@@ -5,7 +5,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { createCanvas, loadImage } = require("canvas");
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 if (!ADMIN_PASSWORD) {
@@ -2143,6 +2143,6 @@ app.delete("/api/comments/:id", (req, res) => {
   );
 });
 
-app.listen(PORT, () => {
-  console.log("Server running http://localhost:3001");
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
