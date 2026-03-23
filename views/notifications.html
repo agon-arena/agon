@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notifications</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body class="page-notifications page-notifications-mobile">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+
+    <div class="home-brand-block">
+      <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+
+      <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+
+      <p class="topbar-message">
+         <strong>La vraie gloire<br> est convaincre.
+  <strong>
+      </p>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="back-notifications-stack">
+  <button
+    type="button"
+    class="mobile-back-button"
+    onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='/' }"
+    aria-label="Revenir à la page précédente"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </button>
+
+  <div class="debate-nav-row">
+    <a href="javascript:history.back()" class="back-link">← Retour</a>
+    <a href="/create" class="button">Ouvrir une arène</a>
+  </div>
+
+        <div class="admin-controls-row" data-admin style="display:none;">
+          <span id="admin-badge" class="admin-badge">Mode admin activé</span>
+
+          <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
+            Quitter le mode admin
+          </button>
+
+          <a class="button button-secondary admin-reports-button" href="/admin-reports">
+            Signalements
+            <span id="reports-count" class="notifications-count" style="display:none;"></span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</header>
+
+<main class="container home-page">
+  <section class="debates-section">
+    <div class="section-header section-header-home">
+      <div>
+        <h3>Notifications</h3>
+      </div>
+    </div>
+<div class="notifications-reset-wrap">
+  <button id="reset-notifications-btn" class="button button-secondary">
+    Tout marquer comme lu
+  </button>
+</div>
+
+    <section id="notifications-page-list" class="notifications-page-list"></section>
+  </section>
+</main>
+
+<script src="/script.js"></script>
+</body>
+</html>

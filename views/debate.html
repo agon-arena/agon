@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Débat</title>
+  <link rel="stylesheet" href="/style.css" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body class="page-debate">
+
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+
+  <div class="home-brand-block">
+
+  <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
+    <i class="fa-solid fa-gear"></i>
+  </button>
+
+ <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+
+<p class="topbar-message">
+  <strong>La vraie gloire</strong><br>
+  <strong>est&nbsp;convaincre.</strong>
+</p>
+    </div>
+<div class="topbar-actions">
+
+<div class="debate-nav-notifications-stack">
+  <div class="debate-nav-row">
+    <a href="/" class="back-link">← Retour aux arènes</a>
+    <a href="/create" class="button">Ouvrir une arène</a>
+  </div>
+
+  <div class="mobile-topbar-actions">
+    <a href="/" class="topbar-back-arrow" title="Retour aux arènes">
+      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+  </div>
+
+  <a id="notifications-bell" class="notifications-button notifications-link notifications-button-large" href="/notifications">
+    🔔
+    <span id="notifications-count" class="notifications-count" style="display:none;"></span>
+  </a>
+
+  <div class="admin-controls-row" data-admin style="display:none;">
+    <span id="admin-badge" class="admin-badge">Mode admin activé</span>
+
+    <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
+      Quitter le mode admin
+    </button>
+
+    <a class="button button-secondary admin-reports-button" href="/admin-reports">
+      Signalements
+      <span id="reports-count" class="notifications-count" style="display:none;"></span>
+    </a>
+  </div>
+</div>
+
+</div>
+
+  </div>
+</header>
+
+<main class="container debate-page">
+
+<section class="debate-hero">
+<div class="debate-hero-top">
+  <div>
+<div class="debate-title-row">
+
+  <h1 id="debate-question">Chargement...</h1>
+
+  <div class="debate-title-side-tools">
+<a href="/" class="debate-back-arrow" title="Retour aux arènes">      <i class="fa-solid fa-arrow-left"></i>
+    </a>
+
+    <a
+      id="notifications-bell-compact"
+      class="notifications-button notifications-link notifications-button-large debate-compact-bell"
+      href="/notifications"
+      title="Notifications"
+    >
+      🔔
+      <span id="notifications-count-compact" class="notifications-count" style="display:none;"></span>
+    </a>
+  </div>
+
+</div>
+
+<div id="global-share-bar"></div>
+ 
+
+
+
+<div class="debate-scroll-add-wrap">
+  <button
+    id="debate-scroll-add-button"
+    class="button debate-scroll-add-button"
+    type="button"
+    onclick="openArgumentComposer('a')"
+  >
+    Ajouter une idée
+  </button>
+</div>
+
+<div id="open-question-reply-wrap" class="open-question-reply-wrap" style="display:none;">
+  <button
+    id="open-question-reply-btn"
+    class="button button-small open-question-reply-btn"
+    type="button"
+ onclick="openArgumentComposer('a')"
+  >
+    Répondre
+  </button>
+</div>
+
+<div class="debate-admin-actions">
+  <button
+    id="edit-debate-btn"
+    class="button button-small"
+    data-admin
+    style="display:none;"
+    type="button"
+    onclick="editDebate()"
+  >
+    Modifier le débat
+  </button>
+
+  <button
+    id="delete-debate-btn"
+    class="delete-button"
+    data-admin
+    style="display:none;"
+    type="button"
+  >
+    Supprimer ce débat
+  </button>
+</div>
+  </div>
+</div>
+
+<div class="debate-top-focus-buttons">
+  <button
+    type="button"
+    id="side-focus-left-btn"
+    class="debate-side-focus-btn debate-side-focus-btn-left"
+    onclick="setDebateColumnFocus('a')"
+  >
+    Ouvrir A
+  </button>
+
+  <button
+    type="button"
+    id="side-focus-right-btn"
+    class="debate-side-focus-btn debate-side-focus-btn-right"
+    onclick="setDebateColumnFocus('b')"
+  >
+    Ouvrir B
+  </button>
+</div>
+
+
+<div id="debate-source-preview-wrap" class="debate-source-preview-wrap" style="display:none;">
+  <iframe
+    id="debate-source-preview"
+    class="debate-source-preview"
+    src=""
+    loading="lazy"
+    referrerpolicy="no-referrer-when-downgrade"
+  ></iframe>
+</div>
+
+<div id="debate-source-fallback" class="debate-source-fallback" style="display:none;">
+  <div id="debate-source-domain" class="debate-source-domain"></div>
+  <a
+    id="debate-source-fallback-link"
+    class="debate-source-link"
+    href="#"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    Ouvrir la source
+  </a>
+</div>
+
+<section class="debate-headings">
+
+
+<div class="column-header position-a">
+  <h2 id="title-a">Position A</h2>
+  <div id="score-a" class="position-score"></div>
+
+  <button
+    type="button"
+    class="position-argument-button position-argument-button-a"
+    onclick="openArgumentComposer('a')"
+  >
+Ajouter une idée
+  </button>
+</div>
+
+<div class="column-header position-b">
+  <h2 id="title-b">Position B</h2>
+  <div id="score-b" class="position-score"></div>
+
+  <button
+    type="button"
+    class="position-argument-button position-argument-button-b"
+    onclick="openArgumentComposer('b')"
+  >
+    Ajouter une idée
+  </button>
+</div>
+
+</section>
+
+
+<div id="debate-score-bar" class="debate-score-bar"></div>
+
+<div id="voices-summary" class="voices-summary-container"></div>
+
+<section class="my-arguments-row">
+  <div id="my-arguments-a" class="my-arguments-summary my-arguments-summary-left"></div>
+  <div id="my-arguments-b" class="my-arguments-summary my-arguments-summary-right"></div>
+</section>
+<form id="form-list" class="argument-form argument-form-list" style="display:none;">
+<div class="argument-form-list-top">
+  <div>
+<h3>Ajouter une idée</h3>    <p id="list-form-subtitle" class="argument-form-list-subtitle">Choisis la position, puis rédige ton idée.</p>
+  </div>
+
+  <button
+    id="list-form-close-btn"
+    type="button"
+    class="form-close-btn"
+    onclick="closeArgumentForm()"
+  >
+    ✕
+  </button>
+</div>
+
+
+    <div class="list-position-picker">
+      <button
+        id="list-side-a"
+        type="button"
+        class="list-position-button list-position-button-a"
+        onclick="setListArgumentSide('a')"
+      >
+        Position A
+      </button>
+
+      <button
+        id="list-side-b"
+        type="button"
+        class="list-position-button list-position-button-b"
+        onclick="setListArgumentSide('b')"
+      >
+        Position B
+      </button>
+    </div>
+
+    <input id="list-side-value" type="hidden" value="A" />
+
+    <div id="warning-list" class="argument-warning" style="display:none;">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>Vérifie si cette idée existe déjà afin d’éviter la dispersion des voix.</span>
+    </div>
+    <label for="list-title">Titre de votre idée</label>
+    <input
+      id="list-title"
+      type="text"
+      maxlength="100"
+      placeholder="Résumez votre idée en une phrase"
+      oninput="handleArgumentInput('list'); updateCounter('list-title','count-title-list',100)"
+    />
+    <small id="count-title-list">0 / 100</small>
+
+    <label for="list-body">Développement</label>
+    <textarea
+      id="list-body"
+      maxlength="600"
+      placeholder="Développez votre idée clairement. Si vous avez plusieurs idées, publiez-les séparément."
+      oninput="handleArgumentInput('list'); updateCounter('list-body','count-body-list',600)"
+    ></textarea>
+    <small id="count-body-list">0 / 600</small>
+<div id="similar-arguments-list" class="similar-arguments-box" style="display:none;"></div>
+
+    <button type="submit" class="button">Publier</button>
+  </form>
+<section class="debate-view-switch">
+
+<div id="debate-view-switch-card" class="debate-view-switch-card">    <div class="debate-view-toggle">
+      <button
+        id="view-columns-btn"
+        class="debate-view-toggle-btn"
+        type="button"
+        onclick="setDebateViewMode('columns')"
+      >
+        Colonnes
+      </button>
+
+      <button
+        id="view-list-btn"
+        class="debate-view-toggle-btn"
+        type="button"
+        onclick="setDebateViewMode('list')"
+      >
+        Liste
+      </button>
+    </div>
+  </div>
+
+  <section class="debate-sort-bar">
+    <label>Trier les idées :</label>
+
+    <div class="sort-dropdown">
+      <button type="button" class="sort-button" onclick="toggleSortMenu()">
+        <span id="sort-button-label">Trier ▾</span>
+      </button>
+
+      <div id="sort-menu" class="sort-menu">
+        <button type="button" onclick="changeArgumentsSort('score')">Plus soutenus</button>
+        <button type="button" onclick="changeArgumentsSort('comments')">Plus commentés</button>
+        <button type="button" onclick="changeArgumentsSort('recent')">Plus récents</button>
+        <button type="button" onclick="changeArgumentsSort('old')">Plus anciens</button>
+      </div>
+    </div>
+  </section>
+
+</section>
+
+<section class="debate-columns">
+
+  <div id="column-a" class="debate-column column-a">
+  
+
+    <form id="form-a" class="argument-form" style="display:none;">
+      <h3>Ajouter une idée</h3>
+<button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
+
+      <div id="warning-a" class="argument-warning" style="display:none;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Vérifie si cet argument existe déjà afin d’éviter la dispersion des votes.</span>
+      </div>
+
+      <label for="a-title">Titre de votre idée</label>
+      <input
+        id="a-title"
+        type="text"
+        maxlength="100"
+        placeholder="Résumez votre idée en une phrase"
+        oninput="handleArgumentInput('a'); updateCounter('a-title','count-title-a',100)"
+      />
+      <small id="count-title-a">0 / 100</small>
+
+      <label for="a-body">Développement</label>
+      <textarea
+        id="a-body"
+        maxlength="600"
+        placeholder="Développez votre idée clairement.
+Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
+        oninput="handleArgumentInput('a'); updateCounter('a-body','count-body-a',600)"
+      ></textarea>
+      <small id="count-body-a">0 / 600</small>
+<div id="similar-arguments-a" class="similar-arguments-box" style="display:none;"></div>
+      <button type="submit" class="button">Publier</button>
+    </form>
+
+    <div id="arguments-a" class="arguments-list"></div>
+  </div>
+
+  <div id="column-b" class="debate-column column-b">
+
+    <form id="form-b" class="argument-form" style="display:none;">
+      <h3>Ajouter une idée</h3>
+<button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
+
+      <div id="warning-b" class="argument-warning" style="display:none;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Vérifie si cet argument existe déjà afin d’éviter la dispersion des votes.</span>
+      </div>
+
+      <label for="b-title">Titre de votre idée</label>
+      <input
+        id="b-title"
+        type="text"
+        maxlength="100"
+        placeholder="Résumez votre idée en une phrase"
+        oninput="handleArgumentInput('b'); updateCounter('b-title','count-title-b',100)"
+      />
+      <small id="count-title-b">0 / 100</small>
+
+      <label for="b-body">Développement</label>
+      <textarea
+        id="b-body"
+        maxlength="600"
+        placeholder="Développez votre idée clairement. Si vous avez plusieurs idées, publiez-les séparément."
+        oninput="handleArgumentInput('b'); updateCounter('b-body','count-body-b',600)"
+      ></textarea>
+      <small id="count-body-b">0 / 600</small>
+<div id="similar-arguments-b" class="similar-arguments-box" style="display:none;"></div>
+
+      <button type="submit" class="button">Publier</button>
+    </form>
+
+    <div id="arguments-b" class="arguments-list"></div>
+  </div>
+
+</section>
+
+
+<section id="debate-list-view" class="debate-list-view" style="display:none;">
+  <div id="arguments-unified" class="arguments-list arguments-list-unified"></div>
+</section>
+
+<section class="similar-debates-section">
+  <div class="section-header section-header-home">
+    <div>
+    </div>
+  </div>
+
+  <div id="similar-debates-bottom" class="similar-debates-bottom"></div>
+</section>
+
+</main>
+
+
+<script src="/script.js"></script>
+</body>
+</html>
