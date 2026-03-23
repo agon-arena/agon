@@ -2886,7 +2886,7 @@ const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length
 <span class="vote-badge">
   ${medal}${rankLabel ? " " + rankLabel : ""}
   ${(medal || rankLabel) ? '<span class="vote-separator">•</span>' : ""}
-<span class="vote-count">${a.votes} voix${a.votes > 1 ? "s" : ""}</span></span>
+<span class="vote-count">${a.votes} voix</span></span>
         </div>
 
         <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
