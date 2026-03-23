@@ -670,7 +670,7 @@ select:focus {
   position: relative;
   background: #f4f6f8;
   padding: 12px 0 18px 0;
-  margin-bottom: 32px; /* ← augmente ici */
+  margin-bottom: 32px;
   border-bottom: 1px solid #e5e7eb;
 }
 
@@ -680,7 +680,7 @@ body.debate-topbar-hidden .debate-hero{
 
 .debate-hero-top{
   position: sticky;
-  top: 74px;
+  top: 78px;
   z-index: 30;
   background: white;
   border: 1px solid #e5e7eb;
@@ -2902,6 +2902,11 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
   );
   opacity: 0.9;
 }
+
+body.page-debate .topbar::after {
+  bottom: -4px !important;
+}
+
 .notifications-button-large {
   position: relative;
   top: -4px;
@@ -4751,18 +4756,21 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
     box-sizing: border-box;
   }
 }
+
+
 /* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
 
-
+/* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
 @media (max-width: 768px) {
   .debate-top-focus-buttons {
-    position: relative;
-    z-index: 1;
+    position: sticky;
+    top: 190px;
+    z-index: 35;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     width: 100%;
-    margin-top: 10px;
+    margin-top: 8px;
     padding: 0;
     background: transparent;
   }
@@ -4775,122 +4783,24 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
     right: auto !important;
     bottom: auto !important;
     transform: none !important;
-    padding: 6px 10px;
-    height: 32px;
     min-width: 72px;
+    height: 32px;
+    padding: 6px 10px;
     font-size: 12px;
     line-height: 1;
     border-radius: 999px;
     box-shadow: 0 3px 8px rgba(0,0,0,0.10);
   }
 
+  .debate-top-focus-buttons .debate-side-focus-btn-left {
+    grid-column: 1;
+  }
+
+  .debate-top-focus-buttons .debate-side-focus-btn-right {
+    grid-column: 2;
+  }
+
   .debate-top-focus-buttons .debate-side-focus-btn:hover {
     transform: translateY(-1px) !important;
   }
-/* ===== FIX FINAL : boutons A/B visibles sous le bloc titre au scroll ===== */
-.debate-top-focus-buttons{
-  position: sticky;
-  top: 190px;
-  z-index: 35;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 28px;
-  width: 100%;
-  margin-top: 10px;
-  padding: 0;
-  background: transparent;
 }
-
-.debate-top-focus-buttons .debate-side-focus-btn{
-  position: static !important;
-  top: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  left: auto !important;
-  transform: none !important;
-  justify-self: center;
-  min-width: 88px;
-}
-
-.debate-top-focus-buttons .debate-side-focus-btn-left{
-  grid-column: 1;
-}
-
-.debate-top-focus-buttons .debate-side-focus-btn-right{
-  grid-column: 2;
-}
-
-.debate-top-focus-buttons .debate-side-focus-btn:hover{
-  transform: translateY(-1px) !important;
-}
-
-@media (max-width: 768px) {
-  .debate-top-focus-buttons{
-    top: 190px;
-    gap: 12px;
-    margin-top: 8px;
-  }
-
-  .debate-top-focus-buttons .debate-side-focus-btn{
-    min-width: 72px;
-    height: 32px;
-    padding: 6px 10px;
-    font-size: 12px;
-    line-height: 1;
-  }
-}
-/* ===== MOBILE : correction affichage propositions d'amélioration en mode colonnes ===== */
-@media (max-width: 768px) {
-  .comment-amelioration-hint,
-  .comment-improvement-preview,
-  .comment-improvement-preview-label,
-  .comment-improvement-preview-title,
-  .comment-improvement-preview-body {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .comment-amelioration-hint,
-  .comment-improvement-preview {
-    overflow: hidden;
-  }
-
-  .comment-improvement-preview-title,
-  .comment-improvement-preview-body,
-  .comment-amelioration-hint {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .comment-improvement-preview {
-    margin-top: 10px;
-    padding: 10px 12px;
-  }
-
-  .comment-improvement-preview-label {
-    font-size: 11px;
-    line-height: 1.3;
-  }
-
-  .comment-improvement-preview-title {
-    font-size: 14px;
-    line-height: 1.35;
-    margin-bottom: 6px;
-  }
-
-  .comment-improvement-preview-body {
-    font-size: 13px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
-
-  .comment-amelioration-hint {
-    font-size: 12px;
-    line-height: 1.4;
-    padding: 8px 10px;
-  }
-}
-}
-

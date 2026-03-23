@@ -855,6 +855,7 @@ function getDebateShareTitle() {
   return title || "Arène sur Agôn";
 }
 
+
 function getDebateShareText() {
   const question = currentDebateShareData.question || getDebateShareTitle();
   const optionA = currentDebateShareData.optionA || "";
@@ -865,30 +866,28 @@ function getDebateShareText() {
   return [
     question,
     "",
-    `${percentA}%`,
-    optionA,
-    "",
-    `${percentB}%`,
-    optionB,
+    `${percentA}% — ${optionA}`,
+    `${percentB}% — ${optionB}`,
     "",
     "Qu’est-ce qui vous paraît le plus convaincant ?"
   ].join("\n");
+}
+async function copyDebateLink() {
+  const { text, url } = getGlobalShareData();
+  const fullText = `${text}\n\n${url}`;
+
+  try {
+    await navigator.clipboard.writeText(fullText);
+    alert("Lien copié.");
+  } catch (error) {
+    alert("Impossible de copier le lien automatiquement.");
+  }
 }
 
 /* =========================
    Share
 ========================= */
 
-async function copyDebateLink() {
-  const { url } = getGlobalShareData();
-
-  try {
-    await navigator.clipboard.writeText(url);
-    alert("Lien copié.");
-  } catch (error) {
-    alert("Impossible de copier le lien automatiquement.");
-  }
-}
 
 function shareOnX() {
   const { text, url } = getGlobalShareData();
@@ -904,7 +903,7 @@ function shareOnFacebook() {
 
 function shareOnWhatsApp() {
   const { text, url } = getGlobalShareData();
-  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`;
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n\n" + url)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -1015,12 +1014,33 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
 
   return { url, title, text };
 }
-async function copyIndexDebateLink(debateId, encodedQuestion) {
+async function copyIndexDebateLink(
+  debateId,
+  encodedQuestion,
+  encodedOptionA = "",
+  encodedOptionB = "",
+  percentA = 50,
+  percentB = 50,
+  type = "debate"
+) {
   const question = decodeURIComponent(encodedQuestion || "");
-  const { url } = getIndexDebateShareData(debateId, question);
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+
+  const { text, url } = getIndexDebateShareData(
+    debateId,
+    question,
+    optionA,
+    optionB,
+    percentA,
+    percentB,
+    type
+  );
+
+  const fullText = `${text}\n\n${url}`;
 
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
