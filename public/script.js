@@ -3652,7 +3652,6 @@ ${
 </div>
 
 <div class="comment-main-field">
-<div class="comment-main-field">
   <textarea
     id="comment-input-${a.id}"
     placeholder="Ajouter un commentaire"
@@ -3660,7 +3659,7 @@ ${
     oninput="updateCounter('comment-input-${a.id}','count-comment-${a.id}',600)"
   ></textarea>
   <small id="count-comment-${a.id}">0 / 600</small>
-</div></div>
+</div>
 
 <div class="comment-amelioration-fields" style="display:none;">
   <input
