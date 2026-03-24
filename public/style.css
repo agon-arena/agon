@@ -1026,24 +1026,24 @@ body.debate-topbar-hidden .debate-compact-bell {
   margin-top: -2px;
 }
 
-.argument-form .button{
-  width:100%;
-  padding:16px 18px;
-  font-size:17px;
-  font-weight:800;
-  background:#2563eb;
-  color:white;
-  border:none;
-  border-radius:12px;
-  cursor:pointer;
-  box-shadow:0 6px 16px rgba(37,99,235,0.25);
-  transition:all 0.15s ease;
+.argument-form .button {
+  width: 100%;
+  padding: 16px 18px;
+  font-size: 17px;
+  font-weight: 800;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37,99,235,0.25);
+  transition: all 0.15s ease;
 }
 
-.argument-form .button:hover{
-  background:#1d4ed8;
-  transform:translateY(-1px);
-  box-shadow:0 8px 20px rgba(37,99,235,0.35);
+.argument-form .button:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(37,99,235,0.35);
 }
 
 .similar-arguments-box{
@@ -1657,6 +1657,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   min-height: 90px;
 }
 
+<<<<<<< HEAD
 .comment-form .button {
   background: #2563eb;
   color: white;
@@ -1665,6 +1666,8 @@ body.debate-topbar-hidden .debate-compact-bell {
 .comment-form .button:hover {
   background: #1d4ed8 !important;
 }
+=======
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
 
 .comment-stance-row{
   display:flex;
@@ -4733,6 +4736,14 @@ body.page-debate .topbar::after {
     box-sizing: border-box;
     overflow: hidden;
   }
+  .comment-main-field,
+  .comment-main-field textarea,
+  .comment-main-field small {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 
   .comments-block,
   .comments-list {
@@ -4778,7 +4789,103 @@ body.page-debate .topbar::after {
     box-sizing: border-box;
   }
 }
+@media (max-width: 768px) {
+  .debate-columns:not(.focus-a):not(.focus-b) .debate-column {
+    min-width: 0;
+    width: 100%;
+  }
 
+  .debate-columns:not(.focus-a):not(.focus-b) .comments-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-main-field {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-main-field textarea {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 110px;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-main-field small {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 6px;
+    text-align: right;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-option {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .argument-warning {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .reply-preview-text,
+  .debate-columns:not(.focus-a):not(.focus-b) .reply-preview-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .argument-warning .button {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+  }
+}
 
 /* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
 
@@ -4831,13 +4938,78 @@ body.page-debate .topbar::after {
     top: 170px;
   }
 }
+<<<<<<< HEAD
 
 .comment-form .button {
   background: #2563eb !important;
+=======
+/* =========================
+   FLASH VERT (colonne A)
+========================= */
+
+.voice-title-highlight-green {
+  display: inline-block;
+  border: 3px solid #22c55e !important;
+  border-radius: 8px;
+  padding: 2px 6px;
+  background: #f0fff4 !important;
+  box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  text-decoration: none !important;
+  color: #374151 !important;
+  animation: voiceTitleFlashGreen 1s ease-in-out 2;
+}
+
+@keyframes voiceTitleFlashGreen {
+  0% {
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+  50% {
+    background: #dcfce7;
+    box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  }
+  100% {
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+}
+
+/* ADMIN VERT */
+
+.admin-highlight-green {
+  border:3px solid #22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,0.25);
+  background:#f0fff4;
+  animation:reportFlashGreen 1s ease-in-out 3;
+}
+
+@keyframes reportFlashGreen{
+  0%{background:#fff;}
+  50%{background:#dcfce7;}
+  100%{background:#fff;}
+}
+@media (max-width: 768px) {
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form textarea::placeholder {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+}
+@media (max-width: 768px) {
+  .comment-form .button {
+    padding: 10px 12px;
+    font-size: 14px;
+    border-radius: 10px;
+    min-height: auto;
+  }
+}
+.comment-form .button {
+  background: #2c3e50 !important;
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
   color: white !important;
 }
 
 .comment-form .button:hover {
+<<<<<<< HEAD
   background: #1d4ed8 !important;
 }
 @keyframes flashGreenCard {
@@ -4860,3 +5032,23 @@ body.page-debate .topbar::after {
   animation: flashGreenCard 1s ease-in-out 2;
 }
 
+=======
+  background: #1f2d3d !important;
+}
+.comment-form button[type="submit"] {
+  background: #2c3e50 !important;
+  color: #ffffff !important;
+}
+
+.comment-form button[type="submit"]:hover {
+  background: #1f2d3d !important;
+}
+.argument-form button[type="submit"] {
+  background: #2c3e50 !important;
+  color: #ffffff !important;
+}
+
+.argument-form button[type="submit"]:hover {
+  background: #1f2d3d !important;
+}
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e

@@ -628,14 +628,27 @@ function highlightVotedArgumentTitles() {
   if (!titles.length) return;
 
   titles.forEach((title) => {
-    title.classList.remove("voice-title-highlight");
-    void title.offsetWidth;
-    title.classList.add("voice-title-highlight");
+    const card = title.closest(".my-arguments-summary-left")
+      ? document.getElementById("column-a") || title
+      : document.getElementById("column-b") || title;
+
+    if (title.closest("#my-arguments-a") || title.closest(".my-arguments-summary-left")) {
+      title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
+      void title.offsetWidth;
+      title.classList.add("voice-title-highlight-green");
+    } else {
+      title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
+      void title.offsetWidth;
+      title.classList.add("voice-title-highlight");
+    }
   });
 
   setTimeout(() => {
     titles.forEach((title) => {
       title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
     });
   }, 1600);
 }
@@ -678,6 +691,30 @@ function scrollToVoicesSummary() {
   setTimeout(() => {
     highlightVotedArgumentTitles();
   }, 420);
+}
+function applyVoiceHighlight(element) {
+  if (!element) return;
+
+  const isGreenSide =
+    element.closest(".column-a") ||
+    element.closest("#arguments-a") ||
+    element.closest(".argument-card-a");
+
+  element.classList.remove("voice-title-highlight");
+  element.classList.remove("voice-title-highlight-green");
+  void element.offsetWidth;
+
+  if (isGreenSide) {
+    element.classList.add("voice-title-highlight-green");
+  } else {
+    element.classList.add("voice-title-highlight");
+  }
+}
+
+function removeVoiceHighlight(element) {
+  if (!element) return;
+  element.classList.remove("voice-title-highlight");
+  element.classList.remove("voice-title-highlight-green");
 }
 function escapeHtml(str) {
   return String(str)
@@ -2711,6 +2748,7 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
+<<<<<<< HEAD
       if (element.closest("#arguments-a")) {
         element.classList.add("flash-green");
 
@@ -2724,6 +2762,13 @@ if (pendingArgumentScrollId) {
           element.classList.remove("admin-highlight");
         }, 2000);
       }
+=======
+      applyVoiceHighlight(element);
+
+      setTimeout(() => {
+        removeVoiceHighlight(element);
+      }, 2000);
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
     }
 
     pendingArgumentScrollId = null;
@@ -2742,10 +2787,10 @@ if (pendingCommentScrollId) {
         block: "center"
       });
 
-      element.classList.add("admin-highlight");
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
-        element.classList.remove("admin-highlight");
+        removeVoiceHighlight(element);
       }, 2000);
     }
 
@@ -2861,6 +2906,7 @@ if (highlight) {
     block: "center"
   });
 
+<<<<<<< HEAD
   if (highlight.startsWith("argument-") && element.closest("#arguments-a")) {
     element.classList.add("flash-green");
 
@@ -2875,6 +2921,14 @@ if (highlight) {
     }, 5000);
   }
 }
+=======
+      applyVoiceHighlight(element);
+
+      setTimeout(() => {
+        removeVoiceHighlight(element);
+      }, 5000);
+    }
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
 
     const url = new URL(window.location.href);
     url.searchParams.delete("highlight");
@@ -3638,7 +3692,7 @@ ${
     oninput="updateCounter('comment-input-${a.id}','count-comment-${a.id}',600)"
   ></textarea>
   <small id="count-comment-${a.id}">0 / 600</small>
-</div></div>
+</div>
 
 <div class="comment-amelioration-fields" style="display:none;">
   <input
@@ -4268,10 +4322,10 @@ function scrollToArgumentFromSummary(argId) {
   }, 260);
 
   setTimeout(() => {
-    element.classList.add("admin-highlight");
+    applyVoiceHighlight(element);
 
     setTimeout(() => {
-      element.classList.remove("admin-highlight");
+      removeVoiceHighlight(element);
     }, 2000);
   }, 420);
 }

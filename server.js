@@ -1282,6 +1282,7 @@ app.post("/api/arguments", (req, res) => {
   const { debate_id, side, title, body, authorKey } = req.body;
 
   const SIMILARITY_THRESHOLD = 0.6;
+<<<<<<< HEAD
 
   const newCombinedText = `${title || ""} ${body || ""}`.trim();
   const normalizedNewWords = normalizeSimilarityText(newCombinedText);
@@ -1325,6 +1326,55 @@ app.post("/api/arguments", (req, res) => {
         });
       }
 
+=======
+
+  const newCombinedText = `${title || ""} ${body || ""}`.trim();
+ 
+const normalizedNewWords = normalizeSimilarityText(newCombinedText);
+const shouldCheckSimilarity = normalizedNewWords.length >= 4;
+
+  db.all(
+    `
+    SELECT id, title, body, side
+    FROM arguments
+    WHERE debate_id = ?
+      AND side = ?
+    `,
+    [debate_id, side],
+    (similarErr, existingArguments) => {
+      if (similarErr) {
+        return sendServerError(res, "Erreur vérification similarité.");
+      }
+
+const similarArguments = shouldCheckSimilarity
+  ? (existingArguments || [])
+      .map((arg) => {
+        const existingCombinedText = `${arg.title || ""} ${arg.body || ""}`.trim();
+        const similarityScore = computeIdeaSimilarity(newCombinedText, existingCombinedText);
+
+        return {
+          ...arg,
+          similarityScore
+        };
+      })
+      .filter((arg) => arg.similarityScore >= SIMILARITY_THRESHOLD)
+      .sort((a, b) => b.similarityScore - a.similarityScore)
+      .slice(0, 3)
+  : [];
+
+if (similarArguments.length > 0) {
+  return res.status(409).json({
+    error: "similar_arguments",
+    similarArguments: similarArguments.map((arg) => ({
+      id: arg.id,
+      title: arg.title,
+      body: arg.body,
+      similarityScore: arg.similarityScore
+    }))
+  });
+}
+
+>>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
       db.run(
         `
         INSERT INTO arguments(debate_id,side,title,body,author_key,created_at)
