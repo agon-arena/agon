@@ -1277,15 +1277,14 @@ app.delete("/api/debates/:id", requireAdmin, (req, res) => {
 /* =========================
    ARGUMENTS
 ========================= */
-
 app.post("/api/arguments", (req, res) => {
   const { debate_id, side, title, body, authorKey } = req.body;
 
   const SIMILARITY_THRESHOLD = 0.6;
-<<<<<<< HEAD
 
   const newCombinedText = `${title || ""} ${body || ""}`.trim();
   const normalizedNewWords = normalizeSimilarityText(newCombinedText);
+  const shouldCheckSimilarity = normalizedNewWords.length >= 4;
 
   db.all(
     `
@@ -1300,19 +1299,24 @@ app.post("/api/arguments", (req, res) => {
         return sendServerError(res, "Erreur vérification similarité.");
       }
 
-      const similarArguments = (existingArguments || [])
-        .map((arg) => {
-          const existingCombinedText = `${arg.title || ""} ${arg.body || ""}`.trim();
-          const similarityScore = computeIdeaSimilarity(newCombinedText, existingCombinedText);
+      const similarArguments = shouldCheckSimilarity
+        ? (existingArguments || [])
+            .map((arg) => {
+              const existingCombinedText = `${title || ""} ${body || ""}`.trim();
+              const similarityScore = computeIdeaSimilarity(
+                newCombinedText,
+                existingCombinedText
+              );
 
-          return {
-            ...arg,
-            similarityScore
-          };
-        })
-        .filter((arg) => arg.similarityScore >= SIMILARITY_THRESHOLD)
-        .sort((a, b) => b.similarityScore - a.similarityScore)
-        .slice(0, 3);
+              return {
+                ...arg,
+                similarityScore
+              };
+            })
+            .filter((arg) => arg.similarityScore >= SIMILARITY_THRESHOLD)
+            .sort((a, b) => b.similarityScore - a.similarityScore)
+            .slice(0, 3)
+        : [];
 
       if (similarArguments.length > 0) {
         return res.status(409).json({
@@ -1326,55 +1330,6 @@ app.post("/api/arguments", (req, res) => {
         });
       }
 
-=======
-
-  const newCombinedText = `${title || ""} ${body || ""}`.trim();
- 
-const normalizedNewWords = normalizeSimilarityText(newCombinedText);
-const shouldCheckSimilarity = normalizedNewWords.length >= 4;
-
-  db.all(
-    `
-    SELECT id, title, body, side
-    FROM arguments
-    WHERE debate_id = ?
-      AND side = ?
-    `,
-    [debate_id, side],
-    (similarErr, existingArguments) => {
-      if (similarErr) {
-        return sendServerError(res, "Erreur vérification similarité.");
-      }
-
-const similarArguments = shouldCheckSimilarity
-  ? (existingArguments || [])
-      .map((arg) => {
-        const existingCombinedText = `${arg.title || ""} ${arg.body || ""}`.trim();
-        const similarityScore = computeIdeaSimilarity(newCombinedText, existingCombinedText);
-
-        return {
-          ...arg,
-          similarityScore
-        };
-      })
-      .filter((arg) => arg.similarityScore >= SIMILARITY_THRESHOLD)
-      .sort((a, b) => b.similarityScore - a.similarityScore)
-      .slice(0, 3)
-  : [];
-
-if (similarArguments.length > 0) {
-  return res.status(409).json({
-    error: "similar_arguments",
-    similarArguments: similarArguments.map((arg) => ({
-      id: arg.id,
-      title: arg.title,
-      body: arg.body,
-      similarityScore: arg.similarityScore
-    }))
-  });
-}
-
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
       db.run(
         `
         INSERT INTO arguments(debate_id,side,title,body,author_key,created_at)
@@ -1413,7 +1368,6 @@ if (similarArguments.length > 0) {
     }
   );
 });
-
 app.post("/api/arguments/:id/vote", (req, res) => {
   const id = req.params.id;
   const { voterKey } = req.body;
