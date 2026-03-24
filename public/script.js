@@ -13,6 +13,7 @@ let pendingArgumentScrollId = null;
 let pendingCommentScrollId = null;
 let openedArgumentForm = null;
 let pinnedNewCommentId = null;
+let pinnedNewArgumentId = null;
 
 let currentAllArguments = [];
 let currentDebateViewMode = "columns";
@@ -485,36 +486,59 @@ function sortArgumentsByMode(args, commentsByArgument = {}) {
   const sorted = [...(args || [])];
 
   if (mode === "recent") {
-    return sorted.sort((a, b) => {
+    const ordered = sorted.sort((a, b) => {
       const dateA = new Date(String(a.created_at || "").replace(" ", "T")).getTime() || 0;
       const dateB = new Date(String(b.created_at || "").replace(" ", "T")).getTime() || 0;
 
       if (dateB !== dateA) return dateB - dateA;
       return Number(b.id || 0) - Number(a.id || 0);
     });
+
+    return movePinnedArgumentToFourthPosition(ordered);
   } else if (mode === "old") {
-    return sorted.sort((a, b) => {
+    const ordered = sorted.sort((a, b) => {
       const dateA = new Date(String(a.created_at || "").replace(" ", "T")).getTime() || 0;
       const dateB = new Date(String(b.created_at || "").replace(" ", "T")).getTime() || 0;
 
       if (dateA !== dateB) return dateA - dateB;
       return Number(a.id || 0) - Number(b.id || 0);
     });
+
+    return movePinnedArgumentToFourthPosition(ordered);
   } else if (mode === "comments") {
-    return sorted.sort((a, b) => {
+    const ordered = sorted.sort((a, b) => {
       const commentsA = (commentsByArgument?.[a.id] || []).length;
       const commentsB = (commentsByArgument?.[b.id] || []).length;
 
       if (commentsB !== commentsA) return commentsB - commentsA;
       return Number(b.id || 0) - Number(a.id || 0);
     });
+
+    return movePinnedArgumentToFourthPosition(ordered);
   } else {
     return sortArgumentsByScore(sorted);
   }
 }
 
+function movePinnedArgumentToFourthPosition(sortedArgs) {
+  if (!pinnedNewArgumentId) return sortedArgs;
+
+  const pinnedIndex = sortedArgs.findIndex(
+    (arg) => String(arg.id) === pinnedNewArgumentId
+  );
+
+  if (pinnedIndex === -1) return sortedArgs;
+
+  const reordered = [...sortedArgs];
+  const [pinnedArg] = reordered.splice(pinnedIndex, 1);
+
+  const targetIndex = Math.min(3, reordered.length);
+  reordered.splice(targetIndex, 0, pinnedArg);
+
+  return reordered;
+}
 function sortArgumentsByScore(args) {
-  return [...(args || [])].sort((a, b) => {
+  const ordered = [...(args || [])].sort((a, b) => {
     const scoreA = Number(a.votes || 0) + getArgumentFreshnessBonus(a);
     const scoreB = Number(b.votes || 0) + getArgumentFreshnessBonus(b);
 
@@ -524,7 +548,11 @@ function sortArgumentsByScore(args) {
 
     return Number(b.id || 0) - Number(a.id || 0);
   });
+
+  return movePinnedArgumentToFourthPosition(ordered);
 }
+
+
 function getSupportRankMap(args) {
   const sortedByVotes = [...(args || [])].sort((a, b) => {
     const votesDiff = Number(b.votes || 0) - Number(a.votes || 0);
@@ -2505,6 +2533,7 @@ localStorage.removeItem("debate_column_focus");
 if (formA) {
   formA.addEventListener("submit", async (e) => {
     e.preventDefault();
+
     await submitArgument(id, "A");
   });
 }
@@ -2868,6 +2897,7 @@ if (element.classList.contains("argument-card-a") || element.closest("#arguments
     }
 
     pendingArgumentScrollId = null;
+pinnedNewArgumentId = null;
   }, 250);
 }
 
@@ -4028,8 +4058,10 @@ if (body.length > 600) {
       updateCounter("list-title", "count-title-list", 100);
 updateCounter("list-body", "count-body-list", 600);    }
 
-    pendingArgumentScrollId = String(r.id);
+pendingArgumentScrollId = String(r.id);
+pinnedNewArgumentId = String(r.id);
     await loadDebate(debateId);
+
   } catch (error) {
     if (error.code === "similar_arguments" && error.details?.similarArguments) {
       const list = error.details.similarArguments;
