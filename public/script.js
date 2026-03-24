@@ -2403,82 +2403,106 @@ const sourceDomain = document.getElementById("debate-source-domain");
 const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
 const sourceUrl = String(data.debate.source_url || "").trim();
 
-function getEmbeddableSourceData(url) {
-  if (!url) {
-    return { embedUrl: "", forceShowPreview: false };
-  }
+function getYouTubeEmbedUrl(url) {
+  if (!url) return "";
 
   try {
     const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    let videoId = "";
 
-    if (
-      parsed.hostname === "www.youtube.com" ||
-      parsed.hostname === "youtube.com"
-    ) {
-      const videoId = parsed.searchParams.get("v");
-      if (videoId) {
-        return {
-          embedUrl: `https://www.youtube.com/embed/${videoId}`,
-          forceShowPreview: true
-        };
+    if (hostname === "youtube.com" || hostname === "m.youtube.com" || hostname === "music.youtube.com") {
+      if (parsed.pathname === "/watch") {
+        videoId = parsed.searchParams.get("v") || "";
+      } else if (parsed.pathname.startsWith("/shorts/")) {
+        videoId = parsed.pathname.split("/shorts/")[1]?.split("/")[0] || "";
+      } else if (parsed.pathname.startsWith("/live/")) {
+        videoId = parsed.pathname.split("/live/")[1]?.split("/")[0] || "";
+      } else if (parsed.pathname.startsWith("/embed/")) {
+        videoId = parsed.pathname.split("/embed/")[1]?.split("/")[0] || "";
       }
     }
 
-    if (parsed.hostname === "youtu.be") {
-      const videoId = parsed.pathname.replace("/", "").trim();
-      if (videoId) {
-        return {
-          embedUrl: `https://www.youtube.com/embed/${videoId}`,
-          forceShowPreview: true
-        };
-      }
+    if (hostname === "youtu.be") {
+      videoId = parsed.pathname.replace(/^\//, "").split("/")[0] || "";
     }
 
-    return {
-      embedUrl: url,
-      forceShowPreview: false
-    };
+    videoId = String(videoId || "").trim();
+
+    if (!videoId) return "";
+
+    return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
   } catch (error) {
-    return {
-      embedUrl: url,
-      forceShowPreview: false
-    };
+    return "";
   }
 }
 
-if (sourcePreviewWrap) {
-  sourcePreviewWrap.style.display = "none";
-}
-if (sourcePreview) {
-  sourcePreview.src = "";
-}
-if (sourceFallback) {
-  sourceFallback.style.display = "none";
+function resetDebateSourcePreview() {
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "none";
+  }
+
+  if (sourcePreview) {
+    sourcePreview.removeAttribute("src");
+    sourcePreview.src = "about:blank";
+  }
+
+  if (sourceFallback) {
+    sourceFallback.style.display = "none";
+  }
+
+  if (sourceDomain) {
+    sourceDomain.textContent = "";
+  }
+
+  if (sourceFallbackLink) {
+    sourceFallbackLink.href = "#";
+  }
 }
 
-if (sourceUrl) {
-  const { embedUrl, forceShowPreview } = getEmbeddableSourceData(sourceUrl);
+function showDebateSourceFallback(url) {
+  if (!sourceFallback || !sourceFallbackLink) return;
 
-  if (embedUrl && forceShowPreview && sourcePreviewWrap && sourcePreview) {
-    sourcePreview.src = embedUrl;
-    sourcePreviewWrap.style.display = "block";
-  } else {
-    try {
-      const domain = new URL(sourceUrl).hostname.replace("www.", "");
+  sourceFallbackLink.href = url;
 
-      if (sourceFallback && sourceDomain && sourceFallbackLink) {
-        sourceDomain.textContent = "🔗 " + domain;
-        sourceFallbackLink.href = sourceUrl;
-        sourceFallback.style.display = "block";
-      }
-    } catch (e) {
-      if (sourceFallback && sourceFallbackLink) {
-        sourceFallbackLink.href = sourceUrl;
-        sourceFallback.style.display = "block";
-      }
+  try {
+    const domain = new URL(url).hostname.replace(/^www\./, "");
+    if (sourceDomain) {
+      sourceDomain.textContent = "🔗 " + domain;
+    }
+  } catch (error) {
+    if (sourceDomain) {
+      sourceDomain.textContent = "🔗 Source externe";
     }
   }
+
+  sourceFallback.style.display = "block";
 }
+
+function showDebateSourcePreview(url) {
+  resetDebateSourcePreview();
+
+  if (!url) return;
+
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(url);
+
+  if (youtubeEmbedUrl && sourcePreviewWrap && sourcePreview) {
+    sourcePreview.loading = "eager";
+    sourcePreviewWrap.style.display = "block";
+
+    requestAnimationFrame(() => {
+      if (sourcePreview.src !== youtubeEmbedUrl) {
+        sourcePreview.src = youtubeEmbedUrl;
+      }
+    });
+
+    return;
+  }
+
+  showDebateSourceFallback(url);
+}
+
+showDebateSourcePreview(sourceUrl);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
