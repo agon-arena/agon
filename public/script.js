@@ -216,23 +216,40 @@ function isMobileColumnFocusScrollContext() {
   return window.innerWidth <= 768 && currentDebateViewMode === "columns" && !isCurrentOpenDebateMode();
 }
 
-function captureHighestVisibleElementForMobileColumnFocus() {
+function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   if (!isMobileColumnFocusScrollContext()) {
     pendingMobileColumnFocusElementId = null;
     pendingMobileColumnFocusElementTop = null;
     return;
   }
 
-  const candidates = Array.from(
-    document.querySelectorAll(`
-      .debate-columns .argument-card[id],
-      .debate-columns .comment-card[id]
-    `)
-  ).filter((element) => {
+  const topbar = document.querySelector(".topbar");
+  const topbarHeight = topbar ? topbar.offsetHeight : 0;
+  const stickyButtonsOffset = 70;
+  const visibleTopLimit = topbarHeight + stickyButtonsOffset;
+
+  const selector =
+    targetMode === "a"
+      ? `
+        .debate-columns .column-a .argument-card[id],
+        .debate-columns .column-a .comment-card[id]
+      `
+      : targetMode === "b"
+        ? `
+        .debate-columns .column-b .argument-card[id],
+        .debate-columns .column-b .comment-card[id]
+      `
+        : `
+        .debate-columns .argument-card[id],
+        .debate-columns .comment-card[id]
+      `;
+
+  const candidates = Array.from(document.querySelectorAll(selector)).filter((element) => {
     if (!element.offsetParent) return false;
 
     const rect = element.getBoundingClientRect();
-    return rect.bottom > 0 && rect.top < window.innerHeight;
+
+    return rect.bottom > visibleTopLimit && rect.top < window.innerHeight;
   });
 
   if (!candidates.length) {
@@ -241,17 +258,16 @@ function captureHighestVisibleElementForMobileColumnFocus() {
     return;
   }
 
-const highestVisibleElement = candidates.reduce((highest, current) => {
-  const highestRect = highest.getBoundingClientRect();
-  const currentRect = current.getBoundingClientRect();
+  const highestVisibleElement = candidates.reduce((highest, current) => {
+    const highestRect = highest.getBoundingClientRect();
+    const currentRect = current.getBoundingClientRect();
 
-  if (currentRect.top < highestRect.top) return current;
-  return highest;
-});
+    if (currentRect.top < highestRect.top) return current;
+    return highest;
+  });
 
-pendingMobileColumnFocusElementId = highestVisibleElement.id;
-pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
-
+  pendingMobileColumnFocusElementId = highestVisibleElement.id;
+  pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
 }
 
 function restoreMobileColumnFocusScroll() {
@@ -289,7 +305,7 @@ function setDebateColumnFocus(mode) {
   const previousMode = getDebateColumnFocus();
 
   if (previousMode === "split" && ["a", "b"].includes(normalizedMode)) {
-captureHighestVisibleElementForMobileColumnFocus();
+captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
   } else {
     pendingMobileColumnFocusElementId = null;
     pendingMobileColumnFocusElementTop = null;
