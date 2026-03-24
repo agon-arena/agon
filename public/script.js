@@ -614,7 +614,10 @@ async function fetchJSON(url, opt = {}) {
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
-    throw new Error(data.error || "Erreur serveur");
+    const error = new Error(data.error || "Erreur serveur");
+    error.code = data.error;
+    error.details = data;
+    throw error;
   }
 
   return data;
@@ -625,14 +628,27 @@ function highlightVotedArgumentTitles() {
   if (!titles.length) return;
 
   titles.forEach((title) => {
-    title.classList.remove("voice-title-highlight");
-    void title.offsetWidth;
-    title.classList.add("voice-title-highlight");
+    const card = title.closest(".my-arguments-summary-left")
+      ? document.getElementById("column-a") || title
+      : document.getElementById("column-b") || title;
+
+    if (title.closest("#my-arguments-a") || title.closest(".my-arguments-summary-left")) {
+      title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
+      void title.offsetWidth;
+      title.classList.add("voice-title-highlight-green");
+    } else {
+      title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
+      void title.offsetWidth;
+      title.classList.add("voice-title-highlight");
+    }
   });
 
   setTimeout(() => {
     titles.forEach((title) => {
       title.classList.remove("voice-title-highlight");
+      title.classList.remove("voice-title-highlight-green");
     });
   }, 1600);
 }
@@ -675,6 +691,30 @@ function scrollToVoicesSummary() {
   setTimeout(() => {
     highlightVotedArgumentTitles();
   }, 420);
+}
+function applyVoiceHighlight(element) {
+  if (!element) return;
+
+  const isGreenSide =
+    element.closest(".column-a") ||
+    element.closest("#arguments-a") ||
+    element.closest(".argument-card-a");
+
+  element.classList.remove("voice-title-highlight");
+  element.classList.remove("voice-title-highlight-green");
+  void element.offsetWidth;
+
+  if (isGreenSide) {
+    element.classList.add("voice-title-highlight-green");
+  } else {
+    element.classList.add("voice-title-highlight");
+  }
+}
+
+function removeVoiceHighlight(element) {
+  if (!element) return;
+  element.classList.remove("voice-title-highlight");
+  element.classList.remove("voice-title-highlight-green");
 }
 function escapeHtml(str) {
   return String(str)
@@ -2708,10 +2748,10 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
-      element.classList.add("admin-highlight");
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
-        element.classList.remove("admin-highlight");
+        removeVoiceHighlight(element);
       }, 2000);
     }
 
@@ -2730,10 +2770,10 @@ if (pendingCommentScrollId) {
         block: "center"
       });
 
-      element.classList.add("admin-highlight");
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
-        element.classList.remove("admin-highlight");
+        removeVoiceHighlight(element);
       }, 2000);
     }
 
@@ -2849,10 +2889,10 @@ if (highlight) {
         block: "center"
       });
 
-      element.classList.add("admin-highlight");
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
-        element.classList.remove("admin-highlight");
+        removeVoiceHighlight(element);
       }, 5000);
     }
 
@@ -3859,11 +3899,20 @@ updateCounter("list-body", "count-body-list", 600);    }
     pendingArgumentScrollId = String(r.id);
     await loadDebate(debateId);
   } catch (error) {
+    if (error.code === "similar_arguments" && error.details?.similarArguments) {
+      const list = error.details.similarArguments;
+
+      alert(
+        "Des idées similaires existent déjà :\n\n" +
+        list.map(a => "• " + (a.title || "Idée")).join("\n")
+      );
+
+      return;
+    }
+
     alert(error.message);
   }
 }
-
-
 
 
 async function submitComment(event, debateId, argumentId) {
@@ -4241,10 +4290,10 @@ function scrollToArgumentFromSummary(argId) {
   }, 260);
 
   setTimeout(() => {
-    element.classList.add("admin-highlight");
+    applyVoiceHighlight(element);
 
     setTimeout(() => {
-      element.classList.remove("admin-highlight");
+      removeVoiceHighlight(element);
     }, 2000);
   }, 420);
 }

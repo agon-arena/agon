@@ -4804,3 +4804,53 @@ body.page-debate .topbar::after {
     transform: translateY(-1px) !important;
   }
 }
+@media (max-width: 768px) {
+  body.page-debate:has(.debate-source-preview) .debate-top-focus-buttons {
+    top: 170px;
+  }
+}
+/* =========================
+   FLASH VERT (colonne A)
+========================= */
+
+.voice-title-highlight-green {
+  display: inline-block;
+  border: 3px solid #22c55e !important;
+  border-radius: 8px;
+  padding: 2px 6px;
+  background: #f0fff4 !important;
+  box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  text-decoration: none !important;
+  color: #374151 !important;
+  animation: voiceTitleFlashGreen 1s ease-in-out 2;
+}
+
+@keyframes voiceTitleFlashGreen {
+  0% {
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+  50% {
+    background: #dcfce7;
+    box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  }
+  100% {
+    background: #fff;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+}
+
+/* ADMIN VERT */
+
+.admin-highlight-green {
+  border:3px solid #22c55e;
+  box-shadow:0 0 0 4px rgba(34,197,94,0.25);
+  background:#f0fff4;
+  animation:reportFlashGreen 1s ease-in-out 3;
+}
+
+@keyframes reportFlashGreen{
+  0%{background:#fff;}
+  50%{background:#dcfce7;}
+  100%{background:#fff;}
+}
