@@ -2388,6 +2388,269 @@ if (formList) {
   await loadDebate(id);
 }
 
+
+function getYouTubeVideoId(url) {
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (hostname === "youtu.be") {
+      return parsed.pathname.split("/").filter(Boolean)[0] || "";
+    }
+
+    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+      if (parsed.pathname === "/watch") {
+        return parsed.searchParams.get("v") || "";
+      }
+
+      const pathParts = parsed.pathname.split("/").filter(Boolean);
+      if (!pathParts.length) return "";
+
+      if (["embed", "shorts", "live"].includes(pathParts[0])) {
+        return pathParts[1] || "";
+      }
+    }
+
+    return "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function getEmbeddableSourceData(url) {
+  if (!url) {
+    return { embedUrl: "", forceShowPreview: false, videoId: "", posterUrl: "" };
+  }
+
+  const videoId = getYouTubeVideoId(url);
+  if (videoId) {
+    return {
+      embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`,
+      forceShowPreview: true,
+      videoId,
+      posterUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    };
+  }
+
+  return {
+    embedUrl: url,
+    forceShowPreview: false,
+    videoId: "",
+    posterUrl: ""
+  };
+}
+
+const debateSourcePreviewState = {
+  retryTimers: [],
+  currentToken: 0,
+  handlersBound: false
+};
+
+function clearDebateSourcePreviewTimers() {
+  debateSourcePreviewState.retryTimers.forEach(timer => clearTimeout(timer));
+  debateSourcePreviewState.retryTimers = [];
+}
+
+function resetDebateSourcePreview() {
+  clearDebateSourcePreviewTimers();
+
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  const sourceDomain = document.getElementById("debate-source-domain");
+  const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourcePosterImg = document.getElementById("debate-source-preview-poster-img");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "none";
+  }
+
+  if (sourcePreview) {
+    sourcePreview.dataset.loaded = "0";
+    sourcePreview.dataset.token = "";
+    sourcePreview.style.display = "none";
+    sourcePreview.style.visibility = "hidden";
+    sourcePreview.removeAttribute("src");
+    sourcePreview.src = "about:blank";
+  }
+
+  if (sourcePoster) {
+    sourcePoster.style.display = "none";
+    sourcePoster.removeAttribute("href");
+  }
+
+  if (sourcePosterImg) {
+    sourcePosterImg.removeAttribute("src");
+    sourcePosterImg.alt = "";
+  }
+
+  if (sourceLoading) {
+    sourceLoading.style.display = "none";
+  }
+
+  if (sourceFallback) {
+    sourceFallback.style.display = "none";
+  }
+
+  if (sourceDomain) {
+    sourceDomain.textContent = "";
+  }
+
+  if (sourceFallbackLink) {
+    sourceFallbackLink.href = "#";
+  }
+}
+
+function showDebateSourceFallback(sourceUrl) {
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  const sourceDomain = document.getElementById("debate-source-domain");
+  const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
+
+  if (!sourceFallback || !sourceFallbackLink) return;
+
+  try {
+    const domain = new URL(sourceUrl).hostname.replace("www.", "");
+    if (sourceDomain) {
+      sourceDomain.textContent = "🔗 " + domain;
+    }
+  } catch (error) {
+    if (sourceDomain) {
+      sourceDomain.textContent = "🔗 Source externe";
+    }
+  }
+
+  sourceFallbackLink.href = sourceUrl;
+  sourceFallback.style.display = "block";
+}
+
+function bindDebateSourcePreviewHandlers() {
+  if (debateSourcePreviewState.handlersBound) return;
+
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  if (!sourcePreview) return;
+
+  sourcePreview.addEventListener("load", () => {
+    sourcePreview.dataset.loaded = "1";
+    sourcePreview.style.visibility = "visible";
+    sourcePreview.style.display = "block";
+
+    if (sourcePoster) {
+      sourcePoster.style.display = "none";
+    }
+
+    if (sourceLoading) {
+      sourceLoading.style.display = "none";
+    }
+
+    clearDebateSourcePreviewTimers();
+  });
+
+  sourcePreview.addEventListener("error", () => {
+    const src = sourcePreview.getAttribute("src");
+    if (src && src !== "about:blank") {
+      showDebateSourceFallback(src);
+    }
+  });
+
+  debateSourcePreviewState.handlersBound = true;
+}
+
+function loadDebateSourceIframe(embedUrl, token, attempt = 0) {
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  if (!sourcePreview || token !== debateSourcePreviewState.currentToken) return;
+
+  sourcePreview.dataset.loaded = "0";
+  sourcePreview.dataset.token = String(token);
+  sourcePreview.style.display = "block";
+  sourcePreview.style.visibility = "hidden";
+  sourcePreview.removeAttribute("src");
+  sourcePreview.src = "about:blank";
+
+  if (sourcePoster) {
+    sourcePoster.style.display = "flex";
+  }
+
+  if (sourceLoading) {
+    sourceLoading.textContent = attempt === 0 ? "Chargement de la vidéo…" : "Nouvelle tentative de chargement…";
+    sourceLoading.style.display = "block";
+  }
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token !== debateSourcePreviewState.currentToken) return;
+      sourcePreview.src = embedUrl;
+    });
+  });
+
+  if (attempt < 2) {
+    const timer = setTimeout(() => {
+      if (token !== debateSourcePreviewState.currentToken) return;
+      if (sourcePreview.dataset.loaded === "1") return;
+      loadDebateSourceIframe(embedUrl, token, attempt + 1);
+    }, attempt === 0 ? 1600 : 3200);
+
+    debateSourcePreviewState.retryTimers.push(timer);
+  }
+}
+
+function renderDebateSourcePreview(sourceUrl) {
+  resetDebateSourcePreview();
+
+  if (!sourceUrl) return;
+
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourcePosterImg = document.getElementById("debate-source-preview-poster-img");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  const { embedUrl, forceShowPreview, videoId, posterUrl } = getEmbeddableSourceData(sourceUrl);
+
+  if (!embedUrl || !forceShowPreview || !videoId) {
+    showDebateSourceFallback(sourceUrl);
+    return;
+  }
+
+  bindDebateSourcePreviewHandlers();
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "block";
+  }
+
+  if (sourcePoster) {
+    sourcePoster.href = sourceUrl;
+    sourcePoster.style.display = "flex";
+  }
+
+  if (sourcePosterImg) {
+    sourcePosterImg.alt = "Aperçu de la vidéo YouTube";
+    sourcePosterImg.src = posterUrl;
+    sourcePosterImg.onerror = function () {
+      this.onerror = null;
+      this.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+    };
+  }
+
+  if (sourceLoading) {
+    sourceLoading.textContent = "Chargement de la vidéo…";
+    sourceLoading.style.display = "block";
+  }
+
+  debateSourcePreviewState.currentToken += 1;
+  const token = debateSourcePreviewState.currentToken;
+  loadDebateSourceIframe(embedUrl, token, 0);
+}
+
+
 async function loadDebate(id) {
 saveVisitedDebate(id);
 
@@ -2396,155 +2659,8 @@ saveVisitedDebate(id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
 
-const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
-const sourcePreview = document.getElementById("debate-source-preview");
-const sourcePreviewPoster = document.getElementById("debate-source-preview-poster");
-const sourcePreviewPosterImage = document.getElementById("debate-source-preview-poster-image");
-const sourcePreviewPosterLink = document.getElementById("debate-source-preview-poster-link");
-const sourceFallback = document.getElementById("debate-source-fallback");
-const sourceDomain = document.getElementById("debate-source-domain");
-const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
 const sourceUrl = String(data.debate.source_url || "").trim();
-
-function getYouTubeVideoId(url) {
-  if (!url) return "";
-
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
-    const pathParts = parsed.pathname.split("/").filter(Boolean);
-
-    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
-      const fromWatch = parsed.searchParams.get("v");
-      if (fromWatch) return fromWatch.trim();
-
-      if (["embed", "shorts", "live"].includes(pathParts[0]) && pathParts[1]) {
-        return pathParts[1].trim();
-      }
-    }
-
-    if (hostname === "youtu.be" && pathParts[0]) {
-      return pathParts[0].trim();
-    }
-  } catch (error) {
-    return "";
-  }
-
-  return "";
-}
-
-function getEmbeddableSourceData(url) {
-  if (!url) {
-    return { embedUrl: "", forceShowPreview: false, thumbnailUrl: "", originalUrl: "" };
-  }
-
-  try {
-    const parsed = new URL(url);
-    const videoId = getYouTubeVideoId(url);
-
-    if (videoId) {
-      return {
-        embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`,
-        forceShowPreview: true,
-        thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        originalUrl: url
-      };
-    }
-
-    return {
-      embedUrl: parsed.toString(),
-      forceShowPreview: false,
-      thumbnailUrl: "",
-      originalUrl: url
-    };
-  } catch (error) {
-    return {
-      embedUrl: url,
-      forceShowPreview: false,
-      thumbnailUrl: "",
-      originalUrl: url
-    };
-  }
-}
-
-if (sourcePreviewWrap) {
-  sourcePreviewWrap.style.display = "none";
-}
-if (sourcePreview) {
-  sourcePreview.removeAttribute("src");
-  sourcePreview.style.visibility = "hidden";
-}
-if (sourcePreviewPoster) {
-  sourcePreviewPoster.style.display = "none";
-}
-if (sourcePreviewPosterImage) {
-  sourcePreviewPosterImage.removeAttribute("src");
-}
-if (sourcePreviewPosterLink) {
-  sourcePreviewPosterLink.removeAttribute("href");
-}
-if (sourceFallback) {
-  sourceFallback.style.display = "none";
-}
-
-if (sourceUrl) {
-  const { embedUrl, forceShowPreview, thumbnailUrl, originalUrl } = getEmbeddableSourceData(sourceUrl);
-
-  if (embedUrl && forceShowPreview && sourcePreviewWrap && sourcePreview) {
-    sourcePreviewWrap.style.display = "block";
-
-    if (sourcePreviewPoster && sourcePreviewPosterImage) {
-      sourcePreviewPosterImage.src = thumbnailUrl;
-      sourcePreviewPoster.style.display = "block";
-    }
-
-    if (sourcePreviewPosterLink) {
-      sourcePreviewPosterLink.href = originalUrl || sourceUrl;
-    }
-
-    const revealIframe = () => {
-      sourcePreview.style.visibility = "visible";
-      if (sourcePreviewPoster) {
-        sourcePreviewPoster.style.display = "none";
-      }
-    };
-
-    sourcePreview.onload = () => {
-      revealIframe();
-    };
-
-    sourcePreview.onerror = () => {
-      sourcePreview.style.visibility = "hidden";
-      if (sourcePreviewPoster) {
-        sourcePreviewPoster.style.display = "block";
-      }
-    };
-
-    requestAnimationFrame(() => {
-      sourcePreview.removeAttribute("src");
-      sourcePreview.src = "about:blank";
-
-      requestAnimationFrame(() => {
-        sourcePreview.src = embedUrl;
-      });
-    });
-  } else {
-    try {
-      const domain = new URL(sourceUrl).hostname.replace("www.", "");
-
-      if (sourceFallback && sourceDomain && sourceFallbackLink) {
-        sourceDomain.textContent = "🔗 " + domain;
-        sourceFallbackLink.href = sourceUrl;
-        sourceFallback.style.display = "block";
-      }
-    } catch (e) {
-      if (sourceFallback && sourceFallbackLink) {
-        sourceFallbackLink.href = sourceUrl;
-        sourceFallback.style.display = "block";
-      }
-    }
-  }
-}
+renderDebateSourcePreview(sourceUrl);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
