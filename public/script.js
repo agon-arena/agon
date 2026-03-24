@@ -19,6 +19,9 @@ let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let currentTypeFilter = "all";
 
+let pendingMobileColumnFocusElementId = null;
+let pendingMobileColumnFocusElementTop = null;
+
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
   return savedMode === "list" ? "list" : "columns";
@@ -209,14 +212,99 @@ function isCurrentOpenDebateMode() {
   return !titleB || !titleB.textContent.trim();
 }
 
+function isMobileColumnFocusScrollContext() {
+  return window.innerWidth <= 768 && currentDebateViewMode === "columns" && !isCurrentOpenDebateMode();
+}
+
+function captureHighestVisibleElementForMobileColumnFocus() {
+  if (!isMobileColumnFocusScrollContext()) {
+    pendingMobileColumnFocusElementId = null;
+    pendingMobileColumnFocusElementTop = null;
+    return;
+  }
+
+  const candidates = Array.from(
+    document.querySelectorAll(`
+      .debate-columns .argument-card[id],
+      .debate-columns .comment-card[id]
+    `)
+  ).filter((element) => {
+    if (!element.offsetParent) return false;
+
+    const rect = element.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < window.innerHeight;
+  });
+
+  if (!candidates.length) {
+    pendingMobileColumnFocusElementId = null;
+    pendingMobileColumnFocusElementTop = null;
+    return;
+  }
+
+const highestVisibleElement = candidates.reduce((highest, current) => {
+  const highestRect = highest.getBoundingClientRect();
+  const currentRect = current.getBoundingClientRect();
+
+  if (currentRect.top < highestRect.top) return current;
+  return highest;
+});
+
+pendingMobileColumnFocusElementId = highestVisibleElement.id;
+pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
+
+}
+
+function restoreMobileColumnFocusScroll() {
+  if (!isMobileColumnFocusScrollContext()) return;
+  if (!pendingMobileColumnFocusElementId) return;
+
+  const target = document.getElementById(pendingMobileColumnFocusElementId);
+
+  if (!target || !target.offsetParent) {
+    pendingMobileColumnFocusElementId = null;
+    pendingMobileColumnFocusElementTop = null;
+    return;
+  }
+
+  const topbar = document.querySelector(".topbar");
+  const extraOffset = 110;
+  const topbarHeight = topbar ? topbar.offsetHeight : 0;
+  const targetY = target.getBoundingClientRect().top + window.scrollY - topbarHeight - extraOffset;
+
+  window.scrollTo({
+    top: Math.max(0, targetY),
+    behavior: "smooth"
+  });
+
+  pendingMobileColumnFocusElementId = null;
+  pendingMobileColumnFocusElementTop = null;
+}
+
 function getDebateColumnFocus() {
   const saved = localStorage.getItem("debate_column_focus");
   return ["split", "a", "b"].includes(saved) ? saved : "split";
 }
 function setDebateColumnFocus(mode) {
   const normalizedMode = ["a", "b"].includes(mode) ? mode : "split";
+  const previousMode = getDebateColumnFocus();
+
+  if (previousMode === "split" && ["a", "b"].includes(normalizedMode)) {
+captureHighestVisibleElementForMobileColumnFocus();
+  } else {
+    pendingMobileColumnFocusElementId = null;
+    pendingMobileColumnFocusElementTop = null;
+  }
+
   localStorage.setItem("debate_column_focus", normalizedMode);
   applyDebateColumnFocusUI();
+
+  if (previousMode === "split" && ["a", "b"].includes(normalizedMode)) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreMobileColumnFocusScroll();
+      });
+    });
+  }
 }
 
 function applyDebateColumnFocusUI() {
