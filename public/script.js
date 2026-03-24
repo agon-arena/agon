@@ -2748,7 +2748,6 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
-<<<<<<< HEAD
       if (element.closest("#arguments-a")) {
         element.classList.add("flash-green");
 
@@ -2762,13 +2761,6 @@ if (pendingArgumentScrollId) {
           element.classList.remove("admin-highlight");
         }, 2000);
       }
-=======
-      applyVoiceHighlight(element);
-
-      setTimeout(() => {
-        removeVoiceHighlight(element);
-      }, 2000);
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
     }
 
     pendingArgumentScrollId = null;
@@ -2900,13 +2892,12 @@ if (highlight) {
       element = document.getElementById(highlight);
     }
 
-  if (element) {
+if (element) {
   element.scrollIntoView({
     behavior: "smooth",
     block: "center"
   });
 
-<<<<<<< HEAD
   if (highlight.startsWith("argument-") && element.closest("#arguments-a")) {
     element.classList.add("flash-green");
 
@@ -2921,14 +2912,6 @@ if (highlight) {
     }, 5000);
   }
 }
-=======
-      applyVoiceHighlight(element);
-
-      setTimeout(() => {
-        removeVoiceHighlight(element);
-      }, 5000);
-    }
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
 
     const url = new URL(window.location.href);
     url.searchParams.delete("highlight");

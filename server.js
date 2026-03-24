@@ -1277,6 +1277,7 @@ app.delete("/api/debates/:id", requireAdmin, (req, res) => {
 /* =========================
    ARGUMENTS
 ========================= */
+
 app.post("/api/arguments", (req, res) => {
   const { debate_id, side, title, body, authorKey } = req.body;
 
@@ -1302,7 +1303,7 @@ app.post("/api/arguments", (req, res) => {
       const similarArguments = shouldCheckSimilarity
         ? (existingArguments || [])
             .map((arg) => {
-              const existingCombinedText = `${title || ""} ${body || ""}`.trim();
+              const existingCombinedText = `${arg.title || ""} ${arg.body || ""}`.trim();
               const similarityScore = computeIdeaSimilarity(
                 newCombinedText,
                 existingCombinedText
@@ -1368,6 +1369,7 @@ app.post("/api/arguments", (req, res) => {
     }
   );
 });
+
 app.post("/api/arguments/:id/vote", (req, res) => {
   const id = req.params.id;
   const { voterKey } = req.body;
