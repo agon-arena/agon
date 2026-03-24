@@ -1657,7 +1657,6 @@ body.debate-topbar-hidden .debate-compact-bell {
   min-height: 90px;
 }
 
-<<<<<<< HEAD
 .comment-form .button {
   background: #2563eb;
   color: white;
@@ -1666,8 +1665,7 @@ body.debate-topbar-hidden .debate-compact-bell {
 .comment-form .button:hover {
   background: #1d4ed8 !important;
 }
-=======
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
+
 
 .comment-stance-row{
   display:flex;
@@ -3657,9 +3655,9 @@ body.page-debate .topbar::after {
     display: none !important;
   }
 }
-/* =========================
+/* 
    MOBILE : topbar débat
-   ========================= */
+ */
 
 .mobile-topbar-actions {
   display: none;
@@ -4938,11 +4936,7 @@ body.page-debate .topbar::after {
     top: 170px;
   }
 }
-<<<<<<< HEAD
 
-.comment-form .button {
-  background: #2563eb !important;
-=======
 /* =========================
    FLASH VERT (colonne A)
 ========================= */
@@ -4977,41 +4971,18 @@ body.page-debate .topbar::after {
 /* ADMIN VERT */
 
 .admin-highlight-green {
-  border:3px solid #22c55e;
-  box-shadow:0 0 0 4px rgba(34,197,94,0.25);
-  background:#f0fff4;
-  animation:reportFlashGreen 1s ease-in-out 3;
+  border: 3px solid #22c55e;
+  box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  background: #f0fff4;
+  animation: reportFlashGreen 1s ease-in-out 3;
 }
 
-@keyframes reportFlashGreen{
-  0%{background:#fff;}
-  50%{background:#dcfce7;}
-  100%{background:#fff;}
-}
-@media (max-width: 768px) {
-  .debate-columns:not(.focus-a):not(.focus-b) .comment-form textarea::placeholder {
-    font-size: 11px;
-    line-height: 1.2;
-  }
-}
-@media (max-width: 768px) {
-  .comment-form .button {
-    padding: 10px 12px;
-    font-size: 14px;
-    border-radius: 10px;
-    min-height: auto;
-  }
-}
-.comment-form .button {
-  background: #2c3e50 !important;
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e
-  color: white !important;
+@keyframes reportFlashGreen {
+  0% { background: #fff; }
+  50% { background: #dcfce7; }
+  100% { background: #fff; }
 }
 
-.comment-form .button:hover {
-<<<<<<< HEAD
-  background: #1d4ed8 !important;
-}
 @keyframes flashGreenCard {
   0% {
     background-color: rgba(34,197,94,0.08);
@@ -5028,27 +4999,50 @@ body.page-debate .topbar::after {
 }
 
 /* UNIQUEMENT cartes vertes */
+.argument-card.argument-card-a.flash-green,
 #arguments-a .argument-card.flash-green {
   animation: flashGreenCard 1s ease-in-out 2;
 }
 
-=======
-  background: #1f2d3d !important;
+@media (max-width: 768px) {
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form textarea::placeholder {
+    font-size: 11px;
+    line-height: 1.2;
+  }
 }
+
+@media (max-width: 768px) {
+  .comment-form .button {
+    padding: 10px 12px;
+    font-size: 14px;
+    border-radius: 10px;
+    min-height: auto;
+  }
+}
+
+.comment-form .button {
+  background: #2563eb !important;
+  color: white !important;
+}
+
+.comment-form .button:hover {
+  background: #1d4ed8 !important;
+}
+
 .comment-form button[type="submit"] {
-  background: #2c3e50 !important;
+  background: #2563eb !important;
   color: #ffffff !important;
 }
 
 .comment-form button[type="submit"]:hover {
-  background: #1f2d3d !important;
+  background: #1d4ed8 !important;
 }
+
 .argument-form button[type="submit"] {
-  background: #2c3e50 !important;
+  background: #2563eb !important;
   color: #ffffff !important;
 }
 
 .argument-form button[type="submit"]:hover {
-  background: #1f2d3d !important;
+  background: #1d4ed8 !important;
 }
->>>>>>> 96634ff312f1645ad07cc4cd56c25e1195b7c70e

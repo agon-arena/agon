@@ -212,7 +212,6 @@ function getDebateColumnFocus() {
   const saved = localStorage.getItem("debate_column_focus");
   return ["split", "a", "b"].includes(saved) ? saved : "split";
 }
-
 function setDebateColumnFocus(mode) {
   const normalizedMode = ["a", "b"].includes(mode) ? mode : "split";
   localStorage.setItem("debate_column_focus", normalizedMode);
@@ -2388,6 +2387,8 @@ function toggleSimilarDebates() {
 
 async function initDebate() {
   const id = getDebateId();
+localStorage.removeItem("debate_column_focus");
+
   if (!id) return;
 
   currentDebateViewMode = getDebateViewMode();
@@ -2748,8 +2749,7 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
-      if (element.closest("#arguments-a")) {
-        element.classList.add("flash-green");
+if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {        element.classList.add("flash-green");
 
         setTimeout(() => {
           element.classList.remove("flash-green");
@@ -2898,8 +2898,10 @@ if (element) {
     block: "center"
   });
 
-  if (highlight.startsWith("argument-") && element.closest("#arguments-a")) {
-    element.classList.add("flash-green");
+if (
+  highlight.startsWith("argument-") &&
+  (element.classList.contains("argument-card-a") || element.closest("#arguments-a"))
+) {    element.classList.add("flash-green");
 
     setTimeout(() => {
       element.classList.remove("flash-green");
