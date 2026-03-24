@@ -3998,7 +3998,7 @@ body.page-debate .topbar::after {
     position: sticky;
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     z-index: 15;
-    margin-top: 4px;
+    margin-top: 24px;
     padding-top: 8px;
     background: linear-gradient(180deg, rgba(255,255,255,0), #ffffff 24px);
   }
