@@ -12,6 +12,7 @@ let currentDebateShareData = {
 let pendingArgumentScrollId = null;
 let pendingCommentScrollId = null;
 let openedArgumentForm = null;
+let pinnedNewCommentId = null;
 
 let currentAllArguments = [];
 let currentDebateViewMode = "columns";
@@ -908,13 +909,12 @@ function getDebateShareText() {
     `${percentA}% — ${optionA}`,
     `${percentB}% — ${optionB}`,
     "",
-    "Qu’est-ce qui vous paraît le plus convaincant ?"
+"Qu’est-ce qui vous paraît le plus convaincant ?\n→"
   ].join("\n");
 }
 async function copyDebateLink() {
   const { text, url } = getGlobalShareData();
-  const fullText = `${text}\n\n${url}`;
-
+const fullText = `${text} ${url}`;
   try {
     await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
@@ -942,13 +942,13 @@ function shareOnFacebook() {
 
 function shareOnWhatsApp() {
   const { text, url } = getGlobalShareData();
-  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n\n" + url)}`;
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
 function shareByEmail() {
   const { title, text, url } = getGlobalShareData();
-  const body = `${text}\n\n${url}`;
+const body = `${text} ${url}`;
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -1036,7 +1036,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
     ? [
         title,
         "",
-        "Qu’est-ce qui vous paraît le plus convaincant ?"
+"Qu’est-ce qui vous paraît le plus convaincant ?\n→"
       ].join("\n")
     : [
         title,
@@ -1048,7 +1048,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
         optionB || "Position B",
         "",
        
-       "Qu’est-ce qui vous paraît le plus convaincant ?"
+"Qu’est-ce qui vous paraît le plus convaincant ?\n→"
       ].join("\n");
 
   return { url, title, text };
@@ -1076,8 +1076,7 @@ async function copyIndexDebateLink(
     type
   );
 
-  const fullText = `${text}\n\n${url}`;
-
+const fullText = `${text} ${url}`;
   try {
     await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
@@ -1106,7 +1105,7 @@ function shareIndexDebateOnWhatsApp(debateId, encodedQuestion, encodedOptionA = 
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
   const { text, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
-  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`;
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -1115,7 +1114,8 @@ function shareIndexDebateByEmail(debateId, encodedQuestion, encodedOptionA = "",
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
   const { title, text, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
-  const body = `${text}\n\n${url}`;
+const body = `${text} ${url}`;
+
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 /* =========================
@@ -3084,7 +3084,12 @@ const ameliorationCommentsCount = comments.filter(
   (comment) => comment.stance === "amelioration"
 ).length;
 
-  comments.sort((c1, c2) => {
+comments.sort((c1, c2) => {
+  const c1Pinned = String(c1.id) === pinnedNewCommentId;
+  const c2Pinned = String(c2.id) === pinnedNewCommentId;
+
+  if (c1Pinned && !c2Pinned) return -1;
+  if (!c1Pinned && c2Pinned) return 1;
 
   function getCommentFreshnessBonus(comment) {
     if (!comment.created_at) return 0;
@@ -3486,29 +3491,35 @@ const favorableCommentsCount = comments.filter((comment) => comment.stance === "
 const defavorableCommentsCount = comments.filter((comment) => comment.stance === "defavorable").length;
 const ameliorationCommentsCount = comments.filter((comment) => comment.stance === "amelioration").length;
 
-    comments.sort((c1, c2) => {
-      function getCommentFreshnessBonus(comment) {
-        if (!comment.created_at) return 0;
+comments.sort((c1, c2) => {
+  const c1Pinned = String(c1.id) === pinnedNewCommentId;
+  const c2Pinned = String(c2.id) === pinnedNewCommentId;
 
-        const created = new Date(String(comment.created_at).replace(" ", "T"));
-        const now = new Date();
-        const ageHours = (now - created) / (1000 * 60 * 60);
+  if (c1Pinned && !c2Pinned) return -1;
+  if (!c1Pinned && c2Pinned) return 1;
 
-        if (ageHours < 24 * 2) return 4;
-        if (ageHours < 24 * 7) return 3;
-        if (ageHours < 24 * 14) return 2;
-        if (ageHours < 24 * 30) return 1;
+  function getCommentFreshnessBonus(comment) {
+    if (!comment.created_at) return 0;
 
-        return 0;
-      }
+    const created = new Date(String(comment.created_at).replace(" ", "T"));
+    const now = new Date();
+    const ageHours = (now - created) / (1000 * 60 * 60);
 
-      const score1 = Number(c1.likes || 0) + getCommentFreshnessBonus(c1);
-      const score2 = Number(c2.likes || 0) + getCommentFreshnessBonus(c2);
+    if (ageHours < 24 * 2) return 4;
+    if (ageHours < 24 * 7) return 3;
+    if (ageHours < 24 * 14) return 2;
+    if (ageHours < 24 * 30) return 1;
 
-      if (score2 !== score1) return score2 - score1;
+    return 0;
+  }
 
-      return Number(c2.id || 0) - Number(c1.id || 0);
-    });
+  const score1 = Number(c1.likes || 0) + getCommentFreshnessBonus(c1);
+  const score2 = Number(c2.likes || 0) + getCommentFreshnessBonus(c2);
+
+  if (score2 !== score1) return score2 - score1;
+
+  return Number(c2.id || 0) - Number(c1.id || 0);
+});
 
     const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
     const visibleComments = comments.slice(0, visibleCommentsCount);
@@ -3982,23 +3993,23 @@ if (stance === "amelioration") {
     return;
   }
 }
-  try {
-    await fetchJSON(API + "/comments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-body: JSON.stringify({
-  argument_id: argumentId,
-  content: stance === "amelioration" ? "" : content,
-  authorKey: getKey(),
-  stance,
-  reply_to_comment_id: replyToCommentId,
-  improvement_title,
-  improvement_body
-})
-    });
+try {
+  const data = await fetchJSON(API + "/comments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      argument_id: argumentId,
+      content: stance === "amelioration" ? "" : content,
+      authorKey: getKey(),
+      stance,
+      reply_to_comment_id: replyToCommentId,
+      improvement_title,
+      improvement_body
+    })
+  });
 
     openCommentsByArgument[argumentId] = true;
-    visibleCommentsByArgument[argumentId] = 5;
+visibleCommentsByArgument[argumentId] = 5;
     delete replyToCommentByArgument[argumentId];
     input.value = "";
 if (improvementTitleInput) {
@@ -4028,7 +4039,10 @@ if (mainField) {
   mainField.style.display = "block";
 }
 
+pendingCommentScrollId = String(data.id);
+pinnedNewCommentId = String(data.id);
 await loadDebate(debateId);
+
   } catch (error) {
     alert(error.message);
   }
