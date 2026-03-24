@@ -121,6 +121,36 @@ function computeDebatePercents(args) {
 function sendServerError(res, message = "Erreur serveur.") {
   return res.status(500).json({ error: message });
 }
+function normalizeSimilarityText(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4);
+}
+
+function computeIdeaSimilarity(textA, textB) {
+  const wordsA = normalizeSimilarityText(textA);
+  const wordsB = normalizeSimilarityText(textB);
+
+  if (!wordsA.length || !wordsB.length) {
+    return 0;
+  }
+
+  const setA = new Set(wordsA);
+  const setB = new Set(wordsB);
+
+  const intersectionCount = [...setA].filter((word) => setB.has(word)).length;
+  const unionCount = new Set([...setA, ...setB]).size;
+
+  if (!unionCount) {
+    return 0;
+  }
+
+  return intersectionCount / unionCount;
+}
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "views/index.html"));
 });
@@ -1251,32 +1281,83 @@ app.delete("/api/debates/:id", requireAdmin, (req, res) => {
 app.post("/api/arguments", (req, res) => {
   const { debate_id, side, title, body, authorKey } = req.body;
 
-  db.run(
+  const SIMILARITY_THRESHOLD = 0.6;
+
+  const newCombinedText = `${title || ""} ${body || ""}`.trim();
+  const normalizedNewWords = normalizeSimilarityText(newCombinedText);
+
+  db.all(
     `
-    INSERT INTO arguments(debate_id,side,title,body,author_key,created_at)
-    VALUES(?,?,?,?,?,datetime('now','localtime'))
+    SELECT id, title, body, side
+    FROM arguments
+    WHERE debate_id = ?
+      AND side = ?
     `,
-    [debate_id, side, title, body, authorKey || null],
-    function (err) {
-      if (err) {
-return sendServerError(res, "Erreur création argument.");      
-}
+    [debate_id, side],
+    (similarErr, existingArguments) => {
+      if (similarErr) {
+        return sendServerError(res, "Erreur vérification similarité.");
+      }
 
-      db.get(
-        `SELECT creator_key, question FROM debates WHERE id = ?`,
-        [debate_id],
-        (debateErr, debateRow) => {
-   if (!debateErr && debateRow && debateRow.creator_key && debateRow.creator_key !== authorKey) {
-  createNotification({
-    user_key: debateRow.creator_key,
-    type: "argument_in_my_debate",
-    debate_id,
-    argument_id: this.lastID,
-    message: "Un nouvel argument a été posté dans votre débat."
-  });
-}
+      const similarArguments = (existingArguments || [])
+        .map((arg) => {
+          const existingCombinedText = `${arg.title || ""} ${arg.body || ""}`.trim();
+          const similarityScore = computeIdeaSimilarity(newCombinedText, existingCombinedText);
 
-          res.json({ success: true, id: this.lastID });
+          return {
+            ...arg,
+            similarityScore
+          };
+        })
+        .filter((arg) => arg.similarityScore >= SIMILARITY_THRESHOLD)
+        .sort((a, b) => b.similarityScore - a.similarityScore)
+        .slice(0, 3);
+
+      if (similarArguments.length > 0) {
+        return res.status(409).json({
+          error: "similar_arguments",
+          similarArguments: similarArguments.map((arg) => ({
+            id: arg.id,
+            title: arg.title,
+            body: arg.body,
+            similarityScore: arg.similarityScore
+          }))
+        });
+      }
+
+      db.run(
+        `
+        INSERT INTO arguments(debate_id,side,title,body,author_key,created_at)
+        VALUES(?,?,?,?,?,datetime('now','localtime'))
+        `,
+        [debate_id, side, title, body, authorKey || null],
+        function (err) {
+          if (err) {
+            return sendServerError(res, "Erreur création argument.");
+          }
+
+          db.get(
+            `SELECT creator_key, question FROM debates WHERE id = ?`,
+            [debate_id],
+            (debateErr, debateRow) => {
+              if (
+                !debateErr &&
+                debateRow &&
+                debateRow.creator_key &&
+                debateRow.creator_key !== authorKey
+              ) {
+                createNotification({
+                  user_key: debateRow.creator_key,
+                  type: "argument_in_my_debate",
+                  debate_id,
+                  argument_id: this.lastID,
+                  message: "Un nouvel argument a été posté dans votre débat."
+                });
+              }
+
+              res.json({ success: true, id: this.lastID });
+            }
+          );
         }
       );
     }

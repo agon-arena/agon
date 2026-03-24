@@ -1658,13 +1658,12 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .comment-form .button {
-  background: #e5e7eb;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background: #2563eb;
+  color: white;
 }
 
 .comment-form .button:hover {
-  background: #d1d5db;
+  background: #1d4ed8 !important;
 }
 
 .comment-stance-row{
@@ -4735,9 +4734,28 @@ body.page-debate .topbar::after {
     overflow: hidden;
   }
 
+  .comments-block,
+  .comments-list {
+    display: grid;
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .comment-card {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    justify-self: stretch;
+    align-self: stretch;
+  }
+
   .comment-card p,
   .comment-like-count,
-  .comment-stance-badge {
+  .comment-stance-badge,
+  .comment-improvement-preview-title,
+  .comment-improvement-preview-body {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
@@ -4747,10 +4765,14 @@ body.page-debate .topbar::after {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    width: 100%;
   }
 
   .comment-like-button,
-  .comment-dislike-button {
+  .comment-dislike-button,
+  .comment-actions .button,
+  .comment-actions .report-button,
+  .comment-actions .delete-button {
     width: 100%;
     text-align: center;
     box-sizing: border-box;
@@ -4804,3 +4826,37 @@ body.page-debate .topbar::after {
     transform: translateY(-1px) !important;
   }
 }
+@media (max-width: 768px) {
+  body.page-debate:has(.debate-source-preview) .debate-top-focus-buttons {
+    top: 170px;
+  }
+}
+
+.comment-form .button {
+  background: #2563eb !important;
+  color: white !important;
+}
+
+.comment-form .button:hover {
+  background: #1d4ed8 !important;
+}
+@keyframes flashGreenCard {
+  0% {
+    background-color: rgba(34,197,94,0.08);
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+  50% {
+    background-color: rgba(34,197,94,0.28);
+    box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  }
+  100% {
+    background-color: rgba(34,197,94,0.08);
+    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+  }
+}
+
+/* UNIQUEMENT cartes vertes */
+#arguments-a .argument-card.flash-green {
+  animation: flashGreenCard 1s ease-in-out 2;
+}
+

@@ -614,7 +614,10 @@ async function fetchJSON(url, opt = {}) {
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
-    throw new Error(data.error || "Erreur serveur");
+    const error = new Error(data.error || "Erreur serveur");
+    error.code = data.error;
+    error.details = data;
+    throw error;
   }
 
   return data;
@@ -2708,16 +2711,25 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
-      element.classList.add("admin-highlight");
+      if (element.closest("#arguments-a")) {
+        element.classList.add("flash-green");
 
-      setTimeout(() => {
-        element.classList.remove("admin-highlight");
-      }, 2000);
+        setTimeout(() => {
+          element.classList.remove("flash-green");
+        }, 2000);
+      } else {
+        element.classList.add("admin-highlight");
+
+        setTimeout(() => {
+          element.classList.remove("admin-highlight");
+        }, 2000);
+      }
     }
 
     pendingArgumentScrollId = null;
   }, 250);
 }
+
 if (pendingCommentScrollId) {
   const targetId = pendingCommentScrollId;
 
@@ -2843,18 +2855,26 @@ if (highlight) {
       element = document.getElementById(highlight);
     }
 
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
+  if (element) {
+  element.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
 
-      element.classList.add("admin-highlight");
+  if (highlight.startsWith("argument-") && element.closest("#arguments-a")) {
+    element.classList.add("flash-green");
 
-      setTimeout(() => {
-        element.classList.remove("admin-highlight");
-      }, 5000);
-    }
+    setTimeout(() => {
+      element.classList.remove("flash-green");
+    }, 5000);
+  } else {
+    element.classList.add("admin-highlight");
+
+    setTimeout(() => {
+      element.classList.remove("admin-highlight");
+    }, 5000);
+  }
+}
 
     const url = new URL(window.location.href);
     url.searchParams.delete("highlight");
@@ -3217,7 +3237,7 @@ ${
   type="text"
   id="comment-improvement-title-${a.id}"
   class="comment-improvement-title-input"
-  placeholder="Titre proposé pour remplacer l’idée"
+  placeholder="Titre proposé"
   maxlength="100"
   oninput="updateCounter('comment-improvement-title-${a.id}','count-improvement-title-${a.id}',100)"
 >
@@ -3237,8 +3257,7 @@ ${
   </div>
 </div>
 
-  <button type="submit" class="button button-small">Publier le commentaire</button>
-</form>
+<button type="submit" class="button">Publier le commentaire</button></form>
 <div class="comments-list">
   ${
     comments.length
@@ -3612,7 +3631,6 @@ ${
 </div>
 
 <div class="comment-main-field">
-<div class="comment-main-field">
   <textarea
     id="comment-input-${a.id}"
     placeholder="Ajouter un commentaire"
@@ -3627,7 +3645,7 @@ ${
   type="text"
   id="comment-improvement-title-${a.id}"
   class="comment-improvement-title-input"
-  placeholder="Titre proposé pour remplacer l’idée"
+  placeholder="Titre proposé"
   maxlength="100"
   oninput="updateCounter('comment-improvement-title-${a.id}','count-improvement-title-${a.id}',100)"
 >
@@ -3647,7 +3665,7 @@ ${
   </div>
 </div>
 
-<button type="submit" class="button button-small">Publier le commentaire</button>
+<button type="submit" class="button">Publier le commentaire</button>
               </form>
 
               <div class="comments-list">
@@ -3859,11 +3877,20 @@ updateCounter("list-body", "count-body-list", 600);    }
     pendingArgumentScrollId = String(r.id);
     await loadDebate(debateId);
   } catch (error) {
+    if (error.code === "similar_arguments" && error.details?.similarArguments) {
+      const list = error.details.similarArguments;
+
+      alert(
+        "Des idées similaires existent déjà :\n\n" +
+        list.map(a => "• " + (a.title || "Idée")).join("\n")
+      );
+
+      return;
+    }
+
     alert(error.message);
   }
 }
-
-
 
 
 async function submitComment(event, debateId, argumentId) {
