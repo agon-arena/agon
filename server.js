@@ -15,6 +15,9 @@ if (!ADMIN_PASSWORD) {
 const MAX_VOTES_PER_DEBATE = 5;
 
 const sqlitePath = process.env.SQLITE_PATH || "./database.db";
+
+console.log("📀 DATABASE PATH =", sqlitePath);
+
 const db = new sqlite3.Database(sqlitePath);
 const adminTokens = new Set();
 
