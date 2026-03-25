@@ -214,12 +214,12 @@ function isCurrentOpenDebateMode() {
   return !titleB || !titleB.textContent.trim();
 }
 
-function isMobileColumnFocusScrollContext() {
-  return window.innerWidth <= 768 && currentDebateViewMode === "columns" && !isCurrentOpenDebateMode();
+function isColumnFocusScrollContext() {
+  return currentDebateViewMode === "columns" && !isCurrentOpenDebateMode();
 }
 
 function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
-  if (!isMobileColumnFocusScrollContext()) {
+  if (!isColumnFocusScrollContext()) {
     pendingMobileColumnFocusElementId = null;
     pendingMobileColumnFocusElementTop = null;
     return;
@@ -227,7 +227,7 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
 
   const topbar = document.querySelector(".topbar");
   const topbarHeight = topbar ? topbar.offsetHeight : 0;
-  const stickyButtonsOffset = 70;
+const stickyButtonsOffset = window.innerWidth <= 768 ? 70 : 20;
   const visibleTopLimit = topbarHeight + stickyButtonsOffset;
 
   const selector =
@@ -273,7 +273,7 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
 }
 
 function restoreMobileColumnFocusScroll() {
-  if (!isMobileColumnFocusScrollContext()) return;
+  if (!isColumnFocusScrollContext()) return;
   if (!pendingMobileColumnFocusElementId) return;
 
   const target = document.getElementById(pendingMobileColumnFocusElementId);
@@ -285,8 +285,7 @@ function restoreMobileColumnFocusScroll() {
   }
 
   const topbar = document.querySelector(".topbar");
-  const extraOffset = 110;
-  const topbarHeight = topbar ? topbar.offsetHeight : 0;
+const extraOffset = window.innerWidth <= 768 ? 110 : 30;  const topbarHeight = topbar ? topbar.offsetHeight : 0;
   const targetY = target.getBoundingClientRect().top + window.scrollY - topbarHeight - extraOffset;
 
   window.scrollTo({
@@ -306,8 +305,16 @@ function setDebateColumnFocus(mode) {
   const normalizedMode = ["a", "b"].includes(mode) ? mode : "split";
   const previousMode = getDebateColumnFocus();
 
-  if (previousMode === "split" && ["a", "b"].includes(normalizedMode)) {
-captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
+  const isGoingFromSplitToSingle =
+    previousMode === "split" && ["a", "b"].includes(normalizedMode);
+
+  const isGoingFromSingleToSplit =
+    ["a", "b"].includes(previousMode) && normalizedMode === "split";
+
+  if (isGoingFromSplitToSingle) {
+    captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
+  } else if (isGoingFromSingleToSplit) {
+    captureHighestVisibleElementForMobileColumnFocus(previousMode);
   } else {
     pendingMobileColumnFocusElementId = null;
     pendingMobileColumnFocusElementTop = null;
@@ -316,7 +323,7 @@ captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
   localStorage.setItem("debate_column_focus", normalizedMode);
   applyDebateColumnFocusUI();
 
-  if (previousMode === "split" && ["a", "b"].includes(normalizedMode)) {
+  if (isGoingFromSplitToSingle || isGoingFromSingleToSplit) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         restoreMobileColumnFocusScroll();
