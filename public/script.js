@@ -5370,6 +5370,7 @@ await loadDebate(debateId);
   }
 }
 
+
 window.updateCounter = updateCounter;
 window.handleArgumentInput = handleArgumentInput;
 window.setListArgumentSide = setListArgumentSide;
@@ -5420,3 +5421,27 @@ window.toggleSimilarDebates = toggleSimilarDebates;
 window.scrollToArgumentFromSummary = scrollToArgumentFromSummary;
 window.setDebateColumnFocus = setDebateColumnFocus;
 window.closeReplacementSuccessMessage = closeReplacementSuccessMessage;
+
+function getVisitorKey() {
+  let key = localStorage.getItem("visitorKey");
+  if (!key) {
+    key = Math.random().toString(36).substring(2);
+    localStorage.setItem("visitorKey", key);
+  }
+  return key;
+}
+
+function trackVisit() {
+  fetch("/api/track-visit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      visitorKey: getVisitorKey(),
+      page: window.location.pathname
+    })
+  }).catch(() => {});
+}
+
+trackVisit();
