@@ -19,6 +19,7 @@ let currentAllArguments = [];
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let currentTypeFilter = "all";
+let currentArgumentsSortMode = "score";
 
 let pendingMobileColumnFocusElementId = null;
 let pendingMobileColumnFocusElementTop = null;
@@ -436,7 +437,7 @@ function getArgumentFreshnessBonus(arg) {
   return 0;
 }
 function getArgumentsSortMode() {
-  return localStorage.getItem("arguments_sort_mode") || "score";
+  return currentArgumentsSortMode || "score";
 }
 
 function changeArgumentsSort(mode) {
@@ -444,7 +445,7 @@ function changeArgumentsSort(mode) {
     ? mode
     : "score";
 
-  localStorage.setItem("arguments_sort_mode", normalizedMode);
+  currentArgumentsSortMode = normalizedMode;
 
   const menu = document.getElementById("sort-menu");
   if (menu) {
@@ -2136,58 +2137,81 @@ const typeInputs = document.querySelectorAll('input[name="debate-type"]');
   } catch (error) {
     debatesForSimilarity = [];
   }
+function renderSimilarDebates(query) {
+  if (!questionInput || !similarBox || !similarList) return;
 
+  const normalizedQuery = normalizeText(query);
+  const queryWords = getMeaningfulWords(query);
 
-  function renderSimilarDebates(query) {
-    if (!questionInput || !similarBox || !similarList) return;
-
-    const normalizedQuery = normalizeText(query);
-
-    if (normalizedQuery.length < 3) {
-      similarBox.style.display = "none";
-      similarList.innerHTML = "";
-      return;
-    }
-
-    const words = normalizedQuery.split(/\s+/).filter(Boolean);
-
-    const matches = debatesForSimilarity
-      .map((debate) => {
-        const normalizedQuestion = normalizeText(debate.question);
-        let score = 0;
-
-        for (const word of words) {
-          if (normalizedQuestion.includes(word)) {
-            score += 1;
-          }
-        }
-
-        if (normalizedQuestion.includes(normalizedQuery)) {
-          score += 3;
-        }
-
-        return { debate, score };
-      })
-      .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    if (!matches.length) {
-      similarBox.style.display = "none";
-      similarList.innerHTML = "";
-      return;
-    }
-
-    similarBox.style.display = "block";
-    similarList.innerHTML = matches.map(({ debate }) => `
-      <a class="similar-debate-item" href="/debate?id=${debate.id}" target="_blank" rel="noopener noreferrer">
-        <div class="similar-debate-question">${escapeHtml(debate.question)}</div>
-        <div class="similar-debate-meta">
-          ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée(s)
-        </div>
-      </a>
-    `).join("");
+  if (normalizedQuery.length < 6 || queryWords.length < 2) {
+    similarBox.style.display = "none";
+    similarList.innerHTML = "";
+    return;
   }
+
+const matches = debatesForSimilarity
+  .filter((debate) => normalizeText(debate.question || "").length > 0)
+  .map((debate) => {
+    const normalizedQuestion = normalizeText(debate.question || "");
+    const debateWords = getMeaningfulWords(debate.question || "");
+
+    const commonWords = countCommonWords(queryWords, debateWords);
+    const commonBigrams = countCommonBigrams(queryWords, debateWords);
+
+    let score = 0;
+
+    if (normalizedQuestion === normalizedQuery) {
+      score += 100;
+    }
+
+    if (
+      normalizedQuestion.length > 0 &&
+      normalizedQuery.length > 0 &&
+      (
+        normalizedQuestion.includes(normalizedQuery) ||
+        normalizedQuery.includes(normalizedQuestion)
+      )
+    ) {
+      score += 20;
+    }
+
+    score += commonWords * 3;
+    score += commonBigrams * 8;
+
+    return {
+      debate,
+      score,
+      commonWords,
+      commonBigrams
+    };
+  })
+  .filter((item) => {
+    return (
+      item.commonWords >= 2 ||
+      item.commonBigrams >= 1 ||
+      item.score >= 12
+    );
+  })
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 5);
+
+  if (!matches.length) {
+    similarBox.style.display = "none";
+    similarList.innerHTML = "";
+    return;
+  }
+
+  similarBox.style.display = "block";
+  similarList.innerHTML = matches.map(({ debate }) => `
+    <a class="similar-debate-item" href="/debate?id=${debate.id}" target="_blank" rel="noopener noreferrer">
+      <div class="similar-debate-question">${escapeHtml(debate.question)}</div>
+      <div class="similar-debate-meta">
+        ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée(s)
+      </div>
+    </a>
+  `).join("");
+}
+
 if (typeInputs.length) {
   typeInputs.forEach((input) => {
     input.addEventListener("change", updateCreateTypeUI);
@@ -2992,6 +3016,10 @@ const params = new URLSearchParams(window.location.search);
 const highlight = params.get("highlight");
 
 if (highlight) {
+if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+  argumentsVisible = currentAllArguments.length;
+}
+if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   if (highlight.startsWith("comment-")) {
     const commentId = highlight.replace("comment-", "");
 
@@ -3002,14 +3030,15 @@ if (highlight) {
         openCommentsByArgument[argumentId] = true;
       }
     }
-
-    if (currentDebateViewMode === "list") {
-      renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
-    } else {
-      renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
-      renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
-    }
   }
+
+  if (currentDebateViewMode === "list") {
+    renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
+  } else {
+    renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
+    renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
+  }
+}
 
   setTimeout(() => {
     let element = null;
@@ -3032,14 +3061,26 @@ if (element) {
     block: "center"
   });
 
-if (
-  highlight.startsWith("argument-") &&
-  (element.classList.contains("argument-card-a") || element.closest("#arguments-a"))
-) {    element.classList.add("flash-green");
+  const isGreenTarget =
+    element.classList.contains("argument-card-a") ||
+    !!element.closest(".argument-card-a") ||
+    !!element.closest("#arguments-a") ||
+    !!element.closest(".column-a");
 
-    setTimeout(() => {
-      element.classList.remove("flash-green");
-    }, 5000);
+  if (isGreenTarget) {
+    if (highlight.startsWith("argument-")) {
+      element.classList.add("flash-green");
+
+      setTimeout(() => {
+        element.classList.remove("flash-green");
+      }, 5000);
+    } else {
+      element.classList.add("admin-highlight-green");
+
+      setTimeout(() => {
+        element.classList.remove("admin-highlight-green");
+      }, 5000);
+    }
   } else {
     element.classList.add("admin-highlight");
 
@@ -3385,22 +3426,32 @@ ${
     : ""
 }
 
-  <div class="comment-stance-row">
-    <label class="comment-stance-option">
-      <input type="radio" name="comment-stance-${a.id}" value="favorable">
-      Favorable à l'idée
-    </label>
 
-    <label class="comment-stance-option">
-      <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-      Défavorable à l'idée
-    </label>
 
-    <label class="comment-stance-option">
-      <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-      Proposition d'amélioration
-    </label>
-  </div>
+${
+  replyToCommentByArgument[a.id]
+    ? ""
+    : `
+      <div class="comment-stance-row">
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="favorable">
+          Favorable à l'idée
+        </label>
+
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="defavorable">
+          Défavorable à l'idée
+        </label>
+
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="amelioration">
+          Proposition d'amélioration
+        </label>
+      </div>
+    `
+}
+
+
 
   <div class="comment-main-field">
 <textarea
@@ -3469,20 +3520,18 @@ ${
         : ""
 }
 
+${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un commentaire</div>` : ""}
 ${
   c.stance === "amelioration"
     ? `
-      ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
-      <div class="comment-improvement-preview">
-        <div class="comment-improvement-preview-label">Proposition de remplacement</div>
-        <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-        <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
-      </div>
+${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+<div class="comment-improvement-preview">
+  <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
+  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+</div>
     `
-    : `<p>${escapeHtml(c.content)}</p>`
+    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
 }
-
-
 
 
 <div class="comment-actions">
@@ -3797,22 +3846,36 @@ ${
     : ""
 }
 
-<div class="comment-stance-row">
-  <label class="comment-stance-option">
-    <input type="radio" name="comment-stance-${a.id}" value="favorable">
-    Favorable à l'idée
-  </label>
+${
+  replyToCommentByArgument[a.id]
+    ? ""
+    : `
+${
+  replyToCommentByArgument[a.id]
+    ? ""
+    : `
+      <div class="comment-stance-row">
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="favorable">
+          Favorable à l'idée
+        </label>
 
-  <label class="comment-stance-option">
-    <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-    Défavorable à l'idée
-  </label>
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="defavorable">
+          Défavorable à l'idée
+        </label>
 
-  <label class="comment-stance-option">
-    <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-    Proposition d'amélioration
-  </label>
-</div>
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="amelioration">
+          Proposition d'amélioration
+        </label>
+      </div>
+    `
+}
+
+
+    `
+}
 
 <div class="comment-main-field">
   <textarea
@@ -3887,17 +3950,17 @@ ${
         : ""
 }
 
+${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un commentaire</div>` : ""}
 ${
   c.stance === "amelioration"
     ? `
-      ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
-      <div class="comment-improvement-preview">
-        <div class="comment-improvement-preview-label">Proposition de remplacement</div>
-        <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-        <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
-      </div>
+${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+<div class="comment-improvement-preview">
+  <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
+  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+</div>
     `
-    : `<p>${escapeHtml(c.content)}</p>`
+    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
 }
 <div class="comment-actions">
   <button

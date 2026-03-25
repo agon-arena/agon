@@ -3035,14 +3035,6 @@ body.page-debate .topbar::after {
   border-radius: 12px;
 }
 
-.comment-improvement-preview-label {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: #92400e;
-  margin-bottom: 6px;
-}
-
 .comment-improvement-preview-title {
   font-weight: 700;
   color: #111827;
@@ -4723,70 +4715,7 @@ body.page-debate .topbar::after {
 }
 
 /* ===== MOBILE : commentaires sans casser le mode colonnes ===== */
-@media (max-width: 768px) {
-  .comments-block,
-  .comment-form,
-  .comments-list,
-  .comment-card {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .comment-main-field,
-  .comment-main-field textarea,
-  .comment-main-field small {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
 
-  .comments-block,
-  .comments-list {
-    display: grid;
-    width: 100%;
-    justify-items: stretch;
-  }
-
-  .comment-card {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    margin-left: 0;
-    margin-right: 0;
-    justify-self: stretch;
-    align-self: stretch;
-  }
-
-  .comment-card p,
-  .comment-like-count,
-  .comment-stance-badge,
-  .comment-improvement-preview-title,
-  .comment-improvement-preview-body {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .comment-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .comment-like-button,
-  .comment-dislike-button,
-  .comment-actions .button,
-  .comment-actions .report-button,
-  .comment-actions .delete-button {
-    width: 100%;
-    text-align: center;
-    box-sizing: border-box;
-  }
-}
 @media (max-width: 768px) {
   .debate-columns:not(.focus-a):not(.focus-b) .debate-column {
     min-width: 0;
@@ -5045,4 +4974,84 @@ body.page-debate .topbar::after {
 
 .argument-form button[type="submit"]:hover {
   background: #1d4ed8 !important;
+}
+
+@media (max-width: 768px) {
+  .comment-improvement-title-input,
+  .comment-improvement-body-input {
+    font-size: 14px !important;
+  }
+
+  .comment-improvement-title-input::placeholder,
+  .comment-improvement-title-input::-webkit-input-placeholder,
+  .comment-improvement-title-input::-moz-placeholder,
+  .comment-improvement-title-input:-ms-input-placeholder,
+  .comment-improvement-title-input::-ms-input-placeholder,
+  .comment-improvement-body-input::placeholder,
+  .comment-improvement-body-input::-webkit-input-placeholder,
+  .comment-improvement-body-input::-moz-placeholder,
+  .comment-improvement-body-input:-ms-input-placeholder,
+  .comment-improvement-body-input::-ms-input-placeholder {
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    opacity: 1 !important;
+  }
+}
+@media (max-width: 768px) {
+  .debate-columns:not(.focus-a):not(.focus-b) 
+  .comment-improvement-preview-label {
+    text-align: center;
+    width: 100%;
+    letter-spacing: 0.04em;
+  }
+}
+
+@media (max-width: 768px) {
+  .comment-actions {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .comment-like-button,
+  .comment-dislike-button {
+    width: auto !important;
+    min-width: 36px;
+    padding: 4px 8px !important;
+    font-size: 13px !important;
+    line-height: 1;
+    border-radius: 8px;
+    flex: 0 0 auto;
+  }
+
+  .comment-actions .comment-like-count {
+    width: auto !important;
+    flex: 0 0 auto;
+    font-size: 12px;
+  }
+
+  .comment-actions .button,
+  .comment-actions .report-button,
+  .comment-actions .delete-button {
+    width: auto !important;
+    padding: 5px 8px !important;
+    font-size: 12px !important;
+    flex: 0 0 auto;
+  }
+}
+.comment-reply-label {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 4px 8px;
+  margin-bottom: 2px;
+}
+@media (max-width: 768px) {
+  .comment-actions .delete-button {
+    display: none !important;
+  }
 }

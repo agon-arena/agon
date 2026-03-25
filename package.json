@@ -13,5 +13,8 @@
     "dotenv": "^17.3.1",
     "express": "^4.21.2",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2"
   }
 }
