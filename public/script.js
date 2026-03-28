@@ -656,8 +656,9 @@ function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
   const gainedPlaces = previousRank - newRank;
   const placeLabel = gainedPlaces === 1 ? "place" : "places";
 
-  showVoteWarning(
-    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive à la ${formatIdeaRank(newRank)} du classement.`
+  showReplacementSuccessMessage(
+    "🚀 Belle progression",
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`
   );
 }
 
@@ -5115,7 +5116,7 @@ async function editArgument(argumentId) {
 /* =========================
    Boot
 ========================= */
-function showReplacementSuccessMessage() {
+function showReplacementSuccessMessage(title, message) {
   const existing = document.getElementById("replacement-success-overlay");
   if (existing) existing.remove();
 
@@ -5123,14 +5124,11 @@ function showReplacementSuccessMessage() {
   overlay.id = "replacement-success-overlay";
   overlay.className = "replacement-success-overlay";
 
-overlay.innerHTML = `
-  <div class="replacement-success-box ranking-gain-box">
-    <div class="replacement-success-icon ranking-gain-icon">🚀🚀🚀</div>
-    <div class="replacement-success-title">${title}</div>
-    <div class="replacement-success-text">${message}</div>
-    <button class="replacement-success-button">Continuer</button>
-  </div>
-`;
+  overlay.innerHTML = `
+    <div class="replacement-success-box ranking-gain-box">
+      <div class="replacement-success-icon ranking-gain-icon">🚀🚀🚀</div>
+      <div class="replacement-success-title">${title}</div>
+      <div class="replacement-success-text">${message}</div>
       <button
         type="button"
         class="replacement-success-button"
