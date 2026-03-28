@@ -2903,11 +2903,9 @@ body.page-debate .topbar::after {
 .debate-top-focus-buttons{
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  gap: 28px;
-
+  gap: 14px;
   width: min(1100px, 100%);
-  margin: 4px auto 4px auto; /* espace équilibré haut/bas */
-
+  margin: 0 auto 2px auto;
   padding: 0;
   background: transparent;
 }
@@ -2930,14 +2928,16 @@ body.page-debate .topbar::after {
   transform: none !important;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:999px;
-  padding:10px 14px;
+  padding:6px 10px;
+  min-height:36px;
+  min-width:72px;
   font-weight:600;
-  font-size:13px;
+  font-size:12px;
   cursor:pointer;
   background:rgba(255,255,255,0.92);
   color:#111827;
   backdrop-filter:blur(6px);
-  box-shadow:0 6px 16px rgba(0,0,0,0.12);
+  box-shadow:0 4px 10px rgba(0,0,0,0.10);
   transition:all 0.18s ease;
 }
 
@@ -4888,24 +4888,27 @@ body.page-debate .topbar::after {
     display: none !important;
   }
 
-  .debate-top-focus-buttons {
-    width: 100% !important;
-    max-width: 1100px !important;
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    align-items: center !important;
-    column-gap: 12px !important;
-    margin: 0 auto 4px auto !important; /* moins d’espace au-dessus, un peu plus en dessous */
-    padding: 0 !important;
-    background: transparent !important;
-  }
+.debate-top-focus-buttons {
+  width: 100% !important;
+  max-width: 1100px !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  align-items: center !important;
+  column-gap: 10px !important;
+  margin: 0 auto 2px auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
 
-  .debate-top-focus-buttons .debate-side-focus-btn {
-    min-width: 90px !important;
-    text-align: center !important;
-    margin: 0 !important;
-    justify-self: center !important;
-  }
+.debate-top-focus-buttons .debate-side-focus-btn {
+  min-width: 72px !important;
+  min-height: 34px !important;
+  padding: 5px 8px !important;
+  font-size: 12px !important;
+  text-align: center !important;
+  margin: 0 !important;
+  justify-self: center !important;
+}
 
   .debate-side-focus-btn-left {
     grid-column: 1 !important;
