@@ -2932,8 +2932,24 @@ if (pendingTopCommentScroll) {
   }, 250);
 }
 else if (pendingCommentScrollId) {
+  const targetId = pendingCommentScrollId;
+
   setTimeout(() => {
-    scrollToTopVisibleComment();
+    const element = getVisibleCommentElement(targetId);
+
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+
+      applyVoiceHighlight(element);
+
+      setTimeout(() => {
+        removeVoiceHighlight(element);
+      }, 2000);
+    }
+
     pendingCommentScrollId = null;
   }, 250);
 }
