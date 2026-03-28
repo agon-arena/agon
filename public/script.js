@@ -5436,7 +5436,7 @@ function openArgumentComposer(side) {
 
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-    const offset = topbar ? topbar.offsetHeight + 80 : 160;
+const offset = topbar ? topbar.offsetHeight + 120 : 200;
     const y = listForm.getBoundingClientRect().top + window.scrollY - offset;
 
     window.scrollTo({
