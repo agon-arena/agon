@@ -124,18 +124,6 @@ function sendServerError(res, message = "Erreur serveur.") {
   return res.status(500).json({ error: message });
 }
 
-  const setA = new Set(wordsA);
-  const setB = new Set(wordsB);
-
-  const intersectionCount = [...setA].filter((word) => setB.has(word)).length;
-  const unionCount = new Set([...setA, ...setB]).size;
-
-  if (!unionCount) {
-    return 0;
-  }
-
-  return intersectionCount / unionCount;
-}
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "views/index.html"));
 });
