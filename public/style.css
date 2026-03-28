@@ -2971,43 +2971,6 @@ body.page-debate .topbar::after {
   box-shadow:0 10px 28px rgba(0,0,0,0.18);
 }
 
-.debate-side-focus-btn-left{
-  left:auto;
-  right:auto;
-  top:auto;
-  transform:none;
-}
-
-.debate-side-focus-btn-left:hover{
-  background:rgba(255,255,255,0.96);
-}
-
-.debate-side-focus-btn-right{
-  left:auto;
-  right:auto;
-  top:auto;
-  transform:none;
-}
-
-.debate-side-focus-btn-right:hover{
-  background:rgba(255,255,255,0.96);
-}
-
-.debate-side-focus-btn-reset{
-  left:auto;
-  right:auto;
-  bottom:auto;
-  transform:none;
-  background:#000000;
-  color:#ffffff;
-  border:1px solid #111827;
-  box-shadow:0 8px 20px rgba(0,0,0,0.25);
-}
-
-.debate-side-focus-btn-reset:hover{
-  transform:scale(1.03);
-  background:#111111;
-}
 
 .open-question-reply-wrap {
   margin: 12px 0 4px 0;
