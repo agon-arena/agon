@@ -14,6 +14,7 @@ let pendingCommentScrollId = null;
 let openedArgumentForm = null;
 let pinnedNewCommentId = null;
 let pinnedNewArgumentId = null;
+let pendingTopCommentScroll = null;
 
 let currentAllArguments = [];
 let currentDebateViewMode = "columns";
@@ -2908,7 +2909,35 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
   renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
 }
 
-if (pendingArgumentScrollId) {
+if (pendingTopCommentScroll) {
+  const targetId = pendingTopCommentScroll;
+
+  setTimeout(() => {
+    const element = document.getElementById(targetId);
+
+    if (element) {
+      const topbar = document.querySelector(".topbar");
+      const offset = (topbar ? topbar.offsetHeight : 80) + 20;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+    } else {
+      scrollToTopVisibleComment();
+    }
+
+    pendingTopCommentScroll = null;
+  }, 250);
+}
+else if (pendingCommentScrollId) {
+  setTimeout(() => {
+    scrollToTopVisibleComment();
+    pendingCommentScrollId = null;
+  }, 250);
+}
+else if (pendingArgumentScrollId) {
   const targetId = pendingArgumentScrollId;
 
   setTimeout(() => {
@@ -2920,7 +2949,8 @@ if (pendingArgumentScrollId) {
         block: "center"
       });
 
-if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {        element.classList.add("flash-green");
+      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+        element.classList.add("flash-green");
 
         setTimeout(() => {
           element.classList.remove("flash-green");
@@ -2935,30 +2965,7 @@ if (element.classList.contains("argument-card-a") || element.closest("#arguments
     }
 
     pendingArgumentScrollId = null;
-pinnedNewArgumentId = null;
-  }, 250);
-}
-
-if (pendingCommentScrollId) {
-  const targetId = pendingCommentScrollId;
-
-  setTimeout(() => {
-    const element = getVisibleCommentElement(targetId);
-
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-
-      applyVoiceHighlight(element);
-
-      setTimeout(() => {
-        removeVoiceHighlight(element);
-      }, 2000);
-    }
-
-    pendingCommentScrollId = null;
+    pinnedNewArgumentId = null;
   }, 250);
 }
 
@@ -4535,6 +4542,56 @@ function scrollToArgumentFromSummary(argId) {
     }, 2000);
   }, 420);
 }
+
+function getTopVisibleCommentElement() {
+  const commentElements = Array.from(
+    document.querySelectorAll(".comment-card[id^='comment-'], .comment-card[id^='list-comment-']")
+  );
+
+  if (!commentElements.length) return null;
+
+  const viewportTop = window.innerHeight > 0 ? 0 : 0;
+
+  let best = null;
+  let bestTop = Infinity;
+
+  commentElements.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+
+    // On ignore les commentaires complètement hors écran vers le bas
+    if (rect.bottom <= 0) return;
+    if (rect.top >= window.innerHeight) return;
+
+    if (rect.top < bestTop) {
+      bestTop = rect.top;
+      best = el;
+    }
+  });
+
+  return best;
+} 
+function scrollToTopVisibleComment() {
+  const element = getTopVisibleCommentElement();
+
+  if (!element) return;
+
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 20;
+
+  const rect = element.getBoundingClientRect();
+
+  // Si déjà bien placé → on ne bouge pas
+  if (rect.top >= offset && rect.top <= offset + 40) {
+    return;
+  }
+
+  const y = rect.top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+}
 async function deleteReportedTarget(targetType, targetId) {
   if (!isAdmin()) {
     alert("Mode admin requis.");
@@ -4776,6 +4833,11 @@ function toggleForm(side) {
 
 function toggleComments(argumentId) {
   const willOpen = !openCommentsByArgument[argumentId];
+
+  // On mémorise le commentaire actuellement le plus haut visible
+  const topVisibleComment = getTopVisibleCommentElement();
+  pendingTopCommentScroll = topVisibleComment ? topVisibleComment.id : null;
+
   openCommentsByArgument[argumentId] = willOpen;
 
   if (willOpen && !visibleCommentsByArgument[argumentId]) {
@@ -4784,10 +4846,6 @@ function toggleComments(argumentId) {
 
   const debateId = getDebateId();
   if (!debateId) return;
-
-  if (!willOpen) {
-    pendingArgumentScrollId = String(argumentId);
-  }
 
   loadDebate(debateId);
 }
