@@ -2897,20 +2897,25 @@ body.page-debate .topbar::after {
     0 8px 20px rgba(0,0,0,0.08),
     0 1px 0 rgba(255,255,255,0.6) inset;
 }
-
 .debate-top-focus-buttons{
-  position: sticky;
-  top: 168px;
-  z-index: 29;
+  position: static;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 12px;
   width: 100%;
   margin-top: 12px;
-  margin-bottom: 12px;
   padding: 8px 0;
-  background: #f4f6f8;
+  background: transparent; /* ✅ changement ici */
+}
+.debate-top-focus-buttons{
+  text-align: center;
+}
+
+.debate-top-focus-buttons .debate-side-focus-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .debate-side-focus-btn{
@@ -5044,5 +5049,20 @@ body.page-debate .topbar::after {
     font-size: 13px;
     line-height: 1;
     border-radius: 999px;
+  }
+}
+@media (max-width: 768px) {
+  .debate-top-focus-buttons{
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .debate-top-focus-buttons .debate-side-focus-btn{
+    min-width: 90px;
+    text-align: center;
   }
 }
