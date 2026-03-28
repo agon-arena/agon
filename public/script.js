@@ -5433,7 +5433,7 @@ function openArgumentFormAndScroll(side) {
 
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-    const offset = (topbar ? topbar.offsetHeight : 80) + 100;
+const offset = (topbar ? topbar.offsetHeight : 80) + 120;
     const y = form.getBoundingClientRect().top + window.scrollY - offset;
 
     window.scrollTo({
@@ -5463,8 +5463,7 @@ function openArgumentComposer(side) {
 setListArgumentSide("");
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-    const offset = topbar ? topbar.offsetHeight + 20 : 100;
-    const y = listForm.offsetTop - offset;
+const offset = (topbar ? topbar.offsetHeight : 80) + 120;    const y = listForm.offsetTop - offset;
 
     window.scrollTo({
       top: y,
