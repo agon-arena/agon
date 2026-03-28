@@ -373,9 +373,6 @@ function handleArgumentDoubleClick(event, side, argumentId) {
   setDebateColumnFocus(currentFocus === side ? "split" : side);
 }
 
-  const currentFocus = getDebateColumnFocus();
-  setDebateColumnFocus(currentFocus === side ? "split" : side);
-}
 
 function applyDebateColumnFocusUI() {
   const focusMode = getDebateColumnFocus();
