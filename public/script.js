@@ -280,7 +280,6 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
 }
 
-
 function restoreMobileColumnFocusScroll() {
   if (!isColumnFocusScrollContext()) return;
   if (!pendingMobileColumnFocusElementId) return;
@@ -372,9 +371,6 @@ function handleArgumentDoubleClick(event, side, argumentId) {
     }
   }
 
-  const currentFocus = getDebateColumnFocus();
-  setDebateColumnFocus(currentFocus === side ? "split" : side);
-}
 
 
 function applyDebateColumnFocusUI() {
