@@ -2671,31 +2671,40 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
  .positions-grid {
   grid-template-columns: 1fr;
 }
-  .debate-side-focus-btn-left,
-  .debate-side-focus-btn-right{
-    top:auto;
-    bottom:90px;
-    transform:none;
-    padding:10px 12px;
-    font-size:13px;
-  }
+.debate-top-focus-buttons{
+  position: sticky;
+  top: 168px;
+  z-index: 29;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 8px 0;
+  background: #f4f6f8;
+}
 
-  .debate-side-focus-btn-left{
-    left:12px;
-  }
+.debate-side-focus-btn-left,
+.debate-side-focus-btn-right{
+  top:auto;
+  bottom:auto;
+  left:auto;
+  right:auto;
+  transform:none;
+  padding:10px 12px;
+  font-size:13px;
+}
 
-  .debate-side-focus-btn-right{
-    right:12px;
-  }
+.debate-side-focus-btn-left:hover,
+.debate-side-focus-btn-right:hover{
+  transform:scale(1.03);
+}
 
-  .debate-side-focus-btn-left:hover,
-  .debate-side-focus-btn-right:hover{
-    transform:scale(1.03);
-  }
-
-  .debate-side-focus-btn-reset{
-    bottom:24px;
-  }
+.debate-side-focus-btn-reset{
+  bottom:auto;
+}
 
   .topbar-inner,
   .section-header,
