@@ -412,21 +412,40 @@ function applyDebateColumnFocusUI() {
     return;
   }
 
-  if (focusMode === "a") {
-    if (headings) headings.style.display = "none";
-    if (columnA) columnA.style.display = "";
-    if (columnB) columnB.style.display = "none";
-    columns.classList.add("focus-a");
-  } else if (focusMode === "b") {
-    if (headings) headings.style.display = "none";
-    if (columnA) columnA.style.display = "none";
-    if (columnB) columnB.style.display = "";
-    columns.classList.add("focus-b");
-  } else {
-    if (headings) headings.style.display = "grid";
-    if (columnA) columnA.style.display = "";
-    if (columnB) columnB.style.display = "";
-  }
+const headerA = document.querySelector(".column-header.position-a");
+const headerB = document.querySelector(".column-header.position-b");
+
+if (focusMode === "a") {
+  if (headings) headings.style.display = "grid";
+
+  if (headerA) headerA.style.display = "";
+  if (headerB) headerB.style.display = "none";
+
+  if (columnA) columnA.style.display = "";
+  if (columnB) columnB.style.display = "none";
+
+  columns.classList.add("focus-a");
+
+} else if (focusMode === "b") {
+  if (headings) headings.style.display = "grid";
+
+  if (headerA) headerA.style.display = "none";
+  if (headerB) headerB.style.display = "";
+
+  if (columnA) columnA.style.display = "none";
+  if (columnB) columnB.style.display = "";
+
+  columns.classList.add("focus-b");
+
+} else {
+  if (headings) headings.style.display = "grid";
+
+  if (headerA) headerA.style.display = "";
+  if (headerB) headerB.style.display = "";
+
+  if (columnA) columnA.style.display = "";
+  if (columnB) columnB.style.display = "";
+}
 
 if (sideFocusLeft) {
   sideFocusLeft.style.display = "";

@@ -5062,3 +5062,9 @@ body.page-debate .topbar::after {
   opacity: 0.5;
   pointer-events: none;
 }
+.debate-headings {
+  position: sticky;
+  top: 120px;
+  z-index: 15;
+  background: white;
+}
