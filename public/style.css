@@ -2921,16 +2921,29 @@ body.page-debate .topbar::after {
     0 8px 20px rgba(0,0,0,0.08),
     0 1px 0 rgba(255,255,255,0.6) inset;
 }
+
+.debate-top-focus-buttons{
+  position: sticky;
+  top: 168px;
+  z-index: 29;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 8px 0;
+  background: #f4f6f8;
+}
+
 .debate-side-focus-btn{
-  position:fixed;
-  z-index:1200;
+  position: static;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:999px;
-  padding:10px 12px;
+  padding:10px 14px;
   font-weight:600;
   font-size:13px;
   cursor:pointer;
-  background:rgba(255,255,255,0.88);
+  background:rgba(255,255,255,0.92);
   color:#111827;
   backdrop-filter:blur(6px);
   box-shadow:0 6px 16px rgba(0,0,0,0.12);
@@ -2938,14 +2951,15 @@ body.page-debate .topbar::after {
 }
 
 .debate-side-focus-btn:hover{
-  transform:translateY(-50%) scale(1.05);
+  transform:scale(1.05);
   box-shadow:0 10px 28px rgba(0,0,0,0.18);
 }
 
 .debate-side-focus-btn-left{
-  top:50%;
-  left:12px;
-  transform:translateY(-50%);
+  left:auto;
+  right:auto;
+  top:auto;
+  transform:none;
 }
 
 .debate-side-focus-btn-left:hover{
@@ -2953,9 +2967,10 @@ body.page-debate .topbar::after {
 }
 
 .debate-side-focus-btn-right{
-  top:50%;
-  right:12px;
-  transform:translateY(-50%);
+  left:auto;
+  right:auto;
+  top:auto;
+  transform:none;
 }
 
 .debate-side-focus-btn-right:hover{
@@ -2963,9 +2978,10 @@ body.page-debate .topbar::after {
 }
 
 .debate-side-focus-btn-reset{
-  left:50%;
-  bottom:24px;
-  transform:translateX(-50%);
+  left:auto;
+  right:auto;
+  bottom:auto;
+  transform:none;
   background:#000000;
   color:#ffffff;
   border:1px solid #111827;
@@ -2973,11 +2989,9 @@ body.page-debate .topbar::after {
 }
 
 .debate-side-focus-btn-reset:hover{
-  transform:translateX(-50%) scale(1.03);
+  transform:scale(1.03);
   background:#111111;
 }
-
-
 
 .open-question-reply-wrap {
   margin: 12px 0 4px 0;
