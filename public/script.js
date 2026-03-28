@@ -346,15 +346,32 @@ if (pendingColumnFocusScrollMode === "dblclick") {
   pendingColumnFocusScrollMode = null;
 }
 
-function handleArgumentDoubleClick(side, argumentId) {
+function handleArgumentDoubleClick(event, side, argumentId) {
   pendingColumnFocusScrollMode = "dblclick";
 
-  captureHighestVisibleElementForMobileColumnFocus(side);
+  // 🔥 IMPORTANT : on prend EXACTEMENT l’élément cliqué
+  const clickedComment = event?.target?.closest(".comment-card[id]");
+  const clickedArgument = event?.target?.closest(".argument-card[id]");
 
-  if (!pendingMobileColumnFocusElementId && argumentId) {
-    pendingMobileColumnFocusElementId = `argument-${argumentId}`;
-    pendingMobileColumnFocusElementTop = 0;
+  if (clickedComment) {
+    pendingMobileColumnFocusElementId = clickedComment.id;
+    pendingMobileColumnFocusElementTop = clickedComment.getBoundingClientRect().top;
+  } else if (clickedArgument) {
+    pendingMobileColumnFocusElementId = clickedArgument.id;
+    pendingMobileColumnFocusElementTop = clickedArgument.getBoundingClientRect().top;
+  } else {
+    // fallback (ancien comportement)
+    captureHighestVisibleElementForMobileColumnFocus(side);
+
+    if (!pendingMobileColumnFocusElementId && argumentId) {
+      pendingMobileColumnFocusElementId = `argument-${argumentId}`;
+      pendingMobileColumnFocusElementTop = 0;
+    }
   }
+
+  const currentFocus = getDebateColumnFocus();
+  setDebateColumnFocus(currentFocus === side ? "split" : side);
+}
 
   const currentFocus = getDebateColumnFocus();
   setDebateColumnFocus(currentFocus === side ? "split" : side);
@@ -3342,7 +3359,7 @@ const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length
 return `
 <article id="argument-${a.id}"
          class="argument-card ${voted ? "argument-card-voted" : ""}"
-         ondblclick="handleArgumentDoubleClick('${a.side === "A" ? "a" : "b"}', '${a.id}')">
+  ondblclick="handleArgumentDoubleClick(event, '${a.side === "A" ? "a" : "b"}', '${a.id}')">
   ${(isOwner || isAdmin()) ? `
     <button
       class="argument-owner-delete"
