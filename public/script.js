@@ -22,7 +22,8 @@ let currentTypeFilter = "all";
 let currentArgumentsSortMode = "score";
 
 let pendingMobileColumnFocusElementId = null;
-let pendingMobileColumnFocusElementTop = null;
+let pendingMobileColumnFocusElementTop = null
+let pendingColumnFocusScrollMode = null;
 
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
@@ -311,14 +312,16 @@ function setDebateColumnFocus(mode) {
   const isGoingFromSingleToSplit =
     ["a", "b"].includes(previousMode) && normalizedMode === "split";
 
-  if (isGoingFromSplitToSingle) {
-    captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
-  } else if (isGoingFromSingleToSplit) {
-    captureHighestVisibleElementForMobileColumnFocus(previousMode);
-  } else {
-    pendingMobileColumnFocusElementId = null;
-    pendingMobileColumnFocusElementTop = null;
-  }
+if (pendingColumnFocusScrollMode === "dblclick") {
+  // on garde la carte ciblée → ne rien faire
+} else if (isGoingFromSplitToSingle) {
+  captureHighestVisibleElementForMobileColumnFocus(normalizedMode);
+} else if (isGoingFromSingleToSplit) {
+  captureHighestVisibleElementForMobileColumnFocus(previousMode);
+} else {
+  pendingMobileColumnFocusElementId = null;
+  pendingMobileColumnFocusElementTop = null;
+}
 
   localStorage.setItem("debate_column_focus", normalizedMode);
   applyDebateColumnFocusUI();
@@ -330,6 +333,20 @@ function setDebateColumnFocus(mode) {
       });
     });
   }
+
+  pendingColumnFocusScrollMode = null;
+}
+
+function handleArgumentDoubleClick(side, argumentId) {
+  pendingColumnFocusScrollMode = "dblclick";
+
+  if (argumentId) {
+    pendingMobileColumnFocusElementId = `argument-${argumentId}`;
+    pendingMobileColumnFocusElementTop = 0;
+  }
+
+  const currentFocus = getDebateColumnFocus();
+  setDebateColumnFocus(currentFocus === side ? "split" : side);
 }
 
 function applyDebateColumnFocusUI() {
@@ -3299,30 +3316,30 @@ const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
 const visibleComments = comments.slice(0, visibleCommentsCount);
 const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length);
 
-    return `
-<article id="argument-${a.id}" class="argument-card ${voted ? "argument-card-voted" : ""}">
+return `
+<article id="argument-${a.id}"
+         class="argument-card ${voted ? "argument-card-voted" : ""}"
+         ondblclick="handleArgumentDoubleClick('${a.side === "A" ? "a" : "b"}', '${a.id}')">
   ${(isOwner || isAdmin()) ? `
     <button
       class="argument-owner-delete"
       type="button"
-      onclick="deleteArgument('${debateId}','${a.id}')"
+      onclick="event.stopPropagation(); deleteArgument('${debateId}','${a.id}')"
       title="Supprimer cette idée"
     >
       ✕
     </button>
-  ` : ""}        <div class="argument-top">
-<span class="vote-badge">
-  ${medal}${rankLabel ? " " + rankLabel : ""}
-  ${(medal || rankLabel) ? '<span class="vote-separator">•</span>' : ""}
-<span class="vote-count">${a.votes} voix</span></span>
-        </div>
+  ` : ""}
+  <div class="argument-top">
+    <span class="vote-badge">
+      ${medal}${rankLabel ? " " + rankLabel : ""}
+      ${(medal || rankLabel) ? '<span class="vote-separator">•</span>' : ""}
+      <span class="vote-count">${a.votes} voix</span>
+    </span>
+  </div>
 
-        <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-        ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
-
-
-
-
+  <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
+  ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
 
 <div class="argument-actions">
   <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">

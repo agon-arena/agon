@@ -14,8 +14,7 @@ if (!ADMIN_PASSWORD) {
 }
 const MAX_VOTES_PER_DEBATE = 5;
 
-const sqlitePath = process.env.SQLITE_PATH || "./database.db";
-
+const sqlitePath = process.env.SQLITE_PATH || "/var/data/database.db";
 console.log("📀 DATABASE PATH =", sqlitePath);
 
 const db = new sqlite3.Database(sqlitePath);
@@ -2232,7 +2231,9 @@ app.delete("/api/comments/:id", (req, res) => {
     }
   );
 });
-
+app.get('/download-db', (req, res) => {
+  res.download('/var/data/database.db');
+});
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
