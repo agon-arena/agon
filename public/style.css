@@ -2903,7 +2903,7 @@ body.page-debate .topbar::after {
 .debate-top-focus-buttons{
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  gap: 14px;
+  gap: 8px;
   width: min(1100px, 100%);
   margin: 0 auto 2px auto;
   padding: 0;
@@ -2921,23 +2921,21 @@ body.page-debate .topbar::after {
 
 .debate-side-focus-btn{
   position: static !important;
-  top: auto !important;
-  right: auto !important;
-  bottom: auto !important;
-  left: auto !important;
-  transform: none !important;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:999px;
-  padding:6px 10px;
-  min-height:36px;
-  min-width:72px;
+
+  padding:4px 8px;
+  min-height:30px;
+  min-width:60px;
+
   font-weight:600;
-  font-size:12px;
+  font-size:11px;
+
   cursor:pointer;
   background:rgba(255,255,255,0.92);
   color:#111827;
-  backdrop-filter:blur(6px);
-  box-shadow:0 4px 10px rgba(0,0,0,0.10);
+
+  box-shadow:0 2px 6px rgba(0,0,0,0.08);
   transition:all 0.18s ease;
 }
 
@@ -4890,23 +4888,18 @@ body.page-debate .topbar::after {
 
 .debate-top-focus-buttons {
   width: 100% !important;
-  max-width: 1100px !important;
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
-  align-items: center !important;
-  column-gap: 10px !important;
-  margin: 0 auto 2px auto !important;
+  column-gap: 8px !important;
+  margin: 0 auto !important;
   padding: 0 !important;
-  background: transparent !important;
 }
 
 .debate-top-focus-buttons .debate-side-focus-btn {
-  min-width: 72px !important;
-  min-height: 34px !important;
-  padding: 5px 8px !important;
-  font-size: 12px !important;
-  text-align: center !important;
-  margin: 0 !important;
+  min-width: 60px !important;
+  min-height: 28px !important;
+  padding: 4px 6px !important;
+  font-size: 11px !important;
   justify-self: center !important;
 }
 
