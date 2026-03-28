@@ -4847,14 +4847,36 @@ body.page-debate .topbar::after {
   .debate-title-row {
     width: 100% !important;
     display: flex !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
     align-items: center !important;
     justify-content: center !important;
     gap: 8px !important;
+    position: relative !important;
+    padding-right: 0 !important;
   }
 
   .debate-title-side-tools {
-    display: none !important;
+    position: static !important;
+    transform: none !important;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+  }
+
+  .debate-back-arrow,
+  .debate-compact-bell {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 15px !important;
+    padding: 0 !important;
   }
 
   .share-bar-top {
@@ -4886,22 +4908,22 @@ body.page-debate .topbar::after {
     display: none !important;
   }
 
-.debate-top-focus-buttons {
-  width: 100% !important;
-  display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
-  column-gap: 8px !important;
-  margin: 0 auto !important;
-  padding: 0 !important;
-}
+  .debate-top-focus-buttons {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    column-gap: 8px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
 
-.debate-top-focus-buttons .debate-side-focus-btn {
-  min-width: 60px !important;
-  min-height: 28px !important;
-  padding: 4px 6px !important;
-  font-size: 11px !important;
-  justify-self: center !important;
-}
+  .debate-top-focus-buttons .debate-side-focus-btn {
+    min-width: 60px !important;
+    min-height: 28px !important;
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+    justify-self: center !important;
+  }
 
   .debate-side-focus-btn-left {
     grid-column: 1 !important;
@@ -4916,6 +4938,21 @@ body.page-debate .topbar::after {
   }
 
   #admin-login-btn {
+    display: none !important;
+  }
+}
+@media (max-width: 768px) {
+  .debate-back-arrow {
+    order: 1;
+  }
+
+  .debate-compact-bell {
+    order: 2;
+  }
+} 
+@media (min-width: 769px) {
+  .debate-back-arrow,
+  .topbar-back-arrow {
     display: none !important;
   }
 }
