@@ -65,102 +65,102 @@
 
 <main class="container debate-page">
 
-<section class="debate-hero">
-<div class="debate-hero-top">
-  <div>
-<div class="debate-title-row">
-
-  <h1 id="debate-question">Chargement...</h1>
-
-  <div class="debate-title-side-tools">
-<a href="/" class="debate-back-arrow" title="Retour aux arènes">      <i class="fa-solid fa-arrow-left"></i>
-    </a>
-
-    <a
-      id="notifications-bell-compact"
-      class="notifications-button notifications-link notifications-button-large debate-compact-bell"
-      href="/notifications"
-      title="Notifications"
-    >
-      🔔
-      <span id="notifications-count-compact" class="notifications-count" style="display:none;"></span>
-    </a>
-  </div>
-
-</div>
-
-<div id="global-share-bar"></div>
  
+<div class="debate-hero-top">
 
+    <div>
+      <div class="debate-title-row">
+        <h1 id="debate-question">Chargement...</h1>
 
+        <div class="debate-title-side-tools">
+          <a href="/" class="debate-back-arrow" title="Retour aux arènes">
+            <i class="fa-solid fa-arrow-left"></i>
+          </a>
 
-<div class="debate-scroll-add-wrap">
-  <button
-    id="debate-scroll-add-button"
-    class="button debate-scroll-add-button"
-    type="button"
-    onclick="openArgumentComposer('a')"
-  >
-    Ajouter une idée
-  </button>
-</div>
+          <a
+            id="notifications-bell-compact"
+            class="notifications-button notifications-link notifications-button-large debate-compact-bell"
+            href="/notifications"
+            title="Notifications"
+          >
+            🔔
+            <span id="notifications-count-compact" class="notifications-count" style="display:none;"></span>
+          </a>
+        </div>
+      </div>
 
-<div id="open-question-reply-wrap" class="open-question-reply-wrap" style="display:none;">
-  <button
-    id="open-question-reply-btn"
-    class="button button-small open-question-reply-btn"
-    type="button"
- onclick="openArgumentComposer('a')"
-  >
-    Répondre
-  </button>
-</div>
+      <div id="global-share-bar"></div>
 
-<div class="debate-admin-actions">
-  <button
-    id="edit-debate-btn"
-    class="button button-small"
-    data-admin
-    style="display:none;"
-    type="button"
-    onclick="editDebate()"
-  >
-    Modifier le débat
-  </button>
+      <div class="debate-scroll-add-wrap">
+        <button
+          id="debate-scroll-add-button"
+          class="button debate-scroll-add-button"
+          type="button"
+          onclick="openArgumentComposer('a')"
+        >
+          Ajouter une idée
+        </button>
+      </div>
 
-  <button
-    id="delete-debate-btn"
-    class="delete-button"
-    data-admin
-    style="display:none;"
-    type="button"
-  >
-    Supprimer ce débat
-  </button>
-</div>
+      <div id="open-question-reply-wrap" class="open-question-reply-wrap" style="display:none;">
+        <button
+          id="open-question-reply-btn"
+          class="button button-small open-question-reply-btn"
+          type="button"
+          onclick="openArgumentComposer('a')"
+        >
+          Répondre
+        </button>
+      </div>
+
+      <div class="debate-admin-actions">
+        <button
+          id="edit-debate-btn"
+          class="button button-small"
+          data-admin
+          style="display:none;"
+          type="button"
+          onclick="editDebate()"
+        >
+          Modifier le débat
+        </button>
+
+        <button
+          id="delete-debate-btn"
+          class="delete-button"
+          data-admin
+          style="display:none;"
+          type="button"
+        >
+          Supprimer ce débat
+        </button>
+      </div>
+
+      <div class="debate-top-focus-buttons">
+        <button
+          type="button"
+          id="side-focus-left-btn"
+          class="debate-side-focus-btn debate-side-focus-btn-left"
+          onclick="setDebateColumnFocus('a')"
+        >
+          Ouvrir A
+        </button>
+
+        <button
+          type="button"
+          id="side-focus-right-btn"
+          class="debate-side-focus-btn debate-side-focus-btn-right"
+          onclick="setDebateColumnFocus('b')"
+        >
+          Ouvrir B
+        </button>
+      </div>
+    </div>
   </div>
+
 </div>
 
-<div class="debate-top-focus-buttons">
-  <button
-    type="button"
-    id="side-focus-left-btn"
-    class="debate-side-focus-btn debate-side-focus-btn-left"
-    onclick="setDebateColumnFocus('a')"
-  >
-    Ouvrir A
-  </button>
-
-  <button
-    type="button"
-    id="side-focus-right-btn"
-    class="debate-side-focus-btn debate-side-focus-btn-right"
-    onclick="setDebateColumnFocus('b')"
-  >
-    Ouvrir B
-  </button>
-</div>
-
+<section class="debate-hero">
 
 <div id="debate-source-preview-wrap" class="debate-source-preview-wrap" style="display:none; position:relative; overflow:hidden;">
   <a
@@ -212,10 +212,13 @@
   </a>
 </div>
 
+</section>
+
 <section class="debate-headings">
 
 
-<div class="column-header position-a" ondblclick="handleHeadingDoubleClick('a')">  <h2 id="title-a">Position A</h2>
+<div class="column-header position-a" ondblclick="handleHeadingDoubleClick('a')">  
+<h2 id="title-a">Position A</h2>
   <div id="score-a" class="position-score"></div>
 
   <button
@@ -227,7 +230,8 @@ Ajouter une idée
   </button>
 </div>
 
-<div class="column-header position-b" ondblclick="handleHeadingDoubleClick('b')">  <h2 id="title-b">Position B</h2>
+<div class="column-header position-b" ondblclick="handleHeadingDoubleClick('b')">  
+<h2 id="title-b">Position B</h2>
   <div id="score-b" class="position-score"></div>
 
   <button
