@@ -5012,3 +5012,37 @@ body.page-debate .topbar::after {
   opacity: 0.5;
   pointer-events: none;
 }
+@media (max-width: 768px) {
+  .debate-top-focus-buttons {
+    position: sticky;
+    top: 190px;
+    z-index: 35;
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    background: #f4f6f8;
+  }
+
+  .debate-top-focus-buttons .debate-side-focus-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    min-width: 88px;
+    height: auto;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1;
+    border-radius: 999px;
+  }
+}
