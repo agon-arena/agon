@@ -2231,8 +2231,8 @@ app.delete("/api/comments/:id", (req, res) => {
     }
   );
 });
-app.get('/download-db', (req, res) => {
-  res.download('/var/data/database.db');
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
