@@ -4975,72 +4975,11 @@ body.page-debate .topbar::after {
     display: none !important;
   }
 }
-/* ===== FIX FINAL MOBILE : pas de flèche dans le bloc titre,
-   flèche du bandeau du haut à gauche de la cloche ===== */
-
+/* ===== MOBILE : enlever la petite flèche du bloc titre uniquement ===== */
 @media (max-width: 768px) {
-  /* 1) On supprime complètement les outils du bloc titre */
   .debate-title-side-tools,
   .debate-back-arrow,
   .debate-compact-bell {
     display: none !important;
-  }
-
-  /* 2) Le conteneur du bandeau du haut doit rester horizontal */
-  .debate-nav-notifications-stack,
-  .back-notifications-stack {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 8px !important;
-    width: auto !important;
-  }
-
-  /* 3) La ligne nav du haut doit être visible sur mobile */
-  .debate-nav-row {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 8px !important;
-    flex-wrap: nowrap !important;
-  }
-
-  /* 4) Flèche du bandeau du haut */
-  .topbar-back-arrow {
-    display: inline-flex !important;
-    order: 1 !important;
-    width: 46px !important;
-    height: 46px !important;
-    min-width: 46px !important;
-    min-height: 46px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border: 2px solid #d1d5db !important;
-    border-radius: 12px !important;
-    background: #ffffff !important;
-    color: #6b7280 !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    line-height: 1 !important;
-    text-decoration: none !important;
-    opacity: 1 !important;
-  }
-
-  .topbar-back-arrow:hover {
-    background: #f9fafb !important;
-    border-color: #9ca3af !important;
-    color: #111827 !important;
-  }
-
-  /* 5) Cloche du bandeau du haut, à droite de la flèche */
-  #notifications-bell,
-  .notifications-button-large {
-    order: 2 !important;
-    top: 0 !important;
-    margin: 0 !important;
-    align-self: center !important;
   }
 }
