@@ -2671,40 +2671,7 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
  .positions-grid {
   grid-template-columns: 1fr;
 }
-.debate-top-focus-buttons{
-  position: sticky;
-  top: 168px;
-  z-index: 29;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  margin-top: 12px;
-  margin-bottom: 12px;
-  padding: 8px 0;
-  background: #f4f6f8;
-}
 
-.debate-side-focus-btn-left,
-.debate-side-focus-btn-right{
-  top:auto;
-  bottom:auto;
-  left:auto;
-  right:auto;
-  transform:none;
-  padding:10px 12px;
-  font-size:13px;
-}
-
-.debate-side-focus-btn-left:hover,
-.debate-side-focus-btn-right:hover{
-  transform:scale(1.03);
-}
-
-.debate-side-focus-btn-reset{
-  bottom:auto;
-}
 
   .topbar-inner,
   .section-header,
@@ -2936,8 +2903,10 @@ body.page-debate .topbar::after {
   top: 168px;
   z-index: 29;
   display: flex;
-  gap: 12px;
   justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
   margin-top: 12px;
   margin-bottom: 12px;
   padding: 8px 0;
@@ -2945,7 +2914,12 @@ body.page-debate .topbar::after {
 }
 
 .debate-side-focus-btn{
-  position: static;
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:999px;
   padding:10px 14px;
@@ -2957,6 +2931,39 @@ body.page-debate .topbar::after {
   backdrop-filter:blur(6px);
   box-shadow:0 6px 16px rgba(0,0,0,0.12);
   transition:all 0.18s ease;
+}
+
+.debate-side-focus-btn:hover{
+  transform:scale(1.05) !important;
+  box-shadow:0 10px 28px rgba(0,0,0,0.18);
+}
+
+.debate-side-focus-btn-left,
+.debate-side-focus-btn-right,
+.debate-side-focus-btn-reset{
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+.debate-side-focus-btn-left:hover,
+.debate-side-focus-btn-right:hover,
+.debate-side-focus-btn-reset:hover{
+  transform:scale(1.03) !important;
+}
+
+.debate-side-focus-btn-reset{
+  background:#000000;
+  color:#ffffff;
+  border:1px solid #111827;
+  box-shadow:0 8px 20px rgba(0,0,0,0.25);
+}
+
+.debate-side-focus-btn-reset:hover{
+  background:#111111;
 }
 
 .debate-side-focus-btn:hover{
