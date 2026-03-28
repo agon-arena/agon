@@ -4846,50 +4846,7 @@ body.page-debate .topbar::after {
 
 /* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
 
-/* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
-@media (max-width: 768px) {
-  .debate-top-focus-buttons {
-    position: sticky;
-    top: 190px;
-    z-index: 35;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    width: 100%;
-    margin-top: 8px;
-    padding: 0;
-    background: transparent;
-  }
 
-  .debate-top-focus-buttons .debate-side-focus-btn {
-    justify-self: center;
-    position: static !important;
-    top: auto !important;
-    left: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    transform: none !important;
-    min-width: 72px;
-    height: 32px;
-    padding: 6px 10px;
-    font-size: 12px;
-    line-height: 1;
-    border-radius: 999px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.10);
-  }
-
-  .debate-top-focus-buttons .debate-side-focus-btn-left {
-    grid-column: 1;
-  }
-
-  .debate-top-focus-buttons .debate-side-focus-btn-right {
-    grid-column: 2;
-  }
-
-  .debate-top-focus-buttons .debate-side-focus-btn:hover {
-    transform: translateY(-1px) !important;
-  }
-}
 @media (max-width: 768px) {
   body.page-debate:has(.debate-source-preview) .debate-top-focus-buttons {
     top: 170px;
