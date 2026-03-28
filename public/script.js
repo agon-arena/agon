@@ -2423,27 +2423,6 @@ function renderSimilarArgumentsForForm(formKey) {
   `;
 }
 
-function hideSimilarArgumentsForForm(formKey) {
-  const box = document.getElementById(`similar-arguments-${formKey}`);
-  if (!box) return;
-
-  box.style.display = "none";
-  box.innerHTML = "";
-}
-
-function renderSimilarArgumentsForSide(side) {
-  const normalizedSide = side === "B" ? "b" : side === "A" ? "a" : side;
-  renderSimilarArgumentsForForm(normalizedSide);
-}
-
-function renderSimilarArgumentsForList() {
-  renderSimilarArgumentsForForm("list");
-}
-
-function hideSimilarArgumentsForSide(side) {
-  const normalizedSide = side === "B" ? "b" : side === "A" ? "a" : side;
-  hideSimilarArgumentsForForm(normalizedSide);
-}
 
 function renderBottomSimilarDebates(currentDebate, debates) {
   const container = document.getElementById("similar-debates-bottom");
@@ -4098,7 +4077,6 @@ async function submitListArgument(debateId) {
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
-
   if (body.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
     return;
@@ -4118,9 +4096,6 @@ async function submitListArgument(debateId) {
     return;
   }
 
-  const submitButton = document.querySelector("#form-list button[type='submit']");
-  setButtonLoading(submitButton);
-
   try {
     const r = await fetchJSON(API + "/arguments", {
       method: "POST",
@@ -4136,7 +4111,6 @@ async function submitListArgument(debateId) {
 
     titleField.value = "";
     bodyField.value = "";
-    hideSimilarArgumentsForForm("list");
 
     if (warning) {
       warning.style.display = "none";
@@ -4157,25 +4131,13 @@ async function submitListArgument(debateId) {
 
     pendingArgumentScrollId = String(r.id);
     pinnedNewArgumentId = String(r.id);
-
     await loadDebate(debateId);
 
   } catch (error) {
-    if (error.code === "similar_arguments" && error.details?.similarArguments) {
-      const list = error.details.similarArguments;
-
-      alert(
-        "Des idées similaires existent déjà :\n\n" +
-        list.map(a => "• " + (a.title || "Idée")).join("\n")
-      );
-      return;
-    }
-
     alert(error.message);
-  } finally {
-    clearButtonLoading(submitButton);
   }
 }
+
 
 async function submitComment(event, debateId, argumentId) {
   event.preventDefault();
@@ -5225,12 +5187,6 @@ function handleArgumentInput(side) {
 
   if (warning) {
     warning.style.display = text.length >= 10 ? "flex" : "none";
-  }
-
-  if (normalizedSide === "list") {
-    renderSimilarArgumentsForList();
-  } else {
-    renderSimilarArgumentsForSide(normalizedSide);
   }
 }
 
