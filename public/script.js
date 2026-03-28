@@ -351,7 +351,6 @@ if (pendingColumnFocusScrollMode === "dblclick") {
 function handleArgumentDoubleClick(event, side, argumentId) {
   pendingColumnFocusScrollMode = "dblclick";
 
-  // 🔥 IMPORTANT : on prend EXACTEMENT l’élément cliqué
   const clickedComment = event?.target?.closest(".comment-card[id]");
   const clickedArgument = event?.target?.closest(".argument-card[id]");
 
@@ -362,7 +361,6 @@ function handleArgumentDoubleClick(event, side, argumentId) {
     pendingMobileColumnFocusElementId = clickedArgument.id;
     pendingMobileColumnFocusElementTop = clickedArgument.getBoundingClientRect().top;
   } else {
-    // fallback (ancien comportement)
     captureHighestVisibleElementForMobileColumnFocus(side);
 
     if (!pendingMobileColumnFocusElementId && argumentId) {
@@ -371,9 +369,12 @@ function handleArgumentDoubleClick(event, side, argumentId) {
     }
   }
 
-
+  const currentFocus = getDebateColumnFocus();
+  setDebateColumnFocus(currentFocus === side ? "split" : side);
+}
 
 function applyDebateColumnFocusUI() {
+
   const focusMode = getDebateColumnFocus();
   const openMode = isCurrentOpenDebateMode();
 
