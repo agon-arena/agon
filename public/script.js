@@ -412,40 +412,21 @@ function applyDebateColumnFocusUI() {
     return;
   }
 
-const headerA = document.querySelector(".column-header.position-a");
-const headerB = document.querySelector(".column-header.position-b");
-
-if (focusMode === "a") {
-  if (headings) headings.style.display = "grid";
-
-  if (headerA) headerA.style.display = "";
-  if (headerB) headerB.style.display = "none";
-
-  if (columnA) columnA.style.display = "";
-  if (columnB) columnB.style.display = "none";
-
-  columns.classList.add("focus-a");
-
-} else if (focusMode === "b") {
-  if (headings) headings.style.display = "grid";
-
-  if (headerA) headerA.style.display = "none";
-  if (headerB) headerB.style.display = "";
-
-  if (columnA) columnA.style.display = "none";
-  if (columnB) columnB.style.display = "";
-
-  columns.classList.add("focus-b");
-
-} else {
-  if (headings) headings.style.display = "grid";
-
-  if (headerA) headerA.style.display = "";
-  if (headerB) headerB.style.display = "";
-
-  if (columnA) columnA.style.display = "";
-  if (columnB) columnB.style.display = "";
-}
+  if (focusMode === "a") {
+    if (headings) headings.style.display = "none";
+    if (columnA) columnA.style.display = "";
+    if (columnB) columnB.style.display = "none";
+    columns.classList.add("focus-a");
+  } else if (focusMode === "b") {
+    if (headings) headings.style.display = "none";
+    if (columnA) columnA.style.display = "none";
+    if (columnB) columnB.style.display = "";
+    columns.classList.add("focus-b");
+  } else {
+    if (headings) headings.style.display = "grid";
+    if (columnA) columnA.style.display = "";
+    if (columnB) columnB.style.display = "";
+  }
 
 if (sideFocusLeft) {
   sideFocusLeft.style.display = "";
@@ -646,6 +627,38 @@ function getSupportRankMap(args) {
   });
 
   return rankMap;
+}
+
+function formatIdeaRank(rank) {
+  const numericRank = Number(rank || 0);
+
+  if (!numericRank || numericRank < 1) {
+    return "classement inconnu";
+  }
+
+  if (numericRank === 1) {
+    return "1re place";
+  }
+
+  return `${numericRank}e place`;
+}
+
+function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
+  const argIdString = String(argId);
+  const previousRank = Number(beforeRankMap?.[argIdString] || 0);
+  const afterRankMap = getSupportRankMap(afterArgs || []);
+  const newRank = Number(afterRankMap[argIdString] || 0);
+
+  if (!previousRank || !newRank || newRank >= previousRank) {
+    return;
+  }
+
+  const gainedPlaces = previousRank - newRank;
+  const placeLabel = gainedPlaces === 1 ? "place" : "places";
+
+  showVoteWarning(
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive à la ${formatIdeaRank(newRank)} du classement.`
+  );
 }
 
 function renderUnifiedVoicesSummary(debateId, args) {
@@ -4329,6 +4342,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
   const voterKey = getKey();
+  const beforeRankMap = getSupportRankMap(currentAllArguments);
 
   const totalVotesUsed = Object.values(state).reduce((sum, value) => {
     return sum + Number(value || 0);
@@ -4356,6 +4370,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
     await loadDebate(debateId);
+    showVoteRankProgress(beforeRankMap, currentAllArguments, argId);
 
   } catch (error) {
     if (error.message === "limit") {
@@ -5296,7 +5311,21 @@ function updateCounter(inputId, counterId, max) {
 }
 
 function handleArgumentInput(side) {
-  return;
+  const normalizedSide = side === "B" ? "b" : side === "A" ? "a" : side;
+
+  const warning = document.getElementById(`warning-${normalizedSide}`);
+  const titleInput = document.getElementById(
+    normalizedSide === "list" ? "list-title" : `${normalizedSide}-title`
+  );
+  const bodyInput = document.getElementById(
+    normalizedSide === "list" ? "list-body" : `${normalizedSide}-body`
+  );
+
+  const text = `${titleInput?.value || ""} ${bodyInput?.value || ""}`.trim();
+
+  if (warning) {
+    warning.style.display = text.length >= 10 ? "flex" : "none";
+  }
 }
 
 function setListArgumentSide(side = "") {
@@ -5432,15 +5461,14 @@ function openArgumentComposer(side) {
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
 
-  setListArgumentSide("");
-
+setListArgumentSide("");
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-const offset = topbar ? topbar.offsetHeight + 120 : 200;
-    const y = listForm.getBoundingClientRect().top + window.scrollY - offset;
+    const offset = topbar ? topbar.offsetHeight + 20 : 100;
+    const y = listForm.offsetTop - offset;
 
     window.scrollTo({
-      top: Math.max(0, y),
+      top: y,
       behavior: "smooth"
     });
 
