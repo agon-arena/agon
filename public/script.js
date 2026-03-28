@@ -372,6 +372,12 @@ function handleArgumentDoubleClick(event, side, argumentId) {
   const currentFocus = getDebateColumnFocus();
   setDebateColumnFocus(currentFocus === side ? "split" : side);
 }
+function handleHeadingDoubleClick(side) {
+  pendingColumnFocusScrollMode = "dblclick";
+
+  const currentFocus = getDebateColumnFocus();
+  setDebateColumnFocus(currentFocus === side ? "split" : side);
+}
 
 function applyDebateColumnFocusUI() {
 
@@ -5473,6 +5479,7 @@ window.openArgumentFormAndScroll = openArgumentFormAndScroll;
 window.openArgumentComposer = openArgumentComposer;
 window.vote = vote;
 window.unvote = unvote;
+window.handleHeadingDoubleClick = handleHeadingDoubleClick;
 window.voteComment = voteComment;
 window.editDebate = editDebate;window.editArgument = editArgument;
 window.deleteDebate = deleteDebate;
