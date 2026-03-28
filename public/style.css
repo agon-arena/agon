@@ -803,6 +803,7 @@ body.debate-topbar-hidden .debate-hero-top{
   justify-content: center;
   gap: 16px;
   min-height: 56px;
+  margin-bottom: 0;
 }
 
 /* flèche + cloche à droite du titre */
@@ -2628,7 +2629,7 @@ body.debate-topbar-hidden .debate-compact-bell {
 .debate-scroll-add-wrap {
   display: none;
   justify-content: center;
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 .debate-scroll-add-button {
@@ -2904,9 +2905,11 @@ body.page-debate .topbar::after {
   align-items: center;
   gap: 12px;
   width: 100%;
-  margin-top: 12px;
-  padding: 8px 0;
-  background: transparent; /* ✅ changement ici */
+  margin-top: 2px;
+  margin-bottom: 0;
+  padding: 0;
+  background: transparent;
+  text-align: center;
 }
 .debate-top-focus-buttons{
   text-align: center;
@@ -3488,38 +3491,6 @@ body.page-debate .topbar::after {
     transform: translateX(50%);
     min-width: 200px;
   }
-
-
-.debate-side-focus-btn-left,
-.debate-side-focus-btn-right {
-  position: fixed;
-  bottom: 84px;
-  top: auto;
-  transform: none;
-  z-index: 1200;
-  padding: 10px 14px;
-  font-size: 13px;
-  border-radius: 999px;
-}
-
-.debate-side-focus-btn-left {
-  left: 12px;
-}
-
-.debate-side-focus-btn-right {
-  right: 12px;
-}
-
-.debate-side-focus-btn-reset {
-  position: fixed;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
-  z-index: 1200;
-  padding: 10px 16px;
-  font-size: 13px;
-  border-radius: 999px;
-}
 }
 
 @media (max-width: 480px) {
@@ -4815,12 +4786,6 @@ body.page-debate .topbar::after {
 /* ===== MOBILE : boutons A/B alignés avec colonnes ===== */
 
 
-@media (max-width: 768px) {
-  body.page-debate:has(.debate-source-preview) .debate-top-focus-buttons {
-    top: 170px;
-  }
-}
-
 /* =========================
    FLASH VERT (colonne A)
 ========================= */
@@ -5019,19 +4984,37 @@ body.page-debate .topbar::after {
 }
 @media (max-width: 768px) {
   .debate-top-focus-buttons {
-    position: sticky;
-    top: 190px;
-    z-index: 35;
+    position: static;
     display: flex !important;
     justify-content: center;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
-    margin-top: 8px;
-    margin-bottom: 12px;
-    padding: 8px 0;
-    background: #f4f6f8;
+    margin-top: 2px;
+    margin-bottom: 0;
+    padding: 0;
+    background: transparent;
   }
+
+  .debate-top-focus-buttons .debate-side-focus-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    min-width: 90px;
+    height: auto;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1;
+    border-radius: 999px;
+    text-align: center;
+  }
+}
 
   .debate-top-focus-buttons .debate-side-focus-btn {
     display: inline-flex !important;
