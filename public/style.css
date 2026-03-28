@@ -5055,3 +5055,10 @@ body.page-debate .topbar::after {
     display: none !important;
   }
 }
+/* === LOADING STATE BOUTONS === */
+
+.button-loading,
+.voice-loading {
+  opacity: 0.5;
+  pointer-events: none;
+}

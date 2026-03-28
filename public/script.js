@@ -679,7 +679,7 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
-                  onclick="unvote('${debateId}', '${item.id}', false)"
+onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
                 >
@@ -691,7 +691,7 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
-                  onclick="vote('${debateId}', '${item.id}', false)"
+onclick="vote('${debateId}', '${item.id}', false, this)"
                  aria-label="Ajouter une voix"
                   title="Ajouter une voix"
                 >
@@ -730,7 +730,7 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
-                  onclick="unvote('${debateId}', '${item.id}', false)"
+onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
                 >
@@ -742,7 +742,7 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
-                  onclick="vote('${debateId}', '${item.id}', false)"
+onclick="vote('${debateId}', '${item.id}', false, this)"
                   aria-label="Ajouter une voix"
                   title="Ajouter une voix"
                 >
@@ -885,6 +885,17 @@ function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
   }
+}
+function setButtonLoading(button, loadingClass = "button-loading") {
+  if (!button) return;
+  button.disabled = true;
+  button.classList.add(loadingClass);
+}
+
+function clearButtonLoading(button, loadingClass = "button-loading") {
+  if (!button) return;
+  button.disabled = false;
+  button.classList.remove(loadingClass);
 }
 
 function getKey() {
@@ -3230,7 +3241,7 @@ onclick="unvote('${debateId}', '${item.id}', false)"
       <button
         type="button"
         class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
-onclick="vote('${debateId}', '${item.id}', false)"
+onclick="vote('${debateId}', '${item.id}', false, this)"
         aria-label="Ajouter une voix"
         title="Ajouter une voix"
       >
@@ -3346,7 +3357,7 @@ return `
     <button
       class="voice-stepper-btn voice-stepper-btn-minus"
       type="button"
-      onclick="unvote('${debateId}','${a.id}')"
+onclick="unvote('${debateId}','${a.id}', true, this)"
       ${myVoteCount > 0 ? "" : "disabled"}
       aria-label="Retirer une voix"
       title="Retirer une voix"
@@ -3362,7 +3373,7 @@ return `
     <button
       class="voice-stepper-btn voice-stepper-btn-plus"
       type="button"
-      onclick="vote('${debateId}','${a.id}')"
+onclick="vote('${debateId}','${a.id}', true, this)"
       aria-label="Ajouter une voix"
       title="Ajouter une voix"
     >
@@ -3562,7 +3573,7 @@ ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
   <button
     class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
     type="button"
-    onclick="voteComment('${debateId}','${c.id}','${a.id}', 1)"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', 1, this)"
     title="${liked ? "Déjà voté positif" : "Vote positif"}"
     ${liked ? "disabled" : ""}
   >
@@ -3572,7 +3583,7 @@ ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
   <button
     class="comment-dislike-button ${disliked ? "comment-dislike-button-active comment-vote-disabled" : ""}"
     type="button"
-    onclick="voteComment('${debateId}','${c.id}','${a.id}', -1)"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
     title="${disliked ? "Déjà voté négatif" : "Vote négatif"}"
     ${disliked ? "disabled" : ""}
   >
@@ -3765,7 +3776,7 @@ ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
             <button
               class="voice-stepper-btn voice-stepper-btn-minus"
               type="button"
-              onclick="unvote('${debateId}','${a.id}')"
+onclick="unvote('${debateId}','${a.id}', true, this)"
               ${myVoteCount > 0 ? "" : "disabled"}
               aria-label="Retirer une voix"
               title="Retirer une voix"
@@ -3781,7 +3792,7 @@ ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
             <button
               class="voice-stepper-btn voice-stepper-btn-plus"
               type="button"
-              onclick="vote('${debateId}','${a.id}')"
+onclick="vote('${debateId}','${a.id}', true, this)"
               aria-label="Ajouter une voix"
               title="Ajouter une voix"
             >
@@ -3874,10 +3885,6 @@ ${
   replyToCommentByArgument[a.id]
     ? ""
     : `
-${
-  replyToCommentByArgument[a.id]
-    ? ""
-    : `
       <div class="comment-stance-row">
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
@@ -3894,10 +3901,6 @@ ${
           Proposition d'amélioration
         </label>
       </div>
-    `
-}
-
-
     `
 }
 
@@ -3990,7 +3993,7 @@ ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
   <button
     class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
     type="button"
-    onclick="voteComment('${debateId}','${c.id}','${a.id}', 1)"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', 1, this)"
     title="${liked ? "Déjà voté positif" : "Vote positif"}"
     ${liked ? "disabled" : ""}
   >
@@ -4000,7 +4003,7 @@ ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
   <button
     class="comment-dislike-button ${disliked ? "comment-dislike-button-active comment-vote-disabled" : ""}"
     type="button"
-    onclick="voteComment('${debateId}','${c.id}','${a.id}', -1)"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
     title="${disliked ? "Déjà voté négatif" : "Vote négatif"}"
     ${disliked ? "disabled" : ""}
   >
@@ -4084,6 +4087,7 @@ ${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
   refreshAdminUI();
 }
 
+
 async function submitListArgument(debateId) {
   const titleField = document.getElementById("list-title");
   const bodyField = document.getElementById("list-body");
@@ -4094,10 +4098,12 @@ async function submitListArgument(debateId) {
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
-if (body.length > 600) {
-  alert("Maximum 600 caractères pour le texte de l'idée.");
-  return;
-}
+
+  if (body.length > 600) {
+    alert("Maximum 600 caractères pour le texte de l'idée.");
+    return;
+  }
+
   const titleB = document.getElementById("title-b");
   const isOpenMode = !titleB || !titleB.textContent.trim();
   const side = isOpenMode ? "A" : sideField.value;
@@ -4111,6 +4117,9 @@ if (body.length > 600) {
     alert("Tu dois choisir une position.");
     return;
   }
+
+  const submitButton = document.querySelector("#form-list button[type='submit']");
+  setButtonLoading(submitButton);
 
   try {
     const r = await fetchJSON(API + "/arguments", {
@@ -4143,10 +4152,12 @@ if (body.length > 600) {
 
     if (typeof updateCounter === "function") {
       updateCounter("list-title", "count-title-list", 100);
-updateCounter("list-body", "count-body-list", 600);    }
+      updateCounter("list-body", "count-body-list", 600);
+    }
 
-pendingArgumentScrollId = String(r.id);
-pinnedNewArgumentId = String(r.id);
+    pendingArgumentScrollId = String(r.id);
+    pinnedNewArgumentId = String(r.id);
+
     await loadDebate(debateId);
 
   } catch (error) {
@@ -4157,14 +4168,14 @@ pinnedNewArgumentId = String(r.id);
         "Des idées similaires existent déjà :\n\n" +
         list.map(a => "• " + (a.title || "Idée")).join("\n")
       );
-
       return;
     }
 
     alert(error.message);
+  } finally {
+    clearButtonLoading(submitButton);
   }
 }
-
 
 async function submitComment(event, debateId, argumentId) {
   event.preventDefault();
@@ -4216,6 +4227,12 @@ if (stance === "amelioration") {
     return;
   }
 }
+const submitButton = event?.currentTarget?.querySelector('button[type="submit"]')
+  || event?.currentTarget?.querySelector(".comment-submit-btn")
+  || null;
+
+setButtonLoading(submitButton);
+
 try {
   const data = await fetchJSON(API + "/comments", {
     method: "POST",
@@ -4268,10 +4285,13 @@ await loadDebate(debateId);
 
   } catch (error) {
     alert(error.message);
+  } finally {
+    clearButtonLoading(submitButton);
   }
 }
-async function vote(debateId, argId, shouldScroll = true) {
 
+
+async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
   const voterKey = getKey();
@@ -4281,13 +4301,14 @@ async function vote(debateId, argId, shouldScroll = true) {
   }, 0);
 
   if (totalVotesUsed >= 5) {
-  showVoteWarning("Toutes tes voix sont déjà attribuées. Retire-en une pour en donner ailleurs.");
-  scrollToVoicesSummary();
-  return;
-}
+    showVoteWarning("Toutes tes voix sont déjà attribuées. Retire-en une pour en donner ailleurs.");
+    scrollToVoicesSummary();
+    return;
+  }
+
+  setButtonLoading(button);
 
   try {
-
     await fetchJSON(API + "/arguments/" + argId + "/vote", {
       method: "POST",
       headers: {
@@ -4297,28 +4318,26 @@ async function vote(debateId, argId, shouldScroll = true) {
     });
 
     state[argIdString] = Number(state[argIdString] || 0) + 1;
-
     setState(debateId, state);
 
-pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
     await loadDebate(debateId);
 
   } catch (error) {
-
     if (error.message === "limit") {
-  showVoteWarning("Vous avez déjà attribué vos 5 voix.");
-  scrollToVoicesSummary();
-  return;
-}
+      showVoteWarning("Vous avez déjà attribué vos 5 voix.");
+      scrollToVoicesSummary();
+      return;
+    }
 
     alert(error.message);
-
+  } finally {
+    clearButtonLoading(button);
   }
-
 }
 
-async function unvote(debateId, argId, shouldScroll = true) {
 
+async function unvote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
   const voterKey = getKey();
@@ -4327,8 +4346,9 @@ async function unvote(debateId, argId, shouldScroll = true) {
     return;
   }
 
-  try {
+  setButtonLoading(button);
 
+  try {
     await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
@@ -4343,18 +4363,16 @@ async function unvote(debateId, argId, shouldScroll = true) {
       delete state[argIdString];
     }
 
-  setState(debateId, state);
+    setState(debateId, state);
 
-pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-
-await loadDebate(debateId);
+    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+    await loadDebate(debateId);
 
   } catch (error) {
-
     alert(error.message);
-
+  } finally {
+    clearButtonLoading(button);
   }
-
 }
 
 async function confirmRemoveVoice(debateId, argId) {
@@ -4365,7 +4383,7 @@ async function confirmRemoveVoice(debateId, argId) {
   await unvote(debateId, argId);
 }
 
-async function voteComment(debateId, commentId, argumentId, value) {
+async function voteComment(debateId, commentId, argumentId, value, button = null) {
   let state = getCommentLikeState(debateId);
   const commentIdString = String(commentId);
   const voterKey = getKey();
@@ -4375,6 +4393,8 @@ async function voteComment(debateId, commentId, argumentId, value) {
     visibleCommentsByArgument[argumentId] =
       Math.max(visibleCommentsByArgument[argumentId] || 5, 9999);
   }
+
+  setButtonLoading(button);
 
   try {
     const debateData = await fetchJSON(API + "/debates/" + debateId);
@@ -4410,30 +4430,32 @@ async function voteComment(debateId, commentId, argumentId, value) {
       alert("Plus de likes que de voix : elle remplace l’idée.");
     }
 
-const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    voterKey,
-    value: nextValue
-  })
-});
+    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voterKey,
+        value: nextValue
+      })
+    });
 
-if (nextValue === 0) {
-  delete state[commentIdString];
-} else {
-  state[commentIdString] = nextValue;
-}
+    if (nextValue === 0) {
+      delete state[commentIdString];
+    } else {
+      state[commentIdString] = nextValue;
+    }
 
-setCommentLikeState(debateId, state);
-pendingCommentScrollId = String(commentId);
-await loadDebate(debateId);
+    setCommentLikeState(debateId, state);
+    pendingCommentScrollId = String(commentId);
+    await loadDebate(debateId);
 
-if (result && result.replaced) {
-  showReplacementSuccessMessage();
-}
+    if (result && result.replaced) {
+      showReplacementSuccessMessage();
+    }
   } catch (error) {
     alert(error.message);
+  } finally {
+    clearButtonLoading(button);
   }
 }
 
