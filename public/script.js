@@ -5277,21 +5277,7 @@ function updateCounter(inputId, counterId, max) {
 }
 
 function handleArgumentInput(side) {
-  const normalizedSide = side === "B" ? "b" : side === "A" ? "a" : side;
-
-  const warning = document.getElementById(`warning-${normalizedSide}`);
-  const titleInput = document.getElementById(
-    normalizedSide === "list" ? "list-title" : `${normalizedSide}-title`
-  );
-  const bodyInput = document.getElementById(
-    normalizedSide === "list" ? "list-body" : `${normalizedSide}-body`
-  );
-
-  const text = `${titleInput?.value || ""} ${bodyInput?.value || ""}`.trim();
-
-  if (warning) {
-    warning.style.display = text.length >= 10 ? "flex" : "none";
-  }
+  return;
 }
 
 function setListArgumentSide(side = "") {

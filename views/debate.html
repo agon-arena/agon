@@ -290,10 +290,7 @@ Ajouter une idée
 
     <input id="list-side-value" type="hidden" value="A" />
 
-    <div id="warning-list" class="argument-warning" style="display:none;">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <span>Vérifie si cette idée existe déjà afin d’éviter la dispersion des voix.</span>
-    </div>
+
     <label for="list-title">Titre de votre idée</label>
     <input
       id="list-title"
@@ -312,7 +309,6 @@ Ajouter une idée
       oninput="handleArgumentInput('list'); updateCounter('list-body','count-body-list',600)"
     ></textarea>
     <small id="count-body-list">0 / 600</small>
-<div id="similar-arguments-list" class="similar-arguments-box" style="display:none;"></div>
 
 <button type="submit" class="button">Publier l'idée</button>
   </form>
@@ -367,10 +363,6 @@ Ajouter une idée
       <h3>Ajouter une idée</h3>
 <button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
 
-      <div id="warning-a" class="argument-warning" style="display:none;">
-        <i class="fa-solid fa-triangle-exclamation"></i>
-        <span>Vérifie si cet argument existe déjà afin d’éviter la dispersion des votes.</span>
-      </div>
 
       <label for="a-title">Titre de votre idée</label>
       <input
@@ -391,7 +383,6 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         oninput="handleArgumentInput('a'); updateCounter('a-body','count-body-a',600)"
       ></textarea>
       <small id="count-body-a">0 / 600</small>
-<div id="similar-arguments-a" class="similar-arguments-box" style="display:none;"></div>
 <button type="submit" class="button">Publier l'idée</button>
     </form>
 
@@ -404,10 +395,6 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
       <h3>Ajouter une idée</h3>
 <button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
 
-      <div id="warning-b" class="argument-warning" style="display:none;">
-        <i class="fa-solid fa-triangle-exclamation"></i>
-        <span>Vérifie si cet argument existe déjà afin d’éviter la dispersion des votes.</span>
-      </div>
 
       <label for="b-title">Titre de votre idée</label>
       <input
@@ -427,7 +414,6 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         oninput="handleArgumentInput('b'); updateCounter('b-body','count-body-b',600)"
       ></textarea>
       <small id="count-body-b">0 / 600</small>
-<div id="similar-arguments-b" class="similar-arguments-box" style="display:none;"></div>
 
 <button type="submit" class="button">Publier l'idée</button>
     </form>
