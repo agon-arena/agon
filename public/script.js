@@ -281,7 +281,6 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
 }
 
 
-
 function restoreMobileColumnFocusScroll() {
   if (!isColumnFocusScrollContext()) return;
   if (!pendingMobileColumnFocusElementId) return;
@@ -294,13 +293,17 @@ function restoreMobileColumnFocusScroll() {
     return;
   }
 
-  const topbar = document.querySelector(".topbar");
-const extraOffset = window.innerWidth <= 768 ? 110 : 30;  const topbarHeight = topbar ? topbar.offsetHeight : 0;
-  const targetY = target.getBoundingClientRect().top + window.scrollY - topbarHeight - extraOffset;
+  const currentTop = target.getBoundingClientRect().top;
+  const savedTop = pendingMobileColumnFocusElementTop;
+
+  let delta = 0;
+  if (typeof savedTop === "number") {
+    delta = currentTop - savedTop;
+  }
 
   window.scrollTo({
-    top: Math.max(0, targetY),
-    behavior: "smooth"
+    top: Math.max(0, window.scrollY + delta),
+    behavior: "auto"
   });
 
   pendingMobileColumnFocusElementId = null;
