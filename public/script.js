@@ -349,7 +349,9 @@ if (pendingColumnFocusScrollMode === "dblclick") {
 function handleArgumentDoubleClick(side, argumentId) {
   pendingColumnFocusScrollMode = "dblclick";
 
-  if (argumentId) {
+  captureHighestVisibleElementForMobileColumnFocus(side);
+
+  if (!pendingMobileColumnFocusElementId && argumentId) {
     pendingMobileColumnFocusElementId = `argument-${argumentId}`;
     pendingMobileColumnFocusElementTop = 0;
   }
