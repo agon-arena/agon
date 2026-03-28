@@ -5123,13 +5123,14 @@ function showReplacementSuccessMessage() {
   overlay.id = "replacement-success-overlay";
   overlay.className = "replacement-success-overlay";
 
-  overlay.innerHTML = `
-    <div class="replacement-success-box">
-      <div class="replacement-success-icon">✨</div>
-      <div class="replacement-success-title">Nouvelle meilleure idée</div>
-<div class="replacement-success-text">
-  Cette proposition d'amélioration a convaincu, elle prend désormais la place de l’idée initiale !
-</div>
+overlay.innerHTML = `
+  <div class="replacement-success-box ranking-gain-box">
+    <div class="replacement-success-icon ranking-gain-icon">🚀🚀🚀</div>
+    <div class="replacement-success-title">${title}</div>
+    <div class="replacement-success-text">${message}</div>
+    <button class="replacement-success-button">Continuer</button>
+  </div>
+`;
       <button
         type="button"
         class="replacement-success-button"
