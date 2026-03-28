@@ -680,7 +680,7 @@ body.debate-topbar-hidden .debate-hero{
 
 .debate-hero-top{
   position: sticky;
-  top: 78px;
+  top: 100px;
   z-index: 30;
   background: white;
   border: 1px solid #e5e7eb;
@@ -760,7 +760,7 @@ body.debate-topbar-hidden .debate-hero{
 }
 
 body.debate-topbar-hidden .debate-hero-top{
-  top: 0;
+  top: 20px;
 }
 
 .debate-hero-top > div:first-child{
