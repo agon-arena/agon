@@ -220,6 +220,8 @@ function isColumnFocusScrollContext() {
   return currentDebateViewMode === "columns" && !isCurrentOpenDebateMode();
 }
 
+
+
 function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   if (!isColumnFocusScrollContext()) {
     pendingMobileColumnFocusElementId = null;
@@ -229,32 +231,36 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
 
   const topbar = document.querySelector(".topbar");
   const topbarHeight = topbar ? topbar.offsetHeight : 0;
-const stickyButtonsOffset = window.innerWidth <= 768 ? 70 : 20;
+  const stickyButtonsOffset = window.innerWidth <= 768 ? 70 : 20;
   const visibleTopLimit = topbarHeight + stickyButtonsOffset;
 
-  const selector =
+  const commentSelector =
     targetMode === "a"
-      ? `
-        .debate-columns .column-a .argument-card[id],
-        .debate-columns .column-a .comment-card[id]
-      `
+      ? `.debate-columns .column-a .comment-card[id]`
       : targetMode === "b"
-        ? `
-        .debate-columns .column-b .argument-card[id],
-        .debate-columns .column-b .comment-card[id]
-      `
-        : `
-        .debate-columns .argument-card[id],
-        .debate-columns .comment-card[id]
-      `;
+        ? `.debate-columns .column-b .comment-card[id]`
+        : `.debate-columns .comment-card[id]`;
 
-  const candidates = Array.from(document.querySelectorAll(selector)).filter((element) => {
-    if (!element.offsetParent) return false;
+  const argumentSelector =
+    targetMode === "a"
+      ? `.debate-columns .column-a .argument-card[id]`
+      : targetMode === "b"
+        ? `.debate-columns .column-b .argument-card[id]`
+        : `.debate-columns .argument-card[id]`;
 
-    const rect = element.getBoundingClientRect();
+  const getVisibleElements = (selector) => {
+    return Array.from(document.querySelectorAll(selector)).filter((element) => {
+      if (!element.offsetParent) return false;
 
-    return rect.bottom > visibleTopLimit && rect.top < window.innerHeight;
-  });
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > visibleTopLimit && rect.top < window.innerHeight;
+    });
+  };
+
+  const visibleComments = getVisibleElements(commentSelector);
+  const visibleArguments = getVisibleElements(argumentSelector);
+
+  const candidates = visibleComments.length ? visibleComments : visibleArguments;
 
   if (!candidates.length) {
     pendingMobileColumnFocusElementId = null;
@@ -273,6 +279,8 @@ const stickyButtonsOffset = window.innerWidth <= 768 ? 70 : 20;
   pendingMobileColumnFocusElementId = highestVisibleElement.id;
   pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
 }
+
+
 
 function restoreMobileColumnFocusScroll() {
   if (!isColumnFocusScrollContext()) return;
