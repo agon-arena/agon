@@ -5432,14 +5432,15 @@ function openArgumentComposer(side) {
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
 
-setListArgumentSide("");
+  setListArgumentSide("");
+
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-    const offset = topbar ? topbar.offsetHeight + 20 : 100;
-    const y = listForm.offsetTop - offset;
+    const offset = topbar ? topbar.offsetHeight + 80 : 160;
+    const y = listForm.getBoundingClientRect().top + window.scrollY - offset;
 
     window.scrollTo({
-      top: y,
+      top: Math.max(0, y),
       behavior: "smooth"
     });
 
