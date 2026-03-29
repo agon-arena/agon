@@ -5224,3 +5224,48 @@ body.debate-topbar-hidden .debate-hero-top {
     border-radius: 12px;
   }
 }
+/* ===== TOP 3 : médaille + vibration ===== */
+
+.ranking-medal-box {
+  position: relative;
+  overflow: hidden;
+}
+
+.ranking-medal-icon {
+  font-size: 68px;
+  line-height: 1;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  filter: drop-shadow(0 12px 22px rgba(255, 215, 0, 0.22));
+}
+
+.ranking-medal-vibrate {
+  animation: rankingMedalPop 0.45s ease, rankingMedalVibrate 0.8s ease 0.45s 2;
+}
+
+@keyframes rankingMedalPop {
+  0% {
+    transform: scale(0.72);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes rankingMedalVibrate {
+  0%   { transform: translateX(0) rotate(0deg); }
+  15%  { transform: translateX(-2px) rotate(-4deg); }
+  30%  { transform: translateX(2px) rotate(4deg); }
+  45%  { transform: translateX(-2px) rotate(-3deg); }
+  60%  { transform: translateX(2px) rotate(3deg); }
+  75%  { transform: translateX(-1px) rotate(-2deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}

@@ -675,6 +675,23 @@ function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
   const gainedPlaces = previousRank - newRank;
   const placeLabel = gainedPlaces === 1 ? "place" : "places";
 
+  if (newRank >= 1 && newRank <= 3) {
+    const medalIcon =
+      newRank === 1 ? "🥇" :
+      newRank === 2 ? "🥈" :
+      "🥉";
+
+    showReplacementSuccessMessage(
+      "🏅 Top 3 du classement",
+      `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
+      null,
+      medalIcon,
+      "ranking-medal-vibrate"
+    );
+
+    return;
+  }
+
   showReplacementSuccessMessage(
     "🚀 Belle progression",
     `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`
@@ -1134,8 +1151,7 @@ function showVoteWarning(titleOrMessage, message = "") {
   overlay.innerHTML = `
     <div class="replacement-success-box warning-box">
       <div class="replacement-success-icon warning-icon-wrap" aria-hidden="true">
-        <span class="warning-icon-symbol">🔄</span>
-        <span class="warning-icon-badge">!</span>
+        <span class="warning-icon-symbol">🔄🗳️</span>
       </div>
       <div class="replacement-success-title">${escapeHtml(title)}</div>
       <div class="replacement-success-text">${escapeHtml(text)}</div>
@@ -5253,8 +5269,7 @@ async function editArgument(argumentId) {
 /* =========================
    Boot
 ========================= */
-
-function showReplacementSuccessMessage(title, message, onClose = null) {
+function showReplacementSuccessMessage(title, message, onClose = null, iconHtml = "💡", iconClass = "") {
   const existing = document.getElementById("replacement-success-overlay");
   if (existing) existing.remove();
 
@@ -5264,7 +5279,7 @@ function showReplacementSuccessMessage(title, message, onClose = null) {
 
   overlay.innerHTML = `
     <div class="replacement-success-box">
-      <div class="replacement-success-icon">💡</div>
+      <div class="replacement-success-icon ${iconClass}">${iconHtml}</div>
       <div class="replacement-success-title">${escapeHtml(title)}</div>
       <div class="replacement-success-text">${escapeHtml(message)}</div>
       <button
