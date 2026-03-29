@@ -731,9 +731,9 @@ function renderUnifiedVoicesSummary(debateId, args) {
     </div>
   `;
 }
+
 function renderUnifiedVotedArgumentsSummary(debateId, args) {
   const state = getState(debateId);
- 
 
   const sortedArgs = sortArgumentsByScore(args || []);
   const votedArgumentsA = [];
@@ -759,23 +759,27 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
 
   const myArgumentsA = document.getElementById("my-arguments-a");
   const myArgumentsB = document.getElementById("my-arguments-b");
+  const myArgumentsRow = document.querySelector(".my-arguments-row");
 
-const myArgumentsRow = document.querySelector(".my-arguments-row");
-const hasAnyVotedArgument = votedArgumentsA.length > 0 || votedArgumentsB.length > 0;
+  const hasAnyVotedArgument = votedArgumentsA.length > 0 || votedArgumentsB.length > 0;
 
-if (myArgumentsRow) {
-  myArgumentsRow.style.display = hasAnyVotedArgument ? "grid" : "none";
-}
+  if (myArgumentsRow) {
+    myArgumentsRow.style.display = hasAnyVotedArgument ? "grid" : "none";
+  }
 
   if (myArgumentsA) {
     if (!votedArgumentsA.length) {
       myArgumentsA.innerHTML = "";
+      myArgumentsA.style.display = "none";
     } else {
+      myArgumentsA.style.display = "";
       myArgumentsA.innerHTML = `
+        <div class="my-votes">Vos idées soutenues côté A</div>
         <div class="my-arguments-list">
           ${votedArgumentsA.map((item) => `
             <div class="my-argument-chip">
               <div class="my-argument-chip-text">
+                <span class="my-argument-chip-rank">#${item.rank}</span>
 
                 <button
                   type="button"
@@ -791,7 +795,7 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
-onclick="unvote('${debateId}', '${item.id}', false, this)"
+                  onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
                 >
@@ -803,8 +807,8 @@ onclick="unvote('${debateId}', '${item.id}', false, this)"
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
-onclick="vote('${debateId}', '${item.id}', false, this)"
-                 aria-label="Ajouter une voix"
+                  onclick="vote('${debateId}', '${item.id}', false, this)"
+                  aria-label="Ajouter une voix"
                   title="Ajouter une voix"
                 >
                   +
@@ -820,12 +824,16 @@ onclick="vote('${debateId}', '${item.id}', false, this)"
   if (myArgumentsB) {
     if (!votedArgumentsB.length) {
       myArgumentsB.innerHTML = "";
+      myArgumentsB.style.display = "none";
     } else {
+      myArgumentsB.style.display = "";
       myArgumentsB.innerHTML = `
+        <div class="my-votes">Vos idées soutenues côté B</div>
         <div class="my-arguments-list">
           ${votedArgumentsB.map((item) => `
             <div class="my-argument-chip">
               <div class="my-argument-chip-text">
+                <span class="my-argument-chip-rank">#${item.rank}</span>
 
                 <button
                   type="button"
@@ -841,7 +849,7 @@ onclick="vote('${debateId}', '${item.id}', false, this)"
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
-onclick="unvote('${debateId}', '${item.id}', false, this)"
+                  onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
                 >
@@ -853,7 +861,7 @@ onclick="unvote('${debateId}', '${item.id}', false, this)"
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
-onclick="vote('${debateId}', '${item.id}', false, this)"
+                  onclick="vote('${debateId}', '${item.id}', false, this)"
                   aria-label="Ajouter une voix"
                   title="Ajouter une voix"
                 >
@@ -867,7 +875,6 @@ onclick="vote('${debateId}', '${item.id}', false, this)"
     }
   }
 }
-
 /* =========================
    Helpers
 ========================= */
