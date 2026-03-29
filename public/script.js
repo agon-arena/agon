@@ -1068,17 +1068,14 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
   return escaped.replace(
-    /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,
-    (match) => {
-      const href = /^(https?:\/\/)/i.test(match) ? match : `https://${match}`;
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
-    }
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
   );
 }
-
 function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
@@ -3695,19 +3692,37 @@ onclick="vote('${debateId}','${a.id}', true, this)"
               <h4>Commentaires (${comments.length})</h4>
 
 <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
-
 ${
   replyToCommentByArgument[a.id]
     ? `
       <div class="argument-warning">
         <div class="reply-preview-text">
           <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
+          <span class="reply-preview-content">${escapeHtml(
+            replyToCommentByArgument[a.id].commentContent.length > 140
+              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
+              : replyToCommentByArgument[a.id].commentContent
+          )}</span>
         </div>
+
+        <button
+          type="button"
+          class="button button-small"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
       </div>
     `
     : ""
 }
+
+
+
+${
+  replyToCommentByArgument[a.id]
+    ? ""
+    : `
       <div class="comment-stance-row">
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
@@ -3810,23 +3825,6 @@ ${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 }
 
 
-
-${
-  replyToCommentByArgument[a.id]
-    ? `
-      <div class="argument-warning">
-        <div class="reply-preview-text">
-          <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
-        </div>
-      </div>
-    `
-    : ""
-}
-
-
-
-
 <div class="comment-actions">
   <button
     class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
@@ -3898,17 +3896,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
       `
       : `<div class="empty-comments">Aucun commentaire.</div>`
   }
-</div> <div 
-
-
-
-
-
-
-
-
-
-class="comments-bottom-actions">
+</div> <div class="comments-bottom-actions">
   <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
     Masquer
   </button>
@@ -4097,162 +4085,46 @@ onclick="vote('${debateId}','${a.id}', true, this)"
           ` : ""}
         </div>
 
-<div class="comments-block">
-  <div class="comments-summary">
-    <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-      ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
-    </button>
+        <div class="comments-block">
+          <div class="comments-summary">
+            <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+              ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
+            </button>
 
-    <div class="comments-summary-details">
-      <span class="comments-count-favorable">
-        ${favorableCommentsCount} favorable${favorableCommentsCount > 1 ? "s" : ""}
-      </span>
+<div class="comments-summary-details">
+  <span class="comments-count-favorable">
+    ${favorableCommentsCount} favorable${favorableCommentsCount > 1 ? "s" : ""}
+  </span>
 
-      <span class="comments-count-defavorable">
-        ${defavorableCommentsCount} défavorable${defavorableCommentsCount > 1 ? "s" : ""}
-      </span>
+  <span class="comments-count-defavorable">
+    ${defavorableCommentsCount} défavorable${defavorableCommentsCount > 1 ? "s" : ""}
+  </span>
 
-      <span class="comments-count-amelioration">
-        ${ameliorationCommentsCount} amélioration${ameliorationCommentsCount > 1 ? "s" : ""}
-      </span>
-    </div>
-  </div>
-
-  ${commentsOpen ? `
-    <div class="comments-content">
-      <h4>Commentaires (${comments.length})</h4>
-
-      <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
-
-        ${
-          replyToCommentByArgument[a.id]
-            ? `
-              <div class="argument-warning">
-                <div class="reply-preview-text">
-                  <span class="reply-preview-label">Vous répondez à :</span>
-                  <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
-                </div>
-              </div>
-            `
-            : ""
-        }
-
-        ${
-          replyToCommentByArgument[a.id]
-            ? ""
-            : `
-              <div class="comment-stance-row">
-                <label class="comment-stance-option">
-                  <input type="radio" name="comment-stance-${a.id}" value="favorable">
-                  Favorable à l'idée
-                </label>
-
-                <label class="comment-stance-option">
-                  <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-                  Défavorable à l'idée
-                </label>
-
-                <label class="comment-stance-option">
-                  <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-                  Proposition d'amélioration
-                </label>
-              </div>
-            `
-        }
-
-        <div class="comment-main-field">
-          <textarea
-            id="comment-input-${a.id}"
-            placeholder="Ajouter un commentaire"
-            maxlength="600"
-            oninput="updateCounter('comment-input-${a.id}','count-comment-${a.id}',600)"
-          ></textarea>
-          <small id="count-comment-${a.id}">0 / 600</small>
-        </div>
-
-        <div class="comment-amelioration-fields" style="display:none;">
-          <input
-            type="text"
-            id="comment-improvement-title-${a.id}"
-            class="comment-improvement-title-input"
-            placeholder="Titre proposé"
-            maxlength="100"
-            oninput="updateCounter('comment-improvement-title-${a.id}','count-improvement-title-${a.id}',100)"
-          >
-          <small id="count-improvement-title-${a.id}">0 / 100</small>
-
-          <textarea
-            id="comment-improvement-body-${a.id}"
-            class="comment-improvement-body-input"
-            placeholder="Texte proposé pour remplacer l’idée"
-            maxlength="600"
-            oninput="updateCounter('comment-improvement-body-${a.id}','count-improvement-body-${a.id}',600)"
-          ></textarea>
-          <small id="count-improvement-body-${a.id}">0 / 600</small>
-
-          <div class="comment-amelioration-hint">
-            Propose une version améliorée de cette idée. Si elle convainc davantage, elle pourra la remplacer.
+  <span class="comments-count-amelioration">
+    ${ameliorationCommentsCount} amélioration${ameliorationCommentsCount > 1 ? "s" : ""}
+  </span>
+</div>
+</div>
           </div>
+
+          ${commentsOpen ? `
+            <div class="comments-content">
+              <h4>Commentaires (${comments.length})</h4>
+
+<form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
+${
+  replyToCommentByArgument[a.id]
+    ? `
+      <div class="argument-warning">
+        <div class="reply-preview-text">
+          <span class="reply-preview-label">Vous répondez à :</span>
+          <span class="reply-preview-content">${escapeHtml(
+            replyToCommentByArgument[a.id].commentContent.length > 140
+              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
+              : replyToCommentByArgument[a.id].commentContent
+          )}</span>
         </div>
 
-        <button type="submit" class="button">Publier le commentaire</button>
-      </form>
-
-      <div class="comments-list">
-        ${
-          comments.length
-            ? `
-              ${visibleComments.map(c => {
-                const isCommentAuthor = isCommentOwner(c);
-                const voteValue = Number(commentLikeState[String(c.id)] || 0);
-                const liked = voteValue === 1;
-                const disliked = voteValue === -1;
-                const likes = Number(c.likes || 0);
-
-                return `
-                  <div id="list-comment-${c.id}" class="comment-card">
-                    ${(isCommentAuthor || isAdmin()) ? `
-                      <button
-                        class="comment-owner-delete"
-                        type="button"
-                        onclick="deleteComment('${debateId}','${c.id}')"
-                        title="Supprimer ce commentaire"
-                      >
-                        ✕
-                      </button>
-                    ` : ""}
-
-                    ${
-                      c.stance === "favorable"
-                        ? `<div class="comment-stance-badge comment-stance-favorable">Commentaire favorable à l'idée</div>`
-                        : c.stance === "defavorable"
-                          ? `<div class="comment-stance-badge comment-stance-defavorable">Commentaire défavorable à l'idée</div>`
-                          : c.stance === "amelioration"
-                            ? `<div class="comment-stance-badge comment-stance-amelioration">Proposition d'amélioration</div>`
-                            : ""
-                    }
-
-                    ${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un commentaire</div>` : ""}
-
-                    ${
-                      c.stance === "amelioration"
-                        ? `
-                          ${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
-                          <div class="comment-improvement-preview">
-                            <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-                            <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
-                          </div>
-                        `
-                        : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
-                    }
-
-                  
-
-${
-  replyToCommentByArgument[a.id] &&
-  String(replyToCommentByArgument[a.id].commentId) === String(c.id)
-    ? `
-      <div class="reply-cancel-under-comment">
         <button
           type="button"
           class="button button-small"
@@ -4265,48 +4137,192 @@ ${
     : ""
 }
 
-<div class="comment-actions">
+${
+  replyToCommentByArgument[a.id]
+    ? ""
+    : `
+      <div class="comment-stance-row">
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="favorable">
+          Favorable à l'idée
+        </label>
 
-                      <button
-                        class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
-                        type="button"
-                        onclick="voteComment('${debateId}','${c.id}','${a.id}', 1, this)"
-                        title="${liked ? "Déjà voté positif" : "Vote positif"}"
-                        ${liked ? "disabled" : ""}
-                      >
-                        👍
-                      </button>
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="defavorable">
+          Défavorable à l'idée
+        </label>
 
-                      <button
-                        class="comment-dislike-button ${disliked ? "comment-dislike-button-active comment-vote-disabled" : ""}"
-                        type="button"
-                        onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
-                        title="${disliked ? "Déjà voté négatif" : "Vote négatif"}"
-                        ${disliked ? "disabled" : ""}
-                      >
-                        👎
-                      </button>
-
-                      <span class="comment-like-count">${likes}</span>
-
-                      <button
-                        class="button button-small"
-                        type="button"
-                        onclick="replyToComment('${a.id}', '${c.id}', ${JSON.stringify(String(c.content || "")).replace(/"/g, '&quot;')})"
-                      >
-                        Répondre
-                      </button>
-                    </div>
-                  </div>
-                `;
-              }).join("")}
-            `
-            : `<div class="empty-comments">Aucun commentaire pour le moment.</div>`
-        }
+        <label class="comment-stance-option">
+          <input type="radio" name="comment-stance-${a.id}" value="amelioration">
+          Proposition d'amélioration
+        </label>
       </div>
-    </div>
-  ` : ""}
+    `
+}
+
+<div class="comment-main-field">
+  <textarea
+    id="comment-input-${a.id}"
+    placeholder="Ajouter un commentaire"
+    maxlength="600"
+    oninput="updateCounter('comment-input-${a.id}','count-comment-${a.id}',600)"
+  ></textarea>
+  <small id="count-comment-${a.id}">0 / 600</small>
 </div>
+
+<div class="comment-amelioration-fields" style="display:none;">
+  <input
+  type="text"
+  id="comment-improvement-title-${a.id}"
+  class="comment-improvement-title-input"
+  placeholder="Titre proposé"
+  maxlength="100"
+  oninput="updateCounter('comment-improvement-title-${a.id}','count-improvement-title-${a.id}',100)"
+>
+<small id="count-improvement-title-${a.id}">0 / 100</small>
+
+<textarea
+  id="comment-improvement-body-${a.id}"
+  class="comment-improvement-body-input"
+  placeholder="Texte proposé pour remplacer l’idée"
+  maxlength="600"
+  oninput="updateCounter('comment-improvement-body-${a.id}','count-improvement-body-${a.id}',600)"
+></textarea>
+<small id="count-improvement-body-${a.id}">0 / 600</small>
+
+  <div class="comment-amelioration-hint">
+   Propose une version améliorée de cette idée. Si elle convainc davantage, elle pourra la remplacer.
+  </div>
+</div>
+
+<button type="submit" class="button">Publier le commentaire</button>
+              </form>
+
+              <div class="comments-list">
+                ${
+                  comments.length
+                    ? `
+                      ${visibleComments.map(c => {
+const isCommentAuthor = isCommentOwner(c);
+
+                       const voteValue = Number(commentLikeState[String(c.id)] || 0);
+const liked = voteValue === 1;
+const disliked = voteValue === -1;
+const likes = Number(c.likes || 0);
+
+                        return `
+                        <div id="list-comment-${c.id}" class="comment-card">
+  ${(isCommentAuthor || isAdmin()) ? `
+    <button
+      class="comment-owner-delete"
+      type="button"
+      onclick="deleteComment('${debateId}','${c.id}')"
+      title="Supprimer ce commentaire"
+    >
+      ✕
+    </button>
+  ` : ""}
+
+${
+  c.stance === "favorable"
+    ? `<div class="comment-stance-badge comment-stance-favorable">Commentaire favorable à l'idée</div>`
+    : c.stance === "defavorable"
+      ? `<div class="comment-stance-badge comment-stance-defavorable">Commentaire défavorable à l'idée</div>`
+      : c.stance === "amelioration"
+        ? `<div class="comment-stance-badge comment-stance-amelioration">Proposition d'amélioration</div>`
+        : ""
+}
+
+${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un commentaire</div>` : ""}
+${
+  c.stance === "amelioration"
+    ? `
+${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
+<div class="comment-improvement-preview">
+  <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
+  <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
+</div>
+    `
+    : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
+}
+<div class="comment-actions">
+  <button
+    class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
+    type="button"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', 1, this)"
+    title="${liked ? "Déjà voté positif" : "Vote positif"}"
+    ${liked ? "disabled" : ""}
+  >
+    👍
+  </button>
+
+  <button
+    class="comment-dislike-button ${disliked ? "comment-dislike-button-active comment-vote-disabled" : ""}"
+    type="button"
+onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
+    title="${disliked ? "Déjà voté négatif" : "Vote négatif"}"
+    ${disliked ? "disabled" : ""}
+  >
+    👎
+  </button>
+
+<span class="comment-like-count">${likes} ${likes > 1 ? "likes" : "like"}</span>
+
+<button
+  class="button button-small"
+  type="button"
+  onclick="replyToComment('${a.id}', '${c.id}', this)"
+>
+  Répondre
+</button>
+
+  <button
+    class="report-button"
+    type="button"
+    onclick="openReportBox('comment', '${c.id}')"
+  >
+    Signaler
+  </button>
+
+  <button
+    class="delete-button"
+    data-admin
+    style="display:none;"
+    type="button"
+    onclick="deleteComment('${debateId}','${c.id}')"
+  >
+    Supprimer le commentaire
+  </button>
+</div>
+                          </div>
+                        `;
+                      }).join("")}
+
+                      ${
+                        hiddenCommentsCount > 0
+                          ? `
+                            <div class="load-more-container">
+                              <button
+                                class="button button-small"
+                                type="button"
+                                onclick="loadMoreComments('${a.id}', this)"
+                              >
+                                Charger plus de commentaires
+                              </button>
+                            </div>
+                          `
+                          : ""
+                      }
+                    `
+                    : `<div class="empty-comments">Aucun commentaire.</div>`
+                }
+              </div>
+
+              <div class="comments-bottom-actions">
+                <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+                  Masquer
+                </button>
+              </div>
             </div>
           ` : ""}
         </div>
