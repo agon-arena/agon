@@ -1476,10 +1476,10 @@ body.debate-topbar-hidden .debate-compact-bell {
 .my-argument-chip-text{
   min-width:0;
   display:flex;
-  align-items:center;
+  align-items:flex-start;
   gap:8px;
   flex-wrap:nowrap;
-  overflow:hidden;
+  overflow:visible;
 }
 
 .my-argument-chip-rank{
@@ -1487,12 +1487,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   white-space:nowrap;
   font-weight:800;
   color:#111827;
-}
-
-.my-argument-chip-title{
-  color:#374151;
-  font-weight:600;
-  overflow-wrap:anywhere;
+  margin-top:1px;
 }
 
 .my-argument-chip-title-button{
@@ -1507,9 +1502,11 @@ body.debate-topbar-hidden .debate-compact-bell {
   font-weight:600;
   cursor:pointer;
   text-align:left;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space:normal;
+  overflow:visible;
+  text-overflow:clip;
+  word-break:break-word;
+  overflow-wrap:anywhere;
 }
 
 .my-argument-chip-title-button:hover{
