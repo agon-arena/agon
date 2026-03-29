@@ -1913,6 +1913,17 @@ body.debate-topbar-hidden .debate-compact-bell {
   overflow:hidden;
   text-overflow:ellipsis;
 }
+.reply-preview-text {
+  display: block;
+}
+
+.reply-cancel-row {
+  margin-top: 10px;
+}
+
+.reply-cancel-row .button {
+  display: inline-flex;
+}
 
 /* Bandeau global A/B */
 

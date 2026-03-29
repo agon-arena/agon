@@ -4135,15 +4135,17 @@ ${
               ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
               : replyToCommentByArgument[a.id].commentContent
           )}</span>
-        </div>
 
-        <button
-          type="button"
-          class="button button-small"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
+          <div class="reply-cancel-row">
+            <button
+              type="button"
+              class="button button-small"
+              onclick="cancelReply('${a.id}')"
+            >
+              Annuler la réponse
+            </button>
+          </div>
+        </div>
       </div>
     `
     : ""
