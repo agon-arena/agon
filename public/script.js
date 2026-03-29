@@ -1002,6 +1002,21 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
     }
   }, 420);
 }
+function scrollToTopOfArgumentCard(argumentId) {
+  const element = getVisibleArgumentElement(argumentId);
+  if (!element) return;
+
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+
+  const rect = element.getBoundingClientRect();
+  const y = rect.top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+}
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -5028,7 +5043,8 @@ function toggleForm(side) {
 }
 
 function toggleComments(argumentId) {
-  const willOpen = !openCommentsByArgument[argumentId];
+  const wasOpen = !!openCommentsByArgument[argumentId];
+  const willOpen = !wasOpen;
 
   // On mémorise le commentaire actuellement le plus haut visible
   const topVisibleComment = getTopVisibleCommentElement();
@@ -5043,7 +5059,13 @@ function toggleComments(argumentId) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  loadDebate(debateId);
+  loadDebate(debateId).then(() => {
+    if (wasOpen) {
+      setTimeout(() => {
+        scrollToTopOfArgumentCard(argumentId);
+      }, 50);
+    }
+  });
 }
 
 document.addEventListener("click", function(event) {
