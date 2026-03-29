@@ -1068,7 +1068,16 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
+function linkifyText(str) {
+  const escaped = escapeHtml(str ?? "");
+  return escaped.replace(
+    /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,
+    (match) => {
+      const href = /^(https?:\/\/)/i.test(match) ? match : `https://${match}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    }
+  );
+}
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
   return escaped.replace(
