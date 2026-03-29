@@ -1004,7 +1004,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
 
   const scrollHigh = () => {
     const rect = element.getBoundingClientRect();
@@ -1050,7 +1050,7 @@ function scrollToTopOfArgumentCard(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
 
   const rect = element.getBoundingClientRect();
   const y = rect.top + window.scrollY - offset;
