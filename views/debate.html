@@ -96,7 +96,7 @@
           id="debate-scroll-add-button"
           class="button debate-scroll-add-button"
           type="button"
-          onclick="openArgumentComposer('a')"
+onclick="openArgumentComposer()"
         >
           Ajouter une idée
         </button>
@@ -107,7 +107,7 @@
           id="open-question-reply-btn"
           class="button button-small open-question-reply-btn"
           type="button"
-          onclick="openArgumentComposer('a')"
+onclick="openArgumentComposer()"
         >
           Répondre
         </button>
@@ -216,9 +216,8 @@
 
 <section class="debate-headings">
 
-
 <div class="column-header position-a" ondblclick="handleHeadingDoubleClick('a')">  
-<h2 id="title-a">Position A</h2>
+  <h2 id="title-a">Position A</h2>
   <div id="score-a" class="position-score"></div>
 
   <button
@@ -226,7 +225,7 @@
     class="position-argument-button position-argument-button-a"
     onclick="openArgumentComposer('a')"
   >
-Ajouter une idée
+    Ajouter une idée
   </button>
 </div>
 

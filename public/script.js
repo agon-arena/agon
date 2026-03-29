@@ -413,21 +413,39 @@ function applyDebateColumnFocusUI() {
     return;
   }
 
-  if (focusMode === "a") {
-    if (headings) headings.style.display = "none";
-    if (columnA) columnA.style.display = "";
-    if (columnB) columnB.style.display = "none";
-    columns.classList.add("focus-a");
-  } else if (focusMode === "b") {
-    if (headings) headings.style.display = "none";
-    if (columnA) columnA.style.display = "none";
-    if (columnB) columnB.style.display = "";
-    columns.classList.add("focus-b");
-  } else {
-    if (headings) headings.style.display = "grid";
-    if (columnA) columnA.style.display = "";
-    if (columnB) columnB.style.display = "";
-  }
+if (focusMode === "a") {
+  if (headings) headings.style.display = "grid";
+  const headingA = document.querySelector(".debate-headings .position-a");
+  const headingB = document.querySelector(".debate-headings .position-b");
+
+  if (headingA) headingA.style.display = "";
+  if (headingB) headingB.style.display = "none";
+
+  if (columnA) columnA.style.display = "";
+  if (columnB) columnB.style.display = "none";
+  columns.classList.add("focus-a");
+} else if (focusMode === "b") {
+  if (headings) headings.style.display = "grid";
+  const headingA = document.querySelector(".debate-headings .position-a");
+  const headingB = document.querySelector(".debate-headings .position-b");
+
+  if (headingA) headingA.style.display = "none";
+  if (headingB) headingB.style.display = "";
+
+  if (columnA) columnA.style.display = "none";
+  if (columnB) columnB.style.display = "";
+  columns.classList.add("focus-b");
+} else {
+  if (headings) headings.style.display = "grid";
+  const headingA = document.querySelector(".debate-headings .position-a");
+  const headingB = document.querySelector(".debate-headings .position-b");
+
+  if (headingA) headingA.style.display = "";
+  if (headingB) headingB.style.display = "";
+
+  if (columnA) columnA.style.display = "";
+  if (columnB) columnB.style.display = "";
+}
 
 if (sideFocusLeft) {
   sideFocusLeft.style.display = "";
