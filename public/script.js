@@ -5040,24 +5040,27 @@ async function deleteDebate(debateId, redirectAfter) {
 
 
 async function deleteComment(debateId, commentId) {
-  const confirmed = window.confirm("Supprimer définitivement ce commentaire ?");
-  if (!confirmed) return;
+  showDeleteConfirmModal({
+    title: "Supprimer ce commentaire ?",
+    text: "Cette suppression est définitive.",
+    onConfirm: async () => {
+      try {
+        await fetchJSON(
+          API + "/comments/" + commentId + "?authorKey=" + encodeURIComponent(getKey()),
+          {
+            method: "DELETE",
+            headers: isAdmin()
+              ? { "x-admin-token": getAdminToken() }
+              : {}
+          }
+        );
 
-  try {
-    await fetchJSON(
-      API + "/comments/" + commentId + "?authorKey=" + encodeURIComponent(getKey()),
-      {
-        method: "DELETE",
-        headers: isAdmin()
-          ? { "x-admin-token": getAdminToken() }
-          : {}
+        await loadDebate(debateId);
+      } catch (error) {
+        alert(error.message);
       }
-    );
-
-    await loadDebate(debateId);
-  } catch (error) {
-    alert(error.message);
-  }
+    }
+  });
 }
 
 /* =========================
@@ -5694,32 +5697,69 @@ function openArgumentComposer(side) {
   }, 50);
 }
 
+function showDeleteConfirmModal({ title, text, onConfirm }) {
+  const existing = document.getElementById("custom-delete-modal");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "custom-delete-modal";
+  overlay.className = "custom-modal-overlay";
+
+  overlay.innerHTML = `
+    <div class="custom-modal-box">
+      <div class="custom-modal-title">${escapeHtml(title)}</div>
+      <div class="custom-modal-text">${escapeHtml(text)}</div>
+
+      <div class="custom-modal-actions">
+        <button type="button" class="button button-secondary" id="delete-cancel-btn">
+          Annuler
+        </button>
+
+        <button type="button" class="button custom-delete-confirm-btn" id="delete-confirm-btn">
+          Supprimer
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById("delete-cancel-btn").onclick = () => overlay.remove();
+
+  document.getElementById("delete-confirm-btn").onclick = () => {
+    overlay.remove();
+    if (typeof onConfirm === "function") onConfirm();
+  };
+}
 
 async function deleteArgument(debateId, argumentId) {
-  const confirmed = window.confirm("Supprimer définitivement cette idée ?");
-  if (!confirmed) return;
+  showDeleteConfirmModal({
+    title: "Supprimer cette idée ?",
+    text: "Cette suppression est définitive.",
+    onConfirm: async () => {
+      try {
+        await fetchJSON(
+          API + "/arguments/" + argumentId + "?authorKey=" + encodeURIComponent(getKey()),
+          {
+            method: "DELETE",
+            headers: isAdmin()
+              ? { "x-admin-token": getAdminToken() }
+              : {}
+          }
+        );
 
-  try {
-    await fetchJSON(
-      API + "/arguments/" + argumentId + "?authorKey=" + encodeURIComponent(getKey()),
-      {
-        method: "DELETE",
-        headers: isAdmin()
-          ? { "x-admin-token": getAdminToken() }
-          : {}
+        delete openCommentsByArgument[argumentId];
+
+        const state = getState(debateId);
+        delete state[String(argumentId)];
+        setState(debateId, state);
+
+        await loadDebate(debateId);
+      } catch (error) {
+        alert(error.message);
       }
-    );
-
- delete openCommentsByArgument[argumentId];
-
-const state = getState(debateId);
-delete state[String(argumentId)];
-setState(debateId, state);
-
-await loadDebate(debateId);
-  } catch (error) {
-    alert(error.message);
-  }
+    }
+  });
 }
 
 

@@ -221,17 +221,22 @@ body {
 }
 
 .delete-button {
-  background: #fff1f2;
-  color: #be123c;
-  border: 1px solid #fecdd3;
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .delete-button:hover {
-  background: #ffe4e6;
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+  transform: translateY(-1px);
 }
 
 .admin-hidden {
@@ -5349,4 +5354,59 @@ body.debate-topbar-hidden .debate-hero-top {
     font-size: 15px;
     padding: 12px 18px;
   }
+}
+/* ===== MODALE CONFIRMATION SUPPRESSION ===== */
+
+.custom-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 99999;
+}
+
+.custom-modal-box {
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
+  padding: 28px 24px;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.22),
+    0 8px 24px rgba(0, 0, 0, 0.10);
+  text-align: center;
+}
+
+.custom-modal-title {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.custom-modal-text {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #4b5563;
+  margin-bottom: 22px;
+}
+
+.custom-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.custom-delete-confirm-btn {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.custom-delete-confirm-btn:hover {
+  background: #991b1b;
 }
