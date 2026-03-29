@@ -5205,3 +5205,22 @@ body.debate-topbar-hidden .debate-hero-top {
     opacity: 0.35;
   }
 }
+/* ===== Bouton Ajouter une idée (desktop uniquement) ===== */
+@media (min-width: 768px) {
+  .debate-scroll-add-button {
+    font-size: 18px;
+    padding: 14px 28px;
+    border-radius: 12px;
+  }
+}
+@media (min-width: 768px) {
+  .debate-scroll-add-wrap {
+    margin-top: 20px;
+  }
+
+  .debate-scroll-add-button {
+    font-size: 18px;
+    padding: 14px 28px;
+    border-radius: 12px;
+  }
+}

@@ -4540,14 +4540,20 @@ if (
   );
 }
 
-    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voterKey,
-        value: nextValue
-      })
-    });
+const shouldWarnAboutReplacement =
+  value === 1 &&
+  targetComment &&
+  targetComment.stance === "amelioration" &&
+  nextValue === 1;
+
+const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    voterKey,
+    value: nextValue
+  })
+});
 
     if (nextValue === 0) {
       delete state[commentIdString];
@@ -4558,10 +4564,16 @@ if (
     setCommentLikeState(debateId, state);
     pendingCommentScrollId = String(commentId);
     await loadDebate(debateId);
+if (result && result.replaced) {
+  closeVoteWarning();
+  showReplacementSuccessMessage();
+} else if (shouldWarnAboutReplacement) {
+  showVoteWarning(
+    "👉 Cette proposition d'amélioration peut remplacer l’idée",
+    "Si le nombre de likes dépasse le nombre de voix de l’idée actuelle, elle prendra sa place."
+  );
+}
 
-    if (result && result.replaced) {
-      showReplacementSuccessMessage();
-    }
   } catch (error) {
     alert(error.message);
   } finally {
