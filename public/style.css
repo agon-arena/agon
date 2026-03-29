@@ -3378,7 +3378,7 @@ body.page-debate .topbar::after {
   gap: 10px;
 }
 body.debate-topbar-hidden .debate-hero-top {
-  top: 0;
+  top: 6px;
   margin-top: 0;
 }
 
