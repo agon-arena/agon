@@ -25,6 +25,7 @@ let currentArgumentsSortMode = "score";
 let pendingMobileColumnFocusElementId = null;
 let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
+let pendingVoicesSummaryHighlight = false;
 
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
@@ -1054,7 +1055,7 @@ function showVoteWarning(titleOrMessage, message = "") {
   overlay.innerHTML = `
     <div class="replacement-success-box warning-box">
       <div class="replacement-success-icon warning-icon-wrap" aria-hidden="true">
-        <span class="warning-icon-symbol">🗳️</span>
+        <span class="warning-icon-symbol">🔄</span>
         <span class="warning-icon-badge">!</span>
       </div>
       <div class="replacement-success-title">${escapeHtml(title)}</div>
@@ -1081,10 +1082,17 @@ function closeVoteWarning() {
   const overlay = document.getElementById("vote-warning-overlay");
   if (!overlay) return;
 
+  const shouldHighlightVoices = pendingVoicesSummaryHighlight;
+  pendingVoicesSummaryHighlight = false;
+
   overlay.classList.remove("replacement-success-overlay-visible");
 
   setTimeout(() => {
     overlay.remove();
+
+    if (shouldHighlightVoices) {
+      scrollToVoicesSummary();
+    }
   }, 250);
 }
 function getVisitedDebateIds() {
@@ -4376,10 +4384,11 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   }, 0);
 
 if (totalVotesUsed >= 5) {
-showVoteWarning(
-  "⚠️ Plus de voix disponibles",
-  "Toutes tes voix sont attribuées. Retire-en une pour en attribuer ailleurs."
-);  scrollToVoicesSummary();
+  pendingVoicesSummaryHighlight = true;
+  showVoteWarning(
+    "⚠️ Plus de voix disponibles",
+    "Tes 5 voix ont été attribuées. Retire-en une pour en attribuer ailleurs."
+  );
   return;
 }
   setButtonLoading(button);
@@ -4401,14 +4410,14 @@ showVoteWarning(
     showVoteRankProgress(beforeRankMap, currentAllArguments, argId);
 
   } catch (error) {
-    if (error.message === "limit") {
-showVoteWarning(
-  "⚠️ Limite atteinte",
-  "Vous avez déjà attribué vos 5 voix."
-);
-      scrollToVoicesSummary();
-      return;
-    }
+   if (error.message === "limit") {
+  pendingVoicesSummaryHighlight = true;
+  showVoteWarning(
+    "⚠️ Limite atteinte",
+    "Vous avez déjà attribué vos 5 voix."
+  );
+  return;
+}
 
     alert(error.message);
   } finally {
@@ -4501,14 +4510,17 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       nextValue = 0;
     }
 
-    if (
-      value === 1 &&
-      targetComment &&
-      targetComment.stance === "amelioration" &&
-      nextValue === 1
-    ) {
-      alert("Plus de likes que de voix : elle remplace l’idée.");
-    }
+if (
+  value === 1 &&
+  targetComment &&
+  targetComment.stance === "amelioration" &&
+  nextValue === 1
+) {
+  showVoteWarning(
+    "👉 Cette proposition d'amélioration peut remplacer l’idée",
+    "Si le nombre de likes dépasse le nombre de voix de l’idée actuelle, elle prendra sa place."
+  );
+}
 
     const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
       method: "POST",
