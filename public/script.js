@@ -1004,7 +1004,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
 
   const scrollHigh = () => {
     const rect = element.getBoundingClientRect();
@@ -1050,7 +1050,7 @@ function scrollToTopOfArgumentCard(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
 
   const rect = element.getBoundingClientRect();
   const y = rect.top + window.scrollY - offset;
@@ -1068,6 +1068,14 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+function linkifyText(str) {
+  const escaped = escapeHtml(str ?? "");
+  return escaped.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+}
 function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
@@ -1083,6 +1091,32 @@ function clearButtonLoading(button, loadingClass = "button-loading") {
   if (!button) return;
   button.disabled = false;
   button.classList.remove(loadingClass);
+}
+
+function setActionLoading(element, loadingClass = "button-loading") {
+  if (!element) return;
+
+  if (typeof element.disabled !== "undefined") {
+    element.disabled = true;
+  }
+
+  element.dataset.loading = "true";
+  element.classList.add(loadingClass);
+  element.style.pointerEvents = "none";
+  element.style.opacity = "0.55";
+}
+
+function clearActionLoading(element, loadingClass = "button-loading") {
+  if (!element) return;
+
+  if (typeof element.disabled !== "undefined") {
+    element.disabled = false;
+  }
+
+  delete element.dataset.loading;
+  element.classList.remove(loadingClass);
+  element.style.pointerEvents = "";
+  element.style.opacity = "";
 }
 
 function getKey() {
@@ -1744,7 +1778,7 @@ if (notification.type === "reply_to_comment") {
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}')"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
         <div class="notification-top">
           <span class="notification-icon">${icon}</span>
@@ -1800,13 +1834,15 @@ async function markOneNotificationAsRead(notificationId) {
     alert(error.message);
   }
 }
-async function handleNotificationClick(event, notificationId, link) {
+async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
+  setActionLoading(element);
 
   try {
     await markOneNotificationAsRead(notificationId);
     window.location.href = link;
   } catch (error) {
+    clearActionLoading(element);
     window.location.href = link;
   }
 }
@@ -3570,7 +3606,7 @@ return `
   </div>
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-  ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
+  ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
 <div class="argument-actions">
   <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
@@ -3632,7 +3668,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
 <div class="comments-block">
   <div class="comments-summary">
-    <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
+    <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
       ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
     </button>
 
@@ -3779,13 +3815,13 @@ ${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un comme
 ${
   c.stance === "amelioration"
     ? `
-${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 <div class="comment-improvement-preview">
   <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+  <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
 </div>
     `
-    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
+    : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
 
 
@@ -3815,7 +3851,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
   <button
     class="button button-small"
     type="button"
-    onclick="replyToComment('${a.id}', '${c.id}')"
+    onclick="replyToComment('${a.id}', '${c.id}', this)"
   >
     Répondre
   </button>
@@ -3849,7 +3885,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
                 <button
                   class="button button-small"
                   type="button"
-                  onclick="loadMoreComments('${a.id}')"
+                  onclick="loadMoreComments('${a.id}', this)"
                 >
                   Charger plus de commentaires
                 </button>
@@ -3861,7 +3897,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
       : `<div class="empty-comments">Aucun commentaire.</div>`
   }
 </div> <div class="comments-bottom-actions">
-  <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
+  <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
     Masquer
   </button>
 </div>
@@ -3989,7 +4025,7 @@ return `
 </div>
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
+${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
         <div class="argument-actions">
           <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
@@ -4051,7 +4087,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
         <div class="comments-block">
           <div class="comments-summary">
-            <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
+            <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
               ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
             </button>
 
@@ -4201,13 +4237,13 @@ ${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un comme
 ${
   c.stance === "amelioration"
     ? `
-${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 <div class="comment-improvement-preview">
   <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+  <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
 </div>
     `
-    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
+    : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
 <div class="comment-actions">
   <button
@@ -4235,7 +4271,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
 <button
   class="button button-small"
   type="button"
-  onclick="replyToComment('${a.id}', '${c.id}')"
+  onclick="replyToComment('${a.id}', '${c.id}', this)"
 >
   Répondre
 </button>
@@ -4269,7 +4305,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
                               <button
                                 class="button button-small"
                                 type="button"
-                                onclick="loadMoreComments('${a.id}')"
+                                onclick="loadMoreComments('${a.id}', this)"
                               >
                                 Charger plus de commentaires
                               </button>
@@ -4283,7 +4319,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
               </div>
 
               <div class="comments-bottom-actions">
-                <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
+                <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
                   Masquer
                 </button>
               </div>
@@ -4313,6 +4349,8 @@ async function submitListArgument(debateId) {
   const bodyField = document.getElementById("list-body");
   const sideField = document.getElementById("list-side-value");
   const warning = document.getElementById("warning-list");
+  const form = document.getElementById("form-list");
+  const submitButton = form?.querySelector('button[type="submit"]') || null;
 
   if (!titleField || !bodyField || !sideField) return;
 
@@ -4337,6 +4375,8 @@ async function submitListArgument(debateId) {
     return;
   }
 
+  setButtonLoading(submitButton);
+
   try {
     const r = await fetchJSON(API + "/arguments", {
       method: "POST",
@@ -4357,7 +4397,6 @@ async function submitListArgument(debateId) {
       warning.style.display = "none";
     }
 
-    const form = document.getElementById("form-list");
     if (form) {
       form.style.display = "none";
     }
@@ -4375,6 +4414,7 @@ async function submitListArgument(debateId) {
     await loadDebate(debateId);
 
   } catch (error) {
+    clearButtonLoading(submitButton);
     alert(error.message);
   }
 }
@@ -4680,12 +4720,7 @@ const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
 if (result && result.replaced) {
   showReplacementSuccessMessage(
     "💡 Idée remplacée",
-    "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
-    () => {
-      if (argumentId) {
-        scrollToTopOfArgumentCardAndFlash(argumentId);
-      }
-    }
+    "Cette amélioration a dépassé l’idée originale et la remplace désormais."
   );
 }
 else if (shouldWarnAboutReplacement) {
@@ -4702,9 +4737,11 @@ else if (shouldWarnAboutReplacement) {
   }
 }
 
-function replyToComment(argumentId, commentId) {
+function replyToComment(argumentId, commentId, button = null) {
   const debateId = getDebateId();
   if (!debateId) return;
+
+  setActionLoading(button);
 
   fetchJSON(API + "/debates/" + debateId)
     .then((debateData) => {
@@ -4773,6 +4810,7 @@ document.addEventListener("focusin", function(event) {
       }
     })
     .catch((error) => {
+      clearActionLoading(button);
       alert(error.message);
     });
 }
@@ -5108,7 +5146,7 @@ function toggleForm(side) {
   }
 }
 
-function toggleComments(argumentId) {
+async function toggleComments(argumentId, button = null) {
   const wasOpen = !!openCommentsByArgument[argumentId];
   const willOpen = !wasOpen;
 
@@ -5125,13 +5163,20 @@ function toggleComments(argumentId) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  loadDebate(debateId).then(() => {
+  setButtonLoading(button);
+
+  try {
+    await loadDebate(debateId);
+
     if (wasOpen) {
       setTimeout(() => {
         scrollToTopOfArgumentCard(argumentId);
       }, 50);
     }
-  });
+  } catch (error) {
+    clearButtonLoading(button);
+    alert(error.message);
+  }
 }
 
 document.addEventListener("click", function(event) {
@@ -5168,14 +5213,21 @@ document.addEventListener("click", function(event) {
   }
 });
 
-function loadMoreComments(argumentId) {
+async function loadMoreComments(argumentId, button = null) {
   visibleCommentsByArgument[argumentId] =
     (visibleCommentsByArgument[argumentId] || 5) + 5;
 
   const debateId = getDebateId();
   if (!debateId) return;
 
-  loadDebate(debateId);
+  setButtonLoading(button);
+
+  try {
+    await loadDebate(debateId);
+  } catch (error) {
+    clearButtonLoading(button);
+    alert(error.message);
+  }
 }
 window.toggleForm = toggleForm;
 window.toggleComments = toggleComments;
@@ -5489,7 +5541,7 @@ if (notification.type === "reply_to_comment") {
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}')"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
           <div class="notification-top">
             <span class="notification-icon">${icon}</span>
