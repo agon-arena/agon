@@ -1478,10 +1478,13 @@ body.debate-topbar-hidden .debate-compact-bell {
   display:flex;
   align-items:center;
   gap:8px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
+  overflow:hidden;
 }
 
 .my-argument-chip-rank{
+  flex:0 0 auto;
+  white-space:nowrap;
   font-weight:800;
   color:#111827;
 }
@@ -1493,6 +1496,8 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .my-argument-chip-title-button{
+  flex:1 1 auto;
+  min-width:0;
   border:none;
   background:transparent;
   padding:0;
@@ -1502,7 +1507,9 @@ body.debate-topbar-hidden .debate-compact-bell {
   font-weight:600;
   cursor:pointer;
   text-align:left;
-  overflow-wrap:anywhere;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .my-argument-chip-title-button:hover{
@@ -1583,6 +1590,10 @@ body.debate-topbar-hidden .debate-compact-bell {
   background: #cbd5e1;
   transform: translateX(-50%);
   pointer-events: none;
+}
+.my-arguments-row.my-arguments-row-single::before {
+  display: none !important;
+  content: none !important;
 }
 
 .my-arguments-summary-left{

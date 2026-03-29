@@ -764,12 +764,15 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
   const hasAnyVotedArgument = votedArgumentsA.length > 0 || votedArgumentsB.length > 0;
 
 if (myArgumentsRow) {
+  myArgumentsRow.classList.remove("my-arguments-row-single");
+
   if (!hasAnyVotedArgument) {
     myArgumentsRow.style.display = "none";
   } else if (votedArgumentsA.length > 0 && votedArgumentsB.length > 0) {
     myArgumentsRow.style.display = "grid";
   } else {
     myArgumentsRow.style.display = "block";
+    myArgumentsRow.classList.add("my-arguments-row-single");
   }
 }
 
@@ -783,19 +786,18 @@ if (myArgumentsRow) {
         <div class="my-votes">Vos idées soutenues côté A</div>
         <div class="my-arguments-list">
           ${votedArgumentsA.map((item) => `
-            <div class="my-argument-chip">
-              <div class="my-argument-chip-text">
-                <span class="my-argument-chip-rank">#${item.rank}</span>
 
-                <button
-                  type="button"
-                  class="my-argument-chip-title-button"
-                  onclick="scrollToArgumentFromSummary('${item.id}')"
-                  title="Aller à cette idée"
-                >
-                  ${escapeHtml(item.title)}
-                </button>
-              </div>
+          <div class="my-argument-chip">
+  <div class="my-argument-chip-text">
+    <button
+      type="button"
+      class="my-argument-chip-title-button"
+      onclick="scrollToArgumentFromSummary('${item.id}')"
+      title="Aller à cette idée"
+    >
+      ${escapeHtml(item.title)}
+    </button>
+  </div>
 
               <div class="my-argument-chip-stepper" aria-label="Modifier les voix de cette idée">
                 <button
@@ -3429,18 +3431,21 @@ if (summaryEl) {
     summaryEl.innerHTML = `
       <div class="my-arguments-list">
         ${votedArgumentsForColumn.map((item) => `
-  <div class="my-argument-chip">
-    <div class="my-argument-chip-text">
 
-      <button
-        type="button"
-        class="my-argument-chip-title-button"
-        onclick="scrollToArgumentFromSummary('${item.id}')"
-        title="Aller à cette idée"
-      >
-        ${escapeHtml(item.title)}
-      </button>
-    </div>
+<div class="my-argument-chip">
+  <div class="my-argument-chip-text">
+    <span class="my-argument-chip-rank">#${item.rank}</span>
+
+    <button
+      type="button"
+      class="my-argument-chip-title-button"
+      onclick="scrollToArgumentFromSummary('${item.id}')"
+      title="Aller à cette idée"
+    >
+      ${escapeHtml(item.title)}
+    </button>
+  </div>
+
 
     <div class="my-argument-chip-stepper" aria-label="Modifier les voix de cette idée">
       <button
