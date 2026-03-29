@@ -4716,17 +4716,11 @@ const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
     }
 
     setCommentLikeState(debateId, state);
-    pendingCommentScrollId = String(commentId);
     await loadDebate(debateId);
 if (result && result.replaced) {
   showReplacementSuccessMessage(
     "💡 Idée remplacée",
-    "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
-    () => {
-      if (argumentId) {
-        scrollToTopOfArgumentCardAndFlash(argumentId);
-      }
-    }
+    "Cette amélioration a dépassé l’idée originale et la remplace désormais."
   );
 }
 else if (shouldWarnAboutReplacement) {
