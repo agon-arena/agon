@@ -31,7 +31,7 @@ const adminTokens = new Set();
 
 app.use(express.json());
 app.use(express.static("public"));
-app.use("/migration-export", express.static("/opt/render/project/src/migration-export"));
+app.use("/migration-export", express.static("/var/data"));
 
 function escapeHtml(value) {
   return String(value ?? "")
