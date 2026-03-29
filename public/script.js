@@ -203,8 +203,19 @@ if (isOpenMode) {
 
 function setDebateViewMode(mode) {
   const normalizedMode = mode === "list" ? "list" : "columns";
+
   localStorage.setItem("debate_view_mode", normalizedMode);
   currentDebateViewMode = normalizedMode;
+
+  if (normalizedMode === "columns") {
+    localStorage.setItem("debate_column_focus", "split");
+
+    const columns = document.querySelector(".debate-columns");
+    if (columns) {
+      columns.classList.remove("focus-a", "focus-b");
+    }
+  }
+
   updateDebateViewModeUI();
 
   const debateId = getDebateId();
