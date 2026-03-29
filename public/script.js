@@ -646,7 +646,15 @@ function formatIdeaRank(rank) {
   }
 
   if (numericRank === 1) {
-    return "1re place";
+    return "première place";
+  }
+
+  if (numericRank === 2) {
+    return "deuxième place";
+  }
+
+  if (numericRank === 3) {
+    return "troisième place";
   }
 
   return `${numericRank}e place`;
