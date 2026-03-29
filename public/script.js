@@ -763,9 +763,15 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
 
   const hasAnyVotedArgument = votedArgumentsA.length > 0 || votedArgumentsB.length > 0;
 
-  if (myArgumentsRow) {
-    myArgumentsRow.style.display = hasAnyVotedArgument ? "grid" : "none";
+if (myArgumentsRow) {
+  if (!hasAnyVotedArgument) {
+    myArgumentsRow.style.display = "none";
+  } else if (votedArgumentsA.length > 0 && votedArgumentsB.length > 0) {
+    myArgumentsRow.style.display = "grid";
+  } else {
+    myArgumentsRow.style.display = "block";
   }
+}
 
   if (myArgumentsA) {
     if (!votedArgumentsA.length) {
