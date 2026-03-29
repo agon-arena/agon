@@ -1283,6 +1283,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   color: #4b5563;
   line-height: 1.55;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .argument-actions {
@@ -1790,6 +1791,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   color: #374151;
   line-height: 1.45;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .comment-actions {
