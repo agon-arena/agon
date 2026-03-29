@@ -26,197 +26,6 @@ let pendingMobileColumnFocusElementId = null;
 let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
-let currentDebateData = null;
-let currentDebateLoadPromise = null;
-let currentDebateLoadId = null;
-let currentDebateData = null;
-let currentDebatesIndexCache = null;
-let currentDebatesIndexCachePromise = null;
-let debateRefreshTimer = null;
-let latestDebateLoadToken = 0;
-let activeDebateLoadPromise = null;
-
-
-function cloneDebatePayload(data) {
-  return JSON.parse(JSON.stringify(data || null));
-}
-
-function invalidateDebatesIndexCache() {
-  currentDebatesIndexCache = null;
-  currentDebatesIndexCachePromise = null;
-}
-
-async function getDebatesIndexCache() {
-  if (Array.isArray(currentDebatesIndexCache)) {
-    return currentDebatesIndexCache;
-  }
-
-  if (!currentDebatesIndexCachePromise) {
-    currentDebatesIndexCachePromise = fetchJSON(API + "/debates")
-      .then((rows) => {
-        currentDebatesIndexCache = Array.isArray(rows) ? rows : [];
-        return currentDebatesIndexCache;
-      })
-      .finally(() => {
-        currentDebatesIndexCachePromise = null;
-      });
-  }
-
-  return currentDebatesIndexCachePromise;
-}
-
-function updateCachedDebateIndexEntryFromCurrentData() {
-  if (!currentDebateData || !Array.isArray(currentDebatesIndexCache)) return;
-
-  const debate = currentDebateData.debate || {};
-  const optionA = currentDebateData.optionA || [];
-  const optionB = currentDebateData.optionB || [];
-  const entryIndex = currentDebatesIndexCache.findIndex((item) => String(item.id) === String(debate.id));
-  if (entryIndex === -1) return;
-
-  const votesA = optionA.reduce((sum, arg) => sum + Number(arg.votes || 0), 0);
-  const votesB = optionB.reduce((sum, arg) => sum + Number(arg.votes || 0), 0);
-  const totalVotes = votesA + votesB;
-  const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
-  const percentB = totalVotes > 0 ? 100 - percentA : 50;
-  const allArgs = [...optionA, ...optionB];
-  const lastArgumentAt = allArgs
-    .map((arg) => arg.created_at)
-    .filter(Boolean)
-    .sort()
-    .slice(-1)[0] || null;
-
-  currentDebatesIndexCache[entryIndex] = {
-    ...currentDebatesIndexCache[entryIndex],
-    ...debate,
-    argument_count: allArgs.length,
-    last_argument_at: lastArgumentAt,
-    votes_a: votesA,
-    votes_b: votesB,
-    percent_a: percentA,
-    percent_b: percentB
-  };
-}
-
-function scheduleDebateRefresh(debateId, delay = 180) {
-  if (!debateId) return;
-
-  if (debateRefreshTimer) {
-    clearTimeout(debateRefreshTimer);
-  }
-
-  debateRefreshTimer = setTimeout(() => {
-    debateRefreshTimer = null;
-    loadDebate(debateId, { force: true, preserveScroll: true, skipSpinner: true }).catch((error) => {
-      console.error(error);
-    });
-  }, delay);
-}
-
-function getCurrentDebateCommentsMap() {
-  if (!currentDebateData || !currentDebateData.commentsByArgument) {
-    return {};
-  }
-
-  return currentDebateData.commentsByArgument;
-}
-
-function findCurrentCommentById(commentId) {
-  const commentIdString = String(commentId);
-  const commentsByArgument = getCurrentDebateCommentsMap();
-
-  for (const comments of Object.values(commentsByArgument)) {
-    const found = (comments || []).find((comment) => String(comment.id) === commentIdString);
-    if (found) return found;
-  }
-
-  return null;
-}
-
-function syncCurrentDebateDataFromCurrentAllArguments() {
-  if (!currentDebateData || !currentDebateData.debate) return;
-
-  currentDebateData.optionA = (currentAllArguments || []).filter(
-    (arg) => String(arg.side || "") === "A"
-  );
-  currentDebateData.optionB = (currentAllArguments || []).filter(
-    (arg) => String(arg.side || "") === "B"
-  );
-}
-
-function rerenderCurrentDebateInteractiveSections(debateId) {
-  if (!currentDebateData || !currentDebateData.debate) return;
-
-  syncCurrentDebateDataFromCurrentAllArguments();
-
-  const commentsByArgument = currentDebateData.commentsByArgument || {};
-  const isOpen = isOpenDebate(currentDebateData.debate);
-
-  renderUnifiedVoicesSummary(debateId, currentAllArguments);
-  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
-
-  if (isOpen || currentDebateViewMode === "list") {
-    const argsA = document.getElementById("arguments-a");
-    const argsB = document.getElementById("arguments-b");
-    if (argsA) argsA.innerHTML = "";
-    if (argsB) argsB.innerHTML = "";
-    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
-  } else {
-    const unified = document.getElementById("arguments-unified");
-    if (unified) unified.innerHTML = "";
-    renderArgs("arguments-a", currentDebateData.optionA || [], debateId, commentsByArgument);
-    renderArgs("arguments-b", currentDebateData.optionB || [], debateId, commentsByArgument);
-  }
-
-  const votesA = (currentDebateData.optionA || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
-  const votesB = (currentDebateData.optionB || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
-  const total = votesA + votesB;
-
-  let percentA = 50;
-  let percentB = 50;
-
-  if (!isOpen && total > 0) {
-    percentA = Math.round((votesA / total) * 100);
-    percentB = 100 - percentA;
-  }
-
-  const scoreBar = document.getElementById("debate-score-bar");
-  const scoreA = document.getElementById("score-a");
-  const scoreB = document.getElementById("score-b");
-
-  if (isOpen) {
-    if (scoreBar) scoreBar.style.display = "none";
-    if (scoreA) scoreA.style.display = "none";
-    if (scoreB) scoreB.style.display = "none";
-  } else {
-    if (scoreBar) scoreBar.style.display = "";
-    if (scoreA) {
-      scoreA.style.display = "";
-      scoreA.innerHTML = `
-        <strong>${percentA}%</strong>
-        <span class="score-votes">(${votesA} voix)</span>
-      `;
-    }
-
-    if (scoreB) {
-      scoreB.style.display = "";
-      scoreB.innerHTML = `
-        <strong>${percentB}%</strong>
-        <span class="score-votes">(${votesB} voix)</span>
-      `;
-    }
-  }
-
-  currentDebateShareData = {
-    question: currentDebateData.debate.question || "",
-    optionA: isOpen ? "" : (currentDebateData.debate.option_a || ""),
-    optionB: isOpen ? "" : (currentDebateData.debate.option_b || ""),
-    percentA,
-    percentB
-  };
-
-  updateCachedDebateIndexEntryFromCurrentData();
-}
 
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
@@ -276,6 +85,16 @@ if (!openMode) {
   setDisplay(viewSwitchCard, "");
   setDisplay(fixedBar, "");
   if (openReplyWrap) openReplyWrap.style.display = "none";
+setDisplay(headings, "");
+setDisplay(columns, currentDebateViewMode === "columns" ? "grid" : "none");
+setDisplay(listView, currentDebateViewMode === "list" ? "grid" : "none");
+setDisplay(scoreBar, "");
+setDisplay(scoreA, "");
+setDisplay(scoreB, "");
+setDisplay(viewSwitch, "");
+setDisplay(viewSwitchCard, "");
+setDisplay(fixedBar, "");
+if (openReplyWrap) openReplyWrap.style.display = "none";
 
 if (sideFocusLeft) sideFocusLeft.style.display = "none";
 if (sideFocusRight) sideFocusRight.style.display = "none";
@@ -400,8 +219,8 @@ function setDebateViewMode(mode) {
   updateDebateViewModeUI();
 
   const debateId = getDebateId();
-  if (debateId && currentDebateData) {
-    renderCurrentDebateFromData(currentDebateData, debateId);
+  if (debateId) {
+    loadDebate(debateId);
   }
 }
 function isCurrentOpenDebateMode() {
@@ -721,8 +540,8 @@ function changeArgumentsSort(mode) {
   updateSortButtonLabel();
 
   const debateId = getDebateId();
-  if (debateId && currentDebateData) {
-    renderCurrentDebateFromData(currentDebateData, debateId);
+  if (debateId) {
+    loadDebate(debateId);
   }
 }
 function toggleSortMenu() {
@@ -1074,15 +893,7 @@ function getDebateId() {
 }
 
 async function fetchJSON(url, opt = {}) {
-  const requestOptions = {
-    cache: "no-store",
-    ...opt,
-    headers: {
-      ...(opt.headers || {})
-    }
-  };
-
-  const r = await fetch(url, requestOptions);
+  const r = await fetch(url, opt);
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
@@ -1490,7 +1301,7 @@ function getDebateShareText() {
 }
 async function copyDebateLink() {
   const { text, url } = getGlobalShareData();
-  const fullText = `${text} ${url}`;
+const fullText = `${text} ${url}`;
   try {
     await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
@@ -3271,309 +3082,278 @@ function renderDebateSourcePreview(sourceUrl) {
 }
 
 
-async function renderCurrentDebateFromData(data, id) {
-  if (!data || !data.debate) return;
+async function loadDebate(id) {
+saveVisitedDebate(id);
 
-  currentDebateData = cloneDebatePayload(data);
+  try {
+    const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
 
-  const sourceUrl = String(data.debate.source_url || "").trim();
-  renderDebateSourcePreview(sourceUrl);
+const sourceUrl = String(data.debate.source_url || "").trim();
+renderDebateSourcePreview(sourceUrl);
+if (isOpenDebate(data.debate)) {
+  document.getElementById("title-a").textContent = "Réponses";
+  document.getElementById("title-b").textContent = "";
+} else {
+  document.getElementById("title-a").textContent = data.debate.option_a;
+  document.getElementById("title-b").textContent = data.debate.option_b;
+}
 
-  if (isOpenDebate(data.debate)) {
-    document.getElementById("title-a").textContent = "Réponses";
-    document.getElementById("title-b").textContent = "";
-  } else {
-    document.getElementById("title-a").textContent = data.debate.option_a;
-    document.getElementById("title-b").textContent = data.debate.option_b;
-  }
+currentDebateViewMode = getDebateViewMode();
+updateDebateViewModeUI();
+updateSortButtonLabel();
+applyDebateTypeUI(data.debate);
 
-  currentDebateViewMode = getDebateViewMode();
-  updateDebateViewModeUI();
-  updateSortButtonLabel();
-  applyDebateTypeUI(data.debate);
+currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
 
-  currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
-  cleanVoteStateForExistingArguments(id, currentAllArguments);
+cleanVoteStateForExistingArguments(id, currentAllArguments);
 
-  renderUnifiedVoicesSummary(id, currentAllArguments);
-  renderUnifiedVotedArgumentsSummary(id, currentAllArguments);
+renderUnifiedVoicesSummary(id, currentAllArguments);
+renderUnifiedVotedArgumentsSummary(id, currentAllArguments);
 
-  if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
-    const argsA = document.getElementById("arguments-a");
-    const argsB = document.getElementById("arguments-b");
-    if (argsA) argsA.innerHTML = "";
-    if (argsB) argsB.innerHTML = "";
+if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
+  const argsA = document.getElementById("arguments-a");
+  const argsB = document.getElementById("arguments-b");
+  if (argsA) argsA.innerHTML = "";
+  if (argsB) argsB.innerHTML = "";
 
-    renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
-  } else {
-    const unified = document.getElementById("arguments-unified");
-    if (unified) unified.innerHTML = "";
+  renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
+} else {
+  const unified = document.getElementById("arguments-unified");
+  if (unified) unified.innerHTML = "";
 
-    renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
-    renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
-  }
+  renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
+  renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
+}
 
-  if (pendingTopCommentScroll) {
-    const targetId = pendingTopCommentScroll;
+if (pendingTopCommentScroll) {
+  const targetId = pendingTopCommentScroll;
 
-    setTimeout(() => {
-      const element = document.getElementById(targetId);
+  setTimeout(() => {
+    const element = document.getElementById(targetId);
 
-      if (element) {
-        const topbar = document.querySelector(".topbar");
-        const offset = (topbar ? topbar.offsetHeight : 80) + 20;
-        const y = element.getBoundingClientRect().top + window.scrollY - offset;
+    if (element) {
+      const topbar = document.querySelector(".topbar");
+      const offset = (topbar ? topbar.offsetHeight : 80) + 20;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-        window.scrollTo({
-          top: Math.max(0, y),
-          behavior: "smooth"
-        });
-      } else {
-        scrollToTopVisibleComment();
-      }
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+    } else {
+      scrollToTopVisibleComment();
+    }
 
-      pendingTopCommentScroll = null;
-    }, 250);
-  } else if (pendingCommentScrollId) {
-    const targetId = pendingCommentScrollId;
+    pendingTopCommentScroll = null;
+  }, 250);
+}
+else if (pendingCommentScrollId) {
+  const targetId = pendingCommentScrollId;
 
-    setTimeout(() => {
-      const element = getVisibleCommentElement(targetId);
+  setTimeout(() => {
+    const element = getVisibleCommentElement(targetId);
 
-      if (element) {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
 
-        applyVoiceHighlight(element);
+      applyVoiceHighlight(element);
+
+      setTimeout(() => {
+        removeVoiceHighlight(element);
+      }, 2000);
+    }
+
+    pendingCommentScrollId = null;
+  }, 250);
+}
+else if (pendingArgumentScrollId) {
+  const targetId = pendingArgumentScrollId;
+
+  setTimeout(() => {
+    const element = getVisibleArgumentElement(targetId);
+
+    if (element) {
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+
+      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+        element.classList.add("flash-green");
 
         setTimeout(() => {
-          removeVoiceHighlight(element);
+          element.classList.remove("flash-green");
+        }, 2000);
+      } else {
+        element.classList.add("admin-highlight");
+
+        setTimeout(() => {
+          element.classList.remove("admin-highlight");
         }, 2000);
       }
+    }
 
-      pendingCommentScrollId = null;
-    }, 250);
-  } else if (pendingArgumentScrollId) {
-    const targetId = pendingArgumentScrollId;
-
-    setTimeout(() => {
-      const element = getVisibleArgumentElement(targetId);
-
-      if (element) {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
-
-        if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
-          element.classList.add("flash-green");
-
-          setTimeout(() => {
-            element.classList.remove("flash-green");
-          }, 2000);
-        } else {
-          element.classList.add("admin-highlight");
-
-          setTimeout(() => {
-            element.classList.remove("admin-highlight");
-          }, 2000);
-        }
-      }
-
-      pendingArgumentScrollId = null;
-      pinnedNewArgumentId = null;
-    }, 250);
-  }
+    pendingArgumentScrollId = null;
+    pinnedNewArgumentId = null;
+  }, 250);
+}
 
   const isOpen = isOpenDebate(data.debate);
-  const votesA = (data.optionA || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
-  const votesB = (data.optionB || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
-  const total = votesA + votesB;
 
-  let percentA = 50;
-  let percentB = 50;
+const votesA = data.optionA.reduce((sum, a) => sum + a.votes, 0);
+const votesB = data.optionB.reduce((sum, a) => sum + a.votes, 0);
 
-  if (!isOpen && total > 0) {
-    percentA = Math.round((votesA / total) * 100);
-    percentB = 100 - percentA;
+const total = votesA + votesB;
+
+let percentA = 50;
+let percentB = 50;
+
+if (!isOpen && total > 0) {
+  percentA = Math.round((votesA / total) * 100);
+  percentB = 100 - percentA;
+}
+const scoreBar = document.getElementById("debate-score-bar");
+const scoreA = document.getElementById("score-a");
+const scoreB = document.getElementById("score-b");
+
+if (isOpen) {
+  if (scoreBar) scoreBar.style.display = "none";
+  if (scoreA) scoreA.style.display = "none";
+  if (scoreB) scoreB.style.display = "none";
+} else {
+  if (scoreBar) {
+    scoreBar.style.display = "";
+    scoreBar.innerHTML = `
+      <div class="score-bar-label score-bar-label-a">${percentA}%</div>
+      <div class="score-bar">
+        <div class="score-bar-a" style="width:${percentA}%"></div>
+        <div class="score-bar-b" style="width:${percentB}%"></div>
+      </div>
+      <div class="score-bar-label score-bar-label-b">${percentB}%</div>
+    `;
   }
 
-  const scoreBar = document.getElementById("debate-score-bar");
-  const scoreA = document.getElementById("score-a");
-  const scoreB = document.getElementById("score-b");
-
-  if (isOpen) {
-    if (scoreBar) scoreBar.style.display = "none";
-    if (scoreA) scoreA.style.display = "none";
-    if (scoreB) scoreB.style.display = "none";
-  } else {
-    if (scoreBar) {
-      scoreBar.style.display = "";
-      scoreBar.innerHTML = `
-        <div class="score-bar-label score-bar-label-a">${percentA}%</div>
-        <div class="score-bar">
-          <div class="score-bar-a" style="width:${percentA}%"></div>
-          <div class="score-bar-b" style="width:${percentB}%"></div>
-        </div>
-        <div class="score-bar-label score-bar-label-b">${percentB}%</div>
-      `;
-    }
-
-    if (scoreA) {
-      scoreA.style.display = "";
-      scoreA.innerHTML = `
-        <strong>${percentA}%</strong>
-        <span class="score-votes">(${votesA} voix)</span>
-      `;
-    }
-
-    if (scoreB) {
-      scoreB.style.display = "";
-      scoreB.innerHTML = `
-        <strong>${percentB}%</strong>
-        <span class="score-votes">(${votesB} voix)</span>
-      `;
-    }
+  if (scoreA) {
+    scoreA.style.display = "";
+    scoreA.innerHTML = `
+      <strong>${percentA}%</strong>
+      <span class="score-votes">(${votesA} voix)</span>
+    `;
   }
 
-  currentDebateShareData = {
-    question: data.debate.question || "",
-    optionA: isOpen ? "" : (data.debate.option_a || ""),
-    optionB: isOpen ? "" : (data.debate.option_b || ""),
-    percentA,
-    percentB
-  };
-
-  updateCachedDebateIndexEntryFromCurrentData();
-
-  try {
-    const allDebates = await getDebatesIndexCache();
-    renderBottomSimilarDebates(data.debate, allDebates);
-  } catch (error) {
-    console.error(error);
-  }
-
-  refreshAdminUI();
-
-  const params = new URLSearchParams(window.location.search);
-  const highlight = params.get("highlight");
-
-  if (highlight) {
-    if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
-      argumentsVisible = currentAllArguments.length;
-    }
-    if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
-      if (highlight.startsWith("comment-")) {
-        const commentId = highlight.replace("comment-", "");
-
-        for (const argumentId in (data.commentsByArgument || {})) {
-          const comments = data.commentsByArgument[argumentId] || [];
-
-          if (comments.some((comment) => String(comment.id) === String(commentId))) {
-            openCommentsByArgument[argumentId] = true;
-          }
-        }
-      }
-
-      if (currentDebateViewMode === "list") {
-        renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
-      } else {
-        renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
-        renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
-      }
-    }
-
-    setTimeout(() => {
-      let element = null;
-
-      if (highlight === "debate") {
-        element = document.getElementById("debate-question");
-      } else if (highlight.startsWith("comment-")) {
-        const commentId = highlight.replace("comment-", "");
-        element = getVisibleCommentElement(commentId);
-      } else if (highlight.startsWith("argument-")) {
-        const argumentId = highlight.replace("argument-", "");
-        element = getVisibleArgumentElement(argumentId);
-      } else {
-        element = document.getElementById(highlight);
-      }
-
-      if (element) {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "center"
-        });
-
-        const isGreenTarget =
-          element.classList.contains("argument-card-a") ||
-          !!element.closest(".argument-card-a") ||
-          !!element.closest("#arguments-a") ||
-          !!element.closest(".column-a");
-
-        if (isGreenTarget) {
-          if (highlight.startsWith("argument-")) {
-            element.classList.add("flash-green");
-
-            setTimeout(() => {
-              element.classList.remove("flash-green");
-            }, 5000);
-          } else {
-            element.classList.add("admin-highlight-green");
-
-            setTimeout(() => {
-              element.classList.remove("admin-highlight-green");
-            }, 5000);
-          }
-        } else {
-          element.classList.add("admin-highlight");
-
-          setTimeout(() => {
-            element.classList.remove("admin-highlight");
-          }, 5000);
-        }
-      }
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete("highlight");
-      window.history.replaceState({}, "", url);
-    }, 300);
+  if (scoreB) {
+    scoreB.style.display = "";
+    scoreB.innerHTML = `
+      <strong>${percentB}%</strong>
+      <span class="score-votes">(${votesB} voix)</span>
+    `;
   }
 }
 
-async function loadDebate(id, options = {}) {
-  const { force = false } = options;
-  saveVisitedDebate(id);
+currentDebateShareData = {
+  question: data.debate.question || "",
+  optionA: isOpen ? "" : (data.debate.option_a || ""),
+  optionB: isOpen ? "" : (data.debate.option_b || ""),
+  percentA,
+  percentB
+};
+const allDebates = await fetchJSON(API + "/debates");
+renderBottomSimilarDebates(data.debate, allDebates);
 
-  if (!force && currentDebateData && String(currentDebateData?.debate?.id) === String(id)) {
-    await renderCurrentDebateFromData(currentDebateData, id);
-    return currentDebateData;
+refreshAdminUI();
+
+const params = new URLSearchParams(window.location.search);
+const highlight = params.get("highlight");
+
+if (highlight) {
+if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+  argumentsVisible = currentAllArguments.length;
+}
+if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+  if (highlight.startsWith("comment-")) {
+    const commentId = highlight.replace("comment-", "");
+
+    for (const argumentId in (data.commentsByArgument || {})) {
+      const comments = data.commentsByArgument[argumentId] || [];
+
+      if (comments.some((comment) => String(comment.id) === String(commentId))) {
+        openCommentsByArgument[argumentId] = true;
+      }
+    }
   }
 
-  const requestToken = ++latestDebateLoadToken;
+  if (currentDebateViewMode === "list") {
+    renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
+  } else {
+    renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
+    renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
+  }
+}
 
-  activeDebateLoadPromise = fetchJSON(API + "/debates/" + id)
-    .then(async (data) => {
-      if (requestToken !== latestDebateLoadToken) return currentDebateData;
-      await renderCurrentDebateFromData(data, id);
-      return currentDebateData;
-    })
-    .catch((error) => {
-      if (requestToken === latestDebateLoadToken) {
-        alert(error.message);
-      }
-      throw error;
-    })
-    .finally(() => {
-      if (requestToken === latestDebateLoadToken) {
-        activeDebateLoadPromise = null;
-      }
-    });
+  setTimeout(() => {
+    let element = null;
 
-  return activeDebateLoadPromise;
+    if (highlight === "debate") {
+      element = document.getElementById("debate-question");
+    } else if (highlight.startsWith("comment-")) {
+      const commentId = highlight.replace("comment-", "");
+      element = getVisibleCommentElement(commentId);
+    } else if (highlight.startsWith("argument-")) {
+      const argumentId = highlight.replace("argument-", "");
+      element = getVisibleArgumentElement(argumentId);
+    } else {
+      element = document.getElementById(highlight);
+    }
+
+if (element) {
+  element.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+
+  const isGreenTarget =
+    element.classList.contains("argument-card-a") ||
+    !!element.closest(".argument-card-a") ||
+    !!element.closest("#arguments-a") ||
+    !!element.closest(".column-a");
+
+  if (isGreenTarget) {
+    if (highlight.startsWith("argument-")) {
+      element.classList.add("flash-green");
+
+      setTimeout(() => {
+        element.classList.remove("flash-green");
+      }, 5000);
+    } else {
+      element.classList.add("admin-highlight-green");
+
+      setTimeout(() => {
+        element.classList.remove("admin-highlight-green");
+      }, 5000);
+    }
+  } else {
+    element.classList.add("admin-highlight");
+
+    setTimeout(() => {
+      element.classList.remove("admin-highlight");
+    }, 5000);
+  }
+}
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("highlight");
+    window.history.replaceState({}, "", url);
+  }, 300);
+}
+
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function renderArgs(container, args, debateId, commentsByArgument) {
@@ -4068,15 +3848,15 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
           hiddenCommentsCount > 0
             ? `
               <div class="load-more-container">
-             <button
-  type="button"
-  class="button button-small"
-  onclick="loadMoreComments('${arg.id}')"
->
-  Charger plus de commentaires
-</button>
-</div>
-`
+                <button
+                  class="button button-small"
+                  type="button"
+                  onclick="loadMoreComments('${a.id}')"
+                >
+                  Charger plus de commentaires
+                </button>
+              </div>
+            `
             : ""
         }
       `
@@ -4495,7 +4275,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
                               >
                                 Charger plus de commentaires
                               </button>
-                            </div >
+                            </div>
                           `
                           : ""
                       }
@@ -4594,8 +4374,7 @@ async function submitListArgument(debateId) {
 
     pendingArgumentScrollId = String(r.id);
     pinnedNewArgumentId = String(r.id);
-    invalidateDebatesIndexCache();
-    await loadDebate(debateId, { force: true });
+    await loadDebate(debateId);
 
   } catch (error) {
     alert(error.message);
@@ -4707,19 +4486,7 @@ if (mainField) {
 
 pendingCommentScrollId = String(data.id);
 pinnedNewCommentId = String(data.id);
-invalidateDebatesIndexCache();
-
-if (currentDebateData) {
-  const key = String(argumentId);
-  const existingComments = currentDebateData.commentsByArgument?.[key] || [];
-  if (!currentDebateData.commentsByArgument) {
-    currentDebateData.commentsByArgument = {};
-  }
-  currentDebateData.commentsByArgument[key] = [...existingComments, { ...data, likes: Number(data.likes || 0) }];
-  rerenderCurrentDebateInteractiveSections(debateId);
-} else {
-  await loadDebate(debateId, { force: true });
-}
+await loadDebate(debateId);
 
   } catch (error) {
     alert(error.message);
@@ -4772,19 +4539,8 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     state[argIdString] = Number(state[argIdString] || 0) + 1;
     setState(debateId, state);
 
-    const targetIndex = (currentAllArguments || []).findIndex(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    if (targetIndex !== -1) {
-      currentAllArguments[targetIndex] = {
-        ...currentAllArguments[targetIndex],
-        votes: Number(currentAllArguments[targetIndex].votes || 0) + 1
-      };
-    }
-
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    rerenderCurrentDebateInteractiveSections(debateId);
+    await loadDebate(debateId);
 
     const targetAfter = (currentAllArguments || []).find(
       (arg) => String(arg.id) === argIdString
@@ -4814,6 +4570,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   }
 }
 
+
 async function unvote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -4842,19 +4599,8 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
 
     setState(debateId, state);
 
-    const targetIndex = (currentAllArguments || []).findIndex(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    if (targetIndex !== -1) {
-      currentAllArguments[targetIndex] = {
-        ...currentAllArguments[targetIndex],
-        votes: Math.max(0, Number(currentAllArguments[targetIndex].votes || 0) - 1)
-      };
-    }
-
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    rerenderCurrentDebateInteractiveSections(debateId);
+    await loadDebate(debateId);
 
   } catch (error) {
     alert(error.message);
@@ -4885,7 +4631,19 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
   setButtonLoading(button);
 
   try {
-    const targetComment = findCurrentCommentById(commentIdString);
+    const debateData = await fetchJSON(API + "/debates/" + debateId);
+    let targetComment = null;
+
+    for (const comments of Object.values(debateData.commentsByArgument || {})) {
+      const found = (comments || []).find(
+        (comment) => String(comment.id) === commentIdString
+      );
+      if (found) {
+        targetComment = found;
+        break;
+      }
+    }
+
     const currentValue = Number(state[commentIdString] || 0);
     let nextValue = 0;
 
@@ -4897,20 +4655,21 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       nextValue = 0;
     }
 
-    const shouldWarnAboutReplacement =
-      value === 1 &&
-      targetComment &&
-      targetComment.stance === "amelioration" &&
-      nextValue === 1;
 
-    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voterKey,
-        value: nextValue
-      })
-    });
+const shouldWarnAboutReplacement =
+  value === 1 &&
+  targetComment &&
+  targetComment.stance === "amelioration" &&
+  nextValue === 1;
+
+const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    voterKey,
+    value: nextValue
+  })
+});
 
     if (nextValue === 0) {
       delete state[commentIdString];
@@ -4920,38 +4679,24 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
     setCommentLikeState(debateId, state);
     pendingCommentScrollId = String(commentId);
-
-    if (currentDebateData?.commentsByArgument) {
-      for (const [key, comments] of Object.entries(currentDebateData.commentsByArgument)) {
-        currentDebateData.commentsByArgument[key] = (comments || []).map((comment) => {
-          if (String(comment.id) !== commentIdString) return comment;
-          return { ...comment, likes: Number(result?.likes ?? comment.likes ?? 0) };
-        });
+    await loadDebate(debateId);
+if (result && result.replaced) {
+  showReplacementSuccessMessage(
+    "💡 Idée remplacée",
+    "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
+    () => {
+      if (argumentId) {
+        scrollToTopOfArgumentCardAndFlash(argumentId);
       }
     }
-
-    if (result && result.replaced) {
-      showReplacementSuccessMessage(
-        "💡 Idée remplacée",
-        "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
-        () => {
-          if (argumentId) {
-            scrollToTopOfArgumentCardAndFlash(argumentId);
-          }
-        }
-      );
-      invalidateDebatesIndexCache();
-      await loadDebate(debateId, { force: true });
-    } else {
-      rerenderCurrentDebateInteractiveSections(debateId);
-
-      if (shouldWarnAboutReplacement) {
-        showVoteWarning(
-          "Cette proposition d'amélioration peut remplacer l’idée :",
-          "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
-        );
-      }
-    }
+  );
+}
+else if (shouldWarnAboutReplacement) {
+  showVoteWarning(
+    "Cette proposition d'amélioration peut remplacer l’idée :",
+    "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
+  );
+}
 
   } catch (error) {
     alert(error.message);
@@ -4964,11 +4709,7 @@ function replyToComment(argumentId, commentId) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  const debatePromise = currentDebateData
-    ? Promise.resolve(cloneDebatePayload(currentDebateData))
-    : fetchJSON(API + "/debates/" + debateId);
-
-  debatePromise
+  fetchJSON(API + "/debates/" + debateId)
     .then((debateData) => {
       const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
       const targetComment = comments.find(
@@ -5332,8 +5073,7 @@ async function deleteComment(debateId, commentId) {
           }
         );
 
-        invalidateDebatesIndexCache();
-        await loadDebate(debateId, { force: true });
+        await loadDebate(debateId);
       } catch (error) {
         alert(error.message);
       }
@@ -5575,18 +5315,9 @@ async function editArgument(argumentId) {
 
     await loadDebate(debateId);
 
-      return data;
-    } catch (error) {
-      alert(error.message);
-      throw error;
-    } finally {
-      if (currentDebateLoadId === debateIdString) {
-        currentDebateLoadPromise = null;
-      }
-    }
-  })();
-
-  return currentDebateLoadPromise;
+  } catch (error) {
+    alert(error.message);
+  }
 }
 /* =========================
    Boot
