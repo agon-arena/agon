@@ -5263,6 +5263,7 @@ async function editArgument(argumentId) {
 /* =========================
    Boot
 ========================= */
+
 function showReplacementSuccessMessage(title, message, onClose = null, iconHtml = "💡", iconClass = "") {
   const existing = document.getElementById("replacement-success-overlay");
   if (existing) existing.remove();
@@ -5271,9 +5272,14 @@ function showReplacementSuccessMessage(title, message, onClose = null, iconHtml 
   overlay.id = "replacement-success-overlay";
   overlay.className = "replacement-success-overlay replacement-success-overlay-visible";
 
+  const boxClass = iconClass.includes("ranking-medal") ? "ranking-medal-box" : "ranking-gain-box";
+  const finalIconClass = iconClass
+    ? `replacement-success-icon ${iconClass}`
+    : "replacement-success-icon ranking-gain-icon";
+
   overlay.innerHTML = `
-    <div class="replacement-success-box">
-      <div class="replacement-success-icon ${iconClass}">${iconHtml}</div>
+    <div class="replacement-success-box ${boxClass}">
+      <div class="${finalIconClass}">${iconHtml}</div>
       <div class="replacement-success-title">${escapeHtml(title)}</div>
       <div class="replacement-success-text">${escapeHtml(message)}</div>
       <button
