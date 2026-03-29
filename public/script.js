@@ -4311,12 +4311,15 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
 
 
 async function submitListArgument(debateId) {
+  const form = document.getElementById("form-list");
+  const submitButton = form?.querySelector('button[type="submit"]') || null;
   const titleField = document.getElementById("list-title");
   const bodyField = document.getElementById("list-body");
   const sideField = document.getElementById("list-side-value");
   const warning = document.getElementById("warning-list");
 
   if (!titleField || !bodyField || !sideField) return;
+  if (submitButton?.disabled) return;
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
@@ -4339,6 +4342,8 @@ async function submitListArgument(debateId) {
     return;
   }
 
+  setButtonLoading(submitButton);
+
   try {
     const r = await fetchJSON(API + "/arguments", {
       method: "POST",
@@ -4359,7 +4364,6 @@ async function submitListArgument(debateId) {
       warning.style.display = "none";
     }
 
-    const form = document.getElementById("form-list");
     if (form) {
       form.style.display = "none";
     }
@@ -4377,6 +4381,7 @@ async function submitListArgument(debateId) {
     await loadDebate(debateId);
 
   } catch (error) {
+    clearButtonLoading(submitButton);
     alert(error.message);
   }
 }
