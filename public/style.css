@@ -5415,3 +5415,23 @@ body.debate-topbar-hidden .debate-hero-top {
 .custom-delete-confirm-btn:hover {
   background: #991b1b;
 }
+@media (max-width: 768px) {
+
+  .my-arguments-list {
+    gap: 6px;
+  }
+
+  .my-argument-chip {
+    margin: 0 !important;
+    padding: 10px 12px !important; /* réduit la hauteur */
+  }
+
+  .my-argument-chip-title-button {
+    line-height: 1.2; /* évite les gros écarts texte */
+  }
+
+  .my-argument-chip-stepper {
+    margin-top: 6px; /* contrôle espace interne */
+  }
+
+}
