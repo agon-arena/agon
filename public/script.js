@@ -26,6 +26,194 @@ let pendingMobileColumnFocusElementId = null;
 let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
+let currentDebateData = null;
+let currentDebatesIndexCache = null;
+let currentDebatesIndexCachePromise = null;
+let debateRefreshTimer = null;
+let latestDebateLoadToken = 0;
+let activeDebateLoadPromise = null;
+
+
+function cloneDebatePayload(data) {
+  return JSON.parse(JSON.stringify(data || null));
+}
+
+function invalidateDebatesIndexCache() {
+  currentDebatesIndexCache = null;
+  currentDebatesIndexCachePromise = null;
+}
+
+async function getDebatesIndexCache() {
+  if (Array.isArray(currentDebatesIndexCache)) {
+    return currentDebatesIndexCache;
+  }
+
+  if (!currentDebatesIndexCachePromise) {
+    currentDebatesIndexCachePromise = fetchJSON(API + "/debates")
+      .then((rows) => {
+        currentDebatesIndexCache = Array.isArray(rows) ? rows : [];
+        return currentDebatesIndexCache;
+      })
+      .finally(() => {
+        currentDebatesIndexCachePromise = null;
+      });
+  }
+
+  return currentDebatesIndexCachePromise;
+}
+
+function updateCachedDebateIndexEntryFromCurrentData() {
+  if (!currentDebateData || !Array.isArray(currentDebatesIndexCache)) return;
+
+  const debate = currentDebateData.debate || {};
+  const optionA = currentDebateData.optionA || [];
+  const optionB = currentDebateData.optionB || [];
+  const entryIndex = currentDebatesIndexCache.findIndex((item) => String(item.id) === String(debate.id));
+  if (entryIndex === -1) return;
+
+  const votesA = optionA.reduce((sum, arg) => sum + Number(arg.votes || 0), 0);
+  const votesB = optionB.reduce((sum, arg) => sum + Number(arg.votes || 0), 0);
+  const totalVotes = votesA + votesB;
+  const percentA = totalVotes > 0 ? Math.round((votesA / totalVotes) * 100) : 50;
+  const percentB = totalVotes > 0 ? 100 - percentA : 50;
+  const allArgs = [...optionA, ...optionB];
+  const lastArgumentAt = allArgs
+    .map((arg) => arg.created_at)
+    .filter(Boolean)
+    .sort()
+    .slice(-1)[0] || null;
+
+  currentDebatesIndexCache[entryIndex] = {
+    ...currentDebatesIndexCache[entryIndex],
+    ...debate,
+    argument_count: allArgs.length,
+    last_argument_at: lastArgumentAt,
+    votes_a: votesA,
+    votes_b: votesB,
+    percent_a: percentA,
+    percent_b: percentB
+  };
+}
+
+function scheduleDebateRefresh(debateId, delay = 180) {
+  if (!debateId) return;
+
+  if (debateRefreshTimer) {
+    clearTimeout(debateRefreshTimer);
+  }
+
+  debateRefreshTimer = setTimeout(() => {
+    debateRefreshTimer = null;
+    loadDebate(debateId, { force: true, preserveScroll: true, skipSpinner: true }).catch((error) => {
+      console.error(error);
+    });
+  }, delay);
+}
+
+function getCurrentDebateCommentsMap() {
+  if (!currentDebateData || !currentDebateData.commentsByArgument) {
+    return {};
+  }
+
+  return currentDebateData.commentsByArgument;
+}
+
+function findCurrentCommentById(commentId) {
+  const commentIdString = String(commentId);
+  const commentsByArgument = getCurrentDebateCommentsMap();
+
+  for (const comments of Object.values(commentsByArgument)) {
+    const found = (comments || []).find((comment) => String(comment.id) === commentIdString);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function syncCurrentDebateDataFromCurrentAllArguments() {
+  if (!currentDebateData || !currentDebateData.debate) return;
+
+  currentDebateData.optionA = (currentAllArguments || []).filter(
+    (arg) => String(arg.side || "") === "A"
+  );
+  currentDebateData.optionB = (currentAllArguments || []).filter(
+    (arg) => String(arg.side || "") === "B"
+  );
+}
+
+function rerenderCurrentDebateInteractiveSections(debateId) {
+  if (!currentDebateData || !currentDebateData.debate) return;
+
+  syncCurrentDebateDataFromCurrentAllArguments();
+
+  const commentsByArgument = currentDebateData.commentsByArgument || {};
+  const isOpen = isOpenDebate(currentDebateData.debate);
+
+  renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+
+  if (isOpen || currentDebateViewMode === "list") {
+    const argsA = document.getElementById("arguments-a");
+    const argsB = document.getElementById("arguments-b");
+    if (argsA) argsA.innerHTML = "";
+    if (argsB) argsB.innerHTML = "";
+    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+  } else {
+    const unified = document.getElementById("arguments-unified");
+    if (unified) unified.innerHTML = "";
+    renderArgs("arguments-a", currentDebateData.optionA || [], debateId, commentsByArgument);
+    renderArgs("arguments-b", currentDebateData.optionB || [], debateId, commentsByArgument);
+  }
+
+  const votesA = (currentDebateData.optionA || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
+  const votesB = (currentDebateData.optionB || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
+  const total = votesA + votesB;
+
+  let percentA = 50;
+  let percentB = 50;
+
+  if (!isOpen && total > 0) {
+    percentA = Math.round((votesA / total) * 100);
+    percentB = 100 - percentA;
+  }
+
+  const scoreBar = document.getElementById("debate-score-bar");
+  const scoreA = document.getElementById("score-a");
+  const scoreB = document.getElementById("score-b");
+
+  if (isOpen) {
+    if (scoreBar) scoreBar.style.display = "none";
+    if (scoreA) scoreA.style.display = "none";
+    if (scoreB) scoreB.style.display = "none";
+  } else {
+    if (scoreBar) scoreBar.style.display = "";
+    if (scoreA) {
+      scoreA.style.display = "";
+      scoreA.innerHTML = `
+        <strong>${percentA}%</strong>
+        <span class="score-votes">(${votesA} voix)</span>
+      `;
+    }
+
+    if (scoreB) {
+      scoreB.style.display = "";
+      scoreB.innerHTML = `
+        <strong>${percentB}%</strong>
+        <span class="score-votes">(${votesB} voix)</span>
+      `;
+    }
+  }
+
+  currentDebateShareData = {
+    question: currentDebateData.debate.question || "",
+    optionA: isOpen ? "" : (currentDebateData.debate.option_a || ""),
+    optionB: isOpen ? "" : (currentDebateData.debate.option_b || ""),
+    percentA,
+    percentB
+  };
+
+  updateCachedDebateIndexEntryFromCurrentData();
+}
 
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
@@ -85,16 +273,6 @@ if (!openMode) {
   setDisplay(viewSwitchCard, "");
   setDisplay(fixedBar, "");
   if (openReplyWrap) openReplyWrap.style.display = "none";
-setDisplay(headings, "");
-setDisplay(columns, currentDebateViewMode === "columns" ? "grid" : "none");
-setDisplay(listView, currentDebateViewMode === "list" ? "grid" : "none");
-setDisplay(scoreBar, "");
-setDisplay(scoreA, "");
-setDisplay(scoreB, "");
-setDisplay(viewSwitch, "");
-setDisplay(viewSwitchCard, "");
-setDisplay(fixedBar, "");
-if (openReplyWrap) openReplyWrap.style.display = "none";
 
 if (sideFocusLeft) sideFocusLeft.style.display = "none";
 if (sideFocusRight) sideFocusRight.style.display = "none";
@@ -219,8 +397,8 @@ function setDebateViewMode(mode) {
   updateDebateViewModeUI();
 
   const debateId = getDebateId();
-  if (debateId) {
-    loadDebate(debateId);
+  if (debateId && currentDebateData) {
+    renderCurrentDebateFromData(currentDebateData, debateId);
   }
 }
 function isCurrentOpenDebateMode() {
@@ -540,8 +718,8 @@ function changeArgumentsSort(mode) {
   updateSortButtonLabel();
 
   const debateId = getDebateId();
-  if (debateId) {
-    loadDebate(debateId);
+  if (debateId && currentDebateData) {
+    renderCurrentDebateFromData(currentDebateData, debateId);
   }
 }
 function toggleSortMenu() {
@@ -893,7 +1071,15 @@ function getDebateId() {
 }
 
 async function fetchJSON(url, opt = {}) {
-  const r = await fetch(url, opt);
+  const requestOptions = {
+    cache: "no-store",
+    ...opt,
+    headers: {
+      ...(opt.headers || {})
+    }
+  };
+
+  const r = await fetch(url, requestOptions);
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
@@ -1004,7 +1190,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
 
   const scrollHigh = () => {
     const rect = element.getBoundingClientRect();
@@ -1050,7 +1236,7 @@ function scrollToTopOfArgumentCard(argumentId) {
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 60;
+  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
 
   const rect = element.getBoundingClientRect();
   const y = rect.top + window.scrollY - offset;
@@ -1072,8 +1258,11 @@ function escapeHtml(str) {
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
   return escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,
+    (match) => {
+      const href = /^(https?:\/\/)/i.test(match) ? match : `https://${match}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    }
   );
 }
 function setDisplay(element, value) {
@@ -1091,32 +1280,6 @@ function clearButtonLoading(button, loadingClass = "button-loading") {
   if (!button) return;
   button.disabled = false;
   button.classList.remove(loadingClass);
-}
-
-function setActionLoading(element, loadingClass = "button-loading") {
-  if (!element) return;
-
-  if (typeof element.disabled !== "undefined") {
-    element.disabled = true;
-  }
-
-  element.dataset.loading = "true";
-  element.classList.add(loadingClass);
-  element.style.pointerEvents = "none";
-  element.style.opacity = "0.55";
-}
-
-function clearActionLoading(element, loadingClass = "button-loading") {
-  if (!element) return;
-
-  if (typeof element.disabled !== "undefined") {
-    element.disabled = false;
-  }
-
-  delete element.dataset.loading;
-  element.classList.remove(loadingClass);
-  element.style.pointerEvents = "";
-  element.style.opacity = "";
 }
 
 function getKey() {
@@ -1334,9 +1497,10 @@ function getDebateShareText() {
   ].join("\n");
 }
 async function copyDebateLink() {
-  const { url } = getGlobalShareData();
+  const { text, url } = getGlobalShareData();
+  const fullText = `${text} ${url}`;
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
@@ -1486,7 +1650,7 @@ async function copyIndexDebateLink(
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
 
-  const { url } = getIndexDebateShareData(
+  const { text, url } = getIndexDebateShareData(
     debateId,
     question,
     optionA,
@@ -1496,8 +1660,9 @@ async function copyIndexDebateLink(
     type
   );
 
+const fullText = `${text} ${url}`;
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
@@ -1778,7 +1943,7 @@ if (notification.type === "reply_to_comment") {
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}')"
 >
         <div class="notification-top">
           <span class="notification-icon">${icon}</span>
@@ -1834,15 +1999,13 @@ async function markOneNotificationAsRead(notificationId) {
     alert(error.message);
   }
 }
-async function handleNotificationClick(event, notificationId, link, element = null) {
+async function handleNotificationClick(event, notificationId, link) {
   event.preventDefault();
-  setActionLoading(element);
 
   try {
     await markOneNotificationAsRead(notificationId);
     window.location.href = link;
   } catch (error) {
-    clearActionLoading(element);
     window.location.href = link;
   }
 }
@@ -3116,278 +3279,309 @@ function renderDebateSourcePreview(sourceUrl) {
 }
 
 
-async function loadDebate(id) {
-saveVisitedDebate(id);
+async function renderCurrentDebateFromData(data, id) {
+  if (!data || !data.debate) return;
 
-  try {
-    const data = await fetchJSON(API + "/debates/" + id);
+  currentDebateData = cloneDebatePayload(data);
 
   document.getElementById("debate-question").textContent = data.debate.question;
 
-const sourceUrl = String(data.debate.source_url || "").trim();
-renderDebateSourcePreview(sourceUrl);
-if (isOpenDebate(data.debate)) {
-  document.getElementById("title-a").textContent = "Réponses";
-  document.getElementById("title-b").textContent = "";
-} else {
-  document.getElementById("title-a").textContent = data.debate.option_a;
-  document.getElementById("title-b").textContent = data.debate.option_b;
-}
+  const sourceUrl = String(data.debate.source_url || "").trim();
+  renderDebateSourcePreview(sourceUrl);
 
-currentDebateViewMode = getDebateViewMode();
-updateDebateViewModeUI();
-updateSortButtonLabel();
-applyDebateTypeUI(data.debate);
-
-currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
-
-cleanVoteStateForExistingArguments(id, currentAllArguments);
-
-renderUnifiedVoicesSummary(id, currentAllArguments);
-renderUnifiedVotedArgumentsSummary(id, currentAllArguments);
-
-if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
-  const argsA = document.getElementById("arguments-a");
-  const argsB = document.getElementById("arguments-b");
-  if (argsA) argsA.innerHTML = "";
-  if (argsB) argsB.innerHTML = "";
-
-  renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
-} else {
-  const unified = document.getElementById("arguments-unified");
-  if (unified) unified.innerHTML = "";
-
-  renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
-  renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
-}
-
-if (pendingTopCommentScroll) {
-  const targetId = pendingTopCommentScroll;
-
-  setTimeout(() => {
-    const element = document.getElementById(targetId);
-
-    if (element) {
-      const topbar = document.querySelector(".topbar");
-      const offset = (topbar ? topbar.offsetHeight : 80) + 20;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-    } else {
-      scrollToTopVisibleComment();
-    }
-
-    pendingTopCommentScroll = null;
-  }, 250);
-}
-else if (pendingCommentScrollId) {
-  const targetId = pendingCommentScrollId;
-
-  setTimeout(() => {
-    const element = getVisibleCommentElement(targetId);
-
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-
-      applyVoiceHighlight(element);
-
-      setTimeout(() => {
-        removeVoiceHighlight(element);
-      }, 2000);
-    }
-
-    pendingCommentScrollId = null;
-  }, 250);
-}
-else if (pendingArgumentScrollId) {
-  const targetId = pendingArgumentScrollId;
-
-  setTimeout(() => {
-    const element = getVisibleArgumentElement(targetId);
-
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-
-      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
-        element.classList.add("flash-green");
-
-        setTimeout(() => {
-          element.classList.remove("flash-green");
-        }, 2000);
-      } else {
-        element.classList.add("admin-highlight");
-
-        setTimeout(() => {
-          element.classList.remove("admin-highlight");
-        }, 2000);
-      }
-    }
-
-    pendingArgumentScrollId = null;
-    pinnedNewArgumentId = null;
-  }, 250);
-}
-
-  const isOpen = isOpenDebate(data.debate);
-
-const votesA = data.optionA.reduce((sum, a) => sum + a.votes, 0);
-const votesB = data.optionB.reduce((sum, a) => sum + a.votes, 0);
-
-const total = votesA + votesB;
-
-let percentA = 50;
-let percentB = 50;
-
-if (!isOpen && total > 0) {
-  percentA = Math.round((votesA / total) * 100);
-  percentB = 100 - percentA;
-}
-const scoreBar = document.getElementById("debate-score-bar");
-const scoreA = document.getElementById("score-a");
-const scoreB = document.getElementById("score-b");
-
-if (isOpen) {
-  if (scoreBar) scoreBar.style.display = "none";
-  if (scoreA) scoreA.style.display = "none";
-  if (scoreB) scoreB.style.display = "none";
-} else {
-  if (scoreBar) {
-    scoreBar.style.display = "";
-    scoreBar.innerHTML = `
-      <div class="score-bar-label score-bar-label-a">${percentA}%</div>
-      <div class="score-bar">
-        <div class="score-bar-a" style="width:${percentA}%"></div>
-        <div class="score-bar-b" style="width:${percentB}%"></div>
-      </div>
-      <div class="score-bar-label score-bar-label-b">${percentB}%</div>
-    `;
+  if (isOpenDebate(data.debate)) {
+    document.getElementById("title-a").textContent = "Réponses";
+    document.getElementById("title-b").textContent = "";
+  } else {
+    document.getElementById("title-a").textContent = data.debate.option_a;
+    document.getElementById("title-b").textContent = data.debate.option_b;
   }
 
-  if (scoreA) {
-    scoreA.style.display = "";
-    scoreA.innerHTML = `
-      <strong>${percentA}%</strong>
-      <span class="score-votes">(${votesA} voix)</span>
-    `;
-  }
+  currentDebateViewMode = getDebateViewMode();
+  updateDebateViewModeUI();
+  updateSortButtonLabel();
+  applyDebateTypeUI(data.debate);
 
-  if (scoreB) {
-    scoreB.style.display = "";
-    scoreB.innerHTML = `
-      <strong>${percentB}%</strong>
-      <span class="score-votes">(${votesB} voix)</span>
-    `;
-  }
-}
+  currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
+  cleanVoteStateForExistingArguments(id, currentAllArguments);
 
-currentDebateShareData = {
-  question: data.debate.question || "",
-  optionA: isOpen ? "" : (data.debate.option_a || ""),
-  optionB: isOpen ? "" : (data.debate.option_b || ""),
-  percentA,
-  percentB
-};
-const allDebates = await fetchJSON(API + "/debates");
-renderBottomSimilarDebates(data.debate, allDebates);
+  renderUnifiedVoicesSummary(id, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(id, currentAllArguments);
 
-refreshAdminUI();
+  if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
+    const argsA = document.getElementById("arguments-a");
+    const argsB = document.getElementById("arguments-b");
+    if (argsA) argsA.innerHTML = "";
+    if (argsB) argsB.innerHTML = "";
 
-const params = new URLSearchParams(window.location.search);
-const highlight = params.get("highlight");
-
-if (highlight) {
-if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
-  argumentsVisible = currentAllArguments.length;
-}
-if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
-  if (highlight.startsWith("comment-")) {
-    const commentId = highlight.replace("comment-", "");
-
-    for (const argumentId in (data.commentsByArgument || {})) {
-      const comments = data.commentsByArgument[argumentId] || [];
-
-      if (comments.some((comment) => String(comment.id) === String(commentId))) {
-        openCommentsByArgument[argumentId] = true;
-      }
-    }
-  }
-
-  if (currentDebateViewMode === "list") {
     renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
   } else {
+    const unified = document.getElementById("arguments-unified");
+    if (unified) unified.innerHTML = "";
+
     renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
     renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
   }
-}
 
-  setTimeout(() => {
-    let element = null;
-
-    if (highlight === "debate") {
-      element = document.getElementById("debate-question");
-    } else if (highlight.startsWith("comment-")) {
-      const commentId = highlight.replace("comment-", "");
-      element = getVisibleCommentElement(commentId);
-    } else if (highlight.startsWith("argument-")) {
-      const argumentId = highlight.replace("argument-", "");
-      element = getVisibleArgumentElement(argumentId);
-    } else {
-      element = document.getElementById(highlight);
-    }
-
-if (element) {
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "center"
-  });
-
-  const isGreenTarget =
-    element.classList.contains("argument-card-a") ||
-    !!element.closest(".argument-card-a") ||
-    !!element.closest("#arguments-a") ||
-    !!element.closest(".column-a");
-
-  if (isGreenTarget) {
-    if (highlight.startsWith("argument-")) {
-      element.classList.add("flash-green");
-
-      setTimeout(() => {
-        element.classList.remove("flash-green");
-      }, 5000);
-    } else {
-      element.classList.add("admin-highlight-green");
-
-      setTimeout(() => {
-        element.classList.remove("admin-highlight-green");
-      }, 5000);
-    }
-  } else {
-    element.classList.add("admin-highlight");
+  if (pendingTopCommentScroll) {
+    const targetId = pendingTopCommentScroll;
 
     setTimeout(() => {
-      element.classList.remove("admin-highlight");
-    }, 5000);
+      const element = document.getElementById(targetId);
+
+      if (element) {
+        const topbar = document.querySelector(".topbar");
+        const offset = (topbar ? topbar.offsetHeight : 80) + 20;
+        const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+        window.scrollTo({
+          top: Math.max(0, y),
+          behavior: "smooth"
+        });
+      } else {
+        scrollToTopVisibleComment();
+      }
+
+      pendingTopCommentScroll = null;
+    }, 250);
+  } else if (pendingCommentScrollId) {
+    const targetId = pendingCommentScrollId;
+
+    setTimeout(() => {
+      const element = getVisibleCommentElement(targetId);
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+
+        applyVoiceHighlight(element);
+
+        setTimeout(() => {
+          removeVoiceHighlight(element);
+        }, 2000);
+      }
+
+      pendingCommentScrollId = null;
+    }, 250);
+  } else if (pendingArgumentScrollId) {
+    const targetId = pendingArgumentScrollId;
+
+    setTimeout(() => {
+      const element = getVisibleArgumentElement(targetId);
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+
+        if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+          element.classList.add("flash-green");
+
+          setTimeout(() => {
+            element.classList.remove("flash-green");
+          }, 2000);
+        } else {
+          element.classList.add("admin-highlight");
+
+          setTimeout(() => {
+            element.classList.remove("admin-highlight");
+          }, 2000);
+        }
+      }
+
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+    }, 250);
   }
-}
 
-    const url = new URL(window.location.href);
-    url.searchParams.delete("highlight");
-    window.history.replaceState({}, "", url);
-  }, 300);
-}
+  const isOpen = isOpenDebate(data.debate);
+  const votesA = (data.optionA || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
+  const votesB = (data.optionB || []).reduce((sum, a) => sum + Number(a.votes || 0), 0);
+  const total = votesA + votesB;
 
+  let percentA = 50;
+  let percentB = 50;
+
+  if (!isOpen && total > 0) {
+    percentA = Math.round((votesA / total) * 100);
+    percentB = 100 - percentA;
+  }
+
+  const scoreBar = document.getElementById("debate-score-bar");
+  const scoreA = document.getElementById("score-a");
+  const scoreB = document.getElementById("score-b");
+
+  if (isOpen) {
+    if (scoreBar) scoreBar.style.display = "none";
+    if (scoreA) scoreA.style.display = "none";
+    if (scoreB) scoreB.style.display = "none";
+  } else {
+    if (scoreBar) {
+      scoreBar.style.display = "";
+      scoreBar.innerHTML = `
+        <div class="score-bar-label score-bar-label-a">${percentA}%</div>
+        <div class="score-bar">
+          <div class="score-bar-a" style="width:${percentA}%"></div>
+          <div class="score-bar-b" style="width:${percentB}%"></div>
+        </div>
+        <div class="score-bar-label score-bar-label-b">${percentB}%</div>
+      `;
+    }
+
+    if (scoreA) {
+      scoreA.style.display = "";
+      scoreA.innerHTML = `
+        <strong>${percentA}%</strong>
+        <span class="score-votes">(${votesA} voix)</span>
+      `;
+    }
+
+    if (scoreB) {
+      scoreB.style.display = "";
+      scoreB.innerHTML = `
+        <strong>${percentB}%</strong>
+        <span class="score-votes">(${votesB} voix)</span>
+      `;
+    }
+  }
+
+  currentDebateShareData = {
+    question: data.debate.question || "",
+    optionA: isOpen ? "" : (data.debate.option_a || ""),
+    optionB: isOpen ? "" : (data.debate.option_b || ""),
+    percentA,
+    percentB
+  };
+
+  updateCachedDebateIndexEntryFromCurrentData();
+
+  try {
+    const allDebates = await getDebatesIndexCache();
+    renderBottomSimilarDebates(data.debate, allDebates);
   } catch (error) {
-    alert(error.message);
+    console.error(error);
   }
+
+  refreshAdminUI();
+
+  const params = new URLSearchParams(window.location.search);
+  const highlight = params.get("highlight");
+
+  if (highlight) {
+    if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+      argumentsVisible = currentAllArguments.length;
+    }
+    if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+      if (highlight.startsWith("comment-")) {
+        const commentId = highlight.replace("comment-", "");
+
+        for (const argumentId in (data.commentsByArgument || {})) {
+          const comments = data.commentsByArgument[argumentId] || [];
+
+          if (comments.some((comment) => String(comment.id) === String(commentId))) {
+            openCommentsByArgument[argumentId] = true;
+          }
+        }
+      }
+
+      if (currentDebateViewMode === "list") {
+        renderUnifiedArgs("arguments-unified", currentAllArguments, id, data.commentsByArgument || {});
+      } else {
+        renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
+        renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
+      }
+    }
+
+    setTimeout(() => {
+      let element = null;
+
+      if (highlight === "debate") {
+        element = document.getElementById("debate-question");
+      } else if (highlight.startsWith("comment-")) {
+        const commentId = highlight.replace("comment-", "");
+        element = getVisibleCommentElement(commentId);
+      } else if (highlight.startsWith("argument-")) {
+        const argumentId = highlight.replace("argument-", "");
+        element = getVisibleArgumentElement(argumentId);
+      } else {
+        element = document.getElementById(highlight);
+      }
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+
+        const isGreenTarget =
+          element.classList.contains("argument-card-a") ||
+          !!element.closest(".argument-card-a") ||
+          !!element.closest("#arguments-a") ||
+          !!element.closest(".column-a");
+
+        if (isGreenTarget) {
+          if (highlight.startsWith("argument-")) {
+            element.classList.add("flash-green");
+
+            setTimeout(() => {
+              element.classList.remove("flash-green");
+            }, 5000);
+          } else {
+            element.classList.add("admin-highlight-green");
+
+            setTimeout(() => {
+              element.classList.remove("admin-highlight-green");
+            }, 5000);
+          }
+        } else {
+          element.classList.add("admin-highlight");
+
+          setTimeout(() => {
+            element.classList.remove("admin-highlight");
+          }, 5000);
+        }
+      }
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("highlight");
+      window.history.replaceState({}, "", url);
+    }, 300);
+  }
+}
+
+async function loadDebate(id, options = {}) {
+  const { force = false } = options;
+  saveVisitedDebate(id);
+
+  if (!force && currentDebateData && String(currentDebateData?.debate?.id) === String(id)) {
+    await renderCurrentDebateFromData(currentDebateData, id);
+    return currentDebateData;
+  }
+
+  const requestToken = ++latestDebateLoadToken;
+
+  activeDebateLoadPromise = fetchJSON(API + "/debates/" + id)
+    .then(async (data) => {
+      if (requestToken !== latestDebateLoadToken) return currentDebateData;
+      await renderCurrentDebateFromData(data, id);
+      return currentDebateData;
+    })
+    .catch((error) => {
+      if (requestToken === latestDebateLoadToken) {
+        alert(error.message);
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (requestToken === latestDebateLoadToken) {
+        activeDebateLoadPromise = null;
+      }
+    });
+
+  return activeDebateLoadPromise;
 }
 
 function renderArgs(container, args, debateId, commentsByArgument) {
@@ -3668,7 +3862,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
 <div class="comments-block">
   <div class="comments-summary">
-    <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+    <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
       ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
     </button>
 
@@ -3851,7 +4045,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
   <button
     class="button button-small"
     type="button"
-    onclick="replyToComment('${a.id}', '${c.id}', this)"
+    onclick="replyToComment('${a.id}', '${c.id}')"
   >
     Répondre
   </button>
@@ -3882,22 +4076,22 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
           hiddenCommentsCount > 0
             ? `
               <div class="load-more-container">
-                <button
-                  class="button button-small"
-                  type="button"
-                  onclick="loadMoreComments('${a.id}', this)"
-                >
-                  Charger plus de commentaires
-                </button>
-              </div>
-            `
+             <button
+  type="button"
+  class="button button-small"
+  onclick="loadMoreComments('${arg.id}')"
+>
+  Charger plus de commentaires
+</button>
+</div>
+`
             : ""
         }
       `
       : `<div class="empty-comments">Aucun commentaire.</div>`
   }
 </div> <div class="comments-bottom-actions">
-  <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+  <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
     Masquer
   </button>
 </div>
@@ -4087,7 +4281,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
         <div class="comments-block">
           <div class="comments-summary">
-            <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+            <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
               ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
             </button>
 
@@ -4271,7 +4465,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
 <button
   class="button button-small"
   type="button"
-  onclick="replyToComment('${a.id}', '${c.id}', this)"
+  onclick="replyToComment('${a.id}', '${c.id}')"
 >
   Répondre
 </button>
@@ -4305,11 +4499,11 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
                               <button
                                 class="button button-small"
                                 type="button"
-                                onclick="loadMoreComments('${a.id}', this)"
+                                onclick="loadMoreComments('${a.id}')"
                               >
                                 Charger plus de commentaires
                               </button>
-                            </div>
+                            </div >
                           `
                           : ""
                       }
@@ -4319,7 +4513,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
               </div>
 
               <div class="comments-bottom-actions">
-                <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+                <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
                   Masquer
                 </button>
               </div>
@@ -4349,8 +4543,6 @@ async function submitListArgument(debateId) {
   const bodyField = document.getElementById("list-body");
   const sideField = document.getElementById("list-side-value");
   const warning = document.getElementById("warning-list");
-  const form = document.getElementById("form-list");
-  const submitButton = form?.querySelector('button[type="submit"]') || null;
 
   if (!titleField || !bodyField || !sideField) return;
 
@@ -4375,8 +4567,6 @@ async function submitListArgument(debateId) {
     return;
   }
 
-  setButtonLoading(submitButton);
-
   try {
     const r = await fetchJSON(API + "/arguments", {
       method: "POST",
@@ -4397,6 +4587,7 @@ async function submitListArgument(debateId) {
       warning.style.display = "none";
     }
 
+    const form = document.getElementById("form-list");
     if (form) {
       form.style.display = "none";
     }
@@ -4411,10 +4602,10 @@ async function submitListArgument(debateId) {
 
     pendingArgumentScrollId = String(r.id);
     pinnedNewArgumentId = String(r.id);
-    await loadDebate(debateId);
+    invalidateDebatesIndexCache();
+    await loadDebate(debateId, { force: true });
 
   } catch (error) {
-    clearButtonLoading(submitButton);
     alert(error.message);
   }
 }
@@ -4524,7 +4715,19 @@ if (mainField) {
 
 pendingCommentScrollId = String(data.id);
 pinnedNewCommentId = String(data.id);
-await loadDebate(debateId);
+invalidateDebatesIndexCache();
+
+if (currentDebateData) {
+  const key = String(argumentId);
+  const existingComments = currentDebateData.commentsByArgument?.[key] || [];
+  if (!currentDebateData.commentsByArgument) {
+    currentDebateData.commentsByArgument = {};
+  }
+  currentDebateData.commentsByArgument[key] = [...existingComments, { ...data, likes: Number(data.likes || 0) }];
+  rerenderCurrentDebateInteractiveSections(debateId);
+} else {
+  await loadDebate(debateId, { force: true });
+}
 
   } catch (error) {
     alert(error.message);
@@ -4577,8 +4780,19 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     state[argIdString] = Number(state[argIdString] || 0) + 1;
     setState(debateId, state);
 
+    const targetIndex = (currentAllArguments || []).findIndex(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    if (targetIndex !== -1) {
+      currentAllArguments[targetIndex] = {
+        ...currentAllArguments[targetIndex],
+        votes: Number(currentAllArguments[targetIndex].votes || 0) + 1
+      };
+    }
+
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
+    rerenderCurrentDebateInteractiveSections(debateId);
 
     const targetAfter = (currentAllArguments || []).find(
       (arg) => String(arg.id) === argIdString
@@ -4608,7 +4822,6 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   }
 }
 
-
 async function unvote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -4637,8 +4850,19 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
 
     setState(debateId, state);
 
+    const targetIndex = (currentAllArguments || []).findIndex(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    if (targetIndex !== -1) {
+      currentAllArguments[targetIndex] = {
+        ...currentAllArguments[targetIndex],
+        votes: Math.max(0, Number(currentAllArguments[targetIndex].votes || 0) - 1)
+      };
+    }
+
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
+    rerenderCurrentDebateInteractiveSections(debateId);
 
   } catch (error) {
     alert(error.message);
@@ -4669,19 +4893,7 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
   setButtonLoading(button);
 
   try {
-    const debateData = await fetchJSON(API + "/debates/" + debateId);
-    let targetComment = null;
-
-    for (const comments of Object.values(debateData.commentsByArgument || {})) {
-      const found = (comments || []).find(
-        (comment) => String(comment.id) === commentIdString
-      );
-      if (found) {
-        targetComment = found;
-        break;
-      }
-    }
-
+    const targetComment = findCurrentCommentById(commentIdString);
     const currentValue = Number(state[commentIdString] || 0);
     let nextValue = 0;
 
@@ -4693,21 +4905,20 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       nextValue = 0;
     }
 
+    const shouldWarnAboutReplacement =
+      value === 1 &&
+      targetComment &&
+      targetComment.stance === "amelioration" &&
+      nextValue === 1;
 
-const shouldWarnAboutReplacement =
-  value === 1 &&
-  targetComment &&
-  targetComment.stance === "amelioration" &&
-  nextValue === 1;
-
-const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    voterKey,
-    value: nextValue
-  })
-});
+    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voterKey,
+        value: nextValue
+      })
+    });
 
     if (nextValue === 0) {
       delete state[commentIdString];
@@ -4716,19 +4927,39 @@ const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
     }
 
     setCommentLikeState(debateId, state);
-    await loadDebate(debateId);
-if (result && result.replaced) {
-  showReplacementSuccessMessage(
-    "💡 Idée remplacée",
-    "Cette amélioration a dépassé l’idée originale et la remplace désormais."
-  );
-}
-else if (shouldWarnAboutReplacement) {
-  showVoteWarning(
-    "Cette proposition d'amélioration peut remplacer l’idée :",
-    "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
-  );
-}
+    pendingCommentScrollId = String(commentId);
+
+    if (currentDebateData?.commentsByArgument) {
+      for (const [key, comments] of Object.entries(currentDebateData.commentsByArgument)) {
+        currentDebateData.commentsByArgument[key] = (comments || []).map((comment) => {
+          if (String(comment.id) !== commentIdString) return comment;
+          return { ...comment, likes: Number(result?.likes ?? comment.likes ?? 0) };
+        });
+      }
+    }
+
+    if (result && result.replaced) {
+      showReplacementSuccessMessage(
+        "💡 Idée remplacée",
+        "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
+        () => {
+          if (argumentId) {
+            scrollToTopOfArgumentCardAndFlash(argumentId);
+          }
+        }
+      );
+      invalidateDebatesIndexCache();
+      await loadDebate(debateId, { force: true });
+    } else {
+      rerenderCurrentDebateInteractiveSections(debateId);
+
+      if (shouldWarnAboutReplacement) {
+        showVoteWarning(
+          "Cette proposition d'amélioration peut remplacer l’idée :",
+          "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
+        );
+      }
+    }
 
   } catch (error) {
     alert(error.message);
@@ -4737,13 +4968,15 @@ else if (shouldWarnAboutReplacement) {
   }
 }
 
-function replyToComment(argumentId, commentId, button = null) {
+function replyToComment(argumentId, commentId) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  setActionLoading(button);
+  const debatePromise = currentDebateData
+    ? Promise.resolve(cloneDebatePayload(currentDebateData))
+    : fetchJSON(API + "/debates/" + debateId);
 
-  fetchJSON(API + "/debates/" + debateId)
+  debatePromise
     .then((debateData) => {
       const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
       const targetComment = comments.find(
@@ -4810,7 +5043,6 @@ document.addEventListener("focusin", function(event) {
       }
     })
     .catch((error) => {
-      clearActionLoading(button);
       alert(error.message);
     });
 }
@@ -5108,7 +5340,8 @@ async function deleteComment(debateId, commentId) {
           }
         );
 
-        await loadDebate(debateId);
+        invalidateDebatesIndexCache();
+        await loadDebate(debateId, { force: true });
       } catch (error) {
         alert(error.message);
       }
@@ -5146,7 +5379,7 @@ function toggleForm(side) {
   }
 }
 
-async function toggleComments(argumentId, button = null) {
+function toggleComments(argumentId) {
   const wasOpen = !!openCommentsByArgument[argumentId];
   const willOpen = !wasOpen;
 
@@ -5163,20 +5396,13 @@ async function toggleComments(argumentId, button = null) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  setButtonLoading(button);
-
-  try {
-    await loadDebate(debateId);
-
+  loadDebate(debateId).then(() => {
     if (wasOpen) {
       setTimeout(() => {
         scrollToTopOfArgumentCard(argumentId);
       }, 50);
     }
-  } catch (error) {
-    clearButtonLoading(button);
-    alert(error.message);
-  }
+  });
 }
 
 document.addEventListener("click", function(event) {
@@ -5213,21 +5439,14 @@ document.addEventListener("click", function(event) {
   }
 });
 
-async function loadMoreComments(argumentId, button = null) {
+function loadMoreComments(argumentId) {
   visibleCommentsByArgument[argumentId] =
     (visibleCommentsByArgument[argumentId] || 5) + 5;
 
   const debateId = getDebateId();
   if (!debateId) return;
 
-  setButtonLoading(button);
-
-  try {
-    await loadDebate(debateId);
-  } catch (error) {
-    clearButtonLoading(button);
-    alert(error.message);
-  }
+  loadDebate(debateId);
 }
 window.toggleForm = toggleForm;
 window.toggleComments = toggleComments;
@@ -5541,7 +5760,7 @@ if (notification.type === "reply_to_comment") {
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}')"
 >
           <div class="notification-top">
             <span class="notification-icon">${icon}</span>
