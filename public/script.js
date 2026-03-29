@@ -757,7 +757,6 @@ if (myArgumentsRow) {
           ${votedArgumentsA.map((item) => `
             <div class="my-argument-chip">
               <div class="my-argument-chip-text">
-                <span class="my-argument-chip-rank">#${item.rank}</span>
 
                 <button
                   type="button"
@@ -808,7 +807,6 @@ onclick="vote('${debateId}', '${item.id}', false, this)"
           ${votedArgumentsB.map((item) => `
             <div class="my-argument-chip">
               <div class="my-argument-chip-text">
-                <span class="my-argument-chip-rank">#${item.rank}</span>
 
                 <button
                   type="button"
@@ -3401,7 +3399,6 @@ if (summaryEl) {
         ${votedArgumentsForColumn.map((item) => `
   <div class="my-argument-chip">
     <div class="my-argument-chip-text">
-      <span class="my-argument-chip-rank">#${item.rank}</span>
 
       <button
         type="button"
