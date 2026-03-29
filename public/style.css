@@ -1460,7 +1460,6 @@ body.debate-topbar-hidden .debate-compact-bell {
   justify-content:space-between;
   gap:10px;
   padding:8px 10px;
-  min-height:44px;
   border:1px solid #e5e7eb;
   border-radius:10px;
   background:#ffffff;
@@ -1468,11 +1467,10 @@ body.debate-topbar-hidden .debate-compact-bell {
 
 .my-argument-chip-text{
   min-width:0;
-  flex:1;
   display:flex;
   align-items:center;
   gap:8px;
-  flex-wrap:nowrap;
+  flex-wrap:wrap;
 }
 
 .my-argument-chip-rank{
@@ -1496,11 +1494,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   font-weight:600;
   cursor:pointer;
   text-align:left;
-  display:block;
-  width:100%;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  overflow-wrap:anywhere;
 }
 
 .my-argument-chip-title-button:hover{
