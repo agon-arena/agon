@@ -4458,25 +4458,36 @@ await loadDebate(debateId);
   }
 }
 
-
 async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
   const voterKey = getKey();
-  const beforeRankMap = getSupportRankMap(currentAllArguments);
+
+  const targetBefore = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  const targetSide = targetBefore ? String(targetBefore.side || "") : "";
+
+  const beforeRankMap = getSupportRankMap(
+    (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === targetSide
+    )
+  );
 
   const totalVotesUsed = Object.values(state).reduce((sum, value) => {
     return sum + Number(value || 0);
   }, 0);
 
-if (totalVotesUsed >= 5) {
-  pendingVoicesSummaryHighlight = true;
-  showVoteWarning(
-    "⚠️ Plus de voix disponibles",
-    "Tes 5 voix ont été attribuées. Retire-en une pour en attribuer ailleurs."
-  );
-  return;
-}
+  if (totalVotesUsed >= 5) {
+    pendingVoicesSummaryHighlight = true;
+    showVoteWarning(
+      "⚠️ Plus de voix disponibles",
+      "Tes 5 voix ont été attribuées. Retire-en une pour en attribuer ailleurs."
+    );
+    return;
+  }
+
   setButtonLoading(button);
 
   try {
@@ -4493,17 +4504,28 @@ if (totalVotesUsed >= 5) {
 
     pendingArgumentScrollId = shouldScroll ? String(argId) : null;
     await loadDebate(debateId);
-    showVoteRankProgress(beforeRankMap, currentAllArguments, argId);
+
+    const targetAfter = (currentAllArguments || []).find(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    const afterSide = targetAfter ? String(targetAfter.side || "") : targetSide;
+
+    const afterArgsSameSide = (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === afterSide
+    );
+
+    showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
 
   } catch (error) {
-   if (error.message === "limit") {
-  pendingVoicesSummaryHighlight = true;
-  showVoteWarning(
-    "⚠️ Limite atteinte",
-    "Vous avez déjà attribué vos 5 voix."
-  );
-  return;
-}
+    if (error.message === "limit") {
+      pendingVoicesSummaryHighlight = true;
+      showVoteWarning(
+        "⚠️ Limite atteinte",
+        "Vous avez déjà attribué vos 5 voix."
+      );
+      return;
+    }
 
     alert(error.message);
   } finally {
