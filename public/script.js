@@ -1486,10 +1486,8 @@ function getDebateShareText() {
   ].join("\n");
 }
 async function copyDebateLink() {
-  const { text, url } = getG
-
-lobalShareData();
-const fullText = `${text} ${url}`;
+  const { text, url } = getGlobalShareData();
+  const fullText = `${text} ${url}`;
   try {
     await navigator.clipboard.writeText(fullText);
     alert("Lien copié.");
