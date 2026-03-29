@@ -1072,8 +1072,11 @@ function escapeHtml(str) {
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
   return escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,
+    (match) => {
+      const href = /^(https?:\/\/)/i.test(match) ? match : `https://${match}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    }
   );
 }
 function setDisplay(element, value) {
