@@ -5489,7 +5489,6 @@ const offset = (topbar ? topbar.offsetHeight : 80) + 120;
 }
 
 function openArgumentComposer(side) {
-  const normalizedSide = side === "b" ? "b" : "a";
   const listForm = document.getElementById("form-list");
   if (!listForm) return;
 
@@ -5498,6 +5497,20 @@ function openArgumentComposer(side) {
 
   if (formA) formA.style.display = "none";
   if (formB) formB.style.display = "none";
+
+  const currentFocus = typeof getDebateColumnFocus === "function"
+    ? getDebateColumnFocus()
+    : "split";
+
+  let normalizedSide;
+
+  if (side === "a" || side === "b") {
+    normalizedSide = side;
+  } else if (currentFocus === "a" || currentFocus === "b") {
+    normalizedSide = currentFocus;
+  } else {
+    normalizedSide = "a";
+  }
 
   listForm.style.display = "grid";
   openedArgumentForm = listForm;
@@ -5519,6 +5532,7 @@ function openArgumentComposer(side) {
     if (titleInput) titleInput.focus();
   }, 50);
 }
+
 
 async function deleteArgument(debateId, argumentId) {
   const confirmed = window.confirm("Supprimer définitivement cette idée ?");
