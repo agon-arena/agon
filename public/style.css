@@ -1472,6 +1472,17 @@ body.debate-topbar-hidden .debate-compact-bell {
   border-radius:10px;
   background:#ffffff;
 }
+#my-arguments-a .my-argument-chip,
+.my-arguments-summary-left .my-argument-chip {
+  background: rgba(34,197,94,0.08);
+  border-color: #cfead6;
+}
+
+#my-arguments-b .my-argument-chip,
+.my-arguments-summary-right .my-argument-chip {
+  background: rgba(239,68,68,0.08);
+  border-color: #f2d2d2;
+}
 
 .my-argument-chip-text{
   min-width:0;
@@ -5291,7 +5302,7 @@ body.debate-topbar-hidden .debate-hero-top {
     flex-wrap: wrap !important;
     align-items: center !important;
     justify-content: flex-end !important;
-    gap: 2px !important;
+    gap: 0px !important;
     width: auto !important;
   }
 
