@@ -1037,29 +1037,55 @@ function getCommentLikeState(id) {
 function setCommentLikeState(id, state) {
   localStorage.setItem("comment_likes_" + id, JSON.stringify(state));
 }
-function showVoteWarning(message) {
-  const existing = document.querySelector(".vote-warning-toast");
-  if (existing) {
-    existing.remove();
+function showVoteWarning(titleOrMessage, message = "") {
+  const existing = document.getElementById("vote-warning-overlay");
+  if (existing) existing.remove();
+
+  const hasExplicitMessage =
+    typeof message === "string" && message.trim() !== "";
+
+  const title = hasExplicitMessage ? titleOrMessage : "⚠️ Attention";
+  const text = hasExplicitMessage ? message : titleOrMessage;
+
+  const overlay = document.createElement("div");
+  overlay.id = "vote-warning-overlay";
+  overlay.className = "replacement-success-overlay replacement-success-overlay-visible";
+
+  overlay.innerHTML = `
+    <div class="replacement-success-box warning-box">
+      <div class="replacement-success-icon warning-icon-wrap" aria-hidden="true">
+        <span class="warning-icon-symbol">🗳️</span>
+        <span class="warning-icon-badge">!</span>
+      </div>
+      <div class="replacement-success-title">${escapeHtml(title)}</div>
+      <div class="replacement-success-text">${escapeHtml(text)}</div>
+      <button
+        type="button"
+        class="replacement-success-button warning-button"
+        id="vote-warning-close-btn"
+      >
+        Compris
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const closeBtn = document.getElementById("vote-warning-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeVoteWarning);
   }
+}
 
-  const toast = document.createElement("div");
-  toast.className = "vote-warning-toast";
-  toast.textContent = message;
+function closeVoteWarning() {
+  const overlay = document.getElementById("vote-warning-overlay");
+  if (!overlay) return;
 
-  document.body.appendChild(toast);
-
-  requestAnimationFrame(() => {
-    toast.classList.add("vote-warning-visible");
-  });
+  overlay.classList.remove("replacement-success-overlay-visible");
 
   setTimeout(() => {
-    toast.classList.remove("vote-warning-visible");
-
-    setTimeout(() => {
-      toast.remove();
-    }, 250);
-  }, 3500);
+    overlay.remove();
+  }, 250);
 }
 function getVisitedDebateIds() {
   const raw = localStorage.getItem("visited_debates");
@@ -4349,12 +4375,13 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return sum + Number(value || 0);
   }, 0);
 
-  if (totalVotesUsed >= 5) {
-    showVoteWarning("Toutes tes voix sont déjà attribuées. Retire-en une pour en donner ailleurs.");
-    scrollToVoicesSummary();
-    return;
-  }
-
+if (totalVotesUsed >= 5) {
+showVoteWarning(
+  "⚠️ Plus de voix disponibles",
+  "Toutes tes voix sont attribuées. Retire-en une pour en attribuer ailleurs."
+);  scrollToVoicesSummary();
+  return;
+}
   setButtonLoading(button);
 
   try {
@@ -4375,7 +4402,10 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
   } catch (error) {
     if (error.message === "limit") {
-      showVoteWarning("Vous avez déjà attribué vos 5 voix.");
+showVoteWarning(
+  "⚠️ Limite atteinte",
+  "Vous avez déjà attribué vos 5 voix."
+);
       scrollToVoicesSummary();
       return;
     }
