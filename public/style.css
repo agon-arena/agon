@@ -1454,9 +1454,14 @@ body.debate-topbar-hidden .debate-compact-bell {
   min-width:0;
 }
 
-.my-arguments-list{
-  display:grid;
-  gap:8px;
+.my-arguments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.my-arguments-list > * {
+  margin: 0 !important;
 }
 
 .my-argument-chip{
