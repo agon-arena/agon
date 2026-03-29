@@ -133,7 +133,7 @@ setDisplay(sideFocusLeft, "none");
 setDisplay(sideFocusRight, "none");
 
 if (mainButton) {
-  mainButton.textContent = "Répondre";
+  mainButton.textContent = "Ajouter une idée";
   mainButton.onclick = () => openArgumentComposer("a");
 }
 }
