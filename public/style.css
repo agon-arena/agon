@@ -1910,19 +1910,36 @@ body.debate-topbar-hidden .debate-compact-bell {
   border-radius:8px;
   padding:6px 8px;
   line-height:1.4;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
-.reply-preview-text {
-  display: block;
+.reply-preview-text{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.reply-cancel-row {
+.reply-preview-content{
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.reply-cancel-under-comment{
   margin-top: 10px;
 }
 
-.reply-cancel-row .button {
+.reply-cancel-under-comment .button{
   display: inline-flex;
+  width: auto;
 }
 
 /* Bandeau global A/B */

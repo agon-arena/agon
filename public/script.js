@@ -1078,16 +1078,7 @@ function linkifyText(str) {
     }
   );
 }
-function linkifyText(str) {
-  const escaped = escapeHtml(str ?? "");
-  return escaped.replace(
-    /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,
-    (match) => {
-      const href = /^(https?:\/\/)/i.test(match) ? match : `https://${match}`;
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
-    }
-  );
-}
+
 function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
@@ -3710,20 +3701,12 @@ ${
       <div class="argument-warning">
         <div class="reply-preview-text">
           <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(
-            replyToCommentByArgument[a.id].commentContent.length > 140
-              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
-              : replyToCommentByArgument[a.id].commentContent
-          )}</span>
+
+         <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
+
         </div>
 
-        <button
-          type="button"
-          class="button button-small"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
+
       </div>
     `
     : ""
@@ -3835,7 +3818,22 @@ ${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
     `
     : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
-
+${
+  replyToCommentByArgument[a.id] &&
+  String(replyToCommentByArgument[a.id].commentId) === String(c.id)
+    ? `
+      <div class="reply-cancel-under-comment">
+        <button
+          type="button"
+          class="button button-small"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
+      </div>
+    `
+    : ""
+}
 
 <div class="comment-actions">
   <button
@@ -4130,20 +4128,27 @@ ${
       <div class="argument-warning">
         <div class="reply-preview-text">
           <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(
-            replyToCommentByArgument[a.id].commentContent.length > 140
-              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
-              : replyToCommentByArgument[a.id].commentContent
-          )}</span>
+
+        <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
+
 
           <div class="reply-cancel-row">
-            <button
-              type="button"
-              class="button button-small"
-              onclick="cancelReply('${a.id}')"
-            >
-              Annuler la réponse
-            </button>
+           
+${
+  replyToCommentByArgument[a.id]
+    ? `
+      <div class="argument-warning">
+        <div class="reply-preview-text">
+          <span class="reply-preview-label">Vous répondez à :</span>
+
+    <span class="reply-preview-content">${escapeHtml(replyToCommentByArgument[a.id].commentContent)}</span>
+
+        </div>
+      </div>
+    `
+    : ""
+}
+
           </div>
         </div>
       </div>
@@ -4258,6 +4263,22 @@ ${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 </div>
     `
     : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
+}
+${
+  replyToCommentByArgument[a.id] &&
+  String(replyToCommentByArgument[a.id].commentId) === String(c.id)
+    ? `
+      <div class="reply-cancel-under-comment">
+        <button
+          type="button"
+          class="button button-small"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
+      </div>
+    `
+    : ""
 }
 <div class="comment-actions">
   <button
