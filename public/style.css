@@ -5410,26 +5410,28 @@ body.debate-topbar-hidden .debate-hero-top {
     margin: 0 !important;
   }
 
-  .my-argument-chip {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 8px !important;
-    margin: 0 !important;
-    padding: 8px 10px !important;
-  }
+.my-argument-chip {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 8px 10px !important;
+  min-height: 44px !important;
+  overflow: hidden !important;
+}
 
-  .my-argument-chip-text {
-    flex: 1 1 0 !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    flex-wrap: nowrap !important;
-    overflow: hidden !important;
-  }
+.my-argument-chip-text {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 96px) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+}
 
   .my-argument-chip-rank {
     flex: 0 0 auto !important;
@@ -5446,10 +5448,14 @@ body.debate-topbar-hidden .debate-hero-top {
     overflow: hidden !important;
     text-overflow: ellipsis !important;
   }
-
-  .my-argument-chip-stepper {
-    flex: 0 0 auto !important;
-    margin: 0 !important;
-    align-self: center !important;
-  }
+.my-argument-chip-count {
+  flex: 0 0 auto !important;
+}
+.my-argument-chip-stepper {
+  flex: 0 0 90px !important;
+  width: 90px !important;
+  margin: 0 !important;
+  align-self: center !important;
+  justify-content: center !important;
+}
 }
