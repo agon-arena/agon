@@ -757,7 +757,7 @@ select:focus {
 }
 
 body.debate-topbar-hidden .debate-hero-top{
-  top: 6px;
+  top: 4px;
   margin-top: 0;
 }
 
@@ -3378,7 +3378,7 @@ body.page-debate .topbar::after {
   gap: 10px;
 }
 body.debate-topbar-hidden .debate-hero-top {
-  top: 6px;
+  top: 4px;
   margin-top: 0;
 }
 
