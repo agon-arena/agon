@@ -3491,20 +3491,31 @@ body.debate-topbar-hidden .debate-hero-top {
     padding: 12px 14px;
   }
 
-  .debate-score-bar {
-    margin-top: 14px;
-    margin-bottom: 18px;
-  }
 
-  .my-arguments-row {
-    grid-template-columns: 1fr;
-    gap: 14px;
-    margin-bottom: 18px;
-  }
 
-  .my-arguments-row::before {
-    display: none;
-  }
+.debate-score-bar {
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+.my-arguments-row {
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.my-arguments-row::before {
+  display: none;
+}
+
+.my-arguments-summary {
+  margin-top: 4px;
+}
+
+.my-votes {
+  margin-bottom: 6px;
+}
+
 
   .argument-form,
   .argument-card,
