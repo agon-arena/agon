@@ -627,21 +627,11 @@ function sortArgumentsByScore(args) {
   return movePinnedArgumentToFourthPosition(ordered);
 }
 
-
 function getSupportRankMap(args) {
-  const sortedByVotes = [...(args || [])].sort((a, b) => {
-    const votesDiff = Number(b.votes || 0) - Number(a.votes || 0);
-
-    if (votesDiff !== 0) {
-      return votesDiff;
-    }
-
-    return Number(b.id || 0) - Number(a.id || 0);
-  });
-
+  const sortedArgs = sortArgumentsByScore(args || []);
   const rankMap = {};
 
-  sortedByVotes.forEach((arg, index) => {
+  sortedArgs.forEach((arg, index) => {
     rankMap[String(arg.id)] = index + 1;
   });
 
@@ -674,23 +664,27 @@ function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
 
   const gainedPlaces = previousRank - newRank;
   const placeLabel = gainedPlaces === 1 ? "place" : "places";
+if (newRank >= 1 && newRank <= 3) {
+  const medalIcon =
+    newRank === 1 ? "🥇" :
+    newRank === 2 ? "🥈" :
+    "🥉";
 
-  if (newRank >= 1 && newRank <= 3) {
-    const medalIcon =
-      newRank === 1 ? "🥇" :
-      newRank === 2 ? "🥈" :
-      "🥉";
+  const topTitle =
+    newRank === 1 ? "Première place du classement" :
+    newRank === 2 ? "Deuxième place du classement" :
+    "Troisième place du classement";
 
-    showReplacementSuccessMessage(
-      "🏅 Top 3 du classement",
-      `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
-      null,
-      medalIcon,
-      "ranking-medal-vibrate"
-    );
+  showReplacementSuccessMessage(
+    topTitle,
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
+    null,
+    medalIcon,
+    "ranking-medal-vibrate"
+  );
 
-    return;
-  }
+  return;
+}
 
   showReplacementSuccessMessage(
     "🚀 Belle progression",
