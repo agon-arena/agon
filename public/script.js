@@ -1068,6 +1068,14 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+function linkifyText(str) {
+  const escaped = escapeHtml(str ?? "");
+  return escaped.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+}
 function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
@@ -3598,7 +3606,7 @@ return `
   </div>
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-  ${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
+  ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
 <div class="argument-actions">
   <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
@@ -3807,13 +3815,13 @@ ${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un comme
 ${
   c.stance === "amelioration"
     ? `
-${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 <div class="comment-improvement-preview">
   <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+  <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
 </div>
     `
-    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
+    : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
 
 
@@ -4017,7 +4025,7 @@ return `
 </div>
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-${a.body ? `<p class="argument-body">${escapeHtml(a.body)}</p>` : ""}
+${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
         <div class="argument-actions">
           <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
@@ -4229,13 +4237,13 @@ ${c.reply_to_comment_id ? `<div class="comment-reply-label">Réponse à un comme
 ${
   c.stance === "amelioration"
     ? `
-${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}
+${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
 <div class="comment-improvement-preview">
   <div class="comment-improvement-preview-title">${escapeHtml(c.improvement_title || "Sans titre")}</div>
-  <div class="comment-improvement-preview-body">${escapeHtml(c.improvement_body || "")}</div>
+  <div class="comment-improvement-preview-body">${linkifyText(c.improvement_body || "")}</div>
 </div>
     `
-    : `${c.content ? `<p>${escapeHtml(c.content)}</p>` : ""}`
+    : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
 <div class="comment-actions">
   <button
