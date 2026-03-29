@@ -4693,8 +4693,8 @@ if (result && result.replaced) {
 }
 else if (shouldWarnAboutReplacement) {
   showVoteWarning(
-    "👉 Cette proposition d'amélioration peut remplacer l’idée",
-    "Si le nombre de likes dépasse le nombre de voix de l’idée actuelle, elle prendra sa place."
+    "Cette proposition d'amélioration peut remplacer l’idée :",
+    "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
   );
 }
 
