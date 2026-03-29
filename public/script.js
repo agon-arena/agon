@@ -5489,6 +5489,7 @@ const offset = (topbar ? topbar.offsetHeight : 80) + 120;
 }
 
 function openArgumentComposer(side) {
+  const normalizedSide = side === "b" ? "b" : "a";
   const listForm = document.getElementById("form-list");
   if (!listForm) return;
 
@@ -5502,10 +5503,12 @@ function openArgumentComposer(side) {
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
 
-setListArgumentSide("");
+  setListArgumentSide(normalizedSide);
+
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
-const offset = (topbar ? topbar.offsetHeight : 80) + 120;    const y = listForm.offsetTop - offset;
+    const offset = (topbar ? topbar.offsetHeight : 80) + 120;
+    const y = listForm.offsetTop - offset;
 
     window.scrollTo({
       top: y,
@@ -5516,6 +5519,7 @@ const offset = (topbar ? topbar.offsetHeight : 80) + 120;    const y = listForm.
     if (titleInput) titleInput.focus();
   }, 50);
 }
+
 async function deleteArgument(debateId, argumentId) {
   const confirmed = window.confirm("Supprimer définitivement cette idée ?");
   if (!confirmed) return;
