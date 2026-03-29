@@ -1300,10 +1300,9 @@ function getDebateShareText() {
   ].join("\n");
 }
 async function copyDebateLink() {
-  const { text, url } = getGlobalShareData();
-const fullText = `${text} ${url}`;
+  const { url } = getGlobalShareData();
   try {
-    await navigator.clipboard.writeText(fullText);
+    await navigator.clipboard.writeText(url);
     alert("Lien copié.");
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
@@ -1453,7 +1452,7 @@ async function copyIndexDebateLink(
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
 
-  const { text, url } = getIndexDebateShareData(
+  const { url } = getIndexDebateShareData(
     debateId,
     question,
     optionA,
@@ -1463,9 +1462,8 @@ async function copyIndexDebateLink(
     type
   );
 
-const fullText = `${text} ${url}`;
   try {
-    await navigator.clipboard.writeText(fullText);
+    await navigator.clipboard.writeText(url);
     alert("Lien copié.");
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
@@ -3634,7 +3632,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
 <div class="comments-block">
   <div class="comments-summary">
-    <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+    <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
       ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
     </button>
 
@@ -3863,7 +3861,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
       : `<div class="empty-comments">Aucun commentaire.</div>`
   }
 </div> <div class="comments-bottom-actions">
-  <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+  <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
     Masquer
   </button>
 </div>
@@ -4053,7 +4051,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 
         <div class="comments-block">
           <div class="comments-summary">
-            <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+            <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
               ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
             </button>
 
@@ -4285,7 +4283,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
               </div>
 
               <div class="comments-bottom-actions">
-                <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
+                <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
                   Masquer
                 </button>
               </div>
@@ -5111,7 +5109,7 @@ function toggleForm(side) {
   }
 }
 
-function toggleComments(argumentId, button = null) {
+function toggleComments(argumentId) {
   const wasOpen = !!openCommentsByArgument[argumentId];
   const willOpen = !wasOpen;
 
@@ -5128,23 +5126,13 @@ function toggleComments(argumentId, button = null) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  setButtonLoading(button);
-
-  loadDebate(debateId)
-    .then(() => {
-      if (wasOpen) {
-        setTimeout(() => {
-          scrollToTopOfArgumentCard(argumentId);
-        }, 50);
-      }
-    })
-    .catch((error) => {
-      openCommentsByArgument[argumentId] = wasOpen;
-      alert(error.message);
-    })
-    .finally(() => {
-      clearButtonLoading(button);
-    });
+  loadDebate(debateId).then(() => {
+    if (wasOpen) {
+      setTimeout(() => {
+        scrollToTopOfArgumentCard(argumentId);
+      }, 50);
+    }
+  });
 }
 
 document.addEventListener("click", function(event) {
