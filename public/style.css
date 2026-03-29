@@ -757,7 +757,7 @@ select:focus {
 }
 
 body.debate-topbar-hidden .debate-hero-top{
-  top: 0;
+  top: 6px;
   margin-top: 0;
 }
 
