@@ -670,7 +670,7 @@ select:focus {
   position: relative;
   background: #ffffff;
   padding: 0;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   border-bottom: none;
 }
 
@@ -3366,7 +3366,7 @@ body.page-debate .topbar::after {
   position: relative;
   background: #ffffff;
   padding: 0;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   border-bottom: none;
 }
 .debate-hero-top {
