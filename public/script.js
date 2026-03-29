@@ -956,6 +956,52 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight");
   element.classList.remove("voice-title-highlight-green");
 }
+function scrollToTopOfArgumentCardAndFlash(argumentId) {
+  const element = getVisibleArgumentElement(argumentId);
+  if (!element) return;
+
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 16;
+
+  const scrollHigh = () => {
+    const rect = element.getBoundingClientRect();
+    const y = rect.top + window.scrollY - offset;
+
+    window.scrollTo({
+      top: Math.max(0, y),
+      behavior: "smooth"
+    });
+  };
+
+  scrollHigh();
+
+  setTimeout(() => {
+    scrollHigh();
+  }, 260);
+
+  setTimeout(() => {
+    const isGreenTarget =
+      element.classList.contains("argument-card-a") ||
+      !!element.closest(".argument-card-a") ||
+      !!element.closest("#arguments-a") ||
+      !!element.closest(".column-a");
+
+    element.classList.remove("flash-green", "admin-highlight");
+    void element.offsetWidth;
+
+    if (isGreenTarget) {
+      element.classList.add("flash-green");
+      setTimeout(() => {
+        element.classList.remove("flash-green");
+      }, 5000);
+    } else {
+      element.classList.add("admin-highlight");
+      setTimeout(() => {
+        element.classList.remove("admin-highlight");
+      }, 5000);
+    }
+  }, 420);
+}
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -3530,7 +3576,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
 <div class="comments-block">
   <div class="comments-summary">
     <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
-      ${commentsOpen ? "Masquer les commentaires" : "Voir les commentaires"} (${comments.length})
+      ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
     </button>
 
 <div class="comments-summary-details">
@@ -3759,7 +3805,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
   }
 </div> <div class="comments-bottom-actions">
   <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
-    Masquer les commentaires
+    Masquer
   </button>
 </div>
             </div>
@@ -3949,7 +3995,7 @@ onclick="vote('${debateId}','${a.id}', true, this)"
         <div class="comments-block">
           <div class="comments-summary">
             <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
-              ${commentsOpen ? "Masquer les commentaires" : "Voir les commentaires"} (${comments.length})
+              ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
             </button>
 
 <div class="comments-summary-details">
@@ -4181,7 +4227,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
 
               <div class="comments-bottom-actions">
                 <button class="button button-small" type="button" onclick="toggleComments('${a.id}')">
-                  Masquer les commentaires
+                  Masquer
                 </button>
               </div>
             </div>
@@ -4528,17 +4574,6 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       nextValue = 0;
     }
 
-if (
-  value === 1 &&
-  targetComment &&
-  targetComment.stance === "amelioration" &&
-  nextValue === 1
-) {
-  showVoteWarning(
-    "👉 Cette proposition d'amélioration peut remplacer l’idée",
-    "Si le nombre de likes dépasse le nombre de voix de l’idée actuelle, elle prendra sa place."
-  );
-}
 
 const shouldWarnAboutReplacement =
   value === 1 &&
@@ -4565,9 +4600,17 @@ const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
     pendingCommentScrollId = String(commentId);
     await loadDebate(debateId);
 if (result && result.replaced) {
-  closeVoteWarning();
-  showReplacementSuccessMessage();
-} else if (shouldWarnAboutReplacement) {
+  showReplacementSuccessMessage(
+    "💡 Idée remplacée",
+    "Cette amélioration a dépassé l’idée originale et la remplace désormais.",
+    () => {
+      if (argumentId) {
+        scrollToTopOfArgumentCardAndFlash(argumentId);
+      }
+    }
+  );
+}
+else if (shouldWarnAboutReplacement) {
   showVoteWarning(
     "👉 Cette proposition d'amélioration peut remplacer l’idée",
     "Si le nombre de likes dépasse le nombre de voix de l’idée actuelle, elle prendra sa place."
@@ -5188,35 +5231,48 @@ async function editArgument(argumentId) {
 /* =========================
    Boot
 ========================= */
-function showReplacementSuccessMessage(title, message) {
+
+function showReplacementSuccessMessage(title, message, onClose = null) {
   const existing = document.getElementById("replacement-success-overlay");
   if (existing) existing.remove();
 
   const overlay = document.createElement("div");
   overlay.id = "replacement-success-overlay";
-  overlay.className = "replacement-success-overlay";
+  overlay.className = "replacement-success-overlay replacement-success-overlay-visible";
 
   overlay.innerHTML = `
-    <div class="replacement-success-box ranking-gain-box">
-      <div class="replacement-success-icon ranking-gain-icon">🚀🚀🚀</div>
-      <div class="replacement-success-title">${title}</div>
-      <div class="replacement-success-text">${message}</div>
+    <div class="replacement-success-box">
+      <div class="replacement-success-icon">💡</div>
+      <div class="replacement-success-title">${escapeHtml(title)}</div>
+      <div class="replacement-success-text">${escapeHtml(message)}</div>
       <button
         type="button"
         class="replacement-success-button"
-        onclick="closeReplacementSuccessMessage()"
+        id="replacement-success-close-btn"
       >
-        Continuer
+        Compris
       </button>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  setTimeout(() => {
-    overlay.classList.add("replacement-success-overlay-visible");
-  }, 10);
+  const closeBtn = document.getElementById("replacement-success-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      overlay.classList.remove("replacement-success-overlay-visible");
+
+      setTimeout(() => {
+        overlay.remove();
+
+        if (typeof onClose === "function") {
+          onClose();
+        }
+      }, 250);
+    });
+  }
 }
+
 
 function closeReplacementSuccessMessage() {
   const overlay = document.getElementById("replacement-success-overlay");
