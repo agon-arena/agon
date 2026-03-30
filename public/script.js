@@ -2222,7 +2222,7 @@ async function initAdminReports() {
     : report.reason === "doublon"
       ? "Doublon / déjà existant"
       : report.reason === "plusieurs_arguments"
-        ? "Plusieurs idées développés"
+        ? "Plusieurs idées développées"
         : "Motif inconnu";
 
       const targetTitle =
@@ -5351,7 +5351,7 @@ function openReportBox(targetType, targetId) {
                 type="button"
                 onclick="submitReport('${targetType}', '${targetId}', 'plusieurs_arguments')"
               >
-                Plusieurs arguments développés
+                Plusieurs idées développées
               </button>
             `
             : ""
