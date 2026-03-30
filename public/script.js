@@ -1071,9 +1071,13 @@ function escapeHtml(str) {
 
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
+
   return escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    /((?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+[a-z]{2,})(?:\/[^\s<]*)?)/gi,
+    (match) => {
+      const href = /^https?:\/\//i.test(match) ? match : `https://${match}`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    }
   );
 }
 function setDisplay(element, value) {
@@ -3692,17 +3696,29 @@ onclick="vote('${debateId}','${a.id}', true, this)"
               <h4>Commentaires (${comments.length})</h4>
 
 <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
+
 ${
   replyToCommentByArgument[a.id]
     ? `
       <div class="argument-warning">
         <div class="reply-preview-text">
           <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(
-            replyToCommentByArgument[a.id].commentContent.length > 140
-              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
-              : replyToCommentByArgument[a.id].commentContent
-          )}</span>
+
+     <span class="reply-preview-content">${escapeHtml(
+  (() => {
+    const replyData = replyToCommentByArgument[a.id] || {};
+    const previewText =
+      replyData.improvementTitle && replyData.improvementBody
+        ? `${replyData.improvementTitle} — ${replyData.improvementBody}`
+        : replyData.improvementTitle
+          ? replyData.improvementTitle
+          : replyData.commentContent || replyData.improvementBody || "";
+
+    return previewText.length > 140
+      ? previewText.slice(0, 140) + "…"
+      : previewText;
+  })()
+)}</span>
         </div>
 
         <button
@@ -4112,30 +4128,6 @@ onclick="vote('${debateId}','${a.id}', true, this)"
               <h4>Commentaires (${comments.length})</h4>
 
 <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
-${
-  replyToCommentByArgument[a.id]
-    ? `
-      <div class="argument-warning">
-        <div class="reply-preview-text">
-          <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(
-            replyToCommentByArgument[a.id].commentContent.length > 140
-              ? replyToCommentByArgument[a.id].commentContent.slice(0, 140) + "…"
-              : replyToCommentByArgument[a.id].commentContent
-          )}</span>
-        </div>
-
-        <button
-          type="button"
-          class="button button-small"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
-      </div>
-    `
-    : ""
-}
 
 ${
   replyToCommentByArgument[a.id]
@@ -4750,10 +4742,12 @@ function replyToComment(argumentId, commentId, button = null) {
         (comment) => String(comment.id) === String(commentId)
       );
 
-      replyToCommentByArgument[argumentId] = {
-        commentId: String(commentId),
-        commentContent: targetComment ? String(targetComment.content || "") : ""
-      };
+replyToCommentByArgument[argumentId] = {
+  commentId: String(commentId),
+  commentContent: targetComment ? String(targetComment.content || "") : "",
+  improvementTitle: targetComment ? String(targetComment.improvement_title || "") : "",
+  improvementBody: targetComment ? String(targetComment.improvement_body || "") : ""
+};
 
       openCommentsByArgument[argumentId] = true;
       visibleCommentsByArgument[argumentId] =
