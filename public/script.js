@@ -30,6 +30,7 @@ let pendingVoicesSummaryHighlight = false;
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
   return savedMode === "list" ? "list" : "columns";
+
 }
 function isOpenDebate(debate) {
   return String(debate?.type || "debate") === "open";
@@ -2797,8 +2798,19 @@ const option_b = selectedType === "open"
   ? ""
   : document.getElementById("option_b").value.trim();
 
-    try {
-      const r = await fetchJSON(API + "/debates", {
+if (selectedType !== "open" && (!option_a || !option_b)) {
+  showReplacementSuccessMessage(
+    "Positions manquantes",
+    "Tu dois renseigner les deux positions avant de créer un débat.",
+    null,
+    "⚠️"
+  );
+  return;
+}
+
+try {
+  const r = await fetchJSON(API + "/debates", {
+
         method: "POST",
         headers: { "Content-Type": "application/json" },
 body: JSON.stringify({
@@ -3456,13 +3468,18 @@ else if (pendingCommentScrollId) {
   setTimeout(() => {
     const element = getVisibleCommentElement(targetId);
 
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
+if (element) {
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      applyVoiceHighlight(element);
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+
+  applyVoiceHighlight(element);
+
 
       setTimeout(() => {
         removeVoiceHighlight(element);
@@ -3877,7 +3894,11 @@ return `
   </div>
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
+
   ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+
+
+
 <div class="argument-actions argument-actions-vertical">
   <div class="argument-share-top">
     ${renderIdeaShareButtons(debateId, a)}
@@ -3945,6 +3966,7 @@ return `
     </div>
   ` : ""}
 </div>
+
 
   ${isAdmin() ? `
     <div class="admin-argument-actions">
@@ -4335,20 +4357,56 @@ return `
 </div>
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
-${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
-.argument-actions.argument-actions-vertical {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 10px !important;
-}
 
-.argument-share-top,
-.argument-report-bottom {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
+${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+
+<div class="argument-actions argument-actions-vertical">
+  <div class="argument-share-top">
+    ${renderIdeaShareButtons(debateId, a)}
+  </div>
+
+  <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
+    <button
+      class="voice-stepper-btn voice-stepper-btn-minus"
+      type="button"
+      data-voice-arg-id="${a.id}"
+      data-voice-action="minus"
+      onclick="unvote('${debateId}','${a.id}', true, this)"
+      ${myVoteCount > 0 ? "" : "disabled"}
+      aria-label="Retirer une voix"
+      title="Retirer une voix"
+    >
+      −
+    </button>
+
+    <div class="voice-stepper-center">
+      <div class="voice-stepper-value">${myVoteCount}</div>
+      <div class="voice-stepper-label">Mes voix</div>
+    </div>
+
+    <button
+      class="voice-stepper-btn voice-stepper-btn-plus"
+      type="button"
+      data-voice-arg-id="${a.id}"
+      data-voice-action="plus"
+      onclick="vote('${debateId}','${a.id}', true, this)"
+      aria-label="Ajouter une voix"
+      title="Ajouter une voix"
+    >
+      +
+    </button>
+  </div>
+
+  <div class="argument-report-bottom">
+    <button
+      class="report-button"
+      type="button"
+      onclick="openReportBox('argument', '${a.id}')"
+    >
+      Signaler
+    </button>
+  </div>
+</div>
 
           ${isAdmin() ? `
             <div class="admin-argument-actions">
@@ -5047,36 +5105,13 @@ replyToCommentByArgument[argumentId] = {
 
       if (target) {
         const topbar = document.querySelector(".topbar");
-        const offset = topbar ? topbar.offsetHeight + 120 : 220;
-        const y = target.getBoundingClientRect().top + window.scrollY - offset;
+const offset = topbar ? topbar.offsetHeight + 230 : 330;        const y = target.getBoundingClientRect().top + window.scrollY - offset;
 
         window.scrollTo({
           top: y,
           behavior: "smooth"
         });
-document.addEventListener("focusin", function(event) {
-  const target = event.target;
 
-  if (target.tagName === "TEXTAREA" && target.id.startsWith("comment-input-")) {
-    
-    setTimeout(() => {
-      const topbar = document.querySelector(".topbar");
-
-      // 🔥 AJUSTE ICI LA VALEUR
-      const extraOffset = 180;
-
-      const offset = (topbar ? topbar.offsetHeight : 80) + extraOffset;
-
-      const y = target.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-
-    }, 250); // important pour laisser le clavier apparaître
-  }
-});
       }
 
       if (input) {
@@ -5731,8 +5766,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (location.pathname === "/") initIndex();
   if (location.pathname === "/create") initCreate();
-  if (location.pathname === "/debate") initDebate();
-  if (location.pathname === "/admin-reports") initAdminReports();
+if (location.pathname === "/debate") {
+  localStorage.setItem("debate_view_mode", "columns");
+  initDebate();
+}  if (location.pathname === "/admin-reports") initAdminReports();
   if (location.pathname === "/notifications") loadNotificationsPage();
 
   loadReportsBadge();
