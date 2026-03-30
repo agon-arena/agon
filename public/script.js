@@ -5797,18 +5797,10 @@ function openArgumentComposer(side) {
   if (formA) formA.style.display = "none";
   if (formB) formB.style.display = "none";
 
-  const currentFocus = typeof getDebateColumnFocus === "function"
-    ? getDebateColumnFocus()
-    : "split";
-
-  let normalizedSide;
+  let normalizedSide = "";
 
   if (side === "a" || side === "b") {
     normalizedSide = side;
-  } else if (currentFocus === "a" || currentFocus === "b") {
-    normalizedSide = currentFocus;
-  } else {
-    normalizedSide = "a";
   }
 
   listForm.style.display = "grid";

@@ -94,17 +94,6 @@
 
       <div id="global-share-bar"></div>
 
-      <div class="debate-scroll-add-wrap">
-        <button
-          id="debate-scroll-add-button"
-          class="button debate-scroll-add-button"
-          type="button"
-onclick="openArgumentComposer()"
-        >
-          Ajouter une idée
-        </button>
-      </div>
-
 
       <div class="debate-admin-actions">
         <button
@@ -129,7 +118,7 @@ onclick="openArgumentComposer()"
         </button>
       </div>
 
-      <div class="debate-top-focus-buttons">
+      <div class="debate-top-sticky-actions">
         <button
           type="button"
           id="side-focus-left-btn"
@@ -137,6 +126,15 @@ onclick="openArgumentComposer()"
           onclick="setDebateColumnFocus('a')"
         >
           Ouvrir A
+        </button>
+
+        <button
+          id="debate-top-add-button"
+          class="button debate-top-add-button"
+          type="button"
+          onclick="openArgumentComposer()"
+        >
+          Ajouter une idée
         </button>
 
         <button
@@ -148,19 +146,9 @@ onclick="openArgumentComposer()"
           Ouvrir B
         </button>
       </div>
+
   </div>
 
-</div>
-
-<div class="debate-top-add-wrap">
-  <button
-    id="debate-top-add-button"
-    class="button debate-top-add-button"
-    type="button"
-    onclick="openArgumentComposer()"
-  >
-    Ajouter une idée
-  </button>
 </div>
 
 <section class="debate-hero">
@@ -293,8 +281,7 @@ onclick="openArgumentComposer()"
       </button>
     </div>
 
-    <input id="list-side-value" type="hidden" value="A" />
-
+<input id="list-side-value" type="hidden" value="" />
 
     <label for="list-title">Titre de votre idée</label>
     <input

@@ -769,6 +769,15 @@ body.debate-topbar-hidden .debate-hero-top{
   min-width:0;
 }
 
+.debate-top-sticky-actions{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  margin-top:8px;
+  width:100%;
+}
+
 .debate-label {
   margin: 0 0 8px 0;
   text-transform: uppercase;
@@ -2991,47 +3000,72 @@ body.page-debate .topbar::after {
     0 1px 0 rgba(255,255,255,0.6) inset;
 }
 .debate-top-focus-buttons{
-  display: grid;
-  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  gap: 8px;
-  width: min(1100px, 100%);
-  margin: 0 auto 2px auto;
-  padding: 0;
-  background: transparent;
-}
-.debate-top-focus-buttons .debate-side-focus-btn{
-  justify-self: center;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0;
+  padding:0;
+  background:transparent;
 }
 
 .debate-top-focus-buttons .debate-side-focus-btn{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
 }
 
 .debate-side-focus-btn{
-  position: static !important;
+  position:static !important;
   border:1px solid rgba(0,0,0,0.08);
   border-radius:999px;
-
-  padding:4px 8px;
-  min-height:30px;
-  min-width:60px;
-
-  font-weight:600;
-  font-size:11px;
-
+  padding:8px 12px;
+  min-height:38px;
+  min-width:88px;
+  font-weight:700;
+  font-size:13px;
   cursor:pointer;
   background:rgba(255,255,255,0.92);
   color:#111827;
-
   box-shadow:0 2px 6px rgba(0,0,0,0.08);
   transition:all 0.18s ease;
+}
+
+.debate-top-add-button{
+  white-space:nowrap;
+  flex:0 0 auto;
 }
 
 .debate-side-focus-btn:hover{
   transform:scale(1.05) !important;
   box-shadow:0 10px 28px rgba(0,0,0,0.18);
+}
+@media (min-width: 769px){
+  .debate-top-sticky-actions{
+    flex-direction:row;
+    flex-wrap:nowrap;
+  }
+
+  .debate-top-focus-buttons{
+    margin-left:0;
+    flex:0 0 auto;
+  }
+}
+
+@media (max-width: 768px){
+  .debate-top-sticky-actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .debate-top-add-button{
+    width:100%;
+  }
+
+  .debate-top-focus-buttons{
+    width:100%;
+    justify-content:center;
+  }
 }
 
 .debate-side-focus-btn-left,
