@@ -807,6 +807,8 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
+                  data-voice-arg-id="${item.id}"
+                  data-voice-action="minus"
                   onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
@@ -819,6 +821,8 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
+                  data-voice-arg-id="${item.id}"
+                  data-voice-action="plus"
                   onclick="vote('${debateId}', '${item.id}', false, this)"
                   aria-label="Ajouter une voix"
                   title="Ajouter une voix"
@@ -861,6 +865,8 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
+                  data-voice-arg-id="${item.id}"
+                  data-voice-action="minus"
                   onclick="unvote('${debateId}', '${item.id}', false, this)"
                   aria-label="Retirer une voix"
                   title="Retirer une voix"
@@ -873,6 +879,8 @@ if (myArgumentsRow) {
                 <button
                   type="button"
                   class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
+                  data-voice-arg-id="${item.id}"
+                  data-voice-action="plus"
                   onclick="vote('${debateId}', '${item.id}', false, this)"
                   aria-label="Ajouter une voix"
                   title="Ajouter une voix"
@@ -1125,6 +1133,51 @@ function clearActionLoading(element, loadingClass = "button-loading") {
   element.classList.remove(loadingClass);
   element.style.pointerEvents = "";
   element.style.opacity = "";
+}
+
+const pendingVoiceRequests = {};
+
+function getVoiceButtons(argId) {
+  return Array.from(document.querySelectorAll(`[data-voice-arg-id="${String(argId)}"]`));
+}
+
+function syncVoiceButtonsDisabledState(debateId, argId) {
+  const argIdString = String(argId);
+  const state = getState(debateId);
+  const myVoteCount = Number(state[argIdString] || 0);
+  const totalVotesUsed = Object.values(state).reduce((sum, value) => sum + Number(value || 0), 0);
+  const isPending = pendingVoiceRequests[argIdString] === true;
+
+  getVoiceButtons(argIdString).forEach((button) => {
+    const action = button.dataset.voiceAction;
+
+    if (isPending) {
+      button.disabled = true;
+      button.dataset.loading = "true";
+      button.classList.add("button-loading");
+      button.style.pointerEvents = "none";
+      button.style.opacity = "0.55";
+      return;
+    }
+
+    delete button.dataset.loading;
+    button.classList.remove("button-loading");
+    button.style.pointerEvents = "";
+    button.style.opacity = "";
+
+    if (action === "minus") {
+      button.disabled = myVoteCount <= 0;
+    } else if (action === "plus") {
+      button.disabled = totalVotesUsed >= 5;
+    } else {
+      button.disabled = false;
+    }
+  });
+}
+
+function setVoiceRequestPending(debateId, argId, isPending) {
+  pendingVoiceRequests[String(argId)] = !!isPending;
+  syncVoiceButtonsDisabledState(debateId, argId);
 }
 
 function getKey() {
@@ -3493,7 +3546,9 @@ if (summaryEl) {
       <button
         type="button"
         class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-minus"
-onclick="unvote('${debateId}', '${item.id}', false)"
+        data-voice-arg-id="${item.id}"
+        data-voice-action="minus"
+onclick="unvote('${debateId}', '${item.id}', false, this)"
         aria-label="Retirer une voix"
         title="Retirer une voix"
       >
@@ -3505,6 +3560,8 @@ onclick="unvote('${debateId}', '${item.id}', false)"
       <button
         type="button"
         class="my-argument-chip-stepper-btn my-argument-chip-stepper-btn-plus"
+        data-voice-arg-id="${item.id}"
+        data-voice-action="plus"
 onclick="vote('${debateId}', '${item.id}', false, this)"
         aria-label="Ajouter une voix"
         title="Ajouter une voix"
@@ -3621,6 +3678,8 @@ return `
     <button
       class="voice-stepper-btn voice-stepper-btn-minus"
       type="button"
+      data-voice-arg-id="${a.id}"
+      data-voice-action="minus"
 onclick="unvote('${debateId}','${a.id}', true, this)"
       ${myVoteCount > 0 ? "" : "disabled"}
       aria-label="Retirer une voix"
@@ -3637,6 +3696,8 @@ onclick="unvote('${debateId}','${a.id}', true, this)"
     <button
       class="voice-stepper-btn voice-stepper-btn-plus"
       type="button"
+      data-voice-arg-id="${a.id}"
+      data-voice-action="plus"
 onclick="vote('${debateId}','${a.id}', true, this)"
       aria-label="Ajouter une voix"
       title="Ajouter une voix"
@@ -4531,6 +4592,10 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   const argIdString = String(argId);
   const voterKey = getKey();
 
+  if (pendingVoiceRequests[argIdString]) {
+    return;
+  }
+
   const targetBefore = (currentAllArguments || []).find(
     (arg) => String(arg.id) === argIdString
   );
@@ -4557,6 +4622,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   }
 
   setButtonLoading(button);
+  setVoiceRequestPending(debateId, argId, true);
 
   try {
     await fetchJSON(API + "/arguments/" + argId + "/vote", {
@@ -4598,6 +4664,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     alert(error.message);
   } finally {
     clearButtonLoading(button);
+    setVoiceRequestPending(debateId, argId, false);
   }
 }
 
@@ -4607,11 +4674,16 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
   const argIdString = String(argId);
   const voterKey = getKey();
 
+  if (pendingVoiceRequests[argIdString]) {
+    return;
+  }
+
   if (!state[argIdString] || Number(state[argIdString]) <= 0) {
     return;
   }
 
   setButtonLoading(button);
+  setVoiceRequestPending(debateId, argId, true);
 
   try {
     await fetchJSON(API + "/arguments/" + argId + "/unvote", {
@@ -4637,6 +4709,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     alert(error.message);
   } finally {
     clearButtonLoading(button);
+    setVoiceRequestPending(debateId, argId, false);
   }
 }
 
