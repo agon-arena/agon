@@ -774,7 +774,7 @@ body.debate-topbar-hidden .debate-hero-top{
   align-items:center;
   justify-content:center;
   gap:12px;
-  margin-top:8px;
+  margin-top:0px;
   width:100%;
 }
 
@@ -2423,7 +2423,7 @@ body.debate-topbar-hidden .debate-compact-bell {
 
 #global-share-bar{
   margin-top:12px;
-  margin-bottom:2px;
+  margin-bottom:0px;
 }
 
 #global-share-bar .share-bar{
@@ -3045,17 +3045,19 @@ body.page-debate .topbar::after {
     gap:8px;
   }
 
-.debate-top-add-button{
-  width:auto;
-  flex:0 1 auto;
-  padding:8px 4px;
-  font-size:12px;
-}
+  .debate-top-add-button{
+    width:auto;
+    min-width:auto;
+    max-width:none;
+    flex:0 0 auto;
+    padding:8px 6px;
+    font-size:12px;
+  }
 
   .debate-side-focus-btn{
     min-width:0;
-padding:7px 8px;
-font-size:11px;
+    padding:7px 8px;
+    font-size:11px;
   }
 }
 
@@ -5428,32 +5430,6 @@ body.debate-topbar-hidden .debate-hero-top {
 
   .page-debate .notifications-button-large {
     top: 0 !important;
-  }
-}
-.debate-top-add-wrap {
-  display: flex;
-  justify-content: center;
-  margin: 14px 0 16px 0;
-}
-
-.debate-top-add-button {
-  min-width: 240px;
-  width: auto;
-  font-size: 16px;
-  padding: 12px 22px;
-  border-radius: 12px;
-}
-
-@media (max-width: 768px) {
-  .debate-top-add-wrap {
-    margin: 12px 0 14px 0;
-  }
-
-  .debate-top-add-button {
-    width: auto;
-    max-width: none;
-    font-size: 12px;
-    padding: 8px 4px;
   }
 }
 /* ===== MODALE CONFIRMATION SUPPRESSION ===== */
