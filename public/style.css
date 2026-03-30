@@ -4642,28 +4642,7 @@ body.debate-topbar-hidden .debate-hero-top {
   box-shadow: none !important;
 }
 /* MOBILE : le bouton signaler reste sous la zone des voix et centré */
-@media (max-width: 768px) {
-  .argument-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
 
-  .argument-actions .voice-stepper,
-  .argument-actions .vote-button,
-  .argument-actions .vote-remaining-label {
-    order: 1;
-  }
-
-  .argument-actions .report-button {
-    order: 2;
-    align-self: center;
-    margin-left: 0;
-    margin-top: 8px;
-    text-align: center;
-  }
-}
 
 /* FIX : options de signalement visibles et encadrées */
 .report-box label {
@@ -5562,5 +5541,29 @@ body.debate-topbar-hidden .debate-hero-top {
 }
 
 .report-box-actions-vertical .report-choice-button {
+  width: 100%;
+}
+.argument-actions.argument-actions-vertical {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.argument-share-top {
+  order: 1;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.voice-stepper {
+  order: 2;
+}
+
+.argument-report-bottom {
+  order: 3;
+  display: flex;
+  justify-content: center;
   width: 100%;
 }

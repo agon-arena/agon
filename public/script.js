@@ -4336,43 +4336,19 @@ return `
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+.argument-actions.argument-actions-vertical {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
 
-        <div class="argument-actions">
-          <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
-            <button
-              class="voice-stepper-btn voice-stepper-btn-minus"
-              type="button"
-onclick="unvote('${debateId}','${a.id}', true, this)"
-              ${myVoteCount > 0 ? "" : "disabled"}
-              aria-label="Retirer une voix"
-              title="Retirer une voix"
-            >
-              −
-            </button>
-
-            <div class="voice-stepper-center">
-              <div class="voice-stepper-value">${myVoteCount}</div>
-              <div class="voice-stepper-label">Mes voix</div>
-            </div>
-
-            <button
-              class="voice-stepper-btn voice-stepper-btn-plus"
-              type="button"
-onclick="vote('${debateId}','${a.id}', true, this)"
-              aria-label="Ajouter une voix"
-              title="Ajouter une voix"
-            >
-              +
-            </button>
-          </div>
-
-          <button
-            class="report-button"
-            type="button"
-            onclick="openReportBox('argument', '${a.id}')"
-          >
-            Signaler
-          </button>
+.argument-share-top,
+.argument-report-bottom {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
 
           ${isAdmin() ? `
             <div class="admin-argument-actions">
