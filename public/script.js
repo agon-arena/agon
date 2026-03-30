@@ -2579,8 +2579,7 @@ if (typeInputs.length) {
 
 const question = document.getElementById("question").value.trim();
 const category = document.getElementById("category").value.trim();
-const sourceUrlRaw = document.getElementById("source_url").value.trim();
-const source_url = normalizeUrl(sourceUrlRaw);
+const source_url = document.getElementById("source_url").value.trim();
 const selectedType =
   document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
@@ -2591,11 +2590,6 @@ const option_a = selectedType === "open"
 const option_b = selectedType === "open"
   ? ""
   : document.getElementById("option_b").value.trim();
-
-if (sourceUrlRaw && !source_url) {
-  alert("Le lien source n'est pas valide.");
-  return;
-}
 
     try {
       const r = await fetchJSON(API + "/debates", {
@@ -2617,36 +2611,6 @@ body: JSON.stringify({
       alert(error.message);
     }
   });
-}
-
-function normalizeUrl(value) {
-  const raw = String(value || "").trim();
-
-  if (!raw) return "";
-
-  if (/^javascript:/i.test(raw)) return "";
-  if (/^data:/i.test(raw)) return "";
-  if (/^vbscript:/i.test(raw)) return "";
-
-  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw)
-    ? raw
-    : `https://${raw}`;
-
-  try {
-    const parsed = new URL(withProtocol);
-
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "";
-    }
-
-    if (!parsed.hostname || !parsed.hostname.includes(".")) {
-      return "";
-    }
-
-    return parsed.href;
-  } catch {
-    return "";
-  }
 }
 function normalizeText(value) {
   return String(value || "")
@@ -3074,20 +3038,8 @@ function showDebateSourceFallback(sourceUrl) {
 
   if (!sourceFallback || !sourceFallbackLink) return;
 
-  const normalizedSourceUrl = normalizeUrl(sourceUrl);
-
-  if (!normalizedSourceUrl) {
-    sourceFallback.style.display = "none";
-    sourceFallbackLink.href = "#";
-
-    if (sourceDomain) {
-      sourceDomain.textContent = "";
-    }
-    return;
-  }
-
   try {
-    const domain = new URL(normalizedSourceUrl).hostname.replace("www.", "");
+    const domain = new URL(sourceUrl).hostname.replace("www.", "");
     if (sourceDomain) {
       sourceDomain.textContent = "🔗 " + domain;
     }
@@ -3097,14 +3049,23 @@ function showDebateSourceFallback(sourceUrl) {
     }
   }
 
-  sourceFallbackLink.href = normalizedSourceUrl;
-  sourceFallbackLink.target = "_blank";
-  sourceFallbackLink.rel = "noopener noreferrer";
+  sourceFallbackLink.href = sourceUrl;
   sourceFallback.style.display = "block";
 }
 
+function bindDebateSourcePreviewHandlers() {
+  if (debateSourcePreviewState.handlersBound) return;
 
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
 
+  if (!sourcePreview) return;
+
+  sourcePreview.addEventListener("load", () => {
+    sourcePreview.dataset.loaded = "1";
+    sourcePreview.style.visibility = "visible";
+    sourcePreview.style.display = "block";
 
     if (sourcePoster) {
       sourcePoster.style.display = "none";
