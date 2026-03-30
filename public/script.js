@@ -401,8 +401,10 @@ function applyDebateColumnFocusUI() {
   const sideFocusLeft = document.getElementById("side-focus-left-btn");
   const sideFocusRight = document.getElementById("side-focus-right-btn");
 
-  const columnA = document.getElementById("column-a");
-  const columnB = document.getElementById("column-b");
+const columnA = document.getElementById("column-a");
+const columnB = document.getElementById("column-b");
+const headingA = document.querySelector(".debate-headings .position-a");
+const headingB = document.querySelector(".debate-headings .position-b");
 
   if (!columns) return;
 
@@ -425,18 +427,31 @@ if (openMode) {
   return;
 }
 
-const headingA = document.querySelector(".debate-headings .position-a");
-const headingB = document.querySelector(".debate-headings .position-b");
+if (headingA) {
+  headingA.classList.remove("position-focus-active", "position-focus-a");
+  headingA.style.display = "";
+}
+
+if (headingB) {
+  headingB.classList.remove("position-focus-active", "position-focus-b");
+  headingB.style.display = "";
+}
 
 if (headings) headings.style.display = "grid";
-if (headingA) headingA.style.display = "";
-if (headingB) headingB.style.display = "";
 
 if (focusMode === "a") {
+  if (headingA) {
+    headingA.classList.add("position-focus-active", "position-focus-a");
+  }
+
   if (columnA) columnA.style.display = "";
   if (columnB) columnB.style.display = "none";
   columns.classList.add("focus-a");
 } else if (focusMode === "b") {
+  if (headingB) {
+    headingB.classList.add("position-focus-active", "position-focus-b");
+  }
+
   if (columnA) columnA.style.display = "none";
   if (columnB) columnB.style.display = "";
   columns.classList.add("focus-b");
