@@ -774,8 +774,11 @@ body.debate-topbar-hidden .debate-hero-top{
   align-items:center;
   justify-content:center;
   gap:12px;
-  margin-top:0px;
+  Margin-top:6px;
   width:100%;
+}
+.debate-admin-actions:empty{
+  display:none;
 }
 
 .debate-label {
@@ -2062,7 +2065,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   display:flex;
   flex-direction:column;
   gap:8px;
-  margin-top:12px;
+  margin-top:4px;
   align-items:flex-start;
 }
 
