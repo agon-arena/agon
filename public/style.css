@@ -5550,3 +5550,17 @@ body.debate-topbar-hidden .debate-hero-top {
   justify-content: center;
   width: 100%;
 }
+.report-choice-modal .replacement-success-icon {
+  font-size: 32px;
+}
+
+.report-box-actions-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 10px;
+}
+
+.report-box-actions-vertical .report-choice-button {
+  width: 100%;
+}

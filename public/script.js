@@ -5285,16 +5285,20 @@ function openReportBox(targetType, targetId) {
 
   const overlay = document.createElement("div");
   overlay.id = "report-box-overlay";
-  overlay.className = "report-box-overlay";
+  overlay.className = "replacement-success-overlay replacement-success-overlay-visible";
 
   overlay.innerHTML = `
-    <div class="report-box">
-      <h3>Signaler ce contenu</h3>
-      <p>Choisis un motif :</p>
+    <div class="replacement-success-box report-choice-modal">
+      <div class="replacement-success-icon" aria-hidden="true">🚩</div>
 
-      <div class="report-box-actions">
+      <div class="replacement-success-title">Signaler ce contenu</div>
+      <div class="replacement-success-text">
+        Choisis le motif qui correspond le mieux.
+      </div>
+
+      <div class="report-box-actions report-box-actions-vertical">
         <button
-          class="report-choice-button"
+          class="replacement-success-button report-choice-button"
           type="button"
           onclick="submitReport('${targetType}', '${targetId}', 'inapproprie')"
         >
@@ -5302,7 +5306,7 @@ function openReportBox(targetType, targetId) {
         </button>
 
         <button
-          class="report-choice-button"
+          class="replacement-success-button report-choice-button"
           type="button"
           onclick="submitReport('${targetType}', '${targetId}', 'doublon')"
         >
@@ -5313,7 +5317,7 @@ function openReportBox(targetType, targetId) {
           targetType === "argument"
             ? `
               <button
-                class="report-choice-button"
+                class="replacement-success-button report-choice-button"
                 type="button"
                 onclick="submitReport('${targetType}', '${targetId}', 'plusieurs_arguments')"
               >
@@ -5324,7 +5328,11 @@ function openReportBox(targetType, targetId) {
         }
       </div>
 
-      <button class="report-close-button" type="button" onclick="closeReportBox()">
+      <button
+        class="replacement-success-button"
+        type="button"
+        onclick="closeReportBox()"
+      >
         Annuler
       </button>
     </div>
@@ -5353,13 +5361,23 @@ async function submitReport(targetType, targetId, reason) {
   })
 });
 
-    closeReportBox();
-    alert("Signalement envoyé.");
+  closeReportBox();
+showReplacementSuccessMessage(
+  "Signalement envoyé",
+  "Merci. Ce contenu a bien été signalé.",
+  null,
+  "🚩"
+);
  } catch (error) {
-  if (error.message === "already_reported") {
-    alert("Tu as déjà signalé ce contenu.");
-    return;
-  }
+if (error.message === "already_reported") {
+  showReplacementSuccessMessage(
+    "Signalement déjà effectué",
+    "Tu as déjà signalé ce contenu.",
+    null,
+    "🚩"
+  );
+  return;
+}
 
   alert(error.message);
 }
