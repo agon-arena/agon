@@ -2597,8 +2597,6 @@ if (sourceUrlRaw && !source_url) {
   return;
 }
 
-
-
     try {
       const r = await fetchJSON(API + "/debates", {
         method: "POST",
@@ -2620,17 +2618,16 @@ body: JSON.stringify({
     }
   });
 }
+
 function normalizeUrl(value) {
   const raw = String(value || "").trim();
 
   if (!raw) return "";
 
-  // Refuse les schémas dangereux
   if (/^javascript:/i.test(raw)) return "";
   if (/^data:/i.test(raw)) return "";
   if (/^vbscript:/i.test(raw)) return "";
 
-  // Si aucun protocole n'est présent, on ajoute https://
   const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw)
     ? raw
     : `https://${raw}`;
@@ -2638,12 +2635,10 @@ function normalizeUrl(value) {
   try {
     const parsed = new URL(withProtocol);
 
-    // On n'autorise que http et https
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return "";
     }
 
-    // Il faut un hostname réel
     if (!parsed.hostname || !parsed.hostname.includes(".")) {
       return "";
     }
@@ -3108,6 +3103,9 @@ function showDebateSourceFallback(sourceUrl) {
   sourceFallback.style.display = "block";
 }
 
+
+
+
     if (sourcePoster) {
       sourcePoster.style.display = "none";
     }
@@ -3226,9 +3224,8 @@ saveVisitedDebate(id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
 
-const sourceUrl = normalizeUrl(String(data.debate.source_url || "").trim());
+const sourceUrl = String(data.debate.source_url || "").trim();
 renderDebateSourcePreview(sourceUrl);
-
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
