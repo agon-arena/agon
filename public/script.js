@@ -1515,9 +1515,16 @@ function handleIdeaShareAction(event, callback) {
 }
 
 if (!window.__ideaShareMenuListenerAttached) {
-  document.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('.idea-share-discreet-wrap')) return;
     closeIdeaShareMenus();
   });
+
+  document.addEventListener('touchstart', (event) => {
+    if (event.target.closest('.idea-share-discreet-wrap')) return;
+    closeIdeaShareMenus();
+  });
+
   window.__ideaShareMenuListenerAttached = true;
 }
 
