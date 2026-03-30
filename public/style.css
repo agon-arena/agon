@@ -3043,28 +3043,31 @@ body.page-debate .topbar::after {
 @media (min-width: 769px){
   .debate-top-sticky-actions{
     flex-direction:row;
+    align-items:center;
+    justify-content:center;
     flex-wrap:nowrap;
-  }
-
-  .debate-top-focus-buttons{
-    margin-left:0;
-    flex:0 0 auto;
+    gap:12px;
   }
 }
 
 @media (max-width: 768px){
   .debate-top-sticky-actions{
-    flex-direction:column;
-    align-items:stretch;
+    flex-direction:row;
+    align-items:center;
+    justify-content:center;
+    flex-wrap:nowrap;
+    gap:8px;
   }
 
   .debate-top-add-button{
-    width:100%;
+    width:auto;
+    flex:0 1 auto;
   }
 
-  .debate-top-focus-buttons{
-    width:100%;
-    justify-content:center;
+  .debate-side-focus-btn{
+    min-width:0;
+    padding:8px 10px;
+    font-size:12px;
   }
 }
 
