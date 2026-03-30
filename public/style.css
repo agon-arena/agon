@@ -1313,12 +1313,14 @@ body.debate-topbar-hidden .debate-compact-bell {
   white-space: pre-wrap;
 }
 
-.argument-actions {
-  display: flex;
-  justify-content: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items:center;
+@media (min-width: 769px) {
+  .argument-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
 }
 
 .vote-button {
@@ -5534,4 +5536,17 @@ body.debate-topbar-hidden .debate-hero-top {
   .my-arguments-list > * {
     margin: 0 !important;
   }
+}
+.argument-actions-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.argument-share-top,
+.argument-report-bottom {
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }

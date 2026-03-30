@@ -3878,15 +3878,18 @@ return `
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
   ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+<div class="argument-actions argument-actions-vertical">
+  <div class="argument-share-top">
+    ${renderIdeaShareButtons(debateId, a)}
+  </div>
 
-<div class="argument-actions">
   <div class="voice-stepper" aria-label="Répartition des voix sur cette idée">
     <button
       class="voice-stepper-btn voice-stepper-btn-minus"
       type="button"
       data-voice-arg-id="${a.id}"
       data-voice-action="minus"
-onclick="unvote('${debateId}','${a.id}', true, this)"
+      onclick="unvote('${debateId}','${a.id}', true, this)"
       ${myVoteCount > 0 ? "" : "disabled"}
       aria-label="Retirer une voix"
       title="Retirer une voix"
@@ -3904,7 +3907,7 @@ onclick="unvote('${debateId}','${a.id}', true, this)"
       type="button"
       data-voice-arg-id="${a.id}"
       data-voice-action="plus"
-onclick="vote('${debateId}','${a.id}', true, this)"
+      onclick="vote('${debateId}','${a.id}', true, this)"
       aria-label="Ajouter une voix"
       title="Ajouter une voix"
     >
@@ -3912,15 +3915,36 @@ onclick="vote('${debateId}','${a.id}', true, this)"
     </button>
   </div>
 
-  ${renderIdeaShareButtons(debateId, a)}
+  <div class="argument-report-bottom">
+    <button
+      class="report-button"
+      type="button"
+      onclick="openReportBox('argument', '${a.id}')"
+    >
+      Signaler
+    </button>
+  </div>
 
-  <button
-    class="report-button"
-    type="button"
-    onclick="openReportBox('argument', '${a.id}')"
-  >
-    Signaler
-  </button>
+  ${isAdmin() ? `
+    <div class="admin-argument-actions">
+      <button
+        class="button button-small"
+        type="button"
+        onclick="editArgument('${a.id}')"
+      >
+        Modifier l'idée
+      </button>
+
+      <button
+        class="delete-button"
+        type="button"
+        onclick="deleteArgument('${debateId}','${a.id}')"
+      >
+        Supprimer l'idée
+      </button>
+    </div>
+  ` : ""}
+</div>
 
   ${isAdmin() ? `
     <div class="admin-argument-actions">
