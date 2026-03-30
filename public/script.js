@@ -2579,7 +2579,8 @@ if (typeInputs.length) {
 
 const question = document.getElementById("question").value.trim();
 const category = document.getElementById("category").value.trim();
-const source_url = document.getElementById("source_url").value.trim();
+const sourceUrlRaw = document.getElementById("source_url").value.trim();
+const source_url = normalizeUrl(sourceUrlRaw);
 const selectedType =
   document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
@@ -2590,6 +2591,13 @@ const option_a = selectedType === "open"
 const option_b = selectedType === "open"
   ? ""
   : document.getElementById("option_b").value.trim();
+
+if (sourceUrlRaw && !source_url) {
+  alert("Le lien source n'est pas valide.");
+  return;
+}
+
+
 
     try {
       const r = await fetchJSON(API + "/debates", {
@@ -2611,6 +2619,39 @@ body: JSON.stringify({
       alert(error.message);
     }
   });
+}
+function normalizeUrl(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  // Refuse les schémas dangereux
+  if (/^javascript:/i.test(raw)) return "";
+  if (/^data:/i.test(raw)) return "";
+  if (/^vbscript:/i.test(raw)) return "";
+
+  // Si aucun protocole n'est présent, on ajoute https://
+  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw)
+    ? raw
+    : `https://${raw}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+
+    // On n'autorise que http et https
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+
+    // Il faut un hostname réel
+    if (!parsed.hostname || !parsed.hostname.includes(".")) {
+      return "";
+    }
+
+    return parsed.href;
+  } catch {
+    return "";
+  }
 }
 function normalizeText(value) {
   return String(value || "")
