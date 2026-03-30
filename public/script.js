@@ -1394,6 +1394,212 @@ function getDebateShareText() {
 "Qu’est-ce qui vous paraît le plus convaincant ?\n→"
   ].join("\n");
 }
+
+function getIdeaShareUrl(debateId, argumentId) {
+  return `${window.location.origin}/debate?id=${encodeURIComponent(String(debateId))}&highlight=argument-${encodeURIComponent(String(argumentId))}`;
+}
+
+function getIdeaShareData(debateId, argument) {
+  const question = currentDebateShareData.question || getDebateShareTitle();
+  const isOpen = isCurrentOpenDebateMode();
+  const sideLabel = isOpen
+    ? "Réponse"
+    : argument?.side === "A"
+      ? (currentDebateShareData.optionA || "Position A")
+      : (currentDebateShareData.optionB || "Position B");
+
+  const ideaTitle = String(argument?.title || "Idée sans titre").trim();
+  const ideaBody = String(argument?.body || "").trim();
+const shortBody = ideaBody;
+  const textParts = [
+    question,
+    "",
+    `${sideLabel} — ${ideaTitle}`
+  ];
+
+  if (shortBody) {
+    textParts.push(shortBody, "");
+  } else {
+    textParts.push("");
+  }
+
+  textParts.push("Qu’est-ce qui vous paraît le plus convaincant ?\n→");
+
+  return {
+    title: `${ideaTitle} — ${question}`,
+    text: textParts.join("\n"),
+    url: getIdeaShareUrl(debateId, argument?.id)
+  };
+}
+
+async function copyIdeaLink(debateId, encodedArgumentJson) {
+  try {
+    const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+    const { url } = getIdeaShareData(debateId, argument);
+    await navigator.clipboard.writeText(url);
+    alert("Lien de l'idée copié.");
+  } catch (error) {
+    alert("Impossible de copier le lien automatiquement.");
+  }
+}
+
+function shareIdeaOnX(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { text, url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIdeaOnFacebook(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIdeaOnWhatsApp(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { text, url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text + " " + url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIdeaByEmail(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { title, text, url } = getIdeaShareData(debateId, argument);
+  const body = `${text} ${url}`;
+  window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+}
+
+let openedIdeaShareMenuId = null;
+
+function closeIdeaShareMenus() {
+  document.querySelectorAll('.idea-share-menu').forEach((menu) => {
+    menu.style.display = 'none';
+  });
+  openedIdeaShareMenuId = null;
+}
+
+function toggleIdeaShareMenu(event, argumentId) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const menuId = `idea-share-menu-${argumentId}`;
+  const menu = document.getElementById(menuId);
+  if (!menu) return;
+
+  const shouldOpen = openedIdeaShareMenuId !== menuId || menu.style.display === 'none' || !menu.style.display;
+
+  closeIdeaShareMenus();
+
+  if (shouldOpen) {
+    menu.style.display = 'flex';
+    openedIdeaShareMenuId = menuId;
+  }
+}
+
+function handleIdeaShareAction(event, callback) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  closeIdeaShareMenus();
+
+  if (typeof callback === 'function') {
+    callback();
+  }
+}
+
+if (!window.__ideaShareMenuListenerAttached) {
+  document.addEventListener('click', () => {
+    closeIdeaShareMenus();
+  });
+  window.__ideaShareMenuListenerAttached = true;
+}
+
+function renderIdeaShareButtons(debateId, argument) {
+  const encodedArgument = encodeURIComponent(JSON.stringify({
+    id: argument?.id || "",
+    title: argument?.title || "",
+    body: argument?.body || "",
+    side: argument?.side || ""
+  }));
+  const menuId = `idea-share-menu-${argument?.id || ''}`;
+
+  return `
+    <div class="idea-share-discreet-wrap" style="position:relative; display:inline-flex; align-items:center;">
+      <button
+        class="share-icon-button idea-share-discreet-trigger"
+        type="button"
+        onclick="toggleIdeaShareMenu(event, '${argument?.id || ''}')"
+        title="Partager cette idée"
+        aria-label="Partager cette idée"
+        aria-haspopup="true"
+        aria-expanded="false"
+      >
+        <i class="fa-solid fa-share-nodes"></i>
+      </button>
+
+      <div
+        id="${menuId}"
+        class="idea-share-menu"
+        onclick="event.stopPropagation()"
+style="display:none; position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%); z-index:30; flex-direction:column; gap:6px; min-width:152px; padding:8px; border:1px solid #e5e7eb; border-radius:12px; background:#ffffff; box-shadow:0 10px 30px rgba(0,0,0,0.12);"
+      >
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ copyIdeaLink('${debateId}', '${encodedArgument}'); })"
+          title="Copier le lien de l'idée"
+          aria-label="Copier le lien de l'idée"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-solid fa-link"></i>
+          <span>Copier</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnWhatsApp('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur WhatsApp"
+          aria-label="Partager l'idée sur WhatsApp"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-whatsapp"></i>
+          <span>WhatsApp</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnX('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur X"
+          aria-label="Partager l'idée sur X"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-x-twitter"></i>
+          <span>X</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaByEmail('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée par email"
+          aria-label="Partager l'idée par email"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-solid fa-envelope"></i>
+          <span>Email</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
 async function copyDebateLink() {
   const { url } = getGlobalShareData();
   try {
@@ -3706,6 +3912,8 @@ onclick="vote('${debateId}','${a.id}', true, this)"
     </button>
   </div>
 
+  ${renderIdeaShareButtons(debateId, a)}
+
   <button
     class="report-button"
     type="button"
@@ -5965,3 +6173,6 @@ function trackVisit() {
 }
 
 trackVisit();
+window.toggleIdeaShareMenu = toggleIdeaShareMenu;
+window.handleIdeaShareAction = handleIdeaShareAction;
+window.closeIdeaShareMenus = closeIdeaShareMenus;
