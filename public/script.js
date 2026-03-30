@@ -3704,19 +3704,16 @@ ${
         <div class="reply-preview-text">
           <span class="reply-preview-label">Vous répondez à :</span>
 
-     <span class="reply-preview-content">${escapeHtml(
+<span class="reply-preview-content">${escapeHtml(
   (() => {
     const replyData = replyToCommentByArgument[a.id] || {};
-    const previewText =
+    return (
       replyData.improvementTitle && replyData.improvementBody
         ? `${replyData.improvementTitle} — ${replyData.improvementBody}`
         : replyData.improvementTitle
           ? replyData.improvementTitle
-          : replyData.commentContent || replyData.improvementBody || "";
-
-    return previewText.length > 140
-      ? previewText.slice(0, 140) + "…"
-      : previewText;
+          : replyData.commentContent || replyData.improvementBody || ""
+    );
   })()
 )}</span>
         </div>
