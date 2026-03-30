@@ -3079,8 +3079,20 @@ function showDebateSourceFallback(sourceUrl) {
 
   if (!sourceFallback || !sourceFallbackLink) return;
 
+  const normalizedSourceUrl = normalizeUrl(sourceUrl);
+
+  if (!normalizedSourceUrl) {
+    sourceFallback.style.display = "none";
+    sourceFallbackLink.href = "#";
+
+    if (sourceDomain) {
+      sourceDomain.textContent = "";
+    }
+    return;
+  }
+
   try {
-    const domain = new URL(sourceUrl).hostname.replace("www.", "");
+    const domain = new URL(normalizedSourceUrl).hostname.replace("www.", "");
     if (sourceDomain) {
       sourceDomain.textContent = "🔗 " + domain;
     }
@@ -3090,23 +3102,11 @@ function showDebateSourceFallback(sourceUrl) {
     }
   }
 
-  sourceFallbackLink.href = sourceUrl;
+  sourceFallbackLink.href = normalizedSourceUrl;
+  sourceFallbackLink.target = "_blank";
+  sourceFallbackLink.rel = "noopener noreferrer";
   sourceFallback.style.display = "block";
 }
-
-function bindDebateSourcePreviewHandlers() {
-  if (debateSourcePreviewState.handlersBound) return;
-
-  const sourcePreview = document.getElementById("debate-source-preview");
-  const sourcePoster = document.getElementById("debate-source-preview-poster");
-  const sourceLoading = document.getElementById("debate-source-preview-loading");
-
-  if (!sourcePreview) return;
-
-  sourcePreview.addEventListener("load", () => {
-    sourcePreview.dataset.loaded = "1";
-    sourcePreview.style.visibility = "visible";
-    sourcePreview.style.display = "block";
 
     if (sourcePoster) {
       sourcePoster.style.display = "none";
@@ -3226,8 +3226,9 @@ saveVisitedDebate(id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
 
-const sourceUrl = String(data.debate.source_url || "").trim();
+const sourceUrl = normalizeUrl(String(data.debate.source_url || "").trim());
 renderDebateSourcePreview(sourceUrl);
+
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
