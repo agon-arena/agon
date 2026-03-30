@@ -3495,13 +3495,21 @@ else if (pendingArgumentScrollId) {
   setTimeout(() => {
     const element = getVisibleArgumentElement(targetId);
 
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
 
-      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+if (element) {
+  const stickyHeader = document.querySelector(".debate-hero-top");
+  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+
+  if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+
+
+
         element.classList.add("flash-green");
 
         setTimeout(() => {
@@ -3629,9 +3637,13 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
     }
 
 if (element) {
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "center"
+  const stickyHeader = document.querySelector(".debate-hero-top");
+  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
   });
 
   const isGreenTarget =
