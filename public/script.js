@@ -6461,13 +6461,43 @@ function initDebateTopbarAutoHide() {
   updateTopbar();
 }
 
-function loadMoreArguments() {
-  argumentsVisible += 6;
-
+function rerenderCurrentDebateArguments() {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  loadDebate(debateId);
+  if (!Array.isArray(currentAllArguments) || !currentAllArguments.length) {
+    loadDebate(debateId);
+    return;
+  }
+
+  renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+
+  const isOpenMode = isOpenDebate(currentDebateCache);
+
+  if (isOpenMode || currentDebateViewMode === "list") {
+    const argsA = document.getElementById("arguments-a");
+    const argsB = document.getElementById("arguments-b");
+    if (argsA) argsA.innerHTML = "";
+    if (argsB) argsB.innerHTML = "";
+
+    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, currentCommentsByArgument || {});
+    return;
+  }
+
+  const unified = document.getElementById("arguments-unified");
+  if (unified) unified.innerHTML = "";
+
+  const optionAArgs = currentAllArguments.filter((argument) => argument.side === "A");
+  const optionBArgs = currentAllArguments.filter((argument) => argument.side === "B");
+
+  renderArgs("arguments-a", optionAArgs, debateId, currentCommentsByArgument || {});
+  renderArgs("arguments-b", optionBArgs, debateId, currentCommentsByArgument || {});
+}
+
+function loadMoreArguments() {
+  argumentsVisible += 6;
+  rerenderCurrentDebateArguments();
 }
 async function editDebate() {
   const debateId = getDebateId();
