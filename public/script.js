@@ -204,6 +204,7 @@ if (isOpenMode) {
   setDisplay(sideFocusRight, "none");
 }
 }
+
 function setDebateViewMode(mode) {
   const normalizedMode = mode === "list" ? "list" : "columns";
   const previousMode = getDebateViewMode();
@@ -220,27 +221,17 @@ function setDebateViewMode(mode) {
     }
   }
 
-  if (normalizedMode === previousMode) {
-    updateDebateViewModeUI();
-    return;
-  }
-
-  if (Array.isArray(currentAllArguments)) {
-    requestAnimationFrame(() => {
-      rerenderCurrentDebateArguments();
-      updateDebateViewModeUI();
-    });
-    return;
-  }
-
   updateDebateViewModeUI();
+
+  if (normalizedMode === previousMode) {
+    return;
+  }
 
   const debateId = getDebateId();
   if (debateId) {
     loadDebate(debateId);
   }
 }
-
 function isCurrentOpenDebateMode() {
   const titleB = document.getElementById("title-b");
   return !titleB || !titleB.textContent.trim();
