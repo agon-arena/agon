@@ -650,7 +650,7 @@ function sortArgumentsByScore(args) {
   return movePinnedArgumentToFourthPosition(ordered);
 }
 function sortArgumentsByProgress(args) {
-  const ordered = [...(args || [])].sort((a, b) => {
+  return [...(args || [])].sort((a, b) => {
     const lastVoteA = getLastVotedAtTimestamp(a);
     const lastVoteB = getLastVotedAtTimestamp(b);
 
@@ -667,8 +667,6 @@ function sortArgumentsByProgress(args) {
 
     return Number(b.id || 0) - Number(a.id || 0);
   });
-
-  return movePinnedArgumentToFourthPosition(ordered);
 }
 
 function getSupportRankMap(args) {
