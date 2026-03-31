@@ -1208,7 +1208,7 @@ function ensureNotificationTransitionOverlayStyles() {
       align-items: center;
       justify-content: center;
       padding: 20px;
-      background: rgba(255, 255, 255, 0.72);
+      background: rgba(255, 255, 255, 0.97);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       opacity: 0;
@@ -1373,11 +1373,9 @@ function finalizeNotificationTransitionAtScrollStart() {
   const state = getNotificationTransitionState();
   if (!state?.active) return;
 
-  setTimeout(() => {
-    requestAnimationFrame(() => {
-      hideNotificationTransitionOverlay();
-    });
-  }, 250);
+  requestAnimationFrame(() => {
+    hideNotificationTransitionOverlay();
+  });
 }
 
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
@@ -3842,27 +3840,23 @@ if (pendingTopCommentScroll) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-  window.scrollTo({
-  top: Math.max(0, y),
-  behavior: "auto"
-});
-finalizeNotificationTransitionAfterFocus();
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "auto"
+      });
 
-waitForNotificationTargetScrollToFinish(() => {
-  finalizeNotificationTransitionAfterFocus();
-});
-
-pendingTopCommentScroll = null;
-  
-  },
+      pendingTopCommentScroll = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
+    },
     () => {
-    scrollToTopVisibleComment();
+      scrollToTopVisibleComment();
 
-waitForNotificationTargetScrollToFinish(() => {
-  finalizeNotificationTransitionAfterFocus();
-});
-
-pendingTopCommentScroll = null;
+      pendingTopCommentScroll = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
     }
   );
 }
@@ -3876,15 +3870,10 @@ else if (pendingCommentScrollId) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 140;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
- window.scrollTo({
-  top: Math.max(0, y),
-  behavior: "auto"
-});
-finalizeNotificationTransitionAfterFocus();
-
-waitForNotificationTargetScrollToFinish(() => {
-  finalizeNotificationTransitionAfterFocus();
-});
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "auto"
+      });
 
       applyVoiceHighlight(element);
 
@@ -3893,10 +3882,15 @@ waitForNotificationTargetScrollToFinish(() => {
       }, 2000);
 
       pendingCommentScrollId = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
     },
     () => {
-   pendingCommentScrollId = null;
-finalizeNotificationTransitionAfterFocus();
+      pendingCommentScrollId = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
     }
   );
 }
@@ -3910,15 +3904,10 @@ else if (pendingArgumentScrollId) {
       const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
- window.scrollTo({
-  top: Math.max(0, y),
-  behavior: "auto"
-});
-finalizeNotificationTransitionAfterFocus();
-
-waitForNotificationTargetScrollToFinish(() => {
-  finalizeNotificationTransitionAfterFocus();
-});
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "auto"
+      });
 
       if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
@@ -3936,11 +3925,16 @@ waitForNotificationTargetScrollToFinish(() => {
 
       pendingArgumentScrollId = null;
       pinnedNewArgumentId = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
     },
     () => {
-   pendingArgumentScrollId = null;
-pinnedNewArgumentId = null;
-finalizeNotificationTransitionAfterFocus();
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+      requestAnimationFrame(() => {
+        finalizeNotificationTransitionAfterFocus();
+      });
     }
   );
 }
@@ -5811,35 +5805,25 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       await loadDebate(debateId);
     }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
 
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+    }
 
-if (optimisticApplied) {
-  setState(debateId, previousState);
-
-  try {
-    refreshVoteUiAfterLocalChange(
-      debateId,
-      argId,
-      previousVotes,
-      previousMyVotesOnArgument,
-      previousLastVotedAt
-    );
-  } catch (rollbackUiError) {
-    console.error(rollbackUiError);
-    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
-  }
-}
-
-if (error.message === "no_vote") {
-  pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-  await loadDebate(debateId);
-  return;
-}
-
-showVoteWarning("Erreur", error.message);
-
-
+    alert(error.message);
   } finally {
     clearButtonLoading(button);
     setVoiceRequestPending(debateId, argId, false);
