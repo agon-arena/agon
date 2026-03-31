@@ -830,8 +830,10 @@ if (myArgumentsRow) {
         <div class="my-arguments-list">
           ${votedArgumentsA.map((item) => `
 
-          <div class="my-argument-chip">
+        <div class="my-argument-chip">
   <div class="my-argument-chip-text">
+    <span class="my-argument-chip-rank">#${item.rank}</span>
+
     <button
       type="button"
       class="my-argument-chip-title-button"
