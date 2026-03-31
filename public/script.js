@@ -5038,8 +5038,42 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
+function rerenderArgumentsFromLocalState(debateId) {
+  const commentsByArgument = currentCommentsByArgument || {};
+  const debate = {
+    type: isCurrentOpenDebateMode() ? "open" : "debate"
+  };
+
+  if (isOpenDebate(debate) || currentDebateViewMode === "list") {
+    const argsA = document.getElementById("arguments-a");
+    const argsB = document.getElementById("arguments-b");
+    const unified = document.getElementById("arguments-unified");
+
+    if (argsA) argsA.innerHTML = "";
+    if (argsB) argsB.innerHTML = "";
+    if (unified) {
+      renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+    }
+
+    return;
+  }
+
+  const optionA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
+  const optionB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
+  const unified = document.getElementById("arguments-unified");
+
+  if (unified) unified.innerHTML = "";
+  renderArgs("arguments-a", optionA, debateId, commentsByArgument);
+  renderArgs("arguments-b", optionB, debateId, commentsByArgument);
+
+  if (currentDebateViewMode === "columns") {
+    applyDebateColumnFocusUI();
+  }
+}
+
 function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
+  rerenderArgumentsFromLocalState(debateId);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
