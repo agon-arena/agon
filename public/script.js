@@ -2181,6 +2181,27 @@ async function markOneNotificationAsRead(notificationId) {
     })
   });
 }
+function markOneNotificationAsReadNonBlocking(notificationId) {
+  try {
+    const payload = JSON.stringify({
+      userKey: getKey(),
+      notificationId
+    });
+
+    fetch(API + "/notifications/read-one", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: payload,
+      keepalive: true
+    }).catch((error) => {
+      console.error(error);
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   setActionLoading(element);
@@ -2190,23 +2211,41 @@ async function handleNotificationClick(event, notificationId, link, element = nu
     decrementStoredUnreadNotificationCount(1);
   }
 
-  try {
-    await markOneNotificationAsRead(notificationId);
-  } catch (error) {
-    if (wasUnread) {
-      setStoredUnreadNotificationCount(getStoredUnreadNotificationCount() + 1);
-      if (element) {
-        element.classList.add("notification-item-unread");
-      }
-    }
-    console.error(error);
-  }
-
+  markOneNotificationAsReadNonBlocking(notificationId);
   window.location.href = link;
 }
 
 function toggleNotificationsPanel() {
   window.location.href = "/notifications";
+}
+function runAfterNextPaint(callback) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      callback();
+    });
+  });
+}
+
+function waitForRenderedElement(getElement, onReady, onFallback = null, attemptsLeft = 8) {
+  runAfterNextPaint(() => {
+    const element = getElement();
+
+    if (element) {
+      onReady(element);
+      return;
+    }
+
+    if (attemptsLeft <= 1) {
+      if (typeof onFallback === "function") {
+        onFallback();
+      }
+      return;
+    }
+
+    setTimeout(() => {
+      waitForRenderedElement(getElement, onReady, onFallback, attemptsLeft - 1);
+    }, 60);
+  });
 }
 /* =========================
    Admin reports
@@ -3534,10 +3573,9 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
 if (pendingTopCommentScroll) {
   const targetId = pendingTopCommentScroll;
 
-  setTimeout(() => {
-    const element = document.getElementById(targetId);
-
-    if (element) {
+  waitForRenderedElement(
+    () => document.getElementById(targetId),
+    (element) => {
       const topbar = document.querySelector(".topbar");
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
@@ -3546,61 +3584,59 @@ if (pendingTopCommentScroll) {
         top: Math.max(0, y),
         behavior: "smooth"
       });
-    } else {
-      scrollToTopVisibleComment();
-    }
 
-    pendingTopCommentScroll = null;
-  }, 250);
+      pendingTopCommentScroll = null;
+    },
+    () => {
+      scrollToTopVisibleComment();
+      pendingTopCommentScroll = null;
+    }
+  );
 }
 else if (pendingCommentScrollId) {
   const targetId = pendingCommentScrollId;
 
-  setTimeout(() => {
-    const element = getVisibleCommentElement(targetId);
+  waitForRenderedElement(
+    () => getVisibleCommentElement(targetId),
+    (element) => {
+      const topbar = document.querySelector(".topbar");
+      const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-if (element) {
-  const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
 
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
-
-  applyVoiceHighlight(element);
-
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
         removeVoiceHighlight(element);
       }, 2000);
-    }
 
-    pendingCommentScrollId = null;
-  }, 250);
+      pendingCommentScrollId = null;
+    },
+    () => {
+      pendingCommentScrollId = null;
+    }
+  );
 }
 else if (pendingArgumentScrollId) {
   const targetId = pendingArgumentScrollId;
 
-  setTimeout(() => {
-    const element = getVisibleArgumentElement(targetId);
+  waitForRenderedElement(
+    () => getVisibleArgumentElement(targetId),
+    (element) => {
+      const stickyHeader = document.querySelector(".debate-hero-top");
+      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
 
-if (element) {
-  const stickyHeader = document.querySelector(".debate-hero-top");
-  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
-
-  if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
-
-
-
+      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
 
         setTimeout(() => {
@@ -3613,11 +3649,15 @@ if (element) {
           element.classList.remove("admin-highlight");
         }, 2000);
       }
-    }
 
-    pendingArgumentScrollId = null;
-    pinnedNewArgumentId = null;
-  }, 250);
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+    },
+    () => {
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+    }
+  );
 }
 
   const isOpen = isOpenDebate(data.debate);
