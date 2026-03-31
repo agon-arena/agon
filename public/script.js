@@ -205,6 +205,7 @@ if (isOpenMode) {
 
 function setDebateViewMode(mode) {
   const normalizedMode = mode === "list" ? "list" : "columns";
+  const previousMode = getDebateViewMode();
 
   localStorage.setItem("debate_view_mode", normalizedMode);
   currentDebateViewMode = normalizedMode;
@@ -219,6 +220,10 @@ function setDebateViewMode(mode) {
   }
 
   updateDebateViewModeUI();
+
+  if (normalizedMode === previousMode) {
+    return;
+  }
 
   const debateId = getDebateId();
   if (debateId) {
@@ -535,6 +540,7 @@ function changeArgumentsSort(mode) {
   const normalizedMode = ["score", "progress", "comments", "recent", "old"].includes(mode)
     ? mode
     : "score";
+  const previousMode = getArgumentsSortMode();
 
   currentArgumentsSortMode = normalizedMode;
 
@@ -544,6 +550,10 @@ function changeArgumentsSort(mode) {
   }
 
   updateSortButtonLabel();
+
+  if (normalizedMode === previousMode) {
+    return;
+  }
 
   const debateId = getDebateId();
   if (debateId) {
@@ -1523,11 +1533,11 @@ function toggleIdeaShareMenu(event, argumentId) {
   const menu = document.getElementById(menuId);
   if (!menu) return;
 
-  const isAlreadyOpen = openedIdeaShareMenuId === menuId && menu.style.display === 'flex';
+  const isSameMenuOpen = openedIdeaShareMenuId === menuId && menu.style.display === 'flex';
 
   closeIdeaShareMenus();
 
-  if (!isAlreadyOpen) {
+  if (!isSameMenuOpen) {
     menu.style.display = 'flex';
     openedIdeaShareMenuId = menuId;
   }
@@ -2031,7 +2041,7 @@ async function loadNotifications() {
   notificationsLoadInFlight = (async () => {
     try {
       const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
-const previousCount = getStoredUnreadNotificationCount();
+const previousCount = Number(localStorage.getItem("notif_count") || 0);
 const unreadCount = notifications.filter((n) => Number(n.is_read) === 0).length;
 
 if (unreadCount > previousCount) {
@@ -6195,7 +6205,7 @@ async function loadNotificationsPage() {
       );
 const unread = notifications.filter(n => !n.is_read).length;
 
-const previous = Number(localStorage.getItem("lastNotifCount") || 0);
+const previous = getStoredUnreadNotificationCount();
 
 if (unread > previous) {
   const bell = document.querySelector(".notifications-button");
@@ -6205,7 +6215,7 @@ if (unread > previous) {
   }
 }
 
-localStorage.setItem("lastNotifCount", unread);
+setStoredUnreadNotificationCount(unread);
 
     if (!notifications.length) {
       list.innerHTML = `<div class="empty-state">Aucune notification.</div>`;
