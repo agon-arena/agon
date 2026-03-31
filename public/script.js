@@ -564,11 +564,11 @@ function updateSortButtonLabel() {
   const mode = getArgumentsSortMode();
 
   const labels = {
-    score: "Plus soutenues",
+    score: "Plus soutenus",
     progress: "Idées en progression",
-    comments: "Commentées",
-    recent: "Récentes",
-    old: "Anciennes"
+    comments: "Commentés",
+    recent: "Récents",
+    old: "Anciens"
   };
 
   button.textContent = `${labels[mode] || "Trier"} ▾`;
@@ -650,7 +650,7 @@ function sortArgumentsByScore(args) {
   return movePinnedArgumentToFourthPosition(ordered);
 }
 function sortArgumentsByProgress(args) {
-  return [...(args || [])].sort((a, b) => {
+  const ordered = [...(args || [])].sort((a, b) => {
     const lastVoteA = getLastVotedAtTimestamp(a);
     const lastVoteB = getLastVotedAtTimestamp(b);
 
@@ -667,6 +667,8 @@ function sortArgumentsByProgress(args) {
 
     return Number(b.id || 0) - Number(a.id || 0);
   });
+
+  return movePinnedArgumentToFourthPosition(ordered);
 }
 
 function getSupportRankMap(args) {
@@ -1501,9 +1503,13 @@ function shareIdeaByEmail(debateId, encodedArgumentJson) {
 let openedIdeaShareMenuId = null;
 
 function closeIdeaShareMenus() {
-  document.querySelectorAll('.idea-share-menu').forEach((menu) => {
-    menu.style.display = 'none';
-  });
+  if (!openedIdeaShareMenuId) return;
+
+  const openedMenu = document.getElementById(openedIdeaShareMenuId);
+  if (openedMenu) {
+    openedMenu.style.display = 'none';
+  }
+
   openedIdeaShareMenuId = null;
 }
 
@@ -1517,11 +1523,11 @@ function toggleIdeaShareMenu(event, argumentId) {
   const menu = document.getElementById(menuId);
   if (!menu) return;
 
-  const shouldOpen = openedIdeaShareMenuId !== menuId || menu.style.display === 'none' || !menu.style.display;
+  const isAlreadyOpen = openedIdeaShareMenuId === menuId && menu.style.display === 'flex';
 
   closeIdeaShareMenus();
 
-  if (shouldOpen) {
+  if (!isAlreadyOpen) {
     menu.style.display = 'flex';
     openedIdeaShareMenuId = menuId;
   }
@@ -2025,7 +2031,7 @@ async function loadNotifications() {
   notificationsLoadInFlight = (async () => {
     try {
       const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
-const previousCount = Number(localStorage.getItem("notif_count") || 0);
+const previousCount = getStoredUnreadNotificationCount();
 const unreadCount = notifications.filter((n) => Number(n.is_read) === 0).length;
 
 if (unreadCount > previousCount) {
@@ -2040,10 +2046,7 @@ if (unreadCount > previousCount) {
   }
 }
 
-localStorage.setItem("notif_count", unreadCount);
-
-updateNotificationBadgeElement(badge, unreadCount);
-updateNotificationBadgeElement(compactBadge, unreadCount);
+setStoredUnreadNotificationCount(unreadCount);
 
    if (!notifications.length) {
   if (list) {
