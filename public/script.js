@@ -5504,10 +5504,43 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
+  const targetBefore = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  const previousState = { ...state };
+  const previousMyVotesOnArgument = Number(state[argIdString] || 0);
+  const previousVotes = Number(targetBefore?.votes || 0);
+  const previousLastVotedAt = targetBefore?.last_voted_at || null;
+  const optimisticMyVotesOnArgument = Math.max(0, previousMyVotesOnArgument - 1);
+  const optimisticVotes = Math.max(0, previousVotes - 1);
+  let optimisticApplied = false;
+
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
 
   try {
+    if (optimisticMyVotesOnArgument > 0) {
+      state[argIdString] = optimisticMyVotesOnArgument;
+    } else {
+      delete state[argIdString];
+    }
+
+    setState(debateId, state);
+
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotesOnArgument,
+      previousLastVotedAt
+    );
+    optimisticApplied = true;
+
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
+
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
@@ -5516,7 +5549,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       body: JSON.stringify({ voterKey })
     });
 
-    const myVotesOnArgument = Number(response?.myVotesOnArgument || 0);
+    const myVotesOnArgument = Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument);
 
     if (myVotesOnArgument > 0) {
       state[argIdString] = myVotesOnArgument;
@@ -5530,20 +5563,34 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
+        Number(response?.votes || optimisticVotes),
         myVotesOnArgument,
-        response?.lastVotedAt || null
+        response?.lastVotedAt || previousLastVotedAt
       );
     } catch (uiError) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
-    }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
+
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+    }
+
     alert(error.message);
   } finally {
     clearButtonLoading(button);
