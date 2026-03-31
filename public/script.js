@@ -5119,6 +5119,12 @@ async function submitListArgument(debateId) {
         body,
         author_key: getKey()
       });
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToTopOfArgumentCardAndFlash(String(r.id));
+        });
+      });
     } catch (localRenderError) {
       console.error(localRenderError);
       await loadDebate(debateId);
