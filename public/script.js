@@ -564,7 +564,7 @@ function updateSortButtonLabel() {
   const mode = getArgumentsSortMode();
 
   const labels = {
-    score: "Plus soutenus",
+    score: "Plus soutenues",
     progress: "Idées en progression",
     comments: "Commentés",
     recent: "Récents",
