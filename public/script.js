@@ -1293,7 +1293,7 @@ function clearNotificationTransitionState() {
   }
 }
 
-function showNotificationTransitionOverlay(message = "Ouverture du message…") {
+function showNotificationTransitionOverlay {
   ensureNotificationTransitionOverlayStyles();
 
   let overlay = document.getElementById("notification-transition-overlay");
