@@ -1352,6 +1352,15 @@ function finalizeNotificationTransitionAfterFocus() {
   });
 }
 
+function finalizeNotificationTransitionAtScrollStart() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  requestAnimationFrame(() => {
+    hideNotificationTransitionOverlay();
+  });
+}
+
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
   const callback = typeof onDone === "function" ? onDone : () => {};
   const maxWaitMs = Number(options.maxWaitMs || 1400);
@@ -3780,12 +3789,13 @@ if (pendingTopCommentScroll) {
         top: Math.max(0, y),
         behavior: "smooth"
       });
+      finalizeNotificationTransitionAtScrollStart();
     } else {
       scrollToTopVisibleComment();
+      finalizeNotificationTransitionAtScrollStart();
     }
 
     pendingTopCommentScroll = null;
-    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
   }, 250);
 }
 else if (pendingCommentScrollId) {
@@ -3803,6 +3813,7 @@ if (element) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+  finalizeNotificationTransitionAtScrollStart();
 
   applyVoiceHighlight(element);
 
@@ -3813,7 +3824,7 @@ if (element) {
     }
 
     pendingCommentScrollId = null;
-    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
+    finalizeNotificationTransitionAtScrollStart();
   }, 250);
 }
 else if (pendingArgumentScrollId) {
@@ -3832,6 +3843,7 @@ if (element) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+  finalizeNotificationTransitionAtScrollStart();
 
   if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
 
@@ -3853,7 +3865,7 @@ if (element) {
 
     pendingArgumentScrollId = null;
     pinnedNewArgumentId = null;
-    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
+    finalizeNotificationTransitionAtScrollStart();
   }, 250);
 }
 else {
