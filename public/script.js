@@ -228,9 +228,16 @@ function setDebateViewMode(mode) {
   }
 
   const debateId = getDebateId();
-  if (debateId) {
-    loadDebate(debateId);
+  if (!debateId) {
+    return;
   }
+
+  if (currentDebateCache && Array.isArray(currentAllArguments)) {
+    rerenderCurrentDebateArguments();
+    return;
+  }
+
+  loadDebate(debateId);
 }
 function isCurrentOpenDebateMode() {
   const titleB = document.getElementById("title-b");
