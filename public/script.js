@@ -5832,6 +5832,48 @@ function replyToComment(argumentId, commentId, button = null) {
 
   setActionLoading(button);
 
+  const focusReplyUi = () => {
+    const replyLabel = document.querySelector(
+      `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
+    );
+
+    const input = document.getElementById(`comment-input-${argumentId}`);
+    const target = replyLabel || input;
+
+    if (target) {
+      const topbar = document.querySelector(".topbar");
+      const offset = topbar ? topbar.offsetHeight + 230 : 330;
+      const y = target.getBoundingClientRect().top + window.scrollY - offset;
+
+      window.scrollTo({
+        top: y,
+        behavior: "smooth"
+      });
+    }
+
+    if (input) {
+      setTimeout(() => {
+        input.focus();
+      }, 250);
+    }
+  };
+
+  const rerenderReplyUi = () => {
+    try {
+      rerenderCurrentDebateArguments(debateId);
+      clearActionLoading(button);
+      focusReplyUi();
+    } catch (uiError) {
+      console.error(uiError);
+      return loadDebate(debateId).then(() => {
+        clearActionLoading(button);
+        focusReplyUi();
+      });
+    }
+
+    return Promise.resolve();
+  };
+
   const applyReplyTarget = (targetComment) => {
     replyToCommentByArgument[argumentId] = {
       commentId: String(commentId),
@@ -5844,7 +5886,7 @@ function replyToComment(argumentId, commentId, button = null) {
     visibleCommentsByArgument[argumentId] =
       Math.max(visibleCommentsByArgument[argumentId] || 5, 9999);
 
-    return loadDebate(debateId);
+    return rerenderReplyUi();
   };
 
   const localTargetComment = getLocalCommentById(commentId, argumentId);
@@ -5860,36 +5902,10 @@ function replyToComment(argumentId, commentId, button = null) {
           return applyReplyTarget(targetComment);
         });
 
-  loadReplyForm
-    .then(() => {
-      const replyLabel = document.querySelector(
-        `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
-      );
-
-      const input = document.getElementById(`comment-input-${argumentId}`);
-      const target = replyLabel || input;
-
-      if (target) {
-        const topbar = document.querySelector(".topbar");
-const offset = topbar ? topbar.offsetHeight + 230 : 330;        const y = target.getBoundingClientRect().top + window.scrollY - offset;
-
-        window.scrollTo({
-          top: y,
-          behavior: "smooth"
-        });
-
-      }
-
-      if (input) {
-        setTimeout(() => {
-          input.focus();
-        }, 250);
-      }
-    })
-    .catch((error) => {
-      clearActionLoading(button);
-      alert(error.message);
-    });
+  loadReplyForm.catch((error) => {
+    clearActionLoading(button);
+    alert(error.message);
+  });
 }
 
 function cancelReply(argumentId) {
@@ -5898,7 +5914,14 @@ function cancelReply(argumentId) {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  loadDebate(debateId);
+  try {
+    rerenderCurrentDebateArguments(debateId);
+  } catch (uiError) {
+    console.error(uiError);
+    loadDebate(debateId).catch((error) => {
+      alert(error.message);
+    });
+  }
 }
 function scrollToArgumentFromSummary(argId) {
   const element = getVisibleArgumentElement(argId);
