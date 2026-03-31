@@ -1298,9 +1298,7 @@ function showNotificationTransitionOverlay(message = "Ouverture du message…") 
     textEl.textContent = message;
   }
 
-  requestAnimationFrame(() => {
-    overlay.classList.add("notification-transition-overlay-visible");
-  });
+  overlay.classList.add("notification-transition-overlay-visible");
 }
 
 function hideNotificationTransitionOverlay() {
@@ -1352,6 +1350,43 @@ function finalizeNotificationTransitionAfterFocus() {
       hideNotificationTransitionOverlay();
     });
   });
+}
+
+function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
+  const callback = typeof onDone === "function" ? onDone : () => {};
+  const maxWaitMs = Number(options.maxWaitMs || 1400);
+  const stableFramesNeeded = Number(options.stableFramesNeeded || 5);
+  const tolerance = Number(options.tolerance || 2);
+  const startedAt = performance.now();
+  let stableFrames = 0;
+  let previousY = window.scrollY;
+
+  const finish = () => {
+    callback();
+  };
+
+  const step = () => {
+    const currentY = window.scrollY;
+    const delta = Math.abs(currentY - previousY);
+
+    if (delta <= tolerance) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+    }
+
+    previousY = currentY;
+
+    const elapsed = performance.now() - startedAt;
+    if (stableFrames >= stableFramesNeeded || elapsed >= maxWaitMs) {
+      finish();
+      return;
+    }
+
+    requestAnimationFrame(step);
+  };
+
+  requestAnimationFrame(step);
 }
 
 function fireAndForgetMarkOneNotificationAsRead(notificationId) {
@@ -2391,8 +2426,8 @@ async function markOneNotificationAsRead(notificationId) {
 }
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
-  setActionLoading(element);
   beginNotificationTransition(link);
+  setActionLoading(element);
 
   const wasUnread = markNotificationElementAsReadLocally(element);
   if (wasUnread) {
@@ -3750,7 +3785,7 @@ if (pendingTopCommentScroll) {
     }
 
     pendingTopCommentScroll = null;
-    finalizeNotificationTransitionAfterFocus();
+    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
   }, 250);
 }
 else if (pendingCommentScrollId) {
@@ -3778,7 +3813,7 @@ if (element) {
     }
 
     pendingCommentScrollId = null;
-    finalizeNotificationTransitionAfterFocus();
+    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
   }, 250);
 }
 else if (pendingArgumentScrollId) {
@@ -3818,7 +3853,7 @@ if (element) {
 
     pendingArgumentScrollId = null;
     pinnedNewArgumentId = null;
-    finalizeNotificationTransitionAfterFocus();
+    waitForNotificationTargetScrollToFinish(finalizeNotificationTransitionAfterFocus);
   }, 250);
 }
 else {
