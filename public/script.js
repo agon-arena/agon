@@ -5033,80 +5033,91 @@ async function submitListArgument(debateId) {
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
- 
- if (body.length > 600) {
-  alert("Maximum 600 caractères pour le texte de l'idée.");
-  return;
-}
 
-const titleB = document.getElementById("title-b");
-const isOpenMode = !titleB || !titleB.textContent.trim();
-const side = isOpenMode ? "A" : sideField.value;
-
-if (!title) {
-  showReplacementSuccessMessage(
-    "Idée manquante",
-    "Tu dois écrire un titre à cette idée avant de la publier.",
-    null,
-    "⚠️"
-  );
-  return;
-}
-
-if (!isOpenMode && side !== "A" && side !== "B") {
-  showReplacementSuccessMessage(
-    "Position manquante",
-    "Tu dois choisir une position avant de publier cette idée.",
-    null,
-    "⚠️"
-  );
-  return;
-}
-
-setButtonLoading(submitButton);
-
-
-try {
-  const r = await fetchJSON(API + "/arguments", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      debate_id: debateId,
-      side,
-      title,
-      body,
-      authorKey: getKey()
-    })
-  });
-
-  titleField.value = "";
-  bodyField.value = "";
-
-  if (warning) {
-    warning.style.display = "none";
+  if (body.length > 600) {
+    alert("Maximum 600 caractères pour le texte de l'idée.");
+    return;
   }
 
-  if (form) {
-    form.style.display = "none";
+  const titleB = document.getElementById("title-b");
+  const isOpenMode = !titleB || !titleB.textContent.trim();
+  const side = isOpenMode ? "A" : sideField.value;
+
+  if (!title) {
+    showReplacementSuccessMessage(
+      "Idée manquante",
+      "Tu dois écrire un titre à cette idée avant de la publier.",
+      null,
+      "⚠️"
+    );
+    return;
   }
 
-  openedArgumentForm = null;
-  document.body.classList.remove("argument-form-open");
-
-  if (typeof updateCounter === "function") {
-    updateCounter("list-title", "count-title-list", 100);
-    updateCounter("list-body", "count-body-list", 600);
+  if (!isOpenMode && side !== "A" && side !== "B") {
+    showReplacementSuccessMessage(
+      "Position manquante",
+      "Tu dois choisir une position avant de publier cette idée.",
+      null,
+      "⚠️"
+    );
+    return;
   }
 
-  pendingArgumentScrollId = String(r.id);
-  pinnedNewArgumentId = String(r.id);
-  await loadDebate(debateId);
+  setButtonLoading(submitButton);
 
-} catch (error) {
-  alert(error.message);
-} finally {
-  clearButtonLoading(submitButton);
-}
+  try {
+    const r = await fetchJSON(API + "/arguments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        debate_id: debateId,
+        side,
+        title,
+        body,
+        authorKey: getKey()
+      })
+    });
+
+    titleField.value = "";
+    bodyField.value = "";
+
+    if (warning) {
+      warning.style.display = "none";
+    }
+
+    if (form) {
+      form.style.display = "none";
+    }
+
+    openedArgumentForm = null;
+    document.body.classList.remove("argument-form-open");
+
+    if (typeof updateCounter === "function") {
+      updateCounter("list-title", "count-title-list", 100);
+      updateCounter("list-body", "count-body-list", 600);
+    }
+
+    pendingArgumentScrollId = String(r.id);
+    pinnedNewArgumentId = String(r.id);
+
+    try {
+      insertLocalArgumentAfterPublish(debateId, {
+        id: r.id,
+        debate_id: debateId,
+        side,
+        title,
+        body,
+        author_key: getKey()
+      });
+    } catch (localRenderError) {
+      console.error(localRenderError);
+      await loadDebate(debateId);
+    }
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    clearButtonLoading(submitButton);
+  }
 }
 
 async function submitComment(event, debateId, argumentId) {
@@ -5142,11 +5153,23 @@ if (stance === "amelioration") {
     alert("Tu dois proposer un texte d'amélioration.");
     return;
   }
-} else if (!content) {
-  alert("Tu dois écrire un commentaire.");
-  return;
+} else {
+  if (!content) {
+    alert("Tu dois écrire un commentaire.");
+    return;
+  }
 }
+if (stance === "amelioration") {
+  if (!improvement_title) {
+    alert("Tu dois proposer un titre d'amélioration.");
+    return;
+  }
 
+  if (!improvement_body) {
+    alert("Tu dois proposer un texte d'amélioration.");
+    return;
+  }
+}
 const submitButton = event?.currentTarget?.querySelector('button[type="submit"]')
   || event?.currentTarget?.querySelector(".comment-submit-btn")
   || null;
@@ -5168,89 +5191,46 @@ try {
     })
   });
 
-  openCommentsByArgument[argumentId] = true;
-  visibleCommentsByArgument[argumentId] = Math.max(visibleCommentsByArgument[argumentId] || 5, 5);
-  delete replyToCommentByArgument[argumentId];
-
-  if (input) {
+    openCommentsByArgument[argumentId] = true;
+visibleCommentsByArgument[argumentId] = 5;
+    delete replyToCommentByArgument[argumentId];
     input.value = "";
-  }
-
-  if (improvementTitleInput) {
-    improvementTitleInput.value = "";
-  }
-
-  if (improvementBodyInput) {
-    improvementBodyInput.value = "";
-  }
-
-  document
-    .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
-    .forEach((input) => {
-      input.checked = false;
-      input.dataset.waschecked = "false";
-    });
-
-  const commentForm = input ? input.closest(".comment-form") : null;
-  const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
-  const mainField = commentForm?.querySelector(".comment-main-field");
-
-  if (ameliorationFields) {
-    ameliorationFields.style.display = "none";
-  }
-
-  if (mainField) {
-    mainField.style.display = "block";
-  }
-
-  const argumentKey = String(argumentId);
-  const existingComments = Array.isArray(currentCommentsByArgument?.[argumentKey])
-    ? currentCommentsByArgument[argumentKey]
-    : [];
-
-  currentCommentsByArgument = {
-    ...(currentCommentsByArgument || {}),
-    [argumentKey]: [data, ...existingComments.filter((comment) => String(comment.id) !== String(data.id))]
-  };
-
-  pendingCommentScrollId = String(data.id);
-  pinnedNewCommentId = String(data.id);
-
-  try {
-    rerenderCurrentDebateArguments(debateId);
-
-    setTimeout(() => {
-      const element = getVisibleCommentElement(String(data.id));
-
-      if (element) {
-        const topbar = document.querySelector(".topbar");
-        const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-        const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-        window.scrollTo({
-          top: Math.max(0, y),
-          behavior: "smooth"
-        });
-
-        applyVoiceHighlight(element);
-
-        setTimeout(() => {
-          removeVoiceHighlight(element);
-        }, 2000);
-      }
-
-      pendingCommentScrollId = null;
-    }, 250);
-  } catch (uiError) {
-    console.error(uiError);
-    await loadDebate(debateId);
-  }
-
-} catch (error) {
-  alert(error.message);
-} finally {
-  clearButtonLoading(submitButton);
+if (improvementTitleInput) {
+  improvementTitleInput.value = "";
 }
+
+if (improvementBodyInput) {
+  improvementBodyInput.value = "";
+}
+
+document
+  .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
+  .forEach((input) => {
+    input.checked = false;
+    input.dataset.waschecked = "false";
+  });
+
+const commentForm = input ? input.closest(".comment-form") : null;
+const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
+const mainField = commentForm?.querySelector(".comment-main-field");
+
+if (ameliorationFields) {
+  ameliorationFields.style.display = "none";
+}
+
+if (mainField) {
+  mainField.style.display = "block";
+}
+
+pendingCommentScrollId = String(data.id);
+pinnedNewCommentId = String(data.id);
+await loadDebate(debateId);
+
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    clearButtonLoading(submitButton);
+  }
 }
 
 function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = null) {
@@ -5320,6 +5300,49 @@ function rerenderArgumentsAfterLocalVoteChange(debateId) {
   } finally {
     pinnedNewArgumentId = previousPinnedArgumentId;
   }
+}
+
+function insertLocalArgumentAfterPublish(debateId, argumentData = {}) {
+  const argumentId = String(argumentData.id || "").trim();
+  if (!argumentId) {
+    throw new Error("Identifiant d'idée manquant.");
+  }
+
+  const nowIsoString = new Date().toISOString();
+  const normalizedArgument = {
+    id: argumentId,
+    debate_id: String(argumentData.debate_id || debateId || ""),
+    side: String(argumentData.side || "A"),
+    title: String(argumentData.title || ""),
+    body: String(argumentData.body || ""),
+    votes: Number(argumentData.votes || 0),
+    author_key: String(argumentData.author_key || getKey() || ""),
+    created_at: argumentData.created_at || nowIsoString,
+    last_voted_at: argumentData.last_voted_at || null
+  };
+
+  const existingArguments = Array.isArray(currentAllArguments) ? currentAllArguments : [];
+  currentAllArguments = [
+    normalizedArgument,
+    ...existingArguments.filter((arg) => String(arg.id) !== argumentId)
+  ];
+
+  if (!currentCommentsByArgument || typeof currentCommentsByArgument !== "object") {
+    currentCommentsByArgument = {};
+  }
+
+  if (!Array.isArray(currentCommentsByArgument[argumentId])) {
+    currentCommentsByArgument[argumentId] = [];
+  }
+
+  rerenderCurrentDebateArguments(debateId);
+  refreshDebateScoreFromCurrentArguments();
+  renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+
+  requestAnimationFrame(() => {
+    syncVoiceButtonsDisabledState(debateId, argumentId);
+  });
 }
 
 function refreshDebateScoreFromCurrentArguments() {
