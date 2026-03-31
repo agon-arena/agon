@@ -1293,7 +1293,7 @@ function clearNotificationTransitionState() {
   }
 }
 
-function showNotificationTransitionOverlay {
+function showNotificationTransitionOverlay(message = "Ouverture en cours…") {
   ensureNotificationTransitionOverlayStyles();
 
   let overlay = document.getElementById("notification-transition-overlay");
@@ -1304,7 +1304,6 @@ function showNotificationTransitionOverlay {
     overlay.innerHTML = `
       <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
         <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
-        <div class="notification-transition-title">Ouverture en cours</div>
         <div class="notification-transition-text" id="notification-transition-text"></div>
       </div>
     `;
@@ -5792,35 +5791,25 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       await loadDebate(debateId);
     }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
 
-   
-if (optimisticApplied) {
-  setState(debateId, previousState);
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+    }
 
-  try {
-    refreshVoteUiAfterLocalChange(
-      debateId,
-      argId,
-      previousVotes,
-      previousMyVotesOnArgument,
-      previousLastVotedAt
-    );
-  } catch (rollbackUiError) {
-    console.error(rollbackUiError);
-    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
-  }
-}
-
-if (error.message === "no_vote") {
-  pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-  await loadDebate(debateId);
-  return;
-}
-
-showVoteWarning("Erreur", error.message);
-
-
+    alert(error.message);
   } finally {
     clearButtonLoading(button);
     setVoiceRequestPending(debateId, argId, false);
@@ -5828,6 +5817,10 @@ showVoteWarning("Erreur", error.message);
 }
 
 async function confirmRemoveVoice(debateId, argId) {
+  const ok = window.confirm("Retirer 1 voix de cette idée ?");
+
+  if (!ok) return;
+
   await unvote(debateId, argId);
 }
 
