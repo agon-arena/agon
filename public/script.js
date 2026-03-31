@@ -5038,36 +5038,25 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
-function rerenderArgumentsAfterLocalVoteChange(debateId) {
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
+  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
+
+  // Après un vote/retrait de voix, on veut un classement pur par score.
+  // On neutralise donc le pinning temporaire des nouvelles idées.
+  pinnedNewArgumentId = null;
+
   const commentsByArgument = currentCommentsByArgument || {};
   const isOpenMode = isCurrentOpenDebateMode();
 
-  if (isOpenMode || currentDebateViewMode === "list") {
-    const argsA = document.getElementById("arguments-a");
-    const argsB = document.getElementById("arguments-b");
-    const unified = document.getElementById("arguments-unified");
-
-    if (argsA) argsA.innerHTML = "";
-    if (argsB) argsB.innerHTML = "";
-    if (unified) unified.innerHTML = "";
-
-    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
-    return;
+  if (currentDebateViewMode === "list" || isOpenMode) {
+    renderUnifiedArgs("arguments-unified", currentAllArguments || [], debateId, commentsByArgument);
+  } else {
+    const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
+    const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
+    renderArgs("arguments-a", argsA, debateId, commentsByArgument);
+    renderArgs("arguments-b", argsB, debateId, commentsByArgument);
   }
 
-  const unified = document.getElementById("arguments-unified");
-  const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
-  const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
-
-  if (unified) unified.innerHTML = "";
-
-  renderArgs("arguments-a", argsA, debateId, commentsByArgument);
-  renderArgs("arguments-b", argsB, debateId, commentsByArgument);
-}
-
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
-  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
-  rerenderArgumentsAfterLocalVoteChange(debateId);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
