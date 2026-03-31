@@ -832,8 +832,6 @@ if (myArgumentsRow) {
 
           <div class="my-argument-chip">
   <div class="my-argument-chip-text">
-    <span class="my-argument-chip-rank">#${item.rank}</span>
-
     <button
       type="button"
       class="my-argument-chip-title-button"
@@ -1174,6 +1172,258 @@ function clearActionLoading(element, loadingClass = "button-loading") {
   element.classList.remove(loadingClass);
   element.style.pointerEvents = "";
   element.style.opacity = "";
+}
+
+const NOTIFICATION_TRANSITION_STORAGE_KEY = "notification_transition_pending";
+
+function ensureNotificationTransitionOverlayStyles() {
+  if (document.getElementById("notification-transition-overlay-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "notification-transition-overlay-styles";
+  style.textContent = `
+    .notification-transition-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .notification-transition-overlay-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .notification-transition-box {
+      width: min(92vw, 360px);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
+      text-align: center;
+    }
+
+    .notification-transition-hourglass {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 12px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+      font-size: 28px;
+      animation: notificationHourglassFloat 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+
+    .notification-transition-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111111;
+      margin-bottom: 6px;
+    }
+
+    .notification-transition-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: #4b5563;
+    }
+
+    @keyframes notificationHourglassFloat {
+      0% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-2px) rotate(180deg); }
+      100% { transform: translateY(0) rotate(360deg); }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function getNotificationTransitionState() {
+  try {
+    return JSON.parse(sessionStorage.getItem(NOTIFICATION_TRANSITION_STORAGE_KEY) || "null");
+  } catch (error) {
+    return null;
+  }
+}
+
+function setNotificationTransitionState(state) {
+  try {
+    sessionStorage.setItem(NOTIFICATION_TRANSITION_STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    // ignore storage failures
+  }
+}
+
+function clearNotificationTransitionState() {
+  try {
+    sessionStorage.removeItem(NOTIFICATION_TRANSITION_STORAGE_KEY);
+  } catch (error) {
+    // ignore storage failures
+  }
+}
+
+function showNotificationTransitionOverlay(message = "Ouverture du message…") {
+  ensureNotificationTransitionOverlayStyles();
+
+  let overlay = document.getElementById("notification-transition-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "notification-transition-overlay";
+    overlay.className = "notification-transition-overlay";
+    overlay.innerHTML = `
+      <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
+        <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
+        <div class="notification-transition-title">Ouverture en cours</div>
+        <div class="notification-transition-text" id="notification-transition-text"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const textEl = document.getElementById("notification-transition-text");
+  if (textEl) {
+    textEl.textContent = message;
+  }
+
+  overlay.classList.add("notification-transition-overlay-visible");
+}
+
+function hideNotificationTransitionOverlay() {
+  const overlay = document.getElementById("notification-transition-overlay");
+  if (!overlay) {
+    clearNotificationTransitionState();
+    return;
+  }
+
+  overlay.classList.remove("notification-transition-overlay-visible");
+
+  setTimeout(() => {
+    overlay.remove();
+  }, 180);
+
+  clearNotificationTransitionState();
+}
+
+function beginNotificationTransition(link) {
+  const state = {
+    active: true,
+    link: String(link || ""),
+    startedAt: Date.now()
+  };
+
+  setNotificationTransitionState(state);
+  showNotificationTransitionOverlay();
+}
+
+function initNotificationTransitionOverlay() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  showNotificationTransitionOverlay();
+
+  if (location.pathname !== "/debate") {
+    setTimeout(() => {
+      hideNotificationTransitionOverlay();
+    }, 1200);
+  }
+}
+
+function finalizeNotificationTransitionAfterFocus() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      hideNotificationTransitionOverlay();
+    });
+  });
+}
+
+function finalizeNotificationTransitionAtScrollStart() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  requestAnimationFrame(() => {
+    hideNotificationTransitionOverlay();
+  });
+}
+
+function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
+  const callback = typeof onDone === "function" ? onDone : () => {};
+  const maxWaitMs = Number(options.maxWaitMs || 1400);
+  const stableFramesNeeded = Number(options.stableFramesNeeded || 5);
+  const tolerance = Number(options.tolerance || 2);
+  const startedAt = performance.now();
+  let stableFrames = 0;
+  let previousY = window.scrollY;
+
+  const finish = () => {
+    callback();
+  };
+
+  const step = () => {
+    const currentY = window.scrollY;
+    const delta = Math.abs(currentY - previousY);
+
+    if (delta <= tolerance) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+    }
+
+    previousY = currentY;
+
+    const elapsed = performance.now() - startedAt;
+    if (stableFrames >= stableFramesNeeded || elapsed >= maxWaitMs) {
+      finish();
+      return;
+    }
+
+    requestAnimationFrame(step);
+  };
+
+  requestAnimationFrame(step);
+}
+
+function fireAndForgetMarkOneNotificationAsRead(notificationId) {
+  const payload = JSON.stringify({
+    userKey: getKey(),
+    notificationId
+  });
+
+  if (navigator.sendBeacon) {
+    try {
+      const blob = new Blob([payload], { type: "application/json" });
+      const sent = navigator.sendBeacon(API + "/notifications/read-one", blob);
+      if (sent) return;
+    } catch (error) {
+      // fallback to fetch keepalive below
+    }
+  }
+
+  fetch(API + "/notifications/read-one", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: payload,
+    keepalive: true
+  }).catch((error) => {
+    console.error(error);
+  });
 }
 
 const pendingVoiceRequests = {};
@@ -2185,6 +2435,7 @@ async function markOneNotificationAsRead(notificationId) {
 }
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
+  beginNotificationTransition(link);
   setActionLoading(element);
 
   const wasUnread = markNotificationElementAsReadLocally(element);
@@ -2192,17 +2443,7 @@ async function handleNotificationClick(event, notificationId, link, element = nu
     decrementStoredUnreadNotificationCount(1);
   }
 
-  try {
-    await markOneNotificationAsRead(notificationId);
-  } catch (error) {
-    if (wasUnread) {
-      setStoredUnreadNotificationCount(getStoredUnreadNotificationCount() + 1);
-      if (element) {
-        element.classList.add("notification-item-unread");
-      }
-    }
-    console.error(error);
-  }
+  fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   window.location.href = link;
 }
@@ -3548,8 +3789,10 @@ if (pendingTopCommentScroll) {
         top: Math.max(0, y),
         behavior: "smooth"
       });
+      finalizeNotificationTransitionAtScrollStart();
     } else {
       scrollToTopVisibleComment();
+      finalizeNotificationTransitionAtScrollStart();
     }
 
     pendingTopCommentScroll = null;
@@ -3570,6 +3813,7 @@ if (element) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+  finalizeNotificationTransitionAtScrollStart();
 
   applyVoiceHighlight(element);
 
@@ -3580,6 +3824,7 @@ if (element) {
     }
 
     pendingCommentScrollId = null;
+    finalizeNotificationTransitionAtScrollStart();
   }, 250);
 }
 else if (pendingArgumentScrollId) {
@@ -3598,6 +3843,7 @@ if (element) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+  finalizeNotificationTransitionAtScrollStart();
 
   if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
 
@@ -3619,7 +3865,11 @@ if (element) {
 
     pendingArgumentScrollId = null;
     pinnedNewArgumentId = null;
+    finalizeNotificationTransitionAtScrollStart();
   }, 250);
+}
+else {
+  finalizeNotificationTransitionAfterFocus();
 }
 
   const isOpen = isOpenDebate(data.debate);
@@ -5153,9 +5403,45 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-setVoiceRequestPending(debateId, argId, true);
+  const previousState = { ...state };
+  const previousMyVotesOnArgument = Number(state[argIdString] || 0);
+  const previousVotes = Number(targetBefore?.votes || 0);
+  const previousLastVotedAt = targetBefore?.last_voted_at || null;
+  const optimisticMyVotesOnArgument = previousMyVotesOnArgument + 1;
+  const optimisticVotes = previousVotes + 1;
+  let optimisticApplied = false;
+
+  setVoiceRequestPending(debateId, argId, true);
 
   try {
+    state[argIdString] = optimisticMyVotesOnArgument;
+    setState(debateId, state);
+
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotesOnArgument,
+      new Date().toISOString()
+    );
+    optimisticApplied = true;
+
+    const targetAfterOptimistic = (currentAllArguments || []).find(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    const optimisticAfterSide = targetAfterOptimistic ? String(targetAfterOptimistic.side || "") : targetSide;
+
+    const optimisticArgsSameSide = (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === optimisticAfterSide
+    );
+
+    showVoteRankProgress(beforeRankMap, optimisticArgsSameSide, argId);
+
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
+
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
       method: "POST",
       headers: {
@@ -5164,15 +5450,15 @@ setVoiceRequestPending(debateId, argId, true);
       body: JSON.stringify({ voterKey })
     });
 
-    state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
+    state[argIdString] = Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument);
     setState(debateId, state);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
-        Number(response?.myVotesOnArgument || 0),
+        Number(response?.votes || optimisticVotes),
+        Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument),
         response?.lastVotedAt || null
       );
     } catch (uiError) {
@@ -5180,23 +5466,27 @@ setVoiceRequestPending(debateId, argId, true);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-
-    const targetAfter = (currentAllArguments || []).find(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    const afterSide = targetAfter ? String(targetAfter.side || "") : targetSide;
-
-    const afterArgsSameSide = (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === afterSide
-    );
-
-    showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
-    }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
+
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+
+      closeReplacementSuccessMessage();
+    }
+
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
       showVoteWarning(
@@ -5208,7 +5498,7 @@ setVoiceRequestPending(debateId, argId, true);
 
     alert(error.message);
   } finally {
-  setVoiceRequestPending(debateId, argId, false);
+    setVoiceRequestPending(debateId, argId, false);
   }
 }
 
@@ -5226,10 +5516,43 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
+  const targetBefore = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  const previousState = { ...state };
+  const previousMyVotesOnArgument = Number(state[argIdString] || 0);
+  const previousVotes = Number(targetBefore?.votes || 0);
+  const previousLastVotedAt = targetBefore?.last_voted_at || null;
+  const optimisticMyVotesOnArgument = Math.max(0, previousMyVotesOnArgument - 1);
+  const optimisticVotes = Math.max(0, previousVotes - 1);
+  let optimisticApplied = false;
+
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
 
   try {
+    if (optimisticMyVotesOnArgument > 0) {
+      state[argIdString] = optimisticMyVotesOnArgument;
+    } else {
+      delete state[argIdString];
+    }
+
+    setState(debateId, state);
+
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotesOnArgument,
+      previousLastVotedAt
+    );
+    optimisticApplied = true;
+
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
+
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
@@ -5238,7 +5561,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       body: JSON.stringify({ voterKey })
     });
 
-    const myVotesOnArgument = Number(response?.myVotesOnArgument || 0);
+    const myVotesOnArgument = Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument);
 
     if (myVotesOnArgument > 0) {
       state[argIdString] = myVotesOnArgument;
@@ -5252,20 +5575,34 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
+        Number(response?.votes || optimisticVotes),
         myVotesOnArgument,
-        response?.lastVotedAt || null
+        response?.lastVotedAt || previousLastVotedAt
       );
     } catch (uiError) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
-    }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
+
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+    }
+
     alert(error.message);
   } finally {
     clearButtonLoading(button);
@@ -6161,6 +6498,7 @@ function ensureProgressSortOption() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initNotificationTransitionOverlay();
   attachAdminButtons();
   loadNotifications();
   renderGlobalShareBar();
