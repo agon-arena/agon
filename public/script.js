@@ -6286,6 +6286,30 @@ async function deleteComment(debateId, commentId) {
           }
         );
 
+        const commentIdString = String(commentId);
+        let hasLocalUpdate = false;
+
+        if (currentCommentsByArgument && typeof currentCommentsByArgument === "object") {
+          Object.keys(currentCommentsByArgument).forEach((argumentId) => {
+            const existingComments = currentCommentsByArgument[argumentId];
+            if (!Array.isArray(existingComments) || !existingComments.length) return;
+
+            const filteredComments = existingComments.filter(
+              (comment) => String(comment?.id) !== commentIdString
+            );
+
+            if (filteredComments.length !== existingComments.length) {
+              currentCommentsByArgument[argumentId] = filteredComments;
+              hasLocalUpdate = true;
+            }
+          });
+        }
+
+        if (hasLocalUpdate && Array.isArray(currentAllArguments)) {
+          rerenderCurrentDebateArguments(debateId);
+          return;
+        }
+
         await loadDebate(debateId);
       } catch (error) {
         alert(error.message);
@@ -6465,7 +6489,7 @@ function rerenderCurrentDebateArguments() {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  if (!Array.isArray(currentAllArguments) || !currentAllArguments.length) {
+  if (!Array.isArray(currentAllArguments)) {
     loadDebate(debateId);
     return;
   }
@@ -7060,11 +7084,32 @@ async function deleteArgument(debateId, argumentId) {
           }
         );
 
-        delete openCommentsByArgument[argumentId];
+        const argumentIdString = String(argumentId);
+
+        delete openCommentsByArgument[argumentIdString];
+        delete visibleCommentsByArgument[argumentIdString];
+                if (currentCommentsByArgument && typeof currentCommentsByArgument === "object") {
+          delete currentCommentsByArgument[argumentIdString];
+        }
 
         const state = getState(debateId);
-        delete state[String(argumentId)];
+        delete state[argumentIdString];
         setState(debateId, state);
+
+        if (Array.isArray(currentAllArguments)) {
+          const nextArguments = currentAllArguments.filter(
+            (argument) => String(argument?.id) !== argumentIdString
+          );
+
+          if (nextArguments.length !== currentAllArguments.length) {
+            currentAllArguments = nextArguments;
+            rerenderCurrentDebateArguments(debateId);
+            refreshDebateScoreFromCurrentArguments();
+            renderUnifiedVoicesSummary(debateId, currentAllArguments);
+            renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+            return;
+          }
+        }
 
         await loadDebate(debateId);
       } catch (error) {
