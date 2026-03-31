@@ -1370,8 +1370,14 @@ function finalizeNotificationTransitionAfterFocus() {
 }
 
 function finalizeNotificationTransitionAtScrollStart() {
-  // Ne rien faire ici.
-  // Le sablier doit rester affiché jusqu'au focus final.
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  setTimeout(() => {
+    requestAnimationFrame(() => {
+      hideNotificationTransitionOverlay();
+    });
+  }, 250);
 }
 
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
