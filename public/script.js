@@ -1174,6 +1174,214 @@ function clearActionLoading(element, loadingClass = "button-loading") {
   element.style.opacity = "";
 }
 
+const NOTIFICATION_TRANSITION_STORAGE_KEY = "notification_transition_pending";
+
+function ensureNotificationTransitionOverlayStyles() {
+  if (document.getElementById("notification-transition-overlay-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "notification-transition-overlay-styles";
+  style.textContent = `
+    .notification-transition-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .notification-transition-overlay-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .notification-transition-box {
+      width: min(92vw, 360px);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
+      text-align: center;
+    }
+
+    .notification-transition-hourglass {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 12px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+      font-size: 28px;
+      animation: notificationHourglassFloat 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+
+    .notification-transition-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111111;
+      margin-bottom: 6px;
+    }
+
+    .notification-transition-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: #4b5563;
+    }
+
+    @keyframes notificationHourglassFloat {
+      0% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-2px) rotate(180deg); }
+      100% { transform: translateY(0) rotate(360deg); }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function getNotificationTransitionState() {
+  try {
+    return JSON.parse(sessionStorage.getItem(NOTIFICATION_TRANSITION_STORAGE_KEY) || "null");
+  } catch (error) {
+    return null;
+  }
+}
+
+function setNotificationTransitionState(state) {
+  try {
+    sessionStorage.setItem(NOTIFICATION_TRANSITION_STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    // ignore storage failures
+  }
+}
+
+function clearNotificationTransitionState() {
+  try {
+    sessionStorage.removeItem(NOTIFICATION_TRANSITION_STORAGE_KEY);
+  } catch (error) {
+    // ignore storage failures
+  }
+}
+
+function showNotificationTransitionOverlay(message = "Ouverture du message…") {
+  ensureNotificationTransitionOverlayStyles();
+
+  let overlay = document.getElementById("notification-transition-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "notification-transition-overlay";
+    overlay.className = "notification-transition-overlay";
+    overlay.innerHTML = `
+      <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
+        <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
+        <div class="notification-transition-title">Ouverture en cours</div>
+        <div class="notification-transition-text" id="notification-transition-text"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const textEl = document.getElementById("notification-transition-text");
+  if (textEl) {
+    textEl.textContent = message;
+  }
+
+  requestAnimationFrame(() => {
+    overlay.classList.add("notification-transition-overlay-visible");
+  });
+}
+
+function hideNotificationTransitionOverlay() {
+  const overlay = document.getElementById("notification-transition-overlay");
+  if (!overlay) {
+    clearNotificationTransitionState();
+    return;
+  }
+
+  overlay.classList.remove("notification-transition-overlay-visible");
+
+  setTimeout(() => {
+    overlay.remove();
+  }, 180);
+
+  clearNotificationTransitionState();
+}
+
+function beginNotificationTransition(link) {
+  const state = {
+    active: true,
+    link: String(link || ""),
+    startedAt: Date.now()
+  };
+
+  setNotificationTransitionState(state);
+  showNotificationTransitionOverlay();
+}
+
+function initNotificationTransitionOverlay() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  showNotificationTransitionOverlay();
+
+  if (location.pathname !== "/debate") {
+    setTimeout(() => {
+      hideNotificationTransitionOverlay();
+    }, 1200);
+  }
+}
+
+function finalizeNotificationTransitionAfterFocus() {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      hideNotificationTransitionOverlay();
+    });
+  });
+}
+
+function fireAndForgetMarkOneNotificationAsRead(notificationId) {
+  const payload = JSON.stringify({
+    userKey: getKey(),
+    notificationId
+  });
+
+  if (navigator.sendBeacon) {
+    try {
+      const blob = new Blob([payload], { type: "application/json" });
+      const sent = navigator.sendBeacon(API + "/notifications/read-one", blob);
+      if (sent) return;
+    } catch (error) {
+      // fallback to fetch keepalive below
+    }
+  }
+
+  fetch(API + "/notifications/read-one", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: payload,
+    keepalive: true
+  }).catch((error) => {
+    console.error(error);
+  });
+}
+
 const pendingVoiceRequests = {};
 
 function getVoiceButtons(argId) {
@@ -2184,23 +2392,14 @@ async function markOneNotificationAsRead(notificationId) {
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   setActionLoading(element);
+  beginNotificationTransition(link);
 
   const wasUnread = markNotificationElementAsReadLocally(element);
   if (wasUnread) {
     decrementStoredUnreadNotificationCount(1);
   }
 
-  try {
-    await markOneNotificationAsRead(notificationId);
-  } catch (error) {
-    if (wasUnread) {
-      setStoredUnreadNotificationCount(getStoredUnreadNotificationCount() + 1);
-      if (element) {
-        element.classList.add("notification-item-unread");
-      }
-    }
-    console.error(error);
-  }
+  fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   window.location.href = link;
 }
@@ -3551,6 +3750,7 @@ if (pendingTopCommentScroll) {
     }
 
     pendingTopCommentScroll = null;
+    finalizeNotificationTransitionAfterFocus();
   }, 250);
 }
 else if (pendingCommentScrollId) {
@@ -3578,6 +3778,7 @@ if (element) {
     }
 
     pendingCommentScrollId = null;
+    finalizeNotificationTransitionAfterFocus();
   }, 250);
 }
 else if (pendingArgumentScrollId) {
@@ -3617,7 +3818,11 @@ if (element) {
 
     pendingArgumentScrollId = null;
     pinnedNewArgumentId = null;
+    finalizeNotificationTransitionAfterFocus();
   }, 250);
+}
+else {
+  finalizeNotificationTransitionAfterFocus();
 }
 
   const isOpen = isOpenDebate(data.debate);
@@ -6199,6 +6404,7 @@ function ensureProgressSortOption() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  initNotificationTransitionOverlay();
   attachAdminButtons();
   loadNotifications();
   renderGlobalShareBar();
