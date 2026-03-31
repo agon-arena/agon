@@ -721,37 +721,39 @@ function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
   const newRank = Number(afterRankMap[argIdString] || 0);
 
   if (!previousRank || !newRank || newRank >= previousRank) {
-    return;
+    return false;
   }
 
   const gainedPlaces = previousRank - newRank;
   const placeLabel = gainedPlaces === 1 ? "place" : "places";
-if (newRank >= 1 && newRank <= 3) {
-  const medalIcon =
-    newRank === 1 ? "🥇" :
-    newRank === 2 ? "🥈" :
-    "🥉";
+  if (newRank >= 1 && newRank <= 3) {
+    const medalIcon =
+      newRank === 1 ? "🥇" :
+      newRank === 2 ? "🥈" :
+      "🥉";
 
-  const topTitle =
-    newRank === 1 ? "Première place du classement" :
-    newRank === 2 ? "Deuxième place du classement" :
-    "Troisième place du classement";
+    const topTitle =
+      newRank === 1 ? "Première place du classement" :
+      newRank === 2 ? "Deuxième place du classement" :
+      "Troisième place du classement";
 
-  showReplacementSuccessMessage(
-    topTitle,
-    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
-    null,
-    medalIcon,
-    "ranking-medal-vibrate"
-  );
+    showReplacementSuccessMessage(
+      topTitle,
+      `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
+      null,
+      medalIcon,
+      "ranking-medal-vibrate"
+    );
 
-  return;
-}
+    return true;
+  }
 
   showReplacementSuccessMessage(
     "🚀 Belle progression",
     `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`
   );
+
+  return true;
 }
 
 function renderUnifiedVoicesSummary(debateId, args) {
@@ -5332,6 +5334,8 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   setState(debateId, optimisticState);
   setVoiceRequestPending(debateId, argId, true);
 
+  let optimisticRankMessageShown = false;
+
   try {
     refreshVoteUiAfterLocalChange(
       debateId,
@@ -5340,6 +5344,24 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       optimisticMyVotes,
       optimisticLastVotedAt,
       { deferHeavyRefresh: false }
+    );
+
+    const optimisticTargetAfter = (currentAllArguments || []).find(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    const optimisticAfterSide = optimisticTargetAfter
+      ? String(optimisticTargetAfter.side || "")
+      : targetSide;
+
+    const optimisticAfterArgsSameSide = (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === optimisticAfterSide
+    );
+
+    optimisticRankMessageShown = showVoteRankProgress(
+      beforeRankMap,
+      optimisticAfterArgsSameSide,
+      argId
     );
   } catch (uiError) {
     console.error(uiError);
@@ -5382,13 +5404,19 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       (arg) => String(arg.side || "") === afterSide
     );
 
-    showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
+    if (!optimisticRankMessageShown) {
+      showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
+    }
 
     if (shouldScroll) {
       scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
     restoreVoteUiSnapshot(debateId, snapshot);
+
+    if (optimisticRankMessageShown) {
+      closeReplacementSuccessMessage();
+    }
 
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
