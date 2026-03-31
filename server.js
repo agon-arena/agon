@@ -1319,9 +1319,17 @@ app.post("/api/arguments/:id/unvote", async (req, res) => {
     const { voterKey } = req.body || {};
 
     const voteRow = await getVoteRow(id, voterKey);
-    if (!voteRow) {
-      return res.status(400).json({ error: "no_vote" });
-    }
+   
+ if (!voteRow) {
+  const argument = await getArgumentById(id);
+
+  return res.json({
+    votes: Number(argument?.votes || 0),
+    myVotesOnArgument: 0,
+    remainingVotes: null,
+    lastVotedAt: argument?.last_voted_at || null
+  });
+}
 
     const argument = await getArgumentById(id);
     if (!argument) {

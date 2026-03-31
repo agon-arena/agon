@@ -5791,25 +5791,35 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       await loadDebate(debateId);
     }
   } catch (error) {
-    if (optimisticApplied) {
-      setState(debateId, previousState);
 
-      try {
-        refreshVoteUiAfterLocalChange(
-          debateId,
-          argId,
-          previousVotes,
-          previousMyVotesOnArgument,
-          previousLastVotedAt
-        );
-      } catch (rollbackUiError) {
-        console.error(rollbackUiError);
-        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-        await loadDebate(debateId);
-      }
-    }
 
-    alert(error.message);
+if (optimisticApplied) {
+  setState(debateId, previousState);
+
+  try {
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      previousVotes,
+      previousMyVotesOnArgument,
+      previousLastVotedAt
+    );
+  } catch (rollbackUiError) {
+    console.error(rollbackUiError);
+    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+    await loadDebate(debateId);
+  }
+}
+
+if (error.message === "no_vote") {
+  pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+  await loadDebate(debateId);
+  return;
+}
+
+showVoteWarning("Erreur", error.message);
+
+
   } finally {
     clearButtonLoading(button);
     setVoiceRequestPending(debateId, argId, false);
