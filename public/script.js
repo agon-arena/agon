@@ -721,39 +721,37 @@ function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
   const newRank = Number(afterRankMap[argIdString] || 0);
 
   if (!previousRank || !newRank || newRank >= previousRank) {
-    return false;
+    return;
   }
 
   const gainedPlaces = previousRank - newRank;
   const placeLabel = gainedPlaces === 1 ? "place" : "places";
-  if (newRank >= 1 && newRank <= 3) {
-    const medalIcon =
-      newRank === 1 ? "🥇" :
-      newRank === 2 ? "🥈" :
-      "🥉";
+if (newRank >= 1 && newRank <= 3) {
+  const medalIcon =
+    newRank === 1 ? "🥇" :
+    newRank === 2 ? "🥈" :
+    "🥉";
 
-    const topTitle =
-      newRank === 1 ? "Première place du classement" :
-      newRank === 2 ? "Deuxième place du classement" :
-      "Troisième place du classement";
+  const topTitle =
+    newRank === 1 ? "Première place du classement" :
+    newRank === 2 ? "Deuxième place du classement" :
+    "Troisième place du classement";
 
-    showReplacementSuccessMessage(
-      topTitle,
-      `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
-      null,
-      medalIcon,
-      "ranking-medal-vibrate"
-    );
+  showReplacementSuccessMessage(
+    topTitle,
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
+    null,
+    medalIcon,
+    "ranking-medal-vibrate"
+  );
 
-    return true;
-  }
+  return;
+}
 
   showReplacementSuccessMessage(
     "🚀 Belle progression",
     `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`
   );
-
-  return true;
 }
 
 function renderUnifiedVoicesSummary(debateId, args) {
@@ -1052,19 +1050,12 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight");
   element.classList.remove("voice-title-highlight-green");
 }
-function scrollToTopOfArgumentCardAndFlash(argumentId, options = {}) {
+function scrollToTopOfArgumentCardAndFlash(argumentId) {
   const element = getVisibleArgumentElement(argumentId);
   if (!element) return;
 
-  const {
-    immediate = false,
-    repeatDelay = 260,
-    flashDelay = 420
-  } = options || {};
-
   const topbar = document.querySelector(".topbar");
   const offset = (topbar ? topbar.offsetHeight : 80) + 60;
-  const scrollBehavior = immediate ? "auto" : "smooth";
 
   const scrollHigh = () => {
     const rect = element.getBoundingClientRect();
@@ -1072,17 +1063,15 @@ function scrollToTopOfArgumentCardAndFlash(argumentId, options = {}) {
 
     window.scrollTo({
       top: Math.max(0, y),
-      behavior: scrollBehavior
+      behavior: "smooth"
     });
   };
 
   scrollHigh();
 
-  if (repeatDelay !== null && repeatDelay !== false) {
-    setTimeout(() => {
-      scrollHigh();
-    }, immediate ? Math.max(0, Number(repeatDelay) || 0) : repeatDelay);
-  }
+  setTimeout(() => {
+    scrollHigh();
+  }, 260);
 
   setTimeout(() => {
     const isGreenTarget =
@@ -1105,7 +1094,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId, options = {}) {
         element.classList.remove("admin-highlight");
       }, 5000);
     }
-  }, immediate ? Math.max(0, Number(flashDelay) || 0) : flashDelay);
+  }, 420);
 }
 function scrollToTopOfArgumentCard(argumentId) {
   const element = getVisibleArgumentElement(argumentId);
@@ -2192,67 +2181,6 @@ async function markOneNotificationAsRead(notificationId) {
     })
   });
 }
-function markOneNotificationAsReadNonBlocking(notificationId) {
-  try {
-    const payload = JSON.stringify({
-      userKey: getKey(),
-      notificationId
-    });
-
-    fetch(API + "/notifications/read-one", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: payload,
-      keepalive: true
-    }).catch((error) => {
-      console.error(error);
-    });
-  } catch (error) {
-    console.error(error);
-  }
-}
-function rememberFastNotificationNavigation(link) {
-  try {
-    const url = new URL(link, window.location.origin);
-    const debateId = url.searchParams.get("id") || "";
-    const highlight = url.searchParams.get("highlight") || "";
-
-    sessionStorage.setItem(
-      "fast_notification_navigation",
-      JSON.stringify({
-        debateId: String(debateId),
-        highlight: String(highlight),
-        createdAt: Date.now()
-      })
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-function consumeFastNotificationNavigation(debateId, highlight) {
-  try {
-    const raw = sessionStorage.getItem("fast_notification_navigation");
-    if (!raw) return false;
-
-    sessionStorage.removeItem("fast_notification_navigation");
-
-    const parsed = JSON.parse(raw);
-    const ageMs = Date.now() - Number(parsed?.createdAt || 0);
-
-    if (ageMs > 15000) return false;
-    if (String(parsed?.debateId || "") !== String(debateId || "")) return false;
-    if (String(parsed?.highlight || "") !== String(highlight || "")) return false;
-
-    return true;
-  } catch (error) {
-    console.error(error);
-    return false;
-  }
-}
-
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   setActionLoading(element);
@@ -2262,53 +2190,23 @@ async function handleNotificationClick(event, notificationId, link, element = nu
     decrementStoredUnreadNotificationCount(1);
   }
 
-  rememberFastNotificationNavigation(link);
-  markOneNotificationAsReadNonBlocking(notificationId);
+  try {
+    await markOneNotificationAsRead(notificationId);
+  } catch (error) {
+    if (wasUnread) {
+      setStoredUnreadNotificationCount(getStoredUnreadNotificationCount() + 1);
+      if (element) {
+        element.classList.add("notification-item-unread");
+      }
+    }
+    console.error(error);
+  }
+
   window.location.href = link;
 }
 
 function toggleNotificationsPanel() {
   window.location.href = "/notifications";
-}
-function runAfterNextPaint(callback) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      callback();
-    });
-  });
-}
-
-function waitForRenderedElement(getElement, onReady, onFallback = null, attemptsLeft = 8) {
-  runAfterNextPaint(() => {
-    const element = getElement();
-
-    if (element) {
-      onReady(element);
-      return;
-    }
-
-    if (attemptsLeft <= 1) {
-      if (typeof onFallback === "function") {
-        onFallback();
-      }
-      return;
-    }
-
-    setTimeout(() => {
-      waitForRenderedElement(getElement, onReady, onFallback, attemptsLeft - 1);
-    }, 60);
-  });
-}
-
-function scrollElementIntoViewWithOffset(element, offset, instant = false) {
-  if (!element) return;
-
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: instant ? "auto" : "smooth"
-  });
 }
 /* =========================
    Admin reports
@@ -3591,10 +3489,6 @@ async function loadDebate(id) {
 saveVisitedDebate(id);
 
   try {
-    const params = new URLSearchParams(window.location.search);
-    const highlight = params.get("highlight");
-    const fastNotificationScroll = consumeFastNotificationNavigation(id, highlight);
-
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
@@ -3640,55 +3534,73 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
 if (pendingTopCommentScroll) {
   const targetId = pendingTopCommentScroll;
 
-  waitForRenderedElement(
-    () => document.getElementById(targetId),
-    (element) => {
+  setTimeout(() => {
+    const element = document.getElementById(targetId);
+
+    if (element) {
       const topbar = document.querySelector(".topbar");
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
-      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      pendingTopCommentScroll = null;
-    },
-    () => {
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+    } else {
       scrollToTopVisibleComment();
-      pendingTopCommentScroll = null;
     }
-  );
+
+    pendingTopCommentScroll = null;
+  }, 250);
 }
 else if (pendingCommentScrollId) {
   const targetId = pendingCommentScrollId;
 
-  waitForRenderedElement(
-    () => getVisibleCommentElement(targetId),
-    (element) => {
-      const topbar = document.querySelector(".topbar");
-      const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
+  setTimeout(() => {
+    const element = getVisibleCommentElement(targetId);
 
-      applyVoiceHighlight(element);
+if (element) {
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+
+  applyVoiceHighlight(element);
+
 
       setTimeout(() => {
         removeVoiceHighlight(element);
       }, 2000);
-
-      pendingCommentScrollId = null;
-    },
-    () => {
-      pendingCommentScrollId = null;
     }
-  );
+
+    pendingCommentScrollId = null;
+  }, 250);
 }
 else if (pendingArgumentScrollId) {
   const targetId = pendingArgumentScrollId;
 
-  waitForRenderedElement(
-    () => getVisibleArgumentElement(targetId),
-    (element) => {
-      const stickyHeader = document.querySelector(".debate-hero-top");
-      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
+  setTimeout(() => {
+    const element = getVisibleArgumentElement(targetId);
 
-      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+
+if (element) {
+  const stickyHeader = document.querySelector(".debate-hero-top");
+  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
+
+  if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
+
+
+
         element.classList.add("flash-green");
 
         setTimeout(() => {
@@ -3701,15 +3613,11 @@ else if (pendingArgumentScrollId) {
           element.classList.remove("admin-highlight");
         }, 2000);
       }
-
-      pendingArgumentScrollId = null;
-      pinnedNewArgumentId = null;
-    },
-    () => {
-      pendingArgumentScrollId = null;
-      pinnedNewArgumentId = null;
     }
-  );
+
+    pendingArgumentScrollId = null;
+    pinnedNewArgumentId = null;
+  }, 250);
 }
 
   const isOpen = isOpenDebate(data.debate);
@@ -3771,7 +3679,13 @@ currentDebateShareData = {
   percentA,
   percentB
 };
+const allDebates = await fetchJSON(API + "/debates");
+renderBottomSimilarDebates(data.debate, allDebates);
+
 refreshAdminUI();
+
+const params = new URLSearchParams(window.location.search);
+const highlight = params.get("highlight");
 
 if (highlight) {
 if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
@@ -3798,75 +3712,65 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   }
 }
 
-  waitForRenderedElement(
-    () => {
-      if (highlight === "debate") {
-        return document.getElementById("debate-question");
-      } else if (highlight.startsWith("comment-")) {
-        const commentId = highlight.replace("comment-", "");
-        return getVisibleCommentElement(commentId);
-      } else if (highlight.startsWith("argument-")) {
-        const argumentId = highlight.replace("argument-", "");
-        return getVisibleArgumentElement(argumentId);
-      }
+  setTimeout(() => {
+    let element = null;
 
-      return document.getElementById(highlight);
-    },
-    (element) => {
-      const stickyHeader = document.querySelector(".debate-hero-top");
-      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
+    if (highlight === "debate") {
+      element = document.getElementById("debate-question");
+    } else if (highlight.startsWith("comment-")) {
+      const commentId = highlight.replace("comment-", "");
+      element = getVisibleCommentElement(commentId);
+    } else if (highlight.startsWith("argument-")) {
+      const argumentId = highlight.replace("argument-", "");
+      element = getVisibleArgumentElement(argumentId);
+    } else {
+      element = document.getElementById(highlight);
+    }
 
-      const isGreenTarget =
-        element.classList.contains("argument-card-a") ||
-        !!element.closest(".argument-card-a") ||
-        !!element.closest("#arguments-a") ||
-        !!element.closest(".column-a");
+if (element) {
+  const stickyHeader = document.querySelector(".debate-hero-top");
+  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      if (isGreenTarget) {
-        if (highlight.startsWith("argument-")) {
-          element.classList.add("flash-green");
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: "smooth"
+  });
 
-          setTimeout(() => {
-            element.classList.remove("flash-green");
-          }, 5000);
-        } else {
-          element.classList.add("admin-highlight-green");
+  const isGreenTarget =
+    element.classList.contains("argument-card-a") ||
+    !!element.closest(".argument-card-a") ||
+    !!element.closest("#arguments-a") ||
+    !!element.closest(".column-a");
 
-          setTimeout(() => {
-            element.classList.remove("admin-highlight-green");
-          }, 5000);
-        }
-      } else {
-        element.classList.add("admin-highlight");
+  if (isGreenTarget) {
+    if (highlight.startsWith("argument-")) {
+      element.classList.add("flash-green");
 
-        setTimeout(() => {
-          element.classList.remove("admin-highlight");
-        }, 5000);
-      }
+      setTimeout(() => {
+        element.classList.remove("flash-green");
+      }, 5000);
+    } else {
+      element.classList.add("admin-highlight-green");
 
-      const url = new URL(window.location.href);
-      url.searchParams.delete("highlight");
-      window.history.replaceState({}, "", url);
-    },
-    () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("highlight");
-      window.history.replaceState({}, "", url);
-    },
-    fastNotificationScroll ? 16 : 8
-  );
+      setTimeout(() => {
+        element.classList.remove("admin-highlight-green");
+      }, 5000);
+    }
+  } else {
+    element.classList.add("admin-highlight");
+
+    setTimeout(() => {
+      element.classList.remove("admin-highlight");
+    }, 5000);
+  }
 }
 
-runAfterNextPaint(() => {
-  fetchJSON(API + "/debates")
-    .then((allDebates) => {
-      renderBottomSimilarDebates(data.debate, allDebates);
-    })
-    .catch((error) => {
-      console.error(error);
-    });
-});
+    const url = new URL(window.location.href);
+    url.searchParams.delete("highlight");
+    window.history.replaceState({}, "", url);
+  }, 300);
+}
 
   } catch (error) {
     alert(error.message);
@@ -5204,114 +5108,13 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
-function shouldRerenderArgumentsAfterVoteChange() {
-  const sortMode = getArgumentsSortMode();
-  return sortMode === "score" || sortMode === "progress";
-}
-
-const pendingVoteUiRefreshByDebate = {};
-
-function scheduleDeferredVoteUiRefresh(debateId, options = {}) {
-  const debateIdString = String(debateId || "");
-  if (!debateIdString) return;
-
-  const previousFrameId = pendingVoteUiRefreshByDebate[debateIdString];
-  if (previousFrameId) {
-    cancelAnimationFrame(previousFrameId);
-  }
-
-  pendingVoteUiRefreshByDebate[debateIdString] = requestAnimationFrame(() => {
-    delete pendingVoteUiRefreshByDebate[debateIdString];
-
-    renderUnifiedVoicesSummary(debateId, currentAllArguments);
-    renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
-    refreshDebateScoreFromCurrentArguments();
-
-    if (options.rerenderArguments) {
-      rerenderArgumentsAfterLocalVoteChange(debateId);
-    }
-
-    if (options.refreshAllVoiceButtons) {
-      refreshAllVoiceButtonsDisabledState(debateId);
-    }
-  });
-}
-
-function refreshExistingVotedArgumentChipCount(argId, myVotesOnArgument) {
-  const argIdString = String(argId);
-  const numericMyVotes = Math.max(0, Number(myVotesOnArgument || 0));
-
-  getVoiceButtons(argIdString).forEach((button) => {
-    const chipStepper = button.closest('.my-argument-chip-stepper');
-    if (!chipStepper) return;
-
-    const chipCount = chipStepper.querySelector('.my-argument-chip-count');
-    if (chipCount) {
-      chipCount.textContent = String(numericMyVotes);
-    }
-  });
-}
-
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null, options = {}) {
-  const shouldRunDeferredRefresh = options.deferHeavyRefresh !== false;
-
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
+  rerenderArgumentsAfterLocalVoteChange(debateId);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
-  refreshExistingVotedArgumentChipCount(argId, myVotesOnArgument);
-  syncVoiceButtonsDisabledState(debateId, argId);
-
-  if (!shouldRunDeferredRefresh) {
-    return;
-  }
-
-  scheduleDeferredVoteUiRefresh(debateId, {
-    rerenderArguments: shouldRerenderArgumentsAfterVoteChange(),
-    refreshAllVoiceButtons: false
-  });
-}
-
-function buildVoteUiSnapshot(argId, state) {
-  const argIdString = String(argId);
-  const targetArgument = (currentAllArguments || []).find(
-    (arg) => String(arg.id) === argIdString
-  );
-
-  return {
-    argId: argIdString,
-    state: { ...(state || {}) },
-    votes: Number(targetArgument?.votes || 0),
-    myVotesOnArgument: Number((state || {})[argIdString] || 0),
-    lastVotedAt: targetArgument?.last_voted_at || null
-  };
-}
-
-function restoreVoteUiSnapshot(debateId, snapshot) {
-  if (!snapshot) return;
-
-  setState(debateId, snapshot.state || {});
-  refreshVoteUiAfterLocalChange(
-    debateId,
-    snapshot.argId,
-    Number(snapshot.votes || 0),
-    Number(snapshot.myVotesOnArgument || 0),
-    snapshot.lastVotedAt || null
-  );
-}
-
-function scheduleFinalVoteCardRecenter(argumentId) {
-  const argumentIdString = String(argumentId || "");
-  if (!argumentIdString) return;
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      scrollToTopOfArgumentCardAndFlash(argumentIdString, {
-        immediate: true,
-        repeatDelay: 0,
-        flashDelay: 40
-      });
-    });
-  });
+  refreshAllVoiceButtonsDisabledState(debateId);
 }
 
 async function vote(debateId, argId, shouldScroll = true, button = null) {
@@ -5348,56 +5151,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-  const snapshot = buildVoteUiSnapshot(argId, state);
-  const optimisticState = { ...state };
-  const optimisticMyVotes = Number(optimisticState[argIdString] || 0) + 1;
-  const optimisticVotes = Number(targetBefore?.votes || 0) + 1;
-  const optimisticLastVotedAt = new Date().toISOString();
-
-  optimisticState[argIdString] = optimisticMyVotes;
-  setState(debateId, optimisticState);
-  setVoiceRequestPending(debateId, argId, true);
-
-  let optimisticRankMessageShown = false;
-
-  try {
-    refreshVoteUiAfterLocalChange(
-      debateId,
-      argId,
-      optimisticVotes,
-      optimisticMyVotes,
-      optimisticLastVotedAt,
-      { deferHeavyRefresh: false }
-    );
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId, {
-        immediate: true,
-        repeatDelay: 24,
-        flashDelay: 80
-      });
-    }
-
-    const optimisticTargetAfter = (currentAllArguments || []).find(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    const optimisticAfterSide = optimisticTargetAfter
-      ? String(optimisticTargetAfter.side || "")
-      : targetSide;
-
-    const optimisticAfterArgsSameSide = (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === optimisticAfterSide
-    );
-
-    optimisticRankMessageShown = showVoteRankProgress(
-      beforeRankMap,
-      optimisticAfterArgsSameSide,
-      argId
-    );
-  } catch (uiError) {
-    console.error(uiError);
-  }
+setVoiceRequestPending(debateId, argId, true);
 
   try {
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
@@ -5408,17 +5162,16 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       body: JSON.stringify({ voterKey })
     });
 
-    const confirmedState = getState(debateId);
-    confirmedState[argIdString] = Number(response?.myVotesOnArgument || optimisticMyVotes);
-    setState(debateId, confirmedState);
+    state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
+    setState(debateId, state);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || optimisticVotes),
-        Number(response?.myVotesOnArgument || optimisticMyVotes),
-        response?.lastVotedAt || optimisticLastVotedAt
+        Number(response?.votes || 0),
+        Number(response?.myVotesOnArgument || 0),
+        response?.lastVotedAt || null
       );
     } catch (uiError) {
       console.error(uiError);
@@ -5436,20 +5189,12 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       (arg) => String(arg.side || "") === afterSide
     );
 
-    if (!optimisticRankMessageShown) {
-      showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
-    }
+    showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
 
     if (shouldScroll) {
-      scheduleFinalVoteCardRecenter(argId);
+      scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
-    restoreVoteUiSnapshot(debateId, snapshot);
-
-    if (optimisticRankMessageShown) {
-      closeReplacementSuccessMessage();
-    }
-
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
       showVoteWarning(
@@ -5461,7 +5206,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     alert(error.message);
   } finally {
-    setVoiceRequestPending(debateId, argId, false);
+  setVoiceRequestPending(debateId, argId, false);
   }
 }
 
@@ -5475,7 +5220,8 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-  if (!state[argIdString] || Number(state[argIdString]) <= 0) {
+  const currentMyVotes = Number(state[argIdString] || 0);
+  if (currentMyVotes <= 0) {
     return;
   }
 
@@ -5483,43 +5229,41 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     (arg) => String(arg.id) === argIdString
   );
 
-  const snapshot = buildVoteUiSnapshot(argId, state);
-  const optimisticState = { ...state };
-  const optimisticMyVotes = Math.max(0, Number(optimisticState[argIdString] || 0) - 1);
-  const optimisticVotes = Math.max(0, Number(targetBefore?.votes || 0) - 1);
+  const previousVotes = Number(targetBefore?.votes || 0);
+  const previousLastVotedAt = targetBefore?.last_voted_at || null;
+  const previousStateSnapshot = { ...state };
 
-  if (optimisticMyVotes > 0) {
-    optimisticState[argIdString] = optimisticMyVotes;
-  } else {
-    delete optimisticState[argIdString];
-  }
+  const optimisticMyVotes = Math.max(0, currentMyVotes - 1);
+  const optimisticVotes = Math.max(0, previousVotes - 1);
 
-  setState(debateId, optimisticState);
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
 
   try {
-    refreshVoteUiAfterLocalChange(
-      debateId,
-      argId,
-      optimisticVotes,
-      optimisticMyVotes,
-      targetBefore?.last_voted_at || null,
-      { deferHeavyRefresh: false }
-    );
+    if (optimisticMyVotes > 0) {
+      state[argIdString] = optimisticMyVotes;
+    } else {
+      delete state[argIdString];
+    }
+
+    setState(debateId, state);
+
+    try {
+      refreshVoteUiAfterLocalChange(
+        debateId,
+        argId,
+        optimisticVotes,
+        optimisticMyVotes,
+        previousLastVotedAt
+      );
+    } catch (optimisticUiError) {
+      console.error(optimisticUiError);
+    }
 
     if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId, {
-        immediate: true,
-        repeatDelay: 24,
-        flashDelay: 80
-      });
+      scrollToTopOfArgumentCardAndFlash(argId);
     }
-  } catch (uiError) {
-    console.error(uiError);
-  }
 
-  try {
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
@@ -5529,35 +5273,46 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     });
 
     const myVotesOnArgument = Number(response?.myVotesOnArgument || 0);
-    const confirmedState = getState(debateId);
 
     if (myVotesOnArgument > 0) {
-      confirmedState[argIdString] = myVotesOnArgument;
+      state[argIdString] = myVotesOnArgument;
     } else {
-      delete confirmedState[argIdString];
+      delete state[argIdString];
     }
 
-    setState(debateId, confirmedState);
+    setState(debateId, state);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || optimisticVotes),
+        Number(response?.votes || 0),
         myVotesOnArgument,
-        response?.lastVotedAt || targetBefore?.last_voted_at || null
+        response?.lastVotedAt || previousLastVotedAt
       );
     } catch (uiError) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-
-    if (shouldScroll) {
-      scheduleFinalVoteCardRecenter(argId);
-    }
   } catch (error) {
-    restoreVoteUiSnapshot(debateId, snapshot);
+    const restoredState = { ...previousStateSnapshot };
+    setState(debateId, restoredState);
+
+    try {
+      refreshVoteUiAfterLocalChange(
+        debateId,
+        argId,
+        previousVotes,
+        currentMyVotes,
+        previousLastVotedAt
+      );
+    } catch (rollbackUiError) {
+      console.error(rollbackUiError);
+      pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+      await loadDebate(debateId);
+    }
+
     alert(error.message);
   } finally {
     clearButtonLoading(button);
