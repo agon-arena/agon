@@ -1190,27 +1190,27 @@ function syncVoiceButtonsDisabledState(debateId, argId) {
   getVoiceButtons(argIdString).forEach((button) => {
     const action = button.dataset.voiceAction;
 
-    if (isPending) {
-      button.disabled = true;
-      button.dataset.loading = "true";
-      button.classList.add("button-loading");
-      button.style.pointerEvents = "none";
-      button.style.opacity = "0.55";
-      return;
-    }
+if (isPending) {
+  button.disabled = true;
+  button.dataset.loading = "true";
+  button.classList.remove("button-loading");
+  button.style.pointerEvents = "none";
+  button.style.opacity = "";
+  return;
+}
 
     delete button.dataset.loading;
     button.classList.remove("button-loading");
     button.style.pointerEvents = "";
     button.style.opacity = "";
 
-    if (action === "minus") {
-      button.disabled = myVoteCount <= 0;
-    } else if (action === "plus") {
-      button.disabled = totalVotesUsed >= 5;
-    } else {
-      button.disabled = false;
-    }
+if (action === "minus") {
+  button.disabled = myVoteCount <= 0;
+} else if (action === "plus") {
+  button.disabled = false;
+} else {
+  button.disabled = false;
+}
   });
 }
 
@@ -5108,13 +5108,22 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
+function shouldRerenderArgumentsAfterVoteChange() {
+  const sortMode = getArgumentsSortMode();
+  return sortMode === "score" || sortMode === "progress";
+}
+
 function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
-  rerenderArgumentsAfterLocalVoteChange(debateId);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
-  refreshAllVoiceButtonsDisabledState(debateId);
+
+  if (shouldRerenderArgumentsAfterVoteChange()) {
+    rerenderArgumentsAfterLocalVoteChange(debateId);
+  }
+
+  syncVoiceButtonsDisabledState(debateId, argId);
 }
 
 async function vote(debateId, argId, shouldScroll = true, button = null) {
@@ -5151,8 +5160,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-  setButtonLoading(button);
-  setVoiceRequestPending(debateId, argId, true);
+setVoiceRequestPending(debateId, argId, true);
 
   try {
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
@@ -5207,8 +5215,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     alert(error.message);
   } finally {
-    clearButtonLoading(button);
-    setVoiceRequestPending(debateId, argId, false);
+  setVoiceRequestPending(debateId, argId, false);
   }
 }
 
