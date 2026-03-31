@@ -1958,15 +1958,48 @@ function updateNotificationBadgeElement(element, unreadCount) {
     element.textContent = "";
   }
 }
+function getStoredUnreadNotificationCount() {
+  return Math.max(0, Number(localStorage.getItem("notif_count") || 0));
+}
+function setStoredUnreadNotificationCount(unreadCount) {
+  const safeCount = Math.max(0, Number(unreadCount || 0));
+  localStorage.setItem("notif_count", safeCount);
+  localStorage.setItem("lastNotifCount", safeCount);
+
+  const badge = document.getElementById("notifications-count");
+  const compactBadge = document.getElementById("notifications-count-compact");
+
+  updateNotificationBadgeElement(badge, safeCount);
+  updateNotificationBadgeElement(compactBadge, safeCount);
+}
+function decrementStoredUnreadNotificationCount(step = 1) {
+  const current = getStoredUnreadNotificationCount();
+  setStoredUnreadNotificationCount(Math.max(0, current - Math.max(1, Number(step || 1))));
+}
+function markNotificationElementAsReadLocally(element) {
+  if (!element) return false;
+
+  const wasUnread = element.classList.contains("notification-item-unread");
+  element.classList.remove("notification-item-unread");
+  return wasUnread;
+}
+function markAllNotificationElementsAsReadLocally() {
+  document.querySelectorAll(".notification-item.notification-item-unread").forEach((element) => {
+    element.classList.remove("notification-item-unread");
+  });
+}
+let notificationsLoadInFlight = null;
 async function loadNotifications() {
   const badge = document.getElementById("notifications-count");
   const compactBadge = document.getElementById("notifications-count-compact");
   const list = document.getElementById("notifications-list");
 
   if (!badge && !compactBadge) return;
+  if (notificationsLoadInFlight) return notificationsLoadInFlight;
 
-  try {
-    const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
+  notificationsLoadInFlight = (async () => {
+    try {
+      const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
 const previousCount = Number(localStorage.getItem("notif_count") || 0);
 const unreadCount = notifications.filter((n) => Number(n.is_read) === 0).length;
 
@@ -2072,7 +2105,12 @@ if (notification.type === "reply_to_comment") {
   if (list) {
     list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
   }
+} finally {
+  notificationsLoadInFlight = null;
 }
+  })();
+
+  return notificationsLoadInFlight;
 }
 
 async function markNotificationsAsRead() {
@@ -2087,7 +2125,8 @@ async function markNotificationsAsRead() {
       })
     });
 
-    await loadNotifications();
+    markAllNotificationElementsAsReadLocally();
+    setStoredUnreadNotificationCount(0);
   } catch (error) {
     alert(error.message);
   }
@@ -2108,13 +2147,20 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   event.preventDefault();
   setActionLoading(element);
 
-  if (element) {
-    element.classList.remove("notification-item-unread");
+  const wasUnread = markNotificationElementAsReadLocally(element);
+  if (wasUnread) {
+    decrementStoredUnreadNotificationCount(1);
   }
 
   try {
     await markOneNotificationAsRead(notificationId);
   } catch (error) {
+    if (wasUnread) {
+      setStoredUnreadNotificationCount(getStoredUnreadNotificationCount() + 1);
+      if (element) {
+        element.classList.add("notification-item-unread");
+      }
+    }
     console.error(error);
   }
 
@@ -6008,6 +6054,10 @@ function closeReplacementSuccessMessage() {
     overlay.remove();
   }, 250);
 }
+function shouldRunBackgroundRefresh() {
+  return !document.hidden;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   attachAdminButtons();
   loadNotifications();
@@ -6025,10 +6075,12 @@ if (location.pathname === "/debate") {
   loadReportsBadge();
 
   setInterval(() => {
+    if (!shouldRunBackgroundRefresh()) return;
     loadNotifications();
   }, 20000);
 
   setInterval(() => {
+    if (!shouldRunBackgroundRefresh()) return;
     loadReportsBadge();
   }, 20000);
   const resetNotificationsBtn = document.getElementById("reset-notifications-btn");
@@ -6037,14 +6089,17 @@ if (location.pathname === "/debate") {
   }
 });
 
+let notificationsPageLoadInFlight = null;
 async function loadNotificationsPage() {
   const list = document.getElementById("notifications-page-list");
   if (!list) return;
+  if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;
 
-  try {
-    const notifications = await fetchJSON(
-      API + "/notifications?userKey=" + encodeURIComponent(getKey())
-    );
+  notificationsPageLoadInFlight = (async () => {
+    try {
+      const notifications = await fetchJSON(
+        API + "/notifications?userKey=" + encodeURIComponent(getKey())
+      );
 const unread = notifications.filter(n => !n.is_read).length;
 
 const previous = Number(localStorage.getItem("lastNotifCount") || 0);
@@ -6138,7 +6193,12 @@ if (notification.type === "reply_to_comment") {
 
   } catch (error) {
     list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  } finally {
+    notificationsPageLoadInFlight = null;
   }
+  })();
+
+  return notificationsPageLoadInFlight;
 }
 
 
