@@ -3842,10 +3842,11 @@ if (pendingTopCommentScroll) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-     window.scrollTo({
+  window.scrollTo({
   top: Math.max(0, y),
-  behavior: "smooth"
+  behavior: "auto"
 });
+finalizeNotificationTransitionAfterFocus();
 
 waitForNotificationTargetScrollToFinish(() => {
   finalizeNotificationTransitionAfterFocus();
@@ -3875,10 +3876,11 @@ else if (pendingCommentScrollId) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 140;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-    window.scrollTo({
+ window.scrollTo({
   top: Math.max(0, y),
-  behavior: "smooth"
+  behavior: "auto"
 });
+finalizeNotificationTransitionAfterFocus();
 
 waitForNotificationTargetScrollToFinish(() => {
   finalizeNotificationTransitionAfterFocus();
@@ -3908,10 +3910,11 @@ else if (pendingArgumentScrollId) {
       const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-    window.scrollTo({
+ window.scrollTo({
   top: Math.max(0, y),
-  behavior: "smooth"
+  behavior: "auto"
 });
+finalizeNotificationTransitionAfterFocus();
 
 waitForNotificationTargetScrollToFinish(() => {
   finalizeNotificationTransitionAfterFocus();
