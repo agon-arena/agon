@@ -6030,9 +6030,31 @@ function cancelReply(argumentId) {
     });
   }
 }
+
 function scrollToArgumentFromSummary(argId) {
-  const element = getVisibleArgumentElement(argId);
-  if (!element) return;
+  const argIdString = String(argId);
+  let element = getVisibleArgumentElement(argIdString);
+
+  if (!element) {
+    const sortedArgs = sortArgumentsByMode(
+      currentAllArguments || [],
+      currentCommentsByArgument || {}
+    );
+
+    const targetIndex = sortedArgs.findIndex(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    if (targetIndex === -1) return;
+
+    if (argumentsVisible <= targetIndex) {
+      argumentsVisible = targetIndex + 1;
+    }
+
+    pendingArgumentScrollId = argIdString;
+    rerenderCurrentDebateArguments();
+    return;
+  }
 
   const topbar = document.querySelector(".topbar");
 
