@@ -228,16 +228,9 @@ function setDebateViewMode(mode) {
   }
 
   const debateId = getDebateId();
-  if (!debateId) {
-    return;
+  if (debateId) {
+    loadDebate(debateId);
   }
-
-  if (currentDebateCache && Array.isArray(currentAllArguments)) {
-    rerenderCurrentDebateArguments();
-    return;
-  }
-
-  loadDebate(debateId);
 }
 function isCurrentOpenDebateMode() {
   const titleB = document.getElementById("title-b");
@@ -1348,7 +1341,7 @@ function initNotificationTransitionOverlay() {
   if (location.pathname !== "/debate") {
     setTimeout(() => {
       hideNotificationTransitionOverlay();
-    }, 1200);
+    }, 400);
   }
 }
 
@@ -1374,9 +1367,9 @@ function finalizeNotificationTransitionAtScrollStart() {
 
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
   const callback = typeof onDone === "function" ? onDone : () => {};
-  const maxWaitMs = Number(options.maxWaitMs || 1400);
-  const stableFramesNeeded = Number(options.stableFramesNeeded || 5);
-  const tolerance = Number(options.tolerance || 2);
+  const maxWaitMs = Number(options.maxWaitMs || 650);
+  const stableFramesNeeded = Number(options.stableFramesNeeded || 3);
+  const tolerance = Number(options.tolerance || 3);
   const startedAt = performance.now();
   let stableFrames = 0;
   let previousY = window.scrollY;
