@@ -4452,13 +4452,13 @@ ${
 )}</span>
         </div>
 
-        <button
-          type="button"
-          class="button button-small"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
+   <button
+  type="button"
+  class="button"
+  onclick="cancelReply('${a.id}')"
+>
+  Annuler la réponse
+</button>
       </div>
     `
     : ""
