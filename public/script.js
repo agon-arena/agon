@@ -566,6 +566,13 @@ function changeArgumentsSort(mode) {
     return;
   }
 
+  if (Array.isArray(currentAllArguments) && currentAllArguments.length) {
+    requestAnimationFrame(() => {
+      rerenderCurrentDebateArguments();
+    });
+    return;
+  }
+
   const debateId = getDebateId();
   if (debateId) {
     loadDebate(debateId);
