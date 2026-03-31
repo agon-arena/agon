@@ -5299,6 +5299,21 @@ function restoreVoteUiSnapshot(debateId, snapshot) {
   );
 }
 
+function scheduleFinalVoteCardRecenter(argumentId) {
+  const argumentIdString = String(argumentId || "");
+  if (!argumentIdString) return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scrollToTopOfArgumentCardAndFlash(argumentIdString, {
+        immediate: true,
+        repeatDelay: 0,
+        flashDelay: 40
+      });
+    });
+  });
+}
+
 async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -5424,6 +5439,10 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     if (!optimisticRankMessageShown) {
       showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
     }
+
+    if (shouldScroll) {
+      scheduleFinalVoteCardRecenter(argId);
+    }
   } catch (error) {
     restoreVoteUiSnapshot(debateId, snapshot);
 
@@ -5532,6 +5551,10 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
+    }
+
+    if (shouldScroll) {
+      scheduleFinalVoteCardRecenter(argId);
     }
   } catch (error) {
     restoreVoteUiSnapshot(debateId, snapshot);
