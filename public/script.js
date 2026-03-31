@@ -4704,15 +4704,25 @@ async function submitListArgument(debateId) {
   const isOpenMode = !titleB || !titleB.textContent.trim();
   const side = isOpenMode ? "A" : sideField.value;
 
-  if (!title) {
-    alert("Tu dois écrire une idée.");
-    return;
-  }
+ if (!title) {
+  showReplacementSuccessMessage(
+    "Idée manquante",
+    "Tu dois écrire un titre à cette idée avant de la publier.",
+    null,
+    "⚠️"
+  );
+  return;
+}
 
-  if (!isOpenMode && side !== "A" && side !== "B") {
-    alert("Tu dois choisir une position.");
-    return;
-  }
+if (!isOpenMode && side !== "A" && side !== "B") {
+  showReplacementSuccessMessage(
+    "Position manquante",
+    "Tu dois choisir une position avant de publier cette idée.",
+    null,
+    "⚠️"
+  );
+  return;
+}
 
   setButtonLoading(submitButton);
 
