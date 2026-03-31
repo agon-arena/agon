@@ -1052,12 +1052,19 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight");
   element.classList.remove("voice-title-highlight-green");
 }
-function scrollToTopOfArgumentCardAndFlash(argumentId) {
+function scrollToTopOfArgumentCardAndFlash(argumentId, options = {}) {
   const element = getVisibleArgumentElement(argumentId);
   if (!element) return;
 
+  const {
+    immediate = false,
+    repeatDelay = 260,
+    flashDelay = 420
+  } = options || {};
+
   const topbar = document.querySelector(".topbar");
   const offset = (topbar ? topbar.offsetHeight : 80) + 60;
+  const scrollBehavior = immediate ? "auto" : "smooth";
 
   const scrollHigh = () => {
     const rect = element.getBoundingClientRect();
@@ -1065,15 +1072,17 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
 
     window.scrollTo({
       top: Math.max(0, y),
-      behavior: "smooth"
+      behavior: scrollBehavior
     });
   };
 
   scrollHigh();
 
-  setTimeout(() => {
-    scrollHigh();
-  }, 260);
+  if (repeatDelay !== null && repeatDelay !== false) {
+    setTimeout(() => {
+      scrollHigh();
+    }, immediate ? Math.max(0, Number(repeatDelay) || 0) : repeatDelay);
+  }
 
   setTimeout(() => {
     const isGreenTarget =
@@ -1096,7 +1105,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
         element.classList.remove("admin-highlight");
       }, 5000);
     }
-  }, 420);
+  }, immediate ? Math.max(0, Number(flashDelay) || 0) : flashDelay);
 }
 function scrollToTopOfArgumentCard(argumentId) {
   const element = getVisibleArgumentElement(argumentId);
@@ -5346,6 +5355,14 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       { deferHeavyRefresh: false }
     );
 
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId, {
+        immediate: true,
+        repeatDelay: 24,
+        flashDelay: 80
+      });
+    }
+
     const optimisticTargetAfter = (currentAllArguments || []).find(
       (arg) => String(arg.id) === argIdString
     );
@@ -5406,10 +5423,6 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     if (!optimisticRankMessageShown) {
       showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
-    }
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
     restoreVoteUiSnapshot(debateId, snapshot);
@@ -5475,6 +5488,14 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       targetBefore?.last_voted_at || null,
       { deferHeavyRefresh: false }
     );
+
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId, {
+        immediate: true,
+        repeatDelay: 24,
+        flashDelay: 80
+      });
+    }
   } catch (uiError) {
     console.error(uiError);
   }
@@ -5511,10 +5532,6 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
-    }
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
     restoreVoteUiSnapshot(debateId, snapshot);
