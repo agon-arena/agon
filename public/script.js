@@ -5946,31 +5946,36 @@ function replyToComment(argumentId, commentId, button = null) {
 
   setActionLoading(button);
 
-  const focusReplyUi = () => {
-    const replyLabel = document.querySelector(
-      `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
-    );
+const focusReplyUi = () => {
+  const isListMode = currentDebateViewMode === "list";
 
-    const input = document.getElementById(`comment-input-${argumentId}`);
-    const target = replyLabel || input;
+  const container = isListMode
+    ? document.getElementById(`list-argument-${argumentId}`)
+    : document.getElementById(`argument-${argumentId}`);
 
-    if (target) {
-      const topbar = document.querySelector(".topbar");
-      const offset = topbar ? topbar.offsetHeight + 230 : 330;
-      const y = target.getBoundingClientRect().top + window.scrollY - offset;
+  if (!container) return;
 
-      window.scrollTo({
-        top: y,
-        behavior: "smooth"
-      });
-    }
+  const replyLabel = container.querySelector(".reply-preview-label");
+  const input = container.querySelector(`#comment-input-${argumentId}`);
+  const target = replyLabel || input;
 
-    if (input) {
-      setTimeout(() => {
-        input.focus();
-      }, 250);
-    }
-  };
+  if (target) {
+    const topbar = document.querySelector(".topbar");
+    const offset = topbar ? topbar.offsetHeight + 230 : 330;
+    const y = target.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({
+      top: y,
+      behavior: "smooth"
+    });
+  }
+
+  if (input) {
+    setTimeout(() => {
+      input.focus();
+    }, 250);
+  }
+};
 
   const rerenderReplyUi = () => {
     try {
