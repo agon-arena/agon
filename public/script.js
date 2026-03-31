@@ -5792,25 +5792,35 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       await loadDebate(debateId);
     }
   } catch (error) {
-    if (optimisticApplied) {
-      setState(debateId, previousState);
 
-      try {
-        refreshVoteUiAfterLocalChange(
-          debateId,
-          argId,
-          previousVotes,
-          previousMyVotesOnArgument,
-          previousLastVotedAt
-        );
-      } catch (rollbackUiError) {
-        console.error(rollbackUiError);
-        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-        await loadDebate(debateId);
-      }
-    }
+   
+if (optimisticApplied) {
+  setState(debateId, previousState);
 
-    alert(error.message);
+  try {
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      previousVotes,
+      previousMyVotesOnArgument,
+      previousLastVotedAt
+    );
+  } catch (rollbackUiError) {
+    console.error(rollbackUiError);
+    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+    await loadDebate(debateId);
+  }
+}
+
+if (error.message === "no_vote") {
+  pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+  await loadDebate(debateId);
+  return;
+}
+
+showVoteWarning("Erreur", error.message);
+
+
   } finally {
     clearButtonLoading(button);
     setVoiceRequestPending(debateId, argId, false);
@@ -5818,10 +5828,6 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
 }
 
 async function confirmRemoveVoice(debateId, argId) {
-  const ok = window.confirm("Retirer 1 voix de cette idée ?");
-
-  if (!ok) return;
-
   await unvote(debateId, argId);
 }
 
