@@ -5162,8 +5162,21 @@ async function confirmRemoveVoice(debateId, argId) {
   await unvote(debateId, argId);
 }
 
-function getLocalCommentById(commentId) {
+function getLocalCommentsForArgument(argumentId) {
+  return currentCommentsByArgument?.[String(argumentId)] || [];
+}
+
+function getLocalCommentById(commentId, argumentId = null) {
   const commentIdString = String(commentId);
+
+  if (argumentId !== null && argumentId !== undefined) {
+    const scopedComments = getLocalCommentsForArgument(argumentId);
+    const scopedFound = (scopedComments || []).find(
+      (comment) => String(comment.id) === commentIdString
+    );
+
+    if (scopedFound) return scopedFound;
+  }
 
   for (const comments of Object.values(currentCommentsByArgument || {})) {
     const found = (comments || []).find((comment) => String(comment.id) === commentIdString);
@@ -5303,26 +5316,35 @@ function replyToComment(argumentId, commentId, button = null) {
 
   setActionLoading(button);
 
-  fetchJSON(API + "/debates/" + debateId)
-    .then((debateData) => {
-      const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
-      const targetComment = comments.find(
-        (comment) => String(comment.id) === String(commentId)
-      );
+  const applyReplyTarget = (targetComment) => {
+    replyToCommentByArgument[argumentId] = {
+      commentId: String(commentId),
+      commentContent: targetComment ? String(targetComment.content || "") : "",
+      improvementTitle: targetComment ? String(targetComment.improvement_title || "") : "",
+      improvementBody: targetComment ? String(targetComment.improvement_body || "") : ""
+    };
 
-replyToCommentByArgument[argumentId] = {
-  commentId: String(commentId),
-  commentContent: targetComment ? String(targetComment.content || "") : "",
-  improvementTitle: targetComment ? String(targetComment.improvement_title || "") : "",
-  improvementBody: targetComment ? String(targetComment.improvement_body || "") : ""
-};
+    openCommentsByArgument[argumentId] = true;
+    visibleCommentsByArgument[argumentId] =
+      Math.max(visibleCommentsByArgument[argumentId] || 5, 9999);
 
-      openCommentsByArgument[argumentId] = true;
-      visibleCommentsByArgument[argumentId] =
-        Math.max(visibleCommentsByArgument[argumentId] || 5, 9999);
+    return loadDebate(debateId);
+  };
 
-      return loadDebate(debateId);
-    })
+  const localTargetComment = getLocalCommentById(commentId, argumentId);
+  const loadReplyForm = localTargetComment
+    ? applyReplyTarget(localTargetComment)
+    : fetchJSON(API + "/debates/" + debateId)
+        .then((debateData) => {
+          const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
+          const targetComment = comments.find(
+            (comment) => String(comment.id) === String(commentId)
+          );
+
+          return applyReplyTarget(targetComment);
+        });
+
+  loadReplyForm
     .then(() => {
       const replyLabel = document.querySelector(
         `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
