@@ -1243,10 +1243,25 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
     }
 
     const newVotes = Number(argument.votes || 0) + 1;
-    const { error: updateArgErr } = await supabase
+    const latestVoteAt = nowIso();
+    let effectiveLastVotedAt = latestVoteAt;
+
+    let { error: updateArgErr } = await supabase
       .from("arguments")
-      .update({ votes: newVotes })
+      .update({
+        votes: newVotes,
+        last_voted_at: latestVoteAt
+      })
       .eq("id", id);
+
+    if (updateArgErr && /last_voted_at/i.test(String(updateArgErr.message || ""))) {
+      effectiveLastVotedAt = argument.last_voted_at || null;
+      const fallbackUpdate = await supabase
+        .from("arguments")
+        .update({ votes: newVotes })
+        .eq("id", id);
+      updateArgErr = fallbackUpdate.error;
+    }
 
     if (updateArgErr) {
       console.error(updateArgErr);
@@ -1268,7 +1283,8 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
     res.json({
       votes: newVotes,
       myVotesOnArgument: Number(finalVoteRow?.vote_count || 0),
-      remainingVotes: MAX_VOTES_PER_DEBATE - (totalVotesUsed + 1)
+      remainingVotes: MAX_VOTES_PER_DEBATE - (totalVotesUsed + 1),
+      lastVotedAt: effectiveLastVotedAt
     });
   } catch (error) {
     console.error(error);
@@ -1330,7 +1346,8 @@ app.post("/api/arguments/:id/unvote", async (req, res) => {
     res.json({
       votes: newVotes,
       myVotesOnArgument: Number(finalVoteRow?.vote_count || 0),
-      remainingVotes: MAX_VOTES_PER_DEBATE - totalVotesAfter
+      remainingVotes: MAX_VOTES_PER_DEBATE - totalVotesAfter,
+      lastVotedAt: argument.last_voted_at || null
     });
   } catch (error) {
     console.error(error);

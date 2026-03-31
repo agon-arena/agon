@@ -532,7 +532,7 @@ function getArgumentsSortMode() {
 }
 
 function changeArgumentsSort(mode) {
-  const normalizedMode = ["score", "comments", "recent", "old"].includes(mode)
+  const normalizedMode = ["score", "progress", "comments", "recent", "old"].includes(mode)
     ? mode
     : "score";
 
@@ -565,6 +565,7 @@ function updateSortButtonLabel() {
 
   const labels = {
     score: "Plus soutenus",
+    progress: "Idées en progression",
     comments: "Commentés",
     recent: "Récents",
     old: "Anciens"
@@ -607,6 +608,8 @@ function sortArgumentsByMode(args, commentsByArgument = {}) {
     });
 
     return movePinnedArgumentToFourthPosition(ordered);
+  } else if (mode === "progress") {
+    return sortArgumentsByProgress(sorted);
   } else {
     return sortArgumentsByScore(sorted);
   }
@@ -629,13 +632,37 @@ function movePinnedArgumentToFourthPosition(sortedArgs) {
 
   return reordered;
 }
+function getLastVotedAtTimestamp(arg) {
+  return new Date(String(arg?.last_voted_at || "").replace(" ", "T")).getTime() || 0;
+}
 function sortArgumentsByScore(args) {
   const ordered = [...(args || [])].sort((a, b) => {
-    const scoreA = Number(a.votes || 0) + getArgumentFreshnessBonus(a);
-    const scoreB = Number(b.votes || 0) + getArgumentFreshnessBonus(b);
+    const votesA = Number(a.votes || 0);
+    const votesB = Number(b.votes || 0);
 
-    if (scoreB !== scoreA) {
-      return scoreB - scoreA;
+    if (votesB !== votesA) {
+      return votesB - votesA;
+    }
+
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+
+  return movePinnedArgumentToFourthPosition(ordered);
+}
+function sortArgumentsByProgress(args) {
+  const ordered = [...(args || [])].sort((a, b) => {
+    const lastVoteA = getLastVotedAtTimestamp(a);
+    const lastVoteB = getLastVotedAtTimestamp(b);
+
+    if (lastVoteB !== lastVoteA) {
+      return lastVoteB - lastVoteA;
+    }
+
+    const votesA = Number(a.votes || 0);
+    const votesB = Number(b.votes || 0);
+
+    if (votesB !== votesA) {
+      return votesB - votesA;
     }
 
     return Number(b.id || 0) - Number(a.id || 0);
@@ -4930,7 +4957,7 @@ await loadDebate(debateId);
   }
 }
 
-function updateLocalArgumentVoteState(argId, votes, myVoteCount) {
+function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = null) {
   const argIdString = String(argId);
   const numericVotes = Math.max(0, Number(votes || 0));
   const numericMyVotes = Math.max(0, Number(myVoteCount || 0));
@@ -4939,7 +4966,8 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount) {
     if (String(arg.id) !== argIdString) return arg;
     return {
       ...arg,
-      votes: numericVotes
+      votes: numericVotes,
+      ...(lastVotedAt ? { last_voted_at: lastVotedAt } : {})
     };
   });
 
@@ -4961,6 +4989,37 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount) {
 
     card.classList.toggle('argument-card-voted', numericMyVotes > 0);
   });
+}
+
+
+function rerenderArgumentsAfterLocalVoteChange(debateId) {
+  const previousPinnedArgumentId = pinnedNewArgumentId;
+  pinnedNewArgumentId = null;
+
+  try {
+    const commentsByArgument = currentCommentsByArgument || {};
+    const unifiedContainer = document.getElementById("arguments-unified");
+    const argumentsAContainer = document.getElementById("arguments-a");
+    const argumentsBContainer = document.getElementById("arguments-b");
+    const openMode = isCurrentOpenDebateMode();
+
+    if (openMode || currentDebateViewMode === "list") {
+      if (argumentsAContainer) argumentsAContainer.innerHTML = "";
+      if (argumentsBContainer) argumentsBContainer.innerHTML = "";
+      renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+      return;
+    }
+
+    if (unifiedContainer) unifiedContainer.innerHTML = "";
+
+    const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
+    const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
+
+    renderArgs("arguments-a", argsA, debateId, commentsByArgument);
+    renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+  } finally {
+    pinnedNewArgumentId = previousPinnedArgumentId;
+  }
 }
 
 function refreshDebateScoreFromCurrentArguments() {
@@ -5038,25 +5097,9 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
-  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
-
-  // Après un vote/retrait de voix, on veut un classement pur par score.
-  // On neutralise donc le pinning temporaire des nouvelles idées.
-  pinnedNewArgumentId = null;
-
-  const commentsByArgument = currentCommentsByArgument || {};
-  const isOpenMode = isCurrentOpenDebateMode();
-
-  if (currentDebateViewMode === "list" || isOpenMode) {
-    renderUnifiedArgs("arguments-unified", currentAllArguments || [], debateId, commentsByArgument);
-  } else {
-    const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
-    const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
-    renderArgs("arguments-a", argsA, debateId, commentsByArgument);
-    renderArgs("arguments-b", argsB, debateId, commentsByArgument);
-  }
-
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
+  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
+  rerenderArgumentsAfterLocalVoteChange(debateId);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
@@ -5117,7 +5160,8 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
         debateId,
         argId,
         Number(response?.votes || 0),
-        Number(response?.myVotesOnArgument || 0)
+        Number(response?.myVotesOnArgument || 0),
+        response?.lastVotedAt || null
       );
     } catch (uiError) {
       console.error(uiError);
@@ -5198,7 +5242,8 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
         debateId,
         argId,
         Number(response?.votes || 0),
-        myVotesOnArgument
+        myVotesOnArgument,
+        response?.lastVotedAt || null
       );
     } catch (uiError) {
       console.error(uiError);
@@ -6075,10 +6120,40 @@ function shouldRunBackgroundRefresh() {
   return !document.hidden;
 }
 
+
+function ensureProgressSortOption() {
+  const menu = document.getElementById("sort-menu");
+  if (!menu) return;
+  if (menu.querySelector('[data-sort-mode="progress"]')) return;
+
+  const templateButton = menu.querySelector('button');
+  const progressButton = templateButton
+    ? templateButton.cloneNode(true)
+    : document.createElement("button");
+
+  progressButton.type = "button";
+  progressButton.textContent = "Idées en progression";
+  progressButton.setAttribute("data-sort-mode", "progress");
+  progressButton.onclick = () => changeArgumentsSort("progress");
+
+  if (!templateButton) {
+    progressButton.style.display = "block";
+    progressButton.style.width = "100%";
+  }
+
+  const commentsButton = menu.querySelector('[onclick*="comments"]');
+  if (commentsButton && commentsButton.parentNode === menu) {
+    menu.insertBefore(progressButton, commentsButton);
+  } else {
+    menu.appendChild(progressButton);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   attachAdminButtons();
   loadNotifications();
   renderGlobalShareBar();
+  ensureProgressSortOption();
   initDebateTopbarAutoHide();
 
   if (location.pathname === "/") initIndex();
