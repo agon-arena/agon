@@ -5142,23 +5142,11 @@ if (stance === "amelioration") {
     alert("Tu dois proposer un texte d'amélioration.");
     return;
   }
-} else {
-  if (!content) {
-    alert("Tu dois écrire un commentaire.");
-    return;
-  }
+} else if (!content) {
+  alert("Tu dois écrire un commentaire.");
+  return;
 }
-if (stance === "amelioration") {
-  if (!improvement_title) {
-    alert("Tu dois proposer un titre d'amélioration.");
-    return;
-  }
 
-  if (!improvement_body) {
-    alert("Tu dois proposer un texte d'amélioration.");
-    return;
-  }
-}
 const submitButton = event?.currentTarget?.querySelector('button[type="submit"]')
   || event?.currentTarget?.querySelector(".comment-submit-btn")
   || null;
@@ -5180,46 +5168,89 @@ try {
     })
   });
 
-    openCommentsByArgument[argumentId] = true;
-visibleCommentsByArgument[argumentId] = 5;
-    delete replyToCommentByArgument[argumentId];
+  openCommentsByArgument[argumentId] = true;
+  visibleCommentsByArgument[argumentId] = Math.max(visibleCommentsByArgument[argumentId] || 5, 5);
+  delete replyToCommentByArgument[argumentId];
+
+  if (input) {
     input.value = "";
-if (improvementTitleInput) {
-  improvementTitleInput.value = "";
-}
-
-if (improvementBodyInput) {
-  improvementBodyInput.value = "";
-}
-
-document
-  .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
-  .forEach((input) => {
-    input.checked = false;
-    input.dataset.waschecked = "false";
-  });
-
-const commentForm = input ? input.closest(".comment-form") : null;
-const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
-const mainField = commentForm?.querySelector(".comment-main-field");
-
-if (ameliorationFields) {
-  ameliorationFields.style.display = "none";
-}
-
-if (mainField) {
-  mainField.style.display = "block";
-}
-
-pendingCommentScrollId = String(data.id);
-pinnedNewCommentId = String(data.id);
-await loadDebate(debateId);
-
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    clearButtonLoading(submitButton);
   }
+
+  if (improvementTitleInput) {
+    improvementTitleInput.value = "";
+  }
+
+  if (improvementBodyInput) {
+    improvementBodyInput.value = "";
+  }
+
+  document
+    .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
+    .forEach((input) => {
+      input.checked = false;
+      input.dataset.waschecked = "false";
+    });
+
+  const commentForm = input ? input.closest(".comment-form") : null;
+  const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
+  const mainField = commentForm?.querySelector(".comment-main-field");
+
+  if (ameliorationFields) {
+    ameliorationFields.style.display = "none";
+  }
+
+  if (mainField) {
+    mainField.style.display = "block";
+  }
+
+  const argumentKey = String(argumentId);
+  const existingComments = Array.isArray(currentCommentsByArgument?.[argumentKey])
+    ? currentCommentsByArgument[argumentKey]
+    : [];
+
+  currentCommentsByArgument = {
+    ...(currentCommentsByArgument || {}),
+    [argumentKey]: [data, ...existingComments.filter((comment) => String(comment.id) !== String(data.id))]
+  };
+
+  pendingCommentScrollId = String(data.id);
+  pinnedNewCommentId = String(data.id);
+
+  try {
+    rerenderCurrentDebateArguments(debateId);
+
+    setTimeout(() => {
+      const element = getVisibleCommentElement(String(data.id));
+
+      if (element) {
+        const topbar = document.querySelector(".topbar");
+        const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+        const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+        window.scrollTo({
+          top: Math.max(0, y),
+          behavior: "smooth"
+        });
+
+        applyVoiceHighlight(element);
+
+        setTimeout(() => {
+          removeVoiceHighlight(element);
+        }, 2000);
+      }
+
+      pendingCommentScrollId = null;
+    }, 250);
+  } catch (uiError) {
+    console.error(uiError);
+    await loadDebate(debateId);
+  }
+
+} catch (error) {
+  alert(error.message);
+} finally {
+  clearButtonLoading(submitButton);
+}
 }
 
 function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = null) {
