@@ -5031,6 +5031,10 @@ function refreshDebateScoreFromCurrentArguments() {
   };
 }
 
+function getTotalVotesUsedFromStateObject(state) {
+  return Object.values(state || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+}
+
 function refreshAllVoiceButtonsDisabledState(debateId) {
   const uniqueArgIds = new Set((currentAllArguments || []).map((arg) => String(arg.id)));
   uniqueArgIds.forEach((argId) => {
@@ -5038,12 +5042,45 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
+function refreshRelevantVoiceButtonsDisabledState(debateId, argId, forceAll = false) {
+  if (forceAll) {
+    refreshAllVoiceButtonsDisabledState(debateId);
+    return;
+  }
+
+  const relevantArgIds = new Set([
+    String(argId),
+    ...Object.keys(getState(debateId) || {})
+  ]);
+
+  relevantArgIds.forEach((currentArgId) => {
+    syncVoiceButtonsDisabledState(debateId, currentArgId);
+  });
+}
+
+function didGlobalVoteAvailabilityChange(previousTotalVotesUsed, currentTotalVotesUsed) {
+  const previousAtLimit = Number(previousTotalVotesUsed || 0) >= 5;
+  const currentAtLimit = Number(currentTotalVotesUsed || 0) >= 5;
+  return previousAtLimit !== currentAtLimit;
+}
+
+function refreshVoteUiAfterLocalChange(
+  debateId,
+  argId,
+  votes,
+  myVotesOnArgument,
+  previousTotalVotesUsed = 0,
+  currentTotalVotesUsed = 0
+) {
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
-  refreshAllVoiceButtonsDisabledState(debateId);
+  refreshRelevantVoiceButtonsDisabledState(
+    debateId,
+    argId,
+    didGlobalVoteAvailabilityChange(previousTotalVotesUsed, currentTotalVotesUsed)
+  );
 }
 
 async function vote(debateId, argId, shouldScroll = true, button = null) {
@@ -5067,9 +5104,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     )
   );
 
-  const totalVotesUsed = Object.values(state).reduce((sum, value) => {
-    return sum + Number(value || 0);
-  }, 0);
+  const totalVotesUsed = getTotalVotesUsedFromStateObject(state);
 
   if (totalVotesUsed >= 5) {
     pendingVoicesSummaryHighlight = true;
@@ -5095,12 +5130,16 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
     setState(debateId, state);
 
+    const updatedTotalVotesUsed = getTotalVotesUsedFromStateObject(state);
+
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
         Number(response?.votes || 0),
-        Number(response?.myVotesOnArgument || 0)
+        Number(response?.myVotesOnArgument || 0),
+        totalVotesUsed,
+        updatedTotalVotesUsed
       );
     } catch (uiError) {
       console.error(uiError);
@@ -5154,6 +5193,8 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
+  const totalVotesUsedBefore = getTotalVotesUsedFromStateObject(state);
+
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
 
@@ -5176,12 +5217,16 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
 
     setState(debateId, state);
 
+    const totalVotesUsedAfter = getTotalVotesUsedFromStateObject(state);
+
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
         Number(response?.votes || 0),
-        myVotesOnArgument
+        myVotesOnArgument,
+        totalVotesUsedBefore,
+        totalVotesUsedAfter
       );
     } catch (uiError) {
       console.error(uiError);
