@@ -266,6 +266,21 @@ async function getCommentLikesTotal(commentId) {
 }
 
 async function getUserVotesUsedInDebate(debateId, voterKey) {
+  try {
+    const { data: votes, error: votesErr } = await supabase
+      .from("votes")
+      .select("vote_count, arguments!inner(debate_id)")
+      .eq("voter_key", voterKey)
+      .eq("arguments.debate_id", debateId);
+
+    if (!votesErr) {
+      return (votes || []).reduce((sum, row) => sum + Number(row.vote_count || 0), 0);
+    }
+  } catch (error) {
+    // Fallback prudent : on conserve l'ancien chemin si la relation PostgREST
+    // n'est pas disponible ou si le schéma ne permet pas le filtre joint.
+  }
+
   const { data: args, error: argsErr } = await supabase
     .from("arguments")
     .select("id")
