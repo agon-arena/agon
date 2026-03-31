@@ -17,6 +17,7 @@ let pinnedNewArgumentId = null;
 let pendingTopCommentScroll = null;
 
 let currentAllArguments = [];
+let currentCommentsByArgument = {};
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let currentTypeFilter = "all";
@@ -3424,6 +3425,7 @@ updateSortButtonLabel();
 applyDebateTypeUI(data.debate);
 
 currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
+currentCommentsByArgument = data.commentsByArgument || {};
 
 cleanVoteStateForExistingArguments(id, currentAllArguments);
 
@@ -5160,6 +5162,60 @@ async function confirmRemoveVoice(debateId, argId) {
   await unvote(debateId, argId);
 }
 
+function getLocalCommentById(commentId) {
+  const commentIdString = String(commentId);
+
+  for (const comments of Object.values(currentCommentsByArgument || {})) {
+    const found = (comments || []).find((comment) => String(comment.id) === commentIdString);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function updateLocalCommentVoteState(commentId, likes, myVoteValue) {
+  const commentIdString = String(commentId);
+  const numericLikes = Number(likes || 0);
+  const numericMyVoteValue = Number(myVoteValue || 0);
+
+  for (const argumentId of Object.keys(currentCommentsByArgument || {})) {
+    currentCommentsByArgument[argumentId] = (currentCommentsByArgument[argumentId] || []).map((comment) => {
+      if (String(comment.id) !== commentIdString) return comment;
+      return {
+        ...comment,
+        likes: numericLikes
+      };
+    });
+  }
+
+  const card = getVisibleCommentElement(commentIdString) || document.getElementById(`comment-${commentIdString}`) || document.getElementById(`list-comment-${commentIdString}`);
+  if (!card) return;
+
+  const likeButton = card.querySelector('.comment-like-button');
+  const dislikeButton = card.querySelector('.comment-dislike-button');
+  const likeCount = card.querySelector('.comment-like-count');
+
+  if (likeCount) {
+    likeCount.textContent = `${numericLikes} ${numericLikes > 1 ? "likes" : "like"}`;
+  }
+
+  if (likeButton) {
+    const liked = numericMyVoteValue === 1;
+    likeButton.disabled = liked;
+    likeButton.title = liked ? "Déjà voté positif" : "Vote positif";
+    likeButton.classList.toggle('comment-like-button-active', liked);
+    likeButton.classList.toggle('comment-vote-disabled', liked);
+  }
+
+  if (dislikeButton) {
+    const disliked = numericMyVoteValue === -1;
+    dislikeButton.disabled = disliked;
+    dislikeButton.title = disliked ? "Déjà voté négatif" : "Vote négatif";
+    dislikeButton.classList.toggle('comment-dislike-button-active', disliked);
+    dislikeButton.classList.toggle('comment-vote-disabled', disliked);
+  }
+}
+
 async function voteComment(debateId, commentId, argumentId, value, button = null) {
   let state = getCommentLikeState(debateId);
   const commentIdString = String(commentId);
@@ -5174,19 +5230,7 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
   setButtonLoading(button);
 
   try {
-    const debateData = await fetchJSON(API + "/debates/" + debateId);
-    let targetComment = null;
-
-    for (const comments of Object.values(debateData.commentsByArgument || {})) {
-      const found = (comments || []).find(
-        (comment) => String(comment.id) === commentIdString
-      );
-      if (found) {
-        targetComment = found;
-        break;
-      }
-    }
-
+    const targetComment = getLocalCommentById(commentIdString);
     const currentValue = Number(state[commentIdString] || 0);
     let nextValue = 0;
 
@@ -5198,21 +5242,20 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       nextValue = 0;
     }
 
+    const shouldWarnAboutReplacement =
+      value === 1 &&
+      targetComment &&
+      targetComment.stance === "amelioration" &&
+      nextValue === 1;
 
-const shouldWarnAboutReplacement =
-  value === 1 &&
-  targetComment &&
-  targetComment.stance === "amelioration" &&
-  nextValue === 1;
-
-const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    voterKey,
-    value: nextValue
-  })
-});
+    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voterKey,
+        value: nextValue
+      })
+    });
 
     if (nextValue === 0) {
       delete state[commentIdString];
@@ -5221,20 +5264,32 @@ const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
     }
 
     setCommentLikeState(debateId, state);
-    await loadDebate(debateId);
-if (result && result.replaced) {
-  showReplacementSuccessMessage(
-    "💡 Idée remplacée",
-    "Cette amélioration a dépassé l’idée originale et la remplace désormais."
-  );
-}
-else if (shouldWarnAboutReplacement) {
-  showVoteWarning(
-    "Cette proposition d'amélioration peut remplacer l’idée :",
-    "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
-  );
-}
 
+    if (result && result.replaced) {
+      pendingArgumentScrollId = result.argumentId ? String(result.argumentId) : null;
+      await loadDebate(debateId);
+
+      showReplacementSuccessMessage(
+        "💡 Idée remplacée",
+        "Cette amélioration a dépassé l’idée originale et la remplace désormais."
+      );
+
+      return;
+    }
+
+    try {
+      updateLocalCommentVoteState(commentIdString, Number(result?.likes || 0), nextValue);
+    } catch (uiError) {
+      console.error(uiError);
+      await loadDebate(debateId);
+    }
+
+    if (shouldWarnAboutReplacement) {
+      showVoteWarning(
+        "Cette proposition d'amélioration peut remplacer l’idée :",
+        "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
+      );
+    }
   } catch (error) {
     alert(error.message);
   } finally {
