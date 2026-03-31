@@ -227,11 +227,19 @@ function setDebateViewMode(mode) {
     return;
   }
 
+  if (Array.isArray(currentAllArguments)) {
+    requestAnimationFrame(() => {
+      rerenderCurrentDebateArguments();
+    });
+    return;
+  }
+
   const debateId = getDebateId();
   if (debateId) {
     loadDebate(debateId);
   }
 }
+
 function isCurrentOpenDebateMode() {
   const titleB = document.getElementById("title-b");
   return !titleB || !titleB.textContent.trim();
