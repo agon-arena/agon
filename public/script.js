@@ -3842,17 +3842,26 @@ if (pendingTopCommentScroll) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-      finalizeNotificationTransitionAtScrollStart();
-      pendingTopCommentScroll = null;
-    },
+     window.scrollTo({
+  top: Math.max(0, y),
+  behavior: "smooth"
+});
+
+waitForNotificationTargetScrollToFinish(() => {
+  finalizeNotificationTransitionAfterFocus();
+});
+
+pendingTopCommentScroll = null;
+  
+  },
     () => {
-      scrollToTopVisibleComment();
-      finalizeNotificationTransitionAtScrollStart();
-      pendingTopCommentScroll = null;
+    scrollToTopVisibleComment();
+
+waitForNotificationTargetScrollToFinish(() => {
+  finalizeNotificationTransitionAfterFocus();
+});
+
+pendingTopCommentScroll = null;
     }
   );
 }
@@ -3866,11 +3875,14 @@ else if (pendingCommentScrollId) {
       const offset = (topbar ? topbar.offsetHeight : 80) + 140;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-      finalizeNotificationTransitionAtScrollStart();
+    window.scrollTo({
+  top: Math.max(0, y),
+  behavior: "smooth"
+});
+
+waitForNotificationTargetScrollToFinish(() => {
+  finalizeNotificationTransitionAfterFocus();
+});
 
       applyVoiceHighlight(element);
 
@@ -3881,8 +3893,8 @@ else if (pendingCommentScrollId) {
       pendingCommentScrollId = null;
     },
     () => {
-      pendingCommentScrollId = null;
-      finalizeNotificationTransitionAtScrollStart();
+   pendingCommentScrollId = null;
+finalizeNotificationTransitionAfterFocus();
     }
   );
 }
@@ -3896,11 +3908,14 @@ else if (pendingArgumentScrollId) {
       const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-      finalizeNotificationTransitionAtScrollStart();
+    window.scrollTo({
+  top: Math.max(0, y),
+  behavior: "smooth"
+});
+
+waitForNotificationTargetScrollToFinish(() => {
+  finalizeNotificationTransitionAfterFocus();
+});
 
       if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
@@ -3920,9 +3935,9 @@ else if (pendingArgumentScrollId) {
       pinnedNewArgumentId = null;
     },
     () => {
-      pendingArgumentScrollId = null;
-      pinnedNewArgumentId = null;
-      finalizeNotificationTransitionAtScrollStart();
+   pendingArgumentScrollId = null;
+pinnedNewArgumentId = null;
+finalizeNotificationTransitionAfterFocus();
     }
   );
 }
