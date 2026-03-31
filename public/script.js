@@ -20,6 +20,8 @@ let currentAllArguments = [];
 let currentCommentsByArgument = {};
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
+let currentDebateCache = null;
+let similarDebatesCache = null;
 let currentTypeFilter = "all";
 let currentArgumentsSortMode = "score";
 
@@ -3413,6 +3415,11 @@ function renderBottomSimilarDebates(currentDebate, debates) {
 function toggleSimilarDebates() {
   similarDebatesVisible = !similarDebatesVisible;
 
+  if (currentDebateCache && Array.isArray(similarDebatesCache)) {
+    renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+    return;
+  }
+
   const debateId = getDebateId();
   if (!debateId) return;
 
@@ -3933,8 +3940,11 @@ currentDebateShareData = {
   percentA,
   percentB
 };
-const allDebates = await fetchJSON(API + "/debates");
-renderBottomSimilarDebates(data.debate, allDebates);
+currentDebateCache = data.debate;
+if (!Array.isArray(similarDebatesCache)) {
+  similarDebatesCache = await fetchJSON(API + "/debates");
+}
+renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
 
 refreshAdminUI();
 
