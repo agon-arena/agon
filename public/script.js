@@ -204,7 +204,6 @@ if (isOpenMode) {
   setDisplay(sideFocusRight, "none");
 }
 }
-
 function setDebateViewMode(mode) {
   const normalizedMode = mode === "list" ? "list" : "columns";
   const previousMode = getDebateViewMode();
@@ -221,18 +220,20 @@ function setDebateViewMode(mode) {
     }
   }
 
-  updateDebateViewModeUI();
-
   if (normalizedMode === previousMode) {
+    updateDebateViewModeUI();
     return;
   }
 
   if (Array.isArray(currentAllArguments)) {
     requestAnimationFrame(() => {
       rerenderCurrentDebateArguments();
+      updateDebateViewModeUI();
     });
     return;
   }
+
+  updateDebateViewModeUI();
 
   const debateId = getDebateId();
   if (debateId) {
