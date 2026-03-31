@@ -2092,34 +2092,32 @@ async function markNotificationsAsRead() {
   }
 }
 async function markOneNotificationAsRead(notificationId) {
-  try {
-    await fetchJSON(API + "/notifications/read-one", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        userKey: getKey(),
-        notificationId
-      })
-    });
-
-    await loadNotifications();
-  } catch (error) {
-    alert(error.message);
-  }
+  return fetchJSON(API + "/notifications/read-one", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      userKey: getKey(),
+      notificationId
+    })
+  });
 }
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   setActionLoading(element);
 
+  if (element) {
+    element.classList.remove("notification-item-unread");
+  }
+
   try {
     await markOneNotificationAsRead(notificationId);
-    window.location.href = link;
   } catch (error) {
-    clearActionLoading(element);
-    window.location.href = link;
+    console.error(error);
   }
+
+  window.location.href = link;
 }
 
 function toggleNotificationsPanel() {
@@ -4884,6 +4882,122 @@ await loadDebate(debateId);
   }
 }
 
+function updateLocalArgumentVoteState(argId, votes, myVoteCount) {
+  const argIdString = String(argId);
+  const numericVotes = Math.max(0, Number(votes || 0));
+  const numericMyVotes = Math.max(0, Number(myVoteCount || 0));
+
+  currentAllArguments = (currentAllArguments || []).map((arg) => {
+    if (String(arg.id) !== argIdString) return arg;
+    return {
+      ...arg,
+      votes: numericVotes
+    };
+  });
+
+  const visibleCards = [
+    document.getElementById(`argument-${argIdString}`),
+    document.getElementById(`list-argument-${argIdString}`)
+  ].filter(Boolean);
+
+  visibleCards.forEach((card) => {
+    const voteCount = card.querySelector('.vote-count');
+    if (voteCount) {
+      voteCount.textContent = `${numericVotes} voix`;
+    }
+
+    const myVotesValue = card.querySelector('.voice-stepper-value');
+    if (myVotesValue) {
+      myVotesValue.textContent = String(numericMyVotes);
+    }
+
+    card.classList.toggle('argument-card-voted', numericMyVotes > 0);
+  });
+}
+
+function refreshDebateScoreFromCurrentArguments() {
+  const scoreBar = document.getElementById("debate-score-bar");
+  const scoreA = document.getElementById("score-a");
+  const scoreB = document.getElementById("score-b");
+  const debateQuestion = document.getElementById("debate-question")?.textContent || "";
+  const optionA = document.getElementById("title-a")?.textContent || "";
+  const optionB = document.getElementById("title-b")?.textContent || "";
+  const isOpen = isCurrentOpenDebateMode();
+
+  const votesA = (currentAllArguments || []).reduce((sum, arg) => {
+    return String(arg.side || "") === "A" ? sum + Number(arg.votes || 0) : sum;
+  }, 0);
+  const votesB = (currentAllArguments || []).reduce((sum, arg) => {
+    return String(arg.side || "") === "B" ? sum + Number(arg.votes || 0) : sum;
+  }, 0);
+
+  const total = votesA + votesB;
+  let percentA = 50;
+  let percentB = 50;
+
+  if (!isOpen && total > 0) {
+    percentA = Math.round((votesA / total) * 100);
+    percentB = 100 - percentA;
+  }
+
+  if (isOpen) {
+    if (scoreBar) scoreBar.style.display = "none";
+    if (scoreA) scoreA.style.display = "none";
+    if (scoreB) scoreB.style.display = "none";
+  } else {
+    if (scoreBar) {
+      scoreBar.style.display = "";
+      scoreBar.innerHTML = `
+      <div class="score-bar-label score-bar-label-a">${percentA}%</div>
+      <div class="score-bar">
+        <div class="score-bar-a" style="width:${percentA}%"></div>
+        <div class="score-bar-b" style="width:${percentB}%"></div>
+      </div>
+      <div class="score-bar-label score-bar-label-b">${percentB}%</div>
+    `;
+    }
+
+    if (scoreA) {
+      scoreA.style.display = "";
+      scoreA.innerHTML = `
+      <strong>${percentA}%</strong>
+      <span class="score-votes">(${votesA} voix)</span>
+    `;
+    }
+
+    if (scoreB) {
+      scoreB.style.display = "";
+      scoreB.innerHTML = `
+      <strong>${percentB}%</strong>
+      <span class="score-votes">(${votesB} voix)</span>
+    `;
+    }
+  }
+
+  currentDebateShareData = {
+    question: debateQuestion,
+    optionA: isOpen ? "" : optionA,
+    optionB: isOpen ? "" : optionB,
+    percentA,
+    percentB
+  };
+}
+
+function refreshAllVoiceButtonsDisabledState(debateId) {
+  const uniqueArgIds = new Set((currentAllArguments || []).map((arg) => String(arg.id)));
+  uniqueArgIds.forEach((argId) => {
+    syncVoiceButtonsDisabledState(debateId, argId);
+  });
+}
+
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument) {
+  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument);
+  renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+  refreshDebateScoreFromCurrentArguments();
+  refreshAllVoiceButtonsDisabledState(debateId);
+}
+
 async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -4922,7 +5036,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   setVoiceRequestPending(debateId, argId, true);
 
   try {
-    await fetchJSON(API + "/arguments/" + argId + "/vote", {
+    const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -4930,11 +5044,21 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       body: JSON.stringify({ voterKey })
     });
 
-    state[argIdString] = Number(state[argIdString] || 0) + 1;
+    state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
     setState(debateId, state);
 
-    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
+    try {
+      refreshVoteUiAfterLocalChange(
+        debateId,
+        argId,
+        Number(response?.votes || 0),
+        Number(response?.myVotesOnArgument || 0)
+      );
+    } catch (uiError) {
+      console.error(uiError);
+      pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+      await loadDebate(debateId);
+    }
 
     const targetAfter = (currentAllArguments || []).find(
       (arg) => String(arg.id) === argIdString
@@ -4948,6 +5072,9 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
 
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
   } catch (error) {
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
@@ -4983,7 +5110,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
   setVoiceRequestPending(debateId, argId, true);
 
   try {
-    await fetchJSON(API + "/arguments/" + argId + "/unvote", {
+    const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -4991,17 +5118,32 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       body: JSON.stringify({ voterKey })
     });
 
-    state[argIdString] = Number(state[argIdString] || 0) - 1;
+    const myVotesOnArgument = Number(response?.myVotesOnArgument || 0);
 
-    if (state[argIdString] <= 0) {
+    if (myVotesOnArgument > 0) {
+      state[argIdString] = myVotesOnArgument;
+    } else {
       delete state[argIdString];
     }
 
     setState(debateId, state);
 
-    pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-    await loadDebate(debateId);
+    try {
+      refreshVoteUiAfterLocalChange(
+        debateId,
+        argId,
+        Number(response?.votes || 0),
+        myVotesOnArgument
+      );
+    } catch (uiError) {
+      console.error(uiError);
+      pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+      await loadDebate(debateId);
+    }
 
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
   } catch (error) {
     alert(error.message);
   } finally {
