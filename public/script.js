@@ -5113,17 +5113,42 @@ function shouldRerenderArgumentsAfterVoteChange() {
   return sortMode === "score" || sortMode === "progress";
 }
 
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
-  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
-  renderUnifiedVoicesSummary(debateId, currentAllArguments);
-  renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
-  refreshDebateScoreFromCurrentArguments();
+const pendingVoteUiRefreshByDebate = {};
 
-  if (shouldRerenderArgumentsAfterVoteChange()) {
-    rerenderArgumentsAfterLocalVoteChange(debateId);
+function scheduleDeferredVoteUiRefresh(debateId, options = {}) {
+  const debateIdString = String(debateId || "");
+  if (!debateIdString) return;
+
+  const previousFrameId = pendingVoteUiRefreshByDebate[debateIdString];
+  if (previousFrameId) {
+    cancelAnimationFrame(previousFrameId);
   }
 
+  pendingVoteUiRefreshByDebate[debateIdString] = requestAnimationFrame(() => {
+    delete pendingVoteUiRefreshByDebate[debateIdString];
+
+    renderUnifiedVoicesSummary(debateId, currentAllArguments);
+    renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+    refreshDebateScoreFromCurrentArguments();
+
+    if (options.rerenderArguments) {
+      rerenderArgumentsAfterLocalVoteChange(debateId);
+    }
+
+    if (options.refreshAllVoiceButtons) {
+      refreshAllVoiceButtonsDisabledState(debateId);
+    }
+  });
+}
+
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
+  updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
   syncVoiceButtonsDisabledState(debateId, argId);
+
+  scheduleDeferredVoteUiRefresh(debateId, {
+    rerenderArguments: shouldRerenderArgumentsAfterVoteChange(),
+    refreshAllVoiceButtons: false
+  });
 }
 
 async function vote(debateId, argId, shouldScroll = true, button = null) {
