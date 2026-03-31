@@ -1329,7 +1329,7 @@ function hideNotificationTransitionOverlay() {
 
   setTimeout(() => {
     overlay.remove();
-  }, 180);
+  }, 90);
 
   clearNotificationTransitionState();
 }
@@ -1354,7 +1354,7 @@ function initNotificationTransitionOverlay() {
   if (location.pathname !== "/debate") {
     setTimeout(() => {
       hideNotificationTransitionOverlay();
-    }, 400);
+    }, 120);
   }
 }
 
@@ -1380,9 +1380,9 @@ function finalizeNotificationTransitionAtScrollStart() {
 
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
   const callback = typeof onDone === "function" ? onDone : () => {};
-  const maxWaitMs = Number(options.maxWaitMs || 650);
-  const stableFramesNeeded = Number(options.stableFramesNeeded || 3);
-  const tolerance = Number(options.tolerance || 3);
+const maxWaitMs = Number(options.maxWaitMs || 260);
+const stableFramesNeeded = Number(options.stableFramesNeeded || 2);
+const tolerance = Number(options.tolerance || 4);
   const startedAt = performance.now();
   let stableFrames = 0;
   let previousY = window.scrollY;
