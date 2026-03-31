@@ -6266,9 +6266,6 @@ async function deleteComment(debateId, commentId) {
     text: "Cette suppression est définitive.",
     onConfirm: async () => {
       try {
-        const localComment = getLocalCommentById(commentId);
-        const targetArgumentId = localComment ? String(localComment.argument_id || "") : "";
-
         await fetchJSON(
           API + "/comments/" + commentId + "?authorKey=" + encodeURIComponent(getKey()),
           {
@@ -6279,59 +6276,7 @@ async function deleteComment(debateId, commentId) {
           }
         );
 
-        try {
-          if (targetArgumentId) {
-            const existingComments = Array.isArray(currentCommentsByArgument[targetArgumentId])
-              ? currentCommentsByArgument[targetArgumentId]
-              : [];
-
-            currentCommentsByArgument = {
-              ...currentCommentsByArgument,
-              [targetArgumentId]: existingComments.filter(
-                (comment) => String(comment.id) !== String(commentId)
-              )
-            };
-          } else {
-            for (const argumentId of Object.keys(currentCommentsByArgument || {})) {
-              currentCommentsByArgument[argumentId] = (currentCommentsByArgument[argumentId] || []).filter(
-                (comment) => String(comment.id) !== String(commentId)
-              );
-            }
-          }
-
-          if (targetArgumentId) {
-            const replyState = replyToCommentByArgument[targetArgumentId];
-            if (replyState && String(replyState.commentId) === String(commentId)) {
-              delete replyToCommentByArgument[targetArgumentId];
-            }
-          } else {
-            for (const argumentId of Object.keys(replyToCommentByArgument || {})) {
-              const replyState = replyToCommentByArgument[argumentId];
-              if (replyState && String(replyState.commentId) === String(commentId)) {
-                delete replyToCommentByArgument[argumentId];
-              }
-            }
-          }
-
-          const commentLikeState = getCommentLikeState(debateId);
-          if (Object.prototype.hasOwnProperty.call(commentLikeState, String(commentId))) {
-            delete commentLikeState[String(commentId)];
-            setCommentLikeState(debateId, commentLikeState);
-          }
-
-          if (pendingCommentScrollId && String(pendingCommentScrollId) === String(commentId)) {
-            pendingCommentScrollId = null;
-          }
-
-          if (pinnedNewCommentId && String(pinnedNewCommentId) === String(commentId)) {
-            pinnedNewCommentId = null;
-          }
-
-          rerenderCurrentDebateArguments(debateId);
-        } catch (renderError) {
-          console.error(renderError);
-          await loadDebate(debateId);
-        }
+        await loadDebate(debateId);
       } catch (error) {
         alert(error.message);
       }
