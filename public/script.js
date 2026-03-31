@@ -566,9 +566,9 @@ function updateSortButtonLabel() {
   const labels = {
     score: "Plus soutenues",
     progress: "Idées en progression",
-    comments: "Commentés",
-    recent: "Récents",
-    old: "Anciens"
+    comments: "Commentées",
+    recent: "Récentes",
+    old: "Anciennes"
   };
 
   button.textContent = `${labels[mode] || "Trier"} ▾`;
