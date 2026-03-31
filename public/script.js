@@ -5109,120 +5109,22 @@ try {
 }
 }
 
-
-function appendNewCommentLocally(argumentId, newComment) {
-  const argumentIdString = String(argumentId);
-  const currentList = Array.isArray(currentCommentsByArgument?.[argumentIdString])
-    ? [...currentCommentsByArgument[argumentIdString]]
-    : [];
-
-  const normalizedComment = {
-    ...newComment,
-    argument_id: newComment?.argument_id ?? argumentId,
-    likes: Number(newComment?.likes || 0)
-  };
-
-  currentCommentsByArgument[argumentIdString] = [...currentList, normalizedComment];
-}
-
 async function submitComment(event, debateId, argumentId) {
   event.preventDefault();
 
-  const input = document.getElementById(`comment-input-${argumentId}`);
-  const selectedStance = document.querySelector(
-    `input[name="comment-stance-${argumentId}"]:checked`
-  );
-  const stance = selectedStance ? selectedStance.value : null;
+const input = document.getElementById(`comment-input-${argumentId}`);
+const selectedStance = document.querySelector(
+  `input[name="comment-stance-${argumentId}"]:checked`
+);
+const stance = selectedStance ? selectedStance.value : null;
 
-  const improvementTitleInput = document.getElementById(`comment-improvement-title-${argumentId}`);
-  const improvementBodyInput = document.getElementById(`comment-improvement-body-${argumentId}`);
+const improvementTitleInput = document.getElementById(`comment-improvement-title-${argumentId}`);
+const improvementBodyInput = document.getElementById(`comment-improvement-body-${argumentId}`);
 
-  const content = input ? input.value.trim() : "";
-  if (content.length > 600) {
-    alert("Maximum 600 caractères pour un commentaire.");
-    return;
-  }
-
-  const improvement_title = improvementTitleInput ? improvementTitleInput.value.trim() : "";
-  const improvement_body = improvementBodyInput ? improvementBodyInput.value.trim() : "";
-
-  const replyData = replyToCommentByArgument[argumentId] || null;
-  const replyToCommentId = replyData ? replyData.commentId : null;
-
-  if (stance === "amelioration") {
-    if (!improvement_title) {
-      alert("Tu dois proposer un titre d'amélioration.");
-      return;
-    }
-
-    if (!improvement_body) {
-      alert("Tu dois proposer un texte d'amélioration.");
-      return;
-    }
-  } else if (!content) {
-    alert("Tu dois écrire un commentaire.");
-    return;
-  }
-
-  const submitButton = event?.currentTarget?.querySelector('button[type="submit"]')
-    || event?.currentTarget?.querySelector(".comment-submit-btn")
-    || null;
-
-  setButtonLoading(submitButton);
-
-  try {
-    const data = await fetchJSON(API + "/comments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        argument_id: argumentId,
-        content: stance === "amelioration" ? "" : content,
-        authorKey: getKey(),
-        stance,
-        reply_to_comment_id: replyToCommentId,
-        improvement_title,
-        improvement_body
-      })
-    });
-
-    if (input) {
-      input.value = "";
-    }
-
-    if (improvementTitleInput) {
-      improvementTitleInput.value = "";
-    }
-
-    if (improvementBodyInput) {
-      improvementBodyInput.value = "";
-    }
-
-    const favorableRadio = document.getElementById(`comment-favorable-${argumentId}`);
-    if (favorableRadio) {
-      favorableRadio.checked = true;
-      favorableRadio.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
-    if (replyData) {
-      cancelReply(argumentId);
-    }
-
-    openCommentsByArgument[argumentId] = true;
-    pendingCommentScrollId = String(data.id);
-    pinnedNewCommentId = String(data.id);
-
-    appendNewCommentLocally(argumentId, data);
-
-    if (typeof rerenderCurrentDebateArguments === "function") {
-      rerenderCurrentDebateArguments(debateId);
-    } else {
-      await loadDebate(debateId);
-    }
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    clearButtonLoading(submitButton);
-  }
+const content = input ? input.value.trim() : "";
+if (content.length > 600) {
+  alert("Maximum 600 caractères pour un commentaire.");
+  return;
 }
 const improvement_title = improvementTitleInput ? improvementTitleInput.value.trim() : "";
 const improvement_body = improvementBodyInput ? improvementBodyInput.value.trim() : "";
@@ -5355,31 +5257,35 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = n
 }
 
 
+function rerenderCurrentDebateArguments(debateId) {
+  const commentsByArgument = currentCommentsByArgument || {};
+  const unifiedContainer = document.getElementById("arguments-unified");
+  const argumentsAContainer = document.getElementById("arguments-a");
+  const argumentsBContainer = document.getElementById("arguments-b");
+  const openMode = isCurrentOpenDebateMode();
+
+  if (openMode || currentDebateViewMode === "list") {
+    if (argumentsAContainer) argumentsAContainer.innerHTML = "";
+    if (argumentsBContainer) argumentsBContainer.innerHTML = "";
+    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+    return;
+  }
+
+  if (unifiedContainer) unifiedContainer.innerHTML = "";
+
+  const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
+  const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
+
+  renderArgs("arguments-a", argsA, debateId, commentsByArgument);
+  renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+}
+
 function rerenderArgumentsAfterLocalVoteChange(debateId) {
   const previousPinnedArgumentId = pinnedNewArgumentId;
   pinnedNewArgumentId = null;
 
   try {
-    const commentsByArgument = currentCommentsByArgument || {};
-    const unifiedContainer = document.getElementById("arguments-unified");
-    const argumentsAContainer = document.getElementById("arguments-a");
-    const argumentsBContainer = document.getElementById("arguments-b");
-    const openMode = isCurrentOpenDebateMode();
-
-    if (openMode || currentDebateViewMode === "list") {
-      if (argumentsAContainer) argumentsAContainer.innerHTML = "";
-      if (argumentsBContainer) argumentsBContainer.innerHTML = "";
-      renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
-      return;
-    }
-
-    if (unifiedContainer) unifiedContainer.innerHTML = "";
-
-    const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
-    const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
-
-    renderArgs("arguments-a", argsA, debateId, commentsByArgument);
-    renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+    rerenderCurrentDebateArguments(debateId);
   } finally {
     pinnedNewArgumentId = previousPinnedArgumentId;
   }
@@ -6285,10 +6191,6 @@ async function toggleComments(argumentId, button = null) {
   const wasOpen = !!openCommentsByArgument[argumentId];
   const willOpen = !wasOpen;
 
-  // On mémorise le commentaire actuellement le plus haut visible
-  const topVisibleComment = getTopVisibleCommentElement();
-  pendingTopCommentScroll = topVisibleComment ? topVisibleComment.id : null;
-
   openCommentsByArgument[argumentId] = willOpen;
 
   if (willOpen && !visibleCommentsByArgument[argumentId]) {
@@ -6301,7 +6203,7 @@ async function toggleComments(argumentId, button = null) {
   setButtonLoading(button);
 
   try {
-    await loadDebate(debateId);
+    rerenderCurrentDebateArguments(debateId);
 
     if (wasOpen) {
       setTimeout(() => {
@@ -6309,8 +6211,9 @@ async function toggleComments(argumentId, button = null) {
       }, 50);
     }
   } catch (error) {
-    clearButtonLoading(button);
     alert(error.message);
+  } finally {
+    clearButtonLoading(button);
   }
 }
 
@@ -6358,10 +6261,11 @@ async function loadMoreComments(argumentId, button = null) {
   setButtonLoading(button);
 
   try {
-    await loadDebate(debateId);
+    rerenderCurrentDebateArguments(debateId);
   } catch (error) {
-    clearButtonLoading(button);
     alert(error.message);
+  } finally {
+    clearButtonLoading(button);
   }
 }
 window.toggleForm = toggleForm;
