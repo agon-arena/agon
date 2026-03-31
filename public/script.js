@@ -566,13 +566,6 @@ function changeArgumentsSort(mode) {
     return;
   }
 
-  if (Array.isArray(currentAllArguments) && currentAllArguments.length) {
-    requestAnimationFrame(() => {
-      rerenderCurrentDebateArguments();
-    });
-    return;
-  }
-
   const debateId = getDebateId();
   if (debateId) {
     loadDebate(debateId);
@@ -1208,7 +1201,7 @@ function ensureNotificationTransitionOverlayStyles() {
       align-items: center;
       justify-content: center;
       padding: 20px;
-      background: rgba(255, 255, 255, 0.97);
+      background: rgba(255, 255, 255, 0.72);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       opacity: 0;
@@ -1293,7 +1286,7 @@ function clearNotificationTransitionState() {
   }
 }
 
-function showNotificationTransitionOverlay(message = "Ouverture en cours…") {
+function showNotificationTransitionOverlay(message = "Ouverture du message…") {
   ensureNotificationTransitionOverlayStyles();
 
   let overlay = document.getElementById("notification-transition-overlay");
@@ -1304,6 +1297,7 @@ function showNotificationTransitionOverlay(message = "Ouverture en cours…") {
     overlay.innerHTML = `
       <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
         <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
+        <div class="notification-transition-title">Ouverture en cours</div>
         <div class="notification-transition-text" id="notification-transition-text"></div>
       </div>
     `;
@@ -1329,7 +1323,7 @@ function hideNotificationTransitionOverlay() {
 
   setTimeout(() => {
     overlay.remove();
-  }, 90);
+  }, 180);
 
   clearNotificationTransitionState();
 }
@@ -1354,7 +1348,7 @@ function initNotificationTransitionOverlay() {
   if (location.pathname !== "/debate") {
     setTimeout(() => {
       hideNotificationTransitionOverlay();
-    }, 120);
+    }, 400);
   }
 }
 
@@ -1380,9 +1374,9 @@ function finalizeNotificationTransitionAtScrollStart() {
 
 function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
   const callback = typeof onDone === "function" ? onDone : () => {};
-const maxWaitMs = Number(options.maxWaitMs || 260);
-const stableFramesNeeded = Number(options.stableFramesNeeded || 2);
-const tolerance = Number(options.tolerance || 4);
+  const maxWaitMs = Number(options.maxWaitMs || 650);
+  const stableFramesNeeded = Number(options.stableFramesNeeded || 3);
+  const tolerance = Number(options.tolerance || 3);
   const startedAt = performance.now();
   let stableFrames = 0;
   let previousY = window.scrollY;
@@ -3842,21 +3836,15 @@ if (pendingTopCommentScroll) {
 
       window.scrollTo({
         top: Math.max(0, y),
-        behavior: "auto"
+        behavior: "smooth"
       });
-
+      finalizeNotificationTransitionAtScrollStart();
       pendingTopCommentScroll = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
     },
     () => {
       scrollToTopVisibleComment();
-
+      finalizeNotificationTransitionAtScrollStart();
       pendingTopCommentScroll = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
     }
   );
 }
@@ -3872,8 +3860,9 @@ else if (pendingCommentScrollId) {
 
       window.scrollTo({
         top: Math.max(0, y),
-        behavior: "auto"
+        behavior: "smooth"
       });
+      finalizeNotificationTransitionAtScrollStart();
 
       applyVoiceHighlight(element);
 
@@ -3882,15 +3871,10 @@ else if (pendingCommentScrollId) {
       }, 2000);
 
       pendingCommentScrollId = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
     },
     () => {
       pendingCommentScrollId = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
+      finalizeNotificationTransitionAtScrollStart();
     }
   );
 }
@@ -3906,8 +3890,9 @@ else if (pendingArgumentScrollId) {
 
       window.scrollTo({
         top: Math.max(0, y),
-        behavior: "auto"
+        behavior: "smooth"
       });
+      finalizeNotificationTransitionAtScrollStart();
 
       if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
@@ -3925,16 +3910,11 @@ else if (pendingArgumentScrollId) {
 
       pendingArgumentScrollId = null;
       pinnedNewArgumentId = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
     },
     () => {
       pendingArgumentScrollId = null;
       pinnedNewArgumentId = null;
-      requestAnimationFrame(() => {
-        finalizeNotificationTransitionAfterFocus();
-      });
+      finalizeNotificationTransitionAtScrollStart();
     }
   );
 }
@@ -4465,13 +4445,13 @@ ${
 )}</span>
         </div>
 
-   <button
-  type="button"
-  class="button"
-  onclick="cancelReply('${a.id}')"
->
-  Annuler la réponse
-</button>
+        <button
+          type="button"
+          class="button button-small"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
       </div>
     `
     : ""
@@ -4887,42 +4867,9 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
 ${
   replyToCommentByArgument[a.id]
-    ? `
-      <div class="argument-warning">
-        <div class="reply-preview-text">
-          <span class="reply-preview-label">Vous répondez à :</span>
-          <span class="reply-preview-content">${escapeHtml(
-            (() => {
-              const replyData = replyToCommentByArgument[a.id] || {};
-              return (
-                replyData.improvementTitle && replyData.improvementBody
-                  ? `${replyData.improvementTitle} — ${replyData.improvementBody}`
-                  : replyData.improvementTitle
-                    ? replyData.improvementTitle
-                    : replyData.commentContent || replyData.improvementBody || ""
-              );
-            })()
-          )}</span>
-        </div>
-
-        <button
-          type="button"
-          class="button"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
-      </div>
-    `
-    : ""
-}
-
-${
-  replyToCommentByArgument[a.id]
     ? ""
     : `
       <div class="comment-stance-row">
-
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
           Favorable à l'idée
@@ -5992,36 +5939,31 @@ function replyToComment(argumentId, commentId, button = null) {
 
   setActionLoading(button);
 
-const focusReplyUi = () => {
-  const isListMode = currentDebateViewMode === "list";
+  const focusReplyUi = () => {
+    const replyLabel = document.querySelector(
+      `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
+    );
 
-  const container = isListMode
-    ? document.getElementById(`list-argument-${argumentId}`)
-    : document.getElementById(`argument-${argumentId}`);
+    const input = document.getElementById(`comment-input-${argumentId}`);
+    const target = replyLabel || input;
 
-  if (!container) return;
+    if (target) {
+      const topbar = document.querySelector(".topbar");
+      const offset = topbar ? topbar.offsetHeight + 230 : 330;
+      const y = target.getBoundingClientRect().top + window.scrollY - offset;
 
-  const replyLabel = container.querySelector(".reply-preview-label");
-  const input = container.querySelector(`#comment-input-${argumentId}`);
-  const target = replyLabel || input;
+      window.scrollTo({
+        top: y,
+        behavior: "smooth"
+      });
+    }
 
-  if (target) {
-    const topbar = document.querySelector(".topbar");
-    const offset = topbar ? topbar.offsetHeight + 230 : 330;
-    const y = target.getBoundingClientRect().top + window.scrollY - offset;
-
-    window.scrollTo({
-      top: y,
-      behavior: "smooth"
-    });
-  }
-
-  if (input) {
-    setTimeout(() => {
-      input.focus();
-    }, 250);
-  }
-};
+    if (input) {
+      setTimeout(() => {
+        input.focus();
+      }, 250);
+    }
+  };
 
   const rerenderReplyUi = () => {
     try {
