@@ -1354,13 +1354,12 @@ app.post("/api/arguments/:id/unvote", async (req, res) => {
       return res.status(500).json({ error: "Erreur mise à jour argument." });
     }
 
-    const finalVoteRow = await getVoteRow(id, voterKey);
-    const totalVotesAfter = await getUserVotesUsedInDebate(argument.debate_id, voterKey);
+    const myVotesOnArgument = Math.max(0, Number(voteRow.vote_count || 0) - 1);
 
     res.json({
       votes: newVotes,
-      myVotesOnArgument: Number(finalVoteRow?.vote_count || 0),
-      remainingVotes: MAX_VOTES_PER_DEBATE - totalVotesAfter,
+      myVotesOnArgument,
+      remainingVotes: null,
       lastVotedAt: argument.last_voted_at || null
     });
   } catch (error) {
