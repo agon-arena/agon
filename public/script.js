@@ -2202,6 +2202,46 @@ function markOneNotificationAsReadNonBlocking(notificationId) {
     console.error(error);
   }
 }
+function rememberFastNotificationNavigation(link) {
+  try {
+    const url = new URL(link, window.location.origin);
+    const debateId = url.searchParams.get("id") || "";
+    const highlight = url.searchParams.get("highlight") || "";
+
+    sessionStorage.setItem(
+      "fast_notification_navigation",
+      JSON.stringify({
+        debateId: String(debateId),
+        highlight: String(highlight),
+        createdAt: Date.now()
+      })
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function consumeFastNotificationNavigation(debateId, highlight) {
+  try {
+    const raw = sessionStorage.getItem("fast_notification_navigation");
+    if (!raw) return false;
+
+    sessionStorage.removeItem("fast_notification_navigation");
+
+    const parsed = JSON.parse(raw);
+    const ageMs = Date.now() - Number(parsed?.createdAt || 0);
+
+    if (ageMs > 15000) return false;
+    if (String(parsed?.debateId || "") !== String(debateId || "")) return false;
+    if (String(parsed?.highlight || "") !== String(highlight || "")) return false;
+
+    return true;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+}
+
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   setActionLoading(element);
@@ -2211,6 +2251,7 @@ async function handleNotificationClick(event, notificationId, link, element = nu
     decrementStoredUnreadNotificationCount(1);
   }
 
+  rememberFastNotificationNavigation(link);
   markOneNotificationAsReadNonBlocking(notificationId);
   window.location.href = link;
 }
@@ -2245,6 +2286,17 @@ function waitForRenderedElement(getElement, onReady, onFallback = null, attempts
     setTimeout(() => {
       waitForRenderedElement(getElement, onReady, onFallback, attemptsLeft - 1);
     }, 60);
+  });
+}
+
+function scrollElementIntoViewWithOffset(element, offset, instant = false) {
+  if (!element) return;
+
+  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, y),
+    behavior: instant ? "auto" : "smooth"
   });
 }
 /* =========================
@@ -3528,6 +3580,10 @@ async function loadDebate(id) {
 saveVisitedDebate(id);
 
   try {
+    const params = new URLSearchParams(window.location.search);
+    const highlight = params.get("highlight");
+    const fastNotificationScroll = consumeFastNotificationNavigation(id, highlight);
+
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
@@ -3578,12 +3634,7 @@ if (pendingTopCommentScroll) {
     (element) => {
       const topbar = document.querySelector(".topbar");
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
+      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
 
       pendingTopCommentScroll = null;
     },
@@ -3601,12 +3652,7 @@ else if (pendingCommentScrollId) {
     (element) => {
       const topbar = document.querySelector(".topbar");
       const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
+      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
 
       applyVoiceHighlight(element);
 
@@ -3629,12 +3675,7 @@ else if (pendingArgumentScrollId) {
     (element) => {
       const stickyHeader = document.querySelector(".debate-hero-top");
       const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
+      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
 
       if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
@@ -3719,13 +3760,7 @@ currentDebateShareData = {
   percentA,
   percentB
 };
-const allDebates = await fetchJSON(API + "/debates");
-renderBottomSimilarDebates(data.debate, allDebates);
-
 refreshAdminUI();
-
-const params = new URLSearchParams(window.location.search);
-const highlight = params.get("highlight");
 
 if (highlight) {
 if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
@@ -3752,65 +3787,75 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   }
 }
 
-  setTimeout(() => {
-    let element = null;
+  waitForRenderedElement(
+    () => {
+      if (highlight === "debate") {
+        return document.getElementById("debate-question");
+      } else if (highlight.startsWith("comment-")) {
+        const commentId = highlight.replace("comment-", "");
+        return getVisibleCommentElement(commentId);
+      } else if (highlight.startsWith("argument-")) {
+        const argumentId = highlight.replace("argument-", "");
+        return getVisibleArgumentElement(argumentId);
+      }
 
-    if (highlight === "debate") {
-      element = document.getElementById("debate-question");
-    } else if (highlight.startsWith("comment-")) {
-      const commentId = highlight.replace("comment-", "");
-      element = getVisibleCommentElement(commentId);
-    } else if (highlight.startsWith("argument-")) {
-      const argumentId = highlight.replace("argument-", "");
-      element = getVisibleArgumentElement(argumentId);
-    } else {
-      element = document.getElementById(highlight);
-    }
+      return document.getElementById(highlight);
+    },
+    (element) => {
+      const stickyHeader = document.querySelector(".debate-hero-top");
+      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+      scrollElementIntoViewWithOffset(element, offset, fastNotificationScroll);
 
-if (element) {
-  const stickyHeader = document.querySelector(".debate-hero-top");
-  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+      const isGreenTarget =
+        element.classList.contains("argument-card-a") ||
+        !!element.closest(".argument-card-a") ||
+        !!element.closest("#arguments-a") ||
+        !!element.closest(".column-a");
 
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
+      if (isGreenTarget) {
+        if (highlight.startsWith("argument-")) {
+          element.classList.add("flash-green");
 
-  const isGreenTarget =
-    element.classList.contains("argument-card-a") ||
-    !!element.closest(".argument-card-a") ||
-    !!element.closest("#arguments-a") ||
-    !!element.closest(".column-a");
+          setTimeout(() => {
+            element.classList.remove("flash-green");
+          }, 5000);
+        } else {
+          element.classList.add("admin-highlight-green");
 
-  if (isGreenTarget) {
-    if (highlight.startsWith("argument-")) {
-      element.classList.add("flash-green");
+          setTimeout(() => {
+            element.classList.remove("admin-highlight-green");
+          }, 5000);
+        }
+      } else {
+        element.classList.add("admin-highlight");
 
-      setTimeout(() => {
-        element.classList.remove("flash-green");
-      }, 5000);
-    } else {
-      element.classList.add("admin-highlight-green");
+        setTimeout(() => {
+          element.classList.remove("admin-highlight");
+        }, 5000);
+      }
 
-      setTimeout(() => {
-        element.classList.remove("admin-highlight-green");
-      }, 5000);
-    }
-  } else {
-    element.classList.add("admin-highlight");
-
-    setTimeout(() => {
-      element.classList.remove("admin-highlight");
-    }, 5000);
-  }
+      const url = new URL(window.location.href);
+      url.searchParams.delete("highlight");
+      window.history.replaceState({}, "", url);
+    },
+    () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("highlight");
+      window.history.replaceState({}, "", url);
+    },
+    fastNotificationScroll ? 16 : 8
+  );
 }
 
-    const url = new URL(window.location.href);
-    url.searchParams.delete("highlight");
-    window.history.replaceState({}, "", url);
-  }, 300);
-}
+runAfterNextPaint(() => {
+  fetchJSON(API + "/debates")
+    .then((allDebates) => {
+      renderBottomSimilarDebates(data.debate, allDebates);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
+});
 
   } catch (error) {
     alert(error.message);
