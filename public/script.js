@@ -5257,31 +5257,35 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = n
 }
 
 
+function rerenderCurrentDebateArguments(debateId) {
+  const commentsByArgument = currentCommentsByArgument || {};
+  const unifiedContainer = document.getElementById("arguments-unified");
+  const argumentsAContainer = document.getElementById("arguments-a");
+  const argumentsBContainer = document.getElementById("arguments-b");
+  const openMode = isCurrentOpenDebateMode();
+
+  if (openMode || currentDebateViewMode === "list") {
+    if (argumentsAContainer) argumentsAContainer.innerHTML = "";
+    if (argumentsBContainer) argumentsBContainer.innerHTML = "";
+    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+    return;
+  }
+
+  if (unifiedContainer) unifiedContainer.innerHTML = "";
+
+  const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
+  const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
+
+  renderArgs("arguments-a", argsA, debateId, commentsByArgument);
+  renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+}
+
 function rerenderArgumentsAfterLocalVoteChange(debateId) {
   const previousPinnedArgumentId = pinnedNewArgumentId;
   pinnedNewArgumentId = null;
 
   try {
-    const commentsByArgument = currentCommentsByArgument || {};
-    const unifiedContainer = document.getElementById("arguments-unified");
-    const argumentsAContainer = document.getElementById("arguments-a");
-    const argumentsBContainer = document.getElementById("arguments-b");
-    const openMode = isCurrentOpenDebateMode();
-
-    if (openMode || currentDebateViewMode === "list") {
-      if (argumentsAContainer) argumentsAContainer.innerHTML = "";
-      if (argumentsBContainer) argumentsBContainer.innerHTML = "";
-      renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
-      return;
-    }
-
-    if (unifiedContainer) unifiedContainer.innerHTML = "";
-
-    const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
-    const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
-
-    renderArgs("arguments-a", argsA, debateId, commentsByArgument);
-    renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+    rerenderCurrentDebateArguments(debateId);
   } finally {
     pinnedNewArgumentId = previousPinnedArgumentId;
   }
@@ -6187,10 +6191,6 @@ async function toggleComments(argumentId, button = null) {
   const wasOpen = !!openCommentsByArgument[argumentId];
   const willOpen = !wasOpen;
 
-  // On mémorise le commentaire actuellement le plus haut visible
-  const topVisibleComment = getTopVisibleCommentElement();
-  pendingTopCommentScroll = topVisibleComment ? topVisibleComment.id : null;
-
   openCommentsByArgument[argumentId] = willOpen;
 
   if (willOpen && !visibleCommentsByArgument[argumentId]) {
@@ -6203,7 +6203,7 @@ async function toggleComments(argumentId, button = null) {
   setButtonLoading(button);
 
   try {
-    await loadDebate(debateId);
+    rerenderCurrentDebateArguments(debateId);
 
     if (wasOpen) {
       setTimeout(() => {
@@ -6211,8 +6211,9 @@ async function toggleComments(argumentId, button = null) {
       }, 50);
     }
   } catch (error) {
-    clearButtonLoading(button);
     alert(error.message);
+  } finally {
+    clearButtonLoading(button);
   }
 }
 
@@ -6260,10 +6261,11 @@ async function loadMoreComments(argumentId, button = null) {
   setButtonLoading(button);
 
   try {
-    await loadDebate(debateId);
+    rerenderCurrentDebateArguments(debateId);
   } catch (error) {
-    clearButtonLoading(button);
     alert(error.message);
+  } finally {
+    clearButtonLoading(button);
   }
 }
 window.toggleForm = toggleForm;
