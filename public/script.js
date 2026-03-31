@@ -4874,9 +4874,42 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
 ${
   replyToCommentByArgument[a.id]
+    ? `
+      <div class="argument-warning">
+        <div class="reply-preview-text">
+          <span class="reply-preview-label">Vous répondez à :</span>
+          <span class="reply-preview-content">${escapeHtml(
+            (() => {
+              const replyData = replyToCommentByArgument[a.id] || {};
+              return (
+                replyData.improvementTitle && replyData.improvementBody
+                  ? `${replyData.improvementTitle} — ${replyData.improvementBody}`
+                  : replyData.improvementTitle
+                    ? replyData.improvementTitle
+                    : replyData.commentContent || replyData.improvementBody || ""
+              );
+            })()
+          )}</span>
+        </div>
+
+        <button
+          type="button"
+          class="button"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
+      </div>
+    `
+    : ""
+}
+
+${
+  replyToCommentByArgument[a.id]
     ? ""
     : `
       <div class="comment-stance-row">
+
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
           Favorable à l'idée
