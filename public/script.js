@@ -5226,9 +5226,33 @@ function scheduleDeferredVoteUiRefresh(debateId, options = {}) {
   });
 }
 
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
+function refreshExistingVotedArgumentChipCount(argId, myVotesOnArgument) {
+  const argIdString = String(argId);
+  const numericMyVotes = Math.max(0, Number(myVotesOnArgument || 0));
+
+  getVoiceButtons(argIdString).forEach((button) => {
+    const chipStepper = button.closest('.my-argument-chip-stepper');
+    if (!chipStepper) return;
+
+    const chipCount = chipStepper.querySelector('.my-argument-chip-count');
+    if (chipCount) {
+      chipCount.textContent = String(numericMyVotes);
+    }
+  });
+}
+
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null, options = {}) {
+  const shouldRunDeferredRefresh = options.deferHeavyRefresh !== false;
+
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
+  renderUnifiedVoicesSummary(debateId, currentAllArguments);
+  refreshDebateScoreFromCurrentArguments();
+  refreshExistingVotedArgumentChipCount(argId, myVotesOnArgument);
   syncVoiceButtonsDisabledState(debateId, argId);
+
+  if (!shouldRunDeferredRefresh) {
+    return;
+  }
 
   scheduleDeferredVoteUiRefresh(debateId, {
     rerenderArguments: shouldRerenderArgumentsAfterVoteChange(),
@@ -5314,7 +5338,8 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       argId,
       optimisticVotes,
       optimisticMyVotes,
-      optimisticLastVotedAt
+      optimisticLastVotedAt,
+      { deferHeavyRefresh: false }
     );
   } catch (uiError) {
     console.error(uiError);
@@ -5419,7 +5444,8 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       argId,
       optimisticVotes,
       optimisticMyVotes,
-      targetBefore?.last_voted_at || null
+      targetBefore?.last_voted_at || null,
+      { deferHeavyRefresh: false }
     );
   } catch (uiError) {
     console.error(uiError);
