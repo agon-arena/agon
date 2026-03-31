@@ -5151,9 +5151,45 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-setVoiceRequestPending(debateId, argId, true);
+  const previousState = { ...state };
+  const previousMyVotesOnArgument = Number(state[argIdString] || 0);
+  const previousVotes = Number(targetBefore?.votes || 0);
+  const previousLastVotedAt = targetBefore?.last_voted_at || null;
+  const optimisticMyVotesOnArgument = previousMyVotesOnArgument + 1;
+  const optimisticVotes = previousVotes + 1;
+  let optimisticApplied = false;
+
+  setVoiceRequestPending(debateId, argId, true);
 
   try {
+    state[argIdString] = optimisticMyVotesOnArgument;
+    setState(debateId, state);
+
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotesOnArgument,
+      new Date().toISOString()
+    );
+    optimisticApplied = true;
+
+    const targetAfterOptimistic = (currentAllArguments || []).find(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    const optimisticAfterSide = targetAfterOptimistic ? String(targetAfterOptimistic.side || "") : targetSide;
+
+    const optimisticArgsSameSide = (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === optimisticAfterSide
+    );
+
+    showVoteRankProgress(beforeRankMap, optimisticArgsSameSide, argId);
+
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
+    }
+
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
       method: "POST",
       headers: {
@@ -5162,15 +5198,15 @@ setVoiceRequestPending(debateId, argId, true);
       body: JSON.stringify({ voterKey })
     });
 
-    state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
+    state[argIdString] = Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument);
     setState(debateId, state);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
-        Number(response?.myVotesOnArgument || 0),
+        Number(response?.votes || optimisticVotes),
+        Number(response?.myVotesOnArgument || optimisticMyVotesOnArgument),
         response?.lastVotedAt || null
       );
     } catch (uiError) {
@@ -5178,23 +5214,27 @@ setVoiceRequestPending(debateId, argId, true);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-
-    const targetAfter = (currentAllArguments || []).find(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    const afterSide = targetAfter ? String(targetAfter.side || "") : targetSide;
-
-    const afterArgsSameSide = (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === afterSide
-    );
-
-    showVoteRankProgress(beforeRankMap, afterArgsSameSide, argId);
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
-    }
   } catch (error) {
+    if (optimisticApplied) {
+      setState(debateId, previousState);
+
+      try {
+        refreshVoteUiAfterLocalChange(
+          debateId,
+          argId,
+          previousVotes,
+          previousMyVotesOnArgument,
+          previousLastVotedAt
+        );
+      } catch (rollbackUiError) {
+        console.error(rollbackUiError);
+        pendingArgumentScrollId = shouldScroll ? String(argId) : null;
+        await loadDebate(debateId);
+      }
+
+      closeReplacementSuccessMessage();
+    }
+
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
       showVoteWarning(
@@ -5206,7 +5246,7 @@ setVoiceRequestPending(debateId, argId, true);
 
     alert(error.message);
   } finally {
-  setVoiceRequestPending(debateId, argId, false);
+    setVoiceRequestPending(debateId, argId, false);
   }
 }
 
@@ -5220,50 +5260,14 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-  const currentMyVotes = Number(state[argIdString] || 0);
-  if (currentMyVotes <= 0) {
+  if (!state[argIdString] || Number(state[argIdString]) <= 0) {
     return;
   }
-
-  const targetBefore = (currentAllArguments || []).find(
-    (arg) => String(arg.id) === argIdString
-  );
-
-  const previousVotes = Number(targetBefore?.votes || 0);
-  const previousLastVotedAt = targetBefore?.last_voted_at || null;
-  const previousStateSnapshot = { ...state };
-
-  const optimisticMyVotes = Math.max(0, currentMyVotes - 1);
-  const optimisticVotes = Math.max(0, previousVotes - 1);
 
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
 
   try {
-    if (optimisticMyVotes > 0) {
-      state[argIdString] = optimisticMyVotes;
-    } else {
-      delete state[argIdString];
-    }
-
-    setState(debateId, state);
-
-    try {
-      refreshVoteUiAfterLocalChange(
-        debateId,
-        argId,
-        optimisticVotes,
-        optimisticMyVotes,
-        previousLastVotedAt
-      );
-    } catch (optimisticUiError) {
-      console.error(optimisticUiError);
-    }
-
-    if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
-    }
-
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
       method: "POST",
       headers: {
@@ -5288,31 +5292,18 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
         argId,
         Number(response?.votes || 0),
         myVotesOnArgument,
-        response?.lastVotedAt || previousLastVotedAt
+        response?.lastVotedAt || null
       );
     } catch (uiError) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
     }
-  } catch (error) {
-    const restoredState = { ...previousStateSnapshot };
-    setState(debateId, restoredState);
 
-    try {
-      refreshVoteUiAfterLocalChange(
-        debateId,
-        argId,
-        previousVotes,
-        currentMyVotes,
-        previousLastVotedAt
-      );
-    } catch (rollbackUiError) {
-      console.error(rollbackUiError);
-      pendingArgumentScrollId = shouldScroll ? String(argId) : null;
-      await loadDebate(debateId);
+    if (shouldScroll) {
+      scrollToTopOfArgumentCardAndFlash(argId);
     }
-
+  } catch (error) {
     alert(error.message);
   } finally {
     clearButtonLoading(button);
