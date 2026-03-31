@@ -5159,17 +5159,7 @@ if (stance === "amelioration") {
     return;
   }
 }
-if (stance === "amelioration") {
-  if (!improvement_title) {
-    alert("Tu dois proposer un titre d'amélioration.");
-    return;
-  }
 
-  if (!improvement_body) {
-    alert("Tu dois proposer un texte d'amélioration.");
-    return;
-  }
-}
 const submitButton = event?.currentTarget?.querySelector('button[type="submit"]')
   || event?.currentTarget?.querySelector(".comment-submit-btn")
   || null;
@@ -5191,40 +5181,100 @@ try {
     })
   });
 
-    openCommentsByArgument[argumentId] = true;
-visibleCommentsByArgument[argumentId] = 5;
-    delete replyToCommentByArgument[argumentId];
+  openCommentsByArgument[argumentId] = true;
+  visibleCommentsByArgument[argumentId] = Math.max(
+    5,
+    Number(visibleCommentsByArgument[argumentId] || 0) + 1
+  );
+  delete replyToCommentByArgument[argumentId];
+
+  if (input) {
     input.value = "";
-if (improvementTitleInput) {
-  improvementTitleInput.value = "";
-}
+  }
 
-if (improvementBodyInput) {
-  improvementBodyInput.value = "";
-}
+  if (improvementTitleInput) {
+    improvementTitleInput.value = "";
+  }
 
-document
-  .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
-  .forEach((input) => {
-    input.checked = false;
-    input.dataset.waschecked = "false";
-  });
+  if (improvementBodyInput) {
+    improvementBodyInput.value = "";
+  }
 
-const commentForm = input ? input.closest(".comment-form") : null;
-const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
-const mainField = commentForm?.querySelector(".comment-main-field");
+  document
+    .querySelectorAll(`input[name="comment-stance-${argumentId}"]`)
+    .forEach((input) => {
+      input.checked = false;
+      input.dataset.waschecked = "false";
+    });
 
-if (ameliorationFields) {
-  ameliorationFields.style.display = "none";
-}
+  const commentForm = input ? input.closest(".comment-form") : null;
+  const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
+  const mainField = commentForm?.querySelector(".comment-main-field");
 
-if (mainField) {
-  mainField.style.display = "block";
-}
+  if (ameliorationFields) {
+    ameliorationFields.style.display = "none";
+  }
 
-pendingCommentScrollId = String(data.id);
-pinnedNewCommentId = String(data.id);
-await loadDebate(debateId);
+  if (mainField) {
+    mainField.style.display = "block";
+  }
+
+  const localComment = {
+    ...data,
+    id: data.id,
+    argument_id: data.argument_id ?? argumentId,
+    content: data.content ?? (stance === "amelioration" ? "" : content),
+    stance: data.stance ?? stance,
+    reply_to_comment_id: data.reply_to_comment_id ?? replyToCommentId,
+    improvement_title: data.improvement_title ?? improvement_title,
+    improvement_body: data.improvement_body ?? improvement_body,
+    likes: Number(data.likes || 0),
+    author_key: data.author_key ?? getKey(),
+    created_at: data.created_at || new Date().toISOString()
+  };
+
+  pendingCommentScrollId = String(localComment.id);
+  pinnedNewCommentId = String(localComment.id);
+
+  try {
+    const existingComments = Array.isArray(currentCommentsByArgument[argumentId])
+      ? currentCommentsByArgument[argumentId]
+      : [];
+
+    currentCommentsByArgument = {
+      ...currentCommentsByArgument,
+      [argumentId]: [...existingComments, localComment]
+    };
+
+    rerenderCurrentDebateArguments(debateId);
+
+    setTimeout(() => {
+      const element = getVisibleCommentElement(String(localComment.id));
+
+      if (element) {
+        const topbar = document.querySelector(".topbar");
+        const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+        const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+        window.scrollTo({
+          top: Math.max(0, y),
+          behavior: "smooth"
+        });
+
+        applyVoiceHighlight(element);
+
+        setTimeout(() => {
+          removeVoiceHighlight(element);
+        }, 2000);
+      }
+
+      pendingCommentScrollId = null;
+      pinnedNewCommentId = null;
+    }, 250);
+  } catch (renderError) {
+    console.error(renderError);
+    await loadDebate(debateId);
+  }
 
   } catch (error) {
     alert(error.message);
