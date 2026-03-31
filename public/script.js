@@ -4695,16 +4695,17 @@ async function submitListArgument(debateId) {
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
-  if (body.length > 600) {
-    alert("Maximum 600 caractères pour le texte de l'idée.");
-    return;
-  }
+ 
+ if (body.length > 600) {
+  alert("Maximum 600 caractères pour le texte de l'idée.");
+  return;
+}
 
-  const titleB = document.getElementById("title-b");
-  const isOpenMode = !titleB || !titleB.textContent.trim();
-  const side = isOpenMode ? "A" : sideField.value;
+const titleB = document.getElementById("title-b");
+const isOpenMode = !titleB || !titleB.textContent.trim();
+const side = isOpenMode ? "A" : sideField.value;
 
- if (!title) {
+if (!title) {
   showReplacementSuccessMessage(
     "Idée manquante",
     "Tu dois écrire un titre à cette idée avant de la publier.",
@@ -4724,50 +4725,51 @@ if (!isOpenMode && side !== "A" && side !== "B") {
   return;
 }
 
-  setButtonLoading(submitButton);
+setButtonLoading(submitButton);
 
-  try {
-    const r = await fetchJSON(API + "/arguments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        debate_id: debateId,
-        side,
-        title,
-        body,
-        authorKey: getKey()
-      })
-    });
 
-    titleField.value = "";
-    bodyField.value = "";
+try {
+  const r = await fetchJSON(API + "/arguments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      debate_id: debateId,
+      side,
+      title,
+      body,
+      authorKey: getKey()
+    })
+  });
 
-    if (warning) {
-      warning.style.display = "none";
-    }
+  titleField.value = "";
+  bodyField.value = "";
 
-    if (form) {
-      form.style.display = "none";
-    }
-
-    openedArgumentForm = null;
-    document.body.classList.remove("argument-form-open");
-
-    if (typeof updateCounter === "function") {
-      updateCounter("list-title", "count-title-list", 100);
-      updateCounter("list-body", "count-body-list", 600);
-    }
-
-    pendingArgumentScrollId = String(r.id);
-    pinnedNewArgumentId = String(r.id);
-    await loadDebate(debateId);
-
-  } catch (error) {
-    clearButtonLoading(submitButton);
-    alert(error.message);
+  if (warning) {
+    warning.style.display = "none";
   }
-}
 
+  if (form) {
+    form.style.display = "none";
+  }
+
+  openedArgumentForm = null;
+  document.body.classList.remove("argument-form-open");
+
+  if (typeof updateCounter === "function") {
+    updateCounter("list-title", "count-title-list", 100);
+    updateCounter("list-body", "count-body-list", 600);
+  }
+
+  pendingArgumentScrollId = String(r.id);
+  pinnedNewArgumentId = String(r.id);
+  await loadDebate(debateId);
+
+} catch (error) {
+  alert(error.message);
+} finally {
+  clearButtonLoading(submitButton);
+}
+}
 
 async function submitComment(event, debateId, argumentId) {
   event.preventDefault();
