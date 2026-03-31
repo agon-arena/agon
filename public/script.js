@@ -1402,6 +1402,40 @@ function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
   requestAnimationFrame(step);
 }
 
+function waitForNotificationTargetElement(getElement, onReady, onMissing, options = {}) {
+  const resolveElement = typeof getElement === "function" ? getElement : () => null;
+  const handleReady = typeof onReady === "function" ? onReady : () => {};
+  const handleMissing = typeof onMissing === "function" ? onMissing : () => {};
+  const maxWaitMs = Number(options.maxWaitMs || 180);
+  const pollDelayMs = Number(options.pollDelayMs || 0);
+  const startedAt = performance.now();
+
+  const tryResolve = () => {
+    const element = resolveElement();
+
+    if (element) {
+      handleReady(element);
+      return;
+    }
+
+    if ((performance.now() - startedAt) >= maxWaitMs) {
+      handleMissing();
+      return;
+    }
+
+    if (pollDelayMs > 0) {
+      setTimeout(() => {
+        requestAnimationFrame(tryResolve);
+      }, pollDelayMs);
+      return;
+    }
+
+    requestAnimationFrame(tryResolve);
+  };
+
+  tryResolve();
+}
+
 function fireAndForgetMarkOneNotificationAsRead(notificationId) {
   const payload = JSON.stringify({
     userKey: getKey(),
@@ -3786,10 +3820,9 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
 if (pendingTopCommentScroll) {
   const targetId = pendingTopCommentScroll;
 
-  setTimeout(() => {
-    const element = document.getElementById(targetId);
-
-    if (element) {
+  waitForNotificationTargetElement(
+    () => document.getElementById(targetId),
+    (element) => {
       const topbar = document.querySelector(".topbar");
       const offset = (topbar ? topbar.offsetHeight : 80) + 20;
       const y = element.getBoundingClientRect().top + window.scrollY - offset;
@@ -3799,65 +3832,62 @@ if (pendingTopCommentScroll) {
         behavior: "smooth"
       });
       finalizeNotificationTransitionAtScrollStart();
-    } else {
+      pendingTopCommentScroll = null;
+    },
+    () => {
       scrollToTopVisibleComment();
       finalizeNotificationTransitionAtScrollStart();
+      pendingTopCommentScroll = null;
     }
-
-    pendingTopCommentScroll = null;
-  }, 250);
+  );
 }
 else if (pendingCommentScrollId) {
   const targetId = pendingCommentScrollId;
 
-  setTimeout(() => {
-    const element = getVisibleCommentElement(targetId);
+  waitForNotificationTargetElement(
+    () => getVisibleCommentElement(targetId),
+    (element) => {
+      const topbar = document.querySelector(".topbar");
+      const offset = (topbar ? topbar.offsetHeight : 80) + 140;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
-if (element) {
-  const topbar = document.querySelector(".topbar");
-  const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+      finalizeNotificationTransitionAtScrollStart();
 
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
-  finalizeNotificationTransitionAtScrollStart();
-
-  applyVoiceHighlight(element);
-
+      applyVoiceHighlight(element);
 
       setTimeout(() => {
         removeVoiceHighlight(element);
       }, 2000);
-    }
 
-    pendingCommentScrollId = null;
-    finalizeNotificationTransitionAtScrollStart();
-  }, 250);
+      pendingCommentScrollId = null;
+    },
+    () => {
+      pendingCommentScrollId = null;
+      finalizeNotificationTransitionAtScrollStart();
+    }
+  );
 }
 else if (pendingArgumentScrollId) {
   const targetId = pendingArgumentScrollId;
 
-  setTimeout(() => {
-    const element = getVisibleArgumentElement(targetId);
+  waitForNotificationTargetElement(
+    () => getVisibleArgumentElement(targetId),
+    (element) => {
+      const stickyHeader = document.querySelector(".debate-hero-top");
+      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+      const y = element.getBoundingClientRect().top + window.scrollY - offset;
 
+      window.scrollTo({
+        top: Math.max(0, y),
+        behavior: "smooth"
+      });
+      finalizeNotificationTransitionAtScrollStart();
 
-if (element) {
-  const stickyHeader = document.querySelector(".debate-hero-top");
-  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
-  finalizeNotificationTransitionAtScrollStart();
-
-  if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
-
-
-
+      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
         element.classList.add("flash-green");
 
         setTimeout(() => {
@@ -3870,12 +3900,16 @@ if (element) {
           element.classList.remove("admin-highlight");
         }, 2000);
       }
-    }
 
-    pendingArgumentScrollId = null;
-    pinnedNewArgumentId = null;
-    finalizeNotificationTransitionAtScrollStart();
-  }, 250);
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+    },
+    () => {
+      pendingArgumentScrollId = null;
+      pinnedNewArgumentId = null;
+      finalizeNotificationTransitionAtScrollStart();
+    }
+  );
 }
 else {
   finalizeNotificationTransitionAfterFocus();
