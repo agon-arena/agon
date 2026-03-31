@@ -566,6 +566,13 @@ function changeArgumentsSort(mode) {
     return;
   }
 
+  if (Array.isArray(currentAllArguments) && currentAllArguments.length) {
+    requestAnimationFrame(() => {
+      rerenderCurrentDebateArguments();
+    });
+    return;
+  }
+
   const debateId = getDebateId();
   if (debateId) {
     loadDebate(debateId);
@@ -1286,7 +1293,7 @@ function clearNotificationTransitionState() {
   }
 }
 
-function showNotificationTransitionOverlay(message = "Ouverture du message…") {
+function showNotificationTransitionOverlay(message = "Ouverture en cours…") {
   ensureNotificationTransitionOverlayStyles();
 
   let overlay = document.getElementById("notification-transition-overlay");
@@ -1297,7 +1304,6 @@ function showNotificationTransitionOverlay(message = "Ouverture du message…") 
     overlay.innerHTML = `
       <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
         <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
-        <div class="notification-transition-title">Ouverture en cours</div>
         <div class="notification-transition-text" id="notification-transition-text"></div>
       </div>
     `;
@@ -4445,13 +4451,13 @@ ${
 )}</span>
         </div>
 
-        <button
-          type="button"
-          class="button button-small"
-          onclick="cancelReply('${a.id}')"
-        >
-          Annuler la réponse
-        </button>
+   <button
+  type="button"
+  class="button"
+  onclick="cancelReply('${a.id}')"
+>
+  Annuler la réponse
+</button>
       </div>
     `
     : ""
@@ -4867,9 +4873,42 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
 
 ${
   replyToCommentByArgument[a.id]
+    ? `
+      <div class="argument-warning">
+        <div class="reply-preview-text">
+          <span class="reply-preview-label">Vous répondez à :</span>
+          <span class="reply-preview-content">${escapeHtml(
+            (() => {
+              const replyData = replyToCommentByArgument[a.id] || {};
+              return (
+                replyData.improvementTitle && replyData.improvementBody
+                  ? `${replyData.improvementTitle} — ${replyData.improvementBody}`
+                  : replyData.improvementTitle
+                    ? replyData.improvementTitle
+                    : replyData.commentContent || replyData.improvementBody || ""
+              );
+            })()
+          )}</span>
+        </div>
+
+        <button
+          type="button"
+          class="button"
+          onclick="cancelReply('${a.id}')"
+        >
+          Annuler la réponse
+        </button>
+      </div>
+    `
+    : ""
+}
+
+${
+  replyToCommentByArgument[a.id]
     ? ""
     : `
       <div class="comment-stance-row">
+
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
           Favorable à l'idée
@@ -5939,31 +5978,36 @@ function replyToComment(argumentId, commentId, button = null) {
 
   setActionLoading(button);
 
-  const focusReplyUi = () => {
-    const replyLabel = document.querySelector(
-      `#argument-${argumentId} .reply-preview-label, #list-argument-${argumentId} .reply-preview-label`
-    );
+const focusReplyUi = () => {
+  const isListMode = currentDebateViewMode === "list";
 
-    const input = document.getElementById(`comment-input-${argumentId}`);
-    const target = replyLabel || input;
+  const container = isListMode
+    ? document.getElementById(`list-argument-${argumentId}`)
+    : document.getElementById(`argument-${argumentId}`);
 
-    if (target) {
-      const topbar = document.querySelector(".topbar");
-      const offset = topbar ? topbar.offsetHeight + 230 : 330;
-      const y = target.getBoundingClientRect().top + window.scrollY - offset;
+  if (!container) return;
 
-      window.scrollTo({
-        top: y,
-        behavior: "smooth"
-      });
-    }
+  const replyLabel = container.querySelector(".reply-preview-label");
+  const input = container.querySelector(`#comment-input-${argumentId}`);
+  const target = replyLabel || input;
 
-    if (input) {
-      setTimeout(() => {
-        input.focus();
-      }, 250);
-    }
-  };
+  if (target) {
+    const topbar = document.querySelector(".topbar");
+    const offset = topbar ? topbar.offsetHeight + 230 : 330;
+    const y = target.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({
+      top: y,
+      behavior: "smooth"
+    });
+  }
+
+  if (input) {
+    setTimeout(() => {
+      input.focus();
+    }, 250);
+  }
+};
 
   const rerenderReplyUi = () => {
     try {
