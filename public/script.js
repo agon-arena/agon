@@ -227,10 +227,8 @@ function setDebateViewMode(mode) {
     return;
   }
 
-  const debateId = getDebateId();
-  if (debateId) {
-    loadDebate(debateId);
-  }
+  // Le changement colonne / liste est purement visuel.
+  // On évite ici un reload complet du débat pour supprimer l'attente inutile.
 }
 function isCurrentOpenDebateMode() {
   const titleB = document.getElementById("title-b");
