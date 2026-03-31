@@ -5151,6 +5151,34 @@ function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument
   });
 }
 
+function buildVoteUiSnapshot(argId, state) {
+  const argIdString = String(argId);
+  const targetArgument = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  return {
+    argId: argIdString,
+    state: { ...(state || {}) },
+    votes: Number(targetArgument?.votes || 0),
+    myVotesOnArgument: Number((state || {})[argIdString] || 0),
+    lastVotedAt: targetArgument?.last_voted_at || null
+  };
+}
+
+function restoreVoteUiSnapshot(debateId, snapshot) {
+  if (!snapshot) return;
+
+  setState(debateId, snapshot.state || {});
+  refreshVoteUiAfterLocalChange(
+    debateId,
+    snapshot.argId,
+    Number(snapshot.votes || 0),
+    Number(snapshot.myVotesOnArgument || 0),
+    snapshot.lastVotedAt || null
+  );
+}
+
 async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -5185,7 +5213,27 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
-setVoiceRequestPending(debateId, argId, true);
+  const snapshot = buildVoteUiSnapshot(argId, state);
+  const optimisticState = { ...state };
+  const optimisticMyVotes = Number(optimisticState[argIdString] || 0) + 1;
+  const optimisticVotes = Number(targetBefore?.votes || 0) + 1;
+  const optimisticLastVotedAt = new Date().toISOString();
+
+  optimisticState[argIdString] = optimisticMyVotes;
+  setState(debateId, optimisticState);
+  setVoiceRequestPending(debateId, argId, true);
+
+  try {
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotes,
+      optimisticLastVotedAt
+    );
+  } catch (uiError) {
+    console.error(uiError);
+  }
 
   try {
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
@@ -5196,16 +5244,17 @@ setVoiceRequestPending(debateId, argId, true);
       body: JSON.stringify({ voterKey })
     });
 
-    state[argIdString] = Number(response?.myVotesOnArgument || (Number(state[argIdString] || 0) + 1));
-    setState(debateId, state);
+    const confirmedState = getState(debateId);
+    confirmedState[argIdString] = Number(response?.myVotesOnArgument || optimisticMyVotes);
+    setState(debateId, confirmedState);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
-        Number(response?.myVotesOnArgument || 0),
-        response?.lastVotedAt || null
+        Number(response?.votes || optimisticVotes),
+        Number(response?.myVotesOnArgument || optimisticMyVotes),
+        response?.lastVotedAt || optimisticLastVotedAt
       );
     } catch (uiError) {
       console.error(uiError);
@@ -5229,6 +5278,8 @@ setVoiceRequestPending(debateId, argId, true);
       scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
+    restoreVoteUiSnapshot(debateId, snapshot);
+
     if (error.message === "limit") {
       pendingVoicesSummaryHighlight = true;
       showVoteWarning(
@@ -5240,7 +5291,7 @@ setVoiceRequestPending(debateId, argId, true);
 
     alert(error.message);
   } finally {
-  setVoiceRequestPending(debateId, argId, false);
+    setVoiceRequestPending(debateId, argId, false);
   }
 }
 
@@ -5258,8 +5309,36 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     return;
   }
 
+  const targetBefore = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  const snapshot = buildVoteUiSnapshot(argId, state);
+  const optimisticState = { ...state };
+  const optimisticMyVotes = Math.max(0, Number(optimisticState[argIdString] || 0) - 1);
+  const optimisticVotes = Math.max(0, Number(targetBefore?.votes || 0) - 1);
+
+  if (optimisticMyVotes > 0) {
+    optimisticState[argIdString] = optimisticMyVotes;
+  } else {
+    delete optimisticState[argIdString];
+  }
+
+  setState(debateId, optimisticState);
   setButtonLoading(button);
   setVoiceRequestPending(debateId, argId, true);
+
+  try {
+    refreshVoteUiAfterLocalChange(
+      debateId,
+      argId,
+      optimisticVotes,
+      optimisticMyVotes,
+      targetBefore?.last_voted_at || null
+    );
+  } catch (uiError) {
+    console.error(uiError);
+  }
 
   try {
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
@@ -5271,22 +5350,23 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     });
 
     const myVotesOnArgument = Number(response?.myVotesOnArgument || 0);
+    const confirmedState = getState(debateId);
 
     if (myVotesOnArgument > 0) {
-      state[argIdString] = myVotesOnArgument;
+      confirmedState[argIdString] = myVotesOnArgument;
     } else {
-      delete state[argIdString];
+      delete confirmedState[argIdString];
     }
 
-    setState(debateId, state);
+    setState(debateId, confirmedState);
 
     try {
       refreshVoteUiAfterLocalChange(
         debateId,
         argId,
-        Number(response?.votes || 0),
+        Number(response?.votes || optimisticVotes),
         myVotesOnArgument,
-        response?.lastVotedAt || null
+        response?.lastVotedAt || targetBefore?.last_voted_at || null
       );
     } catch (uiError) {
       console.error(uiError);
@@ -5298,6 +5378,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       scrollToTopOfArgumentCardAndFlash(argId);
     }
   } catch (error) {
+    restoreVoteUiSnapshot(debateId, snapshot);
     alert(error.message);
   } finally {
     clearButtonLoading(button);
