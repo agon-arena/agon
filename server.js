@@ -346,7 +346,7 @@ app.get("/debate/:id", async (req, res) => {
       return res.status(404).send("Débat introuvable.");
     }
 
-    const args = await getArgumentsByDebateId(id);
+const comments = await getCommentsByArgumentIds(argumentIds);
     const { percentA, percentB } = computeDebatePercents(args);
 
     const shareTitle = debate.question || "Débat sur Agôn";
@@ -401,13 +401,16 @@ app.get("/debate/:id", async (req, res) => {
 app.get("/share-image/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const debate = await getDebateById(id);
 
-    if (!debate) {
-      return res.status(404).send("Débat introuvable.");
-    }
+const [debate, args] = await Promise.all([
+  getDebateById(id),
+  getArgumentsByDebateId(id)
+]);
 
-    const args = await getArgumentsByDebateId(id);
+if (!debate) {
+  return res.status(404).json({ error: "Débat introuvable." });
+}
+
     const { percentA, percentB } = computeDebatePercents(args);
 
     const canvas = createCanvas(1200, 630);
