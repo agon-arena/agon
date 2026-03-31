@@ -1282,24 +1282,28 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
       return res.status(500).json({ error: "Erreur mise à jour argument." });
     }
 
+    const myVotesOnArgument = existingVote
+      ? Number(existingVote.vote_count || 0) + 1
+      : 1;
+
+    res.json({
+      votes: newVotes,
+      myVotesOnArgument,
+      remainingVotes: MAX_VOTES_PER_DEBATE - (totalVotesUsed + 1),
+      lastVotedAt: effectiveLastVotedAt
+    });
+
     if (argument.author_key && argument.author_key !== voterKey) {
-      await createNotification({
+      createNotification({
         user_key: argument.author_key,
         type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
         message: "Votre argument a reçu un vote."
+      }).catch((notificationError) => {
+        console.error(notificationError);
       });
     }
-
-    const finalVoteRow = await getVoteRow(id, voterKey);
-
-    res.json({
-      votes: newVotes,
-      myVotesOnArgument: Number(finalVoteRow?.vote_count || 0),
-      remainingVotes: MAX_VOTES_PER_DEBATE - (totalVotesUsed + 1),
-      lastVotedAt: effectiveLastVotedAt
-    });
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture vote.");
