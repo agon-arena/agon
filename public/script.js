@@ -837,7 +837,6 @@ if (myArgumentsRow) {
     } else {
       myArgumentsA.style.display = "";
       myArgumentsA.innerHTML = `
-        <div class="my-votes">Vos idées soutenues côté A</div>
         <div class="my-arguments-list">
           ${votedArgumentsA.map((item) => `
 
@@ -896,7 +895,6 @@ if (myArgumentsRow) {
     } else {
       myArgumentsB.style.display = "";
       myArgumentsB.innerHTML = `
-        <div class="my-votes">Vos idées soutenues côté B</div>
         <div class="my-arguments-list">
           ${votedArgumentsB.map((item) => `
             <div class="my-argument-chip">
