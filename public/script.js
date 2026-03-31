@@ -789,13 +789,6 @@ function renderUnifiedVoicesSummary(debateId, args) {
 function renderUnifiedVotedArgumentsSummary(debateId, args) {
   const state = getState(debateId);
 
-  const summaryTitleA = currentDebateViewMode === "list"
-    ? "Vos idées soutenues"
-    : "Vos idées soutenues côté A";
-  const summaryTitleB = currentDebateViewMode === "list"
-    ? "Vos idées soutenues"
-    : "Vos idées soutenues côté B";
-
   const sortedArgs = sortArgumentsByScore(args || []);
   const votedArgumentsA = [];
   const votedArgumentsB = [];
@@ -844,7 +837,7 @@ if (myArgumentsRow) {
     } else {
       myArgumentsA.style.display = "";
       myArgumentsA.innerHTML = `
-        <div class="my-votes">${summaryTitleA}</div>
+        <div class="my-votes">Vos idées soutenues côté A</div>
         <div class="my-arguments-list">
           ${votedArgumentsA.map((item) => `
 
@@ -903,7 +896,7 @@ if (myArgumentsRow) {
     } else {
       myArgumentsB.style.display = "";
       myArgumentsB.innerHTML = `
-        <div class="my-votes">${summaryTitleB}</div>
+        <div class="my-votes">Vos idées soutenues côté B</div>
         <div class="my-arguments-list">
           ${votedArgumentsB.map((item) => `
             <div class="my-argument-chip">
