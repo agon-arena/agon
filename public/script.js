@@ -5173,6 +5173,11 @@ async function submitListArgument(debateId) {
     return;
   }
 
+  const confirmed = await showIdeaPublishConfirmModal();
+  if (!confirmed) {
+    return;
+  }
+
   setButtonLoading(submitButton);
 
   try {
@@ -7200,6 +7205,59 @@ function showDeleteConfirmModal({ title, text, onConfirm }) {
     overlay.remove();
     if (typeof onConfirm === "function") onConfirm();
   };
+}
+
+function showIdeaPublishConfirmModal() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("custom-idea-publish-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "custom-idea-publish-modal";
+    overlay.className = "custom-modal-overlay";
+
+    overlay.innerHTML = `
+      <div class="custom-modal-box">
+        <div class="custom-modal-title">Publier cette idée ?</div>
+        <div class="custom-modal-text">Êtes-vous sûr de vouloir publier cette idée ? Vous ne pourrez plus la modifier ensuite, seulement la supprimer.</div>
+
+        <div class="custom-modal-actions">
+          <button type="button" class="button button-secondary" id="idea-publish-cancel-btn">
+            Annuler
+          </button>
+
+          <button type="button" class="button" id="idea-publish-confirm-btn">
+            Publier
+          </button>
+        </div>
+      </div>
+    `;
+
+    const closeModal = (confirmed) => {
+      overlay.remove();
+      resolve(confirmed === true);
+    };
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeModal(false);
+      }
+    });
+
+    document.body.appendChild(overlay);
+
+    const cancelBtn = document.getElementById("idea-publish-cancel-btn");
+    const confirmBtn = document.getElementById("idea-publish-confirm-btn");
+
+    if (cancelBtn) {
+      cancelBtn.onclick = () => closeModal(false);
+    }
+
+    if (confirmBtn) {
+      confirmBtn.onclick = () => closeModal(true);
+      confirmBtn.focus();
+    }
+  });
 }
 
 async function deleteArgument(debateId, argumentId) {
