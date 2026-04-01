@@ -4199,6 +4199,14 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .section-header.section-header-home {
     margin-top: 8px;
     margin-bottom: 0;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap {
+    flex: 0 0 100%;
+    width: 100%;
+    order: 99;
   }
 
   .page-home-mobile .section-header h3 {
