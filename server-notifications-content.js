@@ -154,6 +154,17 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function getNotificationContentLabel(value, maxLength = 90) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function quoteNotificationContent(value, maxLength = 90) {
+  const label = getNotificationContentLabel(value, maxLength);
+  return label ? `« ${label} »` : "";
+}
+
 async function createNotification({
   user_key,
   type,
@@ -1205,7 +1216,7 @@ app.post("/api/arguments", async (req, res) => {
         type: "argument_in_my_debate",
         debate_id,
         argument_id: data.id,
-        message: "Un nouvel argument a été posté dans votre débat."
+        message: `Votre débat ${quoteNotificationContent(debateRow.question)} a reçu une nouvelle idée : ${quoteNotificationContent(title)}.`
       });
     }
 
@@ -1302,7 +1313,7 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
         type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
-        message: "Votre argument a reçu un vote."
+        message: `Votre idée ${quoteNotificationContent(argument.title)} a reçu une voix.`
       }).catch((notificationError) => {
         console.error(notificationError);
       });
@@ -1515,9 +1526,11 @@ app.post("/api/comments", async (req, res) => {
         debate_id: argumentRow.debate_id || null,
         argument_id,
         comment_id: newCommentId,
-        message: shortPreview
-          ? `Nouveau commentaire : ${shortPreview}`
-          : "Nouveau commentaire sur votre argument",
+        message: argumentRow?.title
+          ? `Votre idée ${quoteNotificationContent(argumentRow.title)} a reçu un commentaire : ${quoteNotificationContent(shortPreview, 110)}`
+          : shortPreview
+            ? `Nouveau commentaire : ${shortPreview}`
+            : "Nouveau commentaire sur votre argument",
         is_read: 0,
         created_at: nowIso()
       });
@@ -1537,9 +1550,11 @@ app.post("/api/comments", async (req, res) => {
           debate_id: argumentRow?.debate_id || null,
           argument_id,
           comment_id: newCommentId,
-          message: shortPreview
-            ? `Réponse à votre commentaire : ${shortPreview}`
-            : "Quelqu’un a répondu à votre commentaire",
+          message: parentCommentRow?.content
+            ? `Votre commentaire ${quoteNotificationContent(parentCommentRow.content, 110)} a reçu une réponse : ${quoteNotificationContent(shortPreview, 110)}`
+            : shortPreview
+              ? `Réponse à votre commentaire : ${shortPreview}`
+              : "Quelqu’un a répondu à votre commentaire",
           is_read: 0,
           created_at: nowIso()
         });
@@ -1638,7 +1653,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Votre commentaire a reçu un pouce vers le haut."
+          message: `Votre commentaire ${quoteNotificationContent(commentRow.content, 110)} a reçu un pouce vers le haut.`
         });
       }
 
@@ -1649,7 +1664,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Votre commentaire a reçu un pouce vers le bas."
+          message: `Votre commentaire ${quoteNotificationContent(commentRow.content, 110)} a reçu un pouce vers le bas.`
         });
       }
     }
@@ -1679,7 +1694,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Bravo, ta proposition de remplacement a convaincu, elle prend désormais la place de l’idée initiale !"
+          message: `Bravo, ta proposition sur ${quoteNotificationContent(argumentRow?.title)} a convaincu et remplace désormais l’idée initiale !`
         });
       }
 

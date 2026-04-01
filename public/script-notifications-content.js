@@ -1154,6 +1154,24 @@ function setDisplay(element, value) {
     element.style.display = value;
   }
 }
+function getNotificationDisplayTitle(notification, fallbackTitle) {
+  const detailedTypes = new Set([
+    "vote_on_argument",
+    "comment_on_argument",
+    "argument_in_my_debate",
+    "like_on_comment",
+    "dislike_on_comment",
+    "reply_to_comment",
+    "replacement_accepted"
+  ]);
+
+  if (detailedTypes.has(notification?.type)) {
+    const message = String(notification?.message || "").trim();
+    if (message) return message;
+  }
+
+  return fallbackTitle;
+}
 function setButtonLoading(button, loadingClass = "button-loading") {
   if (!button) return;
   button.disabled = true;
@@ -2424,6 +2442,8 @@ if (notification.type === "reply_to_comment") {
   title = "Quelqu’un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
+
+title = getNotificationDisplayTitle(notification, title);
   return `
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
@@ -6922,6 +6942,7 @@ if (notification.type === "reply_to_comment") {
   title = "Quelqu’un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
+      title = getNotificationDisplayTitle(notification, title);
      return `
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
