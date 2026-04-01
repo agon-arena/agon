@@ -3525,22 +3525,24 @@ function styleDebateDeleteButtonAsTopRightCross() {
   const deleteDebateBtn = document.getElementById("delete-debate-btn");
   if (!deleteDebateBtn) return;
 
-  const anchorContainer =
+  const debateQuestion = document.getElementById("debate-question");
+
+  const mobileTitleBlock =
+    debateQuestion?.closest(".debate-head-card") ||
+    debateQuestion?.parentElement ||
     deleteDebateBtn.closest(".debate-head-card") ||
     deleteDebateBtn.closest(".debate-card") ||
     deleteDebateBtn.closest(".debate-header") ||
     deleteDebateBtn.parentElement;
 
-  if (anchorContainer && getComputedStyle(anchorContainer).position === "static") {
-    anchorContainer.style.position = "relative";
+  if (mobileTitleBlock && getComputedStyle(mobileTitleBlock).position === "static") {
+    mobileTitleBlock.style.position = "relative";
   }
 
   deleteDebateBtn.textContent = "×";
   deleteDebateBtn.title = "Supprimer ce débat";
   deleteDebateBtn.setAttribute("aria-label", "Supprimer ce débat");
   deleteDebateBtn.style.position = "absolute";
-  deleteDebateBtn.style.top = "12px";
-  deleteDebateBtn.style.right = "12px";
   deleteDebateBtn.style.left = "auto";
   deleteDebateBtn.style.bottom = "auto";
   deleteDebateBtn.style.width = "32px";
@@ -3554,6 +3556,15 @@ function styleDebateDeleteButtonAsTopRightCross() {
   deleteDebateBtn.style.fontSize = "24px";
   deleteDebateBtn.style.lineHeight = "1";
   deleteDebateBtn.style.fontWeight = "700";
+  deleteDebateBtn.style.zIndex = "20";
+
+  if (window.innerWidth <= 768) {
+    deleteDebateBtn.style.top = "8px";
+    deleteDebateBtn.style.right = "8px";
+  } else {
+    deleteDebateBtn.style.top = "12px";
+    deleteDebateBtn.style.right = "12px";
+  }
 }
 
 function updateDeleteDebateButtonVisibility(debate) {
