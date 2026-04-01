@@ -2527,6 +2527,23 @@ if (unreadCount > previousCount) {
 
 setStoredUnreadNotificationCount(unreadCount);
 
+function getNotificationContextText(notification) {
+  const contextualTypes = new Set([
+    "comment_on_argument",
+    "argument_in_my_debate",
+    "like_on_comment",
+    "dislike_on_comment"
+  ]);
+
+  if (!contextualTypes.has(String(notification?.type || ""))) {
+    return "";
+  }
+
+  const message = String(notification?.message || "").replace(/\s+/g, " ").trim();
+  if (!message) return "";
+  return message.length > 140 ? message.slice(0, 140).trimEnd() + "…" : message;
+}
+
    if (!notifications.length) {
   if (list) {
     list.innerHTML = `<div class="empty-state">Aucune notification.</div>`;
@@ -2560,25 +2577,25 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
     if (notification.type === "comment_on_argument") {
       icon = "💬";
       title = "Quelqu’un a commenté votre idée";
-      subtitle = "Ouvrir le commentaire";
+      subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
     }
 
     if (notification.type === "argument_in_my_debate") {
       icon = "🧠";
       title = "Une nouvelle idée a été postée dans votre arène";
-      subtitle = "Ouvrir l'arène";
+      subtitle = getNotificationContextText(notification) || "Ouvrir l'arène";
     }
 
   if (notification.type === "like_on_comment") {
   icon = "👍";
   title = "Votre commentaire a reçu un pouce vers le haut";
-  subtitle = "Ouvrir le commentaire";
+  subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
 }
 
 if (notification.type === "dislike_on_comment") {
   icon = "👎";
   title = "Votre commentaire a reçu un pouce vers le bas";
-  subtitle = "Ouvrir le commentaire";
+  subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
 }
 if (notification.type === "replacement_accepted") {
   icon = "🏆";
@@ -7070,24 +7087,24 @@ if (notification.type === "replacement_accepted") {
       if (notification.type === "comment_on_argument") {
         icon = "💬";
         title = "Quelqu’un a commenté votre idée";
-        subtitle = "Ouvrir le commentaire";
+        subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
       }
 
       if (notification.type === "argument_in_my_debate") {
         icon = "🧠";
         title = "Une nouvelle idée a été postée dans votre arène";
-        subtitle = "Ouvrir l'arène";
+        subtitle = getNotificationContextText(notification) || "Ouvrir l'arène";
       }
 
 if (notification.type === "like_on_comment") {
   icon = "👍";
   title = "Votre commentaire a été apprécié";
-  subtitle = "Ouvrir le commentaire";
+  subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
 }
 if (notification.type === "dislike_on_comment") {
   icon = "👎";
   title = "Votre commentaire n’a pas été apprécié";
-  subtitle = "Ouvrir le commentaire";
+  subtitle = getNotificationContextText(notification) || "Ouvrir le commentaire";
 }
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
