@@ -2001,13 +2001,120 @@ async function copyDebateLink() {
   }
 }
 
-function getQrCodeImageUrl(url) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(String(url || ""))}`;
+function getQrCodeImageUrl(url, size = 320) {
+  const safeSize = Math.max(160, Number(size || 320));
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${safeSize}x${safeSize}&margin=16&data=${encodeURIComponent(String(url || ""))}`;
+}
+
+let hiddenQrCodeBaseModal = null;
+
+function restoreHiddenQrCodeBaseModal() {
+  if (!hiddenQrCodeBaseModal) return;
+
+  hiddenQrCodeBaseModal.style.display = "flex";
+  hiddenQrCodeBaseModal = null;
+}
+
+function closeQrCodeFullscreen(options = {}) {
+  const shouldRestoreBaseModal = options.restoreBaseModal !== false;
+  const overlay = document.getElementById("custom-qrcode-fullscreen-modal");
+  if (overlay) {
+    overlay.remove();
+  }
+
+  if (shouldRestoreBaseModal) {
+    restoreHiddenQrCodeBaseModal();
+  }
+}
+
+function openQrCodeFullscreen(title, url) {
+  const safeTitle = String(title || "QR code").trim() || "QR code";
+  const safeUrl = String(url || "").trim();
+
+  if (!safeUrl) return;
+
+  const baseModal = document.getElementById("custom-qrcode-modal");
+  if (baseModal) {
+    hiddenQrCodeBaseModal = baseModal;
+    hiddenQrCodeBaseModal.style.display = "none";
+  }
+
+  const existing = document.getElementById("custom-qrcode-fullscreen-modal");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "custom-qrcode-fullscreen-modal";
+  overlay.style.position = "fixed";
+  overlay.style.inset = "0";
+  overlay.style.zIndex = "10001";
+  overlay.style.display = "flex";
+  overlay.style.alignItems = "center";
+  overlay.style.justifyContent = "center";
+  overlay.style.padding = "18px";
+  overlay.style.background = "rgba(17, 17, 17, 0.88)";
+
+  overlay.innerHTML = `
+    <div style="width:min(96vw, 560px); text-align:center;">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+        <button
+          type="button"
+          id="qrcode-fullscreen-close-btn"
+          aria-label="Fermer le QR code agrandi"
+          style="display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border:none; border-radius:999px; background:rgba(255,255,255,0.14); color:#ffffff; font-size:20px; cursor:pointer;"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div style="margin:0 0 12px; color:#ffffff; font-size:15px; font-weight:700; line-height:1.4;">
+        ${escapeHtml(safeTitle)}
+      </div>
+
+      <div style="display:flex; justify-content:center;">
+        <img
+          src="${escapeHtml(getQrCodeImageUrl(safeUrl, 640))}"
+          alt="QR code agrandi pour ${escapeHtml(safeTitle)}"
+          width="520"
+          height="520"
+          loading="eager"
+          style="display:block; width:min(88vw, 520px); height:auto; border-radius:24px; background:#ffffff; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,0.38);"
+        />
+      </div>
+
+      <div style="margin-top:14px; color:rgba(255,255,255,0.82); font-size:13px; line-height:1.45;">
+        Touchez l’arrière-plan ou la croix pour fermer.
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      closeQrCodeFullscreen({ restoreBaseModal: true });
+    }
+  });
+
+  document.body.appendChild(overlay);
+
+  const closeBtn = document.getElementById("qrcode-fullscreen-close-btn");
+  if (closeBtn) {
+    closeBtn.onclick = () => closeQrCodeFullscreen({ restoreBaseModal: true });
+    closeBtn.focus();
+  }
 }
 
 function closeQrCodeModal() {
+  closeQrCodeFullscreen({ restoreBaseModal: false });
+
   const overlay = document.getElementById("custom-qrcode-modal");
-  if (!overlay) return;
+  if (!overlay) {
+    hiddenQrCodeBaseModal = null;
+    return;
+  }
+
+  if (hiddenQrCodeBaseModal === overlay) {
+    hiddenQrCodeBaseModal = null;
+  }
+
   overlay.remove();
 }
 
@@ -2033,23 +2140,38 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
       <div class="custom-modal-text">${escapeHtml(helperText)}</div>
 
       <div style="display:flex; justify-content:center; margin:18px 0 14px;">
-        <img
-          src="${escapeHtml(getQrCodeImageUrl(safeUrl))}"
-          alt="QR code pour ${escapeHtml(safeTitle)}"
-          width="220"
-          height="220"
-          loading="eager"
-          style="display:block; width:min(220px, 62vw); height:auto; border-radius:18px; border:1px solid #e5e7eb; background:#ffffff; padding:12px;"
-        />
+        <button
+          type="button"
+          id="qrcode-preview-btn"
+          aria-label="Agrandir le QR code"
+          title="Agrandir le QR code"
+          style="display:block; padding:0; border:none; background:transparent; cursor:zoom-in;"
+        >
+          <img
+            src="${escapeHtml(getQrCodeImageUrl(safeUrl))}"
+            alt="QR code pour ${escapeHtml(safeTitle)}"
+            width="220"
+            height="220"
+            loading="eager"
+            style="display:block; width:min(220px, 62vw); height:auto; border-radius:18px; border:1px solid #e5e7eb; background:#ffffff; padding:12px;"
+          />
+        </button>
+      </div>
+
+      <div style="margin:-2px 0 14px; font-size:12px; color:#6b7280;">
+        Touchez le QR code pour l’agrandir.
       </div>
 
       <div style="margin:0 0 18px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb; font-size:12px; line-height:1.45; color:#4b5563; word-break:break-word;">
         ${escapeHtml(safeUrl)}
       </div>
 
-      <div class="custom-modal-actions">
+      <div class="custom-modal-actions" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
         <button type="button" class="button button-secondary" id="qrcode-close-btn">
           Fermer
+        </button>
+        <button type="button" class="button button-secondary" id="qrcode-expand-btn">
+          Agrandir
         </button>
         <button type="button" class="button" id="qrcode-copy-btn">
           Copier le lien
@@ -2068,9 +2190,19 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
 
   const closeBtn = document.getElementById("qrcode-close-btn");
   const copyBtn = document.getElementById("qrcode-copy-btn");
+  const expandBtn = document.getElementById("qrcode-expand-btn");
+  const previewBtn = document.getElementById("qrcode-preview-btn");
 
   if (closeBtn) {
     closeBtn.onclick = () => closeQrCodeModal();
+  }
+
+  if (expandBtn) {
+    expandBtn.onclick = () => openQrCodeFullscreen(safeTitle, safeUrl);
+  }
+
+  if (previewBtn) {
+    previewBtn.onclick = () => openQrCodeFullscreen(safeTitle, safeUrl);
   }
 
   if (copyBtn) {
@@ -2107,6 +2239,13 @@ function showIndexDebateQrCode(debateId, encodedQuestion = "", encodedOptionA = 
 if (!window.__qrCodeModalEscapeListenerAttached) {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      const fullscreenOverlay = document.getElementById("custom-qrcode-fullscreen-modal");
+
+      if (fullscreenOverlay) {
+        closeQrCodeFullscreen();
+        return;
+      }
+
       closeQrCodeModal();
     }
   });
@@ -7638,6 +7777,7 @@ window.copyDebateLink = copyDebateLink;
 window.showDebateQrCode = showDebateQrCode;
 window.showIdeaQrCode = showIdeaQrCode;
 window.showIndexDebateQrCode = showIndexDebateQrCode;
+window.openQrCodeFullscreen = openQrCodeFullscreen;
 window.shareOnX = shareOnX;
 window.shareOnFacebook = shareOnFacebook;
 window.shareOnWhatsApp = shareOnWhatsApp;
