@@ -3297,21 +3297,37 @@ function applyIndexFilters() {
   updateCategoryFilterVisualState();
 }
 
+function setVisitedDebatesSectionVisibility(shouldShow) {
+  const section = document.getElementById("visited-debates-section");
+  if (!section) return;
+
+  if (shouldShow) {
+    section.style.display = "";
+    section.hidden = false;
+    section.setAttribute("aria-hidden", "false");
+  } else {
+    section.style.display = "none";
+    section.hidden = true;
+    section.setAttribute("aria-hidden", "true");
+  }
+}
+
 function renderVisitedDebatesList(debates) {
   const section = document.getElementById("visited-debates-section");
   const div = document.getElementById("visited-debates-list");
 
   if (!section || !div) return;
 
-  if (!debates.length) {
-    section.style.display = "none";
+  const safeDebates = Array.isArray(debates) ? debates : [];
+  const debatesToShow = safeDebates.slice(0, visitedDebatesVisible);
+
+  if (!debatesToShow.length) {
+    setVisitedDebatesSectionVisibility(false);
     div.innerHTML = "";
     return;
   }
 
-  section.style.display = "block";
-
-  const debatesToShow = debates.slice(0, visitedDebatesVisible);
+  setVisitedDebatesSectionVisibility(true);
 
   div.innerHTML = debatesToShow.map(d => {
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
@@ -3636,11 +3652,13 @@ function setTypeFilter(type) {
 }
 
 function updateIndexLists(debates) {
+  const safeDebates = Array.isArray(debates) ? debates : [];
   const visitedIds = getVisitedDebateIds().map(String);
 
-  visitedDebatesCache = debates.filter((d) => visitedIds.includes(String(d.id)));
-  otherDebatesCache = debates.filter((d) => !visitedIds.includes(String(d.id)));
+  visitedDebatesCache = safeDebates.filter((d) => visitedIds.includes(String(d.id)));
+  otherDebatesCache = safeDebates.filter((d) => !visitedIds.includes(String(d.id)));
 
+  setVisitedDebatesSectionVisibility(visitedDebatesCache.length > 0);
   renderVisitedDebatesList(visitedDebatesCache);
   renderDebatesList(otherDebatesCache);
 }
