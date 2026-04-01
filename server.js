@@ -154,17 +154,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function getNotificationTextPreview(value, maxLength = 110) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized.length > maxLength ? normalized.slice(0, maxLength).trimEnd() + "…" : normalized;
-}
-
-function quoteNotificationValue(value, maxLength = 110) {
-  const preview = getNotificationTextPreview(value, maxLength);
-  return preview ? `« ${preview} »` : "";
-}
-
 async function createNotification({
   user_key,
   type,
@@ -1216,7 +1205,9 @@ app.post("/api/arguments", async (req, res) => {
         type: "argument_in_my_debate",
         debate_id,
         argument_id: data.id,
-        message: "Un nouvel argument a été posté dans votre débat."
+        message: debateRow.question
+          ? `Dans l’arène : ${quoteNotificationValue(debateRow.question, 120)}`
+          : "Dans votre arène"
       });
     }
 
@@ -1313,7 +1304,9 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
         type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
-        message: "Votre argument a reçu un vote."
+        message: argument.title
+          ? `Sur l’idée : ${quoteNotificationValue(argument.title, 120)}`
+          : "Sur votre idée"
       }).catch((notificationError) => {
         console.error(notificationError);
       });
@@ -1526,9 +1519,9 @@ app.post("/api/comments", async (req, res) => {
         debate_id: argumentRow.debate_id || null,
         argument_id,
         comment_id: newCommentId,
-        message: shortPreview
-          ? `Nouveau commentaire : ${shortPreview}`
-          : "Nouveau commentaire sur votre argument",
+        message: argumentRow?.title
+          ? `Sur l’idée : ${quoteNotificationValue(argumentRow.title, 120)}`
+          : "Sur votre idée",
         is_read: 0,
         created_at: nowIso()
       });
@@ -1649,7 +1642,9 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Votre commentaire a reçu un pouce vers le haut."
+          message: commentRow.content
+            ? `Sur votre commentaire : ${quoteNotificationValue(commentRow.content, 120)}`
+            : "Sur votre commentaire"
         });
       }
 
@@ -1660,7 +1655,9 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Votre commentaire a reçu un pouce vers le bas."
+          message: commentRow.content
+            ? `Sur votre commentaire : ${quoteNotificationValue(commentRow.content, 120)}`
+            : "Sur votre commentaire"
         });
       }
     }
@@ -1690,7 +1687,9 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Bravo, ta proposition de remplacement a convaincu, elle prend désormais la place de l’idée initiale !"
+          message: argumentRow?.title
+            ? `Sur l’idée : ${quoteNotificationValue(argumentRow.title, 120)}`
+            : "Sur l’idée remplacée"
         });
       }
 
