@@ -1315,7 +1315,9 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
         type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
-        message: "Votre argument a reçu un vote."
+        message: argument.title
+          ? `Sur votre idée : ${quoteNotificationValue(argument.title, 120)}`
+          : "Sur votre idée"
       }).catch((notificationError) => {
         console.error(notificationError);
       });
@@ -1698,7 +1700,9 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: "Bravo, ta proposition de remplacement a convaincu, elle prend désormais la place de l’idée initiale !"
+          message: argumentRow?.title
+            ? `Votre amélioration a remplacé l’idée : ${quoteNotificationValue(argumentRow.title, 120)}`
+            : "Votre amélioration a remplacé l’idée initiale"
         });
       }
 

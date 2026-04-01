@@ -2471,23 +2471,6 @@ function updateNotificationBadgeElement(element, unreadCount) {
 function getStoredUnreadNotificationCount() {
   return Math.max(0, Number(localStorage.getItem("notif_count") || 0));
 }
-
-function getNotificationContextText(notification) {
-  const contextualTypes = new Set([
-    "comment_on_argument",
-    "argument_in_my_debate",
-    "like_on_comment",
-    "dislike_on_comment"
-  ]);
-
-  if (!contextualTypes.has(String(notification?.type || ""))) {
-    return "";
-  }
-
-  const message = String(notification?.message || "").replace(/\s+/g, " ").trim();
-  if (!message) return "";
-  return message.length > 140 ? message.slice(0, 140).trimEnd() + "…" : message;
-}
 function setStoredUnreadNotificationCount(unreadCount) {
   const safeCount = Math.max(0, Number(unreadCount || 0));
   localStorage.setItem("notif_count", safeCount);
@@ -2544,6 +2527,26 @@ if (unreadCount > previousCount) {
 
 setStoredUnreadNotificationCount(unreadCount);
 
+function getNotificationContextText(notification) {
+  const contextualTypes = new Set([
+    "vote_on_argument",
+    "comment_on_argument",
+    "argument_in_my_debate",
+    "like_on_comment",
+    "dislike_on_comment",
+    "reply_to_comment",
+    "replacement_accepted"
+  ]);
+
+  if (!contextualTypes.has(String(notification?.type || ""))) {
+    return "";
+  }
+
+  const message = String(notification?.message || "").replace(/\s+/g, " ").trim();
+  if (!message) return "";
+  return message.length > 160 ? message.slice(0, 160).trimEnd() + "…" : message;
+}
+
    if (!notifications.length) {
   if (list) {
     list.innerHTML = `<div class="empty-state">Aucune notification.</div>`;
@@ -2571,7 +2574,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
     if (notification.type === "vote_on_argument") {
       icon = "👍";
       title = "Votre idée a reçu une voix";
-      subtitle = "Ouvrir l'idée";
+      subtitle = getNotificationContextText(notification) || "Ouvrir l'idée";
     }
 
     if (notification.type === "comment_on_argument") {
@@ -2600,12 +2603,12 @@ if (notification.type === "dislike_on_comment") {
 if (notification.type === "replacement_accepted") {
   icon = "🏆";
   title = "Ta proposition de remplacement a été acceptée";
-  subtitle = "Ouvrir l'idée remplacée";
+  subtitle = getNotificationContextText(notification) || "Ouvrir l'idée remplacée";
 }
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
   title = "Quelqu’un a répondu à votre commentaire";
-  subtitle = "Ouvrir la réponse";
+  subtitle = getNotificationContextText(notification) || "Ouvrir la réponse";
 }
   return `
  <a
@@ -7076,12 +7079,12 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
 if (notification.type === "vote_on_argument") {
   icon = "🗳️";
   title = "Votre idée a reçu une voix";
-  subtitle = "Ouvrir l'idée";
+  subtitle = getNotificationContextText(notification) || "Ouvrir l'idée";
 }
 if (notification.type === "replacement_accepted") {
   icon = "🏆";
   title = "Votre proposition a remplacé l'idée initiale";
-  subtitle = "Voir l'idée remplacée";
+  subtitle = getNotificationContextText(notification) || "Voir l'idée remplacée";
 }
 
       if (notification.type === "comment_on_argument") {
@@ -7109,7 +7112,7 @@ if (notification.type === "dislike_on_comment") {
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
   title = "Quelqu’un a répondu à votre commentaire";
-  subtitle = "Ouvrir la réponse";
+  subtitle = getNotificationContextText(notification) || "Ouvrir la réponse";
 }
      return `
  <a
