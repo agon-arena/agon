@@ -1172,6 +1172,45 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeAttribute(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("'", "&#039;");
+}
+
+function getDomainLabel(url) {
+  try {
+    return new URL(String(url || "")).hostname.replace(/^www\./, "");
+  } catch (error) {
+    return "Source externe";
+  }
+}
+
+function buildSourcePreviewCardHtml(preview) {
+  const safePreview = preview || {};
+  const safeUrl = String(safePreview.finalUrl || safePreview.url || "").trim();
+  const domain = safePreview.siteName || safePreview.domain || getDomainLabel(safeUrl);
+  const title = String(safePreview.title || domain || "Source externe").trim();
+  const description = String(safePreview.description || "").trim();
+  const image = String(safePreview.image || "").trim();
+  const linkLabel = image ? "Ouvrir l'article" : "Ouvrir la source";
+
+  return `
+    <a class="debate-source-card" href="${escapeAttribute(safeUrl)}" target="_blank" rel="noopener noreferrer">
+      ${image ? `<div class="debate-source-card-image-wrap"><img class="debate-source-card-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(title)}" loading="lazy"></div>` : ""}
+      <div class="debate-source-card-body">
+        <div class="debate-source-card-domain">🔗 ${escapeHtml(domain || "Source externe")}</div>
+        <div class="debate-source-card-title">${escapeHtml(title || "Source externe")}</div>
+        ${description ? `<div class="debate-source-card-description">${escapeHtml(description)}</div>` : ""}
+        <span class="debate-source-link">${escapeHtml(linkLabel)}</span>
+      </div>
+    </a>
+  `;
+}
+
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
 
@@ -3181,31 +3220,28 @@ function updateCategoryFilterVisualState() {
   badge.title = `${count} arène${count > 1 ? "s" : ""}`;
 }
 
-
-
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
 
   ensureCategoryFilterVisualStyles();
 
-  let select = document.getElementById("filter-theme");
-  if (select) {
-    updateCategoryFilterVisualState();
-    return select;
-  }
 
-const filterSlot = document.getElementById("visited-theme-filter-slot");
-const sectionHeaderHome = document.getElementById("visited-section-header");
+let select = document.getElementById("filter-theme");
+if (select) {
+  updateCategoryFilterVisualState();
+  return select;
+}
 
-  const fallbackContainer =
+
+
+  const filtersContainer =
     document.getElementById("filter-all")?.parentElement ||
     searchInput.parentElement ||
     searchInput.closest("section") ||
     searchInput.parentElement;
 
-  const targetContainer = sectionHeaderHome || fallbackContainer;
-  if (!targetContainer) return null;
+  if (!filtersContainer) return null;
 
   const wrap = document.createElement("div");
   wrap.id = "filter-theme-wrap";
@@ -3233,25 +3269,19 @@ const sectionHeaderHome = document.getElementById("visited-section-header");
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
- if (filterSlot) {
-  filterSlot.appendChild(wrap);
-} else if (sectionHeaderHome) {
-  sectionHeaderHome.appendChild(wrap);
+
+
+const searchBox = searchInput.closest(".search-box");
+
+if (searchBox && searchBox.parentElement === filtersContainer) {
+  filtersContainer.insertBefore(wrap, searchBox.nextSibling);
 } else {
-
-    const searchBox = searchInput.closest(".search-box");
-
-    if (searchBox && searchBox.parentElement === targetContainer) {
-      targetContainer.insertBefore(wrap, searchBox.nextSibling);
-    } else {
-      targetContainer.appendChild(wrap);
-    }
-  }
+  filtersContainer.appendChild(wrap);
+}
 
   updateCategoryFilterVisualState();
   return select;
 }
-
 
 function refreshCategoryFilterOptions(debates) {
   const select = ensureCategoryFilterControl();
@@ -4278,54 +4308,6 @@ const debateSourcePreviewState = {
   handlersBound: false
 };
 
-const externalLinkPreviewCache = new Map();
-
-function getExternalPreviewDomainLabel(rawUrl) {
-  try {
-    return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "");
-  } catch (error) {
-    return "Source externe";
-  }
-}
-
-async function fetchExternalLinkPreviewData(sourceUrl) {
-  const normalizedUrl = String(sourceUrl || "").trim();
-  if (!normalizedUrl) return null;
-
-  if (externalLinkPreviewCache.has(normalizedUrl)) {
-    return externalLinkPreviewCache.get(normalizedUrl);
-  }
-
-  try {
-    const preview = await fetchJSON(`${API}/link-preview?url=${encodeURIComponent(normalizedUrl)}`);
-    externalLinkPreviewCache.set(normalizedUrl, preview || null);
-    return preview || null;
-  } catch (error) {
-    externalLinkPreviewCache.set(normalizedUrl, null);
-    return null;
-  }
-}
-
-function buildDebateSourceFallbackMarkup(sourceUrl, previewData = null) {
-  const safeUrl = String(sourceUrl || "").trim();
-  const domain = escapeHtml(previewData?.siteName || previewData?.domain || getExternalPreviewDomainLabel(safeUrl));
-  const title = escapeHtml(previewData?.title || domain || "Source externe");
-  const description = escapeHtml(previewData?.description || "Ouvrir la source liée à ce débat.");
-  const imageUrl = String(previewData?.image || "").trim();
-
-  return `
-    <a class="debate-source-card" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
-      ${imageUrl ? `<img class="debate-source-card-image" src="${escapeHtml(imageUrl)}" alt="${title}" loading="lazy">` : `<div class="debate-source-card-image debate-source-card-image-placeholder">🔗</div>`}
-      <div class="debate-source-card-body">
-        <div id="debate-source-domain" class="debate-source-domain">${domain}</div>
-        <div class="debate-source-card-title">${title}</div>
-        <div class="debate-source-card-description">${description}</div>
-        <span id="debate-source-fallback-link" class="debate-source-link" href="${escapeHtml(safeUrl)}">Ouvrir la source</span>
-      </div>
-    </a>
-  `;
-}
-
 function clearDebateSourcePreviewTimers() {
   debateSourcePreviewState.retryTimers.forEach(timer => clearTimeout(timer));
   debateSourcePreviewState.retryTimers = [];
@@ -4383,13 +4365,42 @@ function resetDebateSourcePreview() {
   }
 }
 
-function showDebateSourceFallback(sourceUrl, previewData = null) {
+function showDebateSourceFallback(sourceUrl, preview = null) {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
+  const sourceDomain = document.getElementById("debate-source-domain");
+  const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "flex";
+  }
+
+  if (sourceLoading) {
+    sourceLoading.style.display = "none";
+  }
 
   if (!sourceFallback) return;
 
-  sourceFallback.innerHTML = buildDebateSourceFallbackMarkup(sourceUrl, previewData);
+  const domain = getDomainLabel(sourceUrl);
+  const fallbackPreview = preview || {
+    url: sourceUrl,
+    domain,
+    title: domain,
+    description: "Source externe",
+    image: ""
+  };
+
+  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview);
   sourceFallback.style.display = "block";
+
+  if (sourceDomain) {
+    sourceDomain.textContent = "";
+  }
+
+  if (sourceFallbackLink) {
+    sourceFallbackLink.href = sourceUrl;
+  }
 }
 
 function bindDebateSourcePreviewHandlers() {
@@ -4468,7 +4479,7 @@ function loadDebateSourceIframe(embedUrl, token, attempt = 0) {
   }
 }
 
-async function renderDebateSourcePreview(sourceUrl) {
+function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   resetDebateSourcePreview();
 
   if (!sourceUrl) return;
@@ -4481,8 +4492,7 @@ async function renderDebateSourcePreview(sourceUrl) {
   const { embedUrl, forceShowPreview, videoId, posterUrl } = getEmbeddableSourceData(sourceUrl);
 
   if (!embedUrl || !forceShowPreview || !videoId) {
-    const previewData = await fetchExternalLinkPreviewData(sourceUrl);
-    showDebateSourceFallback(sourceUrl, previewData);
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
     return;
   }
 
@@ -4526,7 +4536,7 @@ saveVisitedDebate(id);
   document.getElementById("debate-question").textContent = data.debate.question;
 
 const sourceUrl = String(data.debate.source_url || "").trim();
-await renderDebateSourcePreview(sourceUrl);
+renderDebateSourcePreview(sourceUrl, data.sourcePreview || null);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";

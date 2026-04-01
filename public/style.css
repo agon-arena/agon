@@ -3407,74 +3407,6 @@ body.page-debate .topbar::after {
   background: #e5e7eb;
   transform: translateY(-1px);
 }
-
-.debate-source-card {
-  display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
-  gap: 18px;
-  width: 100%;
-  max-width: 700px;
-  text-decoration: none;
-  color: inherit;
-  align-items: stretch;
-}
-
-.debate-source-card-image {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-  border-radius: 12px;
-  background: #e5e7eb;
-  display: block;
-}
-
-.debate-source-card-image-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  color: #6b7280;
-}
-
-.debate-source-card-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 10px;
-  min-width: 0;
-  text-align: left;
-}
-
-.debate-source-card-title {
-  font-size: 22px;
-  line-height: 1.25;
-  font-weight: 800;
-  color: #111827;
-  overflow-wrap: anywhere;
-}
-
-.debate-source-card-description {
-  font-size: 14px;
-  line-height: 1.55;
-  color: #4b5563;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 768px) {
-  .debate-source-card {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .debate-source-card-image {
-    height: 200px;
-  }
-
-  .debate-source-card-title {
-    font-size: 18px;
-  }
-}
 /* ===== VERSION MOBILE – PASSE 1 PRUDENTE ===== */
 
 @media (max-width: 768px) {
@@ -4264,18 +4196,16 @@ body.debate-topbar-hidden .debate-hero-top {
     gap: 14px;
   }
 
-
-.page-home-mobile .section-header.section-header-home {
-  margin-top: 8px;
-  margin-bottom: 0;
+.page-home-mobile #visited-theme-filter-slot {
+  width: 100%;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: -2px;
+  margin-bottom: 6px;
 }
 
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap {
-  order: 1;
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-wrap {
   display: flex;
   justify-content: flex-start;
   align-items: center;
@@ -4283,10 +4213,9 @@ body.debate-topbar-hidden .debate-hero-top {
   width: auto;
   max-width: 100%;
   margin: 0;
-  align-self: flex-start;
 }
 
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap .index-theme-filter-select {
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-select {
   width: 220px;
   max-width: calc(100vw - 40px);
   min-width: 0;
@@ -4294,16 +4223,16 @@ body.debate-topbar-hidden .debate-hero-top {
   box-sizing: border-box;
 }
 
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap .index-theme-filter-badge {
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-badge {
   flex: 0 0 auto;
 }
 
-.page-home-mobile .section-header.section-header-home > div:first-child {
-  order: 2;
-  width: 100%;
+.page-home-mobile #visited-section-header {
+  margin-top: -10;
+  margin-bottom: 0;
 }
 
-.page-home-mobile .section-header.section-header-home > div:first-child h3 {
+.page-home-mobile #visited-section-header > h3 {
   margin: 0;
   width: 100%;
 }
@@ -5721,4 +5650,74 @@ body.debate-topbar-hidden .debate-hero-top {
 .debate-card-share-actions {
   justify-content: center;
   width: 100%;
+}
+
+.debate-source-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 700px;
+  text-decoration: none;
+  color: inherit;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.debate-source-card-image-wrap {
+  width: 100%;
+  background: #f3f4f6;
+}
+
+.debate-source-card-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.debate-source-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  text-align: left;
+}
+
+.debate-source-card-domain {
+  font-size: 13px;
+  font-weight: 800;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.debate-source-card-title {
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 800;
+  color: #111827;
+}
+
+.debate-source-card-description {
+  font-size: 15px;
+  line-height: 1.55;
+  color: #4b5563;
+}
+
+@media (max-width: 768px) {
+  .debate-source-card-body {
+    padding: 14px;
+    gap: 8px;
+  }
+
+  .debate-source-card-title {
+    font-size: 18px;
+  }
+
+  .debate-source-card-description {
+    font-size: 14px;
+  }
 }

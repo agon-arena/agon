@@ -54,184 +54,130 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
-function getPreviewDomainLabel(rawUrl) {
-  try {
-    return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "");
-  } catch (error) {
-    return "Source externe";
-  }
-}
-
-function looksLikePrivateHostname(hostname) {
-  const value = String(hostname || "").toLowerCase();
-  if (!value) return true;
-  if (value === "localhost" || value.endsWith(".localhost") || value.endsWith(".local")) return true;
-  if (/^127\./.test(value)) return true;
-  if (/^10\./.test(value)) return true;
-  if (/^192\.168\./.test(value)) return true;
-  if (/^169\.254\./.test(value)) return true;
-  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(value)) return true;
-  if (value === "::1") return true;
-  return false;
-}
-
-function isAllowedPreviewUrl(rawUrl) {
-  try {
-    const parsed = new URL(String(rawUrl || ""));
-    if (!["http:", "https:"].includes(parsed.protocol)) return false;
-    if (looksLikePrivateHostname(parsed.hostname)) return false;
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
 
 function decodeHtmlEntities(value) {
-  return String(value || "")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&#039;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#x2F;/gi, "/");
+  return String(value ?? "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
-function stripHtmlTags(value) {
-  return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function truncateText(value, maxLength = 220) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+function cleanPreviewText(value, maxLength = 240) {
+  const text = decodeHtmlEntities(String(value ?? "").replace(/\s+/g, " ").trim());
   if (!text) return "";
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-function extractMetaContent(html, attributeName, attributeValue) {
-  const safeValue = String(attributeValue).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const patterns = [
-    new RegExp(`<meta[^>]+${attributeName}=["']${safeValue}["'][^>]+content=["']([^"']+)["'][^>]*>`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+${attributeName}=["']${safeValue}["'][^>]*>`, "i")
-  ];
-
+function extractMetaContent(html, patterns) {
   for (const pattern of patterns) {
     const match = html.match(pattern);
-    if (match && match[1]) {
-      return decodeHtmlEntities(match[1]).trim();
-    }
+    const value = match?.[1] || match?.[2] || "";
+    const cleaned = cleanPreviewText(value, 500);
+    if (cleaned) return cleaned;
   }
-
   return "";
 }
 
-function extractTitleFromHtml(html) {
-  const match = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (!match || !match[1]) return "";
-  return decodeHtmlEntities(stripHtmlTags(match[1]));
-}
-
-function extractDescriptionFromHtml(html) {
-  return (
-    extractMetaContent(html, "name", "description") ||
-    extractMetaContent(html, "property", "description") ||
-    ""
-  );
-}
-
-function resolvePreviewUrl(baseUrl, candidateUrl) {
-  const value = String(candidateUrl || "").trim();
+function resolvePreviewUrl(rawUrl, baseUrl) {
+  const value = String(rawUrl || "").trim();
   if (!value) return "";
-
   try {
     return new URL(value, baseUrl).toString();
   } catch (error) {
-    return "";
+    return value;
   }
 }
 
-async function fetchExternalLinkPreview(rawUrl) {
-  if (!isAllowedPreviewUrl(rawUrl)) {
-    const error = new Error("URL non autorisée.");
-    error.statusCode = 400;
-    throw error;
+async function getExternalLinkPreview(sourceUrl) {
+  const safeUrl = String(sourceUrl || "").trim();
+  if (!safeUrl) return null;
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(safeUrl);
+  } catch (error) {
+    return null;
   }
 
+  const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 6000);
 
   try {
-    const response = await fetch(rawUrl, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
+    const response = await fetch(safeUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; AgonPreviewBot/1.0; +https://agon.example)",
+        "User-Agent": "Mozilla/5.0 (compatible; AgonLinkPreview/1.0; +https://agon.example)",
         "Accept": "text/html,application/xhtml+xml"
-      }
+      },
+      redirect: "follow",
+      signal: controller.signal
     });
 
     if (!response.ok) {
-      const error = new Error("Impossible de récupérer la source.");
-      error.statusCode = 502;
-      throw error;
-    }
-
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    if (!contentType.includes("text/html")) {
       return {
-        url: response.url || rawUrl,
-        domain: getPreviewDomainLabel(response.url || rawUrl),
-        title: getPreviewDomainLabel(response.url || rawUrl),
-        description: "Aperçu indisponible pour ce type de contenu.",
+        url: safeUrl,
+        domain,
+        title: domain,
+        description: "Source externe",
         image: "",
-        siteName: ""
+        siteName: domain
       };
     }
 
     const html = await response.text();
-    const finalUrl = response.url || rawUrl;
 
-    const title = truncateText(
-      extractMetaContent(html, "property", "og:title") ||
-      extractMetaContent(html, "name", "twitter:title") ||
-      extractTitleFromHtml(html) ||
-      getPreviewDomainLabel(finalUrl),
-      140
-    );
+    const title = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:title["'][^>]*>/i,
+      /<title[^>]*>([^<]+)<\/title>/i
+    ]) || domain;
 
-    const description = truncateText(
-      extractMetaContent(html, "property", "og:description") ||
-      extractMetaContent(html, "name", "twitter:description") ||
-      extractDescriptionFromHtml(html),
-      220
-    );
+    const description = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:description["'][^>]*>/i,
+      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i
+    ]);
 
-    const image = resolvePreviewUrl(
-      finalUrl,
-      extractMetaContent(html, "property", "og:image") ||
-      extractMetaContent(html, "name", "twitter:image") ||
-      extractMetaContent(html, "property", "og:image:url")
-    );
+    const siteName = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["'][^>]*>/i
+    ]) || domain;
 
-    const siteName = truncateText(
-      extractMetaContent(html, "property", "og:site_name") || getPreviewDomainLabel(finalUrl),
-      80
-    );
+    const image = resolvePreviewUrl(extractMetaContent(html, [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
+      /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/i
+    ]), response.url || safeUrl);
 
     return {
-      url: finalUrl,
-      domain: getPreviewDomainLabel(finalUrl),
+      url: safeUrl,
+      finalUrl: response.url || safeUrl,
+      domain,
       title,
       description,
       image,
       siteName
     };
   } catch (error) {
-    if (error.name === "AbortError") {
-      const timeoutError = new Error("Délai dépassé pour récupérer l'aperçu.");
-      timeoutError.statusCode = 504;
-      throw timeoutError;
-    }
-    throw error;
+    return {
+      url: safeUrl,
+      domain,
+      title: domain,
+      description: "Source externe",
+      image: "",
+      siteName: domain
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -534,6 +480,7 @@ app.get("/admin-reports", (req, res) => {
 app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
+
     const [debate, args] = await Promise.all([
       getDebateById(id),
       getArgumentsByDebateId(id)
@@ -689,22 +636,20 @@ if (!debate) {
   }
 });
 
-app.get("/api/link-preview", async (req, res) => {
+app.post("/api/link-preview", async (req, res) => {
   try {
-    const rawUrl = String(req.query.url || "").trim();
+    const { url } = req.body || {};
+    const safeUrl = String(url || "").trim();
 
-    if (!rawUrl) {
+    if (!safeUrl) {
       return res.status(400).json({ error: "URL manquante." });
     }
 
-    const preview = await fetchExternalLinkPreview(rawUrl);
-    return res.json(preview);
+    const preview = await getExternalLinkPreview(safeUrl);
+    return res.json({ preview: preview || null });
   } catch (error) {
     console.error(error);
-    const statusCode = Number(error.statusCode || 500);
-    return res.status(statusCode).json({
-      error: error.message || "Impossible de récupérer l'aperçu du lien."
-    });
+    return sendServerError(res, "Erreur récupération aperçu.");
   }
 });
 
@@ -1290,6 +1235,7 @@ app.get("/api/debates/:id", async (req, res) => {
     const args = await getArgumentsByDebateId(id);
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
+    const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
 
     const argumentIds = args.map((a) => a.id);
     if (!argumentIds.length) {
@@ -1297,7 +1243,8 @@ app.get("/api/debates/:id", async (req, res) => {
         debate,
         optionA,
         optionB,
-        commentsByArgument: {}
+        commentsByArgument: {},
+        sourcePreview
       });
     }
 
@@ -1315,7 +1262,8 @@ app.get("/api/debates/:id", async (req, res) => {
       debate,
       optionA,
       optionB,
-      commentsByArgument
+      commentsByArgument,
+      sourcePreview
     });
   } catch (error) {
     console.error(error);
