@@ -3187,23 +3187,14 @@ function ensureCategoryFilterControl() {
 
   ensureCategoryFilterVisualStyles();
 
-  let select = document.getElementById("filter-theme");
-  if (select) {
-    const existingWrap = document.getElementById("filter-theme-wrap");
-const sectionHeaderHome = document.querySelector(".section-header.section-header-home");    const shouldPlaceOnOwnMobileRow =
-      window.innerWidth <= 768 &&
-      document.body.classList.contains("page-home-mobile") &&
-      sectionHeaderHome &&
-      existingWrap &&
-      existingWrap.parentElement !== sectionHeaderHome;
 
-    if (shouldPlaceOnOwnMobileRow) {
-      sectionHeaderHome.appendChild(existingWrap);
-    }
+let select = document.getElementById("filter-theme");
+if (select) {
+  updateCategoryFilterVisualState();
+  return select;
+}
 
-    updateCategoryFilterVisualState();
-    return select;
-  }
+
 
   const filtersContainer =
     document.getElementById("filter-all")?.parentElement ||
@@ -3238,6 +3229,8 @@ const sectionHeaderHome = document.querySelector(".section-header.section-header
 
   wrap.appendChild(select);
   wrap.appendChild(badge);
+
+
 
 const searchBox = searchInput.closest(".search-box");
 
