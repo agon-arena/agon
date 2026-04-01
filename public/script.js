@@ -1172,6 +1172,45 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeAttribute(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("'", "&#039;");
+}
+
+function getDomainLabel(url) {
+  try {
+    return new URL(String(url || "")).hostname.replace(/^www\./, "");
+  } catch (error) {
+    return "Source externe";
+  }
+}
+
+function buildSourcePreviewCardHtml(preview) {
+  const safePreview = preview || {};
+  const safeUrl = String(safePreview.finalUrl || safePreview.url || "").trim();
+  const domain = safePreview.siteName || safePreview.domain || getDomainLabel(safeUrl);
+  const title = String(safePreview.title || domain || "Source externe").trim();
+  const description = String(safePreview.description || "").trim();
+  const image = String(safePreview.image || "").trim();
+  const linkLabel = image ? "Ouvrir l'article" : "Ouvrir la source";
+
+  return `
+    <a class="debate-source-card" href="${escapeAttribute(safeUrl)}" target="_blank" rel="noopener noreferrer">
+      ${image ? `<div class="debate-source-card-image-wrap"><img class="debate-source-card-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(title)}" loading="lazy"></div>` : ""}
+      <div class="debate-source-card-body">
+        <div class="debate-source-card-domain">🔗 ${escapeHtml(domain || "Source externe")}</div>
+        <div class="debate-source-card-title">${escapeHtml(title || "Source externe")}</div>
+        ${description ? `<div class="debate-source-card-description">${escapeHtml(description)}</div>` : ""}
+        <span class="debate-source-link">${escapeHtml(linkLabel)}</span>
+      </div>
+    </a>
+  `;
+}
+
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
 
@@ -3181,30 +3220,28 @@ function updateCategoryFilterVisualState() {
   badge.title = `${count} arène${count > 1 ? "s" : ""}`;
 }
 
-
-
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
 
   ensureCategoryFilterVisualStyles();
 
-  let select = document.getElementById("filter-theme");
-  if (select) {
-    updateCategoryFilterVisualState();
-    return select;
-  }
 
-  const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
+let select = document.getElementById("filter-theme");
+if (select) {
+  updateCategoryFilterVisualState();
+  return select;
+}
 
-  const fallbackContainer =
+
+
+  const filtersContainer =
     document.getElementById("filter-all")?.parentElement ||
     searchInput.parentElement ||
     searchInput.closest("section") ||
     searchInput.parentElement;
 
-  const targetContainer = sectionHeaderHome || fallbackContainer;
-  if (!targetContainer) return null;
+  if (!filtersContainer) return null;
 
   const wrap = document.createElement("div");
   wrap.id = "filter-theme-wrap";
@@ -3232,22 +3269,19 @@ function ensureCategoryFilterControl() {
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
-  if (sectionHeaderHome) {
-    sectionHeaderHome.appendChild(wrap);
-  } else {
-    const searchBox = searchInput.closest(".search-box");
 
-    if (searchBox && searchBox.parentElement === targetContainer) {
-      targetContainer.insertBefore(wrap, searchBox.nextSibling);
-    } else {
-      targetContainer.appendChild(wrap);
-    }
-  }
+
+const searchBox = searchInput.closest(".search-box");
+
+if (searchBox && searchBox.parentElement === filtersContainer) {
+  filtersContainer.insertBefore(wrap, searchBox.nextSibling);
+} else {
+  filtersContainer.appendChild(wrap);
+}
 
   updateCategoryFilterVisualState();
   return select;
 }
-
 
 function refreshCategoryFilterOptions(debates) {
   const select = ensureCategoryFilterControl();
@@ -3364,7 +3398,6 @@ function renderVisitedDebatesList(debates) {
 }
 
           <p>${d.argument_count || 0} idée(s)</p>
-          ${renderIndexSourcePreview(d.source_url)}
           <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
           ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
         </a>
@@ -3776,7 +3809,6 @@ const matches = debatesForSimilarity
       <div class="similar-debate-meta">
         ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée(s)
       </div>
-      ${renderIndexSourcePreview(debate.source_url)}
     </a>
   `).join("");
 }
@@ -4270,87 +4302,174 @@ function getEmbeddableSourceData(url) {
   };
 }
 
-function normalizeSourceUrl(rawUrl) {
-  const value = String(rawUrl || "").trim();
-  if (!value) return "";
-
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.toString();
-    }
-  } catch (error) {
-    return "";
-  }
-
-  return "";
-}
-
-function getSourceUrlDomain(sourceUrl) {
-  const safeUrl = normalizeSourceUrl(sourceUrl);
-  if (!safeUrl) return "";
-
-  try {
-    return new URL(safeUrl).hostname.replace(/^www\./i, "");
-  } catch (error) {
-    return "";
-  }
-}
-
-function renderIndexSourcePreview(sourceUrl) {
-  const safeUrl = normalizeSourceUrl(sourceUrl);
-  if (!safeUrl) return "";
-
-  const sourceData = getEmbeddableSourceData(safeUrl);
-  const domain = getSourceUrlDomain(safeUrl) || "Source";
-
-  if (sourceData.videoId && sourceData.posterUrl) {
-    return `
-      <div class="debate-card-source-preview">
-        <a
-          class="debate-card-source-youtube"
-          href="${escapeHtml(safeUrl)}"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Voir la source YouTube"
-        >
-          <div class="debate-card-source-thumb-wrap">
-            <img
-              class="debate-card-source-thumb"
-              src="${escapeHtml(sourceData.posterUrl)}"
-              alt="Miniature YouTube"
-              loading="lazy"
-            />
-            <span class="debate-card-source-play" aria-hidden="true">▶</span>
-          </div>
-          <div class="debate-card-source-meta">
-            <div class="debate-card-source-badge">YouTube</div>
-            <div class="debate-card-source-domain">${escapeHtml(domain)}</div>
-          </div>
-        </a>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="debate-card-source-preview">
-      <a
-        class="debate-card-source-link"
-        href="${escapeHtml(safeUrl)}"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Source · ${escapeHtml(domain)}
-      </a>
-    </div>
-  `;
-}
-
 const debateSourcePreviewState = {
   retryTimers: [],
   currentToken: 0,
   handlersBound: false
 };
+
+
+let debateSourceFallbackTemplate = null;
+let xWidgetsLoaderPromise = null;
+
+function getDebateSourceFallbackTemplate() {
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  if (!sourceFallback) return "";
+
+  if (debateSourceFallbackTemplate === null) {
+    debateSourceFallbackTemplate = sourceFallback.innerHTML;
+  }
+
+  return debateSourceFallbackTemplate;
+}
+
+function restoreDebateSourceFallbackTemplate() {
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  if (!sourceFallback) return;
+
+  const template = getDebateSourceFallbackTemplate();
+  if (template) {
+    sourceFallback.innerHTML = template;
+  }
+}
+
+function isXStatusUrl(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host !== "x.com" && host !== "twitter.com") return false;
+    return /\/[^/]+\/status\/\d+/.test(parsed.pathname);
+  } catch (error) {
+    return false;
+  }
+}
+
+function getXStatusId(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const match = parsed.pathname.match(/\/status\/(\d+)/);
+    return match ? match[1] : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function loadXWidgetsScript() {
+  if (window.twttr?.widgets?.createTweet) {
+    return Promise.resolve(window.twttr);
+  }
+
+  if (xWidgetsLoaderPromise) return xWidgetsLoaderPromise;
+
+  xWidgetsLoaderPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-x-widgets="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.twttr), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Impossible de charger le script X.")), { once: true });
+      return;
+    }
+
+    const scriptEl = document.createElement("script");
+    scriptEl.src = "https://platform.twitter.com/widgets.js";
+    scriptEl.async = true;
+    scriptEl.charset = "utf-8";
+    scriptEl.setAttribute("data-x-widgets", "true");
+    scriptEl.onload = () => resolve(window.twttr);
+    scriptEl.onerror = () => reject(new Error("Impossible de charger le script X."));
+    document.head.appendChild(scriptEl);
+  });
+
+  return xWidgetsLoaderPromise;
+}
+
+async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+  const sourceFallback = document.getElementById("debate-source-fallback");
+
+  if (!sourceFallback) {
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    return;
+  }
+
+  const tweetId = getXStatusId(sourceUrl);
+  if (!tweetId) {
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    return;
+  }
+
+  restoreDebateSourceFallbackTemplate();
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "flex";
+  }
+
+  if (sourcePreview) {
+    sourcePreview.style.display = "none";
+    sourcePreview.style.visibility = "hidden";
+    sourcePreview.removeAttribute("src");
+    sourcePreview.src = "about:blank";
+  }
+
+  if (sourcePoster) {
+    sourcePoster.style.display = "none";
+    sourcePoster.removeAttribute("href");
+  }
+
+  if (sourceLoading) {
+    sourceLoading.textContent = "Chargement du post X…";
+    sourceLoading.style.display = "block";
+  }
+
+  sourceFallback.classList.add("debate-source-fallback-x");
+  sourceFallback.innerHTML = `
+    <div class="debate-source-x-header">
+      <span class="debate-source-x-badge">𝕏 Source</span>
+    </div>
+    <div class="debate-source-x-embed" id="debate-source-x-embed"></div>
+    <a class="debate-source-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">Voir le post sur X</a>
+  `;
+  sourceFallback.style.display = "block";
+
+  try {
+    await loadXWidgetsScript();
+
+    if (!window.twttr?.widgets?.createTweet) {
+      throw new Error("API widgets X indisponible.");
+    }
+
+    const embedContainer = document.getElementById("debate-source-x-embed");
+    if (!embedContainer) {
+      throw new Error("Conteneur X introuvable.");
+    }
+
+    embedContainer.innerHTML = "";
+    const created = await window.twttr.widgets.createTweet(tweetId, embedContainer, {
+      align: "center",
+      theme: "light",
+      dnt: true,
+      conversation: "all"
+    });
+
+    if (!created) {
+      throw new Error("Embed X non généré.");
+    }
+
+    if (sourceLoading) {
+      sourceLoading.style.display = "none";
+    }
+  } catch (error) {
+    sourceFallback.classList.remove("debate-source-fallback-x");
+    restoreDebateSourceFallbackTemplate();
+    if (sourceLoading) {
+      sourceLoading.style.display = "none";
+    }
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+  }
+}
+
 
 function clearDebateSourcePreviewTimers() {
   debateSourcePreviewState.retryTimers.forEach(timer => clearTimeout(timer));
@@ -4397,6 +4516,8 @@ function resetDebateSourcePreview() {
   }
 
   if (sourceFallback) {
+    sourceFallback.classList.remove("debate-source-fallback-x");
+    restoreDebateSourceFallbackTemplate();
     sourceFallback.style.display = "none";
   }
 
@@ -4409,26 +4530,42 @@ function resetDebateSourcePreview() {
   }
 }
 
-function showDebateSourceFallback(sourceUrl) {
+function showDebateSourceFallback(sourceUrl, preview = null) {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
   const sourceDomain = document.getElementById("debate-source-domain");
   const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
 
-  if (!sourceFallback || !sourceFallbackLink) return;
-
-  try {
-    const domain = new URL(sourceUrl).hostname.replace("www.", "");
-    if (sourceDomain) {
-      sourceDomain.textContent = "🔗 " + domain;
-    }
-  } catch (error) {
-    if (sourceDomain) {
-      sourceDomain.textContent = "🔗 Source externe";
-    }
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "flex";
   }
 
-  sourceFallbackLink.href = sourceUrl;
+  if (sourceLoading) {
+    sourceLoading.style.display = "none";
+  }
+
+  if (!sourceFallback) return;
+
+  const domain = getDomainLabel(sourceUrl);
+  const fallbackPreview = preview || {
+    url: sourceUrl,
+    domain,
+    title: domain,
+    description: "Source externe",
+    image: ""
+  };
+
+  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview);
   sourceFallback.style.display = "block";
+
+  if (sourceDomain) {
+    sourceDomain.textContent = "";
+  }
+
+  if (sourceFallbackLink) {
+    sourceFallbackLink.href = sourceUrl;
+  }
 }
 
 function bindDebateSourcePreviewHandlers() {
@@ -4507,10 +4644,15 @@ function loadDebateSourceIframe(embedUrl, token, attempt = 0) {
   }
 }
 
-function renderDebateSourcePreview(sourceUrl) {
+function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   resetDebateSourcePreview();
 
   if (!sourceUrl) return;
+
+  if (isXStatusUrl(sourceUrl)) {
+    renderXSourcePreview(sourceUrl, sourcePreviewData);
+    return;
+  }
 
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourcePoster = document.getElementById("debate-source-preview-poster");
@@ -4520,7 +4662,7 @@ function renderDebateSourcePreview(sourceUrl) {
   const { embedUrl, forceShowPreview, videoId, posterUrl } = getEmbeddableSourceData(sourceUrl);
 
   if (!embedUrl || !forceShowPreview || !videoId) {
-    showDebateSourceFallback(sourceUrl);
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
     return;
   }
 
@@ -4564,7 +4706,7 @@ saveVisitedDebate(id);
   document.getElementById("debate-question").textContent = data.debate.question;
 
 const sourceUrl = String(data.debate.source_url || "").trim();
-renderDebateSourcePreview(sourceUrl);
+renderDebateSourcePreview(sourceUrl, data.sourcePreview || null);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
