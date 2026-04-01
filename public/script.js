@@ -3181,28 +3181,30 @@ function updateCategoryFilterVisualState() {
   badge.title = `${count} arène${count > 1 ? "s" : ""}`;
 }
 
+
+
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
 
   ensureCategoryFilterVisualStyles();
 
+  let select = document.getElementById("filter-theme");
+  if (select) {
+    updateCategoryFilterVisualState();
+    return select;
+  }
 
-let select = document.getElementById("filter-theme");
-if (select) {
-  updateCategoryFilterVisualState();
-  return select;
-}
+  const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
 
-
-
-  const filtersContainer =
+  const fallbackContainer =
     document.getElementById("filter-all")?.parentElement ||
     searchInput.parentElement ||
     searchInput.closest("section") ||
     searchInput.parentElement;
 
-  if (!filtersContainer) return null;
+  const targetContainer = sectionHeaderHome || fallbackContainer;
+  if (!targetContainer) return null;
 
   const wrap = document.createElement("div");
   wrap.id = "filter-theme-wrap";
@@ -3230,19 +3232,22 @@ if (select) {
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
+  if (sectionHeaderHome) {
+    sectionHeaderHome.appendChild(wrap);
+  } else {
+    const searchBox = searchInput.closest(".search-box");
 
-
-const searchBox = searchInput.closest(".search-box");
-
-if (searchBox && searchBox.parentElement === filtersContainer) {
-  filtersContainer.insertBefore(wrap, searchBox.nextSibling);
-} else {
-  filtersContainer.appendChild(wrap);
-}
+    if (searchBox && searchBox.parentElement === targetContainer) {
+      targetContainer.insertBefore(wrap, searchBox.nextSibling);
+    } else {
+      targetContainer.appendChild(wrap);
+    }
+  }
 
   updateCategoryFilterVisualState();
   return select;
 }
+
 
 function refreshCategoryFilterOptions(debates) {
   const select = ensureCategoryFilterControl();
