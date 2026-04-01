@@ -4195,44 +4195,45 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .debates-section {
     gap: 14px;
   }
-.page-home-mobile .section-header.section-header-home {
-  margin-top: 8px;
-  margin-bottom: 0;
+
+.page-home-mobile #visited-theme-filter-slot {
+  width: 100%;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 12px;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: -2px;
+  margin-bottom: 0;
 }
 
-.page-home-mobile .section-header.section-header-home > h3 {
-  order: 1;
-  margin: 0;
-  width: 100%;
-}
-
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap {
-  order: 2;
-  flex: 0 0 100%;
-  width: 100%;
-  max-width: 100%;
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-wrap {
   display: flex;
   justify-content: flex-start;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
 }
 
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap .index-theme-filter-select {
-  width: min(260px, 100%);
-  max-width: 260px;
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-select {
+  width: 220px;
+  max-width: calc(100vw - 40px);
   min-width: 0;
-  flex: 0 1 260px;
+  flex: 0 1 auto;
   box-sizing: border-box;
 }
 
-.page-home-mobile .section-header.section-header-home > .index-theme-filter-wrap .index-theme-filter-badge {
+.page-home-mobile #visited-theme-filter-slot .index-theme-filter-badge {
   flex: 0 0 auto;
+}
+.page-home-mobile #visited-section-header {
+  margin-top: -12px;
+  margin-bottom: 0;
+}
+
+.page-home-mobile #visited-section-header > h3 {
+  margin: 0;
+  width: 100%;
 }
 
   .page-home-mobile .section-header h3 {
@@ -4365,7 +4366,21 @@ body.debate-topbar-hidden .debate-hero-top {
 }
 
 /* ===== BOUTON "OUVRIR UNE ARÈNE" MOBILE COMPACT ===== */
+#visited-section-header {
+  margin-top: -6px;
+  margin-bottom: 0;
+}
 
+#visited-section-header > h3 {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .page-home-mobile #visited-section-header {
+    margin-top: -8px;
+    margin-bottom: 0;
+  }
+}
 @media (max-width: 768px) {
   .page-home-mobile #open-arena-button {
     top: 0;

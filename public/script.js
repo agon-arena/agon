@@ -3195,7 +3195,8 @@ function ensureCategoryFilterControl() {
     return select;
   }
 
-  const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
+const filterSlot = document.getElementById("visited-theme-filter-slot");
+const sectionHeaderHome = document.getElementById("visited-section-header");
 
   const fallbackContainer =
     document.getElementById("filter-all")?.parentElement ||
@@ -3232,9 +3233,12 @@ function ensureCategoryFilterControl() {
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
-  if (sectionHeaderHome) {
-    sectionHeaderHome.appendChild(wrap);
-  } else {
+ if (filterSlot) {
+  filterSlot.appendChild(wrap);
+} else if (sectionHeaderHome) {
+  sectionHeaderHome.appendChild(wrap);
+} else {
+
     const searchBox = searchInput.closest(".search-box");
 
     if (searchBox && searchBox.parentElement === targetContainer) {
