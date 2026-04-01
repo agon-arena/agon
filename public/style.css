@@ -483,6 +483,33 @@ main {
   margin-top: 2px;
 }
 
+.debate-card-source {
+  margin-top: 6px;
+}
+
+.debate-card-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b5563;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.debate-card-source-link:hover {
+  color: #111827;
+  text-decoration: underline;
+}
+
+.similar-debate-source {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
 /* Page création */
 
 .create-page {
@@ -3338,13 +3365,12 @@ body.page-debate .topbar::after {
 }
 
 /* vidéo / preview */
-
 .debate-source-preview-wrap {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
-  margin: 0px auto 14px auto;
+  margin: 12px auto 18px auto;
 }
 
 .debate-source-fallback {
@@ -3354,7 +3380,24 @@ body.page-debate .topbar::after {
   justify-content: center;
   width: 100%;
   max-width: 700px;
-  margin: 4px auto 0 auto;
+  margin: 12px auto 0 auto;
+  padding: 20px;
+  text-align: center;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+/* carte source */
+.debate-source-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 700px;
+  margin: 24px auto 0 auto;
   padding: 20px;
   text-align: center;
   background: #fafafa;
@@ -3567,15 +3610,20 @@ body.debate-topbar-hidden .debate-hero-top {
   }
 
 .debate-source-preview-wrap {
-  margin: -0px auto 14px auto;
+  margin: 10px auto 14px auto;
 }
 
 .debate-source-fallback {
-  width: 100%;
-  max-width: 100%;
-  margin: 2px auto 0 auto;
+  margin: 10px auto 0 auto;
   padding: 16px;
 }
+
+  .debate-source-fallback {
+    width: 100%;
+    max-width: 100%;
+    margin: 16px auto 0 auto;
+    padding: 16px;
+  }
 
   .debate-source-domain {
     font-size: 1.1rem;
@@ -4307,6 +4355,16 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .debate-card p {
     font-size: 14px;
     line-height: 1.5;
+  }
+
+  .page-home-mobile .debate-card-source-link {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .page-home-mobile .similar-debate-source {
+    font-size: 11px;
+    line-height: 1.35;
   }
 
   .page-home-mobile .debate-card-category,

@@ -54,135 +54,6 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
-
-function decodeHtmlEntities(value) {
-  return String(value ?? "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-function cleanPreviewText(value, maxLength = 240) {
-  const text = decodeHtmlEntities(String(value ?? "").replace(/\s+/g, " ").trim());
-  if (!text) return "";
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-}
-
-function extractMetaContent(html, patterns) {
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    const value = match?.[1] || match?.[2] || "";
-    const cleaned = cleanPreviewText(value, 500);
-    if (cleaned) return cleaned;
-  }
-  return "";
-}
-
-function resolvePreviewUrl(rawUrl, baseUrl) {
-  const value = String(rawUrl || "").trim();
-  if (!value) return "";
-  try {
-    return new URL(value, baseUrl).toString();
-  } catch (error) {
-    return value;
-  }
-}
-
-async function getExternalLinkPreview(sourceUrl) {
-  const safeUrl = String(sourceUrl || "").trim();
-  if (!safeUrl) return null;
-
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(safeUrl);
-  } catch (error) {
-    return null;
-  }
-
-  const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
-
-  try {
-    const response = await fetch(safeUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; AgonLinkPreview/1.0; +https://agon.example)",
-        "Accept": "text/html,application/xhtml+xml"
-      },
-      redirect: "follow",
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      return {
-        url: safeUrl,
-        domain,
-        title: domain,
-        description: "Source externe",
-        image: "",
-        siteName: domain
-      };
-    }
-
-    const html = await response.text();
-
-    const title = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:title["'][^>]*>/i,
-      /<title[^>]*>([^<]+)<\/title>/i
-    ]) || domain;
-
-    const description = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:description["'][^>]*>/i,
-      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i
-    ]);
-
-    const siteName = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["'][^>]*>/i
-    ]) || domain;
-
-    const image = resolvePreviewUrl(extractMetaContent(html, [
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
-      /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/i
-    ]), response.url || safeUrl);
-
-    return {
-      url: safeUrl,
-      finalUrl: response.url || safeUrl,
-      domain,
-      title,
-      description,
-      image,
-      siteName
-    };
-  } catch (error) {
-    return {
-      url: safeUrl,
-      domain,
-      title: domain,
-      description: "Source externe",
-      image: "",
-      siteName: domain
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = String(text || "").split(" ");
   let line = "";
@@ -480,16 +351,13 @@ app.get("/admin-reports", (req, res) => {
 app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
-
-    const [debate, args] = await Promise.all([
-      getDebateById(id),
-      getArgumentsByDebateId(id)
-    ]);
+    const debate = await getDebateById(id);
 
     if (!debate) {
       return res.status(404).send("Débat introuvable.");
     }
 
+const comments = await getCommentsByArgumentIds(argumentIds);
     const { percentA, percentB } = computeDebatePercents(args);
 
     const shareTitle = debate.question || "Débat sur Agôn";
@@ -633,23 +501,6 @@ if (!debate) {
   } catch (error) {
     console.error(error);
     res.status(500).send("Erreur génération image");
-  }
-});
-
-app.post("/api/link-preview", async (req, res) => {
-  try {
-    const { url } = req.body || {};
-    const safeUrl = String(url || "").trim();
-
-    if (!safeUrl) {
-      return res.status(400).json({ error: "URL manquante." });
-    }
-
-    const preview = await getExternalLinkPreview(safeUrl);
-    return res.json({ preview: preview || null });
-  } catch (error) {
-    console.error(error);
-    return sendServerError(res, "Erreur récupération aperçu.");
   }
 });
 
@@ -1196,12 +1047,25 @@ app.post("/api/debates", async (req, res) => {
   try {
     const { question, category, source_url, type, option_a, option_b, creatorKey } = req.body || {};
 
+    let normalizedSourceUrl = "";
+    if (String(source_url || "").trim()) {
+      try {
+        const parsedUrl = new URL(String(source_url).trim());
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+          return res.status(400).json({ error: "URL source invalide." });
+        }
+        normalizedSourceUrl = parsedUrl.toString();
+      } catch (error) {
+        return res.status(400).json({ error: "URL source invalide." });
+      }
+    }
+
     const { data, error } = await supabase
       .from("debates")
       .insert({
         question,
         category,
-        source_url: source_url || "",
+        source_url: normalizedSourceUrl,
         type: type || "debate",
         option_a,
         option_b,
@@ -1235,7 +1099,6 @@ app.get("/api/debates/:id", async (req, res) => {
     const args = await getArgumentsByDebateId(id);
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
-    const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
 
     const argumentIds = args.map((a) => a.id);
     if (!argumentIds.length) {
@@ -1243,8 +1106,7 @@ app.get("/api/debates/:id", async (req, res) => {
         debate,
         optionA,
         optionB,
-        commentsByArgument: {},
-        sourcePreview
+        commentsByArgument: {}
       });
     }
 
@@ -1262,8 +1124,7 @@ app.get("/api/debates/:id", async (req, res) => {
       debate,
       optionA,
       optionB,
-      commentsByArgument,
-      sourcePreview
+      commentsByArgument
     });
   } catch (error) {
     console.error(error);
