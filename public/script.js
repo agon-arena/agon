@@ -1559,6 +1559,14 @@ function isCommentOwner(comment) {
   if (!comment) return false;
   return String(comment.author_key || "") === String(getKey() || "");
 }
+function isDebateOwner(debate) {
+  if (!debate) return false;
+  return String(debate.creator_key || "") === String(getKey() || "");
+}
+
+function canDeleteDebate(debate) {
+  return isAdmin() || isDebateOwner(debate);
+}
 
 function getState(id) {
   const s = localStorage.getItem("votes_" + id);
@@ -2701,6 +2709,19 @@ let otherDebatesCache = [];
 let visitedDebatesVisible = 5;
 let otherDebatesVisible = 6;
 
+function getDebateCardDeleteButtonHtml(debate) {
+  if (!canDeleteDebate(debate)) return "";
+
+  return `
+    <button
+      class="delete-button"
+      type="button"
+      onclick="deleteDebate('${debate.id}', false)"
+    >
+      Supprimer
+    </button>
+  `;
+}
 
 function renderVisitedDebatesList(debates) {
   const section = document.getElementById("visited-debates-section");
@@ -2836,9 +2857,7 @@ function renderVisitedDebatesList(debates) {
             Signaler
           </button>
 
-          <div data-admin style="display:none;">
-            <button class="delete-button" onclick="deleteDebate('${d.id}', false)">Supprimer</button>
-          </div>
+          ${getDebateCardDeleteButtonHtml(d)}
         </div>
       </article>
     `;
@@ -2961,9 +2980,7 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
           Signaler
         </button>
 
-        <div data-admin style="display:none;">
-          <button class="delete-button" onclick="deleteDebate('${d.id}', false)">Supprimer</button>
-        </div>
+        ${getDebateCardDeleteButtonHtml(d)}
       </div>
     </article>
   `;
@@ -3209,6 +3226,12 @@ if (selectedType !== "open" && (!option_a || !option_b)) {
     null,
     "⚠️"
   );
+  return;
+}
+
+const confirmed = await showDebatePublishConfirmModal();
+
+if (!confirmed) {
   return;
 }
 
@@ -3496,6 +3519,44 @@ function toggleSimilarDebates() {
    Debate
 ========================= */
 
+function applyCompactDeleteDebateButtonStyle() {
+  const deleteDebateBtn = document.getElementById("delete-debate-btn");
+  if (!deleteDebateBtn) return;
+
+  deleteDebateBtn.textContent = "×";
+  deleteDebateBtn.setAttribute("aria-label", "Supprimer le débat");
+  deleteDebateBtn.setAttribute("title", "Supprimer le débat");
+  deleteDebateBtn.classList.add("delete-debate-cross-button");
+
+  deleteDebateBtn.style.width = "32px";
+  deleteDebateBtn.style.height = "32px";
+  deleteDebateBtn.style.minWidth = "32px";
+  deleteDebateBtn.style.padding = "0";
+  deleteDebateBtn.style.borderRadius = "999px";
+  deleteDebateBtn.style.display = "inline-flex";
+  deleteDebateBtn.style.alignItems = "center";
+  deleteDebateBtn.style.justifyContent = "center";
+  deleteDebateBtn.style.fontSize = "22px";
+  deleteDebateBtn.style.fontWeight = "700";
+  deleteDebateBtn.style.lineHeight = "1";
+  deleteDebateBtn.style.flexShrink = "0";
+}
+
+function updateDeleteDebateButtonVisibility(debate) {
+  const deleteDebateBtn = document.getElementById("delete-debate-btn");
+  if (!deleteDebateBtn) return;
+
+  applyCompactDeleteDebateButtonStyle();
+
+  if (canDeleteDebate(debate)) {
+    deleteDebateBtn.removeAttribute("data-admin");
+    deleteDebateBtn.style.display = "inline-flex";
+    return;
+  }
+
+  deleteDebateBtn.style.display = "none";
+}
+
 async function initDebate() {
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
@@ -3533,6 +3594,8 @@ if (formList) {
 }
 
   if (deleteDebateBtn) {
+    applyCompactDeleteDebateButtonStyle();
+
     deleteDebateBtn.addEventListener("click", async () => {
       await deleteDebate(id, true);
     });
@@ -3826,6 +3889,7 @@ currentDebateViewMode = getDebateViewMode();
 updateDebateViewModeUI();
 updateSortButtonLabel();
 applyDebateTypeUI(data.debate);
+updateDeleteDebateButtonVisibility(data.debate);
 
 currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
 currentCommentsByArgument = data.commentsByArgument || {};
@@ -6381,30 +6445,44 @@ if (error.message === "already_reported") {
 }
 }
 async function deleteDebate(debateId, redirectAfter) {
-  if (!isAdmin()) {
-    alert("Mode admin requis.");
+  const debate = String(currentDebateCache?.id || "") === String(debateId)
+    ? currentDebateCache
+    : [...(debatesCache || []), ...(visitedDebatesCache || []), ...(otherDebatesCache || [])]
+        .find((item) => String(item?.id || "") === String(debateId));
+
+  if (!canDeleteDebate(debate)) {
+    alert("Suppression non autorisée.");
     return;
   }
 
-  const confirmed = window.confirm("Supprimer définitivement cette arène ?");
-  if (!confirmed) return;
+  showDeleteConfirmModal({
+    title: "Supprimer cette arène ?",
+    text: "Cette suppression est définitive. Vous pourrez supprimer cette arène, mais pas la récupérer ensuite.",
+    onConfirm: async () => {
+      try {
+        const url = new URL(API + "/debates/" + debateId, window.location.origin);
+        url.searchParams.set("authorKey", getKey());
 
-  try {
-    await fetchJSON(API + "/debates/" + debateId, {
-      method: "DELETE",
-      headers: {
-        "x-admin-token": getAdminToken()
+        const headers = {};
+        if (isAdmin()) {
+          headers["x-admin-token"] = getAdminToken();
+        }
+
+        await fetchJSON(url.toString(), {
+          method: "DELETE",
+          headers
+        });
+
+        if (redirectAfter) {
+          location = "/";
+        } else {
+          location.reload();
+        }
+      } catch (error) {
+        alert(error.message);
       }
-    });
-
-    if (redirectAfter) {
-      location = "/";
-    } else {
-      location.reload();
     }
-  } catch (error) {
-    alert(error.message);
-  }
+  });
 }
 
 
@@ -7248,6 +7326,59 @@ function showIdeaPublishConfirmModal() {
 
     const cancelBtn = document.getElementById("idea-publish-cancel-btn");
     const confirmBtn = document.getElementById("idea-publish-confirm-btn");
+
+    if (cancelBtn) {
+      cancelBtn.onclick = () => closeModal(false);
+    }
+
+    if (confirmBtn) {
+      confirmBtn.onclick = () => closeModal(true);
+      confirmBtn.focus();
+    }
+  });
+}
+
+function showDebatePublishConfirmModal() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("custom-debate-publish-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "custom-debate-publish-modal";
+    overlay.className = "custom-modal-overlay";
+
+    overlay.innerHTML = `
+      <div class="custom-modal-box">
+        <div class="custom-modal-title">Publier ce débat ?</div>
+        <div class="custom-modal-text">Êtes-vous sûr de vouloir publier ce débat ? Vous ne pourrez plus le modifier ensuite, seulement le supprimer.</div>
+
+        <div class="custom-modal-actions">
+          <button type="button" class="button button-secondary" id="debate-publish-cancel-btn">
+            Annuler
+          </button>
+
+          <button type="button" class="button" id="debate-publish-confirm-btn">
+            Publier
+          </button>
+        </div>
+      </div>
+    `;
+
+    const closeModal = (confirmed) => {
+      overlay.remove();
+      resolve(confirmed === true);
+    };
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeModal(false);
+      }
+    });
+
+    document.body.appendChild(overlay);
+
+    const cancelBtn = document.getElementById("debate-publish-cancel-btn");
+    const confirmBtn = document.getElementById("debate-publish-confirm-btn");
 
     if (cancelBtn) {
       cancelBtn.onclick = () => closeModal(false);

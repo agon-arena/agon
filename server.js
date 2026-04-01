@@ -1119,9 +1119,25 @@ app.get("/api/debates/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/debates/:id", requireAdmin, async (req, res) => {
+app.delete("/api/debates/:id", async (req, res) => {
   try {
     const debateId = req.params.id;
+    const requesterKey = String(req.query.authorKey || "").trim();
+    const adminMode = isAdmin(req);
+
+    const debateRow = await getDebateById(debateId);
+    if (!debateRow) {
+      return res.status(404).json({ error: "Débat introuvable." });
+    }
+
+    const isOwner =
+      requesterKey &&
+      debateRow.creator_key &&
+      String(debateRow.creator_key) === requesterKey;
+
+    if (!adminMode && !isOwner) {
+      return res.status(403).json({ error: "Suppression non autorisée." });
+    }
 
     const { data: argumentsRows, error: argsErr } = await supabase
       .from("arguments")
