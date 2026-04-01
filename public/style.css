@@ -3344,7 +3344,68 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   width: 100%;
-  margin: 0px auto 14px auto;
+  max-width: 980px;
+  margin: 0 auto 18px auto;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+#debate-source-preview-wrap {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto 18px auto;
+}
+
+.debate-source-preview,
+#debate-source-preview,
+.debate-source-preview-poster,
+#debate-source-preview-poster {
+  display: block;
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.debate-source-preview,
+#debate-source-preview {
+  aspect-ratio: 16 / 9;
+  min-height: 320px;
+  height: auto;
+  border: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000000;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.14);
+}
+
+.debate-source-preview-poster,
+#debate-source-preview-poster {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  min-height: 320px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #111827;
+  text-decoration: none;
+}
+
+.debate-source-preview-poster-img,
+#debate-source-preview-poster-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.debate-source-preview-loading,
+#debate-source-preview-loading {
+  width: 100%;
+  max-width: 980px;
+  margin: 10px auto 0 auto;
+  text-align: center;
 }
 
 .debate-source-fallback {
@@ -3567,7 +3628,30 @@ body.debate-topbar-hidden .debate-hero-top {
   }
 
 .debate-source-preview-wrap {
-  margin: -0px auto 14px auto;
+  max-width: 100%;
+  margin: 0 auto 14px auto;
+}
+
+#debate-source-preview-wrap {
+  max-width: 100%;
+  margin: 0 auto 14px auto;
+}
+
+.debate-source-preview,
+#debate-source-preview,
+.debate-source-preview-poster,
+#debate-source-preview-poster {
+  max-width: 100%;
+}
+
+.debate-source-preview,
+#debate-source-preview {
+  min-height: 220px;
+}
+
+.debate-source-preview-poster,
+#debate-source-preview-poster {
+  min-height: 220px;
 }
 
 .debate-source-fallback {
@@ -3765,8 +3849,15 @@ body.debate-topbar-hidden .debate-hero-top {
     font-size: 26px;
   }
 
-  .debate-source-preview {
-    height: 200px;
+  .debate-source-preview,
+  #debate-source-preview {
+    min-height: 180px;
+    height: auto;
+  }
+
+  .debate-source-preview-poster,
+  #debate-source-preview-poster {
+    min-height: 180px;
   }
 
   .argument-form .button,
