@@ -1943,6 +1943,18 @@ style="display:none; position:absolute; left:50%; top:calc(100% + 8px); transfor
         <button
           class="share-icon-button"
           type="button"
+          onclick="handleIdeaShareAction(event, function(){ showIdeaQrCode('${debateId}', '${encodedArgument}'); })"
+          title="Afficher le QR code de l'idée"
+          aria-label="Afficher le QR code de l'idée"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-solid fa-qrcode"></i>
+          <span>QR code</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnWhatsApp('${debateId}', '${encodedArgument}'); })"
           title="Partager l'idée sur WhatsApp"
           aria-label="Partager l'idée sur WhatsApp"
@@ -1987,6 +1999,119 @@ async function copyDebateLink() {
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
   }
+}
+
+function getQrCodeImageUrl(url) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=16&data=${encodeURIComponent(String(url || ""))}`;
+}
+
+function closeQrCodeModal() {
+  const overlay = document.getElementById("custom-qrcode-modal");
+  if (!overlay) return;
+  overlay.remove();
+}
+
+function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvrir le lien.") {
+  const safeTitle = String(title || "QR code").trim() || "QR code";
+  const safeUrl = String(url || "").trim();
+
+  if (!safeUrl) {
+    alert("Lien introuvable pour générer le QR code.");
+    return;
+  }
+
+  const existing = document.getElementById("custom-qrcode-modal");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "custom-qrcode-modal";
+  overlay.className = "custom-modal-overlay";
+
+  overlay.innerHTML = `
+    <div class="custom-modal-box" style="max-width:420px; width:min(92vw,420px); text-align:center;">
+      <div class="custom-modal-title">${escapeHtml(safeTitle)}</div>
+      <div class="custom-modal-text">${escapeHtml(helperText)}</div>
+
+      <div style="display:flex; justify-content:center; margin:18px 0 14px;">
+        <img
+          src="${escapeHtml(getQrCodeImageUrl(safeUrl))}"
+          alt="QR code pour ${escapeHtml(safeTitle)}"
+          width="220"
+          height="220"
+          loading="eager"
+          style="display:block; width:min(220px, 62vw); height:auto; border-radius:18px; border:1px solid #e5e7eb; background:#ffffff; padding:12px;"
+        />
+      </div>
+
+      <div style="margin:0 0 18px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb; font-size:12px; line-height:1.45; color:#4b5563; word-break:break-word;">
+        ${escapeHtml(safeUrl)}
+      </div>
+
+      <div class="custom-modal-actions">
+        <button type="button" class="button button-secondary" id="qrcode-close-btn">
+          Fermer
+        </button>
+        <button type="button" class="button" id="qrcode-copy-btn">
+          Copier le lien
+        </button>
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) {
+      closeQrCodeModal();
+    }
+  });
+
+  document.body.appendChild(overlay);
+
+  const closeBtn = document.getElementById("qrcode-close-btn");
+  const copyBtn = document.getElementById("qrcode-copy-btn");
+
+  if (closeBtn) {
+    closeBtn.onclick = () => closeQrCodeModal();
+  }
+
+  if (copyBtn) {
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(safeUrl);
+        alert("Lien copié.");
+      } catch (error) {
+        alert("Impossible de copier le lien automatiquement.");
+      }
+    };
+  }
+}
+
+function showDebateQrCode() {
+  const { title, url } = getGlobalShareData();
+  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.");
+}
+
+function showIdeaQrCode(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { title, url } = getIdeaShareData(debateId, argument);
+  showQrCodeModal(title || "QR code de l'idée", url, "Scannez ce QR code pour ouvrir directement cette idée.");
+}
+
+function showIndexDebateQrCode(debateId, encodedQuestion = "", encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { title, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.");
+}
+
+if (!window.__qrCodeModalEscapeListenerAttached) {
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeQrCodeModal();
+    }
+  });
+
+  window.__qrCodeModalEscapeListenerAttached = true;
 }
 
 /* =========================
@@ -2069,6 +2194,10 @@ function renderGlobalShareBar() {
     <div class="share-bar share-bar-top">
       <button class="share-button share-button-copy" type="button" onclick="copyDebateLink()">
         <i class="fa-solid fa-link"></i> Copier
+      </button>
+
+      <button class="share-button" type="button" onclick="showDebateQrCode()">
+        <i class="fa-solid fa-qrcode"></i> QR code
       </button>
 
       <button class="share-button share-x" type="button" onclick="shareOnX()">
@@ -2791,6 +2920,23 @@ function renderVisitedDebatesList(debates) {
             <button
               class="share-icon-button"
               type="button"
+              onclick="showIndexDebateQrCode(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Afficher le QR code"
+            >
+              <i class="fa-solid fa-qrcode"></i>
+            </button>
+
+            <button
+              class="share-icon-button"
+              type="button"
          onclick="shareIndexDebateOnX(
   '${d.id}',
   '${encodeURIComponent(String(d.question || ""))}',
@@ -2937,6 +3083,14 @@ ${
 onclick="copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Copier le lien"
           >
             <i class="fa-solid fa-link"></i>
+          </button>
+
+          <button
+            class="share-icon-button"
+            type="button"
+onclick="showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Afficher le QR code"
+          >
+            <i class="fa-solid fa-qrcode"></i>
           </button>
 
           <button
@@ -3229,9 +3383,7 @@ if (selectedType !== "open" && (!option_a || !option_b)) {
   return;
 }
 
-const confirmed = window.confirm(
-  "Êtes-vous sûr de vouloir publier ce débat ? Vous ne pourrez plus le modifier ensuite, seulement le supprimer."
-);
+const confirmed = await showDebatePublishConfirmModal();
 
 if (!confirmed) {
   return;
@@ -7360,6 +7512,59 @@ function showIdeaPublishConfirmModal() {
   });
 }
 
+function showDebatePublishConfirmModal() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("custom-debate-publish-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "custom-debate-publish-modal";
+    overlay.className = "custom-modal-overlay";
+
+    overlay.innerHTML = `
+      <div class="custom-modal-box">
+        <div class="custom-modal-title">Publier ce débat ?</div>
+        <div class="custom-modal-text">Êtes-vous sûr de vouloir publier cette arène ? Vous ne pourrez plus la modifier ensuite, seulement la supprimer.</div>
+
+        <div class="custom-modal-actions">
+          <button type="button" class="button button-secondary" id="debate-publish-cancel-btn">
+            Annuler
+          </button>
+
+          <button type="button" class="button" id="debate-publish-confirm-btn">
+            Publier
+          </button>
+        </div>
+      </div>
+    `;
+
+    const closeModal = (confirmed) => {
+      overlay.remove();
+      resolve(confirmed === true);
+    };
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeModal(false);
+      }
+    });
+
+    document.body.appendChild(overlay);
+
+    const cancelBtn = document.getElementById("debate-publish-cancel-btn");
+    const confirmBtn = document.getElementById("debate-publish-confirm-btn");
+
+    if (cancelBtn) {
+      cancelBtn.onclick = () => closeModal(false);
+    }
+
+    if (confirmBtn) {
+      confirmBtn.onclick = () => closeModal(true);
+      confirmBtn.focus();
+    }
+  });
+}
+
 async function deleteArgument(debateId, argumentId) {
   showDeleteConfirmModal({
     title: "Supprimer cette idée ?",
@@ -7430,6 +7635,9 @@ window.deleteComment = deleteComment;
 window.submitComment = submitComment;
 window.getDebateId = getDebateId;
 window.copyDebateLink = copyDebateLink;
+window.showDebateQrCode = showDebateQrCode;
+window.showIdeaQrCode = showIdeaQrCode;
+window.showIndexDebateQrCode = showIndexDebateQrCode;
 window.shareOnX = shareOnX;
 window.shareOnFacebook = shareOnFacebook;
 window.shareOnWhatsApp = shareOnWhatsApp;
