@@ -54,6 +54,189 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
+function getPreviewDomainLabel(rawUrl) {
+  try {
+    return new URL(String(rawUrl || "")).hostname.replace(/^www\./i, "");
+  } catch (error) {
+    return "Source externe";
+  }
+}
+
+function looksLikePrivateHostname(hostname) {
+  const value = String(hostname || "").toLowerCase();
+  if (!value) return true;
+  if (value === "localhost" || value.endsWith(".localhost") || value.endsWith(".local")) return true;
+  if (/^127\./.test(value)) return true;
+  if (/^10\./.test(value)) return true;
+  if (/^192\.168\./.test(value)) return true;
+  if (/^169\.254\./.test(value)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(value)) return true;
+  if (value === "::1") return true;
+  return false;
+}
+
+function isAllowedPreviewUrl(rawUrl) {
+  try {
+    const parsed = new URL(String(rawUrl || ""));
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    if (looksLikePrivateHostname(parsed.hostname)) return false;
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#039;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#x2F;/gi, "/");
+}
+
+function stripHtmlTags(value) {
+  return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function truncateText(value, maxLength = 220) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1).trim()}…` : text;
+}
+
+function extractMetaContent(html, attributeName, attributeValue) {
+  const safeValue = String(attributeValue).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`<meta[^>]+${attributeName}=["']${safeValue}["'][^>]+content=["']([^"']+)["'][^>]*>`, "i"),
+    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+${attributeName}=["']${safeValue}["'][^>]*>`, "i")
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      return decodeHtmlEntities(match[1]).trim();
+    }
+  }
+
+  return "";
+}
+
+function extractTitleFromHtml(html) {
+  const match = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!match || !match[1]) return "";
+  return decodeHtmlEntities(stripHtmlTags(match[1]));
+}
+
+function extractDescriptionFromHtml(html) {
+  return (
+    extractMetaContent(html, "name", "description") ||
+    extractMetaContent(html, "property", "description") ||
+    ""
+  );
+}
+
+function resolvePreviewUrl(baseUrl, candidateUrl) {
+  const value = String(candidateUrl || "").trim();
+  if (!value) return "";
+
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+async function fetchExternalLinkPreview(rawUrl) {
+  if (!isAllowedPreviewUrl(rawUrl)) {
+    const error = new Error("URL non autorisée.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(rawUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AgonPreviewBot/1.0; +https://agon.example)",
+        "Accept": "text/html,application/xhtml+xml"
+      }
+    });
+
+    if (!response.ok) {
+      const error = new Error("Impossible de récupérer la source.");
+      error.statusCode = 502;
+      throw error;
+    }
+
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("text/html")) {
+      return {
+        url: response.url || rawUrl,
+        domain: getPreviewDomainLabel(response.url || rawUrl),
+        title: getPreviewDomainLabel(response.url || rawUrl),
+        description: "Aperçu indisponible pour ce type de contenu.",
+        image: "",
+        siteName: ""
+      };
+    }
+
+    const html = await response.text();
+    const finalUrl = response.url || rawUrl;
+
+    const title = truncateText(
+      extractMetaContent(html, "property", "og:title") ||
+      extractMetaContent(html, "name", "twitter:title") ||
+      extractTitleFromHtml(html) ||
+      getPreviewDomainLabel(finalUrl),
+      140
+    );
+
+    const description = truncateText(
+      extractMetaContent(html, "property", "og:description") ||
+      extractMetaContent(html, "name", "twitter:description") ||
+      extractDescriptionFromHtml(html),
+      220
+    );
+
+    const image = resolvePreviewUrl(
+      finalUrl,
+      extractMetaContent(html, "property", "og:image") ||
+      extractMetaContent(html, "name", "twitter:image") ||
+      extractMetaContent(html, "property", "og:image:url")
+    );
+
+    const siteName = truncateText(
+      extractMetaContent(html, "property", "og:site_name") || getPreviewDomainLabel(finalUrl),
+      80
+    );
+
+    return {
+      url: finalUrl,
+      domain: getPreviewDomainLabel(finalUrl),
+      title,
+      description,
+      image,
+      siteName
+    };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      const timeoutError = new Error("Délai dépassé pour récupérer l'aperçu.");
+      timeoutError.statusCode = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = String(text || "").split(" ");
   let line = "";
@@ -503,6 +686,25 @@ if (!debate) {
   } catch (error) {
     console.error(error);
     res.status(500).send("Erreur génération image");
+  }
+});
+
+app.get("/api/link-preview", async (req, res) => {
+  try {
+    const rawUrl = String(req.query.url || "").trim();
+
+    if (!rawUrl) {
+      return res.status(400).json({ error: "URL manquante." });
+    }
+
+    const preview = await fetchExternalLinkPreview(rawUrl);
+    return res.json(preview);
+  } catch (error) {
+    console.error(error);
+    const statusCode = Number(error.statusCode || 500);
+    return res.status(statusCode).json({
+      error: error.message || "Impossible de récupérer l'aperçu du lien."
+    });
   }
 });
 
