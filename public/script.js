@@ -1770,7 +1770,7 @@ return `Dernière idée le ${date} à ${hour}`;}
 
 function getDebateShareUrl() {
   const id = getDebateId();
-  return `${window.location.origin}/debate?id=${id}`;
+  return `${window.location.origin}/debate/${encodeURIComponent(String(id))}`;
 }
 
 function getDebateShareTitle() {
@@ -2396,7 +2396,7 @@ function renderGlobalShareBar() {
   `;
 }
 function getIndexDebateShareData(debateId, question, optionA = "", optionB = "", percentA = 50, percentB = 50, type = "debate") {
-  const url = `${window.location.origin}/debate?id=${debateId}`;
+  const url = `${window.location.origin}/debate/${encodeURIComponent(String(debateId))}`;
   const title = question || "Arène sur Agôn";
   const isOpen = String(type || "debate") === "open";
 
@@ -3195,8 +3195,7 @@ function ensureCategoryFilterControl() {
     return select;
   }
 
-const filterSlot = document.getElementById("visited-theme-filter-slot");
-const sectionHeaderHome = document.getElementById("visited-section-header");
+  const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
 
   const fallbackContainer =
     document.getElementById("filter-all")?.parentElement ||
@@ -3233,12 +3232,9 @@ const sectionHeaderHome = document.getElementById("visited-section-header");
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
- if (filterSlot) {
-  filterSlot.appendChild(wrap);
-} else if (sectionHeaderHome) {
-  sectionHeaderHome.appendChild(wrap);
-} else {
-
+  if (sectionHeaderHome) {
+    sectionHeaderHome.appendChild(wrap);
+  } else {
     const searchBox = searchInput.closest(".search-box");
 
     if (searchBox && searchBox.parentElement === targetContainer) {
