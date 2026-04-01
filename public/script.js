@@ -3523,9 +3523,6 @@ function toggleSimilarDebates() {
 
 function styleDebateDeleteButtonAsTopRightCross() {
   const deleteDebateBtn = document.getElementById("delete-debate-btn");
-  if (deleteDebateBtn) {
-    styleDebateDeleteButtonAsTopRightCross();
-  }
   if (!deleteDebateBtn) return;
 
   const anchorContainer =
