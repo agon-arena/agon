@@ -3369,7 +3369,7 @@ body.page-debate .topbar::after {
 .debate-source-preview,
 #debate-source-preview {
   aspect-ratio: 16 / 9;
-  min-height: 320px;
+  min-height: 260px;
   height: auto;
   border: 0;
   border-radius: 16px;
@@ -3385,7 +3385,7 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   aspect-ratio: 16 / 9;
-  min-height: 320px;
+  min-height: 260px;
   border-radius: 16px;
   overflow: hidden;
   background: #111827;
@@ -3646,12 +3646,12 @@ body.debate-topbar-hidden .debate-hero-top {
 
 .debate-source-preview,
 #debate-source-preview {
-  min-height: 220px;
+  min-height: 190px;
 }
 
 .debate-source-preview-poster,
 #debate-source-preview-poster {
-  min-height: 220px;
+  min-height: 190px;
 }
 
 .debate-source-fallback {

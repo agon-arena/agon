@@ -3183,10 +3183,13 @@ function ensureCategoryFilterVisualStyles() {
     }
 
     @media (max-width: 768px) {
-      .index-theme-filter-wrap {
-        gap: 6px;
-        margin-top: 6px;
-      }
+    .index-theme-filter-wrap {
+  width: 100%;
+  flex: 0 0 100%;
+  order: 99;
+  gap: 6px;
+  margin-top: 6px;
+}
 
       .index-theme-filter-label {
         font-size: 11px;
