@@ -2471,6 +2471,23 @@ function updateNotificationBadgeElement(element, unreadCount) {
 function getStoredUnreadNotificationCount() {
   return Math.max(0, Number(localStorage.getItem("notif_count") || 0));
 }
+
+function getNotificationContextText(notification) {
+  const contextualTypes = new Set([
+    "comment_on_argument",
+    "argument_in_my_debate",
+    "like_on_comment",
+    "dislike_on_comment"
+  ]);
+
+  if (!contextualTypes.has(String(notification?.type || ""))) {
+    return "";
+  }
+
+  const message = String(notification?.message || "").replace(/\s+/g, " ").trim();
+  if (!message) return "";
+  return message.length > 140 ? message.slice(0, 140).trimEnd() + "…" : message;
+}
 function setStoredUnreadNotificationCount(unreadCount) {
   const safeCount = Math.max(0, Number(unreadCount || 0));
   localStorage.setItem("notif_count", safeCount);
@@ -2526,23 +2543,6 @@ if (unreadCount > previousCount) {
 }
 
 setStoredUnreadNotificationCount(unreadCount);
-
-function getNotificationContextText(notification) {
-  const contextualTypes = new Set([
-    "comment_on_argument",
-    "argument_in_my_debate",
-    "like_on_comment",
-    "dislike_on_comment"
-  ]);
-
-  if (!contextualTypes.has(String(notification?.type || ""))) {
-    return "";
-  }
-
-  const message = String(notification?.message || "").replace(/\s+/g, " ").trim();
-  if (!message) return "";
-  return message.length > 140 ? message.slice(0, 140).trimEnd() + "…" : message;
-}
 
    if (!notifications.length) {
   if (list) {
