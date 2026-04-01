@@ -2332,6 +2332,7 @@ function markAllNotificationElementsAsReadLocally() {
     element.classList.remove("notification-item-unread");
   });
 }
+
 function getNotificationContextText(notification) {
   const contextualTypes = new Set([
     "vote_on_argument",
@@ -2351,6 +2352,7 @@ function getNotificationContextText(notification) {
   if (!message) return "";
   return message.length > 160 ? message.slice(0, 160).trimEnd() + "…" : message;
 }
+
 let notificationsLoadInFlight = null;
 async function loadNotifications() {
   const badge = document.getElementById("notifications-count");
@@ -2436,7 +2438,7 @@ if (notification.type === "dislike_on_comment") {
 if (notification.type === "replacement_accepted") {
   icon = "🏆";
   title = "Ta proposition de remplacement a été acceptée";
-  subtitle = getNotificationContextText(notification) || "Ouvrir l'idée remplacée";
+  subtitle = "Ouvrir l'idée remplacée";
 }
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
@@ -6906,7 +6908,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
 if (notification.type === "vote_on_argument") {
   icon = "🗳️";
   title = "Votre idée a reçu une voix";
-  subtitle = "Ouvrir l'idée";
+  subtitle = getNotificationContextText(notification) || "Ouvrir l'idée";
 }
 if (notification.type === "replacement_accepted") {
   icon = "🏆";
