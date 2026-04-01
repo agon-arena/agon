@@ -1358,6 +1358,172 @@ function initNotificationTransitionOverlay() {
   }
 }
 
+function ensureMissingDebateCardStyles() {
+  if (document.getElementById("missing-debate-card-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "missing-debate-card-styles";
+  style.textContent = `
+    .missing-debate-card {
+      width: min(100%, 720px);
+      margin: 24px auto 0;
+      padding: 28px 22px;
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: 0 20px 60px rgba(17, 17, 17, 0.08);
+      text-align: center;
+    }
+
+    .missing-debate-card-badge {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      border-radius: 20px;
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+    }
+
+    .missing-debate-card-title {
+      margin: 0 0 8px;
+      font-size: clamp(22px, 4vw, 30px);
+      line-height: 1.15;
+      font-weight: 800;
+      color: #111111;
+    }
+
+    .missing-debate-card-text {
+      margin: 0 auto;
+      max-width: 520px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: #4b5563;
+    }
+
+    .missing-debate-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 22px;
+    }
+
+    .missing-debate-card-button {
+      min-width: 170px;
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: #ffffff;
+      color: #111111;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(17, 17, 17, 0.08);
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .missing-debate-card-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(17, 17, 17, 0.12);
+      border-color: rgba(17, 17, 17, 0.14);
+    }
+
+    .missing-debate-card-button-primary {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function renderMissingDebateState() {
+  hideNotificationTransitionOverlay();
+  ensureMissingDebateCardStyles();
+
+  currentAllArguments = [];
+  currentCommentsByArgument = {};
+  currentDebateCache = null;
+
+  const debateQuestion = document.getElementById("debate-question");
+  const titleA = document.getElementById("title-a");
+  const titleB = document.getElementById("title-b");
+  const scoreBar = document.getElementById("debate-score-bar");
+  const scoreA = document.getElementById("score-a");
+  const scoreB = document.getElementById("score-b");
+  const voicesSummary = document.getElementById("voices-summary");
+  const myArgumentsA = document.getElementById("my-arguments-a");
+  const myArgumentsB = document.getElementById("my-arguments-b");
+  const myArgumentsRow = document.querySelector(".my-arguments-row");
+  const argumentsA = document.getElementById("arguments-a");
+  const argumentsB = document.getElementById("arguments-b");
+  const unified = document.getElementById("arguments-unified");
+  const similarBottom = document.getElementById("similar-debates-bottom");
+  const openReplyWrap = document.getElementById("open-question-reply-wrap");
+  const headings = document.querySelector(".debate-headings");
+  const columns = document.querySelector(".debate-columns");
+  const listView = document.getElementById("debate-list-view");
+  const fixedBar = document.querySelector(".argument-fixed-bar");
+  const viewSwitch = document.querySelector(".debate-view-switch");
+  const viewSwitchCard = document.getElementById("debate-view-switch-card");
+  const sideFocusLeft = document.getElementById("side-focus-left-btn");
+  const sideFocusRight = document.getElementById("side-focus-right-btn");
+
+  if (debateQuestion) {
+    debateQuestion.textContent = "Cette arène n'est plus disponible";
+  }
+
+  if (titleA) titleA.textContent = "";
+  if (titleB) titleB.textContent = "";
+  if (scoreBar) scoreBar.style.display = "none";
+  if (scoreA) scoreA.style.display = "none";
+  if (scoreB) scoreB.style.display = "none";
+  if (voicesSummary) voicesSummary.innerHTML = "";
+  if (myArgumentsA) myArgumentsA.innerHTML = "";
+  if (myArgumentsB) myArgumentsB.innerHTML = "";
+  if (myArgumentsRow) myArgumentsRow.style.display = "none";
+  if (argumentsA) argumentsA.innerHTML = "";
+  if (argumentsB) argumentsB.innerHTML = "";
+  if (similarBottom) similarBottom.innerHTML = "";
+
+  setDisplay(headings, "none");
+  setDisplay(columns, "none");
+  setDisplay(listView, "none");
+  setDisplay(fixedBar, "none");
+  setDisplay(viewSwitch, "none");
+  setDisplay(viewSwitchCard, "none");
+  setDisplay(openReplyWrap, "none");
+  setDisplay(sideFocusLeft, "none");
+  setDisplay(sideFocusRight, "none");
+
+  if (unified) {
+    unified.innerHTML = `
+      <div class="missing-debate-card">
+        <div class="missing-debate-card-badge" aria-hidden="true">🔔</div>
+        <h2 class="missing-debate-card-title">Cette notification renvoie vers une arène indisponible.</h2>
+        <p class="missing-debate-card-text">
+          Le débat lié à cette notification n'est plus accessible. Il a peut-être été supprimé ou n'existe plus.
+        </p>
+        <div class="missing-debate-card-actions">
+          <button type="button" class="missing-debate-card-button missing-debate-card-button-primary" onclick="window.location.href='/'">
+            Retour à l'accueil
+          </button>
+          <button type="button" class="missing-debate-card-button" onclick="window.location.href='/notifications'">
+            Voir mes notifications
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
 function finalizeNotificationTransitionAfterFocus() {
   const state = getNotificationTransitionState();
   if (!state?.active) return;
@@ -4084,6 +4250,12 @@ if (element) {
 }
 
   } catch (error) {
+    if (String(error?.message || "") === "Débat introuvable.") {
+      renderMissingDebateState();
+      return;
+    }
+
+    hideNotificationTransitionOverlay();
     alert(error.message);
   }
 }
