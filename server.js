@@ -154,17 +154,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function getNotificationTextPreview(value, maxLength = 110) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized.length > maxLength ? normalized.slice(0, maxLength).trimEnd() + "…" : normalized;
-}
-
-function quoteNotificationValue(value, maxLength = 110) {
-  const preview = getNotificationTextPreview(value, maxLength);
-  return preview ? `« ${preview} »` : "";
-}
-
 async function createNotification({
   user_key,
   type,
@@ -1216,9 +1205,7 @@ app.post("/api/arguments", async (req, res) => {
         type: "argument_in_my_debate",
         debate_id,
         argument_id: data.id,
-        message: debateRow.question
-          ? `Dans l’arène : ${quoteNotificationValue(debateRow.question, 120)}`
-          : "Dans votre arène"
+        message: "Un nouvel argument a été posté dans votre débat."
       });
     }
 
@@ -1315,9 +1302,7 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
         type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
-        message: argument.title
-          ? `Sur votre idée : ${quoteNotificationValue(argument.title, 120)}`
-          : "Sur votre idée"
+        message: "Votre argument a reçu un vote."
       }).catch((notificationError) => {
         console.error(notificationError);
       });
@@ -1530,11 +1515,9 @@ app.post("/api/comments", async (req, res) => {
         debate_id: argumentRow.debate_id || null,
         argument_id,
         comment_id: newCommentId,
-        message: argumentRow.title
-          ? `Sur l’idée : ${quoteNotificationValue(argumentRow.title, 120)}`
-          : shortPreview
-            ? `Nouveau commentaire : ${shortPreview}`
-            : "Nouveau commentaire sur votre idée",
+        message: shortPreview
+          ? `Nouveau commentaire : ${shortPreview}`
+          : "Nouveau commentaire sur votre argument",
         is_read: 0,
         created_at: nowIso()
       });
@@ -1554,8 +1537,8 @@ app.post("/api/comments", async (req, res) => {
           debate_id: argumentRow?.debate_id || null,
           argument_id,
           comment_id: newCommentId,
-          message: shortPreview
-            ? `Réponse à votre commentaire : ${shortPreview}`
+          message: parentCommentRow.content
+            ? `Sur votre commentaire : ${quoteNotificationValue(parentCommentRow.content, 120)}`
             : "Quelqu’un a répondu à votre commentaire",
           is_read: 0,
           created_at: nowIso()
@@ -1655,9 +1638,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: commentRow.content
-            ? `Sur votre commentaire : ${quoteNotificationValue(commentRow.content, 120)}`
-            : "Sur votre commentaire"
+          message: "Votre commentaire a reçu un pouce vers le haut."
         });
       }
 
@@ -1668,9 +1649,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: commentRow.content
-            ? `Sur votre commentaire : ${quoteNotificationValue(commentRow.content, 120)}`
-            : "Sur votre commentaire"
+          message: "Votre commentaire a reçu un pouce vers le bas."
         });
       }
     }
@@ -1700,9 +1679,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
           debate_id: argumentRow?.debate_id,
           argument_id: commentRow.argument_id,
           comment_id: id,
-          message: argumentRow?.title
-            ? `Votre amélioration a remplacé l’idée : ${quoteNotificationValue(argumentRow.title, 120)}`
-            : "Votre amélioration a remplacé l’idée initiale"
+          message: "Bravo, ta proposition de remplacement a convaincu, elle prend désormais la place de l’idée initiale !"
         });
       }
 
