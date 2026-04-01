@@ -3189,6 +3189,18 @@ function ensureCategoryFilterControl() {
 
   let select = document.getElementById("filter-theme");
   if (select) {
+    const existingWrap = document.getElementById("filter-theme-wrap");
+const sectionHeaderHome = document.querySelector(".section-header.section-header-home");    const shouldPlaceOnOwnMobileRow =
+      window.innerWidth <= 768 &&
+      document.body.classList.contains("page-home-mobile") &&
+      sectionHeaderHome &&
+      existingWrap &&
+      existingWrap.parentElement !== sectionHeaderHome;
+
+    if (shouldPlaceOnOwnMobileRow) {
+      sectionHeaderHome.appendChild(existingWrap);
+    }
+
     updateCategoryFilterVisualState();
     return select;
   }
@@ -3205,14 +3217,6 @@ function ensureCategoryFilterControl() {
   wrap.id = "filter-theme-wrap";
   wrap.className = "index-theme-filter-wrap";
   wrap.dataset.active = "false";
-
-  const label = document.createElement("label");
-  label.className = "index-theme-filter-label";
-  label.setAttribute("for", "filter-theme");
-  label.innerHTML = `
-    <span class="index-theme-filter-label-icon" aria-hidden="true">#</span>
-    <span class="index-theme-filter-label-text">Thématique</span>
-  `;
 
   select = document.createElement("select");
   select.id = "filter-theme";
@@ -3232,12 +3236,19 @@ function ensureCategoryFilterControl() {
     applyIndexFilters();
   });
 
-  wrap.appendChild(label);
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
   const searchBox = searchInput.closest(".search-box");
-  if (searchBox && searchBox.parentElement === filtersContainer) {
+  const sectionHeaderHome = searchInput.closest(".section-header.section-header-home");
+  const shouldPlaceOnOwnMobileRow =
+    window.innerWidth <= 768 &&
+    document.body.classList.contains("page-home-mobile") &&
+    sectionHeaderHome;
+
+  if (shouldPlaceOnOwnMobileRow) {
+    sectionHeaderHome.appendChild(wrap);
+  } else if (searchBox && searchBox.parentElement === filtersContainer) {
     filtersContainer.insertBefore(wrap, searchBox.nextSibling);
   } else {
     filtersContainer.appendChild(wrap);
