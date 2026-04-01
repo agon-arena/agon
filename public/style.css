@@ -3338,12 +3338,13 @@ body.page-debate .topbar::after {
 }
 
 /* vidéo / preview */
+
 .debate-source-preview-wrap {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
-  margin: 12px auto 18px auto;
+  margin: 0px auto 14px auto;
 }
 
 .debate-source-fallback {
@@ -3353,24 +3354,7 @@ body.page-debate .topbar::after {
   justify-content: center;
   width: 100%;
   max-width: 700px;
-  margin: 12px auto 0 auto;
-  padding: 20px;
-  text-align: center;
-  background: #fafafa;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-sizing: border-box;
-}
-
-/* carte source */
-.debate-source-fallback {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  max-width: 700px;
-  margin: 24px auto 0 auto;
+  margin: 4px auto 0 auto;
   padding: 20px;
   text-align: center;
   background: #fafafa;
@@ -3583,22 +3567,15 @@ body.debate-topbar-hidden .debate-hero-top {
   }
 
 .debate-source-preview-wrap {
-  margin: 8px auto 14px auto;
+  margin: -6px auto 14px auto;
 }
 
 .debate-source-fallback {
   width: 100%;
   max-width: 100%;
-  margin: 8px auto 0 auto;
+  margin: 2px auto 0 auto;
   padding: 16px;
 }
-
-  .debate-source-fallback {
-    width: 100%;
-    max-width: 100%;
-    margin: 16px auto 0 auto;
-    padding: 16px;
-  }
 
   .debate-source-domain {
     font-size: 1.1rem;
