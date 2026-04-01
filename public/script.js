@@ -3240,7 +3240,7 @@ const sectionHeaderHome = document.querySelector(".section-header.section-header
   wrap.appendChild(badge);
 
   const searchBox = searchInput.closest(".search-box");
-  const sectionHeaderHome = searchInput.closest(".section-header.section-header-home");
+const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
   const shouldPlaceOnOwnMobileRow =
     window.innerWidth <= 768 &&
     document.body.classList.contains("page-home-mobile") &&
