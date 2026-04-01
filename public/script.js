@@ -3044,26 +3044,29 @@ function ensureCategoryFilterVisualStyles() {
   style.id = "theme-filter-styles";
   style.textContent = `
     .index-theme-filter-wrap {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      gap: 10px;
-      flex-wrap: nowrap;
-      margin: 8px 0 0 8px;
-      padding: 8px 12px;
-      border: 1px solid #e5e7eb;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      justify-content: flex-start;
+      gap: 8px;
+      width: 100%;
+      flex: 0 0 100%;
+      order: 99;
+      margin: 6px 0 0;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
       max-width: 100%;
     }
 
     .index-theme-filter-label {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      font-weight: 700;
-      color: #111827;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
       white-space: nowrap;
       flex-shrink: 0;
     }
@@ -3072,84 +3075,90 @@ function ensureCategoryFilterVisualStyles() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
+      width: 18px;
+      height: 18px;
       border-radius: 999px;
-      background: #111827;
-      color: #ffffff;
-      font-size: 13px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+      background: #f3f4f6;
+      color: #6b7280;
+      font-size: 10px;
+      border: 1px solid #e5e7eb;
     }
 
     .index-theme-filter-select {
       appearance: none;
       -webkit-appearance: none;
-      min-width: 180px;
-      max-width: min(100%, 320px);
-      padding: 10px 42px 10px 14px;
-      border-radius: 999px;
+      min-width: 220px;
+      max-width: min(100%, 280px);
+      padding: 7px 34px 7px 10px;
+      border-radius: 10px;
       border: 1px solid #d1d5db;
       background-color: #ffffff;
-      background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%);
-      background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
-      background-size: 6px 6px, 6px 6px;
+      background-image: linear-gradient(45deg, transparent 50%, #9ca3af 50%), linear-gradient(135deg, #9ca3af 50%, transparent 50%);
+      background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 11px) calc(50% - 2px);
+      background-size: 5px 5px, 5px 5px;
       background-repeat: no-repeat;
-      color: #111827;
+      color: #374151;
       font: inherit;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
       outline: none;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
     }
 
     .index-theme-filter-select:hover {
       border-color: #9ca3af;
+      background-color: #f9fafb;
     }
 
     .index-theme-filter-select:focus {
-      border-color: #111827;
-      box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);
+      border-color: #9ca3af;
+      box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14);
     }
 
     .index-theme-filter-badge {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 30px;
-      height: 30px;
-      padding: 0 10px;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 7px;
       border-radius: 999px;
-      background: #eef2ff;
-      color: #3730a3;
-      font-size: 12px;
-      font-weight: 800;
+      background: #f3f4f6;
+      color: #6b7280;
+      font-size: 11px;
+      font-weight: 700;
       white-space: nowrap;
       flex-shrink: 0;
     }
 
-    .index-theme-filter-wrap[data-active="true"] {
-      border-color: #c7d2fe;
-      background: linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+    .index-theme-filter-wrap[data-active="true"] .index-theme-filter-select {
+      border-color: #9ca3af;
+      background-color: #f9fafb;
+      color: #111827;
+    }
+
+    .index-theme-filter-wrap[data-active="true"] .index-theme-filter-badge {
+      background: #e5e7eb;
+      color: #374151;
     }
 
     @media (max-width: 768px) {
       .index-theme-filter-wrap {
-        display: flex;
-        width: 100%;
-        margin: 10px 0 0;
-        padding: 10px;
-        border-radius: 18px;
-        gap: 8px;
+        gap: 6px;
+        margin-top: 6px;
       }
 
-      .index-theme-filter-label-text {
-        display: none;
+      .index-theme-filter-label {
+        font-size: 11px;
       }
 
       .index-theme-filter-select {
         min-width: 0;
         max-width: none;
         width: 100%;
+        font-size: 12px;
+        padding: 7px 32px 7px 10px;
       }
     }
   `;
@@ -3226,7 +3235,13 @@ function ensureCategoryFilterControl() {
   wrap.appendChild(label);
   wrap.appendChild(select);
   wrap.appendChild(badge);
-  filtersContainer.appendChild(wrap);
+
+  const searchBox = searchInput.closest(".search-box");
+  if (searchBox && searchBox.parentElement === filtersContainer) {
+    filtersContainer.insertBefore(wrap, searchBox.nextSibling);
+  } else {
+    filtersContainer.appendChild(wrap);
+  }
 
   updateCategoryFilterVisualState();
   return select;
@@ -3297,37 +3312,21 @@ function applyIndexFilters() {
   updateCategoryFilterVisualState();
 }
 
-function setVisitedDebatesSectionVisibility(shouldShow) {
-  const section = document.getElementById("visited-debates-section");
-  if (!section) return;
-
-  if (shouldShow) {
-    section.style.display = "";
-    section.hidden = false;
-    section.setAttribute("aria-hidden", "false");
-  } else {
-    section.style.display = "none";
-    section.hidden = true;
-    section.setAttribute("aria-hidden", "true");
-  }
-}
-
 function renderVisitedDebatesList(debates) {
   const section = document.getElementById("visited-debates-section");
   const div = document.getElementById("visited-debates-list");
 
   if (!section || !div) return;
 
-  const safeDebates = Array.isArray(debates) ? debates : [];
-  const debatesToShow = safeDebates.slice(0, visitedDebatesVisible);
-
-  if (!debatesToShow.length) {
-    setVisitedDebatesSectionVisibility(false);
+  if (!debates.length) {
+    section.style.display = "none";
     div.innerHTML = "";
     return;
   }
 
-  setVisitedDebatesSectionVisibility(true);
+  section.style.display = "block";
+
+  const debatesToShow = debates.slice(0, visitedDebatesVisible);
 
   div.innerHTML = debatesToShow.map(d => {
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
@@ -3652,13 +3651,11 @@ function setTypeFilter(type) {
 }
 
 function updateIndexLists(debates) {
-  const safeDebates = Array.isArray(debates) ? debates : [];
   const visitedIds = getVisitedDebateIds().map(String);
 
-  visitedDebatesCache = safeDebates.filter((d) => visitedIds.includes(String(d.id)));
-  otherDebatesCache = safeDebates.filter((d) => !visitedIds.includes(String(d.id)));
+  visitedDebatesCache = debates.filter((d) => visitedIds.includes(String(d.id)));
+  otherDebatesCache = debates.filter((d) => !visitedIds.includes(String(d.id)));
 
-  setVisitedDebatesSectionVisibility(visitedDebatesCache.length > 0);
   renderVisitedDebatesList(visitedDebatesCache);
   renderDebatesList(otherDebatesCache);
 }
