@@ -154,6 +154,17 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function getNotificationTextPreview(value, maxLength = 110) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > maxLength ? normalized.slice(0, maxLength).trimEnd() + "…" : normalized;
+}
+
+function quoteNotificationValue(value, maxLength = 110) {
+  const preview = getNotificationTextPreview(value, maxLength);
+  return preview ? `« ${preview} »` : "";
+}
+
 async function createNotification({
   user_key,
   type,
