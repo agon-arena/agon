@@ -5603,3 +5603,11 @@ body.debate-topbar-hidden .debate-hero-top {
     border-radius: 12px;
   }
 }
+.page-home-mobile .debates-section > .index-theme-filter-wrap {
+  width: 100%;
+  display: flex;
+  margin-top: -6px;
+}
+.page-home-mobile .index-theme-filter-select {
+  width: 100%;
+}

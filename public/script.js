@@ -3239,20 +3239,13 @@ const sectionHeaderHome = document.querySelector(".section-header.section-header
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
-  const searchBox = searchInput.closest(".search-box");
-const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
-  const shouldPlaceOnOwnMobileRow =
-    window.innerWidth <= 768 &&
-    document.body.classList.contains("page-home-mobile") &&
-    sectionHeaderHome;
+const searchBox = searchInput.closest(".search-box");
 
-  if (shouldPlaceOnOwnMobileRow) {
-    sectionHeaderHome.appendChild(wrap);
-  } else if (searchBox && searchBox.parentElement === filtersContainer) {
-    filtersContainer.insertBefore(wrap, searchBox.nextSibling);
-  } else {
-    filtersContainer.appendChild(wrap);
-  }
+if (searchBox && searchBox.parentElement === filtersContainer) {
+  filtersContainer.insertBefore(wrap, searchBox.nextSibling);
+} else {
+  filtersContainer.appendChild(wrap);
+}
 
   updateCategoryFilterVisualState();
   return select;
