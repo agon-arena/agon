@@ -23,6 +23,7 @@ let similarDebatesVisible = false;
 let currentDebateCache = null;
 let similarDebatesCache = null;
 let currentTypeFilter = "all";
+let currentCategoryFilter = "all";
 let currentArgumentsSortMode = "score";
 
 let pendingMobileColumnFocusElementId = null;
@@ -566,6 +567,10 @@ function changeArgumentsSort(mode) {
     return;
   }
 
+  if (pinnedNewArgumentId) {
+    pinnedNewArgumentId = null;
+  }
+
   if (Array.isArray(currentAllArguments) && currentAllArguments.length) {
     requestAnimationFrame(() => {
       rerenderCurrentDebateArguments();
@@ -1068,8 +1073,37 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight");
   element.classList.remove("voice-title-highlight-green");
 }
+function ensureArgumentCardVisibleForScroll(argumentId) {
+  const argIdString = String(argumentId || "");
+  if (!argIdString) return null;
+
+  let element = getVisibleArgumentElement(argIdString);
+  if (element) return element;
+
+  const sortedArgs = sortArgumentsByMode(
+    currentAllArguments || [],
+    currentCommentsByArgument || {}
+  );
+
+  const targetIndex = sortedArgs.findIndex(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  if (targetIndex === -1) return null;
+
+  const minimumVisibleCount = targetIndex + 1;
+  const expandedVisibleCount = Math.ceil(minimumVisibleCount / 6) * 6;
+
+  if (argumentsVisible < expandedVisibleCount) {
+    argumentsVisible = expandedVisibleCount;
+    rerenderCurrentDebateArguments();
+    element = getVisibleArgumentElement(argIdString);
+  }
+
+  return element || getVisibleArgumentElement(argIdString);
+}
 function scrollToTopOfArgumentCardAndFlash(argumentId) {
-  const element = getVisibleArgumentElement(argumentId);
+  const element = ensureArgumentCardVisibleForScroll(argumentId);
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
@@ -1115,7 +1149,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
   }, 420);
 }
 function scrollToTopOfArgumentCard(argumentId) {
-  const element = getVisibleArgumentElement(argumentId);
+  const element = ensureArgumentCardVisibleForScroll(argumentId);
   if (!element) return;
 
   const topbar = document.querySelector(".topbar");
@@ -1805,7 +1839,7 @@ async function copyIdeaLink(debateId, encodedArgumentJson) {
     const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
     const { url } = getIdeaShareData(debateId, argument);
     await navigator.clipboard.writeText(url);
-    alert("Lien de l'idée copié.");
+    showCopyLinkSuccessMessage();
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
   }
@@ -1995,7 +2029,7 @@ async function copyDebateLink() {
   const { url } = getGlobalShareData();
   try {
     await navigator.clipboard.writeText(url);
-    alert("Lien copié.");
+    showCopyLinkSuccessMessage();
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
   }
@@ -2209,7 +2243,7 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
     copyBtn.onclick = async () => {
       try {
         await navigator.clipboard.writeText(safeUrl);
-        alert("Lien copié.");
+        showCopyLinkSuccessMessage();
       } catch (error) {
         alert("Impossible de copier le lien automatiquement.");
       }
@@ -2412,7 +2446,7 @@ async function copyIndexDebateLink(
 
   try {
     await navigator.clipboard.writeText(url);
-    alert("Lien copié.");
+    showCopyLinkSuccessMessage();
   } catch (error) {
     alert("Impossible de copier le lien automatiquement.");
   }
@@ -2991,6 +3025,122 @@ function getDebateCardDeleteButtonHtml(debate) {
   `;
 }
 
+
+function getNormalizedCategoryValue(value) {
+  const normalized = String(value || "").trim();
+  return normalized || "Sans catégorie";
+}
+
+function getSortedUniqueDebateCategories(debates) {
+  return Array.from(
+    new Set((debates || []).map((debate) => getNormalizedCategoryValue(debate.category)))
+  ).sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+}
+
+function ensureCategoryFilterControl() {
+  const searchInput = document.getElementById("debate-search");
+  if (!searchInput) return null;
+
+  let select = document.getElementById("filter-theme");
+  if (select) return select;
+
+  const filtersContainer =
+    document.getElementById("filter-all")?.parentElement ||
+    searchInput.parentElement ||
+    searchInput.closest("section") ||
+    searchInput.parentElement;
+
+  if (!filtersContainer) return null;
+
+  select = document.createElement("select");
+  select.id = "filter-theme";
+  select.setAttribute("aria-label", "Filtrer les arènes par thématique");
+  select.style.minWidth = "170px";
+  select.style.maxWidth = "100%";
+  select.style.padding = "10px 12px";
+  select.style.borderRadius = "12px";
+  select.style.border = "1px solid #d1d5db";
+  select.style.background = "#ffffff";
+  select.style.color = "#111111";
+  select.style.font = "inherit";
+  select.style.cursor = "pointer";
+  select.style.marginLeft = "8px";
+  select.style.marginTop = "8px";
+
+  select.addEventListener("change", () => {
+    currentCategoryFilter = select.value || "all";
+    visitedDebatesVisible = 5;
+    otherDebatesVisible = 6;
+    applyIndexFilters();
+  });
+
+  filtersContainer.appendChild(select);
+  return select;
+}
+
+function refreshCategoryFilterOptions(debates) {
+  const select = ensureCategoryFilterControl();
+  if (!select) return;
+
+  const categories = getSortedUniqueDebateCategories(debates);
+  const previousValue = currentCategoryFilter;
+
+  select.innerHTML = [
+    '<option value="all">Toutes les thématiques</option>',
+    ...categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+  ].join("");
+
+  const allowedValues = new Set(["all", ...categories]);
+  const nextValue = allowedValues.has(previousValue) ? previousValue : "all";
+
+  currentCategoryFilter = nextValue;
+  select.value = nextValue;
+}
+
+function getFilteredDebatesForIndex(baseDebates) {
+  let filteredDebates = Array.isArray(baseDebates) ? [...baseDebates] : [];
+
+  const searchInput = document.getElementById("debate-search");
+  const query = String(searchInput?.value || "").trim().toLowerCase();
+
+  if (query) {
+    filteredDebates = filteredDebates.filter((debate) => {
+      const question = String(debate.question || "").toLowerCase();
+      const category = String(debate.category || "").toLowerCase();
+      const optionA = String(debate.option_a || "").toLowerCase();
+      const optionB = String(debate.option_b || "").toLowerCase();
+
+      return (
+        question.includes(query) ||
+        category.includes(query) ||
+        optionA.includes(query) ||
+        optionB.includes(query)
+      );
+    });
+  }
+
+  if (currentTypeFilter === "debate") {
+    filteredDebates = filteredDebates.filter((debate) => !isOpenDebate(debate));
+  }
+
+  if (currentTypeFilter === "question") {
+    filteredDebates = filteredDebates.filter((debate) => isOpenDebate(debate));
+  }
+
+  if (currentCategoryFilter !== "all") {
+    filteredDebates = filteredDebates.filter(
+      (debate) => getNormalizedCategoryValue(debate.category) === currentCategoryFilter
+    );
+  }
+
+  return filteredDebates;
+}
+
+function applyIndexFilters() {
+  const filteredDebates = getFilteredDebatesForIndex(debatesCache);
+  updateIndexLists(filteredDebates);
+}
+
 function renderVisitedDebatesList(debates) {
   const section = document.getElementById("visited-debates-section");
   const div = document.getElementById("visited-debates-list");
@@ -3298,29 +3448,10 @@ function loadMoreOtherDebates() {
 function filterDebates() {
   const input = document.getElementById("debate-search");
   if (!input) return;
+
   visitedDebatesVisible = 5;
   otherDebatesVisible = 6;
-  const query = input.value.trim().toLowerCase();
-
-  if (!query) {
-setTypeFilter("all");    return;
-  }
-
-  const filtered = debatesCache.filter((d) => {
-    const question = String(d.question || "").toLowerCase();
-    const category = String(d.category || "").toLowerCase();
-    const optionA = String(d.option_a || "").toLowerCase();
-    const optionB = String(d.option_b || "").toLowerCase();
-
-    return (
-      question.includes(query) ||
-      category.includes(query) ||
-      optionA.includes(query) ||
-      optionB.includes(query)
-    );
-  });
-
-  updateIndexLists(filtered);
+  applyIndexFilters();
 }
 
 function setTypeFilter(type) {
@@ -3345,24 +3476,14 @@ function setTypeFilter(type) {
   visitedDebatesVisible = 5;
   otherDebatesVisible = 6;
 
-  updateIndexLists(debatesCache);
+  applyIndexFilters();
 }
 
 function updateIndexLists(debates) {
   const visitedIds = getVisitedDebateIds().map(String);
 
-  let filteredDebates = debates;
-
-  if (currentTypeFilter === "debate") {
-    filteredDebates = debates.filter((d) => !isOpenDebate(d));
-  }
-
-  if (currentTypeFilter === "question") {
-    filteredDebates = debates.filter((d) => isOpenDebate(d));
-  }
-
-  visitedDebatesCache = filteredDebates.filter((d) => visitedIds.includes(String(d.id)));
-  otherDebatesCache = filteredDebates.filter((d) => !visitedIds.includes(String(d.id)));
+  visitedDebatesCache = debates.filter((d) => visitedIds.includes(String(d.id)));
+  otherDebatesCache = debates.filter((d) => !visitedIds.includes(String(d.id)));
 
   renderVisitedDebatesList(visitedDebatesCache);
   renderDebatesList(otherDebatesCache);
@@ -3373,15 +3494,18 @@ async function initIndex() {
     debatesCache = debates;
     visitedDebatesVisible = 5;
     otherDebatesVisible = 6;
+    currentTypeFilter = "all";
+    currentCategoryFilter = "all";
 
-    updateIndexLists(debatesCache);
-
-  setTypeFilter("all");
+    refreshCategoryFilterOptions(debatesCache);
+    applyIndexFilters();
 
     const searchInput = document.getElementById("debate-search");
     if (searchInput) {
       searchInput.addEventListener("input", filterDebates);
     }
+
+    setTypeFilter("all");
   } catch (error) {
     alert(error.message);
   }
@@ -5977,6 +6101,14 @@ function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument
   refreshAllVoiceButtonsDisabledState(debateId);
 }
 
+function clearPinnedNewArgumentIfMatches(argumentId) {
+  if (String(pinnedNewArgumentId || "") !== String(argumentId || "")) {
+    return;
+  }
+
+  pinnedNewArgumentId = null;
+}
+
 async function vote(debateId, argId, shouldScroll = true, button = null) {
   const state = getState(debateId);
   const argIdString = String(argId);
@@ -6024,6 +6156,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   try {
     state[argIdString] = optimisticMyVotesOnArgument;
     setState(debateId, state);
+    clearPinnedNewArgumentIfMatches(argIdString);
 
     refreshVoteUiAfterLocalChange(
       debateId,
@@ -6479,28 +6612,8 @@ function cancelReply(argumentId) {
 
 function scrollToArgumentFromSummary(argId) {
   const argIdString = String(argId);
-  let element = getVisibleArgumentElement(argIdString);
-
-  if (!element) {
-    const sortedArgs = sortArgumentsByMode(
-      currentAllArguments || [],
-      currentCommentsByArgument || {}
-    );
-
-    const targetIndex = sortedArgs.findIndex(
-      (arg) => String(arg.id) === argIdString
-    );
-
-    if (targetIndex === -1) return;
-
-    if (argumentsVisible <= targetIndex) {
-      argumentsVisible = targetIndex + 1;
-    }
-
-    pendingArgumentScrollId = argIdString;
-    rerenderCurrentDebateArguments();
-    return;
-  }
+  let element = ensureArgumentCardVisibleForScroll(argIdString);
+  if (!element) return;
 
   const topbar = document.querySelector(".topbar");
 
@@ -7130,6 +7243,15 @@ async function editArgument(argumentId) {
 /* =========================
    Boot
 ========================= */
+
+function showCopyLinkSuccessMessage() {
+  showReplacementSuccessMessage(
+    "Lien copié",
+    "Le lien a bien été copié dans le presse-papiers.",
+    null,
+    "🔗"
+  );
+}
 
 function showReplacementSuccessMessage(title, message, onClose = null, iconHtml = "💡", iconClass = "") {
   const existing = document.getElementById("replacement-success-overlay");
