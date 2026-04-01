@@ -3037,12 +3037,152 @@ function getSortedUniqueDebateCategories(debates) {
   ).sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
 }
 
+function ensureCategoryFilterVisualStyles() {
+  if (document.getElementById("theme-filter-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "theme-filter-styles";
+  style.textContent = `
+    .index-theme-filter-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: nowrap;
+      margin: 8px 0 0 8px;
+      padding: 8px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      max-width: 100%;
+    }
+
+    .index-theme-filter-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #111827;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .index-theme-filter-label-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: #111827;
+      color: #ffffff;
+      font-size: 13px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+    }
+
+    .index-theme-filter-select {
+      appearance: none;
+      -webkit-appearance: none;
+      min-width: 180px;
+      max-width: min(100%, 320px);
+      padding: 10px 42px 10px 14px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background-color: #ffffff;
+      background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%);
+      background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      color: #111827;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .index-theme-filter-select:hover {
+      border-color: #9ca3af;
+    }
+
+    .index-theme-filter-select:focus {
+      border-color: #111827;
+      box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);
+    }
+
+    .index-theme-filter-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 30px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .index-theme-filter-wrap[data-active="true"] {
+      border-color: #c7d2fe;
+      background: linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+    }
+
+    @media (max-width: 768px) {
+      .index-theme-filter-wrap {
+        display: flex;
+        width: 100%;
+        margin: 10px 0 0;
+        padding: 10px;
+        border-radius: 18px;
+        gap: 8px;
+      }
+
+      .index-theme-filter-label-text {
+        display: none;
+      }
+
+      .index-theme-filter-select {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function updateCategoryFilterVisualState() {
+  const wrap = document.getElementById("filter-theme-wrap");
+  const badge = document.getElementById("filter-theme-badge");
+  const select = document.getElementById("filter-theme");
+  if (!wrap || !badge || !select) return;
+
+  const value = select.value || "all";
+  const isActive = value !== "all";
+  const count = Math.max(0, getFilteredDebatesForIndex(debatesCache).length);
+
+  wrap.dataset.active = isActive ? "true" : "false";
+  badge.textContent = String(count);
+  badge.title = `${count} arène${count > 1 ? "s" : ""}`;
+}
+
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
 
+  ensureCategoryFilterVisualStyles();
+
   let select = document.getElementById("filter-theme");
-  if (select) return select;
+  if (select) {
+    updateCategoryFilterVisualState();
+    return select;
+  }
 
   const filtersContainer =
     document.getElementById("filter-all")?.parentElement ||
@@ -3052,20 +3192,29 @@ function ensureCategoryFilterControl() {
 
   if (!filtersContainer) return null;
 
+  const wrap = document.createElement("div");
+  wrap.id = "filter-theme-wrap";
+  wrap.className = "index-theme-filter-wrap";
+  wrap.dataset.active = "false";
+
+  const label = document.createElement("label");
+  label.className = "index-theme-filter-label";
+  label.setAttribute("for", "filter-theme");
+  label.innerHTML = `
+    <span class="index-theme-filter-label-icon" aria-hidden="true">#</span>
+    <span class="index-theme-filter-label-text">Thématique</span>
+  `;
+
   select = document.createElement("select");
   select.id = "filter-theme";
+  select.className = "index-theme-filter-select";
   select.setAttribute("aria-label", "Filtrer les arènes par thématique");
-  select.style.minWidth = "170px";
-  select.style.maxWidth = "100%";
-  select.style.padding = "10px 12px";
-  select.style.borderRadius = "12px";
-  select.style.border = "1px solid #d1d5db";
-  select.style.background = "#ffffff";
-  select.style.color = "#111111";
-  select.style.font = "inherit";
-  select.style.cursor = "pointer";
-  select.style.marginLeft = "8px";
-  select.style.marginTop = "8px";
+
+  const badge = document.createElement("span");
+  badge.id = "filter-theme-badge";
+  badge.className = "index-theme-filter-badge";
+  badge.textContent = "0";
+  badge.setAttribute("aria-hidden", "true");
 
   select.addEventListener("change", () => {
     currentCategoryFilter = select.value || "all";
@@ -3074,7 +3223,12 @@ function ensureCategoryFilterControl() {
     applyIndexFilters();
   });
 
-  filtersContainer.appendChild(select);
+  wrap.appendChild(label);
+  wrap.appendChild(select);
+  wrap.appendChild(badge);
+  filtersContainer.appendChild(wrap);
+
+  updateCategoryFilterVisualState();
   return select;
 }
 
@@ -3095,6 +3249,7 @@ function refreshCategoryFilterOptions(debates) {
 
   currentCategoryFilter = nextValue;
   select.value = nextValue;
+  updateCategoryFilterVisualState();
 }
 
 function getFilteredDebatesForIndex(baseDebates) {
@@ -3139,6 +3294,7 @@ function getFilteredDebatesForIndex(baseDebates) {
 function applyIndexFilters() {
   const filteredDebates = getFilteredDebatesForIndex(debatesCache);
   updateIndexLists(filteredDebates);
+  updateCategoryFilterVisualState();
 }
 
 function renderVisitedDebatesList(debates) {
