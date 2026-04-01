@@ -3229,7 +3229,9 @@ if (selectedType !== "open" && (!option_a || !option_b)) {
   return;
 }
 
-const confirmed = await showDebatePublishConfirmModal();
+const confirmed = window.confirm(
+  "Êtes-vous sûr de vouloir publier ce débat ? Vous ne pourrez plus le modifier ensuite, seulement le supprimer."
+);
 
 if (!confirmed) {
   return;
@@ -3519,38 +3521,52 @@ function toggleSimilarDebates() {
    Debate
 ========================= */
 
-function applyCompactDeleteDebateButtonStyle() {
+function styleDebateDeleteButtonAsTopRightCross() {
   const deleteDebateBtn = document.getElementById("delete-debate-btn");
+  if (deleteDebateBtn) {
+    styleDebateDeleteButtonAsTopRightCross();
+  }
   if (!deleteDebateBtn) return;
 
-  deleteDebateBtn.textContent = "×";
-  deleteDebateBtn.setAttribute("aria-label", "Supprimer le débat");
-  deleteDebateBtn.setAttribute("title", "Supprimer le débat");
-  deleteDebateBtn.classList.add("delete-debate-cross-button");
+  const anchorContainer =
+    deleteDebateBtn.closest(".debate-head-card") ||
+    deleteDebateBtn.closest(".debate-card") ||
+    deleteDebateBtn.closest(".debate-header") ||
+    deleteDebateBtn.parentElement;
 
+  if (anchorContainer && getComputedStyle(anchorContainer).position === "static") {
+    anchorContainer.style.position = "relative";
+  }
+
+  deleteDebateBtn.textContent = "×";
+  deleteDebateBtn.title = "Supprimer ce débat";
+  deleteDebateBtn.setAttribute("aria-label", "Supprimer ce débat");
+  deleteDebateBtn.style.position = "absolute";
+  deleteDebateBtn.style.top = "12px";
+  deleteDebateBtn.style.right = "12px";
+  deleteDebateBtn.style.left = "auto";
+  deleteDebateBtn.style.bottom = "auto";
   deleteDebateBtn.style.width = "32px";
   deleteDebateBtn.style.height = "32px";
   deleteDebateBtn.style.minWidth = "32px";
   deleteDebateBtn.style.padding = "0";
-  deleteDebateBtn.style.borderRadius = "999px";
-  deleteDebateBtn.style.display = "inline-flex";
+  deleteDebateBtn.style.display = "flex";
   deleteDebateBtn.style.alignItems = "center";
   deleteDebateBtn.style.justifyContent = "center";
-  deleteDebateBtn.style.fontSize = "22px";
-  deleteDebateBtn.style.fontWeight = "700";
+  deleteDebateBtn.style.borderRadius = "999px";
+  deleteDebateBtn.style.fontSize = "24px";
   deleteDebateBtn.style.lineHeight = "1";
-  deleteDebateBtn.style.flexShrink = "0";
+  deleteDebateBtn.style.fontWeight = "700";
 }
 
 function updateDeleteDebateButtonVisibility(debate) {
   const deleteDebateBtn = document.getElementById("delete-debate-btn");
   if (!deleteDebateBtn) return;
 
-  applyCompactDeleteDebateButtonStyle();
-
   if (canDeleteDebate(debate)) {
     deleteDebateBtn.removeAttribute("data-admin");
-    deleteDebateBtn.style.display = "inline-flex";
+    styleDebateDeleteButtonAsTopRightCross();
+    deleteDebateBtn.style.display = "flex";
     return;
   }
 
@@ -3594,8 +3610,6 @@ if (formList) {
 }
 
   if (deleteDebateBtn) {
-    applyCompactDeleteDebateButtonStyle();
-
     deleteDebateBtn.addEventListener("click", async () => {
       await deleteDebate(id, true);
     });
@@ -7326,59 +7340,6 @@ function showIdeaPublishConfirmModal() {
 
     const cancelBtn = document.getElementById("idea-publish-cancel-btn");
     const confirmBtn = document.getElementById("idea-publish-confirm-btn");
-
-    if (cancelBtn) {
-      cancelBtn.onclick = () => closeModal(false);
-    }
-
-    if (confirmBtn) {
-      confirmBtn.onclick = () => closeModal(true);
-      confirmBtn.focus();
-    }
-  });
-}
-
-function showDebatePublishConfirmModal() {
-  return new Promise((resolve) => {
-    const existing = document.getElementById("custom-debate-publish-modal");
-    if (existing) existing.remove();
-
-    const overlay = document.createElement("div");
-    overlay.id = "custom-debate-publish-modal";
-    overlay.className = "custom-modal-overlay";
-
-    overlay.innerHTML = `
-      <div class="custom-modal-box">
-        <div class="custom-modal-title">Publier ce débat ?</div>
-        <div class="custom-modal-text">Êtes-vous sûr de vouloir publier ce débat ? Vous ne pourrez plus le modifier ensuite, seulement le supprimer.</div>
-
-        <div class="custom-modal-actions">
-          <button type="button" class="button button-secondary" id="debate-publish-cancel-btn">
-            Annuler
-          </button>
-
-          <button type="button" class="button" id="debate-publish-confirm-btn">
-            Publier
-          </button>
-        </div>
-      </div>
-    `;
-
-    const closeModal = (confirmed) => {
-      overlay.remove();
-      resolve(confirmed === true);
-    };
-
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) {
-        closeModal(false);
-      }
-    });
-
-    document.body.appendChild(overlay);
-
-    const cancelBtn = document.getElementById("debate-publish-cancel-btn");
-    const confirmBtn = document.getElementById("debate-publish-confirm-btn");
 
     if (cancelBtn) {
       cancelBtn.onclick = () => closeModal(false);
