@@ -1172,47 +1172,6 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function normalizeSourceUrl(rawUrl) {
-  const value = String(rawUrl || "").trim();
-  if (!value) return "";
-
-  try {
-    const parsedUrl = new URL(value);
-    if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
-      return parsedUrl.toString();
-    }
-  } catch (error) {
-    return "";
-  }
-
-  return "";
-}
-
-function getSourceUrlDomain(sourceUrl) {
-  const safeUrl = normalizeSourceUrl(sourceUrl);
-  if (!safeUrl) return "";
-
-  try {
-    return new URL(safeUrl).hostname.replace(/^www\./i, "");
-  } catch (error) {
-    return "";
-  }
-}
-
-function renderDebateCardSourceHtml(sourceUrl) {
-  const safeUrl = normalizeSourceUrl(sourceUrl);
-  if (!safeUrl) return "";
-
-  const domain = getSourceUrlDomain(safeUrl) || "Source";
-  return `
-    <div class="debate-card-source">
-      <a class="debate-card-source-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
-        Source · ${escapeHtml(domain)}
-      </a>
-    </div>
-  `;
-}
-
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
 
@@ -3236,8 +3195,7 @@ function ensureCategoryFilterControl() {
     return select;
   }
 
-const filterSlot = document.getElementById("visited-theme-filter-slot");
-const sectionHeaderHome = document.getElementById("visited-section-header");
+  const sectionHeaderHome = document.querySelector(".section-header.section-header-home");
 
   const fallbackContainer =
     document.getElementById("filter-all")?.parentElement ||
@@ -3274,12 +3232,9 @@ const sectionHeaderHome = document.getElementById("visited-section-header");
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
- if (filterSlot) {
-  filterSlot.appendChild(wrap);
-} else if (sectionHeaderHome) {
-  sectionHeaderHome.appendChild(wrap);
-} else {
-
+  if (sectionHeaderHome) {
+    sectionHeaderHome.appendChild(wrap);
+  } else {
     const searchBox = searchInput.closest(".search-box");
 
     if (searchBox && searchBox.parentElement === targetContainer) {
@@ -3409,7 +3364,7 @@ function renderVisitedDebatesList(debates) {
 }
 
           <p>${d.argument_count || 0} idée(s)</p>
-          ${renderDebateCardSourceHtml(d.source_url)}
+          ${renderIndexSourcePreview(d.source_url)}
           <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
           ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
         </a>
@@ -3815,18 +3770,15 @@ const matches = debatesForSimilarity
   }
 
   similarBox.style.display = "block";
-  similarList.innerHTML = matches.map(({ debate }) => {
-    const sourceDomain = getSourceUrlDomain(debate.source_url);
-    return `
+  similarList.innerHTML = matches.map(({ debate }) => `
     <a class="similar-debate-item" href="/debate?id=${debate.id}" target="_blank" rel="noopener noreferrer">
       <div class="similar-debate-question">${escapeHtml(debate.question)}</div>
       <div class="similar-debate-meta">
         ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée(s)
       </div>
-      ${sourceDomain ? `<div class="similar-debate-source">Source · ${escapeHtml(sourceDomain)}</div>` : ""}
+      ${renderIndexSourcePreview(debate.source_url)}
     </a>
-  `;
-  }).join("");
+  `).join("");
 }
 
 if (typeInputs.length) {
@@ -3847,18 +3799,7 @@ if (typeInputs.length) {
 
 const question = document.getElementById("question").value.trim();
 const category = document.getElementById("category").value.trim();
-const rawSourceUrl = document.getElementById("source_url").value.trim();
-const source_url = normalizeSourceUrl(rawSourceUrl);
-
-if (rawSourceUrl && !source_url) {
-  showReplacementSuccessMessage(
-    "Source invalide",
-    "Le lien source doit commencer par http:// ou https:// et être une URL valide.",
-    null,
-    "⚠️"
-  );
-  return;
-}
+const source_url = document.getElementById("source_url").value.trim();
 const selectedType =
   document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
@@ -4327,6 +4268,82 @@ function getEmbeddableSourceData(url) {
     videoId: "",
     posterUrl: ""
   };
+}
+
+function normalizeSourceUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+  } catch (error) {
+    return "";
+  }
+
+  return "";
+}
+
+function getSourceUrlDomain(sourceUrl) {
+  const safeUrl = normalizeSourceUrl(sourceUrl);
+  if (!safeUrl) return "";
+
+  try {
+    return new URL(safeUrl).hostname.replace(/^www\./i, "");
+  } catch (error) {
+    return "";
+  }
+}
+
+function renderIndexSourcePreview(sourceUrl) {
+  const safeUrl = normalizeSourceUrl(sourceUrl);
+  if (!safeUrl) return "";
+
+  const sourceData = getEmbeddableSourceData(safeUrl);
+  const domain = getSourceUrlDomain(safeUrl) || "Source";
+
+  if (sourceData.videoId && sourceData.posterUrl) {
+    return `
+      <div class="debate-card-source-preview">
+        <a
+          class="debate-card-source-youtube"
+          href="${escapeHtml(safeUrl)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Voir la source YouTube"
+        >
+          <div class="debate-card-source-thumb-wrap">
+            <img
+              class="debate-card-source-thumb"
+              src="${escapeHtml(sourceData.posterUrl)}"
+              alt="Miniature YouTube"
+              loading="lazy"
+            />
+            <span class="debate-card-source-play" aria-hidden="true">▶</span>
+          </div>
+          <div class="debate-card-source-meta">
+            <div class="debate-card-source-badge">YouTube</div>
+            <div class="debate-card-source-domain">${escapeHtml(domain)}</div>
+          </div>
+        </a>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="debate-card-source-preview">
+      <a
+        class="debate-card-source-link"
+        href="${escapeHtml(safeUrl)}"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Source · ${escapeHtml(domain)}
+      </a>
+    </div>
+  `;
 }
 
 const debateSourcePreviewState = {
