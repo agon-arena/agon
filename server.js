@@ -351,13 +351,15 @@ app.get("/admin-reports", (req, res) => {
 app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const debate = await getDebateById(id);
+    const [debate, args] = await Promise.all([
+      getDebateById(id),
+      getArgumentsByDebateId(id)
+    ]);
 
     if (!debate) {
       return res.status(404).send("Débat introuvable.");
     }
 
-const comments = await getCommentsByArgumentIds(argumentIds);
     const { percentA, percentB } = computeDebatePercents(args);
 
     const shareTitle = debate.question || "Débat sur Agôn";
