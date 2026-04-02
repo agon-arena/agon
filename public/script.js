@@ -796,6 +796,7 @@ function renderUnifiedVoicesSummary(debateId, args) {
       }
     </div>
   `;
+  syncVoiceGuidanceState(debateId);
 }
 
 function renderUnifiedVotedArgumentsSummary(debateId, args) {
@@ -956,6 +957,7 @@ if (myArgumentsRow) {
       `;
     }
   }
+  syncVoiceGuidanceState(debateId);
 }
 /* =========================
    Helpers
@@ -1713,39 +1715,62 @@ function getVoiceButtons(argId) {
   return Array.from(document.querySelectorAll(`[data-voice-arg-id="${String(argId)}"]`));
 }
 
+function syncVoiceGuidanceState(debateId) {
+  const state = getState(debateId);
+  const totalVotesUsed = Object.values(state).reduce((sum, value) => sum + Number(value || 0), 0);
+  const shouldGuide = totalVotesUsed < 5;
+
+  document.querySelectorAll(".voice-stepper-btn, .my-argument-chip-stepper-btn").forEach((button) => {
+    button.classList.remove("voice-stepper-btn-guided", "my-argument-chip-stepper-btn-guided");
+
+    if (!shouldGuide) return;
+
+    if (button.classList.contains("voice-stepper-btn")) {
+      button.classList.add("voice-stepper-btn-guided");
+    }
+
+    if (button.classList.contains("my-argument-chip-stepper-btn")) {
+      button.classList.add("my-argument-chip-stepper-btn-guided");
+    }
+  });
+}
+
+
 function syncVoiceButtonsDisabledState(debateId, argId) {
   const argIdString = String(argId);
   const state = getState(debateId);
   const myVoteCount = Number(state[argIdString] || 0);
-  const totalVotesUsed = Object.values(state).reduce((sum, value) => sum + Number(value || 0), 0);
   const isPending = pendingVoiceRequests[argIdString] === true;
 
   getVoiceButtons(argIdString).forEach((button) => {
     const action = button.dataset.voiceAction;
 
-if (isPending) {
-  button.disabled = true;
-  button.dataset.loading = "true";
-  button.classList.remove("button-loading");
-  button.style.pointerEvents = "none";
-  button.style.opacity = "";
-  return;
-}
+    if (isPending) {
+      button.disabled = true;
+      button.dataset.loading = "true";
+      button.classList.remove("button-loading");
+      button.style.pointerEvents = "none";
+      button.style.opacity = "";
+      return;
+    }
 
     delete button.dataset.loading;
     button.classList.remove("button-loading");
     button.style.pointerEvents = "";
     button.style.opacity = "";
 
-if (action === "minus") {
-  button.disabled = myVoteCount <= 0;
-} else if (action === "plus") {
-  button.disabled = false;
-} else {
-  button.disabled = false;
-}
+    if (action === "minus") {
+      button.disabled = myVoteCount <= 0;
+    } else if (action === "plus") {
+      button.disabled = false;
+    } else {
+      button.disabled = false;
+    }
   });
+
+  syncVoiceGuidanceState(debateId);
 }
+
 
 function setVoiceRequestPending(debateId, argId, isPending) {
   pendingVoiceRequests[String(argId)] = !!isPending;
@@ -3478,16 +3503,19 @@ function applyIndexFilters() {
 function renderVisitedDebatesList(debates) {
   const section = document.getElementById("visited-debates-section");
   const div = document.getElementById("visited-debates-list");
+  const header = document.getElementById("visited-section-header");
 
-  if (!section || !div) return;
+if (!section || !div || !header) return;
 
-  if (!debates.length) {
-    section.style.display = "none";
-    div.innerHTML = "";
-    return;
-  }
+if (!debates.length) {
+  header.style.display = "none";
+  section.style.display = "none";
+  div.innerHTML = "";
+  return;
+}
 
-  section.style.display = "block";
+header.style.display = "flex";
+section.style.display = "block";
 
   const debatesToShow = debates.slice(0, visitedDebatesVisible);
 
@@ -3652,13 +3680,17 @@ function loadMoreVisitedDebates() {
 function renderDebatesList(debates) {
   const debatesToShow = debates.slice(0, otherDebatesVisible);
   const div = document.getElementById("debates-list");
-  if (!div) return;
+  const header = document.getElementById("other-section-header");
+  if (!div || !header) return;
 
-  if (!debates.length) {
-    div.innerHTML = `<div class="empty-state">Aucune arène ne correspond à votre recherche.</div>`;
-    refreshAdminUI();
-    return;
-  }
+if (!debates.length) {
+  header.style.display = "none";
+  div.innerHTML = "";
+  refreshAdminUI();
+  return;
+}
+
+header.style.display = "flex";
 
 div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
@@ -3849,6 +3881,159 @@ async function initIndex() {
    Create
 ========================= */
 
+function getSelectedCreateResourceMode() {
+  return document.querySelector('input[name="resource-mode"]:checked')?.value || "none";
+}
+
+function updateCreateResourceModeUI() {
+  const mode = getSelectedCreateResourceMode();
+  const sourceGroup = document.getElementById("source-url-group");
+  const sourceInput = document.getElementById("source_url");
+  const imageGroup = document.getElementById("image-upload-group");
+  const imageInput = document.getElementById("debate_image_file");
+
+  if (sourceGroup) {
+    sourceGroup.style.display = mode === "source" ? "grid" : "none";
+  }
+
+  if (sourceInput) {
+    sourceInput.disabled = mode !== "source";
+    if (mode !== "source") {
+      sourceInput.value = "";
+    }
+  }
+
+  if (imageGroup) {
+    imageGroup.style.display = mode === "image" ? "grid" : "none";
+  }
+
+  if (imageInput) {
+    imageInput.disabled = mode !== "image";
+    if (mode !== "image") {
+      imageInput.value = "";
+    }
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Impossible de lire l'image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function ensureDebateImageSlot() {
+  let wrap = document.getElementById("debate-image-wrap");
+  if (wrap) return wrap;
+
+  const heroSection = document.querySelector(".debate-hero");
+  if (!heroSection) return null;
+
+  wrap = document.createElement("div");
+  wrap.id = "debate-image-wrap";
+  wrap.className = "debate-image-wrap";
+  wrap.style.display = "none";
+  wrap.innerHTML = '<img id="debate-image" class="debate-image" alt="Image du débat">';
+
+  heroSection.appendChild(wrap);
+  return wrap;
+}
+
+function renderDebateImage(imageUrl) {
+  const wrap = ensureDebateImageSlot();
+  const imageEl = document.getElementById("debate-image");
+
+  if (!wrap || !imageEl) return;
+
+  const normalizedUrl = String(imageUrl || "").trim();
+
+  if (!normalizedUrl) {
+   wrap.style.display = "none";
+imageEl.removeAttribute("src");
+closeDebateImageLightbox();
+return;
+  }
+imageEl.src = normalizedUrl;
+wrap.style.display = "block";
+initDebateImageLightbox();
+}
+function openDebateImageLightbox() {
+  const imageEl = document.getElementById("debate-image");
+  const lightbox = document.getElementById("debate-image-lightbox");
+  const lightboxImg = document.getElementById("debate-image-lightbox-img");
+
+  if (!imageEl || !lightbox || !lightboxImg) return;
+
+  const src = String(imageEl.getAttribute("src") || "").trim();
+  if (!src) return;
+
+  lightboxImg.src = src;
+  lightbox.classList.add("debate-image-lightbox-open");
+  lightbox.style.display = "flex";
+  lightbox.setAttribute("aria-hidden", "false");
+}
+function toggleDebateImageLightbox() {
+  const lightbox = document.getElementById("debate-image-lightbox");
+  if (!lightbox) return;
+
+  const isOpen =
+    lightbox.classList.contains("debate-image-lightbox-open") ||
+    lightbox.style.display === "flex";
+
+  if (isOpen) {
+    closeDebateImageLightbox();
+  } else {
+    openDebateImageLightbox();
+  }
+}
+
+function closeDebateImageLightbox() {
+  const lightbox = document.getElementById("debate-image-lightbox");
+  const lightboxImg = document.getElementById("debate-image-lightbox-img");
+
+  if (!lightbox || !lightboxImg) return;
+
+  lightbox.classList.remove("debate-image-lightbox-open");
+  lightbox.style.display = "none";
+  lightbox.setAttribute("aria-hidden", "true");
+  lightboxImg.removeAttribute("src");
+}
+
+function initDebateImageLightbox() {
+  const imageEl = document.getElementById("debate-image");
+  const lightbox = document.getElementById("debate-image-lightbox");
+  const lightboxImg = document.getElementById("debate-image-lightbox-img");
+  const closeBtn = document.getElementById("debate-image-lightbox-close");
+
+  if (!imageEl || !lightbox || !closeBtn) return;
+  if (imageEl.dataset.lightboxBound === "true") return;
+
+  imageEl.addEventListener("dblclick", toggleDebateImageLightbox);
+
+  if (lightboxImg) {
+    lightboxImg.addEventListener("dblclick", toggleDebateImageLightbox);
+  }
+
+  closeBtn.addEventListener("click", closeDebateImageLightbox);
+
+  lightbox.addEventListener("click", (event) => {
+    if (event.target === lightbox) {
+      closeDebateImageLightbox();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeDebateImageLightbox();
+    }
+  });
+
+  imageEl.dataset.lightboxBound = "true";
+}
+
 async function initCreate() {
   const form = document.getElementById("create-form");
   if (!form) return;
@@ -3857,6 +4042,7 @@ async function initCreate() {
   const similarBox = document.getElementById("similar-debates-box");
   const similarList = document.getElementById("similar-debates-list");
 const typeInputs = document.querySelectorAll('input[name="debate-type"]');
+const resourceInputs = document.querySelectorAll('input[name="resource-mode"]');
 
   let debatesForSimilarity = [];
 
@@ -3947,6 +4133,14 @@ if (typeInputs.length) {
 
   updateCreateTypeUI();
 }
+
+if (resourceInputs.length) {
+  resourceInputs.forEach((input) => {
+    input.addEventListener("change", updateCreateResourceModeUI);
+  });
+
+  updateCreateResourceModeUI();
+}
   if (questionInput) {
     questionInput.addEventListener("input", (e) => {
       renderSimilarDebates(e.target.value);
@@ -3958,7 +4152,13 @@ if (typeInputs.length) {
 
 const question = document.getElementById("question").value.trim();
 const category = document.getElementById("category").value.trim();
-const source_url = document.getElementById("source_url").value.trim();
+const resourceMode = getSelectedCreateResourceMode();
+const source_url = resourceMode === "source"
+  ? document.getElementById("source_url").value.trim()
+  : "";
+const imageFile = resourceMode === "image"
+  ? document.getElementById("debate_image_file").files?.[0] || null
+  : null;
 const selectedType =
   document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
@@ -3980,6 +4180,36 @@ if (selectedType !== "open" && (!option_a || !option_b)) {
   return;
 }
 
+if (resourceMode === "source" && !source_url) {
+  showReplacementSuccessMessage(
+    "Lien manquant",
+    "Tu as choisi le mode lien source, mais aucun lien n’a été renseigné.",
+    null,
+    "⚠️"
+  );
+  return;
+}
+
+if (resourceMode === "image" && !imageFile) {
+  showReplacementSuccessMessage(
+    "Image manquante",
+    "Tu as choisi l’import d’image, mais aucun fichier n’a été sélectionné.",
+    null,
+    "⚠️"
+  );
+  return;
+}
+
+if (imageFile && !/^image\//i.test(imageFile.type || "")) {
+  showReplacementSuccessMessage(
+    "Format non pris en charge",
+    "Le fichier sélectionné n’est pas une image valide.",
+    null,
+    "⚠️"
+  );
+  return;
+}
+
 const confirmed = await showDebatePublishConfirmModal();
 
 if (!confirmed) {
@@ -3987,6 +4217,14 @@ if (!confirmed) {
 }
 
 try {
+  const image_upload = imageFile
+    ? {
+        name: imageFile.name || "image",
+        type: imageFile.type || "",
+        dataUrl: await readFileAsDataUrl(imageFile)
+      }
+    : null;
+
   const r = await fetchJSON(API + "/debates", {
 
         method: "POST",
@@ -3995,6 +4233,8 @@ body: JSON.stringify({
   question,
   category,
   source_url,
+  resource_mode: resourceMode,
+  image_upload,
   type: selectedType,
   option_a,
   option_b,
@@ -4535,8 +4775,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     <div class="debate-source-x-embed" id="debate-source-x-embed"></div>
     <a class="debate-source-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">Voir le post sur X</a>
   `;
-  sourceFallback.style.display = "block";
-
+sourceFallback.style.display = "flex";
   try {
     await loadXWidgetsScript();
 
@@ -4805,6 +5044,7 @@ saveVisitedDebate(id);
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
+renderDebateImage(data.debate.image_url || "");
 
 const sourceUrl = String(data.debate.source_url || "").trim();
 const initialSourcePreview = data.sourcePreview || null;
@@ -4846,6 +5086,12 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
   renderArgs("arguments-a", data.optionA, id, data.commentsByArgument || {});
   renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
 }
+
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    syncVoiceGuidanceState(id);
+  });
+});
 
 if (pendingTopCommentScroll) {
   const targetId = pendingTopCommentScroll;
@@ -6428,6 +6674,10 @@ function rerenderCurrentDebateArguments(debateId) {
     if (argumentsAContainer) argumentsAContainer.innerHTML = "";
     if (argumentsBContainer) argumentsBContainer.innerHTML = "";
     renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
+
+    requestAnimationFrame(() => {
+      syncVoiceGuidanceState(debateId);
+    });
     return;
   }
 
@@ -6438,6 +6688,10 @@ function rerenderCurrentDebateArguments(debateId) {
 
   renderArgs("arguments-a", argsA, debateId, commentsByArgument);
   renderArgs("arguments-b", argsB, debateId, commentsByArgument);
+
+  requestAnimationFrame(() => {
+    syncVoiceGuidanceState(debateId);
+  });
 }
 
 function rerenderArgumentsAfterLocalVoteChange(debateId) {
@@ -7360,7 +7614,7 @@ async function deleteDebate(debateId, redirectAfter) {
 
   showDeleteConfirmModal({
     title: "Supprimer cette arène ?",
-    text: "Cette suppression est définitive. Vous pourrez supprimer cette arène, mais pas la récupérer ensuite.",
+    text: "Cette suppression est définitive.",
     onConfirm: async () => {
       try {
         const url = new URL(API + "/debates/" + debateId, window.location.origin);
@@ -7625,6 +7879,12 @@ function rerenderCurrentDebateArguments() {
     if (argsB) argsB.innerHTML = "";
 
     renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, currentCommentsByArgument || {});
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        syncVoiceGuidanceState(debateId);
+      });
+    });
     return;
   }
 
@@ -7636,30 +7896,49 @@ function rerenderCurrentDebateArguments() {
 
   renderArgs("arguments-a", optionAArgs, debateId, currentCommentsByArgument || {});
   renderArgs("arguments-b", optionBArgs, debateId, currentCommentsByArgument || {});
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      syncVoiceGuidanceState(debateId);
+    });
+  });
 }
 
 function loadMoreArguments() {
   argumentsVisible += 6;
   rerenderCurrentDebateArguments();
 }
+
 async function editDebate() {
   const debateId = getDebateId();
   if (!debateId) return;
 
-  const currentQuestion = document.getElementById("debate-question")?.textContent?.trim() || "";
-  const currentOptionA = document.getElementById("title-a")?.textContent?.trim() || "";
-  const currentOptionB = document.getElementById("title-b")?.textContent?.trim() || "";
-
-  const question = window.prompt("Modifier le titre de l'arène :", currentQuestion);
-  if (question === null) return;
-
-  const option_a = window.prompt("Modifier la position A :", currentOptionA);
-  if (option_a === null) return;
-
-  const option_b = window.prompt("Modifier la position B :", currentOptionB);
-  if (option_b === null) return;
-
   try {
+    const data = await fetchJSON(API + "/debates/" + debateId);
+    const debate = data?.debate || null;
+
+    if (!debate) {
+      alert("Arène introuvable.");
+      return;
+    }
+
+    const currentQuestion = debate.question || "";
+    const currentOptionA = debate.option_a || "";
+    const currentOptionB = debate.option_b || "";
+    const currentSourceUrl = debate.source_url || "";
+
+    const question = window.prompt("Modifier le titre de l'arène :", currentQuestion);
+    if (question === null) return;
+
+    const option_a = window.prompt("Modifier la position A :", currentOptionA);
+    if (option_a === null) return;
+
+    const option_b = window.prompt("Modifier la position B :", currentOptionB);
+    if (option_b === null) return;
+
+    const source_url = window.prompt("Modifier le lien source :", currentSourceUrl);
+    if (source_url === null) return;
+
     await fetchJSON(API + "/admin/debate/" + debateId, {
       method: "PUT",
       headers: {
@@ -7669,7 +7948,8 @@ async function editDebate() {
       body: JSON.stringify({
         question: question.trim(),
         option_a: option_a.trim(),
-        option_b: option_b.trim()
+        option_b: option_b.trim(),
+        source_url: source_url.trim()
       })
     });
 
@@ -7678,6 +7958,7 @@ async function editDebate() {
     alert(error.message);
   }
 }
+
 async function editArgument(argumentId) {
   const debateId = getDebateId();
   if (!debateId) return;

@@ -6,7 +6,7 @@
 
 <title>Débat</title>
 <link rel="icon" type="image/png" href="/favicon.png">
-<link rel="stylesheet" href="/style.css?v=20260330-3" />
+<link rel="stylesheet" href="/style.css?v=20260402-1" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body class="page-debate">
@@ -66,6 +66,7 @@
 </header>
 
 <main class="container debate-page">
+
 
  
 <div class="debate-hero-top">
@@ -144,10 +145,29 @@
         >
           Ouvrir B
         </button>
+     
+
       </div>
 
   </div>
 
+</div>
+
+<div id="debate-image-wrap" class="debate-image-wrap" style="display:none;">
+  <img id="debate-image" class="debate-image" alt="Image du débat">
+</div>
+
+<div id="debate-image-lightbox" class="debate-image-lightbox" style="display:none;" aria-hidden="true">
+  <button
+    type="button"
+    id="debate-image-lightbox-close"
+    class="debate-image-lightbox-close"
+    aria-label="Fermer l’image agrandie"
+  >
+    ✕
+  </button>
+
+  <img id="debate-image-lightbox-img" class="debate-image-lightbox-img" alt="Image du débat agrandie">
 </div>
 
 <section class="debate-hero">

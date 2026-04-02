@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
@@ -29,7 +30,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 app.use("/migration-export", express.static("/var/data"));
 
@@ -54,6 +55,24 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
+function normalizeExternalUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    return raw;
+  }
+
+  if (raw.startsWith('//')) {
+    return `https:${raw}`;
+  }
+
+  return `https://${raw}`;
+}
 
 function decodeHtmlEntities(value) {
   return String(value ?? "")
@@ -165,6 +184,101 @@ function safeJsonParse(value) {
   } catch (error) {
     return null;
   }
+}
+
+const debateAssetsDir = path.join(__dirname, "public", "debate-images");
+const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
+
+function ensureDebateAssetsStorage() {
+  fs.mkdirSync(debateAssetsDir, { recursive: true });
+  fs.mkdirSync(path.dirname(debateAssetsMetaPath), { recursive: true });
+
+  if (!fs.existsSync(debateAssetsMetaPath)) {
+    fs.writeFileSync(debateAssetsMetaPath, "{}", "utf8");
+  }
+}
+
+function readDebateAssetsMap() {
+  ensureDebateAssetsStorage();
+
+  try {
+    return JSON.parse(fs.readFileSync(debateAssetsMetaPath, "utf8") || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeDebateAssetsMap(map) {
+  ensureDebateAssetsStorage();
+  fs.writeFileSync(debateAssetsMetaPath, JSON.stringify(map, null, 2), "utf8");
+}
+
+function getDebateStoredImageUrl(debateId) {
+  const map = readDebateAssetsMap();
+  return String(map?.[String(debateId)]?.image_url || "").trim();
+}
+
+function setDebateStoredImageUrl(debateId, imageUrl) {
+  const map = readDebateAssetsMap();
+  const debateKey = String(debateId);
+
+  if (!imageUrl) {
+    delete map[debateKey];
+  } else {
+    map[debateKey] = {
+      image_url: String(imageUrl).trim()
+    };
+  }
+
+  writeDebateAssetsMap(map);
+}
+
+function getImageExtensionFromMimeType(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  return "";
+}
+
+function saveUploadedDebateImage(debateId, imageUpload) {
+  const dataUrl = String(imageUpload?.dataUrl || "").trim();
+  const mimeType = String(imageUpload?.type || "").trim().toLowerCase();
+  const extension = getImageExtensionFromMimeType(mimeType);
+
+  if (!dataUrl || !extension) {
+    throw new Error("Image invalide.");
+  }
+
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Format d'image invalide.");
+  }
+
+  if (String(match[1]).toLowerCase() !== mimeType) {
+    throw new Error("Type d'image incohérent.");
+  }
+
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.length) {
+    throw new Error("Image vide.");
+  }
+
+  ensureDebateAssetsStorage();
+  const filename = `debate-${debateId}-${Date.now()}.${extension}`;
+  const filePath = path.join(debateAssetsDir, filename);
+  fs.writeFileSync(filePath, buffer);
+
+  return `/debate-images/${filename}`;
+}
+
+function enrichDebateWithStoredImage(debate) {
+  if (!debate) return debate;
+  return {
+    ...debate,
+    image_url: getDebateStoredImageUrl(debate.id)
+  };
 }
 
 function walkStructuredData(node, bucket = []) {
@@ -453,7 +567,8 @@ function hasMeaningfulPreview(preview) {
   return false;
 }
 
-function buildBrowserLikeHeaders(url) {
+
+function buildBrowserLikeHeaders(url, profile = "browser") {
   let host = "";
   try {
     host = new URL(url).origin;
@@ -461,12 +576,43 @@ function buildBrowserLikeHeaders(url) {
     host = "https://www.google.com";
   }
 
-  return {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  const commonHeaders = {
     "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
     "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
+    "Pragma": "no-cache"
+  };
+
+  if (profile === "facebook") {
+    return {
+      ...commonHeaders,
+      "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Referer": host
+    };
+  }
+
+  if (profile === "slack") {
+    return {
+      ...commonHeaders,
+      "User-Agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Referer": host
+    };
+  }
+
+  if (profile === "twitter") {
+    return {
+      ...commonHeaders,
+      "User-Agent": "Twitterbot/1.0",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Referer": host
+    };
+  }
+
+  return {
+    ...commonHeaders,
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Upgrade-Insecure-Requests": "1",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
@@ -476,30 +622,189 @@ function buildBrowserLikeHeaders(url) {
   };
 }
 
-async function fetchPreviewHtml(url, timeoutMs = 6000) {
+function getPreviewFetchStrategies() {
+  return [
+    { profile: "browser", timeoutMs: 8000 },
+    { profile: "facebook", timeoutMs: 10000 },
+    { profile: "slack", timeoutMs: 10000 },
+    { profile: "twitter", timeoutMs: 10000 }
+  ];
+}
+
+async function fetchPreviewHtml(url, timeoutMs = 6000, profile = "browser") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
-      headers: buildBrowserLikeHeaders(url),
+      headers: buildBrowserLikeHeaders(url, profile),
       redirect: "follow",
       signal: controller.signal
     });
 
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
     const html = response.ok ? await response.text() : "";
+
     return {
       ok: response.ok,
       status: response.status,
       finalUrl: response.url || url,
-      html
+      html,
+      contentType,
+      profile
     };
   } finally {
     clearTimeout(timeout);
   }
 }
 
+function isBlockedPreviewCandidate(preview, sourceUrl = "") {
+  if (!preview || typeof preview !== "object") return false;
+
+  const title = String(preview.title || "").trim().toLowerCase();
+  const description = String(preview.description || "").trim().toLowerCase();
+  const combined = `${title} ${description}`.trim();
+
+  const blockedMarkers = [
+    "access denied",
+    "just a moment",
+    "attention required",
+    "verify you are human",
+    "enable javascript",
+    "robot or human",
+    "request unsuccessful",
+    "please wait while your request is being verified"
+  ];
+
+  return blockedMarkers.some((marker) => combined.includes(marker));
+}
+
+function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
+  const candidates = previews.filter((preview) => preview && typeof preview === "object");
+  if (!candidates.length) {
+    return { ...emptyPreview };
+  }
+
+  const domain = String(emptyPreview.domain || "").trim().toLowerCase();
+  const isUsefulText = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    return !!normalized && normalized !== domain && normalized !== "source externe";
+  };
+
+  const merged = { ...emptyPreview };
+
+  for (const preview of candidates) {
+    if (!merged.finalUrl && preview.finalUrl) merged.finalUrl = preview.finalUrl;
+    if (!merged.canonicalUrl && preview.canonicalUrl) merged.canonicalUrl = preview.canonicalUrl;
+    if (!merged.url && preview.url) merged.url = preview.url;
+
+    if (!merged.image && preview.image) {
+      merged.image = preview.image;
+    }
+
+    if (!isUsefulText(merged.title) && isUsefulText(preview.title)) {
+      merged.title = preview.title;
+    }
+
+    if (!isUsefulText(merged.description) && isUsefulText(preview.description)) {
+      merged.description = preview.description;
+    } else if (
+      isUsefulText(preview.description) &&
+      String(preview.description).trim().length > String(merged.description || "").trim().length
+    ) {
+      merged.description = preview.description;
+    }
+
+    if (!isUsefulText(merged.siteName) && isUsefulText(preview.siteName)) {
+      merged.siteName = preview.siteName;
+    }
+
+    if (!merged.domain && preview.domain) {
+      merged.domain = preview.domain;
+    }
+  }
+
+  for (const preview of candidates) {
+    if (!merged.image && preview.image) merged.image = preview.image;
+    if (!merged.title && preview.title) merged.title = preview.title;
+    if (!merged.description && preview.description) merged.description = preview.description;
+    if (!merged.siteName && preview.siteName) merged.siteName = preview.siteName;
+    if (!merged.finalUrl && preview.finalUrl) merged.finalUrl = preview.finalUrl;
+    if (!merged.canonicalUrl && preview.canonicalUrl) merged.canonicalUrl = preview.canonicalUrl;
+  }
+
+  if (!merged.title) merged.title = emptyPreview.title;
+  if (!merged.description) merged.description = emptyPreview.description;
+  if (!merged.siteName) merged.siteName = emptyPreview.siteName;
+  if (!merged.finalUrl) merged.finalUrl = emptyPreview.finalUrl;
+  if (!merged.canonicalUrl) merged.canonicalUrl = emptyPreview.canonicalUrl;
+  if (!merged.url) merged.url = emptyPreview.url;
+
+  return merged;
+}
+
 const externalPreviewCache = new Map();
+const EXTERNAL_PREVIEW_CACHE_DIR = "/var/data/external-preview-cache";
+
+function ensureExternalPreviewCacheDir() {
+  try {
+    fs.mkdirSync(EXTERNAL_PREVIEW_CACHE_DIR, { recursive: true });
+  } catch (error) {
+    console.error("Erreur création dossier cache previews externes:", error);
+  }
+}
+
+function getExternalPreviewCacheFilePath(url) {
+  const key = crypto.createHash("sha1").update(String(url || "")).digest("hex");
+  return path.join(EXTERNAL_PREVIEW_CACHE_DIR, `${key}.json`);
+}
+
+function readPersistentPreview(url) {
+  try {
+    ensureExternalPreviewCacheDir();
+    const filePath = getExternalPreviewCacheFilePath(url);
+    if (!fs.existsSync(filePath)) return null;
+
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writePersistentPreview(url, preview) {
+  try {
+    ensureExternalPreviewCacheDir();
+    const filePath = getExternalPreviewCacheFilePath(url);
+    fs.writeFileSync(filePath, JSON.stringify(preview || {}), "utf8");
+  } catch (error) {
+    console.error("Erreur écriture cache preview externe:", error);
+  }
+}
+
+function isMeaningfulPreviewData(preview, sourceUrl = "") {
+  if (!preview || typeof preview !== "object") return false;
+
+  const safeUrl = normalizeExternalUrl(sourceUrl || preview.url || preview.finalUrl || "");
+  const safeDomain = (() => {
+    try {
+      return new URL(safeUrl).hostname.replace(/^www\./, "").toLowerCase();
+    } catch (error) {
+      return String(preview.domain || "").trim().toLowerCase();
+    }
+  })();
+
+  const title = String(preview.title || "").trim().toLowerCase();
+  const description = String(preview.description || "").trim().toLowerCase();
+  const image = String(preview.image || "").trim();
+
+  if (image) return true;
+  if (description && description !== "source externe") return true;
+  if (title && title !== safeDomain && title !== "source externe") return true;
+
+  return false;
+}
 
 function getCachedPreview(url) {
   const entry = externalPreviewCache.get(url);
@@ -518,8 +823,9 @@ function setCachedPreview(url, value, ttlMs = 1000 * 60 * 30) {
   });
 }
 
+
 async function getExternalLinkPreview(sourceUrl) {
-  const safeUrl = String(sourceUrl || "").trim();
+  const safeUrl = normalizeExternalUrl(sourceUrl);
   if (!safeUrl) return null;
 
   let parsedUrl;
@@ -531,6 +837,12 @@ async function getExternalLinkPreview(sourceUrl) {
 
   const cached = getCachedPreview(safeUrl);
   if (cached) return cached;
+
+  const persistedPreview = readPersistentPreview(safeUrl);
+  if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+    setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
+    return persistedPreview;
+  }
 
   const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
   const emptyPreview = {
@@ -544,35 +856,58 @@ async function getExternalLinkPreview(sourceUrl) {
     siteName: domain
   };
 
+  const previewCandidates = [];
+  const strategies = getPreviewFetchStrategies();
+
   try {
-    const fetched = await fetchPreviewHtml(safeUrl, 8000);
-    if (!fetched.ok || !fetched.html) {
-      setCachedPreview(safeUrl, emptyPreview, 1000 * 60 * 5);
-      return emptyPreview;
+    for (const strategy of strategies) {
+      let fetched;
+      try {
+        fetched = await fetchPreviewHtml(safeUrl, strategy.timeoutMs, strategy.profile);
+      } catch (error) {
+        continue;
+      }
+
+      if (!fetched?.ok || !fetched.html) {
+        continue;
+      }
+
+      const candidate = buildPreviewFromHtml(fetched.html, safeUrl, fetched.finalUrl);
+      if (!candidate || isBlockedPreviewCandidate(candidate, safeUrl)) {
+        continue;
+      }
+
+      previewCandidates.push(candidate);
+
+      if (candidate.image && isMeaningfulPreviewData(candidate, safeUrl)) {
+        break;
+      }
     }
 
-    const preview = buildPreviewFromHtml(fetched.html, safeUrl, fetched.finalUrl);
+    const mergedPreview = mergeExternalPreviewCandidates(emptyPreview, previewCandidates);
 
-    if (hasMeaningfulPreview(preview)) {
-      setCachedPreview(safeUrl, preview, 1000 * 60 * 15);
-      return preview;
+    if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
+      setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 60 * 24);
+      writePersistentPreview(safeUrl, mergedPreview);
+      return mergedPreview;
     }
 
-    const fallbackPreview = {
-      ...emptyPreview,
-      finalUrl: fetched.finalUrl || safeUrl,
-      canonicalUrl: fetched.finalUrl || safeUrl,
-      title: preview.title || emptyPreview.title,
-      description: preview.description || emptyPreview.description,
-      image: preview.image || "",
-      siteName: preview.siteName || emptyPreview.siteName
-    };
+    if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+      setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
+      return persistedPreview;
+    }
 
-    setCachedPreview(safeUrl, fallbackPreview, 1000 * 60 * 5);
-    return fallbackPreview;
+    setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 5);
+
+    if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
+      writePersistentPreview(safeUrl, mergedPreview);
+    }
+
+    return mergedPreview;
   } catch (error) {
-    setCachedPreview(safeUrl, emptyPreview, 1000 * 60 * 5);
-    return emptyPreview;
+    const fallback = persistedPreview || emptyPreview;
+    setCachedPreview(safeUrl, fallback, 1000 * 60 * 5);
+    return fallback;
   }
 }
 
@@ -717,7 +1052,7 @@ async function getDebateById(id) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return enrichDebateWithStoredImage(data);
 }
 
 async function getArgumentById(id) {
@@ -728,7 +1063,7 @@ async function getArgumentById(id) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return enrichDebateWithStoredImage(data);
 }
 
 async function getCommentById(id) {
@@ -739,7 +1074,7 @@ async function getCommentById(id) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return enrichDebateWithStoredImage(data);
 }
 
 async function getArgumentsByDebateId(debateId) {
@@ -843,7 +1178,7 @@ async function getVoteRow(argumentId, voterKey) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return enrichDebateWithStoredImage(data);
 }
 
 app.get("/", (req, res) => {
@@ -1032,7 +1367,7 @@ if (!debate) {
 app.post("/api/link-preview", async (req, res) => {
   try {
     const { url } = req.body || {};
-    const safeUrl = String(url || "").trim();
+    const safeUrl = normalizeExternalUrl(url);
 
     if (!safeUrl) {
       return res.status(400).json({ error: "URL manquante." });
@@ -1452,15 +1787,29 @@ app.post("/api/notifications/read-one", async (req, res) => {
 /* =========================
    ADMIN EDIT
 ========================= */
-
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b } = req.body || {};
+    const { question, option_a, option_b, source_url } = req.body || {};
+    const normalizedSourceUrl = normalizeExternalUrl(source_url);
+
+    if (normalizedSourceUrl) {
+      try {
+        await getExternalLinkPreview(normalizedSourceUrl);
+      } catch (error) {
+        console.error("Erreur préchargement aperçu source (admin edit):", error);
+      }
+    }
 
     const { error } = await supabase
       .from("debates")
-      .update({ question, option_a, option_b })
+      .update({
+        question,
+        option_a,
+        option_b,
+        source_url: normalizedSourceUrl || ""
+      })
       .eq("id", req.params.id);
+
 
     if (error) {
       console.error(error);
@@ -1561,6 +1910,7 @@ app.get("/api/debates", async (req, res) => {
 
       return {
         ...d,
+        image_url: getDebateStoredImageUrl(d.id),
         argument_count,
         last_argument_at,
         votes_a,
@@ -1587,14 +1937,38 @@ app.get("/api/debates", async (req, res) => {
 
 app.post("/api/debates", async (req, res) => {
   try {
-    const { question, category, source_url, type, option_a, option_b, creatorKey } = req.body || {};
+    const { question, category, source_url, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
+    const normalizedSourceUrl = normalizeExternalUrl(source_url);
+    const normalizedResourceMode = ["none", "source", "image"].includes(String(resource_mode || ""))
+      ? String(resource_mode)
+      : "none";
+
+    if (normalizedResourceMode === "source" && !normalizedSourceUrl) {
+      return res.status(400).json({ error: "Lien source manquant." });
+    }
+
+    if (normalizedResourceMode === "image" && !image_upload) {
+      return res.status(400).json({ error: "Image manquante." });
+    }
+
+    if (normalizedSourceUrl && image_upload) {
+      return res.status(400).json({ error: "Choisis soit un lien source, soit une image importée." });
+    }
+
+    if (normalizedSourceUrl) {
+      try {
+        await getExternalLinkPreview(normalizedSourceUrl);
+      } catch (error) {
+        console.error("Erreur préchargement aperçu source (create debate):", error);
+      }
+    }
 
     const { data, error } = await supabase
       .from("debates")
       .insert({
         question,
         category,
-        source_url: source_url || "",
+        source_url: normalizedSourceUrl || "",
         type: type || "debate",
         option_a,
         option_b,
@@ -1607,6 +1981,18 @@ app.post("/api/debates", async (req, res) => {
     if (error) {
       console.error(error);
       return res.status(500).json({ error: "Erreur création débat." });
+    }
+
+    if (image_upload) {
+      try {
+        const storedImageUrl = saveUploadedDebateImage(data.id, image_upload);
+        setDebateStoredImageUrl(data.id, storedImageUrl);
+      } catch (imageError) {
+        console.error(imageError);
+        return res.status(400).json({ error: "Erreur enregistrement image." });
+      }
+    } else {
+      setDebateStoredImageUrl(data.id, "");
     }
 
     res.json({ id: data.id });

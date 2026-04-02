@@ -146,14 +146,49 @@
 </div>
 
 <div class="form-group create-form-group">
-  <label for="source_url">Lien source (facultatif)</label>
+  <label>Contenu associé (facultatif)</label>
+
+  <div class="create-resource-toggle">
+    <label class="create-resource-option">
+      <input type="radio" name="resource-mode" value="none" checked>
+      <span>Aucun</span>
+    </label>
+
+    <label class="create-resource-option">
+      <input type="radio" name="resource-mode" value="source">
+      <span>Lien source</span>
+    </label>
+
+    <label class="create-resource-option">
+      <input type="radio" name="resource-mode" value="image">
+      <span>Importer une image</span>
+    </label>
+  </div>
+
+  <small>Choisis une seule option : aucun contenu, un lien source ou une image importée.</small>
+</div>
+
+<div id="source-url-group" class="form-group create-form-group create-resource-panel" style="display:none;">
+  <label for="source_url">Lien source</label>
   <input
     id="source_url"
     type="url"
     maxlength="500"
     placeholder="https://..."
+    disabled
   >
   <small>Ajoute un lien vers un article, une vidéo ou une source utile pour contextualiser la question.</small>
+</div>
+
+<div id="image-upload-group" class="form-group create-form-group create-resource-panel" style="display:none;">
+  <label for="debate_image_file">Image du débat</label>
+  <input
+    id="debate_image_file"
+    type="file"
+    accept="image/png,image/jpeg,image/webp,image/gif"
+    disabled
+  >
+  <small>Importe une seule image. Le lien source devient alors indisponible.</small>
 </div>
 
 <div id="positions-fields" class="positions-grid create-positions-grid">
