@@ -3353,7 +3353,7 @@ body.page-debate .topbar::after {
 #debate-source-preview-wrap {
   width: 100%;
   max-width: 980px;
-  margin: 0 auto 18px auto;
+  margin: 14px auto 18px auto;
 }
 
 .debate-source-preview,
@@ -3629,12 +3629,12 @@ body.debate-topbar-hidden .debate-hero-top {
 
 .debate-source-preview-wrap {
   max-width: 100%;
-  margin: 0 auto 14px auto;
+  margin: 10 auto 14px auto;
 }
 
 #debate-source-preview-wrap {
   max-width: 100%;
-  margin: 0 auto 14px auto;
+  margin: 10 auto 14px auto;
 }
 
 .debate-source-preview,
