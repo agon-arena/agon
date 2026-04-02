@@ -4041,6 +4041,19 @@ async function initCreate() {
   const questionInput = document.getElementById("question");
   const similarBox = document.getElementById("similar-debates-box");
   const similarList = document.getElementById("similar-debates-list");
+
+const submitButton = form.querySelector(".create-submit-button");
+const submitButtonInitialText = submitButton ? submitButton.innerHTML : "";
+
+function resetCreateSubmitButton() {
+  hideNotificationTransitionOverlay();
+
+  if (!submitButton) return;
+  submitButton.disabled = false;
+  submitButton.classList.remove("create-submit-loading");
+  submitButton.innerHTML = submitButtonInitialText;
+}
+
 const typeInputs = document.querySelectorAll('input[name="debate-type"]');
 const resourceInputs = document.querySelectorAll('input[name="resource-mode"]');
 
@@ -4146,107 +4159,132 @@ if (resourceInputs.length) {
       renderSimilarDebates(e.target.value);
     });
   }
-
-  form.addEventListener("submit", async e => {
-    e.preventDefault();
-
-const question = document.getElementById("question").value.trim();
-const category = document.getElementById("category").value.trim();
-const resourceMode = getSelectedCreateResourceMode();
-const source_url = resourceMode === "source"
-  ? document.getElementById("source_url").value.trim()
-  : "";
-const imageFile = resourceMode === "image"
-  ? document.getElementById("debate_image_file").files?.[0] || null
-  : null;
-const selectedType =
-  document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
-
-const option_a = selectedType === "open"
-  ? ""
-  : document.getElementById("option_a").value.trim();
-
-const option_b = selectedType === "open"
-  ? ""
-  : document.getElementById("option_b").value.trim();
-
-if (selectedType !== "open" && (!option_a || !option_b)) {
-  showReplacementSuccessMessage(
-    "Positions manquantes",
-    "Tu dois renseigner les deux positions avant de créer un débat.",
-    null,
-    "⚠️"
-  );
-  return;
+function resetCreateSubmitButton() {
+  if (!submitButton) return;
+  submitButton.disabled = false;
+  submitButton.classList.remove("create-submit-loading");
+  submitButton.innerHTML = submitButtonInitialText;
 }
 
-if (resourceMode === "source" && !source_url) {
-  showReplacementSuccessMessage(
-    "Lien manquant",
-    "Tu as choisi le mode lien source, mais aucun lien n’a été renseigné.",
-    null,
-    "⚠️"
-  );
-  return;
-}
+form.addEventListener("submit", async e => {
+  e.preventDefault();
 
-if (resourceMode === "image" && !imageFile) {
-  showReplacementSuccessMessage(
-    "Image manquante",
-    "Tu as choisi l’import d’image, mais aucun fichier n’a été sélectionné.",
-    null,
-    "⚠️"
-  );
-  return;
-}
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.classList.add("create-submit-loading");
+    submitButton.innerHTML = '<span class="create-submit-spinner" aria-hidden="true"></span><span>Publication...</span>';
+  }
 
-if (imageFile && !/^image\//i.test(imageFile.type || "")) {
-  showReplacementSuccessMessage(
-    "Format non pris en charge",
-    "Le fichier sélectionné n’est pas une image valide.",
-    null,
-    "⚠️"
-  );
-  return;
-}
-
-const confirmed = await showDebatePublishConfirmModal();
-
-if (!confirmed) {
-  return;
-}
-
-try {
-  const image_upload = imageFile
-    ? {
-        name: imageFile.name || "image",
-        type: imageFile.type || "",
-        dataUrl: await readFileAsDataUrl(imageFile)
-      }
+  const question = document.getElementById("question").value.trim();
+  const category = document.getElementById("category").value.trim();
+  const resourceMode = getSelectedCreateResourceMode();
+  const source_url = resourceMode === "source"
+    ? document.getElementById("source_url").value.trim()
+    : "";
+  const imageFile = resourceMode === "image"
+    ? document.getElementById("debate_image_file").files?.[0] || null
     : null;
+  const selectedType =
+    document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
-  const r = await fetchJSON(API + "/debates", {
+  const option_a = selectedType === "open"
+    ? ""
+    : document.getElementById("option_a").value.trim();
 
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-body: JSON.stringify({
-  question,
-  category,
-  source_url,
-  resource_mode: resourceMode,
-  image_upload,
-  type: selectedType,
-  option_a,
-  option_b,
-  creatorKey: getKey()
-})
-      });
+  const option_b = selectedType === "open"
+    ? ""
+    : document.getElementById("option_b").value.trim();
 
-      location = "/debate?id=" + r.id;
-    } catch (error) {
-      alert(error.message);
+  if (selectedType !== "open" && (!option_a || !option_b)) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Positions manquantes",
+      "Tu dois renseigner les deux positions avant de créer un débat.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  if (resourceMode === "source" && !source_url) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Lien manquant",
+      "Tu as choisi le mode lien source, mais aucun lien n’a été renseigné.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  if (resourceMode === "image" && !imageFile) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Image manquante",
+      "Tu as choisi l’import d’image, mais aucun fichier n’a été sélectionné.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  if (imageFile && !/^image\//i.test(imageFile.type || "")) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Format non pris en charge",
+      "Le fichier sélectionné n’est pas une image valide.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  const confirmed = await showDebatePublishConfirmModal();
+
+  if (!confirmed) {
+    resetCreateSubmitButton();
+    return;
+  }
+showNotificationTransitionOverlay("Publication de l’arène en cours…");
+  try {
+
+
+    const image_upload = imageFile
+      ? {
+          name: imageFile.name || "image",
+          type: imageFile.type || "",
+          dataUrl: await readFileAsDataUrl(imageFile)
+        }
+      : null;
+
+    const r = await fetchJSON(API + "/debates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        category,
+        source_url,
+        resource_mode: resourceMode,
+        image_upload,
+        type: selectedType,
+        option_a,
+        option_b,
+        creatorKey: getKey()
+      })
+    });
+
+    location = "/debate?id=" + r.id;
+  } catch (error) {
+    resetCreateSubmitButton();
+    alert(error.message);
+  } finally {
+    if (!window.location.href.includes("/debate?id=")) {
+      resetCreateSubmitButton();
     }
-  });
+  }
+});
+
+
 }
 function normalizeText(value) {
   return String(value || "")
