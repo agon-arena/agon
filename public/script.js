@@ -1189,25 +1189,164 @@ function getDomainLabel(url) {
   }
 }
 
-function buildSourcePreviewCardHtml(preview) {
-  const safePreview = preview || {};
-  const safeUrl = String(safePreview.finalUrl || safePreview.url || "").trim();
-  const domain = safePreview.siteName || safePreview.domain || getDomainLabel(safeUrl);
-  const title = String(safePreview.title || domain || "Source externe").trim();
-  const description = String(safePreview.description || "").trim();
-  const image = String(safePreview.image || "").trim();
-  const linkLabel = image ? "Ouvrir l'article" : "Ouvrir la source";
+function truncateSourcePreviewText(text, maxLength = 240) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function pickFirstSourcePreviewValue(...values) {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized) return normalized;
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      const picked = pickFirstSourcePreviewValue(...value);
+      if (picked) return picked;
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      const picked = pickFirstSourcePreviewValue(
+        value.url,
+        value.secure_url,
+        value.src,
+        value.href,
+        value.content,
+        value.image,
+        value.thumbnail
+      );
+      if (picked) return picked;
+    }
+  }
+
+  return "";
+}
+
+function normalizeSourcePreviewData(preview, sourceUrl = "") {
+  const safePreview = preview && typeof preview === "object" ? preview : {};
+  const safeUrl = pickFirstSourcePreviewValue(
+    safePreview.finalUrl,
+    safePreview.canonicalUrl,
+    safePreview.url,
+    sourceUrl
+  );
+  const domain = pickFirstSourcePreviewValue(
+    safePreview.siteName,
+    safePreview.domain,
+    safePreview.publisher,
+    safePreview.provider,
+    safePreview.source,
+    getDomainLabel(safeUrl || sourceUrl)
+  ) || "Source externe";
+  const title = pickFirstSourcePreviewValue(
+    safePreview.title,
+    safePreview.ogTitle,
+    safePreview.metaTitle,
+    safePreview.headline,
+    safePreview.name,
+    domain,
+    "Source externe"
+  ) || "Source externe";
+  const description = truncateSourcePreviewText(
+    pickFirstSourcePreviewValue(
+      safePreview.description,
+      safePreview.ogDescription,
+      safePreview.metaDescription,
+      safePreview.excerpt,
+      safePreview.summary,
+      safePreview.text,
+      safePreview.content,
+      safePreview.snippet
+    ),
+    240
+  );
+  const image = pickFirstSourcePreviewValue(
+    safePreview.image,
+    safePreview.imageUrl,
+    safePreview.thumbnail,
+    safePreview.thumbnailUrl,
+    safePreview.ogImage,
+    safePreview.cover,
+    safePreview.poster,
+    safePreview.posterUrl,
+    safePreview.media?.image,
+    safePreview.images
+  );
+
+  return {
+    url: safeUrl,
+    domain,
+    title,
+    description,
+    image
+  };
+}
+
+function isWeakSourcePreviewData(preview, sourceUrl = "") {
+  const normalized = normalizeSourcePreviewData(preview, sourceUrl);
+  const title = String(normalized.title || "").trim().toLowerCase();
+  const description = String(normalized.description || "").trim().toLowerCase();
+  const image = String(normalized.image || "").trim();
+
+  if (!title || title === "source externe") return true;
+  if (!image && (!description || description === "source externe")) return true;
+
+  const blockedMarkers = [
+    "access denied",
+    "just a moment",
+    "attention required",
+    "enable javascript",
+    "verify you are human"
+  ];
+
+  return blockedMarkers.some((marker) => title.includes(marker) || description.includes(marker));
+}
+
+function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
+  const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
+  const safeUrl = normalizedPreview.url || String(sourceUrl || "").trim() || "#";
+  const domain = normalizedPreview.domain || "Source externe";
+  const title = normalizedPreview.title || domain;
+  const description = normalizedPreview.description || "";
+  const image = normalizedPreview.image || "";
 
   return `
-    <a class="debate-source-card" href="${escapeAttribute(safeUrl)}" target="_blank" rel="noopener noreferrer">
-      ${image ? `<div class="debate-source-card-image-wrap"><img class="debate-source-card-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(title)}" loading="lazy"></div>` : ""}
-      <div class="debate-source-card-body">
-        <div class="debate-source-card-domain">🔗 ${escapeHtml(domain || "Source externe")}</div>
-        <div class="debate-source-card-title">${escapeHtml(title || "Source externe")}</div>
-        ${description ? `<div class="debate-source-card-description">${escapeHtml(description)}</div>` : ""}
-        <span class="debate-source-link">${escapeHtml(linkLabel)}</span>
+    <div
+      class="debate-source-card"
+      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+    >
+      ${image ? `
+        <div class="debate-source-card-image-wrap" style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
+          <img
+            class="debate-source-card-image"
+            src="${escapeAttribute(image)}"
+            alt="${escapeAttribute(title)}"
+            loading="lazy"
+            style="display:block; width:100%; height:100%; object-fit:cover;"
+            onerror="this.closest('.debate-source-card-image-wrap')?.remove();"
+          >
+        </div>
+      ` : ""}
+      <div class="debate-source-card-body" style="padding:16px 16px 18px; display:flex; flex-direction:column; gap:10px;">
+        <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">${escapeHtml(domain)}</div>
+        <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
+        ${description ? `<div class="debate-source-card-description" style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>` : ""}
+        <div>
+          <a
+            class="debate-source-link"
+            href="${escapeAttribute(safeUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
+          >↗ Ouvrir la source</a>
+        </div>
       </div>
-    </a>
+    </div>
   `;
 }
 
@@ -3090,7 +3229,7 @@ function ensureCategoryFilterVisualStyles() {
       width: 100%;
       flex: 0 0 100%;
       order: 99;
-      margin: 6px 0 0;
+      margin: 2px 0 0;
       padding: 0;
       border: none;
       border-radius: 0;
@@ -3188,7 +3327,7 @@ function ensureCategoryFilterVisualStyles() {
   flex: 0 0 100%;
   order: 99;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
       .index-theme-filter-label {
@@ -3229,22 +3368,14 @@ function ensureCategoryFilterControl() {
 
   ensureCategoryFilterVisualStyles();
 
+  let select = document.getElementById("filter-theme");
+  if (select) {
+    updateCategoryFilterVisualState();
+    return select;
+  }
 
-let select = document.getElementById("filter-theme");
-if (select) {
-  updateCategoryFilterVisualState();
-  return select;
-}
-
-
-
-  const filtersContainer =
-    document.getElementById("filter-all")?.parentElement ||
-    searchInput.parentElement ||
-    searchInput.closest("section") ||
-    searchInput.parentElement;
-
-  if (!filtersContainer) return null;
+  const themeFilterSlot = document.getElementById("theme-filter-slot");
+  if (!themeFilterSlot) return null;
 
   const wrap = document.createElement("div");
   wrap.id = "filter-theme-wrap";
@@ -3272,15 +3403,8 @@ if (select) {
   wrap.appendChild(select);
   wrap.appendChild(badge);
 
-
-
-const searchBox = searchInput.closest(".search-box");
-
-if (searchBox && searchBox.parentElement === filtersContainer) {
-  filtersContainer.insertBefore(wrap, searchBox.nextSibling);
-} else {
-  filtersContainer.appendChild(wrap);
-}
+  themeFilterSlot.innerHTML = "";
+  themeFilterSlot.appendChild(wrap);
 
   updateCategoryFilterVisualState();
   return select;
@@ -4312,29 +4436,7 @@ const debateSourcePreviewState = {
 };
 
 
-let debateSourceFallbackTemplate = null;
 let xWidgetsLoaderPromise = null;
-
-function getDebateSourceFallbackTemplate() {
-  const sourceFallback = document.getElementById("debate-source-fallback");
-  if (!sourceFallback) return "";
-
-  if (debateSourceFallbackTemplate === null) {
-    debateSourceFallbackTemplate = sourceFallback.innerHTML;
-  }
-
-  return debateSourceFallbackTemplate;
-}
-
-function restoreDebateSourceFallbackTemplate() {
-  const sourceFallback = document.getElementById("debate-source-fallback");
-  if (!sourceFallback) return;
-
-  const template = getDebateSourceFallbackTemplate();
-  if (template) {
-    sourceFallback.innerHTML = template;
-  }
-}
 
 function isXStatusUrl(url) {
   try {
@@ -4403,7 +4505,6 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     return;
   }
 
-  restoreDebateSourceFallbackTemplate();
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "flex";
@@ -4465,8 +4566,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     }
   } catch (error) {
     sourceFallback.classList.remove("debate-source-fallback-x");
-    restoreDebateSourceFallbackTemplate();
-    if (sourceLoading) {
+      if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
@@ -4485,8 +4585,6 @@ function resetDebateSourcePreview() {
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourcePreview = document.getElementById("debate-source-preview");
   const sourceFallback = document.getElementById("debate-source-fallback");
-  const sourceDomain = document.getElementById("debate-source-domain");
-  const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
   const sourcePoster = document.getElementById("debate-source-preview-poster");
   const sourcePosterImg = document.getElementById("debate-source-preview-poster-img");
   const sourceLoading = document.getElementById("debate-source-preview-loading");
@@ -4520,24 +4618,14 @@ function resetDebateSourcePreview() {
 
   if (sourceFallback) {
     sourceFallback.classList.remove("debate-source-fallback-x");
-    restoreDebateSourceFallbackTemplate();
-    sourceFallback.style.display = "none";
+      sourceFallback.style.display = "none";
   }
 
-  if (sourceDomain) {
-    sourceDomain.textContent = "";
-  }
-
-  if (sourceFallbackLink) {
-    sourceFallbackLink.href = "#";
-  }
 }
 
 function showDebateSourceFallback(sourceUrl, preview = null) {
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
-  const sourceDomain = document.getElementById("debate-source-domain");
-  const sourceFallbackLink = document.getElementById("debate-source-fallback-link");
   const sourceLoading = document.getElementById("debate-source-preview-loading");
 
   if (sourcePreviewWrap) {
@@ -4550,24 +4638,34 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   if (!sourceFallback) return;
 
-  const domain = getDomainLabel(sourceUrl);
-  const fallbackPreview = preview || {
-    url: sourceUrl,
-    domain,
-    title: domain,
-    description: "Source externe",
-    image: ""
-  };
+  const fallbackPreview = normalizeSourcePreviewData(preview, sourceUrl);
 
-  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview);
+  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
 
-  if (sourceDomain) {
-    sourceDomain.textContent = "";
-  }
+}
 
-  if (sourceFallbackLink) {
-    sourceFallbackLink.href = sourceUrl;
+async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
+  const safeUrl = String(sourceUrl || "").trim();
+  if (!safeUrl) return;
+  if (!isWeakSourcePreviewData(preview, safeUrl)) return;
+
+  try {
+    const response = await fetchJSON(API + "/link-preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ url: safeUrl })
+    });
+
+    if (!response?.preview || isWeakSourcePreviewData(response.preview, safeUrl)) {
+      return;
+    }
+
+    renderDebateSourcePreview(safeUrl, response.preview);
+  } catch (error) {
+    console.error(error);
   }
 }
 
@@ -4709,7 +4807,9 @@ saveVisitedDebate(id);
   document.getElementById("debate-question").textContent = data.debate.question;
 
 const sourceUrl = String(data.debate.source_url || "").trim();
-renderDebateSourcePreview(sourceUrl, data.sourcePreview || null);
+const initialSourcePreview = data.sourcePreview || null;
+renderDebateSourcePreview(sourceUrl, initialSourcePreview);
+hydrateDebateSourcePreviewIfNeeded(sourceUrl, initialSourcePreview);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
@@ -5277,25 +5377,6 @@ return `
     </button>
   </div>
 
-  ${isAdmin() ? `
-    <div class="admin-argument-actions">
-      <button
-        class="button button-small"
-        type="button"
-        onclick="editArgument('${a.id}')"
-      >
-        Modifier l'idée
-      </button>
-
-      <button
-        class="delete-button"
-        type="button"
-        onclick="deleteArgument('${debateId}','${a.id}')"
-      >
-        Supprimer l'idée
-      </button>
-    </div>
-  ` : ""}
 </div>
 
 

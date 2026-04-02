@@ -313,6 +313,10 @@ main {
   gap: 16px;
 }
 
+#theme-filter-slot {
+  margin-top: -14px;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -815,8 +819,19 @@ body.debate-topbar-hidden .debate-hero-top{
   align-items: center;
   justify-content: center;
   gap: 16px;
-  min-height: 56px;
+  min-height: 36px;
   margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .debate-title-row {
+    min-height: 0;
+    gap: 8px;
+  }
+
+  #global-share-bar {
+    margin-top: 2px;
+  }
 }
 
 /* flèche + cloche à droite du titre */
@@ -2443,8 +2458,8 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 #global-share-bar{
-  margin-top:12px;
-  margin-bottom:0px;
+  margin-top:0px;
+  margin-bottom:0;
 }
 
 #global-share-bar .share-bar{
@@ -3353,7 +3368,13 @@ body.page-debate .topbar::after {
 #debate-source-preview-wrap {
   width: 100%;
   max-width: 980px;
-  margin: 14px auto 18px auto;
+  margin: 0px auto 18px auto;
+}
+@media (max-width: 768px) {
+  #debate-source-preview-wrap {
+    max-width: 100%;
+    margin: 0px auto 14px auto;
+  }
 }
 
 .debate-source-preview,
@@ -4304,6 +4325,9 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .debates-section {
     gap: 14px;
   }
+.page-home-mobile #theme-filter-slot {
+  margin-top: -4px;
+}
 
 .page-home-mobile #visited-theme-filter-slot {
   width: 100%;
@@ -5829,4 +5853,12 @@ body.debate-topbar-hidden .debate-hero-top {
   .debate-source-card-description {
     font-size: 14px;
   }
+}
+#theme-filter-slot {
+  width: 100%;
+  margin-top: 8px;
+}
+
+#theme-filter-slot .index-theme-filter-wrap {
+  width: 100%;
 }

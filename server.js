@@ -62,23 +62,15 @@ function decodeHtmlEntities(value) {
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/gi, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\\\//g, "/");
 }
 
 function cleanPreviewText(value, maxLength = 240) {
   const text = decodeHtmlEntities(String(value ?? "").replace(/\s+/g, " ").trim());
   if (!text) return "";
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-}
-
-function extractMetaContent(html, patterns) {
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    const value = match?.[1] || match?.[2] || "";
-    const cleaned = cleanPreviewText(value, 500);
-    if (cleaned) return cleaned;
-  }
-  return "";
 }
 
 function resolvePreviewUrl(rawUrl, baseUrl) {
@@ -89,6 +81,441 @@ function resolvePreviewUrl(rawUrl, baseUrl) {
   } catch (error) {
     return value;
   }
+}
+
+function extractTitleTagContent(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return cleanPreviewText(match?.[1] || "", 500);
+}
+
+function parseMetaTags(html) {
+  const tags = [];
+  const regex = /<meta\b[^>]*>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const tag = match[0];
+    const attrs = {};
+    const attrRegex = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>/]+))/g;
+    let attrMatch;
+
+    while ((attrMatch = attrRegex.exec(tag)) !== null) {
+      const key = String(attrMatch[1] || "").toLowerCase();
+      const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
+      attrs[key] = value;
+    }
+
+    if (Object.keys(attrs).length) {
+      tags.push(attrs);
+    }
+  }
+
+  return tags;
+}
+
+function getMetaValues(metaTags, keys) {
+  const wanted = keys.map((key) => String(key || "").toLowerCase());
+  const values = [];
+
+  for (const tag of metaTags) {
+    const ref = String(tag.property || tag.name || tag.itemprop || "").toLowerCase();
+    if (!ref || !wanted.includes(ref)) continue;
+
+    const content = cleanPreviewText(tag.content || tag.value || "", 500);
+    if (content) values.push(content);
+  }
+
+  return values;
+}
+
+function getFirstMetaValue(metaTags, keys) {
+  return getMetaValues(metaTags, keys)[0] || "";
+}
+
+function extractLinkHref(html, relName) {
+  const regex = /<link\b[^>]*>/gi;
+  let match;
+  const wanted = String(relName || "").toLowerCase();
+
+  while ((match = regex.exec(html)) !== null) {
+    const tag = match[0];
+    const attrs = {};
+    const attrRegex = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>/]+))/g;
+    let attrMatch;
+
+    while ((attrMatch = attrRegex.exec(tag)) !== null) {
+      const key = String(attrMatch[1] || "").toLowerCase();
+      const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
+      attrs[key] = value;
+    }
+
+    const rel = String(attrs.rel || "").toLowerCase();
+    if (rel !== wanted) continue;
+
+    const href = String(attrs.href || "").trim();
+    if (href) return href;
+  }
+
+  return "";
+}
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+}
+
+function walkStructuredData(node, bucket = []) {
+  if (!node) return bucket;
+  if (Array.isArray(node)) {
+    node.forEach((item) => walkStructuredData(item, bucket));
+    return bucket;
+  }
+  if (typeof node === "object") {
+    bucket.push(node);
+    for (const value of Object.values(node)) {
+      walkStructuredData(value, bucket);
+    }
+  }
+  return bucket;
+}
+
+function extractJsonLdObjects(html) {
+  const blocks = [];
+  const regex = /<script\b[^>]*type\s*=\s*(?:"application\/ld\+json"|'application\/ld\+json')[^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const raw = String(match[1] || "").trim();
+    if (!raw) continue;
+    const parsed = safeJsonParse(raw);
+    if (parsed) {
+      walkStructuredData(parsed, blocks);
+    }
+  }
+
+  return blocks;
+}
+
+function pickStructuredValue(objects, keys) {
+  const wanted = keys.map((key) => String(key || "").toLowerCase());
+
+  for (const obj of objects) {
+    if (!obj || typeof obj !== "object") continue;
+
+    for (const [key, value] of Object.entries(obj)) {
+      if (!wanted.includes(String(key).toLowerCase())) continue;
+
+      if (typeof value === "string") {
+        const cleaned = cleanPreviewText(value, 500);
+        if (cleaned) return cleaned;
+      }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === "string") {
+            const cleaned = cleanPreviewText(item, 500);
+            if (cleaned) return cleaned;
+          }
+          if (item && typeof item === "object") {
+            const nested = pickStructuredValue([item], ["url", "contentUrl", "thumbnailUrl", "name", "headline"]);
+            if (nested) return nested;
+          }
+        }
+      }
+
+      if (value && typeof value === "object") {
+        const nested = pickStructuredValue([value], ["url", "contentUrl", "thumbnailUrl", "name", "headline"]);
+        if (nested) return nested;
+      }
+    }
+  }
+
+  return "";
+}
+
+
+function extractHeadingTagContent(html) {
+  const h1Match = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1Match?.[1]) {
+    return cleanPreviewText(stripHtmlTags(h1Match[1]), 500);
+  }
+
+  const h2Match = html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i);
+  if (h2Match?.[1]) {
+    return cleanPreviewText(stripHtmlTags(h2Match[1]), 500);
+  }
+
+  return "";
+}
+
+function extractJsonLikeValueFromScripts(html, keys, maxLength = 500) {
+  const scripts = html.match(/<script\b[^>]*>([\s\S]*?)<\/script>/gi) || [];
+  const wanted = keys
+    .map((key) => String(key || "").trim())
+    .filter(Boolean)
+    .map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+  if (!wanted.length) return "";
+
+  const valuePatterns = [
+    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')`, 'i'),
+    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*\{[^}]*?(?:"|')url(?:"|')\\s*:\\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')`, 'i')
+  ];
+
+  for (const scriptTag of scripts) {
+    for (const pattern of valuePatterns) {
+      const match = scriptTag.match(pattern);
+      const rawValue = match?.[2] || match?.[3] || match?.[4] || match?.[5] || "";
+      const cleaned = cleanPreviewText(rawValue, maxLength);
+      if (cleaned) return cleaned;
+    }
+  }
+
+  return "";
+}
+
+function extractRawImageUrlsFromHtml(html, baseUrl) {
+  const urlPattern = /https?:\/\/[^"'\s<>]+?(?:jpe?g|png|webp|avif)(?:\?[^"'\s<>]*)?/gi;
+  const found = html.match(urlPattern) || [];
+  const candidates = [];
+
+  for (const rawUrl of found) {
+    const resolved = resolvePreviewUrl(rawUrl, baseUrl);
+    const score = scorePreviewImageCandidate(resolved);
+    if (score >= 0) {
+      candidates.push({ url: resolved, score });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0]?.url || "";
+}
+
+function stripHtmlTags(value) {
+  return decodeHtmlEntities(String(value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+}
+
+function scorePreviewImageCandidate(url) {
+  const value = String(url || "").trim().toLowerCase();
+  if (!value) return -1;
+  if (!/^https?:\/\//.test(value) && !value.startsWith("//") && !value.startsWith("/")) return -1;
+
+  let score = 0;
+  if (/\.(jpe?g|png|webp|avif)(?:$|[?#])/.test(value)) score += 4;
+  if (/upload|media|image|img|photo|visuel|illustration|article/.test(value)) score += 3;
+  if (/logo|icon|avatar|sprite|ads|pub|banner|placeholder|amphtml|apple-touch/.test(value)) score -= 6;
+  if (/\.svg(?:$|[?#])/.test(value)) score -= 5;
+  return score;
+}
+
+function extractBestImageFromHtml(html, baseUrl) {
+  const imgRegex = /<img\b[^>]*>/gi;
+  const candidates = [];
+  let match;
+
+  while ((match = imgRegex.exec(html)) !== null) {
+    const tag = match[0];
+    const attrs = {};
+    const attrRegex = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>/]+))/g;
+    let attrMatch;
+
+    while ((attrMatch = attrRegex.exec(tag)) !== null) {
+      const key = String(attrMatch[1] || "").toLowerCase();
+      const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
+      attrs[key] = value;
+    }
+
+    const raw = attrs.src || attrs["data-src"] || attrs["data-lazy-src"] || attrs["data-original"] || attrs["data-url"] || attrs["srcset"] || attrs["data-srcset"] || "";
+    if (!raw) continue;
+
+    let selected = String(raw).split(",")[0].trim().split(/\s+/)[0].trim();
+    if (!selected) continue;
+
+    const resolved = resolvePreviewUrl(selected, baseUrl);
+    const score = scorePreviewImageCandidate(resolved);
+    if (score < 0) continue;
+
+    const width = Number(attrs.width || 0);
+    const height = Number(attrs.height || 0);
+    const areaBonus = width >= 300 || height >= 150 ? 2 : 0;
+    candidates.push({ url: resolved, score: score + areaBonus });
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0]?.url || "";
+}
+
+function extractBodyTextSummary(html) {
+  const paragraphRegex = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+  const candidates = [];
+  let match;
+
+  while ((match = paragraphRegex.exec(html)) !== null) {
+    const text = cleanPreviewText(stripHtmlTags(match[1] || ""), 420);
+    if (!text) continue;
+    if (text.length < 80) continue;
+    if (/cookies|publicité|newsletter|inscrivez-vous|javascript|abonnez-vous|se connecter/i.test(text)) continue;
+    candidates.push(text);
+    if (candidates.length >= 8) break;
+  }
+
+  return candidates[0] || "";
+}
+
+function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
+  const metaTags = parseMetaTags(html);
+  const jsonLdObjects = extractJsonLdObjects(html);
+  const baseUrl = finalUrl || requestedUrl;
+  const domain = (() => {
+    try {
+      return new URL(baseUrl).hostname.replace(/^www\./, "").toLowerCase();
+    } catch (error) {
+      return "";
+    }
+  })();
+
+  const canonicalUrl = resolvePreviewUrl(
+    getFirstMetaValue(metaTags, ["og:url"]) || extractLinkHref(html, "canonical"),
+    baseUrl
+  );
+
+  const title = cleanPreviewText(
+    getFirstMetaValue(metaTags, ["og:title", "twitter:title"]) ||
+      pickStructuredValue(jsonLdObjects, ["headline", "name"]) ||
+      extractJsonLikeValueFromScripts(html, ["headline", "title", "name", "seoTitle"], 500) ||
+      extractHeadingTagContent(html) ||
+      extractTitleTagContent(html) ||
+      domain,
+    500
+  );
+
+  const description = cleanPreviewText(
+    getFirstMetaValue(metaTags, ["og:description", "twitter:description", "description"]) ||
+      pickStructuredValue(jsonLdObjects, ["description", "abstract"]) ||
+      extractJsonLikeValueFromScripts(html, ["description", "seoDescription", "summary", "excerpt", "standfirst"], 500) ||
+      extractBodyTextSummary(html),
+    500
+  );
+
+  const rawImage =
+    getFirstMetaValue(metaTags, [
+      "og:image:secure_url",
+      "og:image:url",
+      "og:image",
+      "twitter:image:src",
+      "twitter:image",
+      "image",
+      "thumbnail",
+      "thumbnailurl"
+    ]) ||
+    pickStructuredValue(jsonLdObjects, ["image", "thumbnailUrl", "url", "contentUrl"]) ||
+    extractJsonLikeValueFromScripts(html, ["image", "imageUrl", "thumbnailUrl", "heroImage", "coverImage", "socialImage", "src", "url"], 1000) ||
+    extractBestImageFromHtml(html, baseUrl) ||
+    extractRawImageUrlsFromHtml(html, baseUrl);
+
+  const image = resolvePreviewUrl(rawImage, baseUrl);
+
+  const siteName = cleanPreviewText(
+    getFirstMetaValue(metaTags, ["og:site_name", "application-name", "twitter:site"]) ||
+      pickStructuredValue(jsonLdObjects, ["publisher", "provider", "sourceOrganization"]) ||
+      extractJsonLikeValueFromScripts(html, ["publisher", "siteName", "brand", "provider", "source"], 160) ||
+      domain,
+    160
+  );
+
+  return {
+    url: requestedUrl,
+    finalUrl: canonicalUrl || finalUrl || requestedUrl,
+    canonicalUrl: canonicalUrl || finalUrl || requestedUrl,
+    domain,
+    title: title || domain,
+    description,
+    image,
+    siteName: siteName || domain
+  };
+}
+
+function hasMeaningfulPreview(preview) {
+  if (!preview) return false;
+
+  const domain = String(preview.domain || "").trim().toLowerCase();
+  const title = String(preview.title || "").trim().toLowerCase();
+  const description = String(preview.description || "").trim().toLowerCase();
+  const image = String(preview.image || "").trim();
+
+  if (image && title && title !== domain && title !== "source externe") return true;
+  if (image && description && description !== "source externe") return true;
+  if (title && title !== domain && title !== "source externe" && description && description !== "source externe") return true;
+
+  return false;
+}
+
+function buildBrowserLikeHeaders(url) {
+  let host = "";
+  try {
+    host = new URL(url).origin;
+  } catch (error) {
+    host = "https://www.google.com";
+  }
+
+  return {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Referer": host
+  };
+}
+
+async function fetchPreviewHtml(url, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      headers: buildBrowserLikeHeaders(url),
+      redirect: "follow",
+      signal: controller.signal
+    });
+
+    const html = response.ok ? await response.text() : "";
+    return {
+      ok: response.ok,
+      status: response.status,
+      finalUrl: response.url || url,
+      html
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const externalPreviewCache = new Map();
+
+function getCachedPreview(url) {
+  const entry = externalPreviewCache.get(url);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    externalPreviewCache.delete(url);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedPreview(url, value, ttlMs = 1000 * 60 * 30) {
+  externalPreviewCache.set(url, {
+    value,
+    expiresAt: Date.now() + ttlMs
+  });
 }
 
 async function getExternalLinkPreview(sourceUrl) {
@@ -102,84 +529,50 @@ async function getExternalLinkPreview(sourceUrl) {
     return null;
   }
 
+  const cached = getCachedPreview(safeUrl);
+  if (cached) return cached;
+
   const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 6000);
+  const emptyPreview = {
+    url: safeUrl,
+    finalUrl: safeUrl,
+    canonicalUrl: safeUrl,
+    domain,
+    title: domain,
+    description: "Source externe",
+    image: "",
+    siteName: domain
+  };
 
   try {
-    const response = await fetch(safeUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; AgonLinkPreview/1.0; +https://agon.example)",
-        "Accept": "text/html,application/xhtml+xml"
-      },
-      redirect: "follow",
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      return {
-        url: safeUrl,
-        domain,
-        title: domain,
-        description: "Source externe",
-        image: "",
-        siteName: domain
-      };
+    const fetched = await fetchPreviewHtml(safeUrl, 8000);
+    if (!fetched.ok || !fetched.html) {
+      setCachedPreview(safeUrl, emptyPreview, 1000 * 60 * 5);
+      return emptyPreview;
     }
 
-    const html = await response.text();
+    const preview = buildPreviewFromHtml(fetched.html, safeUrl, fetched.finalUrl);
 
-    const title = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:title["'][^>]*>/i,
-      /<title[^>]*>([^<]+)<\/title>/i
-    ]) || domain;
+    if (hasMeaningfulPreview(preview)) {
+      setCachedPreview(safeUrl, preview, 1000 * 60 * 15);
+      return preview;
+    }
 
-    const description = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:description["'][^>]*>/i,
-      /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i
-    ]);
-
-    const siteName = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["'][^>]*>/i
-    ]) || domain;
-
-    const image = resolvePreviewUrl(extractMetaContent(html, [
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
-      /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/i
-    ]), response.url || safeUrl);
-
-    return {
-      url: safeUrl,
-      finalUrl: response.url || safeUrl,
-      domain,
-      title,
-      description,
-      image,
-      siteName
+    const fallbackPreview = {
+      ...emptyPreview,
+      finalUrl: fetched.finalUrl || safeUrl,
+      canonicalUrl: fetched.finalUrl || safeUrl,
+      title: preview.title || emptyPreview.title,
+      description: preview.description || emptyPreview.description,
+      image: preview.image || "",
+      siteName: preview.siteName || emptyPreview.siteName
     };
+
+    setCachedPreview(safeUrl, fallbackPreview, 1000 * 60 * 5);
+    return fallbackPreview;
   } catch (error) {
-    return {
-      url: safeUrl,
-      domain,
-      title: domain,
-      description: "Source externe",
-      image: "",
-      siteName: domain
-    };
-  } finally {
-    clearTimeout(timeout);
+    setCachedPreview(safeUrl, emptyPreview, 1000 * 60 * 5);
+    return emptyPreview;
   }
 }
 
