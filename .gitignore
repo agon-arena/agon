@@ -1,3 +1,8 @@
+
 node_modules
 .env
 .DS_Store
+public/debate-images/
+public/uploads/debates/
+data/debate-images.json
+data/debate-assets.json
