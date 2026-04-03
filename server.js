@@ -186,11 +186,14 @@ function safeJsonParse(value) {
   }
 }
 
-const debateAssetsDir = path.join(__dirname, "public", "debate-images");
+const debateImagesDir = path.join(__dirname, "public", "debate-images");
+const debateVideosDir = path.join(__dirname, "public", "debate-videos");
 const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
+const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 
 function ensureDebateAssetsStorage() {
-  fs.mkdirSync(debateAssetsDir, { recursive: true });
+  fs.mkdirSync(debateImagesDir, { recursive: true });
+  fs.mkdirSync(debateVideosDir, { recursive: true });
   fs.mkdirSync(path.dirname(debateAssetsMetaPath), { recursive: true });
 
   if (!fs.existsSync(debateAssetsMetaPath)) {
@@ -213,24 +216,62 @@ function writeDebateAssetsMap(map) {
   fs.writeFileSync(debateAssetsMetaPath, JSON.stringify(map, null, 2), "utf8");
 }
 
-function getDebateStoredImageUrl(debateId) {
+function getDebateAssetsEntry(debateId) {
   const map = readDebateAssetsMap();
-  return String(map?.[String(debateId)]?.image_url || "").trim();
+  const entry = map?.[String(debateId)];
+  return entry && typeof entry === "object" ? entry : {};
 }
 
-function setDebateStoredImageUrl(debateId, imageUrl) {
+function updateDebateAssetsEntry(debateId, partial) {
   const map = readDebateAssetsMap();
   const debateKey = String(debateId);
+  const previous = map?.[debateKey] && typeof map[debateKey] === "object" ? map[debateKey] : {};
+  const next = {
+    ...previous,
+    ...partial
+  };
 
-  if (!imageUrl) {
+  if (!String(next.image_url || "").trim()) {
+    delete next.image_url;
+  }
+
+  if (!String(next.video_url || "").trim()) {
+    delete next.video_url;
+  }
+
+  if (!Object.keys(next).length) {
     delete map[debateKey];
   } else {
-    map[debateKey] = {
-      image_url: String(imageUrl).trim()
-    };
+    map[debateKey] = next;
   }
 
   writeDebateAssetsMap(map);
+}
+
+function removeDebateAssetsEntry(debateId) {
+  const map = readDebateAssetsMap();
+  delete map[String(debateId)];
+  writeDebateAssetsMap(map);
+}
+
+function getDebateStoredImageUrl(debateId) {
+  return String(getDebateAssetsEntry(debateId).image_url || "").trim();
+}
+
+function setDebateStoredImageUrl(debateId, imageUrl) {
+  updateDebateAssetsEntry(debateId, {
+    image_url: String(imageUrl || "").trim()
+  });
+}
+
+function getDebateStoredVideoUrl(debateId) {
+  return String(getDebateAssetsEntry(debateId).video_url || "").trim();
+}
+
+function setDebateStoredVideoUrl(debateId, videoUrl) {
+  updateDebateAssetsEntry(debateId, {
+    video_url: String(videoUrl || "").trim()
+  });
 }
 
 function getImageExtensionFromMimeType(mimeType) {
@@ -240,6 +281,56 @@ function getImageExtensionFromMimeType(mimeType) {
   if (normalized === "image/webp") return "webp";
   if (normalized === "image/gif") return "gif";
   return "";
+}
+
+function getVideoExtensionFromMimeType(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized === "video/mp4") return "mp4";
+  if (normalized === "video/webm") return "webm";
+  if (normalized === "video/quicktime") return "mov";
+  if (normalized === "video/x-m4v") return "m4v";
+  return "";
+}
+
+function getVideoExtensionFromFilename(filename) {
+  const extension = path.extname(String(filename || "")).toLowerCase().replace(/^\./, "");
+  return ["mp4", "webm", "mov", "m4v"].includes(extension) ? extension : "";
+}
+
+function getVideoMimeTypeFromExtension(extension) {
+  switch (String(extension || "").toLowerCase()) {
+    case "mp4":
+      return "video/mp4";
+    case "webm":
+      return "video/webm";
+    case "mov":
+      return "video/quicktime";
+    case "m4v":
+      return "video/x-m4v";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function deleteLocalMediaFile(publicUrl, allowedDir) {
+  const normalizedUrl = String(publicUrl || "").trim();
+  if (!normalizedUrl || !normalizedUrl.startsWith("/")) return;
+
+  const relativePath = normalizedUrl.replace(/^\/+/, "");
+  const absolutePath = path.resolve(__dirname, "public", relativePath);
+  const allowedPath = path.resolve(allowedDir);
+
+  if (!absolutePath.startsWith(allowedPath + path.sep)) {
+    return;
+  }
+
+  try {
+    if (fs.existsSync(absolutePath)) {
+      fs.unlinkSync(absolutePath);
+    }
+  } catch (error) {
+    console.error("Erreur suppression fichier média local:", error);
+  }
 }
 
 function saveUploadedDebateImage(debateId, imageUpload) {
@@ -266,18 +357,57 @@ function saveUploadedDebateImage(debateId, imageUpload) {
   }
 
   ensureDebateAssetsStorage();
+  const previousImageUrl = getDebateStoredImageUrl(debateId);
   const filename = `debate-${debateId}-${Date.now()}.${extension}`;
-  const filePath = path.join(debateAssetsDir, filename);
+  const filePath = path.join(debateImagesDir, filename);
   fs.writeFileSync(filePath, buffer);
 
+  if (previousImageUrl) {
+    deleteLocalMediaFile(previousImageUrl, debateImagesDir);
+  }
+
   return `/debate-images/${filename}`;
+}
+
+function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType) {
+  const safeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
+  if (!safeBuffer.length) {
+    throw new Error("Vidéo vide.");
+  }
+
+  if (safeBuffer.length > MAX_DEBATE_VIDEO_BYTES) {
+    throw new Error("Vidéo trop lourde.");
+  }
+
+  const normalizedType = String(mimeType || "").trim().toLowerCase();
+  const extension = getVideoExtensionFromMimeType(normalizedType) || getVideoExtensionFromFilename(fileName);
+
+  if (!extension) {
+    throw new Error("Format vidéo non pris en charge.");
+  }
+
+  ensureDebateAssetsStorage();
+  const previousVideoUrl = getDebateStoredVideoUrl(debateId);
+  const filename = `debate-video-${debateId}-${Date.now()}.${extension}`;
+  const filePath = path.join(debateVideosDir, filename);
+  fs.writeFileSync(filePath, safeBuffer);
+
+  if (previousVideoUrl) {
+    deleteLocalMediaFile(previousVideoUrl, debateVideosDir);
+  }
+
+  return {
+    url: `/debate-videos/${filename}`,
+    mimeType: getVideoMimeTypeFromExtension(extension)
+  };
 }
 
 function enrichDebateWithStoredImage(debate) {
   if (!debate) return debate;
   return {
     ...debate,
-    image_url: getDebateStoredImageUrl(debate.id)
+    image_url: getDebateStoredImageUrl(debate.id),
+    video_url: getDebateStoredVideoUrl(debate.id)
   };
 }
 
@@ -1647,7 +1777,7 @@ app.get("/api/admin/reports", requireAdmin, async (req, res) => {
       return new Date(b.last_report_at) - new Date(a.last_report_at);
     });
 
-    res.json(rows);
+    res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture signalements.");
@@ -1672,6 +1802,19 @@ app.delete("/api/admin/reports/by-target", requireAdmin, async (req, res) => {
       console.error(error);
       return sendServerError(res, "Erreur suppression signalement.");
     }
+
+    const storedImageUrl = getDebateStoredImageUrl(debateId);
+    const storedVideoUrl = getDebateStoredVideoUrl(debateId);
+
+    if (storedImageUrl) {
+      deleteLocalMediaFile(storedImageUrl, debateImagesDir);
+    }
+
+    if (storedVideoUrl) {
+      deleteLocalMediaFile(storedVideoUrl, debateVideosDir);
+    }
+
+    removeDebateAssetsEntry(debateId);
 
     res.json({ success: true });
   } catch (error) {
@@ -1911,6 +2054,7 @@ app.get("/api/debates", async (req, res) => {
       return {
         ...d,
         image_url: getDebateStoredImageUrl(d.id),
+        video_url: getDebateStoredVideoUrl(d.id),
         argument_count,
         last_argument_at,
         votes_a,
@@ -1920,7 +2064,24 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    rows.sort((a, b) => {
+    const rowsWithSourcePreview = await Promise.all(rows.map(async (row) => {
+      if (!String(row.source_url || '').trim()) {
+        return row;
+      }
+
+      try {
+        const sourcePreview = await getExternalLinkPreview(row.source_url);
+        return {
+          ...row,
+          source_preview: sourcePreview
+        };
+      } catch (error) {
+        console.error('Erreur preview source index:', error);
+        return row;
+      }
+    }));
+
+    rowsWithSourcePreview.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
       const aDate = a.last_argument_at || a.created_at || "";
       const bDate = b.last_argument_at || b.created_at || "";
@@ -1928,7 +2089,7 @@ app.get("/api/debates", async (req, res) => {
       return Number(b.id) - Number(a.id);
     });
 
-    res.json(rows);
+    res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture débats.");
@@ -1939,7 +2100,7 @@ app.post("/api/debates", async (req, res) => {
   try {
     const { question, category, source_url, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
-    const normalizedResourceMode = ["none", "source", "image"].includes(String(resource_mode || ""))
+    const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
       : "none";
 
@@ -1995,10 +2156,57 @@ app.post("/api/debates", async (req, res) => {
       setDebateStoredImageUrl(data.id, "");
     }
 
+    if (normalizedResourceMode !== "video") {
+      setDebateStoredVideoUrl(data.id, "");
+    }
+
     res.json({ id: data.id });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Erreur création débat." });
+  }
+});
+
+app.post("/api/debates/:id/video-file", express.raw({ type: "application/octet-stream", limit: `${MAX_DEBATE_VIDEO_BYTES}b` }), async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
+    const debateRow = await getDebateById(debateId);
+
+    if (!debateRow) {
+      return res.status(404).json({ error: "Débat introuvable." });
+    }
+
+    const isOwner =
+      authorKey &&
+      debateRow.creator_key &&
+      String(debateRow.creator_key) === authorKey;
+
+    if (!isAdmin(req) && !isOwner) {
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
+    }
+
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    if (!buffer.length) {
+      return res.status(400).json({ error: "Vidéo manquante." });
+    }
+
+    const fileName = String(req.get("x-file-name") || "video").trim();
+    const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
+
+    const storedVideo = saveUploadedDebateVideo(debateId, buffer, fileName, mimeType);
+    setDebateStoredVideoUrl(debateId, storedVideo.url);
+    setDebateStoredImageUrl(debateId, "");
+
+    return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
+  } catch (error) {
+    console.error(error);
+    const message = error?.message === "Vidéo trop lourde."
+      ? "Vidéo trop lourde."
+      : error?.message === "Format vidéo non pris en charge."
+        ? "Format vidéo non pris en charge."
+        : "Erreur enregistrement vidéo.";
+    return res.status(400).json({ error: message });
   }
 });
 

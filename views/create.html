@@ -163,9 +163,14 @@
       <input type="radio" name="resource-mode" value="image">
       <span>Importer une image</span>
     </label>
+
+    <label class="create-resource-option">
+      <input type="radio" name="resource-mode" value="video">
+      <span>Importer une vidéo</span>
+    </label>
   </div>
 
-  <small>Choisis une seule option : aucun contenu, un lien source ou une image importée.</small>
+  <small>Choisis une seule option : aucun contenu, un lien source, une image importée ou une vidéo importée.</small>
 </div>
 
 <div id="source-url-group" class="form-group create-form-group create-resource-panel" style="display:none;">
@@ -189,6 +194,17 @@
     disabled
   >
   <small>Importe une seule image. Le lien source devient alors indisponible.</small>
+</div>
+
+<div id="video-upload-group" class="form-group create-form-group create-resource-panel" style="display:none;">
+  <label for="debate_video_file">Vidéo du débat</label>
+  <input
+    id="debate_video_file"
+    type="file"
+    accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.webm,.mov,.m4v"
+    disabled
+  >
+  <small>Importe une seule vidéo (MP4, WebM, MOV ou M4V, 80 Mo max). Le lien source et l’image deviennent alors indisponibles.</small>
 </div>
 
 <div id="positions-fields" class="positions-grid create-positions-grid">

@@ -1309,6 +1309,413 @@ function isWeakSourcePreviewData(preview, sourceUrl = "") {
   return blockedMarkers.some((marker) => title.includes(marker) || description.includes(marker));
 }
 
+function buildXIndexSourceCardHtml(sourceUrl, preview = null) {
+  const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
+  const safeUrl = normalizedPreview.url || String(sourceUrl || "").trim() || "#";
+  const title = normalizedPreview.title && normalizedPreview.title !== "Source externe"
+    ? normalizedPreview.title
+    : "Source publiée sur X";
+  const description = normalizedPreview.description || "Voir le post source sur X.";
+  const image = normalizedPreview.image || "";
+
+  return `
+    <div class="debate-card-source debate-card-source-x">
+      ${image ? `
+        <div class="debate-card-source-image-wrap debate-card-source-image-wrap-x">
+          <img class="debate-card-source-image" src="${escapeAttribute(image)}" alt="Aperçu du post X">
+        </div>
+      ` : ""}
+      <div class="debate-card-source-body">
+        <div class="debate-card-source-badge">𝕏 Source</div>
+        <div class="debate-card-source-title">${escapeHtml(title)}</div>
+        <div class="debate-card-source-description">${escapeHtml(description)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function isIndexYouTubeSourceDebate(debate) {
+  const sourceUrl = String(debate?.source_url || "").trim();
+  if (!sourceUrl) return false;
+
+  const embedData = getEmbeddableSourceData(sourceUrl);
+  return !!String(embedData.videoId || "").trim();
+}
+
+function buildIndexYouTubeEmbedHtml(sourceUrl) {
+  const embedData = getEmbeddableSourceData(sourceUrl);
+  if (!embedData.videoId || !embedData.embedUrl) return "";
+
+  return `
+    <div class="debate-card-media debate-card-media-youtube">
+      <div
+        class="debate-card-youtube-shell"
+        data-index-youtube-shell
+        data-embed-base="${escapeAttribute(embedData.embedUrl)}"
+        data-poster-url="${escapeAttribute(embedData.posterUrl || "") }"
+      >
+        <button
+          type="button"
+          class="debate-card-youtube-poster"
+          data-index-youtube-poster
+          aria-label="Lire la vidéo YouTube"
+        >
+          ${embedData.posterUrl ? `<img class="debate-card-youtube-poster-img" src="${escapeAttribute(embedData.posterUrl)}" alt="Aperçu de la vidéo YouTube" loading="lazy" decoding="async">` : ""}
+          <span class="debate-card-youtube-overlay" data-index-youtube-overlay>
+            <span class="debate-card-youtube-play" aria-hidden="true"><i class="fa-solid fa-play"></i></span>
+            <span class="debate-card-youtube-label">Vidéo YouTube</span>
+          </span>
+        </button>
+        <iframe
+          class="debate-card-youtube-iframe"
+          title="Vidéo YouTube"
+          loading="lazy"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>
+    </div>
+  `;
+}
+
+function renderIndexInlineSourceCard(debate) {
+  const sourceUrl = String(debate?.source_url || "").trim();
+  if (!sourceUrl) return "";
+
+  if (isIndexYouTubeSourceDebate(debate)) {
+    return buildIndexYouTubeEmbedHtml(sourceUrl);
+  }
+
+  const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
+    ? debate.source_preview
+    : null;
+
+  if (isWeakSourcePreviewData(sourcePreview, sourceUrl)) {
+    return "";
+  }
+
+  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl);
+}
+
+function getIndexYouTubeEmbedSrc(baseUrl, options = {}) {
+  const raw = String(baseUrl || "").trim();
+  if (!raw) return "";
+
+  const autoplay = options === true ? true : !!options.autoplay;
+  const muted = options === true ? true : options.muted !== false;
+
+  try {
+    const parsed = new URL(raw);
+    parsed.searchParams.set("playsinline", "1");
+    parsed.searchParams.set("enablejsapi", "1");
+    parsed.searchParams.set("rel", parsed.searchParams.get("rel") || "0");
+    parsed.searchParams.set("modestbranding", parsed.searchParams.get("modestbranding") || "1");
+
+    if (autoplay) {
+      parsed.searchParams.set("autoplay", "1");
+    } else {
+      parsed.searchParams.delete("autoplay");
+    }
+
+    if (muted) {
+      parsed.searchParams.set("mute", "1");
+    } else {
+      parsed.searchParams.delete("mute");
+    }
+
+    return parsed.toString();
+  } catch (error) {
+    return raw;
+  }
+}
+
+function postMessageToIndexYouTubeIframe(iframe, command) {
+  if (!iframe?.contentWindow || !command) return;
+
+  try {
+    iframe.contentWindow.postMessage(JSON.stringify({
+      event: 'command',
+      func: command,
+      args: []
+    }), '*');
+  } catch (error) {
+    // noop
+  }
+}
+
+function ensureIndexYouTubeOverlayLayer(shell) {
+  if (!shell) return null;
+
+  const overlay = shell.querySelector('[data-index-youtube-overlay]');
+  const poster = shell.querySelector('[data-index-youtube-poster]');
+  if (!overlay) return null;
+
+  if (poster && overlay.parentElement === poster) {
+    shell.appendChild(overlay);
+  }
+
+  overlay.style.zIndex = '2';
+  return overlay;
+}
+
+function queueIndexYouTubeSoundActivation(shell, iframe) {
+  if (!shell || !iframe) return;
+  if (shell.dataset.userActivated !== 'true') return;
+
+  const applySound = () => {
+    if (shell.dataset.userActivated !== 'true') return;
+    postMessageToIndexYouTubeIframe(iframe, 'unMute');
+  };
+
+  applySound();
+  [150, 350, 700, 1200].forEach((delay) => {
+    window.setTimeout(applySound, delay);
+  });
+}
+
+function updateIndexYouTubeShellOverlay(shell) {
+  if (!shell) return;
+
+  const overlay = ensureIndexYouTubeOverlayLayer(shell);
+  const label = overlay?.querySelector('.debate-card-youtube-label');
+  const isActive = shell.dataset.active === 'true';
+  const isUserActivated = shell.dataset.userActivated === 'true';
+
+  if (!overlay) return;
+
+  if (!isActive) {
+    overlay.style.display = '';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.cursor = '';
+    if (label) label.textContent = 'Vidéo YouTube';
+    return;
+  }
+
+  if (isUserActivated) {
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.cursor = '';
+    if (label) label.textContent = 'Vidéo YouTube';
+    return;
+  }
+
+  overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
+  overlay.style.cursor = 'pointer';
+  if (label) label.textContent = 'Activer le son';
+}
+
+function unloadIndexYouTubeShell(shell) {
+  if (!shell) return;
+  const iframe = shell.querySelector('.debate-card-youtube-iframe');
+  const poster = shell.querySelector('[data-index-youtube-poster]');
+  if (!iframe) return;
+
+  iframe.removeAttribute('src');
+  iframe.src = 'about:blank';
+  shell.dataset.active = 'false';
+  shell.dataset.userActivated = 'false';
+
+  if (poster) poster.style.display = '';
+  updateIndexYouTubeShellOverlay(shell);
+}
+
+function activateIndexYouTubeShell(shell) {
+  if (!shell) return;
+  const iframe = shell.querySelector('.debate-card-youtube-iframe');
+  const poster = shell.querySelector('[data-index-youtube-poster]');
+  const baseUrl = String(shell.dataset.embedBase || '').trim();
+  if (!iframe || !baseUrl) return;
+
+  const shouldStartMuted = shell.dataset.userActivated !== 'true';
+  const nextSrc = getIndexYouTubeEmbedSrc(baseUrl, {
+    autoplay: true,
+    muted: shouldStartMuted
+  });
+  if (iframe.getAttribute('src') !== nextSrc) {
+    iframe.src = nextSrc;
+  }
+
+  shell.dataset.active = 'true';
+  if (poster) poster.style.display = 'none';
+  updateIndexYouTubeShellOverlay(shell);
+
+  if (shell.dataset.userActivated === 'true') {
+    iframe.onload = () => {
+      queueIndexYouTubeSoundActivation(shell, iframe);
+      iframe.onload = null;
+    };
+
+    queueIndexYouTubeSoundActivation(shell, iframe);
+  } else {
+    iframe.onload = null;
+  }
+}
+
+function enableSoundOnIndexYouTubeShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  const iframe = shell.querySelector('.debate-card-youtube-iframe');
+  if (!iframe) return;
+
+  shell.dataset.userActivated = 'true';
+  updateIndexYouTubeShellOverlay(shell);
+  queueIndexYouTubeSoundActivation(shell, iframe);
+}
+
+function updateIndexYouTubeActiveShell() {
+  const state = window.indexYouTubePlaybackState;
+  if (!state) return;
+
+  const candidates = Array.from(state.shells).filter((shell) => {
+    if (!shell || shell.dataset.inView !== 'true') return false;
+    if (!shell.isConnected || !shell.offsetParent) return false;
+    const rect = shell.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < window.innerHeight;
+  });
+
+  if (!candidates.length) {
+    if (state.activeShell) {
+      unloadIndexYouTubeShell(state.activeShell);
+      state.activeShell = null;
+    }
+    return;
+  }
+
+  const viewportCenter = window.innerHeight / 2;
+  let bestShell = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  candidates.forEach((shell) => {
+    const rect = shell.getBoundingClientRect();
+    const shellCenter = rect.top + (rect.height / 2);
+    const distance = Math.abs(shellCenter - viewportCenter);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestShell = shell;
+    }
+  });
+
+  if (!bestShell) return;
+
+  if (state.activeShell && state.activeShell !== bestShell) {
+    unloadIndexYouTubeShell(state.activeShell);
+  }
+
+  state.activeShell = bestShell;
+  activateIndexYouTubeShell(bestShell);
+
+  candidates.forEach((shell) => {
+    if (shell !== bestShell) {
+      unloadIndexYouTubeShell(shell);
+    }
+  });
+}
+
+function scheduleIndexYouTubeActiveUpdate() {
+  const state = window.indexYouTubePlaybackState;
+  if (!state) return;
+  if (state.rafId) cancelAnimationFrame(state.rafId);
+  state.rafId = requestAnimationFrame(() => {
+    state.rafId = null;
+    updateIndexYouTubeActiveShell();
+  });
+}
+
+function initIndexYouTubeObserver(root = document) {
+  const shells = Array.from(root.querySelectorAll('[data-index-youtube-shell]'));
+  const previousState = window.indexYouTubePlaybackState;
+
+  if (previousState?.observer) {
+    previousState.observer.disconnect();
+  }
+
+  if (previousState?.resizeHandler) {
+    window.removeEventListener('resize', previousState.resizeHandler);
+  }
+
+  if (previousState?.scrollHandler) {
+    window.removeEventListener('scroll', previousState.scrollHandler, { passive: true });
+  }
+
+  if (!shells.length) {
+    window.indexYouTubePlaybackState = null;
+    return;
+  }
+
+  const state = {
+    observer: null,
+    shells: new Set(shells),
+    activeShell: null,
+    rafId: null,
+    resizeHandler: null,
+    scrollHandler: null
+  };
+
+  window.indexYouTubePlaybackState = state;
+
+  shells.forEach((shell) => {
+    shell.dataset.inView = 'false';
+    shell.dataset.active = 'false';
+    shell.dataset.userActivated = 'false';
+    ensureIndexYouTubeOverlayLayer(shell);
+    unloadIndexYouTubeShell(shell);
+
+    const poster = shell.querySelector('[data-index-youtube-poster]');
+    const overlay = shell.querySelector('[data-index-youtube-overlay]');
+
+    if (poster) {
+      poster.onclick = (event) => {
+        event.preventDefault();
+        shell.dataset.inView = 'true';
+        scheduleIndexYouTubeActiveUpdate();
+      };
+    }
+
+    if (overlay) {
+      overlay.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        shell.dataset.inView = 'true';
+
+        if (state.activeShell !== shell) {
+          state.activeShell = shell;
+          activateIndexYouTubeShell(shell);
+        }
+
+        enableSoundOnIndexYouTubeShell(shell);
+      };
+    }
+  });
+
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const shell = entry.target;
+      shell.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.55 ? 'true' : 'false';
+      if (shell.dataset.inView !== 'true' && state.activeShell === shell) {
+        unloadIndexYouTubeShell(shell);
+        state.activeShell = null;
+      }
+    });
+
+    scheduleIndexYouTubeActiveUpdate();
+  }, {
+    threshold: [0, 0.25, 0.55, 0.85],
+    rootMargin: '0px 0px 0px 0px'
+  });
+
+  shells.forEach((shell) => state.observer.observe(shell));
+
+  state.resizeHandler = () => scheduleIndexYouTubeActiveUpdate();
+  state.scrollHandler = () => scheduleIndexYouTubeActiveUpdate();
+
+  window.addEventListener('resize', state.resizeHandler);
+  window.addEventListener('scroll', state.scrollHandler, { passive: true });
+
+  scheduleIndexYouTubeActiveUpdate();
+}
+
 function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
   const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
   const safeUrl = normalizedPreview.url || String(sourceUrl || "").trim() || "#";
@@ -3521,13 +3928,18 @@ section.style.display = "block";
 
   div.innerHTML = debatesToShow.map(d => {
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
+    const mediaHtml = renderIndexInlineSourceCard(d);
+    const mediaOutsideLink = isIndexYouTubeSourceDebate(d);
 
     return `
       <article class="debate-card">
+        ${mediaOutsideLink ? mediaHtml : ""}
         <a class="debate-card-link" href="/debate?id=${d.id}">
           <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
           <div class="debate-card-type">${debateTypeLabel}</div>
           <h2>${escapeHtml(d.question)}</h2>
+
+          ${mediaOutsideLink ? "" : mediaHtml}
 
          ${
   isOpenDebate(d)
@@ -3671,6 +4083,7 @@ section.style.display = "block";
   }
 
   refreshAdminUI();
+  initIndexYouTubeObserver(document);
 }
    
 function loadMoreVisitedDebates() {
@@ -3694,13 +4107,18 @@ header.style.display = "flex";
 
 div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
+  const mediaHtml = renderIndexInlineSourceCard(d);
+  const mediaOutsideLink = isIndexYouTubeSourceDebate(d);
 
   return `
     <article class="debate-card">
+      ${mediaOutsideLink ? mediaHtml : ""}
       <a class="debate-card-link" href="/debate?id=${d.id}">
         <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
         <div class="debate-card-type">${debateTypeLabel}</div>
         <h2>${escapeHtml(d.question)}</h2>
+
+        ${mediaOutsideLink ? "" : mediaHtml}
 
 ${
   isOpenDebate(d)
@@ -3806,6 +4224,7 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
 }
 
   refreshAdminUI();
+  initIndexYouTubeObserver(document);
 }
 function loadMoreOtherDebates() {
   otherDebatesVisible += 6;
@@ -4245,7 +4664,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     return;
   }
-showNotificationTransitionOverlay("Publication de l’arène en cours…");
+showNotificationTransitionOverlay("Ouverture de l’arène en cours…");
   try {
 
 
@@ -4954,6 +5373,10 @@ function bindDebateSourcePreviewHandlers() {
   const sourceLoading = document.getElementById("debate-source-preview-loading");
 
   if (!sourcePreview) return;
+
+  sourcePreview.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+  sourcePreview.setAttribute("allowfullscreen", "");
+  sourcePreview.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
 
   sourcePreview.addEventListener("load", () => {
     sourcePreview.dataset.loaded = "1";
