@@ -1379,7 +1379,53 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
   `;
 }
 
+function isIndexLocalVideoDebate(debate) {
+  return !!String(debate?.video_url || "").trim();
+}
+
+function buildIndexLocalVideoCardHtml(videoUrl) {
+  const safeVideoUrl = String(videoUrl || "").trim();
+  if (!safeVideoUrl) return "";
+
+  return `
+    <div class="debate-card-media debate-card-media-local-video">
+      <div
+        class="debate-card-youtube-shell debate-card-local-video-shell"
+        data-index-local-video-shell
+        data-video-src="${escapeAttribute(safeVideoUrl)}"
+      >
+        <button
+          type="button"
+          class="debate-card-youtube-poster debate-card-local-video-poster"
+          data-index-local-video-poster
+          aria-label="Lire la vidéo importée"
+          style="background:#000;"
+        >
+          <span class="debate-card-youtube-overlay" data-index-local-video-overlay>
+            <span class="debate-card-youtube-play" aria-hidden="true"><i class="fa-solid fa-play"></i></span>
+            <span class="debate-card-youtube-label">Vidéo importée</span>
+          </span>
+        </button>
+        <video
+          class="debate-card-youtube-iframe debate-card-local-video-player"
+          data-index-local-video-player
+          playsinline
+          muted
+          loop
+          preload="none"
+          style="display:block; width:100%; height:100%; border:0; background:#000;"
+        ></video>
+      </div>
+    </div>
+  `;
+}
+
 function renderIndexInlineSourceCard(debate) {
+  const localVideoUrl = String(debate?.video_url || "").trim();
+  if (localVideoUrl) {
+    return buildIndexLocalVideoCardHtml(localVideoUrl);
+  }
+
   const sourceUrl = String(debate?.source_url || "").trim();
   if (!sourceUrl) return "";
 
@@ -1621,6 +1667,259 @@ function scheduleIndexYouTubeActiveUpdate() {
     state.rafId = null;
     updateIndexYouTubeActiveShell();
   });
+}
+
+function updateIndexLocalVideoShellOverlay(shell) {
+  if (!shell) return;
+
+  const overlay = shell.querySelector('[data-index-local-video-overlay]');
+  const label = overlay?.querySelector('.debate-card-youtube-label');
+  const isActive = shell.dataset.active === 'true';
+  const isUserActivated = shell.dataset.userActivated === 'true';
+
+  if (!overlay) return;
+
+  if (!isActive) {
+    overlay.style.display = '';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.cursor = '';
+    if (label) label.textContent = 'Vidéo importée';
+    return;
+  }
+
+  if (isUserActivated) {
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.cursor = '';
+    if (label) label.textContent = 'Vidéo importée';
+    return;
+  }
+
+  overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
+  overlay.style.cursor = 'pointer';
+  if (label) label.textContent = 'Activer le son';
+}
+
+function unloadIndexLocalVideoShell(shell) {
+  if (!shell) return;
+  const video = shell.querySelector('[data-index-local-video-player]');
+  const poster = shell.querySelector('[data-index-local-video-poster]');
+  if (!video) return;
+
+  try {
+    video.pause();
+  } catch (error) {
+    // noop
+  }
+
+  video.removeAttribute('src');
+  video.load();
+  video.muted = true;
+  video.controls = false;
+  shell.dataset.active = 'false';
+  shell.dataset.userActivated = 'false';
+
+  if (poster) poster.style.display = '';
+  updateIndexLocalVideoShellOverlay(shell);
+}
+
+function activateIndexLocalVideoShell(shell) {
+  if (!shell) return;
+  const video = shell.querySelector('[data-index-local-video-player]');
+  const poster = shell.querySelector('[data-index-local-video-poster]');
+  const videoSrc = String(shell.dataset.videoSrc || '').trim();
+  if (!video || !videoSrc) return;
+
+  if (video.getAttribute('src') !== videoSrc) {
+    video.src = videoSrc;
+    video.load();
+  }
+
+  const shouldStartMuted = shell.dataset.userActivated !== 'true';
+  video.muted = shouldStartMuted;
+  video.controls = shell.dataset.userActivated === 'true';
+  shell.dataset.active = 'true';
+
+  const playPromise = video.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {
+      // noop
+    });
+  }
+
+  if (poster) poster.style.display = 'none';
+  updateIndexLocalVideoShellOverlay(shell);
+}
+
+function enableSoundOnIndexLocalVideoShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  const video = shell.querySelector('[data-index-local-video-player]');
+  if (!video) return;
+
+  shell.dataset.userActivated = 'true';
+  video.muted = false;
+  video.controls = true;
+  updateIndexLocalVideoShellOverlay(shell);
+
+  const playPromise = video.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {
+      // noop
+    });
+  }
+}
+
+function updateIndexLocalVideoActiveShell() {
+  const state = window.indexLocalVideoPlaybackState;
+  if (!state) return;
+
+  const candidates = Array.from(state.shells).filter((shell) => {
+    if (!shell || shell.dataset.inView !== 'true') return false;
+    if (!shell.isConnected || !shell.offsetParent) return false;
+    const rect = shell.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < window.innerHeight;
+  });
+
+  if (!candidates.length) {
+    if (state.activeShell) {
+      unloadIndexLocalVideoShell(state.activeShell);
+      state.activeShell = null;
+    }
+    return;
+  }
+
+  const viewportCenter = window.innerHeight / 2;
+  let bestShell = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  candidates.forEach((shell) => {
+    const rect = shell.getBoundingClientRect();
+    const shellCenter = rect.top + (rect.height / 2);
+    const distance = Math.abs(shellCenter - viewportCenter);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestShell = shell;
+    }
+  });
+
+  if (!bestShell) return;
+
+  if (state.activeShell && state.activeShell !== bestShell) {
+    unloadIndexLocalVideoShell(state.activeShell);
+  }
+
+  state.activeShell = bestShell;
+  activateIndexLocalVideoShell(bestShell);
+
+  candidates.forEach((shell) => {
+    if (shell !== bestShell) {
+      unloadIndexLocalVideoShell(shell);
+    }
+  });
+}
+
+function scheduleIndexLocalVideoActiveUpdate() {
+  const state = window.indexLocalVideoPlaybackState;
+  if (!state) return;
+  if (state.rafId) cancelAnimationFrame(state.rafId);
+  state.rafId = requestAnimationFrame(() => {
+    state.rafId = null;
+    updateIndexLocalVideoActiveShell();
+  });
+}
+
+function initIndexLocalVideoObserver(root = document) {
+  const shells = Array.from(root.querySelectorAll('[data-index-local-video-shell]'));
+  const previousState = window.indexLocalVideoPlaybackState;
+
+  if (previousState?.observer) {
+    previousState.observer.disconnect();
+  }
+
+  if (previousState?.resizeHandler) {
+    window.removeEventListener('resize', previousState.resizeHandler);
+  }
+
+  if (previousState?.scrollHandler) {
+    window.removeEventListener('scroll', previousState.scrollHandler, { passive: true });
+  }
+
+  if (!shells.length) {
+    window.indexLocalVideoPlaybackState = null;
+    return;
+  }
+
+  const state = {
+    observer: null,
+    shells: new Set(shells),
+    activeShell: null,
+    rafId: null,
+    resizeHandler: null,
+    scrollHandler: null
+  };
+
+  window.indexLocalVideoPlaybackState = state;
+
+  shells.forEach((shell) => {
+    shell.dataset.inView = 'false';
+    shell.dataset.active = 'false';
+    shell.dataset.userActivated = 'false';
+    unloadIndexLocalVideoShell(shell);
+
+    const poster = shell.querySelector('[data-index-local-video-poster]');
+    const overlay = shell.querySelector('[data-index-local-video-overlay]');
+
+    if (poster) {
+      poster.onclick = (event) => {
+        event.preventDefault();
+        shell.dataset.inView = 'true';
+        scheduleIndexLocalVideoActiveUpdate();
+      };
+    }
+
+    if (overlay) {
+      overlay.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        shell.dataset.inView = 'true';
+
+        if (state.activeShell !== shell) {
+          state.activeShell = shell;
+          activateIndexLocalVideoShell(shell);
+        }
+
+        enableSoundOnIndexLocalVideoShell(shell);
+      };
+    }
+  });
+
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const shell = entry.target;
+      shell.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.55 ? 'true' : 'false';
+      if (shell.dataset.inView !== 'true' && state.activeShell === shell) {
+        unloadIndexLocalVideoShell(shell);
+        state.activeShell = null;
+      }
+    });
+
+    scheduleIndexLocalVideoActiveUpdate();
+  }, {
+    threshold: [0, 0.25, 0.55, 0.85],
+    rootMargin: '0px 0px 0px 0px'
+  });
+
+  shells.forEach((shell) => state.observer.observe(shell));
+
+  state.resizeHandler = () => scheduleIndexLocalVideoActiveUpdate();
+  state.scrollHandler = () => scheduleIndexLocalVideoActiveUpdate();
+
+  window.addEventListener('resize', state.resizeHandler);
+  window.addEventListener('scroll', state.scrollHandler, { passive: true });
+
+  scheduleIndexLocalVideoActiveUpdate();
 }
 
 function initIndexYouTubeObserver(root = document) {
@@ -3929,7 +4228,7 @@ section.style.display = "block";
   div.innerHTML = debatesToShow.map(d => {
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
     const mediaHtml = renderIndexInlineSourceCard(d);
-    const mediaOutsideLink = isIndexYouTubeSourceDebate(d);
+    const mediaOutsideLink = isIndexYouTubeSourceDebate(d) || isIndexLocalVideoDebate(d);
 
     return `
       <article class="debate-card">
@@ -4084,6 +4383,7 @@ section.style.display = "block";
 
   refreshAdminUI();
   initIndexYouTubeObserver(document);
+  initIndexLocalVideoObserver(document);
 }
    
 function loadMoreVisitedDebates() {
@@ -4108,7 +4408,7 @@ header.style.display = "flex";
 div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
   const mediaHtml = renderIndexInlineSourceCard(d);
-  const mediaOutsideLink = isIndexYouTubeSourceDebate(d);
+  const mediaOutsideLink = isIndexYouTubeSourceDebate(d) || isIndexLocalVideoDebate(d);
 
   return `
     <article class="debate-card">
@@ -4225,6 +4525,7 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
 
   refreshAdminUI();
   initIndexYouTubeObserver(document);
+  initIndexLocalVideoObserver(document);
 }
 function loadMoreOtherDebates() {
   otherDebatesVisible += 6;
@@ -4304,12 +4605,22 @@ function getSelectedCreateResourceMode() {
   return document.querySelector('input[name="resource-mode"]:checked')?.value || "none";
 }
 
+function getCreateVideoFileInput() {
+  return document.getElementById("debate_video_file")
+    || document.getElementById("video_file")
+    || document.getElementById("create_video_file")
+    || document.querySelector('#video-upload-group input[type="file"]')
+    || document.querySelector('input[type="file"][accept*="video"]');
+}
+
 function updateCreateResourceModeUI() {
   const mode = getSelectedCreateResourceMode();
   const sourceGroup = document.getElementById("source-url-group");
   const sourceInput = document.getElementById("source_url");
   const imageGroup = document.getElementById("image-upload-group");
   const imageInput = document.getElementById("debate_image_file");
+  const videoGroup = document.getElementById("video-upload-group");
+  const videoInput = getCreateVideoFileInput();
 
   if (sourceGroup) {
     sourceGroup.style.display = mode === "source" ? "grid" : "none";
@@ -4332,6 +4643,17 @@ function updateCreateResourceModeUI() {
       imageInput.value = "";
     }
   }
+
+  if (videoGroup) {
+    videoGroup.style.display = mode === "video" ? "grid" : "none";
+  }
+
+  if (videoInput) {
+    videoInput.disabled = mode !== "video";
+    if (mode !== "video") {
+      videoInput.value = "";
+    }
+  }
 }
 
 function readFileAsDataUrl(file) {
@@ -4341,6 +4663,16 @@ function readFileAsDataUrl(file) {
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(new Error("Impossible de lire l'image."));
     reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Impossible de lire la vidéo."));
+    reader.readAsArrayBuffer(file);
   });
 }
 
@@ -4603,6 +4935,10 @@ form.addEventListener("submit", async e => {
   const imageFile = resourceMode === "image"
     ? document.getElementById("debate_image_file").files?.[0] || null
     : null;
+  const videoInput = getCreateVideoFileInput();
+  const videoFile = resourceMode === "video"
+    ? videoInput?.files?.[0] || null
+    : null;
   const selectedType =
     document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
@@ -4658,6 +4994,28 @@ form.addEventListener("submit", async e => {
     return;
   }
 
+  if (resourceMode === "video" && !videoFile) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Vidéo manquante",
+      "Tu as choisi l’import vidéo, mais aucun fichier n’a été sélectionné.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  if (videoFile && !/^video\//i.test(videoFile.type || "")) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Format non pris en charge",
+      "Le fichier sélectionné n’est pas une vidéo valide.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
   const confirmed = await showDebatePublishConfirmModal();
 
   if (!confirmed) {
@@ -4676,6 +5034,8 @@ showNotificationTransitionOverlay("Ouverture de l’arène en cours…");
         }
       : null;
 
+    const creatorKey = getKey();
+
     const r = await fetchJSON(API + "/debates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4688,9 +5048,27 @@ showNotificationTransitionOverlay("Ouverture de l’arène en cours…");
         type: selectedType,
         option_a,
         option_b,
-        creatorKey: getKey()
+        creatorKey
       })
     });
+
+    if (resourceMode === "video" && videoFile) {
+      const videoBuffer = await readFileAsArrayBuffer(videoFile);
+      const uploadResponse = await fetch(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "x-file-name": videoFile.name || "video",
+          "x-file-type": videoFile.type || "application/octet-stream"
+        },
+        body: videoBuffer
+      });
+
+      const uploadData = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok) {
+        throw new Error(uploadData.error || "Erreur enregistrement vidéo.");
+      }
+    }
 
     location = "/debate?id=" + r.id;
   } catch (error) {
