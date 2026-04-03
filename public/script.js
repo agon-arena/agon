@@ -1382,6 +1382,28 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
 function isIndexLocalVideoDebate(debate) {
   return !!String(debate?.video_url || "").trim();
 }
+function isIndexLocalImageDebate(debate) {
+  return !!String(debate?.image_url || "").trim();
+}
+
+function buildIndexLocalImageCardHtml(imageUrl) {
+  const safeImageUrl = String(imageUrl || "").trim();
+  if (!safeImageUrl) return "";
+
+  return `
+    <div class="debate-card-media debate-card-media-local-image">
+      <div class="debate-card-local-image-shell">
+        <img
+          class="debate-card-local-image"
+          src="${escapeAttribute(safeImageUrl)}"
+          alt="Image importée du débat"
+          loading="lazy"
+          decoding="async"
+        >
+      </div>
+    </div>
+  `;
+}
 
 function buildIndexLocalVideoCardHtml(videoUrl) {
   const safeVideoUrl = String(videoUrl || "").trim();
@@ -1421,6 +1443,11 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
 }
 
 function renderIndexInlineSourceCard(debate) {
+  const localImageUrl = String(debate?.image_url || "").trim();
+  if (localImageUrl) {
+    return buildIndexLocalImageCardHtml(localImageUrl);
+  }
+
   const localVideoUrl = String(debate?.video_url || "").trim();
   if (localVideoUrl) {
     return buildIndexLocalVideoCardHtml(localVideoUrl);
@@ -1495,6 +1522,21 @@ function ensureIndexYouTubeOverlayLayer(shell) {
 
   const overlay = shell.querySelector('[data-index-youtube-overlay]');
   const poster = shell.querySelector('[data-index-youtube-poster]');
+  if (!overlay) return null;
+
+  if (poster && overlay.parentElement === poster) {
+    shell.appendChild(overlay);
+  }
+
+  overlay.style.zIndex = '2';
+  return overlay;
+}
+
+function ensureIndexLocalVideoOverlayLayer(shell) {
+  if (!shell) return null;
+
+  const overlay = shell.querySelector('[data-index-local-video-overlay]');
+  const poster = shell.querySelector('[data-index-local-video-poster]');
   if (!overlay) return null;
 
   if (poster && overlay.parentElement === poster) {
@@ -1672,7 +1714,7 @@ function scheduleIndexYouTubeActiveUpdate() {
 function updateIndexLocalVideoShellOverlay(shell) {
   if (!shell) return;
 
-  const overlay = shell.querySelector('[data-index-local-video-overlay]');
+  const overlay = ensureIndexLocalVideoOverlayLayer(shell);
   const label = overlay?.querySelector('.debate-card-youtube-label');
   const isActive = shell.dataset.active === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
@@ -1866,6 +1908,7 @@ function initIndexLocalVideoObserver(root = document) {
     shell.dataset.inView = 'false';
     shell.dataset.active = 'false';
     shell.dataset.userActivated = 'false';
+    ensureIndexLocalVideoOverlayLayer(shell);
     unloadIndexLocalVideoShell(shell);
 
     const poster = shell.querySelector('[data-index-local-video-poster]');
@@ -2029,7 +2072,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
       style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
     >
       ${image ? `
-        <div class="debate-source-card-image-wrap" style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
+    <div class="debate-source-card-image-wrap" style="display:block; width:100%; aspect-ratio:16/9; background:transparent; overflow:hidden;">
           <img
             class="debate-source-card-image"
             src="${escapeAttribute(image)}"
@@ -2040,7 +2083,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
           >
         </div>
       ` : ""}
-      <div class="debate-source-card-body" style="padding:16px 16px 18px; display:flex; flex-direction:column; gap:10px;">
+     <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px;">
         <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">${escapeHtml(domain)}</div>
         <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
         ${description ? `<div class="debate-source-card-description" style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>` : ""}
@@ -3880,8 +3923,15 @@ async function initAdminReports() {
           }
           <p class="debate-date">${escapeHtml(formatDebateDate(report.last_report_at))}</p>
 
-          <div class="debate-card-actions">
-            ${
+        </a>
+
+        ${mediaOutsideLink ? mediaHtml : ""}
+
+      </a>
+
+      ${mediaOutsideLink ? mediaHtml : ""}
+
+      <div class="debate-card-actions">${
               viewLink !== "#"
                 ? `<a class="button button-small" href="${viewLink}">Voir</a>`
                 : ""
@@ -4227,12 +4277,11 @@ section.style.display = "block";
 
   div.innerHTML = debatesToShow.map(d => {
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
-    const mediaHtml = renderIndexInlineSourceCard(d);
-    const mediaOutsideLink = isIndexYouTubeSourceDebate(d) || isIndexLocalVideoDebate(d);
+const mediaHtml = renderIndexInlineSourceCard(d);
+const mediaOutsideLink = !!mediaHtml;
 
     return `
       <article class="debate-card">
-        ${mediaOutsideLink ? mediaHtml : ""}
         <a class="debate-card-link" href="/debate?id=${d.id}">
           <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
           <div class="debate-card-type">${debateTypeLabel}</div>
@@ -4263,13 +4312,19 @@ section.style.display = "block";
     `
 }
 
-          <p>${d.argument_count || 0} idée(s)</p>
-          <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
-          ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
         </a>
 
+        ${mediaOutsideLink ? mediaHtml : ""}
+
+        <div class="debate-card-meta-below-media">
+          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+          <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
+          ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
+        </div>
+
         <div class="debate-card-actions">
-          <div class="debate-card-share-actions">
+
+<div class="debate-card-share-actions">
             <button
               class="share-icon-button"
               type="button"
@@ -4407,12 +4462,11 @@ header.style.display = "flex";
 
 div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
-  const mediaHtml = renderIndexInlineSourceCard(d);
-  const mediaOutsideLink = isIndexYouTubeSourceDebate(d) || isIndexLocalVideoDebate(d);
+const mediaHtml = renderIndexInlineSourceCard(d);
+const mediaOutsideLink = !!mediaHtml;
 
   return `
     <article class="debate-card">
-      ${mediaOutsideLink ? mediaHtml : ""}
       <a class="debate-card-link" href="/debate?id=${d.id}">
         <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
         <div class="debate-card-type">${debateTypeLabel}</div>
@@ -4443,13 +4497,19 @@ ${
     `
 }
 
-        <p>${d.argument_count || 0} idée(s)</p>
+          </a>
+
+      ${mediaOutsideLink ? mediaHtml : ""}
+
+      <div class="debate-card-meta-below-media">
+        <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
         <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
         ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
-      </a>
+      </div>
 
       <div class="debate-card-actions">
-        <div class="debate-card-share-actions">
+
+<div class="debate-card-share-actions">
           <button
             class="share-icon-button"
             type="button"
@@ -4693,6 +4753,79 @@ function ensureDebateImageSlot() {
   return wrap;
 }
 
+function ensureDebateVideoSlot() {
+  let wrap = document.getElementById("debate-video-wrap");
+  if (wrap) return wrap;
+
+  const heroSection = document.querySelector(".debate-hero");
+  if (!heroSection) return null;
+
+  wrap = document.createElement("div");
+  wrap.id = "debate-video-wrap";
+  wrap.className = "debate-video-wrap";
+  wrap.style.display = "none";
+  wrap.innerHTML = `
+    <video
+      id="debate-video"
+      class="debate-video"
+      controls
+      playsinline
+      preload="metadata"
+      style="display:block; width:100%; height:auto; border-radius:20px; background:#000;"
+    ></video>
+  `;
+
+  heroSection.insertAdjacentElement("afterbegin", wrap);
+  return wrap;
+}
+
+function resetDebateVideo() {
+  const wrap = document.getElementById("debate-video-wrap");
+  const videoEl = document.getElementById("debate-video");
+
+  if (videoEl) {
+    try {
+      videoEl.pause();
+    } catch (error) {
+      // noop
+    }
+    videoEl.removeAttribute("src");
+    videoEl.load();
+  }
+
+  if (wrap) {
+    wrap.style.display = "none";
+  }
+}
+
+function renderDebateVideo(videoUrl) {
+  const wrap = ensureDebateVideoSlot();
+  const videoEl = document.getElementById("debate-video");
+
+  if (!wrap || !videoEl) return;
+
+  const normalizedUrl = String(videoUrl || "").trim();
+
+  if (!normalizedUrl) {
+    resetDebateVideo();
+    return;
+  }
+
+  const imageWrap = document.getElementById("debate-image-wrap");
+  const imageEl = document.getElementById("debate-image");
+  if (imageWrap) imageWrap.style.display = "none";
+  if (imageEl) imageEl.removeAttribute("src");
+  closeDebateImageLightbox();
+  resetDebateSourcePreview();
+
+  if (videoEl.getAttribute("src") !== normalizedUrl) {
+    videoEl.src = normalizedUrl;
+    videoEl.load();
+  }
+
+  wrap.style.display = "block";
+}
+
 function renderDebateImage(imageUrl) {
   const wrap = ensureDebateImageSlot();
   const imageEl = document.getElementById("debate-image");
@@ -4707,6 +4840,7 @@ imageEl.removeAttribute("src");
 closeDebateImageLightbox();
 return;
   }
+resetDebateVideo();
 imageEl.src = normalizedUrl;
 wrap.style.display = "block";
 initDebateImageLightbox();
@@ -5883,12 +6017,21 @@ saveVisitedDebate(id);
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
-renderDebateImage(data.debate.image_url || "");
-
+const debateVideoUrl = String(data.debate.video_url || "").trim();
+const debateImageUrl = String(data.debate.image_url || "").trim();
 const sourceUrl = String(data.debate.source_url || "").trim();
 const initialSourcePreview = data.sourcePreview || null;
-renderDebateSourcePreview(sourceUrl, initialSourcePreview);
-hydrateDebateSourcePreviewIfNeeded(sourceUrl, initialSourcePreview);
+
+if (debateVideoUrl) {
+  renderDebateVideo(debateVideoUrl);
+  renderDebateImage("");
+  resetDebateSourcePreview();
+} else {
+  renderDebateVideo("");
+  renderDebateImage(debateImageUrl);
+  renderDebateSourcePreview(sourceUrl, initialSourcePreview);
+  hydrateDebateSourcePreviewIfNeeded(sourceUrl, initialSourcePreview);
+}
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
