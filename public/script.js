@@ -6271,21 +6271,21 @@ form.addEventListener("submit", async e => {
     if (resourceMode === "video" && videoFile) {
       setCreatePublishProgress(82, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
 
-      const uploadSetup = await fetchJSON(
-        `${API}/debates/${encodeURIComponent(r.id)}/video-upload-url?authorKey=${encodeURIComponent(creatorKey)}`,
-        {
-          signal: getCreatePublishSignal(),
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileName: videoFile.name || "video",
-            contentType: videoFile.type || "application/octet-stream",
-            size: Number(videoFile.size || 0)
-          })
-        }
-      );
-
       try {
+        const uploadSetup = await fetchJSON(
+          `${API}/debates/${encodeURIComponent(r.id)}/video-upload-url?authorKey=${encodeURIComponent(creatorKey)}`,
+          {
+            signal: getCreatePublishSignal(),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: videoFile.name || "video",
+              contentType: videoFile.type || "application/octet-stream",
+              size: Number(videoFile.size || 0)
+            })
+          }
+        );
+
         let directUploadStarted = false;
         let directUploadStartTimer = null;
 
