@@ -6269,9 +6269,36 @@ form.addEventListener("submit", async e => {
     setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du téléversement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
-      setCreatePublishProgress(82, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
+      const DIRECT_VIDEO_UPLOAD_START_TIMEOUT_MS = 60000;
+      const VIDEO_UPLOAD_WARN_BYTES = 25 * 1024 * 1024;
+      const VIDEO_UPLOAD_HEAVY_WARN_BYTES = 40 * 1024 * 1024;
+      const videoUploadSize = Number(videoFile.size || 0);
+      const videoUploadSizeMb = videoUploadSize > 0 ? (videoUploadSize / (1024 * 1024)).toFixed(1) : "0.0";
+      const videoSizeWarningDetail = videoUploadSize >= VIDEO_UPLOAD_HEAVY_WARN_BYTES
+        ? ` Vidéo très lourde (${videoUploadSizeMb} Mo) : l’envoi peut être long.`
+        : videoUploadSize >= VIDEO_UPLOAD_WARN_BYTES
+          ? ` Vidéo lourde (${videoUploadSizeMb} Mo) : l’envoi peut être long.`
+          : "";
+      const videoUploadMetrics = {
+        debateCreatedAt: Date.now(),
+        directUploadStartTimeoutMs: DIRECT_VIDEO_UPLOAD_START_TIMEOUT_MS
+      };
+
+      if (videoSizeWarningDetail) {
+        console.warn(`[video-upload] débat=${r.id} taille=${videoUploadSizeMb}MB${videoUploadSize >= VIDEO_UPLOAD_HEAVY_WARN_BYTES ? ' (très lourde)' : ''}`);
+      }
+
+      setCreatePublishProgress(
+        82,
+        "Préparation de la vidéo",
+        `Préparation de l’envoi direct de la vidéo…${videoSizeWarningDetail}`
+      );
+
+      let directUploadStage = "signed-url";
+      let directUploadAbortReason = "";
 
       try {
+        videoUploadMetrics.signedUrlRequestedAt = Date.now();
         const uploadSetup = await fetchJSON(
           `${API}/debates/${encodeURIComponent(r.id)}/video-upload-url?authorKey=${encodeURIComponent(creatorKey)}`,
           {
@@ -6281,13 +6308,45 @@ form.addEventListener("submit", async e => {
             body: JSON.stringify({
               fileName: videoFile.name || "video",
               contentType: videoFile.type || "application/octet-stream",
-              size: Number(videoFile.size || 0)
+              size: videoUploadSize
             })
           }
+        );
+        videoUploadMetrics.signedUrlReceivedAt = Date.now();
+        console.info(
+          `[video-upload] débat=${r.id} signed-url prête en ${videoUploadMetrics.signedUrlReceivedAt - videoUploadMetrics.signedUrlRequestedAt}ms`
         );
 
         let directUploadStarted = false;
         let directUploadStartTimer = null;
+
+        const clearDirectUploadStartTimer = () => {
+          if (directUploadStartTimer) {
+            clearTimeout(directUploadStartTimer);
+            directUploadStartTimer = null;
+          }
+        };
+
+        const markDirectUploadStarted = (trigger = "xhr") => {
+          if (!directUploadStarted) {
+            directUploadStarted = true;
+            if (!videoUploadMetrics.directUploadStartedAt) {
+              videoUploadMetrics.directUploadStartedAt = Date.now();
+              console.info(
+                `[video-upload] débat=${r.id} upload direct démarré en ${videoUploadMetrics.directUploadStartedAt - videoUploadMetrics.signedUrlRequestedAt}ms (${trigger})`
+              );
+            }
+          }
+
+          if (directUploadAbortReason === "startup-timeout") {
+            directUploadAbortReason = "";
+          }
+
+          clearDirectUploadStartTimer();
+        };
+
+        directUploadStage = "direct-put";
+        videoUploadMetrics.directPutStartedAt = Date.now();
 
         await createXhrRequest(uploadSetup.signedUrl, {
           signal: getCreatePublishSignal(),
@@ -6298,20 +6357,12 @@ form.addEventListener("submit", async e => {
           body: videoFile,
           responseType: "text",
           onXhrCreated: (xhr) => {
-            const markDirectUploadStarted = () => {
-              directUploadStarted = true;
-              if (directUploadStartTimer) {
-                clearTimeout(directUploadStartTimer);
-                directUploadStartTimer = null;
-              }
-            };
-
-            xhr.addEventListener("loadstart", markDirectUploadStarted, { once: true });
+            xhr.addEventListener("loadstart", () => markDirectUploadStarted("xhr-loadstart"), { once: true });
             if (xhr.upload) {
-              xhr.upload.addEventListener("loadstart", markDirectUploadStarted, { once: true });
+              xhr.upload.addEventListener("loadstart", () => markDirectUploadStarted("xhr-upload-loadstart"), { once: true });
               xhr.upload.addEventListener("progress", (event) => {
                 if (event.loaded > 0) {
-                  markDirectUploadStarted();
+                  markDirectUploadStarted("xhr-upload-progress");
                 }
               }, { once: true });
             }
@@ -6321,25 +6372,26 @@ form.addEventListener("submit", async e => {
                 return;
               }
 
+              directUploadAbortReason = "startup-timeout";
+              console.warn(
+                `[video-upload] débat=${r.id} aucun démarrage détecté après ${DIRECT_VIDEO_UPLOAD_START_TIMEOUT_MS}ms, bascule possible vers le secours.`
+              );
+
               try {
                 xhr.abort();
               } catch (error) {
                 // noop
               }
-            }, 15000);
+            }, DIRECT_VIDEO_UPLOAD_START_TIMEOUT_MS);
           },
           onUploadProgress: (progress) => {
-            directUploadStarted = true;
-            if (directUploadStartTimer) {
-              clearTimeout(directUploadStartTimer);
-              directUploadStartTimer = null;
-            }
+            markDirectUploadStarted("upload-progress-callback");
 
             if (progress >= 100) {
               setCreatePublishProgress(
                 99,
-                "Upload terminé",
-                "Téléversement terminé. Finalisation de la vidéo…"
+                "Validation de la vidéo",
+                "Transfert direct terminé. Validation de la vidéo…"
               );
               return;
             }
@@ -6351,18 +6403,23 @@ form.addEventListener("submit", async e => {
             );
           },
           onUploadComplete: () => {
-            if (directUploadStartTimer) {
-              clearTimeout(directUploadStartTimer);
-              directUploadStartTimer = null;
-            }
+            clearDirectUploadStartTimer();
+            videoUploadMetrics.directPutCompletedAt = Date.now();
+            console.info(
+              `[video-upload] débat=${r.id} upload direct terminé en ${videoUploadMetrics.directPutCompletedAt - videoUploadMetrics.directPutStartedAt}ms`
+            );
 
             setCreatePublishProgress(
               99,
-              "Upload terminé",
-              "Téléversement terminé. Finalisation de la vidéo…"
+              "Validation de la vidéo",
+              "Transfert direct terminé. Validation de la vidéo…"
             );
           }
         });
+
+        directUploadStage = "finalize";
+        videoUploadMetrics.finalizeRequestedAt = Date.now();
+        setCreatePublishProgress(99, "Validation de la vidéo", "Validation de la vidéo et association au débat…");
 
         await fetchJSON(
           `${API}/debates/${encodeURIComponent(r.id)}/video-upload-complete?authorKey=${encodeURIComponent(creatorKey)}`,
@@ -6376,15 +6433,27 @@ form.addEventListener("submit", async e => {
             })
           }
         );
+
+        videoUploadMetrics.finalizeCompletedAt = Date.now();
+        console.info(
+          `[video-upload] débat=${r.id} finalisation terminée en ${videoUploadMetrics.finalizeCompletedAt - videoUploadMetrics.finalizeRequestedAt}ms`
+        );
       } catch (directUploadError) {
         const message = String(directUploadError?.message || "").toLowerCase();
-        const canFallback = (!message.includes("annul") || message.includes("interrompu")) && !getCreatePublishSignal()?.aborted;
+        const wasUserAbort = Boolean(getCreatePublishSignal()?.aborted) && directUploadAbortReason !== "startup-timeout";
+        const isStartupTimeout = directUploadAbortReason === "startup-timeout";
+        const shouldFallback = !wasUserAbort && directUploadStage !== "finalize";
 
-        if (!canFallback) {
+        console.warn(
+          `[video-upload] débat=${r.id} échec du flux direct (étape=${directUploadStage}, raison=${directUploadAbortReason || message || 'inconnue'})`
+        );
+
+        if (!shouldFallback) {
           throw directUploadError;
         }
 
-        setCreatePublishProgress(84, "Envoi de la vidéo", "Reprise avec le mode de secours…");
+        setCreatePublishProgress(84, "Envoi de la vidéo", "Bascule vers le mode de secours…");
+        videoUploadMetrics.fallbackStartedAt = Date.now();
 
         await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
           signal: getCreatePublishSignal(),
@@ -6400,23 +6469,27 @@ form.addEventListener("submit", async e => {
             if (progress >= 100) {
               setCreatePublishProgress(
                 99,
-                "Upload terminé",
-                "Téléversement terminé. Traitement serveur en cours…"
+                "Finalisation côté serveur",
+                "Envoi de secours terminé. Traitement serveur en cours…"
               );
               return;
             }
 
             setCreatePublishProgress(
               mapProgressRange(progress, 84, 99),
-              "Envoi de la vidéo",
+              "Envoi de secours de la vidéo",
               `Téléversement de secours de la vidéo… ${Math.round(progress)}%`
             );
           },
           onUploadComplete: () => {
+            videoUploadMetrics.fallbackCompletedAt = Date.now();
+            console.info(
+              `[video-upload] débat=${r.id} fallback terminé en ${videoUploadMetrics.fallbackCompletedAt - videoUploadMetrics.fallbackStartedAt}ms${isStartupTimeout ? ' après timeout de démarrage du direct' : ''}`
+            );
             setCreatePublishProgress(
               99,
-              "Upload terminé",
-              "Téléversement terminé. Traitement serveur en cours…"
+              "Finalisation côté serveur",
+              "Envoi de secours terminé. Traitement serveur en cours…"
             );
           }
         });
