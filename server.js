@@ -874,13 +874,17 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
 }
 
 const externalPreviewCache = new Map();
-const EXTERNAL_PREVIEW_CACHE_DIR = "/var/data/external-preview-cache";
+const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
 
 function ensureExternalPreviewCacheDir() {
   try {
-    fs.mkdirSync(EXTERNAL_PREVIEW_CACHE_DIR, { recursive: true });
+    if (!fs.existsSync(EXTERNAL_PREVIEW_CACHE_DIR)) {
+      fs.mkdirSync(EXTERNAL_PREVIEW_CACHE_DIR, { recursive: true });
+    }
+    return true;
   } catch (error) {
     console.error("Erreur création dossier cache previews externes:", error);
+    return false;
   }
 }
 
@@ -891,7 +895,8 @@ function getExternalPreviewCacheFilePath(url) {
 
 function readPersistentPreview(url) {
   try {
-    ensureExternalPreviewCacheDir();
+    if (!ensureExternalPreviewCacheDir()) return null;
+
     const filePath = getExternalPreviewCacheFilePath(url);
     if (!fs.existsSync(filePath)) return null;
 
@@ -899,13 +904,15 @@ function readPersistentPreview(url) {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch (error) {
+    console.error("Erreur lecture cache preview externe:", error);
     return null;
   }
 }
 
 function writePersistentPreview(url, preview) {
   try {
-    ensureExternalPreviewCacheDir();
+    if (!ensureExternalPreviewCacheDir()) return;
+
     const filePath = getExternalPreviewCacheFilePath(url);
     fs.writeFileSync(filePath, JSON.stringify(preview || {}), "utf8");
   } catch (error) {

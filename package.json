@@ -8,7 +8,7 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.100.1",
+    "@supabase/supabase-js": "^2.101.1",
     "canvas": "^3.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
