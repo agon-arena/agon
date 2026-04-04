@@ -4458,7 +4458,7 @@ async function initAdminReports() {
                 : "#");
 
       return `
-        <article class="debate-card">
+<article class="debate-card ${mediaOutsideLink ? '' : 'debate-card-no-media'}">
           <div class="debate-card-category">${typeLabel}</div>
           <h2>${escapeHtml(targetTitle)}</h2>
           <p><strong>Motif :</strong> ${reasonLabel}</p>
@@ -4917,7 +4917,7 @@ const contextHtml = buildIndexContextPreviewHtml(d);
         ${mediaOutsideLink ? mediaHtml : ""}
         ${contextHtml}
 
-        <div class="debate-card-meta-below-media">
+<div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
           <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
           <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
           ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
@@ -5452,6 +5452,7 @@ function createXhrRequest(url, options = {}) {
     body = null,
     responseType = "json",
     onUploadProgress,
+    onUploadComplete,
     signal,
     onXhrCreated
   } = options;
@@ -5491,11 +5492,19 @@ function createXhrRequest(url, options = {}) {
       onXhrCreated(xhr);
     }
 
-    if (typeof onUploadProgress === "function" && xhr.upload) {
-      xhr.upload.addEventListener("progress", (event) => {
-        if (!event.lengthComputable) return;
-        onUploadProgress(Math.round((event.loaded / event.total) * 100), event);
-      });
+    if (xhr.upload) {
+      if (typeof onUploadProgress === "function") {
+        xhr.upload.addEventListener("progress", (event) => {
+          if (!event.lengthComputable) return;
+          onUploadProgress(Math.round((event.loaded / event.total) * 100), event);
+        });
+      }
+
+      if (typeof onUploadComplete === "function") {
+        xhr.upload.addEventListener("loadend", () => {
+          onUploadComplete();
+        });
+      }
     }
 
     let abortHandler = null;
@@ -6051,6 +6060,17 @@ form.addEventListener("submit", async e => {
       body: createPayload,
       responseType: "json",
       onUploadProgress: (progress) => {
+        if (progress >= 100) {
+          setCreatePublishProgress(
+            78,
+            "Création de l’arène",
+            imageFile
+              ? "Téléversement terminé, finalisation côté serveur…"
+              : "Envoi terminé, finalisation côté serveur…"
+          );
+          return;
+        }
+
         const mapped = imageFile
           ? mapProgressRange(progress, 34, 78)
           : mapProgressRange(progress, 12, 78);
@@ -6062,10 +6082,19 @@ form.addEventListener("submit", async e => {
             ? `Envoi du débat et de l’image au serveur… ${Math.round(progress)}%`
             : `Envoi du débat au serveur… ${Math.round(progress)}%`
         );
+      },
+      onUploadComplete: () => {
+        setCreatePublishProgress(
+          78,
+          "Création de l’arène",
+          imageFile
+            ? "Téléversement terminé, finalisation côté serveur…"
+            : "Envoi terminé, finalisation côté serveur…"
+        );
       }
     });
 
-    setCreatePublishProgress(80, "Arène créée", "Finalisation…");
+    setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du traitement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
       setCreatePublishProgress(82, "Préparation de la vidéo", "Lecture du fichier vidéo…");
@@ -6091,10 +6120,26 @@ form.addEventListener("submit", async e => {
         body: videoBuffer,
         responseType: "json",
         onUploadProgress: (progress) => {
+          if (progress >= 100) {
+            setCreatePublishProgress(
+              99,
+              "Upload terminé",
+              "Téléversement terminé. Traitement serveur en cours…"
+            );
+            return;
+          }
+
           setCreatePublishProgress(
             mapProgressRange(progress, 90, 99),
             "Envoi de la vidéo",
             `Téléversement de la vidéo… ${Math.round(progress)}%`
+          );
+        },
+        onUploadComplete: () => {
+          setCreatePublishProgress(
+            99,
+            "Upload terminé",
+            "Téléversement terminé. Traitement serveur en cours…"
           );
         }
       });
