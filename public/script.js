@@ -6094,30 +6094,20 @@ form.addEventListener("submit", async e => {
       }
     });
 
-    setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du traitement vidéo…" : "Traitement serveur en cours…");
+    setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du téléversement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
-      setCreatePublishProgress(82, "Préparation de la vidéo", "Lecture du fichier vidéo…");
-      const videoBuffer = await readFileAsArrayBuffer(videoFile, {
-        signal: getCreatePublishSignal(),
-        onProgress: (progress) => {
-          setCreatePublishProgress(
-            mapProgressRange(progress, 82, 90),
-            "Préparation de la vidéo",
-            `Lecture du fichier vidéo… ${Math.round(progress)}%`
-          );
-        }
-      });
+      setCreatePublishProgress(82, "Envoi de la vidéo", "Démarrage du téléversement vidéo…");
 
       await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
         signal: getCreatePublishSignal(),
         method: "POST",
         headers: {
-          "Content-Type": "application/octet-stream",
+          "Content-Type": videoFile.type || "application/octet-stream",
           "x-file-name": videoFile.name || "video",
           "x-file-type": videoFile.type || "application/octet-stream"
         },
-        body: videoBuffer,
+        body: videoFile,
         responseType: "json",
         onUploadProgress: (progress) => {
           if (progress >= 100) {
@@ -6130,7 +6120,7 @@ form.addEventListener("submit", async e => {
           }
 
           setCreatePublishProgress(
-            mapProgressRange(progress, 90, 99),
+            mapProgressRange(progress, 82, 99),
             "Envoi de la vidéo",
             `Téléversement de la vidéo… ${Math.round(progress)}%`
           );
