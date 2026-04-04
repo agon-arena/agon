@@ -1651,7 +1651,6 @@ function unloadIndexYouTubeShell(shell) {
   iframe.removeAttribute('src');
   iframe.src = 'about:blank';
   shell.dataset.active = 'false';
-  shell.dataset.userActivated = 'false';
 
   if (poster) poster.style.display = '';
   updateIndexYouTubeShellOverlay(shell);
@@ -1664,14 +1663,14 @@ function activateIndexYouTubeShell(shell) {
   const baseUrl = String(shell.dataset.embedBase || '').trim();
   if (!iframe || !baseUrl) return;
 
-  const shouldStartMuted = shell.dataset.userActivated !== 'true';
-  const nextSrc = getIndexYouTubeEmbedSrc(baseUrl, {
+const currentSrc = String(iframe.getAttribute('src') || '').trim();
+
+if (!currentSrc || currentSrc === 'about:blank') {
+  iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
-    muted: shouldStartMuted
+    muted: true
   });
-  if (iframe.getAttribute('src') !== nextSrc) {
-    iframe.src = nextSrc;
-  }
+}
 
   shell.dataset.active = 'true';
   if (poster) poster.style.display = 'none';
@@ -1704,12 +1703,16 @@ function updateIndexYouTubeActiveShell() {
   const state = window.indexYouTubePlaybackState;
   if (!state) return;
 
-  const candidates = Array.from(state.shells).filter((shell) => {
-    if (!shell || shell.dataset.inView !== 'true') return false;
-    if (!shell.isConnected || !shell.offsetParent) return false;
-    const rect = shell.getBoundingClientRect();
-    return rect.bottom > 0 && rect.top < window.innerHeight;
-  });
+ const candidates = Array.from(state.shells).filter((shell) => {
+  if (!shell || shell.dataset.inView !== 'true') return false;
+  if (!shell.isConnected || !shell.offsetParent) return false;
+
+  const rect = shell.getBoundingClientRect();
+const topTolerance = window.innerHeight * 0.18;
+const bottomTolerance = window.innerHeight * 0.18;
+
+  return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTolerance;
+});
 
   if (!candidates.length) {
     if (state.activeShell) {
@@ -1808,7 +1811,6 @@ function unloadIndexLocalVideoShell(shell) {
   video.muted = true;
   video.controls = false;
   shell.dataset.active = 'false';
-  shell.dataset.userActivated = 'false';
 
   if (poster) poster.style.display = '';
   updateIndexLocalVideoShellOverlay(shell);
@@ -1869,8 +1871,10 @@ function updateIndexLocalVideoActiveShell() {
     if (!shell || shell.dataset.inView !== 'true') return false;
     if (!shell.isConnected || !shell.offsetParent) return false;
     const rect = shell.getBoundingClientRect();
-    return rect.bottom > 0 && rect.top < window.innerHeight;
-  });
+const topTolerance = window.innerHeight * 0.18;
+const bottomTolerance = window.innerHeight * 0.18;
+
+return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTolerance;  });
 
   if (!candidates.length) {
     if (state.activeShell) {
@@ -2079,21 +2083,19 @@ function initIndexYouTubeObserver(root = document) {
     }
   });
 
-  state.observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      const shell = entry.target;
-      shell.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.55 ? 'true' : 'false';
-      if (shell.dataset.inView !== 'true' && state.activeShell === shell) {
-        unloadIndexYouTubeShell(shell);
-        state.activeShell = null;
-      }
-    });
-
-    scheduleIndexYouTubeActiveUpdate();
-  }, {
-    threshold: [0, 0.25, 0.55, 0.85],
-    rootMargin: '0px 0px 0px 0px'
+state.observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    const shell = entry.target;
+    shell.dataset.inView = entry.isIntersecting ? 'true' : 'false';
   });
+
+  scheduleIndexYouTubeActiveUpdate();
+}, {
+  threshold: [0, 0.1, 0.25, 0.55, 0.85],
+  rootMargin: '35% 0px 35% 0px'
+});
+
+
 
   shells.forEach((shell) => state.observer.observe(shell));
 
