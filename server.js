@@ -190,7 +190,6 @@ const debateImagesDir = path.join(__dirname, "public", "debate-images");
 const debateVideosDir = path.join(__dirname, "public", "debate-videos");
 const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
-const VIDEO_UPLOAD_WARNING_BYTES = 25 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
 
 const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json");
@@ -541,21 +540,13 @@ async function saveUploadedDebateImage(debateId, imageUpload, options = {}) {
 }
 
 async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, options = {}) {
-  const saveStartedAt = Date.now();
   const safeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
-  const videoSizeBytes = safeBuffer.length;
-  const videoSizeMb = videoSizeBytes ? (videoSizeBytes / (1024 * 1024)).toFixed(2) : "0.00";
-
-  if (!videoSizeBytes) {
+  if (!safeBuffer.length) {
     throw new Error("Vidéo vide.");
   }
 
-  if (videoSizeBytes > MAX_DEBATE_VIDEO_BYTES) {
+  if (safeBuffer.length > MAX_DEBATE_VIDEO_BYTES) {
     throw new Error("Vidéo trop lourde.");
-  }
-
-  if (videoSizeBytes >= VIDEO_UPLOAD_WARNING_BYTES) {
-    console.warn(`[video-upload][server] débat=${debateId} vidéo lourde détectée (${videoSizeMb}MB).`);
   }
 
   const normalizedType = String(mimeType || "").trim().toLowerCase();
@@ -565,45 +556,33 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
     throw new Error("Format vidéo non pris en charge.");
   }
 
-  const resolvedMimeType = getVideoMimeTypeFromExtension(extension);
   const previousVideoUrl = String(options.previousVideoUrl || "").trim();
   const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
 
-  const storageUploadStartedAt = Date.now();
   const { error } = await supabase.storage
     .from(SUPABASE_DEBATE_MEDIA_BUCKET)
     .upload(objectPath, safeBuffer, {
-      contentType: resolvedMimeType,
+      contentType: getVideoMimeTypeFromExtension(extension),
       upsert: false
     });
-  const storageUploadCompletedAt = Date.now();
 
   if (error) {
     console.error("Erreur upload vidéo Supabase Storage:", error);
     throw new Error("Erreur enregistrement vidéo.");
   }
 
-  const publicUrlStartedAt = Date.now();
   const publicUrl = getStoragePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, objectPath);
-  const publicUrlCompletedAt = Date.now();
   if (!publicUrl) {
     throw new Error("Erreur enregistrement vidéo.");
   }
 
-  let cleanupDurationMs = 0;
   if (previousVideoUrl) {
-    const cleanupStartedAt = Date.now();
     await deleteStoredMediaAsset(previousVideoUrl, debateVideosDir);
-    cleanupDurationMs = Date.now() - cleanupStartedAt;
   }
-
-  console.info(
-    `[video-upload][server] saveUploadedDebateVideo débat=${debateId} taille=${videoSizeMb}MB storage=${storageUploadCompletedAt - storageUploadStartedAt}ms publicUrl=${publicUrlCompletedAt - publicUrlStartedAt}ms cleanup=${cleanupDurationMs}ms total=${Date.now() - saveStartedAt}ms`
-  );
 
   return {
     url: publicUrl,
-    mimeType: resolvedMimeType
+    mimeType: getVideoMimeTypeFromExtension(extension)
   };
 }
 
@@ -2437,15 +2416,14 @@ app.post("/api/debates", async (req, res) => {
   }
 });
 
+
+
 app.post("/api/debates/:id/video-upload-url", async (req, res) => {
   try {
     const debateId = req.params.id;
-    const authorKey = String(req.body?.creatorKey || req.body?.authorKey || req.query.authorKey || req.get("x-author-key") || "").trim();
-    const fileName = String(req.body?.fileName || "video").trim();
-    const contentType = String(req.body?.contentType || "application/octet-stream").trim();
-    const requestedSize = Number(req.body?.size || 0);
-
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
     const debateRow = await getDebateById(debateId);
+
     if (!debateRow) {
       return res.status(404).json({ error: "Débat introuvable." });
     }
@@ -2456,38 +2434,42 @@ app.post("/api/debates/:id/video-upload-url", async (req, res) => {
       String(debateRow.creator_key) === authorKey;
 
     if (!isAdmin(req) && !isOwner) {
-      return res.status(403).json({ error: "Upload vidéo non autorisé." });
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
     }
 
-    const normalizedType = contentType.toLowerCase();
-    const extension = getVideoExtensionFromMimeType(normalizedType) || getVideoExtensionFromFilename(fileName);
+    const fileName = String(req.body?.fileName || "video").trim();
+    const mimeType = String(req.body?.contentType || "").trim().toLowerCase();
+    const size = Number(req.body?.size || 0);
+
+    if (!size || !Number.isFinite(size) || size <= 0) {
+      return res.status(400).json({ error: "Taille vidéo invalide." });
+    }
+
+    if (size > MAX_DEBATE_VIDEO_BYTES) {
+      return res.status(400).json({ error: "Vidéo trop lourde." });
+    }
+
+    const extension = getVideoExtensionFromMimeType(mimeType) || getVideoExtensionFromFilename(fileName);
     if (!extension) {
       return res.status(400).json({ error: "Format vidéo non pris en charge." });
     }
 
-    if (requestedSize > MAX_DEBATE_VIDEO_BYTES) {
-      return res.status(400).json({ error: "Vidéo trop lourde." });
-    }
-
     const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
-    const storageMimeType = getVideoMimeTypeFromExtension(extension);
-
     const { data, error } = await supabase.storage
       .from(SUPABASE_DEBATE_MEDIA_BUCKET)
-      .createSignedUploadUrl(objectPath, {
-        upsert: false
-      });
+      .createSignedUploadUrl(objectPath);
 
-    if (error || !data?.signedUrl || !data?.token) {
-      console.error("Erreur création signed upload url vidéo:", error || new Error("Signed upload URL manquante."));
+    if (error || !data?.token) {
+      console.error("Erreur création signed upload URL vidéo:", error || data);
       return res.status(500).json({ error: "Erreur préparation upload vidéo." });
     }
 
+    const signedUrl = `${SUPABASE_URL}/storage/v1/object/upload/sign/${SUPABASE_DEBATE_MEDIA_BUCKET}/${objectPath}?token=${encodeURIComponent(data.token)}`;
+
     return res.json({
-      signedUrl: data.signedUrl,
-      token: data.token,
+      signedUrl,
       objectPath,
-      mimeType: storageMimeType
+      mimeType: getVideoMimeTypeFromExtension(extension)
     });
   } catch (error) {
     console.error(error);
@@ -2498,11 +2480,9 @@ app.post("/api/debates/:id/video-upload-url", async (req, res) => {
 app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
   try {
     const debateId = req.params.id;
-    const authorKey = String(req.body?.creatorKey || req.body?.authorKey || req.query.authorKey || req.get("x-author-key") || "").trim();
-    const objectPath = String(req.body?.objectPath || "").trim().replace(/^\/+/, "");
-    const mimeType = String(req.body?.mimeType || "application/octet-stream").trim();
-
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
     const debateRow = await getDebateById(debateId);
+
     if (!debateRow) {
       return res.status(404).json({ error: "Débat introuvable." });
     }
@@ -2513,14 +2493,17 @@ app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
       String(debateRow.creator_key) === authorKey;
 
     if (!isAdmin(req) && !isOwner) {
-      return res.status(403).json({ error: "Finalisation vidéo non autorisée." });
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
     }
+
+    const objectPath = String(req.body?.objectPath || "").trim().replace(/^\/+/, "");
+    const mimeType = String(req.body?.mimeType || "").trim();
 
     if (!objectPath) {
       return res.status(400).json({ error: "Chemin vidéo manquant." });
     }
 
-    const expectedPrefix = `debates/${debateId}/`;
+    const expectedPrefix = `debates/${debateId}/video-`;
     if (!objectPath.startsWith(expectedPrefix)) {
       return res.status(400).json({ error: "Chemin vidéo invalide." });
     }
@@ -2530,13 +2513,12 @@ app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
       return res.status(500).json({ error: "Erreur finalisation vidéo." });
     }
 
-    const previousVideoUrl = String(debateRow.video_url || "").trim();
-    if (previousVideoUrl && previousVideoUrl !== publicUrl) {
-      await deleteStoredMediaAsset(previousVideoUrl, debateVideosDir);
-    }
-
     if (debateRow.image_url) {
       await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
+    }
+
+    if (debateRow.video_url) {
+      await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
     }
 
     await persistDebateMediaUrls(debateId, {
@@ -2544,13 +2526,12 @@ app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
       video_url: publicUrl
     });
 
-    return res.json({ success: true, video_url: publicUrl, mime_type: mimeType || getVideoMimeTypeFromExtension(path.extname(objectPath).slice(1)) });
+    return res.json({ success: true, video_url: publicUrl, mime_type: mimeType || getVideoMimeTypeFromExtension(getVideoExtensionFromFilename(objectPath)) });
   } catch (error) {
     console.error(error);
-    return res.status(400).json({ error: "Erreur finalisation vidéo." });
+    return res.status(500).json({ error: "Erreur finalisation vidéo." });
   }
 });
-
 app.post("/api/debates/:id/video-file", express.raw({
   type: (req) => {
     const contentType = String(req.get("content-type") || "").toLowerCase().split(";")[0].trim();
@@ -2564,19 +2545,12 @@ app.post("/api/debates/:id/video-file", express.raw({
   },
   limit: `${MAX_DEBATE_VIDEO_BYTES}b`
 }), async (req, res) => {
-  const requestStartedAt = Date.now();
-
   try {
     const debateId = req.params.id;
     const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
-    const fileName = String(req.get("x-file-name") || "video").trim();
-    const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
-    const debateLookupStartedAt = Date.now();
     const debateRow = await getDebateById(debateId);
-    const debateLookupDurationMs = Date.now() - debateLookupStartedAt;
 
     if (!debateRow) {
-      console.warn(`[video-upload][fallback] débat=${debateId} introuvable après ${debateLookupDurationMs}ms.`);
       return res.status(404).json({ error: "Débat introuvable." });
     }
 
@@ -2586,7 +2560,6 @@ app.post("/api/debates/:id/video-file", express.raw({
       String(debateRow.creator_key) === authorKey;
 
     if (!isAdmin(req) && !isOwner) {
-      console.warn(`[video-upload][fallback] débat=${debateId} refusé (non autorisé).`);
       return res.status(403).json({ error: "Ajout vidéo non autorisé." });
     }
 
@@ -2595,39 +2568,25 @@ app.post("/api/debates/:id/video-file", express.raw({
       return res.status(400).json({ error: "Vidéo manquante." });
     }
 
-    const bufferSizeMb = (buffer.length / (1024 * 1024)).toFixed(2);
-    console.info(
-      `[video-upload][fallback] début débat=${debateId} taille=${bufferSizeMb}MB mime=${mimeType || 'inconnu'} fichier=${fileName || 'video'} lookup=${debateLookupDurationMs}ms`
-    );
+    const fileName = String(req.get("x-file-name") || "video").trim();
+    const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
 
-    const saveStartedAt = Date.now();
     const storedVideo = await saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, {
       previousVideoUrl: debateRow.video_url
     });
-    const saveDurationMs = Date.now() - saveStartedAt;
 
-    let imageCleanupDurationMs = 0;
     if (debateRow.image_url) {
-      const imageCleanupStartedAt = Date.now();
       await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
-      imageCleanupDurationMs = Date.now() - imageCleanupStartedAt;
     }
 
-    const persistStartedAt = Date.now();
     await persistDebateMediaUrls(debateId, {
       image_url: "",
       video_url: storedVideo.url
     });
-    const persistDurationMs = Date.now() - persistStartedAt;
-
-    console.info(
-      `[video-upload][fallback] terminé débat=${debateId} save=${saveDurationMs}ms persist=${persistDurationMs}ms imageCleanup=${imageCleanupDurationMs}ms total=${Date.now() - requestStartedAt}ms`
-    );
 
     return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
   } catch (error) {
     console.error(error);
-    console.error(`[video-upload][fallback] échec après ${Date.now() - requestStartedAt}ms.`);
     const message = error?.message === "Vidéo trop lourde."
       ? "Vidéo trop lourde."
       : error?.message === "Format vidéo non pris en charge."
