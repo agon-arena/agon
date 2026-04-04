@@ -6346,15 +6346,45 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
     sourceLoading.style.display = "block";
   }
 
-  sourceFallback.classList.add("debate-source-fallback-instagram");
-  sourceFallback.innerHTML = `
+ sourceFallback.classList.add("debate-source-fallback-instagram");
+sourceFallback.innerHTML = `
+  <div
+    id="debate-source-instagram-shell"
+    style="width:100%; cursor:pointer;"
+    role="link"
+    tabindex="0"
+    aria-label="Ouvrir le post Instagram"
+  >
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
       <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
       <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
     </div>
     <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
-  `;
-  sourceFallback.style.display = "flex";
+  </div>
+`;
+sourceFallback.style.display = "flex";
+
+const instagramShell = document.getElementById("debate-source-instagram-shell");
+
+if (instagramShell) {
+  const openInstagramPost = () => {
+    window.open(embedPermalink, "_blank", "noopener,noreferrer");
+  };
+
+  instagramShell.addEventListener("click", (event) => {
+    const interactiveTarget = event.target.closest("a, button, iframe");
+    if (interactiveTarget) return;
+    openInstagramPost();
+  });
+
+  instagramShell.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const interactiveTarget = event.target.closest("a, button, iframe");
+    if (interactiveTarget) return;
+    event.preventDefault();
+    openInstagramPost();
+  });
+}
 
   try {
     await loadInstagramEmbedScript();
