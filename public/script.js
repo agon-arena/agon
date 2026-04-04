@@ -1319,16 +1319,60 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null) {
   const image = normalizedPreview.image || "";
 
   return `
-    <div class="debate-card-source debate-card-source-x">
+    <div
+      class="debate-card-source debate-card-source-x"
+      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+    >
       ${image ? `
-        <div class="debate-card-source-image-wrap debate-card-source-image-wrap-x">
-          <img class="debate-card-source-image" src="${escapeAttribute(image)}" alt="Aperçu du post X">
+        <div style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
+          <img
+            src="${escapeAttribute(image)}"
+            alt="Aperçu du post X"
+            loading="lazy"
+            decoding="async"
+            style="display:block; width:100%; height:100%; object-fit:cover;"
+            onerror="this.closest('div')?.remove();"
+          >
         </div>
       ` : ""}
-      <div class="debate-card-source-body">
-        <div class="debate-card-source-badge">𝕏 Source</div>
-        <div class="debate-card-source-title">${escapeHtml(title)}</div>
-        <div class="debate-card-source-description">${escapeHtml(description)}</div>
+      <div style="padding:10px 16px 14px; display:flex; flex-direction:column; gap:6px;">
+        <div style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">𝕏 Source</div>
+        <div style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
+        <div style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>
+        <div>
+          <a
+            class="debate-source-link"
+            href="${escapeAttribute(safeUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
+          >↗ Voir le post sur X</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildIndexXEmbedHtml(sourceUrl, preview = null) {
+  const tweetId = getXStatusId(sourceUrl);
+  if (!tweetId) {
+    return buildXIndexSourceCardHtml(sourceUrl, preview);
+  }
+
+  return `
+    <div class="debate-card-media debate-card-media-x">
+      <div
+        class="debate-card-x-shell"
+        data-index-x-shell
+        data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
+        data-tweet-id="${escapeAttribute(tweetId)}"
+      >
+        <div
+          data-index-x-loading
+          style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
+        >Chargement du post X…</div>
+        <div data-index-x-embed style="display:none;"></div>
+        <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview)}</div>
       </div>
     </div>
   `;
@@ -1463,6 +1507,10 @@ function renderIndexInlineSourceCard(debate) {
   const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
     ? debate.source_preview
     : null;
+
+  if (isXStatusUrl(sourceUrl)) {
+    return buildIndexXEmbedHtml(sourceUrl, sourcePreview);
+  }
 
   if (isWeakSourcePreviewData(sourcePreview, sourceUrl)) {
     return "";
@@ -2056,6 +2104,141 @@ function initIndexYouTubeObserver(root = document) {
   window.addEventListener('scroll', state.scrollHandler, { passive: true });
 
   scheduleIndexYouTubeActiveUpdate();
+}
+
+
+function isElementNearViewport(element, extraMargin = 160) {
+  if (!element || typeof element.getBoundingClientRect !== 'function') return false;
+
+  const rect = element.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+  return rect.bottom >= -extraMargin && rect.top <= viewportHeight + extraMargin;
+}
+
+async function renderIndexXShell(shell) {
+  if (!shell) return;
+  if (shell.dataset.rendered === 'true') return;
+  if (shell.dataset.rendering === 'true') return;
+
+  const tweetId = String(shell.dataset.tweetId || '').trim();
+  const sourceUrl = String(shell.dataset.sourceUrl || '').trim();
+  const loading = shell.querySelector('[data-index-x-loading]');
+  const embed = shell.querySelector('[data-index-x-embed]');
+  const fallback = shell.querySelector('[data-index-x-fallback]');
+
+  if (!tweetId || !embed) {
+    if (loading) loading.style.display = 'none';
+    if (fallback) fallback.style.display = '';
+    shell.dataset.rendered = 'failed';
+    return;
+  }
+
+  shell.dataset.rendering = 'true';
+
+  if (loading) loading.style.display = 'flex';
+  if (fallback) fallback.style.display = 'none';
+
+  embed.innerHTML = '';
+  embed.style.display = 'block';
+  embed.style.visibility = 'hidden';
+  embed.style.minHeight = '220px';
+
+  try {
+    await loadXWidgetsScript();
+
+    if (!window.twttr?.widgets?.createTweet) {
+      throw new Error('API widgets X indisponible.');
+    }
+
+    const created = await window.twttr.widgets.createTweet(tweetId, embed, {
+      align: 'center',
+      theme: 'light',
+      dnt: true,
+      conversation: 'all'
+    });
+
+    if (!created) {
+      throw new Error('Embed X non généré.');
+    }
+
+    shell.dataset.rendered = 'true';
+    embed.style.display = 'block';
+    embed.style.visibility = 'visible';
+    embed.style.minHeight = '';
+    if (loading) loading.style.display = 'none';
+  } catch (error) {
+    shell.dataset.rendered = 'failed';
+    embed.innerHTML = '';
+    embed.style.display = 'none';
+    embed.style.visibility = 'visible';
+    embed.style.minHeight = '';
+    if (loading) loading.style.display = 'none';
+    if (fallback) fallback.style.display = '';
+    console.warn('Impossible de rendre le post X sur index:', sourceUrl || tweetId, error);
+  } finally {
+    shell.dataset.rendering = 'false';
+  }
+}
+
+function initIndexXObserver(root = document) {
+  const shells = Array.from(root.querySelectorAll('[data-index-x-shell]'));
+  const previousState = window.indexXEmbedState;
+
+  if (previousState?.observer) {
+    previousState.observer.disconnect();
+  }
+
+  if (!shells.length) {
+    window.indexXEmbedState = null;
+    return;
+  }
+
+  const state = {
+    observer: null,
+    shells: new Set(shells)
+  };
+
+  window.indexXEmbedState = state;
+
+  shells.forEach((shell) => {
+    if (!shell.dataset.rendered) {
+      shell.dataset.rendered = 'false';
+    }
+    shell.dataset.rendering = 'false';
+  });
+
+  if (typeof IntersectionObserver !== 'function') {
+    shells.forEach((shell) => {
+      renderIndexXShell(shell);
+    });
+    return;
+  }
+
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const shell = entry.target;
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return;
+      renderIndexXShell(shell);
+
+      if (shell.dataset.rendered === 'true' || shell.dataset.rendered === 'failed') {
+        state.observer?.unobserve(shell);
+      }
+    });
+  }, {
+    threshold: [0, 0.1, 0.35, 0.7],
+    rootMargin: '120px 0px 120px 0px'
+  });
+
+  shells.forEach((shell) => {
+    state.observer.observe(shell);
+
+    if (isElementNearViewport(shell, 220)) {
+      requestAnimationFrame(() => {
+        renderIndexXShell(shell);
+      });
+    }
+  });
 }
 
 function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
@@ -4439,6 +4622,7 @@ const mediaOutsideLink = !!mediaHtml;
   refreshAdminUI();
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
+  initIndexXObserver(document);
 }
    
 function loadMoreVisitedDebates() {
@@ -4586,6 +4770,7 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
   refreshAdminUI();
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
+  initIndexXObserver(document);
 }
 function loadMoreOtherDebates() {
   otherDebatesVisible += 6;
