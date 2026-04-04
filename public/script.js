@@ -1378,6 +1378,73 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null) {
   `;
 }
 
+function buildIndexInstagramFallbackHtml(sourceUrl, preview = null) {
+  const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
+  const safeUrl = getInstagramEmbedPermalink(sourceUrl) || normalizedPreview.url || String(sourceUrl || "").trim() || "#";
+  const image = normalizedPreview.image || "";
+  const title = normalizedPreview.title || "Post Instagram";
+  const description = normalizedPreview.description || "Ouvrir ce post Instagram.";
+
+  return `
+    <div
+      class="debate-card-source debate-card-source-instagram"
+      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+    >
+      ${image ? `
+        <div style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
+          <img
+            src="${escapeAttribute(image)}"
+            alt="Aperçu du post Instagram"
+            loading="lazy"
+            decoding="async"
+            style="display:block; width:100%; height:100%; object-fit:cover;"
+            onerror="this.closest('div')?.remove();"
+          >
+        </div>
+      ` : ""}
+      <div style="padding:10px 16px 14px; display:flex; flex-direction:column; gap:6px;">
+        <div style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">Instagram</div>
+        <div style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
+        <div style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>
+        <div>
+          <a
+            class="debate-source-link"
+            href="${escapeAttribute(safeUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
+          >↗ Voir le post sur Instagram</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildIndexInstagramEmbedHtml(sourceUrl, preview = null) {
+  const embedPermalink = getInstagramEmbedPermalink(sourceUrl);
+  if (!embedPermalink) {
+    return buildIndexInstagramFallbackHtml(sourceUrl, preview);
+  }
+
+  return `
+    <div class="debate-card-media debate-card-media-instagram">
+      <div
+        class="debate-card-instagram-shell"
+        data-index-instagram-shell
+        data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
+        data-instagram-permalink="${escapeAttribute(embedPermalink)}"
+      >
+        <div
+          data-index-instagram-loading
+          style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
+        >Chargement du post Instagram…</div>
+        <div data-index-instagram-embed style="display:none; justify-content:center;"></div>
+        <div data-index-instagram-fallback style="display:none;">${buildIndexInstagramFallbackHtml(sourceUrl, preview)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function isIndexYouTubeSourceDebate(debate) {
   const sourceUrl = String(debate?.source_url || "").trim();
   if (!sourceUrl) return false;
@@ -1510,6 +1577,10 @@ function renderIndexInlineSourceCard(debate) {
 
   if (isXStatusUrl(sourceUrl)) {
     return buildIndexXEmbedHtml(sourceUrl, sourcePreview);
+  }
+
+  if (isInstagramPostUrl(sourceUrl)) {
+    return buildIndexInstagramEmbedHtml(sourceUrl, sourcePreview);
   }
 
   if (isWeakSourcePreviewData(sourcePreview, sourceUrl)) {
@@ -1871,8 +1942,8 @@ function updateIndexLocalVideoActiveShell() {
     if (!shell || shell.dataset.inView !== 'true') return false;
     if (!shell.isConnected || !shell.offsetParent) return false;
     const rect = shell.getBoundingClientRect();
-const topTolerance = window.innerHeight * 0.18;
-const bottomTolerance = window.innerHeight * 0.18;
+const topTolerance = window.innerHeight * 0.12;
+const bottomTolerance = window.innerHeight * 0.12;
 
 return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTolerance;  });
 
@@ -2086,14 +2157,14 @@ function initIndexYouTubeObserver(root = document) {
 state.observer = new IntersectionObserver((entries) => {
   entries.forEach((entry) => {
     const shell = entry.target;
-    shell.dataset.inView = entry.isIntersecting ? 'true' : 'false';
+    shell.dataset.inView =
+      entry.isIntersecting && entry.intersectionRatio >= 0.12 ? 'true' : 'false';
   });
 
   scheduleIndexYouTubeActiveUpdate();
 }, {
-  threshold: [0, 0.1, 0.25, 0.55, 0.85],
-rootMargin: '18% 0px 18% 0px'
-
+  threshold: [0, 0.05, 0.12, 0.25, 0.55, 0.85],
+  rootMargin: '0px 0px 0px 0px'
 });
 
 
@@ -2239,6 +2310,134 @@ function initIndexXObserver(root = document) {
     if (isElementNearViewport(shell, 220)) {
       requestAnimationFrame(() => {
         renderIndexXShell(shell);
+      });
+    }
+  });
+}
+
+async function renderIndexInstagramShell(shell) {
+  if (!shell) return;
+  if (shell.dataset.rendered === 'true') return;
+  if (shell.dataset.rendering === 'true') return;
+
+  const embedPermalink = String(shell.dataset.instagramPermalink || '').trim();
+  const sourceUrl = String(shell.dataset.sourceUrl || '').trim();
+  const loading = shell.querySelector('[data-index-instagram-loading]');
+  const embed = shell.querySelector('[data-index-instagram-embed]');
+  const fallback = shell.querySelector('[data-index-instagram-fallback]');
+
+  if (!embedPermalink || !embed) {
+    if (loading) loading.style.display = 'none';
+    if (fallback) fallback.style.display = '';
+    shell.dataset.rendered = 'failed';
+    return;
+  }
+
+  shell.dataset.rendering = 'true';
+
+  if (loading) loading.style.display = 'flex';
+  if (fallback) fallback.style.display = 'none';
+
+  embed.innerHTML = '';
+  embed.style.display = 'flex';
+  embed.style.visibility = 'hidden';
+  embed.style.minHeight = '220px';
+
+  try {
+    await loadInstagramEmbedScript();
+
+    if (!window.instgrm?.Embeds?.process) {
+      throw new Error('API embed Instagram indisponible.');
+    }
+
+    embed.innerHTML = `
+      <blockquote
+        class="instagram-media"
+        data-instgrm-captioned
+        data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
+        data-instgrm-version="14"
+        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:540px; min-width:280px; padding:0; width:100%;"
+      >
+        <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
+      </blockquote>
+    `;
+
+    window.instgrm.Embeds.process();
+
+    shell.dataset.rendered = 'true';
+    embed.style.display = 'flex';
+    embed.style.visibility = 'visible';
+    embed.style.minHeight = '';
+    if (loading) loading.style.display = 'none';
+  } catch (error) {
+    shell.dataset.rendered = 'failed';
+    embed.innerHTML = '';
+    embed.style.display = 'none';
+    embed.style.visibility = 'visible';
+    embed.style.minHeight = '';
+    if (loading) loading.style.display = 'none';
+    if (fallback) fallback.style.display = '';
+    console.warn('Impossible de rendre le post Instagram sur index:', sourceUrl || embedPermalink, error);
+  } finally {
+    shell.dataset.rendering = 'false';
+  }
+}
+
+function initIndexInstagramObserver(root = document) {
+  const shells = Array.from(root.querySelectorAll('[data-index-instagram-shell]'));
+  const previousState = window.indexInstagramEmbedState;
+
+  if (previousState?.observer) {
+    previousState.observer.disconnect();
+  }
+
+  if (!shells.length) {
+    window.indexInstagramEmbedState = null;
+    return;
+  }
+
+  const state = {
+    observer: null,
+    shells: new Set(shells)
+  };
+
+  window.indexInstagramEmbedState = state;
+
+  shells.forEach((shell) => {
+    if (!shell.dataset.rendered) {
+      shell.dataset.rendered = 'false';
+    }
+    shell.dataset.rendering = 'false';
+  });
+
+  if (typeof IntersectionObserver !== 'function') {
+    shells.forEach((shell) => {
+      renderIndexInstagramShell(shell);
+    });
+    return;
+  }
+
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const shell = entry.target;
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return;
+      renderIndexInstagramShell(shell);
+
+      if (shell.dataset.rendered === 'true' || shell.dataset.rendered === 'failed') {
+        state.observer?.unobserve(shell);
+      }
+    });
+  }, {
+    threshold: [0, 0.1, 0.35, 0.7],
+    rootMargin: '120px 0px 120px 0px'
+  });
+
+  shells.forEach((shell) => {
+    state.observer.observe(shell);
+
+    if (isElementNearViewport(shell, 220)) {
+      requestAnimationFrame(() => {
+        renderIndexInstagramShell(shell);
       });
     }
   });
@@ -4626,6 +4825,7 @@ const mediaOutsideLink = !!mediaHtml;
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
+  initIndexInstagramObserver(document);
 }
    
 function loadMoreVisitedDebates() {
@@ -4774,6 +4974,7 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
+  initIndexInstagramObserver(document);
 }
 function loadMoreOtherDebates() {
   otherDebatesVisible += 6;
@@ -5997,6 +6198,29 @@ function getEmbeddableSourceData(url) {
   };
 }
 
+function getInstagramEmbedPermalink(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host !== "instagram.com") return "";
+
+    const match = parsed.pathname.match(/^\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)(?:\/|$)/i);
+    if (!match) return "";
+
+    const kind = String(match[1] || "").toLowerCase() === "reels" ? "reel" : String(match[1] || "").toLowerCase();
+    const shortcode = String(match[2] || "").trim();
+    if (!shortcode) return "";
+
+    return `https://www.instagram.com/${kind}/${shortcode}/`;
+  } catch (error) {
+    return "";
+  }
+}
+
+function isInstagramPostUrl(url) {
+  return !!getInstagramEmbedPermalink(url);
+}
+
 const debateSourcePreviewState = {
   retryTimers: [],
   currentToken: 0,
@@ -6005,6 +6229,7 @@ const debateSourcePreviewState = {
 
 
 let xWidgetsLoaderPromise = null;
+let instagramEmbedLoaderPromise = null;
 
 function isXStatusUrl(url) {
   try {
@@ -6053,6 +6278,124 @@ function loadXWidgetsScript() {
   });
 
   return xWidgetsLoaderPromise;
+}
+
+function loadInstagramEmbedScript() {
+  if (window.instgrm?.Embeds?.process) {
+    return Promise.resolve(window.instgrm);
+  }
+
+  if (instagramEmbedLoaderPromise) return instagramEmbedLoaderPromise;
+
+  instagramEmbedLoaderPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-instagram-embed="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.instgrm), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Impossible de charger le script Instagram.")), { once: true });
+      return;
+    }
+
+    const scriptEl = document.createElement("script");
+    scriptEl.src = "https://www.instagram.com/embed.js";
+    scriptEl.async = true;
+    scriptEl.setAttribute("data-instagram-embed", "true");
+    scriptEl.onload = () => resolve(window.instgrm);
+    scriptEl.onerror = () => reject(new Error("Impossible de charger le script Instagram."));
+    document.head.appendChild(scriptEl);
+  });
+
+  return instagramEmbedLoaderPromise;
+}
+
+async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null) {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  const sourcePreview = document.getElementById("debate-source-preview");
+  const sourcePoster = document.getElementById("debate-source-preview-poster");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+  const sourceFallback = document.getElementById("debate-source-fallback");
+
+  if (!sourceFallback) {
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    return;
+  }
+
+  const embedPermalink = getInstagramEmbedPermalink(sourceUrl);
+  if (!embedPermalink) {
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    return;
+  }
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "flex";
+  }
+
+  if (sourcePreview) {
+    sourcePreview.style.display = "none";
+    sourcePreview.style.visibility = "hidden";
+    sourcePreview.removeAttribute("src");
+    sourcePreview.src = "about:blank";
+  }
+
+  if (sourcePoster) {
+    sourcePoster.style.display = "none";
+    sourcePoster.removeAttribute("href");
+  }
+
+  if (sourceLoading) {
+    sourceLoading.textContent = "Chargement du post Instagram…";
+    sourceLoading.style.display = "block";
+  }
+
+  sourceFallback.classList.add("debate-source-fallback-instagram");
+  sourceFallback.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+      <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
+      <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
+    </div>
+    <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
+  `;
+  sourceFallback.style.display = "flex";
+
+  try {
+    await loadInstagramEmbedScript();
+
+    if (!window.instgrm?.Embeds?.process) {
+      throw new Error("API embed Instagram indisponible.");
+    }
+
+    const embedContainer = document.getElementById("debate-source-instagram-embed");
+    if (!embedContainer) {
+      throw new Error("Conteneur Instagram introuvable.");
+    }
+
+    embedContainer.innerHTML = `
+      <blockquote
+        class="instagram-media"
+        data-instgrm-captioned
+        data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
+        data-instgrm-version="14"
+        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:540px; min-width:280px; padding:0; width:100%;"
+      >
+        <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
+      </blockquote>
+    `;
+
+    window.instgrm.Embeds.process();
+
+    if (sourceLoading) {
+      setTimeout(() => {
+        if (sourceLoading) {
+          sourceLoading.style.display = "none";
+        }
+      }, 700);
+    }
+  } catch (error) {
+    sourceFallback.classList.remove("debate-source-fallback-instagram");
+    if (sourceLoading) {
+      sourceLoading.style.display = "none";
+    }
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+  }
 }
 
 async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
@@ -6184,8 +6527,9 @@ function resetDebateSourcePreview() {
   }
 
   if (sourceFallback) {
-    sourceFallback.classList.remove("debate-source-fallback-x");
-      sourceFallback.style.display = "none";
+    sourceFallback.classList.remove("debate-source-fallback-x", "debate-source-fallback-instagram");
+    sourceFallback.innerHTML = "";
+    sourceFallback.style.display = "none";
   }
 
 }
@@ -6323,6 +6667,11 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   if (isXStatusUrl(sourceUrl)) {
     renderXSourcePreview(sourceUrl, sourcePreviewData);
+    return;
+  }
+
+  if (isInstagramPostUrl(sourceUrl)) {
+    renderInstagramSourcePreview(sourceUrl, sourcePreviewData);
     return;
   }
 
