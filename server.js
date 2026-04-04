@@ -365,6 +365,29 @@ function getVideoMimeTypeFromExtension(extension) {
   }
 }
 
+function getAcceptedVideoContentTypes() {
+  return [
+    "application/octet-stream",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-m4v"
+  ];
+}
+
+function normalizeIncomingVideoMetadata({ contentType = "", fileName = "" } = {}) {
+  const normalizedContentType = String(contentType || "").toLowerCase().split(";")[0].trim();
+  const safeFileName = String(fileName || "video").trim() || "video";
+  const extension = getVideoExtensionFromMimeType(normalizedContentType) || getVideoExtensionFromFilename(safeFileName);
+
+  return {
+    contentType: normalizedContentType,
+    fileName: safeFileName,
+    extension,
+    mimeType: extension ? getVideoMimeTypeFromExtension(extension) : ""
+  };
+}
+
 function deleteLocalMediaFile(publicUrl, allowedDir) {
   const normalizedUrl = String(publicUrl || "").trim();
   if (!normalizedUrl || !normalizedUrl.startsWith("/")) return;
@@ -2416,6 +2439,125 @@ app.post("/api/debates", async (req, res) => {
   }
 });
 
+app.post("/api/debates/:id/video-upload-url", async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
+    const debateRow = await getDebateById(debateId);
+
+    if (!debateRow) {
+      return res.status(404).json({ error: "Débat introuvable." });
+    }
+
+    const isOwner =
+      authorKey &&
+      debateRow.creator_key &&
+      String(debateRow.creator_key) === authorKey;
+
+    if (!isAdmin(req) && !isOwner) {
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
+    }
+
+    const contentLength = Number(req.body?.size || 0);
+    if (contentLength && contentLength > MAX_DEBATE_VIDEO_BYTES) {
+      return res.status(400).json({ error: "Vidéo trop lourde." });
+    }
+
+    const videoMeta = normalizeIncomingVideoMetadata({
+      contentType: req.body?.contentType,
+      fileName: req.body?.fileName
+    });
+
+    if (!getAcceptedVideoContentTypes().includes(videoMeta.contentType) || !videoMeta.extension) {
+      return res.status(400).json({ error: "Format vidéo non pris en charge." });
+    }
+
+    const objectPath = buildDebateMediaStoragePath(debateId, "video", videoMeta.extension);
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_DEBATE_MEDIA_BUCKET)
+      .createSignedUploadUrl(objectPath);
+
+    if (error || !data?.token || !data?.signedUrl) {
+      console.error("Erreur création signed upload URL vidéo:", error || data);
+      return res.status(400).json({ error: "Erreur préparation vidéo." });
+    }
+
+    return res.json({
+      success: true,
+      bucket: SUPABASE_DEBATE_MEDIA_BUCKET,
+      objectPath,
+      token: data.token,
+      signedUrl: data.signedUrl,
+      publicUrl: getStoragePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, objectPath),
+      mimeType: videoMeta.mimeType
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(400).json({ error: "Erreur préparation vidéo." });
+  }
+});
+
+app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
+    const debateRow = await getDebateById(debateId);
+
+    if (!debateRow) {
+      return res.status(404).json({ error: "Débat introuvable." });
+    }
+
+    const isOwner =
+      authorKey &&
+      debateRow.creator_key &&
+      String(debateRow.creator_key) === authorKey;
+
+    if (!isAdmin(req) && !isOwner) {
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
+    }
+
+    const objectPath = String(req.body?.objectPath || "").trim();
+    const mimeType = String(req.body?.mimeType || "").trim();
+
+    if (!objectPath || !objectPath.startsWith(`debates/${debateId}/video-`)) {
+      return res.status(400).json({ error: "Vidéo invalide." });
+    }
+
+    const publicUrl = getStoragePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, objectPath);
+    if (!publicUrl) {
+      return res.status(400).json({ error: "Erreur enregistrement vidéo." });
+    }
+
+    try {
+      if (debateRow.video_url) {
+        await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
+      }
+
+      if (debateRow.image_url) {
+        await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
+      }
+
+      await persistDebateMediaUrls(debateId, {
+        image_url: "",
+        video_url: publicUrl
+      });
+    } catch (persistError) {
+      console.error("Erreur finalisation upload vidéo direct:", persistError);
+      await deleteStoredMediaAsset(publicUrl, debateVideosDir);
+      throw persistError;
+    }
+
+    return res.json({
+      success: true,
+      video_url: publicUrl,
+      mime_type: mimeType || getVideoMimeTypeFromExtension(path.extname(objectPath).replace(/^\./, ""))
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(400).json({ error: "Erreur enregistrement vidéo." });
+  }
+});
+
 app.post("/api/debates/:id/video-file", async (req, res) => {
   try {
     const debateId = req.params.id;
@@ -2435,28 +2577,6 @@ app.post("/api/debates/:id/video-file", async (req, res) => {
       return res.status(403).json({ error: "Ajout vidéo non autorisé." });
     }
 
-    const rawContentType = String(req.get("content-type") || "").toLowerCase();
-    const contentType = rawContentType.split(";")[0].trim();
-    const acceptedTypes = [
-      "application/octet-stream",
-      "video/mp4",
-      "video/webm",
-      "video/quicktime",
-      "video/x-m4v"
-    ];
-
-    if (!acceptedTypes.includes(contentType)) {
-      return res.status(400).json({ error: "Format vidéo non pris en charge." });
-    }
-
-    const fileName = String(req.get("x-file-name") || "video").trim();
-    const mimeType = String(req.get("x-file-type") || contentType || "").trim();
-    const extension = getVideoExtensionFromMimeType(mimeType) || getVideoExtensionFromFilename(fileName);
-
-    if (!extension) {
-      return res.status(400).json({ error: "Format vidéo non pris en charge." });
-    }
-
     const contentLengthHeader = String(req.get("content-length") || "").trim();
     const contentLength = Number(contentLengthHeader || 0);
 
@@ -2464,12 +2584,21 @@ app.post("/api/debates/:id/video-file", async (req, res) => {
       return res.status(400).json({ error: "Vidéo trop lourde." });
     }
 
-    const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
+    const videoMeta = normalizeIncomingVideoMetadata({
+      contentType: req.get("x-file-type") || req.get("content-type") || "",
+      fileName: req.get("x-file-name") || "video"
+    });
+
+    if (!getAcceptedVideoContentTypes().includes(videoMeta.contentType) || !videoMeta.extension) {
+      return res.status(400).json({ error: "Format vidéo non pris en charge." });
+    }
+
+    const objectPath = buildDebateMediaStoragePath(debateId, "video", videoMeta.extension);
     const uploadUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/${SUPABASE_DEBATE_MEDIA_BUCKET}/${objectPath}`;
     const uploadHeaders = {
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      "Content-Type": getVideoMimeTypeFromExtension(extension),
+      "Content-Type": videoMeta.mimeType,
       "x-upsert": "false"
     };
 
@@ -2518,7 +2647,7 @@ app.post("/api/debates/:id/video-file", async (req, res) => {
     return res.json({
       success: true,
       video_url: publicUrl,
-      mime_type: getVideoMimeTypeFromExtension(extension)
+      mime_type: videoMeta.mimeType
     });
   } catch (error) {
     console.error(error);

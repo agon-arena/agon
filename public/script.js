@@ -6265,42 +6265,115 @@ form.addEventListener("submit", async e => {
     setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du téléversement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
-      setCreatePublishProgress(82, "Envoi de la vidéo", "Démarrage du téléversement vidéo…");
+      setCreatePublishProgress(82, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
 
-      await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
-        signal: getCreatePublishSignal(),
-        method: "POST",
-        headers: {
-          "Content-Type": videoFile.type || "application/octet-stream",
-          "x-file-name": videoFile.name || "video",
-          "x-file-type": videoFile.type || "application/octet-stream"
-        },
-        body: videoFile,
-        responseType: "json",
-        onUploadProgress: (progress) => {
-          if (progress >= 100) {
+      const uploadSetup = await fetchJSON(
+        `${API}/debates/${encodeURIComponent(r.id)}/video-upload-url?authorKey=${encodeURIComponent(creatorKey)}`,
+        {
+          signal: getCreatePublishSignal(),
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: videoFile.name || "video",
+            contentType: videoFile.type || "application/octet-stream",
+            size: Number(videoFile.size || 0)
+          })
+        }
+      );
+
+      try {
+        await createXhrRequest(uploadSetup.signedUrl, {
+          signal: getCreatePublishSignal(),
+          method: "PUT",
+          headers: {
+            "x-upsert": "false",
+            "cache-control": "max-age=3600",
+            "content-type": uploadSetup.mimeType || videoFile.type || "application/octet-stream"
+          },
+          body: videoFile,
+          responseType: "text",
+          onUploadProgress: (progress) => {
+            if (progress >= 100) {
+              setCreatePublishProgress(
+                99,
+                "Upload terminé",
+                "Téléversement terminé. Finalisation de la vidéo…"
+              );
+              return;
+            }
+
+            setCreatePublishProgress(
+              mapProgressRange(progress, 82, 99),
+              "Envoi direct de la vidéo",
+              `Téléversement direct vers le stockage… ${Math.round(progress)}%`
+            );
+          },
+          onUploadComplete: () => {
+            setCreatePublishProgress(
+              99,
+              "Upload terminé",
+              "Téléversement terminé. Finalisation de la vidéo…"
+            );
+          }
+        });
+
+        await fetchJSON(
+          `${API}/debates/${encodeURIComponent(r.id)}/video-upload-complete?authorKey=${encodeURIComponent(creatorKey)}`,
+          {
+            signal: getCreatePublishSignal(),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              objectPath: uploadSetup.objectPath,
+              mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream"
+            })
+          }
+        );
+      } catch (directUploadError) {
+        const message = String(directUploadError?.message || "").toLowerCase();
+        const canFallback = !message.includes("annul") && !getCreatePublishSignal()?.aborted;
+
+        if (!canFallback) {
+          throw directUploadError;
+        }
+
+        setCreatePublishProgress(84, "Envoi de la vidéo", "Reprise avec le mode de secours…");
+
+        await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
+          signal: getCreatePublishSignal(),
+          method: "POST",
+          headers: {
+            "Content-Type": videoFile.type || "application/octet-stream",
+            "x-file-name": videoFile.name || "video",
+            "x-file-type": videoFile.type || "application/octet-stream"
+          },
+          body: videoFile,
+          responseType: "json",
+          onUploadProgress: (progress) => {
+            if (progress >= 100) {
+              setCreatePublishProgress(
+                99,
+                "Upload terminé",
+                "Téléversement terminé. Traitement serveur en cours…"
+              );
+              return;
+            }
+
+            setCreatePublishProgress(
+              mapProgressRange(progress, 84, 99),
+              "Envoi de la vidéo",
+              `Téléversement de secours de la vidéo… ${Math.round(progress)}%`
+            );
+          },
+          onUploadComplete: () => {
             setCreatePublishProgress(
               99,
               "Upload terminé",
               "Téléversement terminé. Traitement serveur en cours…"
             );
-            return;
           }
-
-          setCreatePublishProgress(
-            mapProgressRange(progress, 82, 99),
-            "Envoi de la vidéo",
-            `Téléversement de la vidéo… ${Math.round(progress)}%`
-          );
-        },
-        onUploadComplete: () => {
-          setCreatePublishProgress(
-            99,
-            "Upload terminé",
-            "Téléversement terminé. Traitement serveur en cours…"
-          );
-        }
-      });
+        });
+      }
     }
 
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
