@@ -192,6 +192,58 @@ const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
 
+const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json");
+
+function ensureDebateContentStorage() {
+  fs.mkdirSync(path.dirname(debateContentMetaPath), { recursive: true });
+  if (!fs.existsSync(debateContentMetaPath)) {
+    fs.writeFileSync(debateContentMetaPath, "{}", "utf8");
+  }
+}
+
+function readDebateContentMap() {
+  ensureDebateContentStorage();
+  try {
+    return JSON.parse(fs.readFileSync(debateContentMetaPath, "utf8") || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeDebateContentMap(map) {
+  ensureDebateContentStorage();
+  fs.writeFileSync(debateContentMetaPath, JSON.stringify(map, null, 2), "utf8");
+}
+
+function normalizeDebateContent(value) {
+  return String(value || "").trim().slice(0, 600);
+}
+
+function getDebateStoredContent(debateId) {
+  const map = readDebateContentMap();
+  return normalizeDebateContent(map?.[String(debateId)] || "");
+}
+
+function setDebateStoredContent(debateId, content) {
+  const map = readDebateContentMap();
+  const debateKey = String(debateId);
+  const safeContent = normalizeDebateContent(content);
+
+  if (!safeContent) {
+    delete map[debateKey];
+  } else {
+    map[debateKey] = safeContent;
+  }
+
+  writeDebateContentMap(map);
+}
+
+function removeDebateStoredContent(debateId) {
+  const map = readDebateContentMap();
+  delete map[String(debateId)];
+  writeDebateContentMap(map);
+}
+
 function ensureDebateAssetsStorage() {
   fs.mkdirSync(debateImagesDir, { recursive: true });
   fs.mkdirSync(debateVideosDir, { recursive: true });
@@ -539,7 +591,8 @@ function enrichDebateWithStoredImage(debate) {
   return {
     ...debate,
     image_url: getResolvedDebateImageUrl(debate),
-    video_url: getResolvedDebateVideoUrl(debate)
+    video_url: getResolvedDebateVideoUrl(debate),
+    content: normalizeDebateContent(debate.content || getDebateStoredContent(debate?.id))
   };
 }
 
@@ -1954,6 +2007,7 @@ app.delete("/api/admin/reports/by-target", requireAdmin, async (req, res) => {
     }
 
     removeDebateAssetsEntry(debateId);
+    removeDebateStoredContent(debateId);
 
     res.json({ success: true });
   } catch (error) {
@@ -2071,7 +2125,8 @@ app.post("/api/notifications/read-one", async (req, res) => {
 ========================= */
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url } = req.body || {};
+    const { question, option_a, option_b, source_url, content } = req.body || {};
+    const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
 
     if (normalizedSourceUrl) {
@@ -2082,21 +2137,43 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
       }
     }
 
+    let updateError = null;
+
     const { error } = await supabase
       .from("debates")
       .update({
         question,
         option_a,
         option_b,
-        source_url: normalizedSourceUrl || ""
+        source_url: normalizedSourceUrl || "",
+        content: normalizedContent
       })
       .eq("id", req.params.id);
 
-
     if (error) {
-      console.error(error);
+      const combined = `${String(error.message || "")} ${String(error.details || "")} ${String(error.hint || "")}`.toLowerCase();
+      if (combined.includes("content") || combined.includes("column")) {
+        const { error: fallbackError } = await supabase
+          .from("debates")
+          .update({
+            question,
+            option_a,
+            option_b,
+            source_url: normalizedSourceUrl || ""
+          })
+          .eq("id", req.params.id);
+        updateError = fallbackError;
+      } else {
+        updateError = error;
+      }
+    }
+
+    if (updateError) {
+      console.error(updateError);
       return res.status(500).json({ error: "Erreur modification débat." });
     }
+
+    setDebateStoredContent(req.params.id, normalizedContent);
 
     res.json({ success: true });
   } catch (error) {
@@ -2235,7 +2312,8 @@ app.get("/api/debates", async (req, res) => {
 
 app.post("/api/debates", async (req, res) => {
   try {
-    const { question, category, source_url, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
+    const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
@@ -2261,12 +2339,13 @@ app.post("/api/debates", async (req, res) => {
       }
     }
 
-    const { data, error } = await supabase
+    let insertResult = await supabase
       .from("debates")
       .insert({
         question,
         category,
         source_url: normalizedSourceUrl || "",
+        content: normalizedContent,
         type: type || "debate",
         option_a,
         option_b,
@@ -2276,10 +2355,34 @@ app.post("/api/debates", async (req, res) => {
       .select("id")
       .single();
 
+    if (insertResult.error) {
+      const combined = `${String(insertResult.error.message || "")} ${String(insertResult.error.details || "")} ${String(insertResult.error.hint || "")}`.toLowerCase();
+      if (combined.includes("content") || combined.includes("column")) {
+        insertResult = await supabase
+          .from("debates")
+          .insert({
+            question,
+            category,
+            source_url: normalizedSourceUrl || "",
+            type: type || "debate",
+            option_a,
+            option_b,
+            creator_key: creatorKey || null,
+            created_at: nowIso()
+          })
+          .select("id")
+          .single();
+      }
+    }
+
+    const { data, error } = insertResult;
+
     if (error) {
       console.error(error);
       return res.status(500).json({ error: "Erreur création débat." });
     }
+
+    setDebateStoredContent(data.id, normalizedContent);
 
     if (image_upload) {
       try {
@@ -2492,6 +2595,7 @@ app.delete("/api/debates/:id", async (req, res) => {
     }
 
     removeDebateAssetsEntry(debateId);
+    removeDebateStoredContent(debateId);
 
     res.json({ success: true });
   } catch (error) {

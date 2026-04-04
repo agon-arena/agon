@@ -9,6 +9,9 @@ let currentDebateShareData = {
   percentB: 50
 };
 
+let indexCardHighlightRaf = null;
+let indexCardHighlightBound = false;
+
 let pendingArgumentScrollId = null;
 let pendingCommentScrollId = null;
 let openedArgumentForm = null;
@@ -968,6 +971,18 @@ function getDebateId() {
   return p.get("id");
 }
 
+function openIndexDebateFromMedia(debateId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const safeDebateId = String(debateId || "").trim();
+  if (!safeDebateId) return;
+
+  window.location.href = `/debate?id=${encodeURIComponent(safeDebateId)}`;
+}
+
 async function fetchJSON(url, opt = {}) {
   const r = await fetch(url, opt);
   const data = await r.json().catch(() => ({}));
@@ -1353,7 +1368,24 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null) {
   `;
 }
 
-function buildIndexXEmbedHtml(sourceUrl, preview = null) {
+function buildIndexDebateNavigationOverlay(debateId, label = "Ouvrir le débat") {
+  const safeDebateId = String(debateId || "").trim();
+  if (!safeDebateId) return "";
+
+  return `
+    <button
+      type="button"
+      class="debate-card-index-nav-overlay"
+      data-index-debate-nav
+      onclick="openIndexDebateFromMedia('${escapeAttribute(safeDebateId)}', event)"
+      aria-label="${escapeAttribute(label)}"
+      title="${escapeAttribute(label)}"
+      style="position:absolute; inset:0; z-index:30; display:block; width:100%; height:100%; border:0; padding:0; margin:0; background:transparent; cursor:pointer;"
+    ></button>
+  `;
+}
+
+function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const tweetId = getXStatusId(sourceUrl);
   if (!tweetId) {
     return buildXIndexSourceCardHtml(sourceUrl, preview);
@@ -1366,6 +1398,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null) {
         data-index-x-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-tweet-id="${escapeAttribute(tweetId)}"
+        style="position:relative;"
       >
         <div
           data-index-x-loading
@@ -1373,6 +1406,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null) {
         >Chargement du post X…</div>
         <div data-index-x-embed style="display:none;"></div>
         <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview)}</div>
+        ${buildIndexDebateNavigationOverlay(debateId, "Ouvrir le débat lié à ce post X")}
       </div>
     </div>
   `;
@@ -1420,7 +1454,7 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null) {
   `;
 }
 
-function buildIndexInstagramEmbedHtml(sourceUrl, preview = null) {
+function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const embedPermalink = getInstagramEmbedPermalink(sourceUrl);
   if (!embedPermalink) {
     return buildIndexInstagramFallbackHtml(sourceUrl, preview);
@@ -1433,6 +1467,7 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null) {
         data-index-instagram-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-instagram-permalink="${escapeAttribute(embedPermalink)}"
+        style="position:relative;"
       >
         <div
           data-index-instagram-loading
@@ -1440,6 +1475,7 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null) {
         >Chargement du post Instagram…</div>
         <div data-index-instagram-embed style="display:none; justify-content:center;"></div>
         <div data-index-instagram-fallback style="display:none;">${buildIndexInstagramFallbackHtml(sourceUrl, preview)}</div>
+        ${buildIndexDebateNavigationOverlay(debateId, "Ouvrir le débat lié à ce post Instagram")}
       </div>
     </div>
   `;
@@ -1497,13 +1533,20 @@ function isIndexLocalImageDebate(debate) {
   return !!String(debate?.image_url || "").trim();
 }
 
-function buildIndexLocalImageCardHtml(imageUrl) {
+function buildIndexLocalImageCardHtml(imageUrl, debateId = "") {
   const safeImageUrl = String(imageUrl || "").trim();
   if (!safeImageUrl) return "";
 
+  const safeDebateId = String(debateId || "").trim();
+  const debateHref = safeDebateId ? `/debate?id=${encodeURIComponent(safeDebateId)}` : "";
+  const wrapperTag = debateHref ? "a" : "div";
+  const wrapperAttributes = debateHref
+    ? `class="debate-card-local-image-shell" href="${escapeAttribute(debateHref)}" style="display:block; text-decoration:none;"`
+    : `class="debate-card-local-image-shell"`;
+
   return `
     <div class="debate-card-media debate-card-media-local-image">
-      <div class="debate-card-local-image-shell">
+      <${wrapperTag} ${wrapperAttributes}>
         <img
           class="debate-card-local-image"
           src="${escapeAttribute(safeImageUrl)}"
@@ -1511,7 +1554,7 @@ function buildIndexLocalImageCardHtml(imageUrl) {
           loading="lazy"
           decoding="async"
         >
-      </div>
+      </${wrapperTag}>
     </div>
   `;
 }
@@ -1554,9 +1597,11 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
 }
 
 function renderIndexInlineSourceCard(debate) {
+  const safeDebateId = String(debate?.id || "").trim();
+  const debateHref = safeDebateId ? `/debate?id=${encodeURIComponent(safeDebateId)}` : "";
   const localImageUrl = String(debate?.image_url || "").trim();
   if (localImageUrl) {
-    return buildIndexLocalImageCardHtml(localImageUrl);
+    return buildIndexLocalImageCardHtml(localImageUrl, safeDebateId);
   }
 
   const localVideoUrl = String(debate?.video_url || "").trim();
@@ -1574,20 +1619,21 @@ function renderIndexInlineSourceCard(debate) {
   const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
     ? debate.source_preview
     : null;
+  const debateId = String(debate?.id || "").trim();
 
   if (isXStatusUrl(sourceUrl)) {
-    return buildIndexXEmbedHtml(sourceUrl, sourcePreview);
+    return buildIndexXEmbedHtml(sourceUrl, sourcePreview, debateId);
   }
 
   if (isInstagramPostUrl(sourceUrl)) {
-    return buildIndexInstagramEmbedHtml(sourceUrl, sourcePreview);
+    return buildIndexInstagramEmbedHtml(sourceUrl, sourcePreview, debateId);
   }
 
   if (isWeakSourcePreviewData(sourcePreview, sourceUrl)) {
     return "";
   }
 
-  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl);
+  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl, { debateHref });
 }
 
 function getIndexYouTubeEmbedSrc(baseUrl, options = {}) {
@@ -1719,9 +1765,11 @@ function unloadIndexYouTubeShell(shell) {
   const poster = shell.querySelector('[data-index-youtube-poster]');
   if (!iframe) return;
 
+  iframe.onload = null;
   iframe.removeAttribute('src');
   iframe.src = 'about:blank';
   shell.dataset.active = 'false';
+  shell.dataset.userActivated = 'false';
 
   if (poster) poster.style.display = '';
   updateIndexYouTubeShellOverlay(shell);
@@ -1879,9 +1927,11 @@ function unloadIndexLocalVideoShell(shell) {
 
   video.removeAttribute('src');
   video.load();
+  video.defaultMuted = true;
   video.muted = true;
   video.controls = false;
   shell.dataset.active = 'false';
+  shell.dataset.userActivated = 'false';
 
   if (poster) poster.style.display = '';
   updateIndexLocalVideoShellOverlay(shell);
@@ -1900,6 +1950,7 @@ function activateIndexLocalVideoShell(shell) {
   }
 
   const shouldStartMuted = shell.dataset.userActivated !== 'true';
+  video.defaultMuted = shouldStartMuted;
   video.muted = shouldStartMuted;
   video.controls = shell.dataset.userActivated === 'true';
   shell.dataset.active = 'true';
@@ -1975,8 +2026,14 @@ return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTole
     unloadIndexLocalVideoShell(state.activeShell);
   }
 
+  const shouldActivateBestShell =
+    state.activeShell !== bestShell || bestShell.dataset.active !== 'true';
+
   state.activeShell = bestShell;
-  activateIndexLocalVideoShell(bestShell);
+
+  if (shouldActivateBestShell) {
+    activateIndexLocalVideoShell(bestShell);
+  }
 
   candidates.forEach((shell) => {
     if (shell !== bestShell) {
@@ -1984,6 +2041,7 @@ return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTole
     }
   });
 }
+
 
 function scheduleIndexLocalVideoActiveUpdate() {
   const state = window.indexLocalVideoPlaybackState;
@@ -1995,7 +2053,105 @@ function scheduleIndexLocalVideoActiveUpdate() {
   });
 }
 
+function clearMobileIndexCardHighlight() {
+  document.querySelectorAll(
+    '.page-home-mobile .debate-card.index-card-active, .page-debate .similar-debate-item.index-card-active'
+  ).forEach((card) => {
+    card.classList.remove('index-card-active');
+  });
+}
+function updateMobileIndexCardHighlight() {
+  if (window.innerWidth > 768) {
+    clearMobileIndexCardHighlight();
+    return;
+  }
+
+  const isMobileHome =
+    document.body.classList.contains('page-home-mobile') &&
+    !getDebateId();
+
+  const isMobileOpenDebate =
+    document.body.classList.contains('page-debate') &&
+    !!getDebateId();
+
+  let cards = [];
+
+  if (isMobileHome) {
+    cards = Array.from(
+      document.querySelectorAll('.page-home-mobile .debates-list .debate-card')
+    ).filter((card) => card.offsetParent !== null);
+  } else if (isMobileOpenDebate) {
+    cards = Array.from(
+      document.querySelectorAll('.page-debate .similar-debates-list .similar-debate-item')
+    ).filter((card) => card.offsetParent !== null);
+  } else {
+    clearMobileIndexCardHighlight();
+    return;
+  }
+
+  if (!cards.length) {
+    clearMobileIndexCardHighlight();
+    return;
+  }
+
+  const topbar = document.querySelector('.topbar');
+  const topOffset = (topbar ? topbar.offsetHeight : 0) + 12;
+  const viewportCenter = topOffset + ((window.innerHeight - topOffset) * 0.32);
+
+  let bestCard = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  cards.forEach((card) => {
+    const rect = card.getBoundingClientRect();
+
+    const visible =
+      rect.bottom > topOffset + 20 &&
+      rect.top < window.innerHeight - 20;
+
+    if (!visible) return;
+
+    const cardCenter = rect.top + (rect.height / 2);
+    const distance = Math.abs(cardCenter - viewportCenter);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestCard = card;
+    }
+  });
+
+  cards.forEach((card) => {
+    card.classList.toggle('index-card-active', card === bestCard);
+  });
+}
+
+function scheduleMobileIndexCardHighlightUpdate() {
+  if (indexCardHighlightRaf) {
+    cancelAnimationFrame(indexCardHighlightRaf);
+  }
+
+  indexCardHighlightRaf = requestAnimationFrame(() => {
+    indexCardHighlightRaf = null;
+    updateMobileIndexCardHighlight();
+  });
+}
+function initMobileIndexCardHighlight() {
+  if (indexCardHighlightBound) return;
+  indexCardHighlightBound = true;
+
+  window.addEventListener('scroll', scheduleMobileIndexCardHighlightUpdate, { passive: true });
+  window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    scheduleMobileIndexCardHighlightUpdate();
+  });
+
+  scheduleMobileIndexCardHighlightUpdate();
+}
+
 function initIndexLocalVideoObserver(root = document) {
+
+
   const shells = Array.from(root.querySelectorAll('[data-index-local-video-shell]'));
   const previousState = window.indexLocalVideoPlaybackState;
 
@@ -2443,18 +2599,33 @@ function initIndexInstagramObserver(root = document) {
   });
 }
 
-function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
+function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
   const safeUrl = normalizedPreview.url || String(sourceUrl || "").trim() || "#";
   const domain = normalizedPreview.domain || "Source externe";
   const title = normalizedPreview.title || domain;
   const description = normalizedPreview.description || "";
   const image = normalizedPreview.image || "";
+  const debateHref = String(options?.debateHref || "").trim();
+  const cardTag = debateHref ? "a" : "div";
+  const cardAttributes = debateHref
+    ? `class="debate-source-card" href="${escapeAttribute(debateHref)}" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; text-decoration:none;"`
+    : `class="debate-source-card" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+  const openSourceHtml = debateHref
+    ? ""
+    : `<div>
+          <a
+            class="debate-source-link"
+            href="${escapeAttribute(safeUrl)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
+          >↗ Ouvrir la source</a>
+        </div>`;
 
   return `
-    <div
-      class="debate-source-card"
-      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+    <${cardTag}
+      ${cardAttributes}
     >
       ${image ? `
     <div class="debate-source-card-image-wrap" style="display:block; width:100%; aspect-ratio:16/9; background:transparent; overflow:hidden;">
@@ -2472,17 +2643,9 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "") {
         <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">${escapeHtml(domain)}</div>
         <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
         ${description ? `<div class="debate-source-card-description" style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>` : ""}
-        <div>
-          <a
-            class="debate-source-link"
-            href="${escapeAttribute(safeUrl)}"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
-          >↗ Ouvrir la source</a>
-        </div>
+        ${openSourceHtml}
       </div>
-    </div>
+    </${cardTag}>
   `;
 }
 
@@ -4369,6 +4532,57 @@ function getDebateCardDeleteButtonHtml(debate) {
   `;
 }
 
+function buildIndexContextPreviewHtml(debate) {
+  const fullText = String(debate?.content || '').trim();
+  if (!fullText) return "";
+
+  const previewLimit = 170;
+  const shortText = fullText.length > previewLimit
+    ? `${fullText.slice(0, previewLimit).trimEnd()}…`
+    : fullText;
+  const needsToggle = fullText.length > previewLimit;
+  const debateId = escapeAttribute(String(debate?.id || ""));
+
+  return `
+    <div class="debate-card-context" data-index-context-card>
+      <p
+        class="debate-card-context-text"
+        data-index-context-text
+        data-full-text="${escapeAttribute(fullText)}"
+        data-short-text="${escapeAttribute(shortText)}"
+        data-expanded="false"
+      >${escapeHtml(shortText)}</p>
+      ${needsToggle ? `
+        <button
+          type="button"
+          class="debate-card-context-toggle"
+          data-index-context-toggle
+          data-debate-id="${debateId}"
+          aria-expanded="false"
+          onclick="toggleIndexContextPreview(this)"
+        >Voir plus</button>
+      ` : ""}
+    </div>
+  `;
+}
+
+function toggleIndexContextPreview(button) {
+  const card = button?.closest('[data-index-context-card]');
+  const textEl = card?.querySelector('[data-index-context-text]');
+  if (!button || !textEl) return;
+
+  const expanded = textEl.getAttribute('data-expanded') === 'true';
+  const nextExpanded = !expanded;
+  const nextText = nextExpanded
+    ? String(textEl.getAttribute('data-full-text') || '')
+    : String(textEl.getAttribute('data-short-text') || '');
+
+  textEl.textContent = nextText;
+  textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
+  button.textContent = nextExpanded ? 'Voir moins' : 'Voir plus';
+  button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+}
+
 
 function getNormalizedCategoryValue(value) {
   const normalized = String(value || "").trim();
@@ -4664,6 +4878,7 @@ section.style.display = "block";
     const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
+const contextHtml = buildIndexContextPreviewHtml(d);
 
     return `
       <article class="debate-card">
@@ -4700,6 +4915,7 @@ const mediaOutsideLink = !!mediaHtml;
         </a>
 
         ${mediaOutsideLink ? mediaHtml : ""}
+        ${contextHtml}
 
         <div class="debate-card-meta-below-media">
           <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
@@ -4851,6 +5067,7 @@ div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
+const contextHtml = buildIndexContextPreviewHtml(d);
 
   return `
     <article class="debate-card">
@@ -4887,6 +5104,7 @@ ${
           </a>
 
       ${mediaOutsideLink ? mediaHtml : ""}
+      ${contextHtml}
 
       <div class="debate-card-meta-below-media">
         <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
@@ -5062,6 +5280,44 @@ function getCreateVideoFileInput() {
     || document.querySelector('input[type="file"][accept*="video"]');
 }
 
+function toggleCreateContextField(forceOpen = null) {
+  const group = document.getElementById("context-text-group");
+  const button = document.getElementById("toggle-context-button");
+
+  if (!group || !button) return;
+
+  const shouldOpen = typeof forceOpen === "boolean"
+    ? forceOpen
+    : group.style.display === "none" || !group.style.display;
+
+  group.style.display = shouldOpen ? "grid" : "none";
+  button.textContent = shouldOpen
+    ? "Retirer le texte de contexte"
+    : "Ajouter un texte de contexte";
+  button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+function getCreateContextText() {
+  const input = document.getElementById("context_text");
+  return input ? input.value.trim().slice(0, 1800) : "";
+}
+
+function renderDebateContext(content) {
+  const wrap = document.getElementById("debate-context-wrap");
+  const text = document.getElementById("debate-context-text");
+  if (!wrap || !text) return;
+
+  const safeContent = String(content || "").trim();
+  if (!safeContent) {
+    wrap.style.display = "none";
+    text.textContent = "";
+    return;
+  }
+
+  text.textContent = safeContent;
+  wrap.style.display = "block";
+}
+
 function updateCreateResourceModeUI() {
   const mode = getSelectedCreateResourceMode();
   const sourceGroup = document.getElementById("source-url-group");
@@ -5130,19 +5386,55 @@ function readFileAsDataUrl(file, options = {}) {
 }
 
 function readFileAsArrayBuffer(file, options = {}) {
-  const { onProgress } = options;
+  const { onProgress, signal } = options;
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
+    const abortRead = () => {
+      try {
+        if (reader.readyState === FileReader.LOADING) {
+          reader.abort();
+        }
+      } catch (error) {
+        // noop
+      }
+      reject(new Error("Publication annulée."));
+    };
+
+    if (signal?.aborted) {
+      abortRead();
+      return;
+    }
+
+    const handleAbort = () => abortRead();
+    if (signal) {
+      signal.addEventListener("abort", handleAbort, { once: true });
+    }
+
     reader.onload = () => {
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
       if (typeof onProgress === "function") {
         onProgress(100);
       }
       resolve(reader.result);
     };
 
-    reader.onerror = () => reject(new Error("Impossible de lire la vidéo."));
+    reader.onerror = () => {
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      reject(new Error("Impossible de lire la vidéo."));
+    };
+
+    reader.onabort = () => {
+      if (signal) {
+        signal.removeEventListener("abort", handleAbort);
+      }
+      reject(new Error("Publication annulée."));
+    };
 
     reader.onprogress = (event) => {
       if (!event.lengthComputable || typeof onProgress !== "function") return;
@@ -5159,23 +5451,69 @@ function createXhrRequest(url, options = {}) {
     headers = {},
     body = null,
     responseType = "json",
-    onUploadProgress
+    onUploadProgress,
+    signal,
+    onXhrCreated
   } = options;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, url, true);
 
+    let settled = false;
+
+    const cleanupAbortListener = () => {
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+    };
+
+    const safeResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanupAbortListener();
+      resolve(value);
+    };
+
+    const safeReject = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanupAbortListener();
+      reject(error);
+    };
+
     Object.entries(headers || {}).forEach(([key, value]) => {
       if (value == null) return;
       xhr.setRequestHeader(key, value);
     });
+
+    if (typeof onXhrCreated === "function") {
+      onXhrCreated(xhr);
+    }
 
     if (typeof onUploadProgress === "function" && xhr.upload) {
       xhr.upload.addEventListener("progress", (event) => {
         if (!event.lengthComputable) return;
         onUploadProgress(Math.round((event.loaded / event.total) * 100), event);
       });
+    }
+
+    let abortHandler = null;
+    if (signal) {
+      abortHandler = () => {
+        try {
+          xhr.abort();
+        } catch (error) {
+          // noop
+        }
+      };
+
+      if (signal.aborted) {
+        abortHandler();
+        return;
+      }
+
+      signal.addEventListener("abort", abortHandler, { once: true });
     }
 
     xhr.onload = () => {
@@ -5190,18 +5528,18 @@ function createXhrRequest(url, options = {}) {
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(payload);
+        safeResolve(payload);
         return;
       }
 
       const message = payload && typeof payload === "object"
         ? payload.error || "Erreur serveur"
         : "Erreur serveur";
-      reject(new Error(message));
+      safeReject(new Error(message));
     };
 
-    xhr.onerror = () => reject(new Error("Erreur réseau."));
-    xhr.onabort = () => reject(new Error("Envoi interrompu."));
+    xhr.onerror = () => safeReject(new Error("Erreur réseau."));
+    xhr.onabort = () => safeReject(new Error(signal?.aborted ? "Publication annulée." : "Envoi interrompu."));
     xhr.send(body);
   });
 }
@@ -5399,14 +5737,36 @@ async function initCreate() {
 
 const submitButton = form.querySelector(".create-submit-button");
 const submitButtonInitialText = submitButton ? submitButton.innerHTML : "";
+const cancelPublishButton = document.getElementById("create-publish-cancel");
+let createPublishAbortController = null;
+let createPublishCancelRequested = false;
 
 function resetCreateSubmitButton() {
-  hideNotificationTransitionOverlay();
-
   if (!submitButton) return;
   submitButton.disabled = false;
   submitButton.classList.remove("create-submit-loading");
   submitButton.innerHTML = submitButtonInitialText;
+}
+
+function startCreatePublishSession() {
+  createPublishCancelRequested = false;
+  createPublishAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
+  showCreatePublishProgress();
+  setCreatePublishCancelState(false);
+}
+
+function cancelCreatePublishSession() {
+  createPublishCancelRequested = true;
+  setCreatePublishCancelState(true);
+  setCreatePublishProgress(currentCreatePublishProgressValue, "Annulation en cours", "La publication est en train d’être interrompue…");
+
+  if (createPublishAbortController) {
+    createPublishAbortController.abort();
+  }
+}
+
+function getCreatePublishSignal() {
+  return createPublishAbortController?.signal;
 }
 
 const typeInputs = document.querySelectorAll('input[name="debate-type"]');
@@ -5480,6 +5840,7 @@ const matches = debatesForSimilarity
   if (!matches.length) {
     similarBox.style.display = "none";
     similarList.innerHTML = "";
+    scheduleMobileIndexCardHighlightUpdate();
     return;
   }
 
@@ -5492,6 +5853,8 @@ const matches = debatesForSimilarity
       </div>
     </a>
   `).join("");
+
+  scheduleMobileIndexCardHighlightUpdate();
 }
 
 if (typeInputs.length) {
@@ -5509,17 +5872,15 @@ if (resourceInputs.length) {
 
   updateCreateResourceModeUI();
 }
+
+  toggleCreateContextField(false);
   if (questionInput) {
     questionInput.addEventListener("input", (e) => {
       renderSimilarDebates(e.target.value);
     });
   }
-function resetCreateSubmitButton() {
-  hideCreatePublishProgress();
-  if (!submitButton) return;
-  submitButton.disabled = false;
-  submitButton.classList.remove("create-submit-loading");
-  submitButton.innerHTML = submitButtonInitialText;
+if (cancelPublishButton) {
+  cancelPublishButton.addEventListener("click", cancelCreatePublishSession);
 }
 
 form.addEventListener("submit", async e => {
@@ -5531,6 +5892,7 @@ form.addEventListener("submit", async e => {
     submitButton.innerHTML = '<span class="create-submit-spinner" aria-hidden="true"></span><span>Publication...</span>';
   }
 
+  startCreatePublishSession();
   setCreatePublishProgress(3, "Préparation de la publication", "Vérification des informations…");
 
   const question = document.getElementById("question").value.trim();
@@ -5548,6 +5910,7 @@ form.addEventListener("submit", async e => {
     : null;
   const selectedType =
     document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
+  const content = getCreateContextText();
 
   const option_a = selectedType === "open"
     ? ""
@@ -5562,6 +5925,17 @@ form.addEventListener("submit", async e => {
     showReplacementSuccessMessage(
       "Positions manquantes",
       "Tu dois renseigner les deux positions avant de créer un débat.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  if (content.length > 600) {
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Texte trop long",
+      "Le texte de contexte ne peut pas dépasser 600 caractères.",
       null,
       "⚠️"
     );
@@ -5656,6 +6030,7 @@ form.addEventListener("submit", async e => {
       question,
       category,
       source_url,
+      content,
       resource_mode: resourceMode,
       image_upload,
       type: selectedType,
@@ -5695,6 +6070,7 @@ form.addEventListener("submit", async e => {
     if (resourceMode === "video" && videoFile) {
       setCreatePublishProgress(82, "Préparation de la vidéo", "Lecture du fichier vidéo…");
       const videoBuffer = await readFileAsArrayBuffer(videoFile, {
+        signal: getCreatePublishSignal(),
         onProgress: (progress) => {
           setCreatePublishProgress(
             mapProgressRange(progress, 82, 90),
@@ -5705,6 +6081,7 @@ form.addEventListener("submit", async e => {
       });
 
       await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
+        signal: getCreatePublishSignal(),
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
@@ -5726,17 +6103,32 @@ form.addEventListener("submit", async e => {
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
     location = "/debate?id=" + r.id;
   } catch (error) {
-    resetCreateSubmitButton();
-    alert(error.message);
+    if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
+      hideCreatePublishProgress();
+      showReplacementSuccessMessage(
+        "Publication annulée",
+        "La création de l’arène a bien été interrompue.",
+        null,
+        "⚪"
+      );
+    } else {
+      hideCreatePublishProgress();
+      alert(error.message);
+    }
   } finally {
+    createPublishAbortController = null;
+    createPublishCancelRequested = false;
+
     if (!window.location.href.includes("/debate?id=")) {
       resetCreateSubmitButton();
+      setCreatePublishCancelState(false);
     }
   }
 });
 
 
 }
+let currentCreatePublishProgressValue = 0;
 function getCreatePublishProgressElements() {
   return {
     box: document.getElementById("create-upload-progress"),
@@ -5747,29 +6139,53 @@ function getCreatePublishProgressElements() {
   };
 }
 
+function setCreatePublishCancelState(isCancelling = false) {
+  const cancelButton = document.getElementById("create-publish-cancel");
+  if (!cancelButton) return;
+  cancelButton.disabled = !!isCancelling;
+  cancelButton.textContent = isCancelling ? "Annulation..." : "Annuler";
+}
+
 function hideCreatePublishProgress() {
+  const overlay = document.getElementById("create-publish-overlay");
+  const overlayTitle = document.getElementById("create-publish-overlay-title");
+  const overlayDetail = document.getElementById("create-publish-overlay-detail");
   const { box, fill, percent, label, detail } = getCreatePublishProgressElements();
+  currentCreatePublishProgressValue = 0;
+
+  if (overlay) overlay.style.display = "none";
+  document.body.classList.remove("create-publish-overlay-open");
   if (box) box.style.display = "none";
   if (fill) fill.style.width = "0%";
   if (percent) percent.textContent = "0%";
   if (label) label.textContent = "Publication en cours";
   if (detail) detail.textContent = "";
+  if (overlayTitle) overlayTitle.textContent = "Publication en cours";
+  if (overlayDetail) overlayDetail.textContent = "Préparation…";
 }
 
 function showCreatePublishProgress() {
+  const overlay = document.getElementById("create-publish-overlay");
   const { box } = getCreatePublishProgressElements();
+  if (overlay) overlay.style.display = "flex";
+  document.body.classList.add("create-publish-overlay-open");
   if (box) box.style.display = "block";
 }
 
 function setCreatePublishProgress(value, label = "Publication en cours", detail = "") {
+  const overlayTitle = document.getElementById("create-publish-overlay-title");
+  const overlayDetail = document.getElementById("create-publish-overlay-detail");
   const { box, fill, percent, label: labelEl, detail: detailEl } = getCreatePublishProgressElements();
   const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+  currentCreatePublishProgressValue = safeValue;
 
   if (box) box.style.display = "block";
   if (fill) fill.style.width = `${safeValue}%`;
   if (percent) percent.textContent = `${Math.round(safeValue)}%`;
   if (labelEl) labelEl.textContent = label;
   if (detailEl) detailEl.textContent = detail;
+  if (overlayTitle) overlayTitle.textContent = label;
+  if (overlayDetail) overlayDetail.textContent = detail || "Préparation…";
 }
 
 function mapProgressRange(progress, min, max) {
@@ -5989,6 +6405,8 @@ function renderBottomSimilarDebates(currentDebate, debates) {
             <div class="debate-card-category">${escapeHtml(debate.category || "Sans catégorie")}</div>
             <div class="debate-card-type">${debateTypeLabel}</div>
             <h2>${escapeHtml(debate.question)}</h2>
+
+            ${buildIndexContextPreviewHtml(debate)}
 
            ${
   isOpenDebate(debate)
@@ -6230,6 +6648,10 @@ const debateSourcePreviewState = {
 
 let xWidgetsLoaderPromise = null;
 let instagramEmbedLoaderPromise = null;
+let debateInstagramVisibilityObserver = null;
+let debateInstagramCurrentUrl = "";
+let debateInstagramCurrentPreviewData = null;
+let debateInstagramIsRendered = false;
 
 function isXStatusUrl(url) {
   try {
@@ -6307,7 +6729,75 @@ function loadInstagramEmbedScript() {
   return instagramEmbedLoaderPromise;
 }
 
+function destroyDebateInstagramEmbed() {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  const sourceLoading = document.getElementById("debate-source-preview-loading");
+
+  if (debateInstagramVisibilityObserver) {
+    debateInstagramVisibilityObserver.disconnect();
+    debateInstagramVisibilityObserver = null;
+  }
+
+  if (sourcePreviewWrap) {
+    sourcePreviewWrap.style.display = "none";
+  }
+
+  if (sourceFallback) {
+    sourceFallback.innerHTML = "";
+    sourceFallback.style.display = "none";
+  }
+
+  if (sourceLoading) {
+    sourceLoading.style.display = "none";
+  }
+
+  debateInstagramIsRendered = false;
+}
+
+function initDebateInstagramVisibilityObserver(sourceUrl, sourcePreviewData = null) {
+  const target =
+    document.getElementById("debate-source-instagram-shell") ||
+    document.getElementById("debate-source-fallback");
+
+  if (!target) return;
+
+  debateInstagramCurrentUrl = sourceUrl;
+  debateInstagramCurrentPreviewData = sourcePreviewData;
+
+  if (debateInstagramVisibilityObserver) {
+    debateInstagramVisibilityObserver.disconnect();
+  }
+
+  debateInstagramVisibilityObserver = new IntersectionObserver((entries) => {
+    const entry = entries[0];
+    if (!entry) return;
+
+    const isStillVisible = entry.isIntersecting && entry.intersectionRatio > 0.05;
+
+    if (!isStillVisible) {
+      destroyDebateInstagramEmbed();
+      return;
+    }
+
+    if (!debateInstagramIsRendered && debateInstagramCurrentUrl) {
+      renderInstagramSourcePreview(
+        debateInstagramCurrentUrl,
+        debateInstagramCurrentPreviewData
+      );
+    }
+  }, {
+    threshold: [0, 0.01, 0.05, 0.2]
+  });
+
+  debateInstagramVisibilityObserver.observe(target);
+}
+
 async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null) {
+  if (debateInstagramIsRendered) {
+    return;
+  }
+
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourcePreview = document.getElementById("debate-source-preview");
   const sourcePoster = document.getElementById("debate-source-preview-poster");
@@ -6346,45 +6836,46 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
     sourceLoading.style.display = "block";
   }
 
- sourceFallback.classList.add("debate-source-fallback-instagram");
-sourceFallback.innerHTML = `
-  <div
-    id="debate-source-instagram-shell"
-    style="width:100%; cursor:pointer;"
-    role="link"
-    tabindex="0"
-    aria-label="Ouvrir le post Instagram"
-  >
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
-      <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
-      <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
+  sourceFallback.classList.add("debate-source-fallback-instagram");
+  sourceFallback.innerHTML = `
+    <div
+      id="debate-source-instagram-shell"
+      style="width:100%; cursor:pointer;"
+      role="link"
+      tabindex="0"
+      aria-label="Ouvrir le post Instagram"
+    >
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+        <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
+        <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
+      </div>
+      <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
     </div>
-    <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
-  </div>
-`;
-sourceFallback.style.display = "flex";
+  `;
+  sourceFallback.style.display = "flex";
+  debateInstagramIsRendered = true;
 
-const instagramShell = document.getElementById("debate-source-instagram-shell");
+  const instagramShell = document.getElementById("debate-source-instagram-shell");
 
-if (instagramShell) {
-  const openInstagramPost = () => {
-    window.open(embedPermalink, "_blank", "noopener,noreferrer");
-  };
+  if (instagramShell) {
+    const openInstagramPost = () => {
+      window.open(embedPermalink, "_blank", "noopener,noreferrer");
+    };
 
-  instagramShell.addEventListener("click", (event) => {
-    const interactiveTarget = event.target.closest("a, button, iframe");
-    if (interactiveTarget) return;
-    openInstagramPost();
-  });
+    instagramShell.addEventListener("click", (event) => {
+      const interactiveTarget = event.target.closest("a, button, iframe");
+      if (interactiveTarget) return;
+      openInstagramPost();
+    });
 
-  instagramShell.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const interactiveTarget = event.target.closest("a, button, iframe");
-    if (interactiveTarget) return;
-    event.preventDefault();
-    openInstagramPost();
-  });
-}
+    instagramShell.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const interactiveTarget = event.target.closest("a, button, iframe");
+      if (interactiveTarget) return;
+      event.preventDefault();
+      openInstagramPost();
+    });
+  }
 
   try {
     await loadInstagramEmbedScript();
@@ -6425,7 +6916,9 @@ if (instagramShell) {
       sourceLoading.style.display = "none";
     }
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    debateInstagramIsRendered = false;
   }
+
 }
 
 async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
@@ -6521,6 +7014,15 @@ function clearDebateSourcePreviewTimers() {
 
 function resetDebateSourcePreview() {
   clearDebateSourcePreviewTimers();
+
+  if (debateInstagramVisibilityObserver) {
+    debateInstagramVisibilityObserver.disconnect();
+    debateInstagramVisibilityObserver = null;
+  }
+
+  debateInstagramIsRendered = false;
+  debateInstagramCurrentUrl = "";
+  debateInstagramCurrentPreviewData = null;
 
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourcePreview = document.getElementById("debate-source-preview");
@@ -6755,6 +7257,7 @@ saveVisitedDebate(id);
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
+  renderDebateContext(data.debate.content || "");
 const debateVideoUrl = String(data.debate.video_url || "").trim();
 const debateImageUrl = String(data.debate.image_url || "").trim();
 const sourceUrl = String(data.debate.source_url || "").trim();
@@ -9822,6 +10325,8 @@ function ensureProgressSortOption() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+initMobileIndexCardHighlight();
+scheduleMobileIndexCardHighlightUpdate();
   initNotificationTransitionOverlay();
   attachAdminButtons();
   loadNotifications();

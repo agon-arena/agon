@@ -86,7 +86,7 @@
         <div class="create-hero-copy">
           <h1>Ouvrir une nouvelle arène</h1>
           <p class="create-subtitle">
-            Formule une question claire, choisis une thématique, puis crée soit un débat à deux positions, soit une question ouverte.
+            Formule un sujet claire, choisis le format (libre ou à positions), sélectionne la thématique et insère éventuellement des contenus associés.
           </p>
         </div>
       </div>
@@ -95,42 +95,95 @@
     <section class="create-card">
       <form id="create-form" class="create-form" novalidate>
 <div class="form-group create-form-group create-form-group-primary">
-  <label for="question">Question de l'arène</label>
-  <input
-    id="question"
-    type="text"
-    placeholder="Ex. Faut-il interdire TikTok aux moins de 16 ans ?"
-    maxlength="180"
-    required
-  >
-  <small>Pose une question simple, claire et fermée.</small>
+  <label for="question">Sujet de l'arène</label>
+<input
+  id="question"
+  type="text"
+  placeholder="Ex. Faut-il interdire TikTok aux moins de 16 ans ?"
+  maxlength="100"
+  required
+  oninput="updateCounter('question','question-count',100)"
+>
+<small id="question-count">0 / 100</small>
+<small>Ecris ici le sujet de ton arène. </small>
 
   <div id="similar-debates-box" class="similar-debates-box" style="display:none;">
     <p class="similar-debates-title">Arènes similaires déjà existantes</p>
     <div id="similar-debates-list" class="similar-debates-list"></div>
   </div>
 </div>
+
+<div class="form-group create-form-group">
+  <button
+    type="button"
+    id="toggle-context-button"
+    class="button button-secondary button-small create-context-toggle"
+    aria-expanded="false"
+    onclick="toggleCreateContextField()"
+  >
+    Ajouter un texte de contexte
+  </button>
+  <small>Facultatif. Ce texte apparaîtra sous le sujet de l’arène.</small>
+</div>
+
+<div id="context-text-group" class="form-group create-form-group create-context-panel" style="display:none;">
+  <label for="context_text">Texte de contexte</label>
+  <textarea
+    id="context_text"
+    maxlength="1800"
+    placeholder="Ajoute ici un court texte pour donner le contexte de l’arène..."
+    oninput="updateCounter('context_text','context-text-count',1800)"
+  ></textarea>
+  <small id="context-text-count">0 / 600</small>
+</div>
+
 <div class="form-group create-form-group">
   <label>Type d’arène</label>
 
   <div class="debate-type-toggle">
     <label class="debate-type-option">
-      <input type="radio" name="debate-type" value="debate" checked>
-      <span>Débat à deux positions</span>
+      <input type="radio" name="debate-type" value="open" checked>
+      <span>Arène libre</span>
     </label>
 
     <label class="debate-type-option">
-      <input type="radio" name="debate-type" value="open">
-      <span>Question ouverte</span>
+      <input type="radio" name="debate-type" value="debate">
+      <span>Arène à deux positions</span>
     </label>
   </div>
 
   <small>
-    Le débat à deux positions oppose deux camps. La question ouverte permet des réponses libres sous forme de liste.
+    L’arène libre permet d’ajouter librement des idées sous forme de liste. L’arène à deux positions organise les contributions autour de deux axes distincts. 
   </small>
 </div>
 
-     <div class="form-group create-form-group">
+<div id="positions-fields" class="positions-grid create-positions-grid" style="display:none;">
+  <div class="position-card position-a create-position-card">
+    <h2>Position A</h2>
+    <label for="option_a">Intitulé de la position A</label>
+    <input
+      id="option_a"
+      type="text"
+      placeholder="Ex. Oui, il faut l’interdire"
+      maxlength="120"
+    >
+    <small>Formule courte et compréhensible immédiatement.</small>
+  </div>
+
+  <div class="position-card position-b create-position-card">
+    <h2>Position B</h2>
+    <label for="option_b">Intitulé de la position B</label>
+    <input
+      id="option_b"
+      type="text"
+      placeholder="Ex. Non, il ne faut pas l’interdire"
+      maxlength="120"
+    >
+    <small>Intitulé bref, clair et distinct du premier.</small>
+  </div>
+</div>
+
+<div class="form-group create-form-group">
   <label for="category">Thématique</label>
   <select id="category" class="create-category-select" required>
     <option value="">Sélectionner une thématique</option>
@@ -207,34 +260,6 @@
   <small>Importe une seule vidéo (MP4, WebM, MOV ou M4V, 80 Mo max). Le lien source et l’image deviennent alors indisponibles.</small>
 </div>
 
-<div id="positions-fields" class="positions-grid create-positions-grid">
-          
-<div class="position-card position-a create-position-card">
-            <h2>Position A</h2>
-            <label for="option_a">Intitulé de la position A</label>
-            <input
-              id="option_a"
-              type="text"
-              placeholder="Ex. Oui, il faut l’interdire"
-              maxlength="120"
-              required
-            >
-            <small>Formule courte et compréhensible immédiatement.</small>
-          </div>
-
-          <div class="position-card position-b create-position-card">
-            <h2>Position B</h2>
-            <label for="option_b">Intitulé de la position B</label>
-            <input
-              id="option_b"
-              type="text"
-              placeholder="Ex. Non, il ne faut pas l’interdire"
-              maxlength="120"
-              required
-            >
-            <small>La position opposée, formulée de façon claire.</small>
-          </div>
-        </div>
 
         <div id="create-upload-progress" class="create-upload-progress" style="display:none; margin-top:18px; padding:16px; border:1px solid #e5e7eb; border-radius:18px; background:#f8fafc;">
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px;">
@@ -256,6 +281,29 @@
 
   </main>
 
-  <script src="/script.js?v=20260404-instagram-1"></script>
+  <div id="create-publish-overlay" class="create-publish-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#ffffff; align-items:center; justify-content:center; padding:24px;">
+    <div class="create-publish-overlay-inner" style="width:min(100%, 560px); text-align:center; display:flex; flex-direction:column; gap:18px; align-items:stretch;">
+      <div class="create-publish-hourglass" aria-hidden="true" style="font-size:52px; line-height:1;">⌛</div>
+      <h2 id="create-publish-overlay-title" style="margin:0; font-size:32px; line-height:1.2; color:#111111;">Publication en cours</h2>
+      <p id="create-publish-overlay-detail" style="margin:0; font-size:16px; line-height:1.6; color:#475569;">Préparation…</p>
+
+      <div id="create-upload-progress" class="create-upload-progress create-upload-progress-overlay" style="display:none; width:100%; padding:20px; border:1px solid #e5e7eb; border-radius:24px; background:#ffffff; box-shadow:0 16px 40px rgba(15,23,42,0.08); text-align:left;">
+        <div class="create-upload-progress-head" style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px;">
+          <strong id="create-upload-progress-label">Publication en cours</strong>
+          <span id="create-upload-progress-percent" aria-live="polite">0%</span>
+        </div>
+        <div class="create-upload-progress-track" style="width:100%; height:14px; border-radius:999px; background:#e5e7eb; overflow:hidden;">
+          <div id="create-upload-progress-fill" class="create-upload-progress-fill" style="width:0%; height:100%; border-radius:999px; background:#111111; transition:width 0.2s ease;"></div>
+        </div>
+        <div id="create-upload-progress-detail" class="create-upload-progress-detail" style="margin-top:10px; font-size:14px; color:#475569;"></div>
+      </div>
+
+      <button id="create-publish-cancel" class="button button-secondary create-publish-cancel-button" type="button" style="align-self:center; min-width:160px;">
+        Annuler
+      </button>
+    </div>
+  </div>
+
+  <script src="/script.js?v=20260404-context-2"></script>
 </body>
 </html>

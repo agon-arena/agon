@@ -408,6 +408,39 @@ main.create-page {
   line-height: 1.5;
 }
 
+.debate-card-context {
+  display: grid;
+  gap: 6px;
+  margin-top: -2px;
+  justify-items: center;
+}
+
+.debate-card-context-text {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.55;
+  font-size: 14px;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debate-card-context-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.debate-card-context-toggle:hover {
+  text-decoration: underline;
+}
+
 .debate-card-source{
   display:grid;
   gap:0;
@@ -6432,5 +6465,162 @@ padding:4px 14px 12px 14px;
 @media (min-width: 769px) {
   .debate-video-wrap{
     width:min(640px, 100%);
+  }
+}
+/* =========================
+   INDEX — mise en valeur desktop + scroll mobile
+========================= */
+
+.debate-card {
+  transition:
+    transform 0.24s ease,
+    box-shadow 0.24s ease,
+    border-color 0.24s ease,
+    background-color 0.24s ease;
+  will-change: transform, box-shadow;
+}
+
+.debate-card:hover,
+.debate-card:focus-within {
+  transform: translateY(-5px);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(17, 24, 39, 0.04);
+  border-color: #bfc9d8;
+}
+
+.debate-card h2,
+.debate-card-media img,
+.debate-card-media video,
+.debate-card-media iframe,
+.debate-card-media .debate-card-source,
+.debate-card-media .debate-card-youtube-shell,
+.debate-card-media .debate-card-instagram-shell,
+.debate-card-media .debate-card-local-image-shell,
+.debate-card-media .debate-card-local-video-shell,
+.debate-card-media .debate-card-x-shell {
+  transition:
+    transform 0.24s ease,
+    box-shadow 0.24s ease,
+    color 0.24s ease,
+    filter 0.24s ease;
+}
+
+.debate-card:hover h2,
+.debate-card:focus-within h2 {
+  color: #111111;
+}
+
+.debate-card:hover .debate-card-media img,
+.debate-card:hover .debate-card-media video,
+.debate-card:hover .debate-card-media iframe,
+.debate-card:focus-within .debate-card-media img,
+.debate-card:focus-within .debate-card-media video,
+.debate-card:focus-within .debate-card-media iframe {
+  transform: scale(1.02);
+}
+
+.debate-card:hover .debate-card-source,
+.debate-card:hover .debate-card-youtube-shell,
+.debate-card:hover .debate-card-instagram-shell,
+.debate-card:hover .debate-card-local-image-shell,
+.debate-card:hover .debate-card-local-video-shell,
+.debate-card:hover .debate-card-x-shell,
+.debate-card:focus-within .debate-card-source,
+.debate-card:focus-within .debate-card-youtube-shell,
+.debate-card:focus-within .debate-card-instagram-shell,
+.debate-card:focus-within .debate-card-local-image-shell,
+.debate-card:focus-within .debate-card-local-video-shell,
+.debate-card:focus-within .debate-card-x-shell {
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .debate-card:hover,
+  .debate-card:focus-within {
+    transform: none;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+    border-color: #cbd5e1;
+  }
+
+  .debate-card:hover .debate-card-media img,
+  .debate-card:hover .debate-card-media video,
+  .debate-card:hover .debate-card-media iframe,
+  .debate-card:focus-within .debate-card-media img,
+  .debate-card:focus-within .debate-card-media video,
+  .debate-card:focus-within .debate-card-media iframe {
+    transform: none;
+  }
+
+  .page-home-mobile .debate-card.index-card-active {
+    transform: translateY(-6px) scale(1.01);
+    box-shadow:
+      0 18px 40px rgba(15, 23, 42, 0.16),
+      0 0 0 1px rgba(17, 24, 39, 0.08);
+    border-color: #94a3b8;
+    background: #ffffff;
+  }
+
+  .page-home-mobile .debate-card.index-card-active h2 {
+    color: #111111;
+  }
+
+  .page-home-mobile .debate-card.index-card-active .debate-card-media img,
+  .page-home-mobile .debate-card.index-card-active .debate-card-media video,
+  .page-home-mobile .debate-card.index-card-active .debate-card-media iframe {
+    transform: scale(1.03);
+  }
+
+  .page-home-mobile .debate-card.index-card-active .debate-card-source,
+  .page-home-mobile .debate-card.index-card-active .debate-card-youtube-shell,
+  .page-home-mobile .debate-card.index-card-active .debate-card-instagram-shell,
+  .page-home-mobile .debate-card.index-card-active .debate-card-local-image-shell,
+  .page-home-mobile .debate-card.index-card-active .debate-card-local-video-shell,
+  .page-home-mobile .debate-card.index-card-active .debate-card-x-shell {
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+  }
+}
+
+
+.create-context-toggle {
+  width: fit-content;
+}
+
+.create-context-panel textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.debate-context-wrap {
+  display: none;
+  margin: 18px auto 14px auto;
+  max-width: 860px;
+}
+
+.debate-context-text {
+  white-space: pre-wrap;
+  color: #1f2937;
+  line-height: 1.7;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .create-context-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .debate-context-wrap {
+    margin: 16px auto 12px auto;
+    max-width: 100%;
+  }
+
+  .debate-context-text {
+    font-size: 16px;
+    font-weight: 700;
   }
 }
