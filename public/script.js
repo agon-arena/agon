@@ -4875,7 +4875,7 @@ section.style.display = "block";
   const debatesToShow = debates.slice(0, visitedDebatesVisible);
 
   div.innerHTML = debatesToShow.map(d => {
-    const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
+    const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
@@ -5064,7 +5064,7 @@ if (!debates.length) {
 header.style.display = "flex";
 
 div.innerHTML = debatesToShow.map(d => {
-  const debateTypeLabel = isOpenDebate(d) ? "Question ouverte" : "Débat";
+  const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
@@ -6720,7 +6720,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
 
     <div class="similar-debates-results">
     ${matches.map(({ debate }) => {
-      const debateTypeLabel = isOpenDebate(debate) ? "Question ouverte" : "Débat";
+      const debateTypeLabel = isOpenDebate(debate) ? "Arène libre" : "Arène à position";
 
       return `
         <article class="debate-card">
