@@ -2092,7 +2092,8 @@ state.observer = new IntersectionObserver((entries) => {
   scheduleIndexYouTubeActiveUpdate();
 }, {
   threshold: [0, 0.1, 0.25, 0.55, 0.85],
-  rootMargin: '35% 0px 35% 0px'
+rootMargin: '18% 0px 18% 0px'
+
 });
 
 
