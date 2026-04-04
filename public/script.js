@@ -4716,23 +4716,104 @@ function updateCreateResourceModeUI() {
   }
 }
 
-function readFileAsDataUrl(file) {
+function readFileAsDataUrl(file, options = {}) {
+  const { onProgress } = options;
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onload = () => {
+      if (typeof onProgress === "function") {
+        onProgress(100);
+      }
+      resolve(String(reader.result || ""));
+    };
+
     reader.onerror = () => reject(new Error("Impossible de lire l'image."));
+
+    reader.onprogress = (event) => {
+      if (!event.lengthComputable || typeof onProgress !== "function") return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+
     reader.readAsDataURL(file);
   });
 }
 
-function readFileAsArrayBuffer(file) {
+function readFileAsArrayBuffer(file, options = {}) {
+  const { onProgress } = options;
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => {
+      if (typeof onProgress === "function") {
+        onProgress(100);
+      }
+      resolve(reader.result);
+    };
+
     reader.onerror = () => reject(new Error("Impossible de lire la vidéo."));
+
+    reader.onprogress = (event) => {
+      if (!event.lengthComputable || typeof onProgress !== "function") return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+
     reader.readAsArrayBuffer(file);
+  });
+}
+
+function createXhrRequest(url, options = {}) {
+  const {
+    method = "GET",
+    headers = {},
+    body = null,
+    responseType = "json",
+    onUploadProgress
+  } = options;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+
+    Object.entries(headers || {}).forEach(([key, value]) => {
+      if (value == null) return;
+      xhr.setRequestHeader(key, value);
+    });
+
+    if (typeof onUploadProgress === "function" && xhr.upload) {
+      xhr.upload.addEventListener("progress", (event) => {
+        if (!event.lengthComputable) return;
+        onUploadProgress(Math.round((event.loaded / event.total) * 100), event);
+      });
+    }
+
+    xhr.onload = () => {
+      let payload = xhr.responseText;
+
+      if (responseType === "json") {
+        try {
+          payload = payload ? JSON.parse(payload) : {};
+        } catch (error) {
+          payload = {};
+        }
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload);
+        return;
+      }
+
+      const message = payload && typeof payload === "object"
+        ? payload.error || "Erreur serveur"
+        : "Erreur serveur";
+      reject(new Error(message));
+    };
+
+    xhr.onerror = () => reject(new Error("Erreur réseau."));
+    xhr.onabort = () => reject(new Error("Envoi interrompu."));
+    xhr.send(body);
   });
 }
 
@@ -5045,6 +5126,7 @@ if (resourceInputs.length) {
     });
   }
 function resetCreateSubmitButton() {
+  hideCreatePublishProgress();
   if (!submitButton) return;
   submitButton.disabled = false;
   submitButton.classList.remove("create-submit-loading");
@@ -5059,6 +5141,8 @@ form.addEventListener("submit", async e => {
     submitButton.classList.add("create-submit-loading");
     submitButton.innerHTML = '<span class="create-submit-spinner" aria-hidden="true"></span><span>Publication...</span>';
   }
+
+  setCreatePublishProgress(3, "Préparation de la publication", "Vérification des informations…");
 
   const question = document.getElementById("question").value.trim();
   const category = document.getElementById("category").value.trim();
@@ -5156,54 +5240,101 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     return;
   }
-showNotificationTransitionOverlay("Ouverture de l’arène en cours…");
   try {
+    let image_upload = null;
 
-
-    const image_upload = imageFile
-      ? {
-          name: imageFile.name || "image",
-          type: imageFile.type || "",
-          dataUrl: await readFileAsDataUrl(imageFile)
+    if (imageFile) {
+      setCreatePublishProgress(8, "Préparation de l’image", "Lecture du fichier image…");
+      const imageDataUrl = await readFileAsDataUrl(imageFile, {
+        onProgress: (progress) => {
+          setCreatePublishProgress(
+            mapProgressRange(progress, 8, 32),
+            "Préparation de l’image",
+            `Lecture du fichier image… ${Math.round(progress)}%`
+          );
         }
-      : null;
+      });
+
+      image_upload = {
+        name: imageFile.name || "image",
+        type: imageFile.type || "",
+        dataUrl: imageDataUrl
+      };
+    }
 
     const creatorKey = getKey();
-
-    const r = await fetchJSON(API + "/debates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        question,
-        category,
-        source_url,
-        resource_mode: resourceMode,
-        image_upload,
-        type: selectedType,
-        option_a,
-        option_b,
-        creatorKey
-      })
+    const createPayload = JSON.stringify({
+      question,
+      category,
+      source_url,
+      resource_mode: resourceMode,
+      image_upload,
+      type: selectedType,
+      option_a,
+      option_b,
+      creatorKey
     });
 
+    setCreatePublishProgress(
+      imageFile ? 34 : 12,
+      "Création de l’arène",
+      imageFile ? "Envoi du débat et de l’image au serveur…" : "Envoi du débat au serveur…"
+    );
+
+    const r = await createXhrRequest(API + "/debates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: createPayload,
+      responseType: "json",
+      onUploadProgress: (progress) => {
+        const mapped = imageFile
+          ? mapProgressRange(progress, 34, 78)
+          : mapProgressRange(progress, 12, 78);
+
+        setCreatePublishProgress(
+          mapped,
+          "Création de l’arène",
+          imageFile
+            ? `Envoi du débat et de l’image au serveur… ${Math.round(progress)}%`
+            : `Envoi du débat au serveur… ${Math.round(progress)}%`
+        );
+      }
+    });
+
+    setCreatePublishProgress(80, "Arène créée", "Finalisation…");
+
     if (resourceMode === "video" && videoFile) {
-      const videoBuffer = await readFileAsArrayBuffer(videoFile);
-      const uploadResponse = await fetch(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
+      setCreatePublishProgress(82, "Préparation de la vidéo", "Lecture du fichier vidéo…");
+      const videoBuffer = await readFileAsArrayBuffer(videoFile, {
+        onProgress: (progress) => {
+          setCreatePublishProgress(
+            mapProgressRange(progress, 82, 90),
+            "Préparation de la vidéo",
+            `Lecture du fichier vidéo… ${Math.round(progress)}%`
+          );
+        }
+      });
+
+      await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
           "x-file-name": videoFile.name || "video",
           "x-file-type": videoFile.type || "application/octet-stream"
         },
-        body: videoBuffer
+        body: videoBuffer,
+        responseType: "json",
+        onUploadProgress: (progress) => {
+          setCreatePublishProgress(
+            mapProgressRange(progress, 90, 99),
+            "Envoi de la vidéo",
+            `Téléversement de la vidéo… ${Math.round(progress)}%`
+          );
+        }
       });
-
-      const uploadData = await uploadResponse.json().catch(() => ({}));
-      if (!uploadResponse.ok) {
-        throw new Error(uploadData.error || "Erreur enregistrement vidéo.");
-      }
     }
 
+    setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
     location = "/debate?id=" + r.id;
   } catch (error) {
     resetCreateSubmitButton();
@@ -5217,6 +5348,46 @@ showNotificationTransitionOverlay("Ouverture de l’arène en cours…");
 
 
 }
+function getCreatePublishProgressElements() {
+  return {
+    box: document.getElementById("create-upload-progress"),
+    label: document.getElementById("create-upload-progress-label"),
+    detail: document.getElementById("create-upload-progress-detail"),
+    fill: document.getElementById("create-upload-progress-fill"),
+    percent: document.getElementById("create-upload-progress-percent")
+  };
+}
+
+function hideCreatePublishProgress() {
+  const { box, fill, percent, label, detail } = getCreatePublishProgressElements();
+  if (box) box.style.display = "none";
+  if (fill) fill.style.width = "0%";
+  if (percent) percent.textContent = "0%";
+  if (label) label.textContent = "Publication en cours";
+  if (detail) detail.textContent = "";
+}
+
+function showCreatePublishProgress() {
+  const { box } = getCreatePublishProgressElements();
+  if (box) box.style.display = "block";
+}
+
+function setCreatePublishProgress(value, label = "Publication en cours", detail = "") {
+  const { box, fill, percent, label: labelEl, detail: detailEl } = getCreatePublishProgressElements();
+  const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+
+  if (box) box.style.display = "block";
+  if (fill) fill.style.width = `${safeValue}%`;
+  if (percent) percent.textContent = `${Math.round(safeValue)}%`;
+  if (labelEl) labelEl.textContent = label;
+  if (detailEl) detailEl.textContent = detail;
+}
+
+function mapProgressRange(progress, min, max) {
+  const safeProgress = Math.max(0, Math.min(100, Number(progress || 0)));
+  return min + ((max - min) * safeProgress) / 100;
+}
+
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()

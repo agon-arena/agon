@@ -236,6 +236,17 @@
           </div>
         </div>
 
+        <div id="create-upload-progress" class="create-upload-progress" style="display:none; margin-top:18px; padding:16px; border:1px solid #e5e7eb; border-radius:18px; background:#f8fafc;">
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px;">
+            <strong id="create-upload-progress-label">Publication en cours</strong>
+            <span id="create-upload-progress-percent" aria-live="polite">0%</span>
+          </div>
+          <div style="width:100%; height:12px; border-radius:999px; background:#e5e7eb; overflow:hidden;">
+            <div id="create-upload-progress-fill" style="width:0%; height:100%; border-radius:999px; background:#111111; transition:width 0.2s ease;"></div>
+          </div>
+          <div id="create-upload-progress-detail" style="margin-top:10px; font-size:14px; color:#475569;"></div>
+        </div>
+
         <div class="create-actions create-actions-sticky">
           <button class="button create-submit-button" type="submit">Créer l'arène</button>
         </div>
