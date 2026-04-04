@@ -4429,6 +4429,23 @@ body.debate-topbar-hidden .debate-hero-top {
   font-weight: 800;
   border-radius: 12px;
 }
+.create-submit-helper {
+  display: none;
+  margin: -6px 0 0 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.create-submit-helper.create-submit-helper-visible {
+  display: block;
+}
+
+.page-create-mobile .create-submit-helper {
+  font-size: 13px;
+  padding: 0 4px;
+}
 
 @media (max-width: 768px) {
   .page-create-mobile .topbar {

@@ -5333,6 +5333,7 @@ function updateCreateResourceModeUI() {
 
   if (sourceInput) {
     sourceInput.disabled = mode !== "source";
+    sourceInput.required = mode === "source";
     if (mode !== "source") {
       sourceInput.value = "";
     }
@@ -5344,6 +5345,7 @@ function updateCreateResourceModeUI() {
 
   if (imageInput) {
     imageInput.disabled = mode !== "image";
+    imageInput.required = mode === "image";
     if (mode !== "image") {
       imageInput.value = "";
     }
@@ -5355,6 +5357,7 @@ function updateCreateResourceModeUI() {
 
   if (videoInput) {
     videoInput.disabled = mode !== "video";
+    videoInput.required = mode === "video";
     if (mode !== "video") {
       videoInput.value = "";
     }
@@ -5746,6 +5749,7 @@ async function initCreate() {
 
 const submitButton = form.querySelector(".create-submit-button");
 const submitButtonInitialText = submitButton ? submitButton.innerHTML : "";
+const submitHelper = document.getElementById("create-submit-helper");
 const cancelPublishButton = document.getElementById("create-publish-cancel");
 let createPublishAbortController = null;
 let createPublishCancelRequested = false;
@@ -5774,8 +5778,62 @@ function cancelCreatePublishSession() {
   }
 }
 
-function getCreatePublishSignal() {
-  return createPublishAbortController?.signal;
+function getCreateValidationState() {
+  const question = document.getElementById("question")?.value.trim() || "";
+  const category = document.getElementById("category")?.value.trim() || "";
+  const selectedType = document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
+  const optionA = selectedType === "open"
+    ? ""
+    : document.getElementById("option_a")?.value.trim() || "";
+  const optionB = selectedType === "open"
+    ? ""
+    : document.getElementById("option_b")?.value.trim() || "";
+  const resourceMode = getSelectedCreateResourceMode();
+  const sourceUrl = resourceMode === "source"
+    ? document.getElementById("source_url")?.value.trim() || ""
+    : "";
+  const imageFile = resourceMode === "image"
+    ? document.getElementById("debate_image_file")?.files?.[0] || null
+    : null;
+  const videoFile = resourceMode === "video"
+    ? getCreateVideoFileInput()?.files?.[0] || null
+    : null;
+
+  return {
+    isValid:
+      !!question &&
+      !!category &&
+      (selectedType === "open" || (!!optionA && !!optionB)) &&
+      (resourceMode !== "source" || !!sourceUrl) &&
+      (resourceMode !== "image" || !!imageFile) &&
+      (resourceMode !== "video" || !!videoFile),
+    question,
+    category,
+    selectedType,
+    optionA,
+    optionB,
+    resourceMode,
+    sourceUrl,
+    imageFile,
+    videoFile
+  };
+}
+
+function updateCreateSubmitAvailability() {
+  if (!submitButton) return;
+  if (submitButton.classList.contains("create-submit-loading")) return;
+
+  const { isValid } = getCreateValidationState();
+  const helperMessage = isValid ? "" : "Complète tous les champs requis pour créer l’arène.";
+
+  submitButton.disabled = !isValid;
+  submitButton.setAttribute("aria-disabled", String(!isValid));
+  submitButton.title = isValid ? "Créer l’arène" : helperMessage;
+
+  if (submitHelper) {
+    submitHelper.textContent = helperMessage;
+    submitHelper.classList.toggle("create-submit-helper-visible", !isValid);
+  }
 }
 
 const typeInputs = document.querySelectorAll('input[name="debate-type"]');
@@ -5868,7 +5926,10 @@ const matches = debatesForSimilarity
 
 if (typeInputs.length) {
   typeInputs.forEach((input) => {
-    input.addEventListener("change", updateCreateTypeUI);
+    input.addEventListener("change", () => {
+      updateCreateTypeUI();
+      updateCreateSubmitAvailability();
+    });
   });
 
   updateCreateTypeUI();
@@ -5876,13 +5937,31 @@ if (typeInputs.length) {
 
 if (resourceInputs.length) {
   resourceInputs.forEach((input) => {
-    input.addEventListener("change", updateCreateResourceModeUI);
+    input.addEventListener("change", () => {
+      updateCreateResourceModeUI();
+      updateCreateSubmitAvailability();
+    });
   });
 
   updateCreateResourceModeUI();
 }
 
+  [
+    questionInput,
+    document.getElementById("category"),
+    document.getElementById("option_a"),
+    document.getElementById("option_b"),
+    document.getElementById("source_url"),
+    document.getElementById("debate_image_file"),
+    getCreateVideoFileInput()
+  ].forEach((field) => {
+    if (!field) return;
+    field.addEventListener("input", updateCreateSubmitAvailability);
+    field.addEventListener("change", updateCreateSubmitAvailability);
+  });
+
   toggleCreateContextField(false);
+  updateCreateSubmitAvailability();
   if (questionInput) {
     questionInput.addEventListener("input", (e) => {
       renderSimilarDebates(e.target.value);
@@ -5904,32 +5983,52 @@ form.addEventListener("submit", async e => {
   startCreatePublishSession();
   setCreatePublishProgress(3, "Préparation de la publication", "Vérification des informations…");
 
-  const question = document.getElementById("question").value.trim();
-  const category = document.getElementById("category").value.trim();
-  const resourceMode = getSelectedCreateResourceMode();
-  const source_url = resourceMode === "source"
-    ? document.getElementById("source_url").value.trim()
-    : "";
-  const imageFile = resourceMode === "image"
-    ? document.getElementById("debate_image_file").files?.[0] || null
-    : null;
-  const videoInput = getCreateVideoFileInput();
-  const videoFile = resourceMode === "video"
-    ? videoInput?.files?.[0] || null
-    : null;
-  const selectedType =
-    document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
+  const validationState = getCreateValidationState();
+  const question = validationState.question;
+  const category = validationState.category;
+  const resourceMode = validationState.resourceMode;
+  const source_url = validationState.sourceUrl;
+  const imageFile = validationState.imageFile;
+  const videoFile = validationState.videoFile;
+  const selectedType = validationState.selectedType;
   const content = getCreateContextText();
 
   const option_a = selectedType === "open"
     ? ""
-    : document.getElementById("option_a").value.trim();
+    : validationState.optionA;
 
   const option_b = selectedType === "open"
     ? ""
-    : document.getElementById("option_b").value.trim();
+    : validationState.optionB;
+
+  if (!question) {
+    hideCreatePublishProgress();
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Sujet manquant",
+      "Tu dois renseigner le sujet de l’arène avant de la créer.",
+      null,
+      "⚠️"
+    );
+    updateCreateSubmitAvailability();
+    return;
+  }
+
+  if (!category) {
+    hideCreatePublishProgress();
+    resetCreateSubmitButton();
+    showReplacementSuccessMessage(
+      "Thématique manquante",
+      "Tu dois choisir une thématique avant de créer l’arène.",
+      null,
+      "⚠️"
+    );
+    updateCreateSubmitAvailability();
+    return;
+  }
 
   if (selectedType !== "open" && (!option_a || !option_b)) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Positions manquantes",
@@ -5941,6 +6040,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (content.length > 600) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Texte trop long",
@@ -5952,6 +6052,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (resourceMode === "source" && !source_url) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Lien manquant",
@@ -5963,6 +6064,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (resourceMode === "image" && !imageFile) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Image manquante",
@@ -5974,6 +6076,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (imageFile && !/^image\//i.test(imageFile.type || "")) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Format non pris en charge",
@@ -5985,6 +6088,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (resourceMode === "video" && !videoFile) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Vidéo manquante",
@@ -5996,6 +6100,7 @@ form.addEventListener("submit", async e => {
   }
 
   if (videoFile && !/^video\//i.test(videoFile.type || "")) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Format non pris en charge",
@@ -6009,6 +6114,7 @@ form.addEventListener("submit", async e => {
   const confirmed = await showDebatePublishConfirmModal();
 
   if (!confirmed) {
+    hideCreatePublishProgress();
     resetCreateSubmitButton();
     return;
   }

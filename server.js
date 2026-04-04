@@ -2416,7 +2416,19 @@ app.post("/api/debates", async (req, res) => {
   }
 });
 
-app.post("/api/debates/:id/video-file", express.raw({ type: "application/octet-stream", limit: `${MAX_DEBATE_VIDEO_BYTES}b` }), async (req, res) => {
+app.post("/api/debates/:id/video-file", express.raw({
+  type: (req) => {
+    const contentType = String(req.get("content-type") || "").toLowerCase().split(";")[0].trim();
+    return [
+      "application/octet-stream",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/x-m4v"
+    ].includes(contentType);
+  },
+  limit: `${MAX_DEBATE_VIDEO_BYTES}b`
+}), async (req, res) => {
   try {
     const debateId = req.params.id;
     const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
