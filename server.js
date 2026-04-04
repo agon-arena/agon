@@ -190,8 +190,10 @@ const debateImagesDir = path.join(__dirname, "public", "debate-images");
 const debateVideosDir = path.join(__dirname, "public", "debate-videos");
 const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
+
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim();
-const debateMediaUrlCache = new Map();
+const SUPABASE_DEBATE_IMAGE_PREFIX = "images";
+
 
 function ensureDebateAssetsStorage() {
   fs.mkdirSync(debateImagesDir, { recursive: true });
@@ -276,161 +278,6 @@ function setDebateStoredVideoUrl(debateId, videoUrl) {
   });
 }
 
-function getDebateMediaFolder(debateId) {
-  return `debates/${debateId}`;
-}
-
-function getDebateMediaPublicUrl(storagePath) {
-  const { data } = supabase.storage
-    .from(SUPABASE_DEBATE_MEDIA_BUCKET)
-    .getPublicUrl(storagePath);
-
-  return String(data?.publicUrl || "").trim();
-}
-
-function getCachedDebateMediaUrls(debateId) {
-  const entry = debateMediaUrlCache.get(String(debateId));
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    debateMediaUrlCache.delete(String(debateId));
-    return null;
-  }
-  return entry.value;
-}
-
-function setCachedDebateMediaUrls(debateId, value, ttlMs = 1000 * 60 * 10) {
-  debateMediaUrlCache.set(String(debateId), {
-    value: {
-      image_url: String(value?.image_url || "").trim(),
-      video_url: String(value?.video_url || "").trim()
-    },
-    expiresAt: Date.now() + ttlMs
-  });
-}
-
-function clearCachedDebateMediaUrls(debateId) {
-  debateMediaUrlCache.delete(String(debateId));
-}
-
-async function listDebateStorageMediaFiles(debateId) {
-  const folder = getDebateMediaFolder(debateId);
-  const { data, error } = await supabase.storage
-    .from(SUPABASE_DEBATE_MEDIA_BUCKET)
-    .list(folder, {
-      limit: 100,
-      sortBy: { column: "name", order: "asc" }
-    });
-
-  if (error) {
-    const message = String(error.message || "").toLowerCase();
-    if (
-      message.includes("not found")
-      || message.includes("bucket")
-      || message.includes("does not exist")
-      || message.includes("no such bucket")
-    ) {
-      return [];
-    }
-    throw error;
-  }
-
-  return Array.isArray(data) ? data : [];
-}
-
-async function deleteDebateStorageMediaByPrefix(debateId, prefixes = []) {
-  const safePrefixes = (Array.isArray(prefixes) ? prefixes : [])
-    .map((prefix) => String(prefix || "").trim())
-    .filter(Boolean);
-
-  if (!safePrefixes.length) return;
-
-  let files = [];
-  try {
-    files = await listDebateStorageMediaFiles(debateId);
-  } catch (error) {
-    console.error("Erreur listing médias Supabase:", error);
-    return;
-  }
-
-  const pathsToRemove = files
-    .map((file) => String(file?.name || "").trim())
-    .filter((name) => name && safePrefixes.some((prefix) => name.startsWith(prefix)))
-    .map((name) => `${getDebateMediaFolder(debateId)}/${name}`);
-
-  if (!pathsToRemove.length) return;
-
-  const { error } = await supabase.storage
-    .from(SUPABASE_DEBATE_MEDIA_BUCKET)
-    .remove(pathsToRemove);
-
-  if (error) {
-    console.error("Erreur suppression médias Supabase:", error);
-  }
-}
-
-async function deleteAllDebateMedia(debateId) {
-  await deleteDebateStorageMediaByPrefix(debateId, ["image.", "video."]);
-
-  const storedImageUrl = getDebateStoredImageUrl(debateId);
-  const storedVideoUrl = getDebateStoredVideoUrl(debateId);
-
-  if (storedImageUrl) {
-    deleteLocalMediaFile(storedImageUrl, debateImagesDir);
-  }
-
-  if (storedVideoUrl) {
-    deleteLocalMediaFile(storedVideoUrl, debateVideosDir);
-  }
-
-  removeDebateAssetsEntry(debateId);
-  clearCachedDebateMediaUrls(debateId);
-}
-
-async function resolveDebateMediaUrls(debateId) {
-  const cached = getCachedDebateMediaUrls(debateId);
-  if (cached) return cached;
-
-  let imageUrl = "";
-  let videoUrl = "";
-
-  try {
-    const files = await listDebateStorageMediaFiles(debateId);
-
-    for (const file of files) {
-      const name = String(file?.name || "").trim();
-      if (!name) continue;
-
-      const storagePath = `${getDebateMediaFolder(debateId)}/${name}`;
-
-      if (!imageUrl && name.startsWith("image.")) {
-        imageUrl = getDebateMediaPublicUrl(storagePath);
-      }
-
-      if (!videoUrl && name.startsWith("video.")) {
-        videoUrl = getDebateMediaPublicUrl(storagePath);
-      }
-    }
-  } catch (error) {
-    console.error("Erreur résolution médias Supabase:", error);
-  }
-
-  if (!imageUrl) {
-    imageUrl = getDebateStoredImageUrl(debateId);
-  }
-
-  if (!videoUrl) {
-    videoUrl = getDebateStoredVideoUrl(debateId);
-  }
-
-  const resolved = {
-    image_url: String(imageUrl || "").trim(),
-    video_url: String(videoUrl || "").trim()
-  };
-
-  setCachedDebateMediaUrls(debateId, resolved);
-  return resolved;
-}
-
 function getImageExtensionFromMimeType(mimeType) {
   const normalized = String(mimeType || "").toLowerCase();
   if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
@@ -490,6 +337,167 @@ function deleteLocalMediaFile(publicUrl, allowedDir) {
   }
 }
 
+
+async function updateDebateMediaColumnsIfAvailable(debateId, partial) {
+  if (!debateId || !partial || typeof partial !== "object" || !Object.keys(partial).length) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("debates")
+      .update(partial)
+      .eq("id", debateId);
+
+    if (!error) return;
+
+    const message = String(error.message || "").toLowerCase();
+    const code = String(error.code || "").toLowerCase();
+    const ignorable =
+      message.includes("column") ||
+      message.includes("schema cache") ||
+      code === "pgrst204" ||
+      code === "42703";
+
+    if (!ignorable) {
+      console.error("Erreur mise à jour colonnes média débat:", error);
+    }
+  } catch (error) {
+    console.error("Erreur mise à jour colonnes média débat:", error);
+  }
+}
+
+function getDebateImageStorageFolder(debateId) {
+  return `${SUPABASE_DEBATE_IMAGE_PREFIX}/${String(debateId)}`;
+}
+
+function getSupabasePublicUrl(bucketName, storagePath) {
+  const safeBucket = String(bucketName || "").trim();
+  const safePath = String(storagePath || "").replace(/^\/+/, "").trim();
+  if (!safeBucket || !safePath) return "";
+
+  const { data } = supabase.storage.from(safeBucket).getPublicUrl(safePath);
+  return String(data?.publicUrl || "").trim();
+}
+
+function extractSupabaseStoragePathFromPublicUrl(publicUrl, bucketName = SUPABASE_DEBATE_MEDIA_BUCKET) {
+  const safeUrl = String(publicUrl || "").trim();
+  const safeBucket = String(bucketName || "").trim();
+  if (!safeUrl || !safeBucket) return "";
+
+  try {
+    const parsed = new URL(safeUrl);
+    const marker = `/object/public/${safeBucket}/`;
+    const index = parsed.pathname.indexOf(marker);
+    if (index === -1) return "";
+    const relative = parsed.pathname.slice(index + marker.length);
+    return decodeURIComponent(relative).replace(/^\/+/, "");
+  } catch (error) {
+    return "";
+  }
+}
+
+async function listDebateImageFilesFromStorage(debateId) {
+  const folder = getDebateImageStorageFolder(debateId);
+
+  try {
+    const { data, error } = await supabase.storage
+      .from(SUPABASE_DEBATE_MEDIA_BUCKET)
+      .list(folder, {
+        limit: 20,
+        sortBy: { column: "name", order: "desc" }
+      });
+
+    if (error) {
+      const message = String(error.message || "").toLowerCase();
+      if (
+        message.includes("not found") ||
+        message.includes("bucket") ||
+        message.includes("does not exist")
+      ) {
+        return [];
+      }
+
+      console.error("Erreur listing images Supabase:", error);
+      return [];
+    }
+
+    return (data || []).filter((item) => item && item.name && !item.id?.endsWith?.("/"));
+  } catch (error) {
+    console.error("Erreur listing images Supabase:", error);
+    return [];
+  }
+}
+
+async function removeDebateImagesFromSupabaseStorage(debateId) {
+  const files = await listDebateImageFilesFromStorage(debateId);
+  if (!files.length) return;
+
+  const paths = files
+    .map((file) => `${getDebateImageStorageFolder(debateId)}/${file.name}`)
+    .filter(Boolean);
+
+  if (!paths.length) return;
+
+  try {
+    const { error } = await supabase.storage
+      .from(SUPABASE_DEBATE_MEDIA_BUCKET)
+      .remove(paths);
+
+    if (error) {
+      console.error("Erreur suppression images Supabase:", error);
+    }
+  } catch (error) {
+    console.error("Erreur suppression images Supabase:", error);
+  }
+}
+
+async function removeSupabaseFileByPublicUrl(publicUrl) {
+  const storagePath = extractSupabaseStoragePathFromPublicUrl(publicUrl);
+  if (!storagePath) return;
+
+  try {
+    const { error } = await supabase.storage
+      .from(SUPABASE_DEBATE_MEDIA_BUCKET)
+      .remove([storagePath]);
+
+    if (error) {
+      console.error("Erreur suppression fichier Supabase:", error);
+    }
+  } catch (error) {
+    console.error("Erreur suppression fichier Supabase:", error);
+  }
+}
+
+async function resolveDebateImageUrlFromStorage(debateId) {
+  const files = await listDebateImageFilesFromStorage(debateId);
+  if (!files.length) return "";
+
+  const selected = files[0];
+  return getSupabasePublicUrl(
+    SUPABASE_DEBATE_MEDIA_BUCKET,
+    `${getDebateImageStorageFolder(debateId)}/${selected.name}`
+  );
+}
+
+async function resolveDebateStoredImageUrl(debateId, preferredUrl = "") {
+  const normalizedPreferredUrl = String(preferredUrl || "").trim();
+  if (normalizedPreferredUrl) {
+    return normalizedPreferredUrl;
+  }
+
+  const localUrl = getDebateStoredImageUrl(debateId);
+  if (localUrl) {
+    return localUrl;
+  }
+
+  return await resolveDebateImageUrlFromStorage(debateId);
+}
+
+function resolveDebateStoredVideoUrl(debateId, preferredUrl = "") {
+  return String(preferredUrl || "").trim() || getDebateStoredVideoUrl(debateId);
+}
+
 async function saveUploadedDebateImage(debateId, imageUpload) {
   const dataUrl = String(imageUpload?.dataUrl || "").trim();
   const mimeType = String(imageUpload?.type || "").trim().toLowerCase();
@@ -513,34 +521,31 @@ async function saveUploadedDebateImage(debateId, imageUpload) {
     throw new Error("Image vide.");
   }
 
-  const storagePath = `${getDebateMediaFolder(debateId)}/image.${extension}`;
+  ensureDebateAssetsStorage();
+  const previousImageUrl = getDebateStoredImageUrl(debateId);
 
-  await deleteDebateStorageMediaByPrefix(debateId, ["image."]);
+  await removeDebateImagesFromSupabaseStorage(debateId);
 
+  const storagePath = `${getDebateImageStorageFolder(debateId)}/debate-${debateId}-${Date.now()}.${extension}`;
   const { error } = await supabase.storage
     .from(SUPABASE_DEBATE_MEDIA_BUCKET)
     .upload(storagePath, buffer, {
       contentType: mimeType,
-      upsert: true
+      upsert: false
     });
 
   if (error) {
-    console.error("Erreur upload image Supabase:", error);
-    throw new Error("Image invalide.");
+    throw new Error("Erreur upload image Supabase.");
   }
 
-  const publicUrl = getDebateMediaPublicUrl(storagePath);
-  if (!publicUrl) {
-    throw new Error("Image invalide.");
+  if (previousImageUrl) {
+    deleteLocalMediaFile(previousImageUrl, debateImagesDir);
   }
 
-  setDebateStoredImageUrl(debateId, "");
-  clearCachedDebateMediaUrls(debateId);
-
-  return publicUrl;
+  return getSupabasePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, storagePath);
 }
 
-async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType) {
+function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType) {
   const safeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
   if (!safeBuffer.length) {
     throw new Error("Vidéo vide.");
@@ -557,45 +562,28 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType) {
     throw new Error("Format vidéo non pris en charge.");
   }
 
-  const storagePath = `${getDebateMediaFolder(debateId)}/video.${extension}`;
+  ensureDebateAssetsStorage();
+  const previousVideoUrl = getDebateStoredVideoUrl(debateId);
+  const filename = `debate-video-${debateId}-${Date.now()}.${extension}`;
+  const filePath = path.join(debateVideosDir, filename);
+  fs.writeFileSync(filePath, safeBuffer);
 
-  await deleteDebateStorageMediaByPrefix(debateId, ["video."]);
-
-  const { error } = await supabase.storage
-    .from(SUPABASE_DEBATE_MEDIA_BUCKET)
-    .upload(storagePath, safeBuffer, {
-      contentType: getVideoMimeTypeFromExtension(extension),
-      upsert: true
-    });
-
-  if (error) {
-    console.error("Erreur upload vidéo Supabase:", error);
-    throw new Error("Erreur enregistrement vidéo.");
+  if (previousVideoUrl) {
+    deleteLocalMediaFile(previousVideoUrl, debateVideosDir);
   }
-
-  const publicUrl = getDebateMediaPublicUrl(storagePath);
-  if (!publicUrl) {
-    throw new Error("Erreur enregistrement vidéo.");
-  }
-
-  setDebateStoredVideoUrl(debateId, "");
-  clearCachedDebateMediaUrls(debateId);
 
   return {
-    url: publicUrl,
+    url: `/debate-videos/${filename}`,
     mimeType: getVideoMimeTypeFromExtension(extension)
   };
 }
 
 async function enrichDebateWithStoredImage(debate) {
-  if (!debate || typeof debate !== "object" || !debate.id) return debate;
-
-  const media = await resolveDebateMediaUrls(debate.id);
-
+  if (!debate) return debate;
   return {
     ...debate,
-    image_url: media.image_url,
-    video_url: media.video_url
+    image_url: await resolveDebateStoredImageUrl(debate.id, debate.image_url),
+    video_url: resolveDebateStoredVideoUrl(debate.id, debate.video_url)
   };
 }
 
@@ -1388,7 +1376,7 @@ async function getArgumentById(id) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return await enrichDebateWithStoredImage(data);
 }
 
 async function getCommentById(id) {
@@ -1399,7 +1387,7 @@ async function getCommentById(id) {
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return await enrichDebateWithStoredImage(data);
 }
 
 async function getArgumentsByDebateId(debateId) {
@@ -2222,7 +2210,7 @@ app.get("/api/debates", async (req, res) => {
       argsByDebate.get(arg.debate_id).push(arg);
     }
 
-    const rows = await Promise.all(debateRows.map(async (d) => {
+    const rows = debateRows.map((d) => {
       const debateArgs = argsByDebate.get(d.id) || [];
       const argument_count = debateArgs.length;
       const last_argument_at = debateArgs.length
@@ -2246,12 +2234,10 @@ app.get("/api/debates", async (req, res) => {
         { side: "B", votes: votes_b }
       ]);
 
-      const media = await resolveDebateMediaUrls(d.id);
-
       return {
         ...d,
-        image_url: media.image_url,
-        video_url: media.video_url,
+        image_url: getDebateStoredImageUrl(d.id),
+        video_url: getDebateStoredVideoUrl(d.id),
         argument_count,
         last_argument_at,
         votes_a,
@@ -2259,7 +2245,7 @@ app.get("/api/debates", async (req, res) => {
         percent_a: percentA,
         percent_b: percentB
       };
-    }));
+    });
 
     const rowsWithSourcePreview = await Promise.all(rows.map(async (row) => {
       if (!String(row.source_url || '').trim()) {
@@ -2343,22 +2329,17 @@ app.post("/api/debates", async (req, res) => {
 
     if (image_upload) {
       try {
-        const storedImageUrl = await saveUploadedDebateImage(data.id, image_upload);
-        await deleteDebateStorageMediaByPrefix(data.id, ["video."]);
-        setDebateStoredImageUrl(data.id, "");
-        setDebateStoredVideoUrl(data.id, "");
-        setCachedDebateMediaUrls(data.id, { image_url: storedImageUrl, video_url: "" });
+        const storedImageUrl = saveUploadedDebateImage(data.id, image_upload);
+        setDebateStoredImageUrl(data.id, storedImageUrl);
       } catch (imageError) {
         console.error(imageError);
         return res.status(400).json({ error: "Erreur enregistrement image." });
       }
     } else {
       setDebateStoredImageUrl(data.id, "");
-      clearCachedDebateMediaUrls(data.id);
     }
 
     if (normalizedResourceMode !== "video") {
-      await deleteDebateStorageMediaByPrefix(data.id, ["video."]);
       setDebateStoredVideoUrl(data.id, "");
     }
 
@@ -2396,11 +2377,9 @@ app.post("/api/debates/:id/video-file", express.raw({ type: "application/octet-s
     const fileName = String(req.get("x-file-name") || "video").trim();
     const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
 
-    const storedVideo = await saveUploadedDebateVideo(debateId, buffer, fileName, mimeType);
-    await deleteDebateStorageMediaByPrefix(debateId, ["image."]);
-    setDebateStoredVideoUrl(debateId, "");
+    const storedVideo = saveUploadedDebateVideo(debateId, buffer, fileName, mimeType);
+    setDebateStoredVideoUrl(debateId, storedVideo.url);
     setDebateStoredImageUrl(debateId, "");
-    setCachedDebateMediaUrls(debateId, { image_url: "", video_url: storedVideo.url });
 
     return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
   } catch (error) {
@@ -2528,8 +2507,6 @@ app.delete("/api/debates/:id", async (req, res) => {
       console.error(deleteErr);
       return res.status(500).json({ error: "Erreur suppression débat." });
     }
-
-    await deleteAllDebateMedia(debateId);
 
     res.json({ success: true });
   } catch (error) {
