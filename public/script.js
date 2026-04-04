@@ -5778,6 +5778,10 @@ function cancelCreatePublishSession() {
   }
 }
 
+function getCreatePublishSignal() {
+  return createPublishAbortController ? createPublishAbortController.signal : undefined;
+}
+
 function getCreateValidationState() {
   const question = document.getElementById("question")?.value.trim() || "";
   const category = document.getElementById("category")?.value.trim() || "";
