@@ -5819,21 +5819,89 @@ function getCreateValidationState() {
   };
 }
 
-function updateCreateSubmitAvailability() {
+function updateCreateSubmitAvailability(showIncompleteMessage = false) {
   if (!submitButton) return;
   if (submitButton.classList.contains("create-submit-loading")) return;
 
   const { isValid } = getCreateValidationState();
-  const helperMessage = isValid ? "" : "Complète tous les champs requis pour créer l’arène.";
+  const helperMessage = "Complète tous les champs requis pour créer l’arène.";
 
-  submitButton.disabled = !isValid;
-  submitButton.setAttribute("aria-disabled", String(!isValid));
-  submitButton.title = isValid ? "Créer l’arène" : helperMessage;
+  submitButton.disabled = false;
+  submitButton.removeAttribute("aria-disabled");
+  submitButton.title = "Créer l’arène";
 
   if (submitHelper) {
-    submitHelper.textContent = helperMessage;
-    submitHelper.classList.toggle("create-submit-helper-visible", !isValid);
+    const shouldShowMessage = showIncompleteMessage && !isValid;
+    submitHelper.textContent = shouldShowMessage ? helperMessage : "";
+    submitHelper.classList.toggle("create-submit-helper-visible", shouldShowMessage);
   }
+}
+
+function getCreateValidationError() {
+  const validationState = getCreateValidationState();
+  const {
+    question,
+    category,
+    selectedType,
+    optionA,
+    optionB,
+    resourceMode,
+    sourceUrl,
+    imageFile,
+    videoFile
+  } = validationState;
+
+
+
+  if (selectedType !== "open" && !optionA) {
+    return {
+      title: "Champs incomplets",
+      message: "Complète tous les champs requis pour créer l’arène.",
+      focusElement: document.getElementById("option_a")
+    };
+  }
+
+  if (selectedType !== "open" && !optionB) {
+    return {
+      title: "Champs incomplets",
+      message: "Complète tous les champs requis pour créer l’arène.",
+      focusElement: document.getElementById("option_b")
+    };
+  }
+
+  if (resourceMode === "source" && !sourceUrl) {
+    return {
+      title: "Champs incomplets",
+      message: "Complète tous les champs requis pour créer l’arène.",
+      focusElement: document.getElementById("source_url")
+    };
+  }
+
+
+
+  return null;
+}
+
+function focusCreateValidationField(element) {
+  if (!element || typeof element.focus !== "function") return;
+
+  const topbar = document.querySelector(".topbar");
+  const offset = (topbar ? topbar.offsetHeight : 80) + 20;
+  const rect = element.getBoundingClientRect();
+  const targetY = rect.top + window.scrollY - offset;
+
+  window.scrollTo({
+    top: Math.max(0, targetY),
+    behavior: "smooth"
+  });
+
+  setTimeout(() => {
+    try {
+      element.focus({ preventScroll: true });
+    } catch (error) {
+      element.focus();
+    }
+  }, 180);
 }
 
 const typeInputs = document.querySelectorAll('input[name="debate-type"]');
@@ -5984,6 +6052,22 @@ form.addEventListener("submit", async e => {
   setCreatePublishProgress(3, "Préparation de la publication", "Vérification des informations…");
 
   const validationState = getCreateValidationState();
+  const validationError = getCreateValidationError();
+
+  if (validationError) {
+    hideCreatePublishProgress();
+    resetCreateSubmitButton();
+    updateCreateSubmitAvailability(true);
+    showReplacementSuccessMessage(
+      validationError.title,
+      validationError.message,
+      null,
+      "⚠️"
+    );
+    focusCreateValidationField(validationError.focusElement);
+    return;
+  }
+
   const question = validationState.question;
   const category = validationState.category;
   const resourceMode = validationState.resourceMode;
@@ -6027,17 +6111,6 @@ form.addEventListener("submit", async e => {
     return;
   }
 
-  if (selectedType !== "open" && (!option_a || !option_b)) {
-    hideCreatePublishProgress();
-    resetCreateSubmitButton();
-    showReplacementSuccessMessage(
-      "Positions manquantes",
-      "Tu dois renseigner les deux positions avant de créer un débat.",
-      null,
-      "⚠️"
-    );
-    return;
-  }
 
   if (content.length > 600) {
     hideCreatePublishProgress();
@@ -6051,17 +6124,6 @@ form.addEventListener("submit", async e => {
     return;
   }
 
-  if (resourceMode === "source" && !source_url) {
-    hideCreatePublishProgress();
-    resetCreateSubmitButton();
-    showReplacementSuccessMessage(
-      "Lien manquant",
-      "Tu as choisi le mode lien source, mais aucun lien n’a été renseigné.",
-      null,
-      "⚠️"
-    );
-    return;
-  }
 
   if (resourceMode === "image" && !imageFile) {
     hideCreatePublishProgress();

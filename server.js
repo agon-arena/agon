@@ -2416,19 +2416,7 @@ app.post("/api/debates", async (req, res) => {
   }
 });
 
-app.post("/api/debates/:id/video-file", express.raw({
-  type: (req) => {
-    const contentType = String(req.get("content-type") || "").toLowerCase().split(";")[0].trim();
-    return [
-      "application/octet-stream",
-      "video/mp4",
-      "video/webm",
-      "video/quicktime",
-      "video/x-m4v"
-    ].includes(contentType);
-  },
-  limit: `${MAX_DEBATE_VIDEO_BYTES}b`
-}), async (req, res) => {
+app.post("/api/debates/:id/video-file", async (req, res) => {
   try {
     const debateId = req.params.id;
     const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
@@ -2447,28 +2435,91 @@ app.post("/api/debates/:id/video-file", express.raw({
       return res.status(403).json({ error: "Ajout vidéo non autorisé." });
     }
 
-    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
-    if (!buffer.length) {
-      return res.status(400).json({ error: "Vidéo manquante." });
+    const rawContentType = String(req.get("content-type") || "").toLowerCase();
+    const contentType = rawContentType.split(";")[0].trim();
+    const acceptedTypes = [
+      "application/octet-stream",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/x-m4v"
+    ];
+
+    if (!acceptedTypes.includes(contentType)) {
+      return res.status(400).json({ error: "Format vidéo non pris en charge." });
     }
 
     const fileName = String(req.get("x-file-name") || "video").trim();
-    const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
+    const mimeType = String(req.get("x-file-type") || contentType || "").trim();
+    const extension = getVideoExtensionFromMimeType(mimeType) || getVideoExtensionFromFilename(fileName);
 
-    const storedVideo = await saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, {
-      previousVideoUrl: debateRow.video_url
-    });
-
-    if (debateRow.image_url) {
-      await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
+    if (!extension) {
+      return res.status(400).json({ error: "Format vidéo non pris en charge." });
     }
 
-    await persistDebateMediaUrls(debateId, {
-      image_url: "",
-      video_url: storedVideo.url
+    const contentLengthHeader = String(req.get("content-length") || "").trim();
+    const contentLength = Number(contentLengthHeader || 0);
+
+    if (contentLength && contentLength > MAX_DEBATE_VIDEO_BYTES) {
+      return res.status(400).json({ error: "Vidéo trop lourde." });
+    }
+
+    const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
+    const uploadUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/${SUPABASE_DEBATE_MEDIA_BUCKET}/${objectPath}`;
+    const uploadHeaders = {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      "Content-Type": getVideoMimeTypeFromExtension(extension),
+      "x-upsert": "false"
+    };
+
+    if (contentLength > 0) {
+      uploadHeaders["Content-Length"] = String(contentLength);
+    }
+
+    const upstreamResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: uploadHeaders,
+      body: req,
+      duplex: "half"
     });
 
-    return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
+    const upstreamText = await upstreamResponse.text();
+
+    if (!upstreamResponse.ok) {
+      console.error("Erreur upload vidéo Supabase Storage:", upstreamResponse.status, upstreamText);
+      return res.status(400).json({ error: "Erreur enregistrement vidéo." });
+    }
+
+    const publicUrl = getStoragePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, objectPath);
+    if (!publicUrl) {
+      return res.status(400).json({ error: "Erreur enregistrement vidéo." });
+    }
+
+    try {
+      if (debateRow.video_url) {
+        await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
+      }
+
+      if (debateRow.image_url) {
+        await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
+      }
+
+      await persistDebateMediaUrls(debateId, {
+        image_url: "",
+        video_url: publicUrl
+      });
+    } catch (persistError) {
+      console.error("Erreur finalisation upload vidéo:", persistError);
+      await deleteStoredMediaAsset(publicUrl, debateVideosDir);
+      throw persistError;
+    }
+
+    return res.json({
+      success: true,
+      video_url: publicUrl,
+      mime_type: getVideoMimeTypeFromExtension(extension)
+    });
   } catch (error) {
     console.error(error);
     const message = error?.message === "Vidéo trop lourde."
