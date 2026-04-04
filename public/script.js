@@ -6287,6 +6287,8 @@ form.addEventListener("submit", async e => {
         );
 
         let directUploadStarted = false;
+        let directUploadFinished = false;
+        let directUploadFinalizeStarted = false;
         let directUploadStartTimer = null;
 
         await createXhrRequest(uploadSetup.signedUrl, {
@@ -6357,6 +6359,7 @@ form.addEventListener("submit", async e => {
             );
           },
           onUploadComplete: () => {
+            directUploadFinished = true;
             if (directUploadStartTimer) {
               clearTimeout(directUploadStartTimer);
               directUploadStartTimer = null;
@@ -6370,6 +6373,7 @@ form.addEventListener("submit", async e => {
           }
         });
 
+        directUploadFinalizeStarted = true;
         await fetchJSON(
           `${API}/debates/${encodeURIComponent(r.id)}/video-upload-complete?authorKey=${encodeURIComponent(creatorKey)}`,
           {
@@ -6385,9 +6389,18 @@ form.addEventListener("submit", async e => {
       } catch (directUploadError) {
         const message = String(directUploadError?.message || "").toLowerCase();
         const isDirectStartupTimeoutNotice = message.includes("timeout") || message.includes("démarrage") || message.includes("demarrage");
-        const canFallback = (!message.includes("annul") || message.includes("interrompu")) && !getCreatePublishSignal()?.aborted && !isDirectStartupTimeoutNotice;
+        const uploadWasCommittedToDirectFlow = directUploadStarted || directUploadFinished || directUploadFinalizeStarted;
+        const canFallback =
+          (!message.includes("annul") || message.includes("interrompu")) &&
+          !getCreatePublishSignal()?.aborted &&
+          !isDirectStartupTimeoutNotice &&
+          !uploadWasCommittedToDirectFlow;
 
         if (!canFallback) {
+          if (uploadWasCommittedToDirectFlow && !getCreatePublishSignal()?.aborted) {
+            console.error("[video-upload] échec après démarrage du flux direct, secours bloqué pour éviter un double envoi.", directUploadError);
+            throw new Error("La vidéo a déjà été envoyée au stockage ou sa finalisation a commencé. Le mode secours a été bloqué pour éviter un double téléversement. Recharge la page du débat pour vérifier si la vidéo est déjà présente, puis réessaie seulement si nécessaire.");
+          }
           throw directUploadError;
         }
 
