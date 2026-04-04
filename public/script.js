@@ -6282,17 +6282,55 @@ form.addEventListener("submit", async e => {
       );
 
       try {
+        let directUploadStarted = false;
+        let directUploadStartTimer = null;
+
         await createXhrRequest(uploadSetup.signedUrl, {
           signal: getCreatePublishSignal(),
           method: "PUT",
           headers: {
-            "x-upsert": "false",
-            "cache-control": "max-age=3600",
             "content-type": uploadSetup.mimeType || videoFile.type || "application/octet-stream"
           },
           body: videoFile,
           responseType: "text",
+          onXhrCreated: (xhr) => {
+            const markDirectUploadStarted = () => {
+              directUploadStarted = true;
+              if (directUploadStartTimer) {
+                clearTimeout(directUploadStartTimer);
+                directUploadStartTimer = null;
+              }
+            };
+
+            xhr.addEventListener("loadstart", markDirectUploadStarted, { once: true });
+            if (xhr.upload) {
+              xhr.upload.addEventListener("loadstart", markDirectUploadStarted, { once: true });
+              xhr.upload.addEventListener("progress", (event) => {
+                if (event.loaded > 0) {
+                  markDirectUploadStarted();
+                }
+              }, { once: true });
+            }
+
+            directUploadStartTimer = setTimeout(() => {
+              if (directUploadStarted || getCreatePublishSignal()?.aborted) {
+                return;
+              }
+
+              try {
+                xhr.abort();
+              } catch (error) {
+                // noop
+              }
+            }, 4500);
+          },
           onUploadProgress: (progress) => {
+            directUploadStarted = true;
+            if (directUploadStartTimer) {
+              clearTimeout(directUploadStartTimer);
+              directUploadStartTimer = null;
+            }
+
             if (progress >= 100) {
               setCreatePublishProgress(
                 99,
@@ -6309,6 +6347,11 @@ form.addEventListener("submit", async e => {
             );
           },
           onUploadComplete: () => {
+            if (directUploadStartTimer) {
+              clearTimeout(directUploadStartTimer);
+              directUploadStartTimer = null;
+            }
+
             setCreatePublishProgress(
               99,
               "Upload terminé",
@@ -6331,7 +6374,7 @@ form.addEventListener("submit", async e => {
         );
       } catch (directUploadError) {
         const message = String(directUploadError?.message || "").toLowerCase();
-        const canFallback = !message.includes("annul") && !getCreatePublishSignal()?.aborted;
+        const canFallback = (!message.includes("annul") || message.includes("interrompu")) && !getCreatePublishSignal()?.aborted;
 
         if (!canFallback) {
           throw directUploadError;
