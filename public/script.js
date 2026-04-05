@@ -6781,46 +6781,9 @@ form.addEventListener("submit", async e => {
     setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Préparation du téléversement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
-      let uploadVideoFile = videoFile;
+      const uploadVideoFile = videoFile;
 
-      if (shouldCompressVideoBeforeUpload(videoFile)) {
-        setCreatePublishProgress(82, "Optimisation locale de la vidéo", "Allégement de la vidéo avant envoi…");
-
-        try {
-          const compressionResult = await compressVideoBeforeUpload(videoFile, {
-            signal: getCreatePublishSignal(),
-            onProgress: (progress) => {
-              setCreatePublishProgress(
-                mapProgressRange(progress, 82, 88),
-                "Optimisation locale de la vidéo",
-                `Compression locale avant envoi… ${Math.round(progress)}%`
-              );
-            }
-          });
-
-          if (compressionResult?.compressed && compressionResult.file instanceof File) {
-            uploadVideoFile = compressionResult.file;
-            const savedMo = Math.max(0, ((Number(videoFile.size || 0) - Number(uploadVideoFile.size || 0)) / (1024 * 1024)));
-            setCreatePublishProgress(
-              88,
-              "Vidéo allégée",
-              `Vidéo allégée avant envoi${savedMo > 0.1 ? ` : ${savedMo.toFixed(1)} Mo économisés.` : "."}`
-            );
-          } else {
-            setCreatePublishProgress(86, "Préparation de la vidéo", "Compression locale non retenue. Envoi du fichier original…");
-          }
-        } catch (compressionError) {
-          if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(compressionError?.message || ""))) {
-            throw compressionError;
-          }
-
-          console.warn("[video-upload] compression locale ignorée, reprise avec le fichier original.", compressionError);
-          uploadVideoFile = videoFile;
-          setCreatePublishProgress(86, "Préparation de la vidéo", "Compression locale impossible sur cet appareil. Envoi du fichier original…");
-        }
-      } else {
-        setCreatePublishProgress(86, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
-      }
+      setCreatePublishProgress(86, "Préparation de la vidéo", "Compression locale désactivée pour conserver le son. Envoi du fichier original…");
 
       try {
         const uploadSetup = await fetchJSON(
@@ -10789,10 +10752,23 @@ async function deleteDebate(debateId, redirectAfter) {
           headers
         });
 
-        if (redirectAfter) {
+        removeDebateFromAllCaches(debateId);
+
+        if (redirectAfter || location.pathname === "/debate") {
           location = "/";
-        } else {
-          location.reload();
+          return;
+        }
+
+        if (location.pathname === "/admin-reports") {
+          await initAdminReports();
+          return;
+        }
+
+        if (location.pathname === "/") {
+          refreshCategoryFilterOptions(debatesCache || []);
+          applyIndexFilters();
+          loadReportsBadge();
+          return;
         }
       } catch (error) {
         alert(error.message);
@@ -11068,13 +11044,124 @@ function loadMoreArguments() {
   rerenderCurrentDebateArguments();
 }
 
+function updateDebateInCacheCollection(collection, updatedDebate) {
+  if (!Array.isArray(collection)) return collection;
+
+  const debateId = String(updatedDebate?.id || "");
+  if (!debateId) return collection;
+
+  return collection.map((item) => {
+    if (String(item?.id || "") !== debateId) {
+      return item;
+    }
+
+    return {
+      ...item,
+      ...updatedDebate
+    };
+  });
+}
+
+function removeDebateFromCacheCollection(collection, debateId) {
+  if (!Array.isArray(collection)) return collection;
+
+  const debateIdString = String(debateId || "");
+  if (!debateIdString) return collection;
+
+  return collection.filter((item) => String(item?.id || "") !== debateIdString);
+}
+
+function updateDebateCachesAfterEdit(updatedDebate) {
+  const debateId = String(updatedDebate?.id || "");
+  if (!debateId) return;
+
+  debatesCache = updateDebateInCacheCollection(debatesCache, updatedDebate);
+  visitedDebatesCache = updateDebateInCacheCollection(visitedDebatesCache, updatedDebate);
+  otherDebatesCache = updateDebateInCacheCollection(otherDebatesCache, updatedDebate);
+  similarDebatesCache = updateDebateInCacheCollection(similarDebatesCache, updatedDebate);
+
+  if (String(currentDebateCache?.id || "") === debateId) {
+    currentDebateCache = {
+      ...currentDebateCache,
+      ...updatedDebate
+    };
+  }
+}
+
+function removeDebateFromAllCaches(debateId) {
+  const debateIdString = String(debateId || "");
+  if (!debateIdString) return;
+
+  debatesCache = removeDebateFromCacheCollection(debatesCache, debateIdString);
+  visitedDebatesCache = removeDebateFromCacheCollection(visitedDebatesCache, debateIdString);
+  otherDebatesCache = removeDebateFromCacheCollection(otherDebatesCache, debateIdString);
+  similarDebatesCache = removeDebateFromCacheCollection(similarDebatesCache, debateIdString);
+
+  if (String(currentDebateCache?.id || "") === debateIdString) {
+    currentDebateCache = null;
+  }
+}
+
+function applyCurrentDebateHeaderUpdate(updatedDebate) {
+  if (!updatedDebate || typeof updatedDebate !== "object") return;
+
+  const questionEl = document.getElementById("debate-question");
+  if (questionEl) {
+    questionEl.textContent = updatedDebate.question || "";
+  }
+
+  renderDebateContext(updatedDebate.content || "");
+
+  const debateVideoUrl = String(updatedDebate.video_url || "").trim();
+  const debateImageUrl = String(updatedDebate.image_url || "").trim();
+  const sourceUrl = String(updatedDebate.source_url || "").trim();
+
+  if (debateVideoUrl) {
+    renderDebateVideo(debateVideoUrl);
+    renderDebateImage("");
+    resetDebateSourcePreview();
+  } else {
+    renderDebateVideo("");
+    renderDebateImage(debateImageUrl);
+    renderDebateSourcePreview(sourceUrl, null);
+    hydrateDebateSourcePreviewIfNeeded(sourceUrl, null);
+  }
+
+  if (isOpenDebate(updatedDebate)) {
+    const titleA = document.getElementById("title-a");
+    const titleB = document.getElementById("title-b");
+    if (titleA) titleA.textContent = "Réponses";
+    if (titleB) titleB.textContent = "";
+  } else {
+    const titleA = document.getElementById("title-a");
+    const titleB = document.getElementById("title-b");
+    if (titleA) titleA.textContent = updatedDebate.option_a || "";
+    if (titleB) titleB.textContent = updatedDebate.option_b || "";
+  }
+
+  currentDebateViewMode = getDebateViewMode();
+  updateDebateViewModeUI();
+  updateSortButtonLabel();
+  applyDebateTypeUI(updatedDebate);
+  updateDeleteDebateButtonVisibility(updatedDebate);
+  refreshDebateScoreFromCurrentArguments();
+  refreshAdminUI();
+
+  if (currentDebateCache) {
+    renderBottomSimilarDebates(currentDebateCache, similarDebatesCache || []);
+  }
+}
+
 async function editDebate() {
   const debateId = getDebateId();
   if (!debateId) return;
 
   try {
-    const data = await fetchJSON(API + "/debates/" + debateId);
-    const debate = data?.debate || null;
+    const existingDebate = String(currentDebateCache?.id || "") === String(debateId)
+      ? currentDebateCache
+      : null;
+
+    const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId))?.debate || null;
 
     if (!debate) {
       alert("Arène introuvable.");
@@ -11085,6 +11172,7 @@ async function editDebate() {
     const currentOptionA = debate.option_a || "";
     const currentOptionB = debate.option_b || "";
     const currentSourceUrl = debate.source_url || "";
+    const currentContent = debate.content || "";
 
     const question = window.prompt("Modifier le titre de l'arène :", currentQuestion);
     if (question === null) return;
@@ -11108,11 +11196,22 @@ async function editDebate() {
         question: question.trim(),
         option_a: option_a.trim(),
         option_b: option_b.trim(),
-        source_url: source_url.trim()
+        source_url: source_url.trim(),
+        content: currentContent
       })
     });
 
-    await loadDebate(debateId);
+    const updatedDebate = {
+      ...debate,
+      question: question.trim(),
+      option_a: option_a.trim(),
+      option_b: option_b.trim(),
+      source_url: source_url.trim(),
+      content: currentContent
+    };
+
+    updateDebateCachesAfterEdit(updatedDebate);
+    applyCurrentDebateHeaderUpdate(updatedDebate);
   } catch (error) {
     alert(error.message);
   }
@@ -11123,10 +11222,15 @@ async function editArgument(argumentId) {
   if (!debateId) return;
 
   try {
-    const data = await fetchJSON(API + "/debates/" + debateId);
+    let argument = Array.isArray(currentAllArguments)
+      ? currentAllArguments.find((item) => String(item.id) === String(argumentId))
+      : null;
 
-    const allArguments = [...(data.optionA || []), ...(data.optionB || [])];
-    const argument = allArguments.find(a => String(a.id) === String(argumentId));
+    if (!argument) {
+      const data = await fetchJSON(API + "/debates/" + debateId);
+      const allArguments = [...(data.optionA || []), ...(data.optionB || [])];
+      argument = allArguments.find((item) => String(item.id) === String(argumentId));
+    }
 
     if (!argument) {
       alert("Idée introuvable.");
@@ -11151,8 +11255,27 @@ async function editArgument(argumentId) {
       })
     });
 
-    await loadDebate(debateId);
+    if (Array.isArray(currentAllArguments)) {
+      currentAllArguments = currentAllArguments.map((item) => {
+        if (String(item?.id) !== String(argumentId)) {
+          return item;
+        }
 
+        return {
+          ...item,
+          title: title.trim(),
+          body: body.trim()
+        };
+      });
+
+      rerenderCurrentDebateArguments(debateId);
+      renderUnifiedVoicesSummary(debateId, currentAllArguments);
+      renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
+      refreshDebateScoreFromCurrentArguments();
+      return;
+    }
+
+    await loadDebate(debateId);
   } catch (error) {
     alert(error.message);
   }
