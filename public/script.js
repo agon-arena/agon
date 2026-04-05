@@ -11392,6 +11392,8 @@ scheduleMobileIndexCardHighlightUpdate();
   renderGlobalShareBar();
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
+  initHomeTopbarAutoHide();
+  initHomeBottomShareMenu();
 
   if (location.pathname === "/") initIndex();
   if (location.pathname === "/create") initCreate();
@@ -12002,3 +12004,168 @@ trackVisit();
 window.toggleIdeaShareMenu = toggleIdeaShareMenu;
 window.handleIdeaShareAction = handleIdeaShareAction;
 window.closeIdeaShareMenus = closeIdeaShareMenus;
+
+
+/* =========================
+   Home bottom share menu
+========================= */
+
+let homeBottomShareMenuOpen = false;
+
+function closeHomeBottomShareMenu() {
+  const menu = document.getElementById("home-bottom-share-menu");
+  const trigger = document.querySelector('.home-bottom-nav-item-wrap > .home-bottom-nav-item[aria-haspopup="true"]');
+
+  if (menu) {
+    menu.classList.remove("home-bottom-share-menu-open");
+  }
+
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", "false");
+  }
+
+  homeBottomShareMenuOpen = false;
+}
+
+function toggleHomeBottomShareMenu(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const menu = document.getElementById("home-bottom-share-menu");
+  const trigger = document.querySelector('.home-bottom-nav-item-wrap > .home-bottom-nav-item[aria-haspopup="true"]');
+
+  if (!menu) return;
+
+  const shouldOpen = !homeBottomShareMenuOpen;
+
+  closeHomeBottomShareMenu();
+
+  if (shouldOpen) {
+    menu.classList.add("home-bottom-share-menu-open");
+    if (trigger) {
+      trigger.setAttribute("aria-expanded", "true");
+    }
+    homeBottomShareMenuOpen = true;
+  }
+}
+
+function handleHomeBottomShareAction(event, callback) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  closeHomeBottomShareMenu();
+
+  if (typeof callback === "function") {
+    callback();
+  }
+}
+
+function initHomeBottomShareMenu() {
+  if (window.__homeBottomShareMenuInitialized) return;
+  window.__homeBottomShareMenuInitialized = true;
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".home-bottom-nav-item-wrap")) return;
+    closeHomeBottomShareMenu();
+  });
+
+  document.addEventListener("touchstart", (event) => {
+    if (event.target.closest(".home-bottom-nav-item-wrap")) return;
+    closeHomeBottomShareMenu();
+  }, { passive: true });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeHomeBottomShareMenu();
+    }
+  });
+}
+
+function initHomeTopbarAutoHide() {
+  if (window.location.pathname !== "/") return;
+
+  const topbar = document.querySelector(".topbar");
+  if (!topbar) return;
+
+  let ticking = false;
+  let lastScrollY = window.scrollY;
+  const SHOW_THRESHOLD = 80;
+  const HIDE_THRESHOLD = 10;
+
+  function updateTopbar() {
+    const currentScrollY = window.scrollY;
+    const delta = currentScrollY - lastScrollY;
+
+    if (currentScrollY <= 10) {
+      topbar.classList.remove("topbar-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      return;
+    }
+
+    if (delta > HIDE_THRESHOLD) {
+      topbar.classList.add("topbar-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      closeHomeBottomShareMenu();
+      return;
+    }
+
+    if (delta < -SHOW_THRESHOLD) {
+      topbar.classList.remove("topbar-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      return;
+    }
+
+    lastScrollY = currentScrollY;
+    ticking = false;
+  }
+
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      window.requestAnimationFrame(updateTopbar);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  updateTopbar();
+}
+
+window.toggleHomeBottomShareMenu = toggleHomeBottomShareMenu;
+window.handleHomeBottomShareAction = handleHomeBottomShareAction;
+window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
+
+function updateHomeBottomNavViewportOffset() {
+  if (window.innerWidth > 768) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  const vv = window.visualViewport;
+  if (!vv) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  const offset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+  document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(offset)}px`);
+}
+
+function initHomeBottomNavViewportOffset() {
+  updateHomeBottomNavViewportOffset();
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateHomeBottomNavViewportOffset);
+    window.visualViewport.addEventListener('scroll', updateHomeBottomNavViewportOffset);
+  }
+
+  window.addEventListener('resize', updateHomeBottomNavViewportOffset);
+  window.addEventListener('orientationchange', updateHomeBottomNavViewportOffset);
+  window.addEventListener('scroll', updateHomeBottomNavViewportOffset, { passive: true });
+}
+

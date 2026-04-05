@@ -136,6 +136,71 @@
 
 </main>
 
+
+<nav class="home-bottom-nav" aria-label="Navigation principale mobile">
+  <a href="/" class="home-bottom-nav-item home-bottom-nav-item-active" aria-label="Explorer">
+    <i class="fa-regular fa-compass"></i>
+    <span>Explorer</span>
+  </a>
+
+  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
+    <i class="fa-solid fa-plus"></i>
+    <span>Créer</span>
+  </a>
+
+  <div class="home-bottom-nav-item-wrap">
+    <button
+      type="button"
+      class="home-bottom-nav-item"
+      aria-label="Partager"
+      aria-haspopup="true"
+      aria-expanded="false"
+      onclick="toggleHomeBottomShareMenu(event)"
+    >
+      <i class="fa-solid fa-share-nodes"></i>
+      <span>Partager</span>
+    </button>
+
+    <div
+      id="home-bottom-share-menu"
+      class="home-bottom-share-menu"
+      onclick="event.stopPropagation()"
+      aria-label="Options de partage"
+    >
+      <button type="button" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
+        <i class="fa-solid fa-link"></i>
+        <span>Copier le lien</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnX)">
+        <i class="fa-brands fa-x-twitter"></i>
+        <span>X</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnFacebook)">
+        <i class="fa-brands fa-facebook-f"></i>
+        <span>Facebook</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
+        <i class="fa-brands fa-whatsapp"></i>
+        <span>WhatsApp</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareByEmail)">
+        <i class="fa-solid fa-envelope"></i>
+        <span>Email</span>
+      </button>
+    </div>
+  </div>
+
+  <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
+    <i class="fa-regular fa-bell"></i>
+    <span>Alertes</span>
+  </a>
+</nav>
+
+
 <script src="/script.js?v=20260404-2"></script>
 </body>
 </html>
