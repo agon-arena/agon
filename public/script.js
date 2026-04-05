@@ -5753,6 +5753,138 @@ const submitHelper = document.getElementById("create-submit-helper");
 const cancelPublishButton = document.getElementById("create-publish-cancel");
 let createPublishAbortController = null;
 let createPublishCancelRequested = false;
+const CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY = "agon_pending_create_video_upload";
+
+function getCreatePendingVideoUploadState() {
+  try {
+    const raw = localStorage.getItem(CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
+function setCreatePendingVideoUploadState(nextState) {
+  try {
+    if (!nextState || typeof nextState !== "object") {
+      localStorage.removeItem(CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY, JSON.stringify({
+      debateId: String(nextState.debateId || "").trim(),
+      authorKey: String(nextState.authorKey || "").trim(),
+      objectPath: String(nextState.objectPath || "").trim().replace(/^\/+/, ""),
+      mimeType: String(nextState.mimeType || "").trim(),
+      fileName: String(nextState.fileName || "").trim(),
+      status: String(nextState.status || "pending").trim(),
+      startedAt: Number(nextState.startedAt || Date.now()) || Date.now()
+    }));
+  } catch (error) {
+    console.warn("[video-upload] impossible de mémoriser l’état de reprise.", error);
+  }
+}
+
+function clearCreatePendingVideoUploadState() {
+  try {
+    localStorage.removeItem(CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY);
+  } catch (error) {
+    // noop
+  }
+}
+
+async function resumePendingCreateVideoUpload() {
+  const pendingUpload = getCreatePendingVideoUploadState();
+  if (!pendingUpload) return false;
+
+  const debateId = String(pendingUpload.debateId || "").trim();
+  const authorKey = String(pendingUpload.authorKey || "").trim();
+  const objectPath = String(pendingUpload.objectPath || "").trim().replace(/^\/+/, "");
+  const mimeType = String(pendingUpload.mimeType || "").trim();
+
+  if (!debateId || !authorKey || !objectPath) {
+    clearCreatePendingVideoUploadState();
+    return false;
+  }
+
+  startCreatePublishSession();
+  setCreatePublishProgress(96, "Reprise de la vidéo", "Vérification de l’envoi précédent…");
+
+  try {
+    const status = await fetchJSON(
+      `${API}/debates/${encodeURIComponent(debateId)}/video-upload-status?authorKey=${encodeURIComponent(authorKey)}&objectPath=${encodeURIComponent(objectPath)}`,
+      {
+        signal: getCreatePublishSignal(),
+        method: "GET"
+      }
+    );
+
+    if (status?.finalized) {
+      clearCreatePendingVideoUploadState();
+      setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l’arène…");
+      window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+      return true;
+    }
+
+    if (!status?.exists) {
+      clearCreatePendingVideoUploadState();
+      hideCreatePublishProgress();
+      showReplacementSuccessMessage(
+        "Upload interrompu",
+        "La vidéo n’a pas été retrouvée dans le stockage. Il faut relancer l’envoi depuis la page de création.",
+        null,
+        "⚠️"
+      );
+      return false;
+    }
+
+    setCreatePendingVideoUploadState({
+      ...pendingUpload,
+      status: "finalizing"
+    });
+
+    setCreatePublishProgress(99, "Finalisation de la vidéo", "La vidéo a bien été retrouvée. Finalisation en cours…");
+
+    await fetchJSON(
+      `${API}/debates/${encodeURIComponent(debateId)}/video-upload-complete?authorKey=${encodeURIComponent(authorKey)}`,
+      {
+        signal: getCreatePublishSignal(),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          objectPath,
+          mimeType: mimeType || "application/octet-stream"
+        })
+      }
+    );
+
+    clearCreatePendingVideoUploadState();
+    setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l’arène. Redirection…");
+    window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+    return true;
+  } catch (error) {
+    if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
+      hideCreatePublishProgress();
+      return true;
+    }
+
+    hideCreatePublishProgress();
+    showReplacementSuccessMessage(
+      "Reprise impossible",
+      "La vidéo a peut-être déjà été envoyée, mais sa finalisation n’a pas pu être reprise automatiquement. Recharge la page de création ou ouvre l’arène pour vérifier.",
+      null,
+      "⚠️"
+    );
+    return false;
+  } finally {
+    createPublishAbortController = null;
+    createPublishCancelRequested = false;
+    setCreatePublishCancelState(false);
+  }
+}
 
 function resetCreateSubmitButton() {
   if (!submitButton) return;
@@ -5781,6 +5913,12 @@ function cancelCreatePublishSession() {
 function getCreatePublishSignal() {
   return createPublishAbortController ? createPublishAbortController.signal : undefined;
 }
+
+cancelPublishButton?.addEventListener("click", () => {
+  cancelCreatePublishSession();
+});
+
+void resumePendingCreateVideoUpload();
 
 function getCreateValidationState() {
   const question = document.getElementById("question")?.value.trim() || "";
@@ -6286,6 +6424,16 @@ form.addEventListener("submit", async e => {
           }
         );
 
+        setCreatePendingVideoUploadState({
+          debateId: r.id,
+          authorKey: creatorKey,
+          objectPath: uploadSetup.objectPath,
+          mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
+          fileName: videoFile.name || "video",
+          status: "uploading",
+          startedAt: Date.now()
+        });
+
         let directUploadStarted = false;
         let directUploadFinished = false;
         let directUploadFinalizeStarted = false;
@@ -6344,6 +6492,15 @@ form.addEventListener("submit", async e => {
             }
 
             if (progress >= 100) {
+              setCreatePendingVideoUploadState({
+                debateId: r.id,
+                authorKey: creatorKey,
+                objectPath: uploadSetup.objectPath,
+                mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
+                fileName: videoFile.name || "video",
+                status: "uploaded",
+                startedAt: Date.now()
+              });
               setCreatePublishProgress(
                 99,
                 "Upload terminé",
@@ -6365,6 +6522,16 @@ form.addEventListener("submit", async e => {
               directUploadStartTimer = null;
             }
 
+            setCreatePendingVideoUploadState({
+              debateId: r.id,
+              authorKey: creatorKey,
+              objectPath: uploadSetup.objectPath,
+              mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
+              fileName: videoFile.name || "video",
+              status: "uploaded",
+              startedAt: Date.now()
+            });
+
             setCreatePublishProgress(
               99,
               "Upload terminé",
@@ -6374,6 +6541,15 @@ form.addEventListener("submit", async e => {
         });
 
         directUploadFinalizeStarted = true;
+        setCreatePendingVideoUploadState({
+          debateId: r.id,
+          authorKey: creatorKey,
+          objectPath: uploadSetup.objectPath,
+          mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
+          fileName: videoFile.name || "video",
+          status: "finalizing",
+          startedAt: Date.now()
+        });
         await fetchJSON(
           `${API}/debates/${encodeURIComponent(r.id)}/video-upload-complete?authorKey=${encodeURIComponent(creatorKey)}`,
           {
@@ -6386,6 +6562,7 @@ form.addEventListener("submit", async e => {
             })
           }
         );
+        clearCreatePendingVideoUploadState();
       } catch (directUploadError) {
         const message = String(directUploadError?.message || "").toLowerCase();
         const isDirectStartupTimeoutNotice = message.includes("timeout") || message.includes("démarrage") || message.includes("demarrage");
@@ -6405,6 +6582,8 @@ form.addEventListener("submit", async e => {
         }
 
         setCreatePublishProgress(84, "Envoi de la vidéo", "Reprise avec le mode de secours…");
+
+        clearCreatePendingVideoUploadState();
 
         await createXhrRequest(`${API}/debates/${encodeURIComponent(r.id)}/video-file?authorKey=${encodeURIComponent(creatorKey)}`, {
           signal: getCreatePublishSignal(),
@@ -6443,6 +6622,7 @@ form.addEventListener("submit", async e => {
       }
     }
 
+    clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
     location = "/debate?id=" + r.id;
   } catch (error) {

@@ -453,6 +453,31 @@ async function deleteStoredMediaAsset(publicUrl, allowedDir) {
   }
 }
 
+async function storageObjectExists(objectPath) {
+  const normalizedPath = String(objectPath || "").trim().replace(/^\/+/, "");
+  if (!normalizedPath) return false;
+
+  const pathParts = normalizedPath.split("/").filter(Boolean);
+  if (!pathParts.length) return false;
+
+  const fileName = pathParts.pop();
+  const folderPath = pathParts.join("/");
+
+  const { data, error } = await supabase.storage
+    .from(SUPABASE_DEBATE_MEDIA_BUCKET)
+    .list(folderPath, {
+      limit: 100,
+      search: fileName
+    });
+
+  if (error) {
+    console.error("Erreur vérification objet Supabase Storage:", error);
+    return false;
+  }
+
+  return Array.isArray(data) && data.some((item) => String(item?.name || "") === fileName);
+}
+
 async function persistDebateMediaUrls(debateId, media = {}) {
   const imageUrl = String(media.image_url || "").trim();
   const videoUrl = String(media.video_url || "").trim();
@@ -2477,6 +2502,55 @@ app.post("/api/debates/:id/video-upload-url", async (req, res) => {
   }
 });
 
+app.get("/api/debates/:id/video-upload-status", async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const authorKey = String(req.query.authorKey || req.get("x-author-key") || "").trim();
+    const debateRow = await getDebateById(debateId);
+
+    if (!debateRow) {
+      return res.status(404).json({ error: "Débat introuvable." });
+    }
+
+    const isOwner =
+      authorKey &&
+      debateRow.creator_key &&
+      String(debateRow.creator_key) === authorKey;
+
+    if (!isAdmin(req) && !isOwner) {
+      return res.status(403).json({ error: "Ajout vidéo non autorisé." });
+    }
+
+    const objectPath = String(req.query.objectPath || "").trim().replace(/^\/+/, "");
+    if (!objectPath) {
+      return res.status(400).json({ error: "Chemin vidéo manquant." });
+    }
+
+    const expectedPrefix = `debates/${debateId}/video-`;
+    if (!objectPath.startsWith(expectedPrefix)) {
+      return res.status(400).json({ error: "Chemin vidéo invalide." });
+    }
+
+    const publicUrl = getStoragePublicUrl(SUPABASE_DEBATE_MEDIA_BUCKET, objectPath);
+    if (!publicUrl) {
+      return res.status(500).json({ error: "Erreur vérification vidéo." });
+    }
+
+    const resolvedVideoUrl = getResolvedDebateVideoUrl(debateRow);
+    const finalized = resolvedVideoUrl === publicUrl;
+    const exists = finalized ? true : await storageObjectExists(objectPath);
+
+    return res.json({
+      exists,
+      finalized,
+      video_url: finalized ? publicUrl : ""
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erreur vérification vidéo." });
+  }
+});
+
 app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
   try {
     const debateId = req.params.id;
@@ -2513,11 +2587,26 @@ app.post("/api/debates/:id/video-upload-complete", async (req, res) => {
       return res.status(500).json({ error: "Erreur finalisation vidéo." });
     }
 
+    const alreadyResolvedVideoUrl = getResolvedDebateVideoUrl(debateRow);
+    if (alreadyResolvedVideoUrl === publicUrl) {
+      return res.json({
+        success: true,
+        already_finalized: true,
+        video_url: publicUrl,
+        mime_type: mimeType || getVideoMimeTypeFromExtension(getVideoExtensionFromFilename(objectPath))
+      });
+    }
+
+    const objectExists = await storageObjectExists(objectPath);
+    if (!objectExists) {
+      return res.status(404).json({ error: "Fichier vidéo introuvable dans le stockage." });
+    }
+
     if (debateRow.image_url) {
       await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
     }
 
-    if (debateRow.video_url) {
+    if (debateRow.video_url && debateRow.video_url !== publicUrl) {
       await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
     }
 
@@ -3312,6 +3401,14 @@ app.delete("/api/comments/:id", async (req, res) => {
     return res.status(500).json({ error: "Erreur suppression commentaire." });
   }
 });
+
+const { execSync } = require("child_process");
+
+try {
+  console.log("FFMPEG CHECK:", execSync("ffmpeg -version", { encoding: "utf8" }).split("\n")[0]);
+} catch (e) {
+  console.error("FFMPEG CHECK FAILED:", e.message);
+}
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
