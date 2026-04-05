@@ -39,7 +39,15 @@
         <i class="fa-solid fa-gear"></i>
       </button>
 
-      <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+    <div class="home-brand-main">
+  <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+  <span class="brand-divider" aria-hidden="true"></span>
+
+  <p class="topbar-message">
+    <strong>La&nbsp;vraie&nbsp;gloire</strong><br>
+    <strong>est&nbsp;convaincre.</strong>
+  </p>
+</div>
     </div>
 
 <div class="topbar-social">
@@ -67,14 +75,7 @@
 
     <div class="topbar-actions">
       <div class="back-notifications-stack">
-        <a href="/create" class="button" id="open-arena-button">Ouvrir une arène</a>
-
-        <div id="global-share-bar"></div>
-
-        <a id="notifications-bell" class="notifications-button notifications-link notifications-button-large" href="/notifications">
-          🔔
-          <span id="notifications-count" class="notifications-count" style="display:none;"></span>
-        </a>
+<div id="global-share-bar"></div>
 
         <div class="admin-controls-row" data-admin style="display:none;">
           <span id="admin-badge" class="admin-badge">Mode admin activé</span>
@@ -97,22 +98,40 @@
 
   <section class="debates-section">
 
-    <div class="search-box">
-      <input
-        id="debate-search"
-        type="text"
-        placeholder="Découvrir une arène ouverte..."
-        autocomplete="off"
+    <div class="index-explorer-topbar">
+      <button
+        type="button"
+        id="index-sort-toggle"
+        class="index-sort-toggle"
+        aria-label="Afficher les filtres de tri et de recherche"
+        aria-controls="index-explorer-controls"
+        aria-expanded="false"
+        onclick="toggleIndexSortControls(event)"
       >
+        <i class="fa-solid fa-sliders"></i>
+        <span>Trier</span>
+      </button>
     </div>
 
-  <div class="debate-type-filter">
-  <button onclick="setTypeFilter('all')" id="filter-all">Tous</button>
-  <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
-  <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
-</div>
+    <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
+      <div class="search-box">
+        <input
+          id="debate-search"
+          type="text"
+          placeholder="Découvrir une arène ouverte..."
+          autocomplete="off"
+        >
+      </div>
 
-<div id="theme-filter-slot"></div>
+      <div class="debate-type-filter">
+        <button onclick="setTypeFilter('all')" id="filter-all">Tous</button>
+        <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
+        <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
+        <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
+      </div>
+
+      <div id="theme-filter-slot"></div>
+    </div>
 
 <div id="visited-section-header" class="section-header section-header-home" style="display:none;">
   <div>
@@ -138,10 +157,18 @@
 
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
-  <a href="/" class="home-bottom-nav-item home-bottom-nav-item-active" aria-label="Explorer">
+  <button
+    type="button"
+    id="index-explorer-toggle"
+    class="home-bottom-nav-item"
+    aria-label="Explorer"
+    aria-controls="index-explorer-controls"
+    aria-expanded="false"
+    onclick="toggleIndexExplorerControls(event)"
+  >
     <i class="fa-regular fa-compass"></i>
     <span>Explorer</span>
-  </a>
+  </button>
 
   <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
     <i class="fa-solid fa-plus"></i>
@@ -194,9 +221,10 @@
     </div>
   </div>
 
-  <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
+    <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
   </a>
 </nav>
 

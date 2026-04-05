@@ -1521,6 +1521,16 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowfullscreen
         ></iframe>
+        <button
+          type="button"
+          class="debate-card-sound-toggle"
+          data-index-youtube-sound-btn
+          aria-label="Activer le son"
+          title="Activer le son"
+          style="display:none;"
+        >
+          <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
   `;
@@ -1591,6 +1601,16 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
           preload="none"
           style="display:block; width:100%; height:100%; border:0; background:#000;"
         ></video>
+        <button
+          type="button"
+          class="debate-card-sound-toggle"
+          data-index-local-video-sound-btn
+          aria-label="Activer le son"
+          title="Activer le son"
+          style="display:none;"
+        >
+          <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
   `;
@@ -1732,6 +1752,7 @@ function updateIndexYouTubeShellOverlay(shell) {
 
   const overlay = ensureIndexYouTubeOverlayLayer(shell);
   const label = overlay?.querySelector('.debate-card-youtube-label');
+  const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
   const isActive = shell.dataset.active === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
 
@@ -1742,21 +1763,22 @@ function updateIndexYouTubeShellOverlay(shell) {
     overlay.style.pointerEvents = 'none';
     overlay.style.cursor = '';
     if (label) label.textContent = 'Vidéo YouTube';
+    if (soundButton) soundButton.style.display = 'none';
     return;
   }
 
-  if (isUserActivated) {
-    overlay.style.display = 'none';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.cursor = '';
-    if (label) label.textContent = 'Vidéo YouTube';
-    return;
-  }
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
+  overlay.style.cursor = '';
+  if (label) label.textContent = 'Vidéo YouTube';
 
-  overlay.style.display = 'flex';
-  overlay.style.pointerEvents = 'auto';
-  overlay.style.cursor = 'pointer';
-  if (label) label.textContent = 'Activer le son';
+  if (soundButton) {
+    soundButton.style.display = 'inline-flex';
+    const iconClass = isUserActivated ? 'fa-volume-xmark' : 'fa-volume-high';
+    soundButton.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
+    soundButton.setAttribute('aria-label', isUserActivated ? 'Couper le son' : 'Activer le son');
+    soundButton.setAttribute('title', isUserActivated ? 'Couper le son' : 'Activer le son');
+  }
 }
 
 function unloadIndexYouTubeShell(shell) {
@@ -1816,6 +1838,28 @@ function enableSoundOnIndexYouTubeShell(shell) {
   shell.dataset.userActivated = 'true';
   updateIndexYouTubeShellOverlay(shell);
   queueIndexYouTubeSoundActivation(shell, iframe);
+}
+
+function disableSoundOnIndexYouTubeShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  const iframe = shell.querySelector('.debate-card-youtube-iframe');
+  if (!iframe) return;
+
+  shell.dataset.userActivated = 'false';
+  updateIndexYouTubeShellOverlay(shell);
+  postMessageToIndexYouTubeIframe(iframe, 'mute');
+}
+
+function toggleSoundOnIndexYouTubeShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  if (shell.dataset.userActivated === 'true') {
+    disableSoundOnIndexYouTubeShell(shell);
+    return;
+  }
+
+  enableSoundOnIndexYouTubeShell(shell);
 }
 
 function updateIndexYouTubeActiveShell() {
@@ -1886,6 +1930,7 @@ function updateIndexLocalVideoShellOverlay(shell) {
 
   const overlay = ensureIndexLocalVideoOverlayLayer(shell);
   const label = overlay?.querySelector('.debate-card-youtube-label');
+  const soundButton = shell.querySelector('[data-index-local-video-sound-btn]');
   const isActive = shell.dataset.active === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
 
@@ -1896,21 +1941,22 @@ function updateIndexLocalVideoShellOverlay(shell) {
     overlay.style.pointerEvents = 'none';
     overlay.style.cursor = '';
     if (label) label.textContent = 'Vidéo importée';
+    if (soundButton) soundButton.style.display = 'none';
     return;
   }
 
-  if (isUserActivated) {
-    overlay.style.display = 'none';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.cursor = '';
-    if (label) label.textContent = 'Vidéo importée';
-    return;
-  }
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
+  overlay.style.cursor = '';
+  if (label) label.textContent = 'Vidéo importée';
 
-  overlay.style.display = 'flex';
-  overlay.style.pointerEvents = 'auto';
-  overlay.style.cursor = 'pointer';
-  if (label) label.textContent = 'Activer le son';
+  if (soundButton) {
+    soundButton.style.display = 'inline-flex';
+    const iconClass = isUserActivated ? 'fa-volume-xmark' : 'fa-volume-high';
+    soundButton.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
+    soundButton.setAttribute('aria-label', isUserActivated ? 'Couper le son' : 'Activer le son');
+    soundButton.setAttribute('title', isUserActivated ? 'Couper le son' : 'Activer le son');
+  }
 }
 
 function unloadIndexLocalVideoShell(shell) {
@@ -1973,6 +2019,7 @@ function enableSoundOnIndexLocalVideoShell(shell) {
   if (!video) return;
 
   shell.dataset.userActivated = 'true';
+  video.defaultMuted = false;
   video.muted = false;
   video.controls = true;
   updateIndexLocalVideoShellOverlay(shell);
@@ -1983,6 +2030,37 @@ function enableSoundOnIndexLocalVideoShell(shell) {
       // noop
     });
   }
+}
+
+function disableSoundOnIndexLocalVideoShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  const video = shell.querySelector('[data-index-local-video-player]');
+  if (!video) return;
+
+  shell.dataset.userActivated = 'false';
+  video.defaultMuted = true;
+  video.muted = true;
+  video.controls = false;
+  updateIndexLocalVideoShellOverlay(shell);
+
+  const playPromise = video.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {
+      // noop
+    });
+  }
+}
+
+function toggleSoundOnIndexLocalVideoShell(shell) {
+  if (!shell || shell.dataset.active !== 'true') return;
+
+  if (shell.dataset.userActivated === 'true') {
+    disableSoundOnIndexLocalVideoShell(shell);
+    return;
+  }
+
+  enableSoundOnIndexLocalVideoShell(shell);
 }
 
 function updateIndexLocalVideoActiveShell() {
@@ -2192,6 +2270,7 @@ function initIndexLocalVideoObserver(root = document) {
 
     const poster = shell.querySelector('[data-index-local-video-poster]');
     const overlay = shell.querySelector('[data-index-local-video-overlay]');
+    const soundButton = shell.querySelector('[data-index-local-video-sound-btn]');
 
     if (poster) {
       poster.onclick = (event) => {
@@ -2206,13 +2285,22 @@ function initIndexLocalVideoObserver(root = document) {
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.inView = 'true';
+        scheduleIndexLocalVideoActiveUpdate();
+      };
+    }
+
+    if (soundButton) {
+      soundButton.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        shell.dataset.inView = 'true';
 
         if (state.activeShell !== shell) {
           state.activeShell = shell;
           activateIndexLocalVideoShell(shell);
         }
 
-        enableSoundOnIndexLocalVideoShell(shell);
+        toggleSoundOnIndexLocalVideoShell(shell);
       };
     }
   });
@@ -2285,6 +2373,7 @@ function initIndexYouTubeObserver(root = document) {
 
     const poster = shell.querySelector('[data-index-youtube-poster]');
     const overlay = shell.querySelector('[data-index-youtube-overlay]');
+    const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
 
     if (poster) {
       poster.onclick = (event) => {
@@ -2299,13 +2388,22 @@ function initIndexYouTubeObserver(root = document) {
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.inView = 'true';
+        scheduleIndexYouTubeActiveUpdate();
+      };
+    }
+
+    if (soundButton) {
+      soundButton.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        shell.dataset.inView = 'true';
 
         if (state.activeShell !== shell) {
           state.activeShell = shell;
           activateIndexYouTubeShell(shell);
         }
 
-        enableSoundOnIndexYouTubeShell(shell);
+        toggleSoundOnIndexYouTubeShell(shell);
       };
     }
   });
@@ -4140,9 +4238,11 @@ function setStoredUnreadNotificationCount(unreadCount) {
 
   const badge = document.getElementById("notifications-count");
   const compactBadge = document.getElementById("notifications-count-compact");
+  const bottomBadge = document.getElementById("notifications-count-bottom");
 
   updateNotificationBadgeElement(badge, safeCount);
   updateNotificationBadgeElement(compactBadge, safeCount);
+  updateNotificationBadgeElement(bottomBadge, safeCount);
 }
 function decrementStoredUnreadNotificationCount(step = 1) {
   const current = getStoredUnreadNotificationCount();
@@ -4164,9 +4264,10 @@ let notificationsLoadInFlight = null;
 async function loadNotifications() {
   const badge = document.getElementById("notifications-count");
   const compactBadge = document.getElementById("notifications-count-compact");
+  const bottomBadge = document.getElementById("notifications-count-bottom");
   const list = document.getElementById("notifications-list");
 
-  if (!badge && !compactBadge) return;
+  if (!badge && !compactBadge && !bottomBadge) return;
   if (notificationsLoadInFlight) return notificationsLoadInFlight;
 
   notificationsLoadInFlight = (async () => {
@@ -4176,7 +4277,8 @@ const previousCount = Number(localStorage.getItem("notif_count") || 0);
 const unreadCount = notifications.filter((n) => Number(n.is_read) === 0).length;
 
 if (unreadCount > previousCount) {
-  const bell = document.getElementById("notifications-bell");
+  const bell = document.getElementById("notifications-bell-bottom")
+    || document.getElementById("notifications-bell");
 
   if (bell) {
     bell.classList.add("notif-shake");
@@ -4517,6 +4619,36 @@ let visitedDebatesCache = [];
 let otherDebatesCache = [];
 let visitedDebatesVisible = 5;
 let otherDebatesVisible = 6;
+let indexInfiniteScrollObserver = null;
+let indexInfiniteScrollLoading = false;
+
+function cleanupIndexInfiniteScrollObserver() {
+  if (indexInfiniteScrollObserver) {
+    indexInfiniteScrollObserver.disconnect();
+    indexInfiniteScrollObserver = null;
+  }
+}
+
+function setupIndexInfiniteScroll() {
+  cleanupIndexInfiniteScrollObserver();
+
+  const sentinel = document.getElementById("index-infinite-scroll-sentinel");
+  if (!sentinel) return;
+
+  indexInfiniteScrollObserver = new IntersectionObserver((entries) => {
+    const entry = entries[0];
+    if (!entry?.isIntersecting) return;
+    if (indexInfiniteScrollLoading) return;
+
+    loadMoreOtherDebates();
+  }, {
+    root: null,
+    rootMargin: "0px 0px 320px 0px",
+    threshold: 0.01
+  });
+
+  indexInfiniteScrollObserver.observe(sentinel);
+}
 
 function getDebateCardDeleteButtonHtml(debate) {
   if (!canDeleteDebate(debate)) return "";
@@ -4742,6 +4874,78 @@ function updateCategoryFilterVisualState() {
   badge.title = `${count} arène${count > 1 ? "s" : ""}`;
 }
 
+function isIndexExplorerControlsDesktopMode() {
+  return window.innerWidth > 768;
+}
+
+function syncIndexExplorerControlButtons(isOpen) {
+  const bottomToggle = document.getElementById("index-explorer-toggle");
+  const topToggle = document.getElementById("index-sort-toggle");
+
+  [bottomToggle, topToggle].forEach((toggle) => {
+    if (!toggle) return;
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  });
+
+  if (bottomToggle) {
+    bottomToggle.classList.toggle("home-bottom-nav-item-active", isOpen);
+  }
+
+  if (topToggle) {
+    topToggle.classList.toggle("index-sort-toggle-active", isOpen);
+  }
+}
+
+function setIndexExplorerControlsOpen(forceOpen) {
+  const controls = document.getElementById("index-explorer-controls");
+  if (!controls) return;
+
+  const shouldOpen = !!forceOpen;
+  controls.style.display = shouldOpen ? "grid" : "none";
+  syncIndexExplorerControlButtons(shouldOpen);
+}
+
+function toggleIndexSortControls(event) {
+  event?.preventDefault?.();
+
+  const controls = document.getElementById("index-explorer-controls");
+  if (!controls) return;
+
+  closeHomeBottomShareMenu?.();
+
+  const isOpen = controls.style.display !== "none";
+  setIndexExplorerControlsOpen(!isOpen);
+}
+
+function toggleIndexExplorerControls(event) {
+  event?.preventDefault?.();
+
+  closeHomeBottomShareMenu?.();
+
+  const topbar = document.querySelector(".topbar");
+  if (topbar) {
+    topbar.classList.remove("topbar-hidden");
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+function initIndexExplorerControls() {
+  const controls = document.getElementById("index-explorer-controls");
+  const bottomToggle = document.getElementById("index-explorer-toggle");
+  const topToggle = document.getElementById("index-sort-toggle");
+  if (!controls || (!bottomToggle && !topToggle)) return;
+
+  setIndexExplorerControlsOpen(false);
+
+  window.addEventListener("resize", () => {
+    syncIndexExplorerControlButtons(controls.style.display !== "none");
+  });
+}
+
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
@@ -4838,6 +5042,11 @@ function getFilteredDebatesForIndex(baseDebates) {
 
   if (currentTypeFilter === "question") {
     filteredDebates = filteredDebates.filter((debate) => isOpenDebate(debate));
+  }
+
+  if (currentTypeFilter === "visited") {
+    const visitedIds = new Set(getVisitedDebateIds().map(String));
+    filteredDebates = filteredDebates.filter((debate) => visitedIds.has(String(debate.id)));
   }
 
   if (currentCategoryFilter !== "all") {
@@ -5049,19 +5258,21 @@ function loadMoreVisitedDebates() {
   renderVisitedDebatesList(visitedDebatesCache);
 }
 function renderDebatesList(debates) {
+  cleanupIndexInfiniteScrollObserver();
+
   const debatesToShow = debates.slice(0, otherDebatesVisible);
   const div = document.getElementById("debates-list");
   const header = document.getElementById("other-section-header");
-  if (!div || !header) return;
+  if (!div) return;
 
 if (!debates.length) {
-  header.style.display = "none";
+  if (header) header.style.display = "none";
   div.innerHTML = "";
   refreshAdminUI();
   return;
 }
 
-header.style.display = "flex";
+if (header) header.style.display = "none";
 
 div.innerHTML = debatesToShow.map(d => {
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
@@ -5180,23 +5391,32 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
 
  if (debatesToShow.length < debates.length) {
   div.innerHTML += `
-    <div class="load-more-container">
-      <button class="button button-small" type="button" onclick="loadMoreOtherDebates()">
-        Découvrir plus d'arènes
-      </button>
-    </div>
+    <div
+      id="index-infinite-scroll-sentinel"
+      class="load-more-container"
+      aria-hidden="true"
+    ></div>
   `;
 }
 
   refreshAdminUI();
+  setupIndexInfiniteScroll();
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
   initIndexInstagramObserver(document);
 }
 function loadMoreOtherDebates() {
+  if (indexInfiniteScrollLoading) return;
+  if (otherDebatesVisible >= otherDebatesCache.length) return;
+
+  indexInfiniteScrollLoading = true;
   otherDebatesVisible += 6;
   renderDebatesList(otherDebatesCache);
+
+  requestAnimationFrame(() => {
+    indexInfiniteScrollLoading = false;
+  });
 }
 function filterDebates() {
   const input = document.getElementById("debate-search");
@@ -5213,6 +5433,7 @@ function setTypeFilter(type) {
   document.getElementById("filter-all")?.classList.remove("active");
   document.getElementById("filter-debate")?.classList.remove("active");
   document.getElementById("filter-question")?.classList.remove("active");
+  document.getElementById("filter-visited")?.classList.remove("active");
 
   if (type === "all") {
     document.getElementById("filter-all")?.classList.add("active");
@@ -5226,6 +5447,10 @@ function setTypeFilter(type) {
     document.getElementById("filter-question")?.classList.add("active");
   }
 
+  if (type === "visited") {
+    document.getElementById("filter-visited")?.classList.add("active");
+  }
+
   visitedDebatesVisible = 5;
   otherDebatesVisible = 6;
 
@@ -5233,16 +5458,38 @@ function setTypeFilter(type) {
 }
 
 function updateIndexLists(debates) {
-  const visitedIds = getVisitedDebateIds().map(String);
+  const visitedIds = new Set(getVisitedDebateIds().map(String));
+  const allDebates = Array.isArray(debates) ? debates : [];
+  const visitedDebates = allDebates.filter((d) => visitedIds.has(String(d.id)));
+  const otherHeaderTitle = document.querySelector("#other-section-header h3");
 
-  visitedDebatesCache = debates.filter((d) => visitedIds.includes(String(d.id)));
-  otherDebatesCache = debates.filter((d) => !visitedIds.includes(String(d.id)));
+  if (currentTypeFilter === "visited") {
+    visitedDebatesCache = visitedDebates;
+    otherDebatesCache = [];
 
-  renderVisitedDebatesList(visitedDebatesCache);
+    if (otherHeaderTitle) {
+      otherHeaderTitle.textContent = "Arènes ouvertes";
+    }
+
+    renderVisitedDebatesList(visitedDebatesCache);
+    renderDebatesList([]);
+    return;
+  }
+
+  visitedDebatesCache = [];
+  otherDebatesCache = allDebates;
+
+  if (otherHeaderTitle) {
+    otherHeaderTitle.textContent = "Arènes ouvertes";
+  }
+
+  renderVisitedDebatesList([]);
   renderDebatesList(otherDebatesCache);
 }
 async function initIndex() {
   try {
+    initIndexExplorerControls();
+
     const debates = await fetchJSON(API + "/debates");
     debatesCache = debates;
     visitedDebatesVisible = 5;

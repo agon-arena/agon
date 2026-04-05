@@ -11,59 +11,56 @@
 </head>
 <body class="page-debate">
 
+
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
 
-  <div class="home-brand-block">
+    <div class="home-brand-block">
+      <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
+        <i class="fa-solid fa-gear"></i>
+      </button>
 
-  <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
-    <i class="fa-solid fa-gear"></i>
-  </button>
+<div class="home-brand-main">
+  <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+  <span class="brand-divider" aria-hidden="true"></span>
 
- <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
-
-<p class="topbar-message">
-  <strong>La vraie gloire</strong><br>
-  <strong>est&nbsp;convaincre.</strong>
-</p>
+  <p class="topbar-message">
+    <strong>La&nbsp;vraie&nbsp;gloire</strong><br>
+    <strong>est&nbsp;convaincre.</strong>
+  </p>
+</div>
     </div>
-<div class="topbar-actions">
 
-<div class="debate-nav-notifications-stack">
-  <div class="debate-nav-row">
-    <a href="/" class="back-link">← Retour aux arènes</a>
-    <a href="/create" class="button">Ouvrir une arène</a>
-  </div>
+    <div class="topbar-actions">
+      <div class="debate-nav-notifications-stack">
+        <div class="debate-nav-row">
+          <a href="/" class="back-link">← Retour aux arènes</a>
+        </div>
 
-  <div class="mobile-topbar-actions">
-    <a href="/" class="topbar-back-arrow" title="Retour aux arènes">
-      <i class="fa-solid fa-arrow-left"></i>
-    </a>
-  </div>
+        <div class="mobile-topbar-actions">
+          <a href="/" class="topbar-back-arrow" title="Retour aux arènes">
+            <i class="fa-solid fa-arrow-left"></i>
+          </a>
+        </div>
 
-  <a id="notifications-bell" class="notifications-button notifications-link notifications-button-large" href="/notifications">
-    🔔
-    <span id="notifications-count" class="notifications-count" style="display:none;"></span>
-  </a>
+        <div class="admin-controls-row" data-admin style="display:none;">
+          <span id="admin-badge" class="admin-badge">Mode admin activé</span>
 
-  <div class="admin-controls-row" data-admin style="display:none;">
-    <span id="admin-badge" class="admin-badge">Mode admin activé</span>
+          <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
+            Quitter le mode admin
+          </button>
 
-    <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
-      Quitter le mode admin
-    </button>
-
-    <a class="button button-secondary admin-reports-button" href="/admin-reports">
-      Signalements
-      <span id="reports-count" class="notifications-count" style="display:none;"></span>
-    </a>
-  </div>
-</div>
-
-</div>
+          <a class="button button-secondary admin-reports-button" href="/admin-reports">
+            Signalements
+            <span id="reports-count" class="notifications-count" style="display:none;"></span>
+          </a>
+        </div>
+      </div>
+    </div>
 
   </div>
 </header>
+
 
 <main class="container debate-page">
 
@@ -519,9 +516,10 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     </div>
   </div>
 
-  <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
+    <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
   </a>
 </nav>
 

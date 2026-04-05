@@ -86,11 +86,6 @@
 
         <div id="global-share-bar"></div>
 
-        <a id="notifications-bell" class="notifications-button notifications-link notifications-button-large" href="/notifications">
-          🔔
-          <span id="notifications-count" class="notifications-count" style="display:none;"></span>
-        </a>
-
         <div class="admin-controls-row" data-admin style="display:none;">
           <span id="admin-badge" class="admin-badge">Mode admin activé</span>
 
@@ -382,9 +377,10 @@
     </div>
   </div>
 
-  <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
+    <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
   </a>
 </nav>
 
