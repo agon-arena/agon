@@ -5448,6 +5448,380 @@ function readFileAsArrayBuffer(file, options = {}) {
   });
 }
 
+
+const CLIENT_VIDEO_COMPRESSION_THRESHOLD_BYTES = 12 * 1024 * 1024;
+const CLIENT_VIDEO_COMPRESSION_MAX_DIMENSION = 720;
+const CLIENT_VIDEO_COMPRESSION_MAX_DURATION_SECONDS = 90;
+const CLIENT_VIDEO_COMPRESSION_MIN_RATIO_GAIN = 0.9;
+
+function getSupportedClientCompressedVideoMimeType() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+
+  const candidates = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4"
+  ];
+
+  return candidates.find((mimeType) => {
+    try {
+      return MediaRecorder.isTypeSupported(mimeType);
+    } catch (error) {
+      return false;
+    }
+  }) || "";
+}
+
+function getVideoExtensionFromMimeTypeForClientCompression(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized.includes("webm")) return "webm";
+  if (normalized.includes("mp4")) return "mp4";
+  return "webm";
+}
+
+function replaceFileExtension(fileName, nextExtension) {
+  const safeName = String(fileName || "video").trim() || "video";
+  const baseName = safeName.replace(/\.[^.]+$/, "") || "video";
+  return `${baseName}.${nextExtension}`;
+}
+
+function shouldCompressVideoBeforeUpload(file) {
+  if (!(file instanceof File)) return false;
+  if (Number(file.size || 0) <= CLIENT_VIDEO_COMPRESSION_THRESHOLD_BYTES) return false;
+  if (typeof MediaRecorder === "undefined") return false;
+  if (typeof document === "undefined") return false;
+
+  const mimeType = getSupportedClientCompressedVideoMimeType();
+  if (!mimeType) return false;
+
+  const canvas = document.createElement("canvas");
+  return typeof canvas.captureStream === "function";
+}
+
+function loadVideoMetadataFromFile(file, options = {}) {
+  const { signal } = options;
+
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const objectUrl = URL.createObjectURL(file);
+    let settled = false;
+
+    const cleanup = () => {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+    };
+
+    const safeResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const safeReject = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const abortHandler = () => safeReject(new Error("Publication annulée."));
+
+    if (signal?.aborted) {
+      abortHandler();
+      return;
+    }
+
+    if (signal) {
+      signal.addEventListener("abort", abortHandler, { once: true });
+    }
+
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+
+    video.onloadedmetadata = () => {
+      safeResolve({
+        duration: Number(video.duration || 0),
+        width: Number(video.videoWidth || 0),
+        height: Number(video.videoHeight || 0)
+      });
+    };
+
+    video.onerror = () => {
+      safeReject(new Error("Impossible d’analyser la vidéo avant envoi."));
+    };
+
+    video.src = objectUrl;
+  });
+}
+
+async function compressVideoBeforeUpload(file, options = {}) {
+  const { signal, onProgress } = options;
+
+  if (!(file instanceof File)) {
+    throw new Error("Vidéo invalide.");
+  }
+
+  const supportedMimeType = getSupportedClientCompressedVideoMimeType();
+  if (!supportedMimeType) {
+    return {
+      file,
+      compressed: false,
+      reason: "unsupported"
+    };
+  }
+
+  const metadata = await loadVideoMetadataFromFile(file, { signal });
+  const duration = Number(metadata.duration || 0);
+  const sourceWidth = Number(metadata.width || 0);
+  const sourceHeight = Number(metadata.height || 0);
+
+  if (!duration || !sourceWidth || !sourceHeight) {
+    return {
+      file,
+      compressed: false,
+      reason: "invalid-metadata"
+    };
+  }
+
+  if (duration > CLIENT_VIDEO_COMPRESSION_MAX_DURATION_SECONDS) {
+    return {
+      file,
+      compressed: false,
+      reason: "too-long",
+      metadata
+    };
+  }
+
+  const maxDimension = CLIENT_VIDEO_COMPRESSION_MAX_DIMENSION;
+  const ratio = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+  const targetWidth = Math.max(2, Math.round((sourceWidth * ratio) / 2) * 2);
+  const targetHeight = Math.max(2, Math.round((sourceHeight * ratio) / 2) * 2);
+
+  const needsResize = targetWidth < sourceWidth || targetHeight < sourceHeight;
+  const needsCompression = Number(file.size || 0) > CLIENT_VIDEO_COMPRESSION_THRESHOLD_BYTES;
+
+  if (!needsResize && !needsCompression) {
+    return {
+      file,
+      compressed: false,
+      reason: "not-needed",
+      metadata
+    };
+  }
+
+  return new Promise((resolve, reject) => {
+    const sourceVideo = document.createElement("video");
+    const sourceUrl = URL.createObjectURL(file);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { alpha: false });
+
+    if (!ctx || typeof canvas.captureStream !== "function") {
+      URL.revokeObjectURL(sourceUrl);
+      resolve({ file, compressed: false, reason: "unsupported", metadata });
+      return;
+    }
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const stream = canvas.captureStream(24);
+    let recorder;
+    const chunks = [];
+    let settled = false;
+    let drawHandle = 0;
+    let abortHandler = null;
+
+    const cleanup = () => {
+      if (drawHandle) {
+        cancelAnimationFrame(drawHandle);
+        drawHandle = 0;
+      }
+
+      try {
+        sourceVideo.pause();
+      } catch (error) {
+        // noop
+      }
+
+      sourceVideo.removeAttribute("src");
+      sourceVideo.load();
+      URL.revokeObjectURL(sourceUrl);
+
+      try {
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (error) {
+        // noop
+      }
+
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+    };
+
+    const safeResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const safeReject = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const drawFrame = () => {
+      if (settled) return;
+      try {
+        ctx.drawImage(sourceVideo, 0, 0, targetWidth, targetHeight);
+      } catch (error) {
+        // noop
+      }
+
+      if (typeof onProgress === "function" && duration > 0) {
+        const normalizedProgress = Math.min(100, Math.max(0, Math.round((sourceVideo.currentTime / duration) * 100)));
+        onProgress(normalizedProgress);
+      }
+
+      if (!sourceVideo.paused && !sourceVideo.ended) {
+        drawHandle = requestAnimationFrame(drawFrame);
+      }
+    };
+
+    const finishRecording = () => {
+      if (settled) return;
+      if (typeof onProgress === "function") {
+        onProgress(100);
+      }
+      try {
+        if (recorder && recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      } catch (error) {
+        safeReject(error);
+      }
+    };
+
+    abortHandler = () => {
+      try {
+        if (recorder && recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      } catch (error) {
+        // noop
+      }
+      safeReject(new Error("Publication annulée."));
+    };
+
+    if (signal?.aborted) {
+      abortHandler();
+      return;
+    }
+
+    if (signal) {
+      signal.addEventListener("abort", abortHandler, { once: true });
+    }
+
+    try {
+      recorder = new MediaRecorder(stream, {
+        mimeType: supportedMimeType,
+        videoBitsPerSecond: 1200000,
+        audioBitsPerSecond: 96000
+      });
+    } catch (error) {
+      cleanup();
+      resolve({ file, compressed: false, reason: "recorder-init-failed", metadata });
+      return;
+    }
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    recorder.onerror = () => {
+      safeReject(new Error("Compression locale impossible sur cet appareil."));
+    };
+
+    recorder.onstop = () => {
+      if (settled) return;
+
+      const blob = new Blob(chunks, { type: supportedMimeType });
+      if (!blob.size) {
+        safeResolve({ file, compressed: false, reason: "empty-output", metadata });
+        return;
+      }
+
+      if (blob.size >= Number(file.size || 0) * CLIENT_VIDEO_COMPRESSION_MIN_RATIO_GAIN) {
+        safeResolve({ file, compressed: false, reason: "not-smaller", metadata });
+        return;
+      }
+
+      const extension = getVideoExtensionFromMimeTypeForClientCompression(supportedMimeType);
+      const compressedFile = new File(
+        [blob],
+        replaceFileExtension(file.name || "video", extension),
+        {
+          type: supportedMimeType,
+          lastModified: Date.now()
+        }
+      );
+
+      safeResolve({
+        file: compressedFile,
+        compressed: true,
+        originalSize: Number(file.size || 0),
+        compressedSize: Number(compressedFile.size || 0),
+        metadata,
+        mimeType: supportedMimeType
+      });
+    };
+
+    sourceVideo.preload = "auto";
+    sourceVideo.muted = true;
+    sourceVideo.defaultMuted = true;
+    sourceVideo.playsInline = true;
+
+    sourceVideo.onloadedmetadata = async () => {
+      try {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.drawImage(sourceVideo, 0, 0, targetWidth, targetHeight);
+        recorder.start(250);
+        sourceVideo.currentTime = 0;
+        drawHandle = requestAnimationFrame(drawFrame);
+        await sourceVideo.play();
+      } catch (error) {
+        safeReject(new Error("Impossible de démarrer la compression locale."));
+      }
+    };
+
+    sourceVideo.onended = () => {
+      finishRecording();
+    };
+
+    sourceVideo.onerror = () => {
+      safeReject(new Error("Impossible de lire la vidéo avant envoi."));
+    };
+
+    sourceVideo.src = sourceUrl;
+  });
+}
+
 function createXhrRequest(url, options = {}) {
   const {
     method = "GET",
@@ -6404,10 +6778,49 @@ form.addEventListener("submit", async e => {
       }
     });
 
-    setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Initialisation du téléversement vidéo…" : "Traitement serveur en cours…");
+    setCreatePublishProgress(80, "Arène créée", resourceMode === "video" ? "Préparation du téléversement vidéo…" : "Traitement serveur en cours…");
 
     if (resourceMode === "video" && videoFile) {
-      setCreatePublishProgress(82, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
+      let uploadVideoFile = videoFile;
+
+      if (shouldCompressVideoBeforeUpload(videoFile)) {
+        setCreatePublishProgress(82, "Optimisation locale de la vidéo", "Allégement de la vidéo avant envoi…");
+
+        try {
+          const compressionResult = await compressVideoBeforeUpload(videoFile, {
+            signal: getCreatePublishSignal(),
+            onProgress: (progress) => {
+              setCreatePublishProgress(
+                mapProgressRange(progress, 82, 88),
+                "Optimisation locale de la vidéo",
+                `Compression locale avant envoi… ${Math.round(progress)}%`
+              );
+            }
+          });
+
+          if (compressionResult?.compressed && compressionResult.file instanceof File) {
+            uploadVideoFile = compressionResult.file;
+            const savedMo = Math.max(0, ((Number(videoFile.size || 0) - Number(uploadVideoFile.size || 0)) / (1024 * 1024)));
+            setCreatePublishProgress(
+              88,
+              "Vidéo allégée",
+              `Vidéo allégée avant envoi${savedMo > 0.1 ? ` : ${savedMo.toFixed(1)} Mo économisés.` : "."}`
+            );
+          } else {
+            setCreatePublishProgress(86, "Préparation de la vidéo", "Compression locale non retenue. Envoi du fichier original…");
+          }
+        } catch (compressionError) {
+          if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(compressionError?.message || ""))) {
+            throw compressionError;
+          }
+
+          console.warn("[video-upload] compression locale ignorée, reprise avec le fichier original.", compressionError);
+          uploadVideoFile = videoFile;
+          setCreatePublishProgress(86, "Préparation de la vidéo", "Compression locale impossible sur cet appareil. Envoi du fichier original…");
+        }
+      } else {
+        setCreatePublishProgress(86, "Préparation de la vidéo", "Préparation de l’envoi direct de la vidéo…");
+      }
 
       try {
         const uploadSetup = await fetchJSON(
@@ -6417,9 +6830,9 @@ form.addEventListener("submit", async e => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              fileName: videoFile.name || "video",
-              contentType: videoFile.type || "application/octet-stream",
-              size: Number(videoFile.size || 0)
+              fileName: uploadVideoFile.name || "video",
+              contentType: uploadVideoFile.type || videoFile.type || "application/octet-stream",
+              size: Number(uploadVideoFile.size || 0)
             })
           }
         );
@@ -6428,8 +6841,8 @@ form.addEventListener("submit", async e => {
           debateId: r.id,
           authorKey: creatorKey,
           objectPath: uploadSetup.objectPath,
-          mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
-          fileName: videoFile.name || "video",
+          mimeType: uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream",
+          fileName: uploadVideoFile.name || videoFile.name || "video",
           status: "uploading",
           startedAt: Date.now()
         });
@@ -6443,9 +6856,9 @@ form.addEventListener("submit", async e => {
           signal: getCreatePublishSignal(),
           method: "PUT",
           headers: {
-            "content-type": uploadSetup.mimeType || videoFile.type || "application/octet-stream"
+            "content-type": uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream"
           },
-          body: videoFile,
+          body: uploadVideoFile,
           responseType: "text",
           onXhrCreated: (xhr) => {
             const markDirectUploadStarted = () => {
@@ -6496,8 +6909,8 @@ form.addEventListener("submit", async e => {
                 debateId: r.id,
                 authorKey: creatorKey,
                 objectPath: uploadSetup.objectPath,
-                mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
-                fileName: videoFile.name || "video",
+                mimeType: uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream",
+                fileName: uploadVideoFile.name || videoFile.name || "video",
                 status: "uploaded",
                 startedAt: Date.now()
               });
@@ -6526,8 +6939,8 @@ form.addEventListener("submit", async e => {
               debateId: r.id,
               authorKey: creatorKey,
               objectPath: uploadSetup.objectPath,
-              mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
-              fileName: videoFile.name || "video",
+              mimeType: uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream",
+              fileName: uploadVideoFile.name || videoFile.name || "video",
               status: "uploaded",
               startedAt: Date.now()
             });
@@ -6545,8 +6958,8 @@ form.addEventListener("submit", async e => {
           debateId: r.id,
           authorKey: creatorKey,
           objectPath: uploadSetup.objectPath,
-          mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream",
-          fileName: videoFile.name || "video",
+          mimeType: uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream",
+          fileName: uploadVideoFile.name || videoFile.name || "video",
           status: "finalizing",
           startedAt: Date.now()
         });
@@ -6558,7 +6971,7 @@ form.addEventListener("submit", async e => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               objectPath: uploadSetup.objectPath,
-              mimeType: uploadSetup.mimeType || videoFile.type || "application/octet-stream"
+              mimeType: uploadSetup.mimeType || uploadVideoFile.type || videoFile.type || "application/octet-stream"
             })
           }
         );
@@ -6589,11 +7002,11 @@ form.addEventListener("submit", async e => {
           signal: getCreatePublishSignal(),
           method: "POST",
           headers: {
-            "Content-Type": videoFile.type || "application/octet-stream",
-            "x-file-name": videoFile.name || "video",
-            "x-file-type": videoFile.type || "application/octet-stream"
+            "Content-Type": uploadVideoFile.type || videoFile.type || "application/octet-stream",
+            "x-file-name": uploadVideoFile.name || videoFile.name || "video",
+            "x-file-type": uploadVideoFile.type || videoFile.type || "application/octet-stream"
           },
-          body: videoFile,
+          body: uploadVideoFile,
           responseType: "json",
           onUploadProgress: (progress) => {
             if (progress >= 100) {
