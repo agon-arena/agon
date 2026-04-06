@@ -1291,6 +1291,21 @@ function setCachedPreview(url, value, ttlMs = 1000 * 60 * 30) {
   });
 }
 
+function getCachedExternalLinkPreview(sourceUrl) {
+  const safeUrl = normalizeExternalUrl(sourceUrl);
+  if (!safeUrl) return null;
+
+  const cached = getCachedPreview(safeUrl);
+  if (cached) return cached;
+
+  const persistedPreview = readPersistentPreview(safeUrl);
+  if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+    setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
+    return persistedPreview;
+  }
+
+  return null;
+}
 
 async function getExternalLinkPreview(sourceUrl) {
   const safeUrl = normalizeExternalUrl(sourceUrl);
@@ -2424,7 +2439,21 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    rows.sort((a, b) => {
+    const rowsWithSourcePreview = rows.map((row) => {
+      if (!String(row.source_url || "").trim()) {
+        return row;
+      }
+
+      const sourcePreview = getCachedExternalLinkPreview(row.source_url);
+      return sourcePreview
+        ? {
+            ...row,
+            source_preview: sourcePreview
+          }
+        : row;
+    });
+
+    rowsWithSourcePreview.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
       const aDate = a.last_argument_at || a.created_at || "";
       const bDate = b.last_argument_at || b.created_at || "";
@@ -2432,7 +2461,7 @@ app.get("/api/debates", async (req, res) => {
       return Number(b.id) - Number(a.id);
     });
 
-    res.json(rows);
+    res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture débats.");
