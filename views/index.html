@@ -24,7 +24,7 @@
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=20260406-3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 
@@ -41,12 +41,6 @@
 
     <div class="home-brand-main">
   <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
-  <span class="brand-divider" aria-hidden="true"></span>
-
-  <p class="topbar-message">
-    <strong>La&nbsp;vraie&nbsp;gloire</strong><br>
-    <strong>est&nbsp;convaincre.</strong>
-  </p>
 </div>
     </div>
 
@@ -74,6 +68,47 @@
 
 
     <div class="topbar-actions">
+      <div class="home-topbar-menu-wrap">
+        <button
+          type="button"
+          id="home-topbar-menu-toggle"
+          class="home-topbar-menu-toggle"
+          aria-label="Ouvrir le menu"
+          aria-controls="home-topbar-menu"
+          aria-expanded="false"
+          onclick="toggleHomeTopbarMenu(event)"
+        >
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div
+          id="home-topbar-menu"
+          class="home-topbar-menu"
+          onclick="event.stopPropagation()"
+          aria-label="Menu du bandeau"
+        >
+         <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link">
+  <i class="fa-solid fa-plus"></i>
+  <span>Ouvrir une arène</span>
+</a>
+
+<a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link">
+  <i class="fa-regular fa-bell"></i>
+  <span>Notifications</span>
+</a>
+
+          <button type="button" class="home-topbar-menu-item" id="home-topbar-login-button">
+            <i class="fa-regular fa-user"></i>
+            <span>Se connecter</span>
+          </button>
+
+          <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-signup-button">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>S'inscrire</span>
+          </button>
+        </div>
+      </div>
+
       <div class="back-notifications-stack">
 <div id="global-share-bar"></div>
 
@@ -94,6 +129,15 @@
 
   </div>
 </header>
+
+<button
+  type="button"
+  id="home-topbar-menu-backdrop"
+  class="home-topbar-menu-backdrop"
+  aria-label="Fermer le menu"
+  onclick="closeHomeTopbarMenu()"
+></button>
+
 <main class="container home-page">
 
   <section class="debates-section">
@@ -229,6 +273,7 @@
 </nav>
 
 
-<script src="/script.js?v=20260404-2"></script>
+<script src="/script.js?v=20260406-4"></script>
+
 </body>
 </html>

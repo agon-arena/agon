@@ -12416,3 +12416,137 @@ function initHomeBottomNavViewportOffset() {
   window.addEventListener('scroll', updateHomeBottomNavViewportOffset, { passive: true });
 }
 
+function positionHomeTopbarMenu() {
+  const menu = document.getElementById("home-topbar-menu");
+  const trigger = document.getElementById("home-topbar-menu-toggle");
+  const topbar = document.querySelector(".topbar");
+
+  if (!menu || !trigger) return;
+
+  const rect = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const menuWidth = Math.min(window.innerWidth <= 768 ? 240 : 260, Math.max(0, viewportWidth - 24));
+
+  let top;
+
+  if (window.innerWidth <= 768 && topbar) {
+    const topbarRect = topbar.getBoundingClientRect();
+    top = Math.round(topbarRect.bottom + 8);
+  } else {
+    top = Math.round(rect.bottom + 10);
+  }
+
+  menu.style.setProperty("--home-topbar-menu-top", `${top}px`);
+
+  if (window.innerWidth <= 768) {
+    const left = Math.max(12, Math.round(rect.left));
+    menu.style.setProperty("--home-topbar-menu-left", `${left}px`);
+    menu.style.removeProperty("--home-topbar-menu-right");
+    return;
+  }
+
+  const right = Math.max(12, Math.round(viewportWidth - rect.right));
+  const maxRight = Math.max(12, viewportWidth - 12 - menuWidth);
+  const safeRight = Math.min(right, maxRight);
+
+  menu.style.setProperty("--home-topbar-menu-right", `${safeRight}px`);
+  menu.style.removeProperty("--home-topbar-menu-left");
+}
+
+function syncHomeTopbarMenuOpenState(isOpen) {
+  const menu = document.getElementById("home-topbar-menu");
+  const trigger = document.getElementById("home-topbar-menu-toggle");
+  const backdrop = document.getElementById("home-topbar-menu-backdrop");
+
+  if (menu) {
+    menu.classList.toggle("home-topbar-menu-open", !!isOpen);
+  }
+
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  if (backdrop) {
+    backdrop.classList.toggle("home-topbar-menu-backdrop-open", !!isOpen);
+  }
+
+  document.body.classList.toggle("home-topbar-menu-is-open", !!isOpen);
+}
+
+function closeHomeTopbarMenu() {
+  syncHomeTopbarMenuOpenState(false);
+}
+
+function toggleHomeTopbarMenu(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const menu = document.getElementById("home-topbar-menu");
+  const trigger = document.getElementById("home-topbar-menu-toggle");
+  if (!menu || !trigger) return;
+
+  const isOpen = menu.classList.contains("home-topbar-menu-open");
+
+  if (isOpen) {
+    syncHomeTopbarMenuOpenState(false);
+  } else {
+    positionHomeTopbarMenu();
+    syncHomeTopbarMenuOpenState(true);
+  }
+}
+
+function initHomeTopbarMenu() {
+  if (window.__homeTopbarMenuInitDone) return;
+  window.__homeTopbarMenuInitDone = true;
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".home-topbar-menu-wrap")) return;
+    closeHomeTopbarMenu();
+  });
+const createLink = document.getElementById("home-topbar-create-link");
+const notificationsLink = document.getElementById("home-topbar-notifications-link");
+
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeHomeTopbarMenu();
+    }
+  });
+
+  window.addEventListener("resize", positionHomeTopbarMenu);
+  window.addEventListener("scroll", positionHomeTopbarMenu, { passive: true });
+
+ 
+}
+
+const loginButton = document.getElementById("home-topbar-login-button");
+const signupButton = document.getElementById("home-topbar-signup-button");
+
+function showAccountsComingSoonMessage() {
+  closeHomeTopbarMenu();
+  showReplacementSuccessMessage(
+    "Comptes bientôt disponibles",
+    "Super nouvelle : Agôn t’intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n’est pas encore disponible. Mais promis : elle arrive bientôt.",
+    null,
+    "✨"
+  );
+}
+
+if (loginButton) {
+  loginButton.addEventListener("click", showAccountsComingSoonMessage);
+}
+
+if (signupButton) {
+  signupButton.addEventListener("click", showAccountsComingSoonMessage);
+}
+
+window.toggleHomeTopbarMenu = toggleHomeTopbarMenu;
+window.closeHomeTopbarMenu = closeHomeTopbarMenu;
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
+} else {
+  initHomeTopbarMenu();
+}
