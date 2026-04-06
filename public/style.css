@@ -6822,7 +6822,7 @@ padding:4px 14px 12px 14px;
   }
 
   .page-home-mobile .debate-card.index-card-active {
-    transform: translateY(-6px) scale(1.01);
+    transform: translateY(-6px);
     box-shadow:
       0 18px 40px rgba(15, 23, 42, 0.16),
       0 0 0 1px rgba(17, 24, 39, 0.08);
