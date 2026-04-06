@@ -2144,9 +2144,10 @@ function updateMobileIndexCardHighlight() {
     return;
   }
 
-  const isMobileHome =
-    document.body.classList.contains('page-home-mobile') &&
-    !getDebateId();
+const isMobileHome =
+  false &&
+  document.body.classList.contains('page-home-mobile') &&
+  !getDebateId();
 
   const isMobileOpenDebate =
     document.body.classList.contains('page-debate') &&
