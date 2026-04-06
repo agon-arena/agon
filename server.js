@@ -74,22 +74,143 @@ function normalizeExternalUrl(value) {
   return `https://${raw}`;
 }
 
+const HTML_ENTITY_MAP = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  shy: "",
+  laquo: "«",
+  raquo: "»",
+  lsquo: "'",
+  rsquo: "'",
+  sbquo: "'",
+  ldquo: '"',
+  rdquo: '"',
+  bdquo: '"',
+  ndash: "-",
+  mdash: "-",
+  hellip: "...",
+  middot: "·",
+  bull: "•",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+  euro: "€",
+  cent: "¢",
+  pound: "£",
+  yen: "¥",
+  sect: "§",
+  para: "¶",
+  agrave: "à",
+  aacute: "á",
+  acirc: "â",
+  atilde: "ã",
+  auml: "ä",
+  aring: "å",
+  aelig: "æ",
+  ccedil: "ç",
+  egrave: "è",
+  eacute: "é",
+  ecirc: "ê",
+  euml: "ë",
+  igrave: "ì",
+  iacute: "í",
+  icirc: "î",
+  iuml: "ï",
+  eth: "ð",
+  ntilde: "ñ",
+  ograve: "ò",
+  oacute: "ó",
+  ocirc: "ô",
+  otilde: "õ",
+  ouml: "ö",
+  oslash: "ø",
+  ugrave: "ù",
+  uacute: "ú",
+  ucirc: "û",
+  uuml: "ü",
+  yacute: "ý",
+  yuml: "ÿ",
+  Agrave: "À",
+  Aacute: "Á",
+  Acirc: "Â",
+  Atilde: "Ã",
+  Auml: "Ä",
+  Aring: "Å",
+  AElig: "Æ",
+  Ccedil: "Ç",
+  Egrave: "È",
+  Eacute: "É",
+  Ecirc: "Ê",
+  Euml: "Ë",
+  Igrave: "Ì",
+  Iacute: "Í",
+  Icirc: "Î",
+  Iuml: "Ï",
+  Ntilde: "Ñ",
+  Ograve: "Ò",
+  Oacute: "Ó",
+  Ocirc: "Ô",
+  Otilde: "Õ",
+  Ouml: "Ö",
+  Oslash: "Ø",
+  Ugrave: "Ù",
+  Uacute: "Ú",
+  Ucirc: "Û",
+  Uuml: "Ü",
+  Yacute: "Ý"
+};
+
 function decodeHtmlEntities(value) {
-  return String(value ?? "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/gi, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\\\//g, "/");
+  let output = String(value ?? "");
+
+  for (let i = 0; i < 3; i += 1) {
+    const decoded = output
+      .replace(/&#(\d+);/g, (match, code) => {
+        const numeric = Number.parseInt(code, 10);
+        return Number.isFinite(numeric) ? String.fromCodePoint(numeric) : match;
+      })
+      .replace(/&#x([0-9a-fA-F]+);/g, (match, code) => {
+        const numeric = Number.parseInt(code, 16);
+        return Number.isFinite(numeric) ? String.fromCodePoint(numeric) : match;
+      })
+      .replace(/&([a-zA-Z][a-zA-Z0-9]+);/g, (match, name) => {
+        return Object.prototype.hasOwnProperty.call(HTML_ENTITY_MAP, name)
+          ? HTML_ENTITY_MAP[name]
+          : match;
+      })
+      .replace(/\\\//g, "/");
+
+    if (decoded === output) {
+      break;
+    }
+
+    output = decoded;
+  }
+
+  return output;
 }
 
 function cleanPreviewText(value, maxLength = 240) {
   const text = decodeHtmlEntities(String(value ?? "").replace(/\s+/g, " ").trim());
   if (!text) return "";
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function normalizeOgCanvasText(value) {
+  return decodeHtmlEntities(String(value ?? ""))
+    .normalize("NFC")
+    .replace(/[‘’′]/g, "'")
+    .replace(/[“”″]/g, '"')
+    .replace(/[–—−]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/ /g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function resolvePreviewUrl(rawUrl, baseUrl) {
@@ -1651,7 +1772,7 @@ if (!debate) {
 
     ctx.fillStyle = "#111111";
     ctx.font = "bold 42px Arial";
-    wrapTextCentered(ctx, debate.question || "Débat sur Agôn", cardWidth / 2, 250, 920, 52);
+    wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur Agôn"), cardWidth / 2, 250, 920, 52);
 
     const barX = 140;
     const barY = 340;
@@ -1687,8 +1808,8 @@ if (!debate) {
     ctx.fillStyle = "#111111";
     ctx.font = "bold 28px Arial";
 
-    wrapText(ctx, debate.option_a || "", 140, 430, 380, 38);
-    wrapText(ctx, debate.option_b || "", 680, 430, 380, 38);
+    wrapText(ctx, normalizeOgCanvasText(debate.option_a || ""), 140, 430, 380, 38);
+    wrapText(ctx, normalizeOgCanvasText(debate.option_b || ""), 680, 430, 380, 38);
 
     ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 2;
@@ -1700,7 +1821,7 @@ if (!debate) {
     ctx.fillStyle = "#4b5563";
     ctx.font = "28px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Comparez les arguments sur agôn - l'arène des idées", cardWidth / 2, 590);
+    ctx.fillText(normalizeOgCanvasText("Comparez les arguments sur agôn - l\'arène des idées"), cardWidth / 2, 590);
     ctx.textAlign = "left";
 
     res.setHeader("Content-Type", "image/png");
