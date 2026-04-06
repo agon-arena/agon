@@ -5961,6 +5961,16 @@ body.debate-topbar-hidden .debate-hero-top {
     display: none !important;
   }
 }
+
+@media (max-width: 768px) {
+  #global-share-bar .share-button[onclick*="shareOnFacebook"],
+  #global-share-bar .share-button[onclick*="shareOnMastodon"],
+  #global-share-bar .share-button.share-facebook,
+  #global-share-bar .share-button.share-mastodon {
+    display: none !important;
+  }
+}
+
 /* ===== MOBILE : enlever la petite flèche du bloc titre uniquement ===== */
 @media (max-width: 768px) {
   .debate-title-side-tools,
@@ -6484,7 +6494,7 @@ padding:4px 14px 12px 14px;
 @media (min-width: 901px) {
   #debate-question,
   .debate-hero h1 {
-    font-size: 36px !important;
+    font-size: 32px !important;
     line-height: 1.2 !important;
   }
 }
@@ -6566,7 +6576,7 @@ padding:4px 14px 12px 14px;
 @media (max-width: 768px) {
   .page-debate #debate-source-preview-wrap,
   .page-debate .debate-source-preview-wrap {
-    margin: 14px auto 14px auto;
+    margin: 8px auto 12px auto;
   }
 }
 .create-submit-loading {
@@ -7881,5 +7891,11 @@ body.index-batch-loading-active {
 
   .index-batch-loading-overlay-visible {
     pointer-events: auto;
+  }
+}
+@media (max-width: 768px) {
+  #global-share-bar .share-icon-button.facebook,
+  #global-share-bar .share-icon-button.mastodon {
+    display: none !important;
   }
 }

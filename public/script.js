@@ -4009,6 +4009,24 @@ const body = `${text} ${url}`;
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
+function shareOnLinkedIn() {
+  const { text, url } = getGlobalShareData();
+  const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}&summary=${encodeURIComponent(text)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareOnMastodon() {
+  const { text, url } = getGlobalShareData();
+  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(text + " " + url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareOnReddit() {
+  const { title, url } = getGlobalShareData();
+  const shareUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
 async function shareOnInstagram() {
   const { url } = getGlobalShareData();
 
@@ -4055,6 +4073,51 @@ function getGlobalShareData() {
 function renderGlobalShareBar() {
   const container = document.getElementById("global-share-bar");
   if (!container) return;
+
+  const isDebatePage = document.body?.classList.contains("page-debate");
+
+  if (isDebatePage) {
+    container.innerHTML = `
+      <div class="debate-card-share-actions debate-title-share-actions">
+        <button class="share-icon-button copy" type="button" onclick="copyDebateLink()" title="Copier le lien">
+          <i class="fa-solid fa-link"></i>
+        </button>
+
+        <button class="share-icon-button qrcode" type="button" onclick="showDebateQrCode()" title="Afficher le QR code">
+          <i class="fa-solid fa-qrcode"></i>
+        </button>
+
+        <button class="share-icon-button x" type="button" onclick="shareOnX()" title="Partager sur X">
+          <i class="fa-brands fa-x-twitter"></i>
+        </button>
+
+        <button class="share-icon-button facebook" type="button" onclick="shareOnFacebook()" title="Partager sur Facebook">
+          <i class="fa-brands fa-facebook"></i>
+        </button>
+
+        <button class="share-icon-button whatsapp" type="button" onclick="shareOnWhatsApp()" title="Partager sur WhatsApp">
+          <i class="fa-brands fa-whatsapp"></i>
+        </button>
+
+        <button class="share-icon-button email" type="button" onclick="shareByEmail()" title="Partager par mail">
+          <i class="fa-solid fa-envelope"></i>
+        </button>
+
+        <button class="share-icon-button linkedin" type="button" onclick="shareOnLinkedIn()" title="Partager sur LinkedIn">
+          <i class="fa-brands fa-linkedin-in"></i>
+        </button>
+
+        <button class="share-icon-button mastodon" type="button" onclick="shareOnMastodon()" title="Partager sur Mastodon">
+          <i class="fa-brands fa-mastodon"></i>
+        </button>
+
+        <button class="share-icon-button reddit" type="button" onclick="shareOnReddit()" title="Partager sur Reddit">
+          <i class="fa-brands fa-reddit-alien"></i>
+        </button>
+      </div>
+    `;
+    return;
+  }
 
   container.innerHTML = `
     <div class="share-bar share-bar-top">
@@ -12650,6 +12713,9 @@ window.shareOnX = shareOnX;
 window.shareOnFacebook = shareOnFacebook;
 window.shareOnWhatsApp = shareOnWhatsApp;
 window.shareByEmail = shareByEmail;
+window.shareOnLinkedIn = shareOnLinkedIn;
+window.shareOnMastodon = shareOnMastodon;
+window.shareOnReddit = shareOnReddit;
 window.shareOnInstagram = shareOnInstagram;
 window.copyIndexDebateLink = copyIndexDebateLink;
 window.shareIndexDebateOnX = shareIndexDebateOnX;
