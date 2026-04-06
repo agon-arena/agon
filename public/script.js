@@ -121,8 +121,13 @@ function updatePageArrivalLoadingOverlayBounds() {
 
   const topbar = document.querySelector(".topbar");
   const bottomBar = document.querySelector(".home-bottom-nav");
+  const isDebatePage = location.pathname === "/debate";
 
-  const top = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
+  const top = isDebatePage
+    ? 0
+    : topbar
+      ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom))
+      : 0;
   const bottom = bottomBar ? Math.max(0, Math.round(window.innerHeight - bottomBar.getBoundingClientRect().top)) : 0;
 
   overlay.style.setProperty("--page-arrival-loading-top", `${top}px`);
