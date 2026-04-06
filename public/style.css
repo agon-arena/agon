@@ -6821,24 +6821,20 @@ padding:4px 14px 12px 14px;
     transform: none;
   }
 
-  .page-home-mobile .debate-card.index-card-active {
-    transform: translateY(-6px);
-    box-shadow:
-      0 18px 40px rgba(15, 23, 42, 0.16),
-      0 0 0 1px rgba(17, 24, 39, 0.08);
-    border-color: #94a3b8;
-    background: #ffffff;
-  }
+.page-home-mobile .debate-card.index-card-active {
+  transform: translateY(-6px);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(17, 24, 39, 0.08);
+  border-color: #94a3b8;
+  background: #ffffff;
+}
 
-  .page-home-mobile .debate-card.index-card-active h2 {
-    color: #111111;
-  }
-
-  .page-home-mobile .debate-card.index-card-active .debate-card-media img,
-  .page-home-mobile .debate-card.index-card-active .debate-card-media video,
-  .page-home-mobile .debate-card.index-card-active .debate-card-media iframe {
-    transform: scale(1.03);
-  }
+.page-home-mobile .debate-card.index-card-active .debate-card-media img,
+.page-home-mobile .debate-card.index-card-active .debate-card-media video,
+.page-home-mobile .debate-card.index-card-active .debate-card-media iframe {
+  transform: none;
+}
 
   .page-home-mobile .debate-card.index-card-active .debate-card-source,
   .page-home-mobile .debate-card.index-card-active .debate-card-youtube-shell,
