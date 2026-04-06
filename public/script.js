@@ -34,6 +34,208 @@ let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
 
+const INDEX_RETURN_SCROLL_KEY = "agon_index_return_scroll_y";
+const INDEX_RETURN_PATH_KEY = "agon_index_return_path";
+const INDEX_RETURN_HASH_KEY = "agon_index_return_hash";
+let indexReturnRestoreAttempted = false;
+
+let pageArrivalLoadingOverlayHideTimer = null;
+let pageArrivalLoadingOverlayFallbackTimer = null;
+let pageArrivalLoadingOverlayReady = false;
+
+function ensurePageArrivalLoadingOverlayStyles() {
+  if (document.getElementById("page-arrival-loading-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "page-arrival-loading-style";
+  style.textContent = `
+    .page-arrival-loading-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--page-arrival-loading-top, 0px);
+      bottom: var(--page-arrival-loading-bottom, 0px);
+      z-index: 18;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(17, 24, 39, 0.18);
+      backdrop-filter: blur(1.5px);
+      -webkit-backdrop-filter: blur(1.5px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .page-arrival-loading-box {
+      width: min(92vw, 360px);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
+      text-align: center;
+    }
+
+    .page-arrival-loading-hourglass {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 12px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+      font-size: 29px;
+      animation: pageArrivalHourglassSpin 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
+
+    .page-arrival-loading-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: #111111;
+    }
+
+    @keyframes pageArrivalHourglassSpin {
+      0% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-2px) rotate(180deg); }
+      100% { transform: translateY(0) rotate(360deg); }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function updatePageArrivalLoadingOverlayBounds() {
+  const overlay = document.getElementById("page-arrival-loading-overlay");
+  if (!overlay) return;
+
+  const topbar = document.querySelector(".topbar");
+  const bottomBar = document.querySelector(".home-bottom-nav");
+
+  const top = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
+  const bottom = bottomBar ? Math.max(0, Math.round(window.innerHeight - bottomBar.getBoundingClientRect().top)) : 0;
+
+  overlay.style.setProperty("--page-arrival-loading-top", `${top}px`);
+  overlay.style.setProperty("--page-arrival-loading-bottom", `${bottom}px`);
+}
+
+function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
+  ensurePageArrivalLoadingOverlayStyles();
+
+  let overlay = document.getElementById("page-arrival-loading-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "page-arrival-loading-overlay";
+    overlay.className = "page-arrival-loading-overlay";
+    overlay.setAttribute("aria-live", "polite");
+    overlay.innerHTML = `
+      <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
+        <div class="page-arrival-loading-hourglass" aria-hidden="true">⌛</div>
+        <div class="page-arrival-loading-title" id="page-arrival-loading-title"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const title = document.getElementById("page-arrival-loading-title");
+  if (title) {
+    title.textContent = String(message || "").trim() || "Chargement en cours";
+  }
+
+  updatePageArrivalLoadingOverlayBounds();
+  overlay.classList.add("page-arrival-loading-overlay-visible");
+}
+
+function hidePageArrivalLoadingOverlay() {
+  const overlay = document.getElementById("page-arrival-loading-overlay");
+  if (!overlay) return;
+
+  if (pageArrivalLoadingOverlayHideTimer) {
+    clearTimeout(pageArrivalLoadingOverlayHideTimer);
+    pageArrivalLoadingOverlayHideTimer = null;
+  }
+
+  overlay.classList.remove("page-arrival-loading-overlay-visible");
+  pageArrivalLoadingOverlayHideTimer = setTimeout(() => {
+    overlay.remove();
+    pageArrivalLoadingOverlayHideTimer = null;
+  }, 180);
+}
+
+function markPageArrivalLoadingOverlayReady() {
+  pageArrivalLoadingOverlayReady = true;
+
+  if (document.documentElement.dataset.pageArrivalLoadingInitialized !== "true") return;
+
+  if (pageArrivalLoadingOverlayFallbackTimer) {
+    clearTimeout(pageArrivalLoadingOverlayFallbackTimer);
+    pageArrivalLoadingOverlayFallbackTimer = null;
+  }
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      updatePageArrivalLoadingOverlayBounds();
+      hidePageArrivalLoadingOverlay();
+    });
+  });
+}
+
+function initPageArrivalLoadingOverlay() {
+  if (document.documentElement.dataset.pageArrivalLoadingInitialized === "true") return;
+  document.documentElement.dataset.pageArrivalLoadingInitialized = "true";
+  pageArrivalLoadingOverlayReady = location.pathname !== "/debate";
+
+  showPageArrivalLoadingOverlay("Chargement en cours");
+
+  const refreshBounds = () => {
+    requestAnimationFrame(updatePageArrivalLoadingOverlayBounds);
+  };
+
+  window.addEventListener("resize", refreshBounds);
+  window.addEventListener("orientationchange", refreshBounds);
+  window.addEventListener("scroll", refreshBounds, { passive: true });
+
+  const finish = (force = false) => {
+    if (location.pathname === "/debate" && !pageArrivalLoadingOverlayReady && !force) {
+      return;
+    }
+
+    if (pageArrivalLoadingOverlayFallbackTimer) {
+      clearTimeout(pageArrivalLoadingOverlayFallbackTimer);
+      pageArrivalLoadingOverlayFallbackTimer = null;
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        updatePageArrivalLoadingOverlayBounds();
+        hidePageArrivalLoadingOverlay();
+      });
+    });
+  };
+
+  if (document.readyState === "complete") {
+    setTimeout(finish, 120);
+  } else {
+    window.addEventListener("load", () => {
+      setTimeout(finish, 120);
+    }, { once: true });
+  }
+
+  pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
+    finish(true);
+  }, location.pathname === "/debate" ? 5000 : 2200);
+}
+
 function getDebateViewMode() {
   const savedMode = localStorage.getItem("debate_view_mode");
   return savedMode === "list" ? "list" : "columns";
@@ -980,7 +1182,198 @@ function openIndexDebateFromMedia(debateId, event) {
   const safeDebateId = String(debateId || "").trim();
   if (!safeDebateId) return;
 
+  saveIndexReturnState();
   window.location.href = `/debate?id=${encodeURIComponent(safeDebateId)}`;
+}
+
+function saveIndexReturnState() {
+  if (location.pathname !== "/") return;
+
+  try {
+    sessionStorage.setItem(INDEX_RETURN_SCROLL_KEY, String(Math.max(0, Math.round(window.scrollY || 0))));
+    sessionStorage.setItem(INDEX_RETURN_PATH_KEY, location.pathname + location.search);
+    sessionStorage.setItem(INDEX_RETURN_HASH_KEY, location.hash || "");
+  } catch (error) {
+    console.warn("[index-return] impossible d'enregistrer la position de retour.", error);
+  }
+}
+
+function clearIndexReturnState() {
+  try {
+    sessionStorage.removeItem(INDEX_RETURN_SCROLL_KEY);
+    sessionStorage.removeItem(INDEX_RETURN_PATH_KEY);
+    sessionStorage.removeItem(INDEX_RETURN_HASH_KEY);
+  } catch (error) {
+    console.warn("[index-return] impossible d'effacer la position de retour.", error);
+  }
+}
+
+function getSavedIndexReturnScrollY() {
+  try {
+    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
+    if (savedPath && savedPath !== location.pathname + location.search) {
+      return null;
+    }
+
+    const rawValue = sessionStorage.getItem(INDEX_RETURN_SCROLL_KEY);
+    if (rawValue === null || rawValue === "") return null;
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+
+    return parsed;
+  } catch (error) {
+    console.warn("[index-return] impossible de lire la position de retour.", error);
+    return null;
+  }
+}
+
+function restoreIndexReturnStateIfNeeded() {
+  if (location.pathname !== "/" || indexReturnRestoreAttempted) return;
+
+  const savedScrollY = getSavedIndexReturnScrollY();
+  if (savedScrollY === null) return;
+
+  indexReturnRestoreAttempted = true;
+
+  let attempts = 0;
+  let stableHeightCount = 0;
+  let lastScrollHeight = 0;
+  const maxAttempts = 30;
+
+  const restoreScroll = () => {
+    window.scrollTo(0, savedScrollY);
+  };
+
+  const tick = () => {
+    attempts += 1;
+
+    const currentScrollHeight = Math.max(
+      document.body ? document.body.scrollHeight : 0,
+      document.documentElement ? document.documentElement.scrollHeight : 0
+    );
+
+    restoreScroll();
+
+    if (currentScrollHeight === lastScrollHeight) {
+      stableHeightCount += 1;
+    } else {
+      stableHeightCount = 0;
+      lastScrollHeight = currentScrollHeight;
+    }
+
+    const reachedTarget = Math.abs(window.scrollY - savedScrollY) <= 4;
+    const pageStable = stableHeightCount >= 3;
+
+    if ((reachedTarget && pageStable) || attempts >= maxAttempts) {
+      restoreScroll();
+      setTimeout(() => {
+        restoreScroll();
+        clearIndexReturnState();
+      }, 120);
+      return;
+    }
+
+    setTimeout(() => {
+      requestAnimationFrame(tick);
+    }, 120);
+  };
+
+  requestAnimationFrame(() => {
+    setTimeout(tick, 80);
+  });
+}
+
+function initIndexReturnNavigation() {
+  if (location.pathname === "/") {
+    if (window.__agonIndexReturnNavigationInitialized) return;
+    window.__agonIndexReturnNavigationInitialized = true;
+
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest('a[href^="/debate?id="]');
+      if (!link) return;
+      if (!document.body.classList.contains("page-home")) return;
+      saveIndexReturnState();
+    });
+
+    return;
+  }
+
+  if (location.pathname !== "/debate") return;
+  if (window.__agonDebateBackNavigationInitialized) return;
+  window.__agonDebateBackNavigationInitialized = true;
+
+  const backSelectors = [
+    ".debate-title-side-tools .debate-back-arrow",
+    ".mobile-topbar-actions .topbar-back-arrow",
+    ".debate-nav-row .back-link"
+  ];
+
+  const setPendingBackButtonsState = () => {
+    const buttons = [];
+
+    backSelectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((element) => {
+        if (!buttons.includes(element)) {
+          buttons.push(element);
+        }
+      });
+    });
+
+    buttons.forEach((element) => {
+      if (element.dataset.backPending === "true") return;
+      element.dataset.backPending = "true";
+      element.dataset.backPendingPointerEvents = element.style.pointerEvents || "";
+      element.dataset.backPendingOpacity = element.style.opacity || "";
+      element.dataset.backPendingFilter = element.style.filter || "";
+      element.dataset.backPendingColor = element.style.color || "";
+      element.dataset.backPendingBackground = element.style.background || "";
+      element.style.pointerEvents = "none";
+      element.style.opacity = "0.65";
+      element.style.filter = "grayscale(1)";
+      element.style.color = "#6b7280";
+      element.style.background = "#e5e7eb";
+      element.setAttribute("aria-disabled", "true");
+    });
+
+    window.setTimeout(() => {
+      buttons.forEach((element) => {
+        if (element.dataset.backPending !== "true") return;
+        element.style.pointerEvents = element.dataset.backPendingPointerEvents || "";
+        element.style.opacity = element.dataset.backPendingOpacity || "";
+        element.style.filter = element.dataset.backPendingFilter || "";
+        element.style.color = element.dataset.backPendingColor || "";
+        element.style.background = element.dataset.backPendingBackground || "";
+        element.removeAttribute("aria-disabled");
+        delete element.dataset.backPending;
+        delete element.dataset.backPendingPointerEvents;
+        delete element.dataset.backPendingOpacity;
+        delete element.dataset.backPendingFilter;
+        delete element.dataset.backPendingColor;
+        delete element.dataset.backPendingBackground;
+      });
+    }, 2000);
+  };
+
+  const goBackToIndex = (event) => {
+    event.preventDefault();
+
+    const hasSavedIndexState = getSavedIndexReturnScrollY() !== null;
+    setPendingBackButtonsState();
+
+    if (hasSavedIndexState && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    window.location.href = "/";
+  };
+
+  backSelectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((element) => {
+      element.addEventListener("click", goBackToIndex);
+    });
+  });
 }
 
 async function fetchJSON(url, opt = {}) {
@@ -2145,7 +2538,6 @@ function updateMobileIndexCardHighlight() {
   }
 
 const isMobileHome =
-  false &&
   document.body.classList.contains('page-home-mobile') &&
   !getDebateId();
 
@@ -3016,44 +3408,12 @@ function clearNotificationTransitionState() {
   }
 }
 
-function showNotificationTransitionOverlay(message = "Ouverture en cours…") {
-  ensureNotificationTransitionOverlayStyles();
-
-  let overlay = document.getElementById("notification-transition-overlay");
-  if (!overlay) {
-    overlay = document.createElement("div");
-    overlay.id = "notification-transition-overlay";
-    overlay.className = "notification-transition-overlay";
-    overlay.innerHTML = `
-      <div class="notification-transition-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="notification-transition-hourglass" aria-hidden="true">⌛</div>
-        <div class="notification-transition-text" id="notification-transition-text"></div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-  }
-
-  const textEl = document.getElementById("notification-transition-text");
-  if (textEl) {
-    textEl.textContent = message;
-  }
-
-  overlay.classList.add("notification-transition-overlay-visible");
+function showNotificationTransitionOverlay(message = "Chargement en cours") {
+  showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
 
 function hideNotificationTransitionOverlay() {
-  const overlay = document.getElementById("notification-transition-overlay");
-  if (!overlay) {
-    clearNotificationTransitionState();
-    return;
-  }
-
-  overlay.classList.remove("notification-transition-overlay-visible");
-
-  setTimeout(() => {
-    overlay.remove();
-  }, 180);
-
+  hidePageArrivalLoadingOverlay();
   clearNotificationTransitionState();
 }
 
@@ -6025,6 +6385,7 @@ async function initIndex() {
     }
 
     setTypeFilter("all");
+    restoreIndexReturnStateIfNeeded();
   } catch (error) {
     alert(error.message);
   }
@@ -8186,7 +8547,10 @@ async function initDebate() {
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
 
-  if (!id) return;
+  if (!id) {
+    markPageArrivalLoadingOverlayReady();
+    return;
+  }
 
   currentDebateViewMode = getDebateViewMode();
   updateDebateViewModeUI();
@@ -8224,7 +8588,11 @@ if (formList) {
     });
   }
 
-  await loadDebate(id);
+  try {
+    await loadDebate(id);
+  } finally {
+    markPageArrivalLoadingOverlayReady();
+  }
 }
 
 
@@ -8394,6 +8762,13 @@ function loadInstagramEmbedScript() {
   return instagramEmbedLoaderPromise;
 }
 
+function updateDebateSourcePreviewVerticalOffset() {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  if (!sourcePreviewWrap) return;
+
+  sourcePreviewWrap.style.marginTop = "-8px";
+}
+
 function destroyDebateInstagramEmbed() {
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
@@ -8406,6 +8781,7 @@ function destroyDebateInstagramEmbed() {
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "none";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourceFallback) {
@@ -8482,6 +8858,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "flex";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourcePreview) {
@@ -8607,6 +8984,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "flex";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourcePreview) {
@@ -8698,6 +9076,7 @@ function resetDebateSourcePreview() {
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "none";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourcePreview) {
@@ -8738,6 +9117,7 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "flex";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourceLoading) {
@@ -8888,6 +9268,7 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "block";
+    updateDebateSourcePreviewVerticalOffset();
   }
 
   if (sourcePoster) {
@@ -12149,6 +12530,8 @@ function ensureProgressSortOption() {
   }
 }
 
+initPageArrivalLoadingOverlay();
+
 document.addEventListener("DOMContentLoaded", () => {
 initMobileIndexCardHighlight();
 scheduleMobileIndexCardHighlightUpdate();
@@ -12160,6 +12543,7 @@ scheduleMobileIndexCardHighlightUpdate();
   initDebateTopbarAutoHide();
   initHomeTopbarAutoHide();
   initHomeBottomShareMenu();
+  initIndexReturnNavigation();
 
   if (location.pathname === "/") initIndex();
   if (location.pathname === "/create") initCreate();
@@ -12914,6 +13298,11 @@ window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
 
 function updateHomeBottomNavViewportOffset() {
   if (window.innerWidth > 768) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  if (document.body.classList.contains('page-home-mobile')) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
     return;
   }

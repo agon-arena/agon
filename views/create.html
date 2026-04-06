@@ -81,6 +81,52 @@
     </div>
 
     <div class="topbar-actions">
+      <div class="home-topbar-menu-wrap">
+        <button
+          type="button"
+          id="home-topbar-menu-toggle"
+          class="home-topbar-menu-toggle"
+          aria-label="Ouvrir le menu"
+          aria-controls="home-topbar-menu"
+          aria-expanded="false"
+          onclick="toggleHomeTopbarMenu(event)"
+        >
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div
+          id="home-topbar-menu"
+          class="home-topbar-menu"
+          onclick="event.stopPropagation()"
+          aria-label="Menu du bandeau"
+        >
+          <a href="/" class="home-topbar-menu-item" id="home-topbar-explore-link">
+            <i class="fa-regular fa-compass"></i>
+            <span>Explorer les arènes</span>
+          </a>
+
+          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link">
+            <i class="fa-solid fa-plus"></i>
+            <span>Ouvrir une arène</span>
+          </a>
+
+          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link">
+            <i class="fa-regular fa-bell"></i>
+            <span>Notifications</span>
+          </a>
+
+          <button type="button" class="home-topbar-menu-item" id="home-topbar-login-button">
+            <i class="fa-regular fa-user"></i>
+            <span>Se connecter</span>
+          </button>
+
+          <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-signup-button">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>S'inscrire</span>
+          </button>
+        </div>
+      </div>
+
       <div class="back-notifications-stack">
         <a href="/" class="back-link create-back-link">← Retour aux arènes</a>
 
@@ -103,6 +149,14 @@
 
   </div>
 </header>
+
+<button
+  type="button"
+  id="home-topbar-menu-backdrop"
+  class="home-topbar-menu-backdrop"
+  aria-label="Fermer le menu"
+  onclick="closeHomeTopbarMenu()"
+></button>
 
 
   <main class="container create-page">
@@ -287,7 +341,7 @@
 </div>
 
         <div class="create-actions create-actions-sticky">
-          <button class="button create-submit-button" type="submit">Créer l'arène</button>
+          <button class="button create-submit-button" type="submit">Ouvrir l'arène</button>
         </div>
         <p id="create-submit-helper" class="create-submit-helper" aria-live="assertive" role="alert"></p>
 
