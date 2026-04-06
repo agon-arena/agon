@@ -2424,24 +2424,7 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    const rowsWithSourcePreview = await Promise.all(rows.map(async (row) => {
-      if (!String(row.source_url || '').trim()) {
-        return row;
-      }
-
-      try {
-        const sourcePreview = await getExternalLinkPreview(row.source_url);
-        return {
-          ...row,
-          source_preview: sourcePreview
-        };
-      } catch (error) {
-        console.error('Erreur preview source index:', error);
-        return row;
-      }
-    }));
-
-    rowsWithSourcePreview.sort((a, b) => {
+    rows.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
       const aDate = a.last_argument_at || a.created_at || "";
       const bDate = b.last_argument_at || b.created_at || "";
@@ -2449,7 +2432,7 @@ app.get("/api/debates", async (req, res) => {
       return Number(b.id) - Number(a.id);
     });
 
-    res.json(rowsWithSourcePreview);
+    res.json(rows);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture débats.");
