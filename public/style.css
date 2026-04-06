@@ -6959,7 +6959,7 @@ padding:4px 14px 12px 14px;
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -8px;
+  bottom: 0;
   height: 8px;
   background: linear-gradient(
     90deg,
