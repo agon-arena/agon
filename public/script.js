@@ -2444,6 +2444,91 @@ function isElementNearViewport(element, extraMargin = 160) {
   return rect.bottom >= -extraMargin && rect.top <= viewportHeight + extraMargin;
 }
 
+function getDefaultIndexEmbedReservedHeight(type = '') {
+  const normalizedType = String(type || '').trim().toLowerCase();
+  const isMobile = window.innerWidth <= 768;
+
+  if (normalizedType === 'instagram') {
+    return isMobile ? 610 : 560;
+  }
+
+  if (normalizedType === 'x') {
+    return isMobile ? 540 : 500;
+  }
+
+  return isMobile ? 520 : 480;
+}
+
+function reserveIndexEmbedShellHeight(shell, type = '') {
+  if (!shell) return 0;
+
+  const measuredHeight = shell.getBoundingClientRect().height || 0;
+  const reservedFromDataset = Number(shell.dataset.reservedHeight || 0);
+  const targetHeight = Math.max(
+    measuredHeight,
+    reservedFromDataset,
+    getDefaultIndexEmbedReservedHeight(type)
+  );
+
+  if (targetHeight > 0) {
+    shell.style.minHeight = `${Math.round(targetHeight)}px`;
+    shell.dataset.reservedHeight = String(Math.round(targetHeight));
+  }
+
+  return targetHeight;
+}
+
+function captureIndexEmbedScrollAnchor(shell, type = '') {
+  if (!shell || typeof shell.getBoundingClientRect !== 'function') return null;
+
+  reserveIndexEmbedShellHeight(shell, type);
+
+  const rect = shell.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const topbar = document.querySelector('.topbar');
+  const topbarHeight = topbar ? topbar.offsetHeight : 0;
+  const visibleTopLimit = Math.max(0, topbarHeight - 8);
+  const shouldCompensate = rect.bottom > visibleTopLimit && rect.top < viewportHeight;
+
+  if (!shouldCompensate) return null;
+
+  return {
+    top: rect.top,
+    scrollY: window.scrollY,
+    type: String(type || '').trim().toLowerCase()
+  };
+}
+
+function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
+  if (!shell) return;
+
+  const finalize = () => {
+    const finalHeight = Math.max(shell.getBoundingClientRect().height || 0, Number(shell.dataset.reservedHeight || 0));
+
+    if (finalHeight > 0) {
+      shell.style.minHeight = `${Math.round(finalHeight)}px`;
+      shell.dataset.reservedHeight = String(Math.round(finalHeight));
+    }
+
+    if (!anchor) return;
+    if (Math.abs(window.scrollY - Number(anchor.scrollY || 0)) > 140) return;
+
+    const rect = shell.getBoundingClientRect();
+    const delta = rect.top - Number(anchor.top || 0);
+
+    if (Math.abs(delta) < 2) return;
+
+    window.scrollTo({
+      top: Math.max(0, window.scrollY + delta),
+      behavior: 'auto'
+    });
+  };
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(finalize);
+  });
+}
+
 async function renderIndexXShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
@@ -2454,15 +2539,19 @@ async function renderIndexXShell(shell) {
   const loading = shell.querySelector('[data-index-x-loading]');
   const embed = shell.querySelector('[data-index-x-embed]');
   const fallback = shell.querySelector('[data-index-x-fallback]');
+  const scrollAnchor = captureIndexEmbedScrollAnchor(shell, 'x');
 
   if (!tweetId || !embed) {
     if (loading) loading.style.display = 'none';
     if (fallback) fallback.style.display = '';
     shell.dataset.rendered = 'failed';
+    restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
 
   shell.dataset.rendering = 'true';
+  shell.dataset.embedType = 'x';
+  reserveIndexEmbedShellHeight(shell, 'x');
 
   if (loading) loading.style.display = 'flex';
   if (fallback) fallback.style.display = 'none';
@@ -2470,7 +2559,7 @@ async function renderIndexXShell(shell) {
   embed.innerHTML = '';
   embed.style.display = 'block';
   embed.style.visibility = 'hidden';
-  embed.style.minHeight = '220px';
+  embed.style.minHeight = `${Math.round(Number(shell.dataset.reservedHeight || getDefaultIndexEmbedReservedHeight('x')))}px`;
 
   try {
     await loadXWidgetsScript();
@@ -2506,6 +2595,7 @@ async function renderIndexXShell(shell) {
     console.warn('Impossible de rendre le post X sur index:', sourceUrl || tweetId, error);
   } finally {
     shell.dataset.rendering = 'false';
+    restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
   }
 }
 
@@ -2579,15 +2669,19 @@ async function renderIndexInstagramShell(shell) {
   const loading = shell.querySelector('[data-index-instagram-loading]');
   const embed = shell.querySelector('[data-index-instagram-embed]');
   const fallback = shell.querySelector('[data-index-instagram-fallback]');
+  const scrollAnchor = captureIndexEmbedScrollAnchor(shell, 'instagram');
 
   if (!embedPermalink || !embed) {
     if (loading) loading.style.display = 'none';
     if (fallback) fallback.style.display = '';
     shell.dataset.rendered = 'failed';
+    restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
 
   shell.dataset.rendering = 'true';
+  shell.dataset.embedType = 'instagram';
+  reserveIndexEmbedShellHeight(shell, 'instagram');
 
   if (loading) loading.style.display = 'flex';
   if (fallback) fallback.style.display = 'none';
@@ -2595,7 +2689,7 @@ async function renderIndexInstagramShell(shell) {
   embed.innerHTML = '';
   embed.style.display = 'flex';
   embed.style.visibility = 'hidden';
-  embed.style.minHeight = '220px';
+  embed.style.minHeight = `${Math.round(Number(shell.dataset.reservedHeight || getDefaultIndexEmbedReservedHeight('instagram')))}px`;
 
   try {
     await loadInstagramEmbedScript();
@@ -2634,6 +2728,7 @@ async function renderIndexInstagramShell(shell) {
     console.warn('Impossible de rendre le post Instagram sur index:', sourceUrl || embedPermalink, error);
   } finally {
     shell.dataset.rendering = 'false';
+    restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
   }
 }
 
@@ -4083,6 +4178,34 @@ const body = `${text} ${url}`;
 
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
+
+function shareIndexDebateOnLinkedIn(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIndexDebateOnMastodon(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { text, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(text + " " + url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIndexDebateOnReddit(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { title, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  const shareUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
 /* =========================
    Comment visibility
 ========================= */
@@ -4618,15 +4741,221 @@ let debatesCache = [];
 let visitedDebatesCache = [];
 let otherDebatesCache = [];
 let visitedDebatesVisible = 5;
-let otherDebatesVisible = 6;
+const INDEX_OTHER_DEBATES_BATCH_SIZE = 10;
+let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
+let indexPendingEmbedPreloadRange = null;
+let indexEmbedBatchPreloadPromise = null;
+let indexDeferQueuedPreloadOnce = false;
+let indexBatchScrollLockY = null;
+let indexBatchScrollLockHandlers = null;
+
+function preventIndexBatchScrollWhileLoading(event) {
+  if (!document.body.classList.contains('index-batch-loading-active')) return;
+
+  if (event.type === 'keydown') {
+    const blockedKeys = new Set([
+      'ArrowUp',
+      'ArrowDown',
+      'PageUp',
+      'PageDown',
+      'Home',
+      'End',
+      ' ',
+      'Spacebar'
+    ]);
+
+    if (!blockedKeys.has(event.key)) {
+      return;
+    }
+  }
+
+  event.preventDefault();
+}
+
+function attachIndexBatchScrollLockHandlers() {
+  if (indexBatchScrollLockHandlers) return;
+
+  indexBatchScrollLockHandlers = {
+    wheel: (event) => preventIndexBatchScrollWhileLoading(event),
+    touchmove: (event) => preventIndexBatchScrollWhileLoading(event),
+    keydown: (event) => preventIndexBatchScrollWhileLoading(event)
+  };
+
+  window.addEventListener('wheel', indexBatchScrollLockHandlers.wheel, { passive: false });
+  window.addEventListener('touchmove', indexBatchScrollLockHandlers.touchmove, { passive: false });
+  window.addEventListener('keydown', indexBatchScrollLockHandlers.keydown, { passive: false });
+}
+
+function detachIndexBatchScrollLockHandlers() {
+  if (!indexBatchScrollLockHandlers) return;
+
+  window.removeEventListener('wheel', indexBatchScrollLockHandlers.wheel, { passive: false });
+  window.removeEventListener('touchmove', indexBatchScrollLockHandlers.touchmove, { passive: false });
+  window.removeEventListener('keydown', indexBatchScrollLockHandlers.keydown, { passive: false });
+  indexBatchScrollLockHandlers = null;
+}
+
+function lockIndexBatchScroll() {
+  if (document.body.classList.contains('index-batch-loading-active')) return;
+
+  indexBatchScrollLockY = window.scrollY || window.pageYOffset || 0;
+  document.documentElement.style.top = `-${indexBatchScrollLockY}px`;
+  document.body.style.top = `-${indexBatchScrollLockY}px`;
+  document.documentElement.classList.add('index-batch-loading-active');
+  document.body.classList.add('index-batch-loading-active');
+  attachIndexBatchScrollLockHandlers();
+}
+
+function unlockIndexBatchScroll() {
+  const wasLocked = document.body.classList.contains('index-batch-loading-active');
+  const savedY = Number(indexBatchScrollLockY || 0);
+
+  document.documentElement.classList.remove('index-batch-loading-active');
+  document.body.classList.remove('index-batch-loading-active');
+  document.documentElement.style.top = '';
+  document.body.style.top = '';
+  detachIndexBatchScrollLockHandlers();
+  indexBatchScrollLockY = null;
+
+  if (wasLocked) {
+    window.scrollTo({ top: Math.max(0, savedY), behavior: 'auto' });
+  }
+}
 
 function cleanupIndexInfiniteScrollObserver() {
   if (indexInfiniteScrollObserver) {
     indexInfiniteScrollObserver.disconnect();
     indexInfiniteScrollObserver = null;
   }
+}
+
+function ensureIndexBatchLoadingOverlay() {
+  let overlay = document.getElementById('index-batch-loading-overlay');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('div');
+  overlay.id = 'index-batch-loading-overlay';
+  overlay.className = 'index-batch-loading-overlay';
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.innerHTML = `
+    <div class="index-batch-loading-card">
+      <span class="load-more-spinner" aria-hidden="true"></span>
+      <span class="index-batch-loading-text">Chargement…</span>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
+  const sentinel = document.getElementById('index-infinite-scroll-sentinel');
+  const overlay = ensureIndexBatchLoadingOverlay();
+  const loading = !!isLoading;
+  const safeMessage = String(message || '').trim() || 'Chargement des arènes';
+
+  if (loading) {
+    lockIndexBatchScroll();
+  } else {
+    unlockIndexBatchScroll();
+  }
+
+  if (sentinel) {
+    sentinel.classList.toggle('load-more-container-loading', loading);
+    sentinel.setAttribute('aria-busy', loading ? 'true' : 'false');
+
+    if (!sentinel.dataset.baseMessage) {
+      sentinel.dataset.baseMessage = 'Fais défiler pour charger la suite';
+    }
+
+    const text = loading ? safeMessage : sentinel.dataset.baseMessage;
+
+    sentinel.innerHTML = `
+      <div class="load-more-status">
+        ${loading ? '<span class="load-more-spinner" aria-hidden="true"></span>' : ''}
+        <span class="load-more-text">${escapeHtml(text)}</span>
+      </div>
+    `;
+  }
+
+  if (overlay) {
+    const textNode = overlay.querySelector('.index-batch-loading-text');
+    if (textNode) {
+      textNode.textContent = safeMessage;
+    }
+    overlay.classList.toggle('index-batch-loading-overlay-visible', loading);
+    overlay.setAttribute('aria-hidden', loading ? 'false' : 'true');
+  }
+}
+
+function getIndexEmbedShellsInDebateRange(startIndex = 0, endIndex = 0) {
+  const cards = Array.from(document.querySelectorAll('#debates-list .debate-card'));
+  if (!cards.length) return [];
+
+  const start = Math.max(0, Number(startIndex) || 0);
+  const end = Math.max(start, Number(endIndex) || 0);
+
+  return cards
+    .slice(start, end)
+    .flatMap((card) => Array.from(card.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]')));
+}
+
+async function preloadIndexEmbedsForDebateRange(startIndex = 0, endIndex = 0) {
+  const shells = getIndexEmbedShellsInDebateRange(startIndex, endIndex).filter((shell) => {
+    const rendered = String(shell?.dataset?.rendered || '').trim();
+    const rendering = String(shell?.dataset?.rendering || '').trim();
+    return rendering !== 'true' && rendered !== 'true' && rendered !== 'failed';
+  });
+
+  if (!shells.length) return;
+
+  setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
+
+  for (const shell of shells) {
+    const isInstagram = shell.hasAttribute('data-index-instagram-shell');
+
+    if (isInstagram) {
+      await renderIndexInstagramShell(shell);
+    } else {
+      await renderIndexXShell(shell);
+    }
+  }
+
+  setIndexInfiniteScrollLoadingState(false);
+}
+
+function queueIndexEmbedPreloadRange(startIndex = 0, endIndex = 0) {
+  indexPendingEmbedPreloadRange = {
+    start: Math.max(0, Number(startIndex) || 0),
+    end: Math.max(0, Number(endIndex) || 0)
+  };
+}
+
+function runQueuedIndexEmbedPreloadIfNeeded() {
+  const range = indexPendingEmbedPreloadRange;
+  indexPendingEmbedPreloadRange = null;
+
+  if (!range || range.end <= range.start) {
+    setIndexInfiniteScrollLoadingState(false);
+    return Promise.resolve();
+  }
+
+  const job = preloadIndexEmbedsForDebateRange(range.start, range.end)
+    .catch((error) => {
+      console.warn('Préchargement des embeds index interrompu :', error);
+    })
+    .finally(() => {
+      if (indexEmbedBatchPreloadPromise === job) {
+        indexEmbedBatchPreloadPromise = null;
+      }
+      setIndexInfiniteScrollLoadingState(false);
+      scheduleMobileIndexCardHighlightUpdate();
+    });
+
+  indexEmbedBatchPreloadPromise = job;
+  return job;
 }
 
 function setupIndexInfiniteScroll() {
@@ -4980,7 +5309,7 @@ function ensureCategoryFilterControl() {
   select.addEventListener("change", () => {
     currentCategoryFilter = select.value || "all";
     visitedDebatesVisible = 5;
-    otherDebatesVisible = 6;
+    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
     applyIndexFilters();
   });
 
@@ -5136,18 +5465,18 @@ const contextHtml = buildIndexContextPreviewHtml(d);
 
 <div class="debate-card-share-actions">
             <button
-              class="share-icon-button"
+              class="share-icon-button copy"
               type="button"
-              onclick="copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"
+              onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"
               title="Copier le lien"
             >
               <i class="fa-solid fa-link"></i>
             </button>
 
             <button
-              class="share-icon-button"
+              class="share-icon-button qrcode"
               type="button"
-              onclick="showIndexDebateQrCode(
+              onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode(
   '${d.id}',
   '${encodeURIComponent(String(d.question || ""))}',
   '${encodeURIComponent(String(d.option_a || ""))}',
@@ -5162,9 +5491,9 @@ const contextHtml = buildIndexContextPreviewHtml(d);
             </button>
 
             <button
-              class="share-icon-button"
+              class="share-icon-button x"
               type="button"
-         onclick="shareIndexDebateOnX(
+         onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX(
   '${d.id}',
   '${encodeURIComponent(String(d.question || ""))}',
   '${encodeURIComponent(String(d.option_a || ""))}',
@@ -5179,18 +5508,18 @@ const contextHtml = buildIndexContextPreviewHtml(d);
             </button>
 
             <button
-              class="share-icon-button"
+              class="share-icon-button facebook"
               type="button"
-              onclick="shareIndexDebateOnFacebook('${d.id}')"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"
               title="Partager sur Facebook"
             >
               <i class="fa-brands fa-facebook"></i>
             </button>
 
             <button
-              class="share-icon-button"
+              class="share-icon-button whatsapp"
               type="button"
-             onclick="shareIndexDebateOnWhatsApp(
+             onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp(
   '${d.id}',
   '${encodeURIComponent(String(d.question || ""))}',
   '${encodeURIComponent(String(d.option_a || ""))}',
@@ -5205,9 +5534,9 @@ const contextHtml = buildIndexContextPreviewHtml(d);
             </button>
 
             <button
-              class="share-icon-button"
+              class="share-icon-button email"
               type="button"
-             onclick="shareIndexDebateByEmail(
+             onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail(
   '${d.id}',
   '${encodeURIComponent(String(d.question || ""))}',
   '${encodeURIComponent(String(d.option_a || ""))}',
@@ -5219,6 +5548,57 @@ const contextHtml = buildIndexContextPreviewHtml(d);
               title="Partager par email"
             >
               <i class="fa-solid fa-envelope"></i>
+            </button>
+
+            <button
+              class="share-icon-button linkedin"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur LinkedIn"
+            >
+              <i class="fa-brands fa-linkedin-in"></i>
+            </button>
+
+            <button
+              class="share-icon-button mastodon"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur Mastodon"
+            >
+              <i class="fa-brands fa-mastodon"></i>
+            </button>
+
+            <button
+              class="share-icon-button reddit"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur Reddit"
+            >
+              <i class="fa-brands fa-reddit-alien"></i>
             </button>
           </div>
 
@@ -5327,52 +5707,103 @@ ${
 
 <div class="debate-card-share-actions">
           <button
-            class="share-icon-button"
+            class="share-icon-button copy"
             type="button"
-onclick="copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Copier le lien"
+onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Copier le lien"
           >
             <i class="fa-solid fa-link"></i>
           </button>
 
           <button
-            class="share-icon-button"
+            class="share-icon-button qrcode"
             type="button"
-onclick="showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Afficher le QR code"
+onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Afficher le QR code"
           >
             <i class="fa-solid fa-qrcode"></i>
           </button>
 
           <button
-            class="share-icon-button"
+            class="share-icon-button x"
             type="button"
-onclick="shareIndexDebateOnX('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager sur X"
+onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager sur X"
           >
             <i class="fa-brands fa-x-twitter"></i>
           </button>
 
           <button
-            class="share-icon-button"
+            class="share-icon-button facebook"
             type="button"
-onclick="shareIndexDebateOnFacebook('${d.id}')"            title="Partager sur Facebook"
+onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"            title="Partager sur Facebook"
           >
             <i class="fa-brands fa-facebook"></i>
           </button>
 
           <button
-            class="share-icon-button"
+            class="share-icon-button whatsapp"
             type="button"
-onclick="shareIndexDebateOnWhatsApp('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager sur WhatsApp"
+onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager sur WhatsApp"
           >
             <i class="fa-brands fa-whatsapp"></i>
           </button>
 
           <button
-            class="share-icon-button"
+            class="share-icon-button email"
             type="button"
-onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager par email"
+onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"            title="Partager par email"
           >
             <i class="fa-solid fa-envelope"></i>
           </button>
+
+            <button
+              class="share-icon-button linkedin"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur LinkedIn"
+            >
+              <i class="fa-brands fa-linkedin-in"></i>
+            </button>
+
+            <button
+              class="share-icon-button mastodon"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur Mastodon"
+            >
+              <i class="fa-brands fa-mastodon"></i>
+            </button>
+
+            <button
+              class="share-icon-button reddit"
+              type="button"
+              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit(
+  '${d.id}',
+  '${encodeURIComponent(String(d.question || ""))}',
+  '${encodeURIComponent(String(d.option_a || ""))}',
+  '${encodeURIComponent(String(d.option_b || ""))}',
+  '${d.percent_a ?? 50}',
+  '${d.percent_b ?? 50}',
+  '${encodeURIComponent(String(d.type || "debate"))}'
+)"
+              title="Partager sur Reddit"
+            >
+              <i class="fa-brands fa-reddit-alien"></i>
+            </button>
         </div>
 
         <button
@@ -5394,7 +5825,9 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
     <div
       id="index-infinite-scroll-sentinel"
       class="load-more-container"
-      aria-hidden="true"
+      aria-live="polite"
+      aria-busy="false"
+      data-base-message="Fais défiler pour charger la suite"
     ></div>
   `;
 }
@@ -5405,25 +5838,46 @@ onclick="shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.quest
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
   initIndexInstagramObserver(document);
+  setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
+  if (!indexDeferQueuedPreloadOnce) {
+    requestAnimationFrame(() => {
+      runQueuedIndexEmbedPreloadIfNeeded();
+    });
+  } else {
+    indexDeferQueuedPreloadOnce = false;
+  }
 }
-function loadMoreOtherDebates() {
+async function loadMoreOtherDebates() {
   if (indexInfiniteScrollLoading) return;
   if (otherDebatesVisible >= otherDebatesCache.length) return;
 
   indexInfiniteScrollLoading = true;
-  otherDebatesVisible += 6;
+  const previousVisible = otherDebatesVisible;
+  otherDebatesVisible = Math.min(
+    otherDebatesVisible + INDEX_OTHER_DEBATES_BATCH_SIZE,
+    otherDebatesCache.length
+  );
+  queueIndexEmbedPreloadRange(previousVisible, otherDebatesVisible);
+  setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
+  indexDeferQueuedPreloadOnce = true;
   renderDebatesList(otherDebatesCache);
 
-  requestAnimationFrame(() => {
+  try {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await runQueuedIndexEmbedPreloadIfNeeded();
+  } catch (error) {
+    console.warn('Chargement des prochains posts index interrompu :', error);
+  } finally {
     indexInfiniteScrollLoading = false;
-  });
+    setIndexInfiniteScrollLoadingState(false);
+  }
 }
 function filterDebates() {
   const input = document.getElementById("debate-search");
   if (!input) return;
 
   visitedDebatesVisible = 5;
-  otherDebatesVisible = 6;
+  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
   applyIndexFilters();
 }
 
@@ -5452,7 +5906,7 @@ function setTypeFilter(type) {
   }
 
   visitedDebatesVisible = 5;
-  otherDebatesVisible = 6;
+  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 
   applyIndexFilters();
 }
@@ -5483,6 +5937,7 @@ function updateIndexLists(debates) {
     otherHeaderTitle.textContent = "Arènes ouvertes";
   }
 
+  queueIndexEmbedPreloadRange(0, Math.min(otherDebatesVisible, otherDebatesCache.length));
   renderVisitedDebatesList([]);
   renderDebatesList(otherDebatesCache);
 }
@@ -5493,7 +5948,7 @@ async function initIndex() {
     const debates = await fetchJSON(API + "/debates");
     debatesCache = debates;
     visitedDebatesVisible = 5;
-    otherDebatesVisible = 6;
+    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
     currentTypeFilter = "all";
     currentCategoryFilter = "all";
 
@@ -12201,6 +12656,9 @@ window.shareIndexDebateOnX = shareIndexDebateOnX;
 window.shareIndexDebateOnFacebook = shareIndexDebateOnFacebook;
 window.shareIndexDebateOnWhatsApp = shareIndexDebateOnWhatsApp;
 window.shareIndexDebateByEmail = shareIndexDebateByEmail;
+window.shareIndexDebateOnLinkedIn = shareIndexDebateOnLinkedIn;
+window.shareIndexDebateOnMastodon = shareIndexDebateOnMastodon;
+window.shareIndexDebateOnReddit = shareIndexDebateOnReddit;
 window.openReportBox = openReportBox;
 window.closeReportBox = closeReportBox;
 window.submitReport = submitReport;
@@ -12424,33 +12882,37 @@ function positionHomeTopbarMenu() {
   if (!menu || !trigger) return;
 
   const rect = trigger.getBoundingClientRect();
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  const menuWidth = Math.min(window.innerWidth <= 768 ? 240 : 260, Math.max(0, viewportWidth - 24));
+  const isMobile = window.innerWidth <= 768;
+  const isDebatePage = document.body.classList.contains("page-debate");
 
   let top;
 
-  if (window.innerWidth <= 768 && topbar) {
+  if (isMobile && topbar) {
     const topbarRect = topbar.getBoundingClientRect();
     top = Math.round(topbarRect.bottom + 8);
-  } else {
+  } else if (isDebatePage) {
     top = Math.round(rect.bottom + 10);
+  } else {
+    top = Math.round(rect.bottom + 300);
   }
 
   menu.style.setProperty("--home-topbar-menu-top", `${top}px`);
 
-  if (window.innerWidth <= 768) {
+  if (isMobile) {
     const left = Math.max(12, Math.round(rect.left));
     menu.style.setProperty("--home-topbar-menu-left", `${left}px`);
     menu.style.removeProperty("--home-topbar-menu-right");
     return;
   }
 
-  const right = Math.max(12, Math.round(viewportWidth - rect.right));
-  const maxRight = Math.max(12, viewportWidth - 12 - menuWidth);
-  const safeRight = Math.min(right, maxRight);
+  if (isDebatePage) {
+    menu.style.setProperty("--home-topbar-menu-right", `1050px`);
+  } else {
+    menu.style.setProperty("--home-topbar-menu-right", `80px`);
+  }
 
-  menu.style.setProperty("--home-topbar-menu-right", `${safeRight}px`);
   menu.style.removeProperty("--home-topbar-menu-left");
+
 }
 
 function syncHomeTopbarMenuOpenState(isOpen) {
