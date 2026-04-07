@@ -1148,6 +1148,12 @@ select:focus {
   margin-bottom: 14px;
   border-bottom: none;
 }
+
+@media (max-width: 768px) {
+  .debate-hero {
+    margin-top: 20px;
+  }
+}
 #debate-source-preview-wrap,
 .debate-source-preview-wrap,
 #debate-source-fallback,
@@ -1247,6 +1253,27 @@ select:focus {
   width:100%;
   max-width:100%;
   min-width:0;
+}
+
+@media (min-width: 769px){
+  .debate-columns.focus-a,
+  .debate-columns.focus-b{
+    max-width:none !important;
+    width:100% !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .debate-columns.focus-a .column-a,
+  .debate-columns.focus-b .column-b {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .debate-columns.focus-a .column-b,
+  .debate-columns.focus-b .column-a {
+    display: none !important;
+  }
 }
 
 body.debate-topbar-hidden .debate-hero-top{
@@ -6604,6 +6631,7 @@ padding:4px 14px 12px 14px;
 
 .page-debate .debate-hero-top {
   margin-bottom: 0;
+  z-index: 17;
 }
 
 @media (max-width: 768px) {
@@ -6798,6 +6826,31 @@ padding:4px 14px 12px 14px;
   border: 1px solid #e5e7eb;
   box-sizing: border-box;
   contain: layout style;
+}
+
+.page-home .debate-card-instagram-shell iframe,
+.page-home .debate-card-instagram-shell blockquote {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .page-home-mobile .debate-card {
+    overflow: hidden;
+  }
+
+  .page-home-mobile .debate-card-media-instagram {
+    margin-left: -22px;
+    margin-right: -22px;
+    width: calc(100% + 44px);
+  }
+
+  .page-home-mobile .debate-card-instagram-shell {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
 }
 
 .page-home .debate-card-instagram-shell[data-rendering="true"],

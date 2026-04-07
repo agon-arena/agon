@@ -6,7 +6,7 @@
 
 <title>Notifications</title>
 <link rel="icon" type="image/png" href="/favicon.png">
-<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/style.css?v=20260407-1" />
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -132,6 +132,26 @@
         <i class="fa-solid fa-envelope"></i>
         <span>Email</span>
       </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
+        <i class="fa-brands fa-linkedin-in"></i>
+        <span>LinkedIn</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
+        <i class="fa-brands fa-mastodon"></i>
+        <span>Mastodon</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
+        <i class="fa-brands fa-reddit-alien"></i>
+        <span>Reddit</span>
+      </button>
+
+      <button type="button" onclick="handleHomeBottomShareAction(event, showQRCode)">
+        <i class="fa-solid fa-qrcode"></i>
+        <span>QR Code</span>
+      </button>
     </div>
   </div>
 
@@ -141,6 +161,43 @@
   </a>
 </nav>
 
-<script src="/script.js"></script>
+
+<!-- QR Code Modal -->
+<div id="qrcode-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;" onclick="closeQRModal()">
+  <div style="background:#fff; border-radius:20px; padding:32px 28px; text-align:center; max-width:300px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+    <h3 style="margin:0 0 20px; font-size:18px; font-weight:700; color:#111;">Scanner pour partager</h3>
+    <div id="qrcode-container" style="display:flex; justify-content:center;"></div>
+    <p id="qrcode-url" style="font-size:11px; color:#94a3b8; margin:14px 0 0; word-break:break-all; line-height:1.4;"></p>
+    <button onclick="closeQRModal()" style="margin-top:20px; padding:10px 28px; border:none; border-radius:12px; background:#111; color:#fff; cursor:pointer; font-size:14px; font-weight:600;">Fermer</button>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+function showQRCode() {
+  var url = window.location.href;
+  var modal = document.getElementById('qrcode-modal');
+  var container = document.getElementById('qrcode-container');
+  var urlEl = document.getElementById('qrcode-url');
+  container.innerHTML = '';
+  new QRCode(container, {
+    text: url,
+    width: 200,
+    height: 200,
+    colorDark: '#111111',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+  urlEl.textContent = url;
+  modal.style.display = 'flex';
+}
+function closeQRModal() {
+  document.getElementById('qrcode-modal').style.display = 'none';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeQRModal();
+});
+</script>
+
+<script src="/script.js?v=20260407-1"></script>
 </body>
 </html>

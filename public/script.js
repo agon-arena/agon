@@ -28,6 +28,7 @@ let similarDebatesCache = null;
 let currentTypeFilter = "all";
 let currentCategoryFilter = "all";
 let currentArgumentsSortMode = "score";
+let currentIndexSortMode = "popular";
 
 let pendingMobileColumnFocusElementId = null;
 let pendingMobileColumnFocusElementTop = null
@@ -37,6 +38,9 @@ let pendingVoicesSummaryHighlight = false;
 const INDEX_RETURN_SCROLL_KEY = "agon_index_return_scroll_y";
 const INDEX_RETURN_PATH_KEY = "agon_index_return_path";
 const INDEX_RETURN_HASH_KEY = "agon_index_return_hash";
+const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
+const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
+const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let indexReturnRestoreAttempted = false;
 
 let pageArrivalLoadingOverlayHideTimer = null;
@@ -198,7 +202,7 @@ function markPageArrivalLoadingOverlayReady() {
 function initPageArrivalLoadingOverlay() {
   if (document.documentElement.dataset.pageArrivalLoadingInitialized === "true") return;
   document.documentElement.dataset.pageArrivalLoadingInitialized = "true";
-  pageArrivalLoadingOverlayReady = location.pathname !== "/debate";
+  pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/";
 
   showPageArrivalLoadingOverlay("Chargement en cours");
 
@@ -211,7 +215,7 @@ function initPageArrivalLoadingOverlay() {
   window.addEventListener("scroll", refreshBounds, { passive: true });
 
   const finish = (force = false) => {
-    if (location.pathname === "/debate" && !pageArrivalLoadingOverlayReady && !force) {
+    if ((location.pathname === "/debate" || location.pathname === "/") && !pageArrivalLoadingOverlayReady && !force) {
       return;
     }
 
@@ -238,7 +242,7 @@ function initPageArrivalLoadingOverlay() {
 
   pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
     finish(true);
-  }, location.pathname === "/debate" ? 5000 : 2200);
+  }, location.pathname === "/debate" || location.pathname === "/" ? 5000 : 2200);
 }
 
 function getDebateViewMode() {
@@ -618,6 +622,37 @@ function handleHeadingDoubleClick(side) {
 
   const currentFocus = getDebateColumnFocus();
   setDebateColumnFocus(currentFocus === side ? "split" : side);
+}
+
+function shouldIgnoreDesktopColumnFocusClick(target) {
+  if (!target) return false;
+
+  return !!target.closest(
+    'a, button, input, textarea, select, option, label, form, summary, details, iframe, video, audio, [contenteditable="true"], .sort-dropdown, .sort-menu, .share-icon-button, .home-topbar-menu, .home-topbar-menu-toggle, .position-argument-button, .form-close-btn, .argument-action-button, .comment-action-button, .voice-button, .vote-button, .comment-form, .argument-form, .comment-card-menu, .argument-card-menu'
+  );
+}
+
+function initDesktopColumnFocusClick() {
+  if (location.pathname !== "/debate") return;
+
+  const bindColumn = (columnId, side) => {
+    const column = document.getElementById(columnId);
+    if (!column || column.dataset.desktopColumnFocusBound === "true") return;
+
+    column.dataset.desktopColumnFocusBound = "true";
+    column.addEventListener("click", (event) => {
+      if (window.innerWidth <= 768) return;
+      if (currentDebateViewMode !== "columns") return;
+      if (!isColumnFocusScrollContext()) return;
+      if (shouldIgnoreDesktopColumnFocusClick(event.target)) return;
+
+      const currentFocus = getDebateColumnFocus();
+      setDebateColumnFocus(currentFocus === side ? "split" : side);
+    });
+  };
+
+  bindColumn("column-a", "a");
+  bindColumn("column-b", "b");
 }
 
 function applyDebateColumnFocusUI() {
@@ -1191,11 +1226,12 @@ function openIndexDebateFromMedia(debateId, event) {
   window.location.href = `/debate?id=${encodeURIComponent(safeDebateId)}`;
 }
 
-function saveIndexReturnState() {
+function saveIndexReturnState(scrollY = null) {
   if (location.pathname !== "/") return;
 
   try {
-    sessionStorage.setItem(INDEX_RETURN_SCROLL_KEY, String(Math.max(0, Math.round(window.scrollY || 0))));
+    const y = scrollY !== null ? scrollY : Math.max(0, Math.round(window.scrollY || 0));
+    sessionStorage.setItem(INDEX_RETURN_SCROLL_KEY, String(y));
     sessionStorage.setItem(INDEX_RETURN_PATH_KEY, location.pathname + location.search);
     sessionStorage.setItem(INDEX_RETURN_HASH_KEY, location.hash || "");
   } catch (error) {
@@ -1294,11 +1330,39 @@ function initIndexReturnNavigation() {
     if (window.__agonIndexReturnNavigationInitialized) return;
     window.__agonIndexReturnNavigationInitialized = true;
 
+    // Bfcache restore : page déjà prête, overlay et scroll immédiats
+    window.addEventListener("pageshow", (event) => {
+      if (!event.persisted) return;
+
+      // Cacher l'overlay immédiatement, sans attendre l'API
+      pageArrivalLoadingOverlayReady = true;
+      hidePageArrivalLoadingOverlay();
+
+      // Restaurer le scroll en une seule instruction, sans polling
+      const savedScrollY = getSavedIndexReturnScrollY();
+      if (savedScrollY !== null) {
+        window.scrollTo(0, savedScrollY);
+        requestAnimationFrame(() => {
+          window.scrollTo(0, savedScrollY);
+          clearIndexReturnState();
+        });
+      }
+    });
+
     document.addEventListener("click", (event) => {
       const link = event.target.closest('a[href^="/debate?id="]');
       if (!link) return;
       if (!document.body.classList.contains("page-home")) return;
-      saveIndexReturnState();
+
+      const card = link.closest(".debate-card") || link.closest("article");
+      if (card) {
+        const topbar = document.querySelector(".topbar");
+        const topbarHeight = topbar ? topbar.offsetHeight : 0;
+        const cardTop = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarHeight));
+        saveIndexReturnState(cardTop);
+      } else {
+        saveIndexReturnState();
+      }
     });
 
     return;
@@ -2270,7 +2334,7 @@ function updateIndexYouTubeActiveShell() {
 
   const rect = shell.getBoundingClientRect();
 const topTolerance = window.innerHeight * 0.18;
-const bottomTolerance = window.innerHeight * 0.18;
+const bottomTolerance = window.innerHeight * 0.18 + 120;
 
   return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTolerance;
 });
@@ -2470,7 +2534,7 @@ function updateIndexLocalVideoActiveShell() {
     if (!shell.isConnected || !shell.offsetParent) return false;
     const rect = shell.getBoundingClientRect();
 const topTolerance = window.innerHeight * 0.12;
-const bottomTolerance = window.innerHeight * 0.12;
+const bottomTolerance = window.innerHeight * 0.12 + 300;
 
 return rect.bottom > -topTolerance && rect.top < window.innerHeight + bottomTolerance;  });
 
@@ -2706,7 +2770,7 @@ function initIndexLocalVideoObserver(root = document) {
   state.observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       const shell = entry.target;
-      shell.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.55 ? 'true' : 'false';
+      shell.dataset.inView = entry.isIntersecting ? 'true' : 'false';
       if (shell.dataset.inView !== 'true' && state.activeShell === shell) {
         unloadIndexLocalVideoShell(shell);
         state.activeShell = null;
@@ -2715,8 +2779,8 @@ function initIndexLocalVideoObserver(root = document) {
 
     scheduleIndexLocalVideoActiveUpdate();
   }, {
-    threshold: [0, 0.25, 0.55, 0.85],
-    rootMargin: '0px 0px 0px 0px'
+    threshold: [0, 0.1, 0.25, 0.55, 0.85],
+    rootMargin: '0px 0px 300px 0px'
   });
 
   shells.forEach((shell) => state.observer.observe(shell));
@@ -2809,14 +2873,13 @@ function initIndexYouTubeObserver(root = document) {
 state.observer = new IntersectionObserver((entries) => {
   entries.forEach((entry) => {
     const shell = entry.target;
-    shell.dataset.inView =
-      entry.isIntersecting && entry.intersectionRatio >= 0.12 ? 'true' : 'false';
+    shell.dataset.inView = entry.isIntersecting ? 'true' : 'false';
   });
 
   scheduleIndexYouTubeActiveUpdate();
 }, {
   threshold: [0, 0.05, 0.12, 0.25, 0.55, 0.85],
-  rootMargin: '0px 0px 0px 0px'
+  rootMargin: '0px 0px 120px 0px'
 });
 
 
@@ -3102,7 +3165,7 @@ async function renderIndexInstagramShell(shell) {
         data-instgrm-captioned
         data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
         data-instgrm-version="14"
-        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:540px; min-width:280px; padding:0; width:100%;"
+        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:100%; padding:0; width:100%;"
       >
         <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
       </blockquote>
@@ -5813,7 +5876,78 @@ function getFilteredDebatesForIndex(baseDebates) {
     );
   }
 
+  filteredDebates = sortDebatesForIndex(filteredDebates);
+
   return filteredDebates;
+}
+
+function sortDebatesForIndex(debates) {
+  const sorted = [...debates];
+
+  if (currentIndexSortMode === "recent") {
+    return sorted.sort((a, b) => {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }
+
+  if (currentIndexSortMode === "old") {
+    return sorted.sort((a, b) => {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return dateA - dateB;
+    });
+  }
+
+  if (currentIndexSortMode === "ideas") {
+    return sorted.sort((a, b) => {
+      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
+      const dateA = new Date(a.last_argument_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.last_argument_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }
+
+  // "popular" (default) : argument_count + bonus de fraîcheur décroissant sur 14 jours
+  const now = Date.now();
+  return sorted.sort((a, b) => {
+    const activityA = new Date(a.last_argument_at || a.created_at || 0).getTime();
+    const activityB = new Date(b.last_argument_at || b.created_at || 0).getTime();
+    const freshnessA = Math.max(0, 1 - (now - activityA) / (14 * 24 * 60 * 60 * 1000));
+    const freshnessB = Math.max(0, 1 - (now - activityB) / (14 * 24 * 60 * 60 * 1000));
+    const scoreA = (a.argument_count || 0) + freshnessA * 10;
+    const scoreB = (b.argument_count || 0) + freshnessB * 10;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+}
+
+const INDEX_SORT_LABELS = {
+  popular: "Plus populaires",
+  recent: "Plus récentes",
+  old: "Plus anciennes",
+  ideas: "Plus d'idées",
+};
+
+function setIndexSort(mode) {
+  currentIndexSortMode = mode;
+  const btn = document.getElementById("index-sort-button-label");
+  if (btn) btn.textContent = (INDEX_SORT_LABELS[mode] || "Trier") + " ▾";
+  const menu = document.getElementById("index-sort-menu");
+  if (menu) menu.classList.remove("sort-menu-visible");
+  document.querySelectorAll("#index-sort-menu button").forEach((b) => {
+    b.classList.toggle("sort-menu-active", b.dataset.mode === mode);
+  });
+  visitedDebatesVisible = 5;
+  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+  applyIndexFilters();
+}
+
+function toggleIndexSortMenu() {
+  const menu = document.getElementById("index-sort-menu");
+  if (!menu) return;
+  menu.classList.toggle("sort-menu-visible");
 }
 
 function applyIndexFilters() {
@@ -6370,28 +6504,80 @@ function updateIndexLists(debates) {
   renderVisitedDebatesList([]);
   renderDebatesList(otherDebatesCache);
 }
+function saveDebatesToSessionCache(debates) {
+  try {
+    sessionStorage.setItem(INDEX_DEBATES_CACHE_KEY, JSON.stringify(debates));
+    sessionStorage.setItem(INDEX_DEBATES_CACHE_TIME_KEY, String(Date.now()));
+  } catch (e) {}
+}
+
+function getDebatesFromSessionCache() {
+  try {
+    const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
+    if (Date.now() - time > INDEX_DEBATES_CACHE_TTL) return null;
+    const raw = sessionStorage.getItem(INDEX_DEBATES_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
 async function initIndex() {
   try {
     initIndexExplorerControls();
 
-    const debates = await fetchJSON(API + "/debates");
-    debatesCache = debates;
-    visitedDebatesVisible = 5;
-    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-    currentTypeFilter = "all";
-    currentCategoryFilter = "all";
+    const cached = getDebatesFromSessionCache();
 
-    refreshCategoryFilterOptions(debatesCache);
-    applyIndexFilters();
+    if (cached) {
+      // Rendu immédiat depuis le cache — pas d'appel API pour l'affichage initial
+      debatesCache = cached;
+      visitedDebatesVisible = 5;
+      otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+      currentTypeFilter = "all";
+      currentCategoryFilter = "all";
+      refreshCategoryFilterOptions(debatesCache);
+      applyIndexFilters();
 
-    const searchInput = document.getElementById("debate-search");
-    if (searchInput) {
-      searchInput.addEventListener("input", filterDebates);
+      const searchInput = document.getElementById("debate-search");
+      if (searchInput) searchInput.addEventListener("input", filterDebates);
+      setTypeFilter("all");
+
+      // Scroll AVANT de cacher l'overlay : se passe derrière le fondu (180ms)
+      restoreIndexReturnStateIfNeeded();
+
+      pageArrivalLoadingOverlayReady = true;
+      hidePageArrivalLoadingOverlay();
+
+      // Rafraîchissement silencieux en arrière-plan
+      fetchJSON(API + "/debates").then((fresh) => {
+        saveDebatesToSessionCache(fresh);
+        debatesCache = fresh;
+      }).catch(() => {});
+
+    } else {
+      // Première visite — comportement normal
+      const debates = await fetchJSON(API + "/debates");
+      saveDebatesToSessionCache(debates);
+      debatesCache = debates;
+      visitedDebatesVisible = 5;
+      otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+      currentTypeFilter = "all";
+      currentCategoryFilter = "all";
+      refreshCategoryFilterOptions(debatesCache);
+      applyIndexFilters();
+      pageArrivalLoadingOverlayReady = true;
+      hidePageArrivalLoadingOverlay();
+
+      const searchInput = document.getElementById("debate-search");
+      if (searchInput) searchInput.addEventListener("input", filterDebates);
+      setTypeFilter("all");
+      restoreIndexReturnStateIfNeeded();
     }
 
-    setTypeFilter("all");
-    restoreIndexReturnStateIfNeeded();
   } catch (error) {
+    pageArrivalLoadingOverlayReady = true;
+    hidePageArrivalLoadingOverlay();
     alert(error.message);
   }
 }
@@ -8564,6 +8750,8 @@ localStorage.removeItem("debate_column_focus");
   const formB = document.getElementById("form-b");
   const deleteDebateBtn = document.getElementById("delete-debate-btn");
 
+  initDesktopColumnFocusClick();
+
 if (formA) {
   formA.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -8942,7 +9130,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
         data-instgrm-captioned
         data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
         data-instgrm-version="14"
-        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:540px; min-width:280px; padding:0; width:100%;"
+        style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:100%; padding:0; width:100%;"
       >
         <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
       </blockquote>
@@ -13132,6 +13320,8 @@ window.cancelReply = cancelReply;
 window.changeArgumentsSort = changeArgumentsSort;
 window.setTypeFilter = setTypeFilter;
 window.toggleSortMenu = toggleSortMenu;
+window.setIndexSort = setIndexSort;
+window.toggleIndexSortMenu = toggleIndexSortMenu;
 window.loadMoreArguments = loadMoreArguments;
 window.setDebateViewMode = setDebateViewMode;
 window.toggleSimilarDebates = toggleSimilarDebates;
