@@ -153,6 +153,30 @@ body {
   opacity: 1;
   flex-shrink: 0;
 }
+@media (min-width: 769px) {
+  .page-create .topbar-inner.topbar-home {
+    position: relative;
+    justify-content: space-between;
+  }
+
+  .page-create .topbar-inner.topbar-home .home-brand-block {
+    flex: 1 1 0;
+  }
+
+  .page-create .topbar-inner.topbar-home .topbar-actions {
+    flex: 1 1 0;
+    justify-content: flex-end;
+  }
+
+  .page-create .topbar-inner.topbar-home .home-brand-main {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    justify-content: center;
+    z-index: 1;
+  }
+}
+
 /* ===== SOCIAL TOPBAR MOBILE (INDEX UNIQUEMENT) ===== */
 
 .topbar-social {
@@ -4747,7 +4771,7 @@ body.debate-topbar-hidden .debate-hero-top {
   }
 
   .page-create-mobile .home-logo {
-    width: 130px;
+    width: 130px; /* overridden below */
   }
 
   .page-create-mobile .topbar-message {
@@ -5217,7 +5241,7 @@ body.debate-topbar-hidden .debate-hero-top {
 
   .page-create-mobile .home-logo {
     display: block;
-    width: 110px;
+    width: 110px; /* overridden below */
     height: auto;
     flex-shrink: 0;
   }
@@ -7993,3 +8017,271 @@ body.index-batch-loading-active {
     display: none !important;
   }
 }
+
+/* === PAGE CREATE — TOPBAR MOBILE RANGÉE UNIQUE === */
+@media (max-width: 768px) {
+  .page-create-mobile .topbar-inner.topbar-home {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0 !important;
+  }
+  .page-create-mobile .home-brand-block {
+    width: auto !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+  }
+  .page-create-mobile .home-brand-main {
+    flex: 1 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+  .page-create-mobile .topbar-actions {
+    width: auto !important;
+    flex: 0 0 auto !important;
+    margin-left: 0 !important;
+  }
+  .page-create-mobile .back-notifications-stack {
+    width: auto !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+  .page-create-mobile .debate-nav-row {
+    display: none !important;
+  }
+  .page-create-mobile .mobile-topbar-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .page-create-mobile .topbar-back-arrow {
+    display: inline-flex !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px solid #d1d5db !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    color: #6b7280 !important;
+    text-decoration: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+  }
+}
+
+/* === PAGE CREATE — LOGO CENTRÉ EN ABSOLU SUR MOBILE === */
+@media (max-width: 768px) {
+  .page-create-mobile .topbar-inner.topbar-home {
+    position: relative !important;
+  }
+  .page-create-mobile .home-brand-main {
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    flex: none !important;
+    pointer-events: none !important;
+  }
+  .page-create-mobile .home-brand-main .home-logo {
+    pointer-events: auto !important;
+  }
+}
+
+/* === PAGE CREATE — GRID TOPBAR + LOGO TAILLE DEBATE + SOCIAL ROW === */
+
+/* Desktop : logo même taille que debate */
+@media (min-width: 769px) {
+  .page-create-mobile .home-brand-main {
+    position: static !important;
+    transform: none !important;
+  }
+  .page-create .home-logo {
+    width: 210px !important;
+  }
+}
+
+/* Mobile : grid 3 colonnes — hamburger | logo centré | flèche — puis ligne sociale */
+@media (max-width: 768px) {
+  .page-create-mobile .topbar-inner.topbar-home {
+    display: grid !important;
+    grid-template-columns: auto 1fr auto !important;
+    grid-template-areas:
+      "brand logo actions"
+      "social social social" !important;
+    align-items: center !important;
+    row-gap: 1px !important;
+    column-gap: 8px !important;
+    position: static !important;
+  }
+  .page-create-mobile .home-brand-block {
+    grid-area: brand !important;
+    flex: none !important;
+    width: auto !important;
+  }
+  .page-create-mobile .home-brand-main {
+    grid-area: logo !important;
+    position: static !important;
+    transform: none !important;
+    flex: none !important;
+    display: flex !important;
+    justify-content: center !important;
+    padding-left: 16px !important;
+    align-items: center !important;
+  }
+  .page-create-mobile .home-logo {
+    width: 140px !important;
+  }
+  .page-create-mobile .topbar-actions {
+    grid-area: actions !important;
+    width: auto !important;
+    margin-left: 0 !important;
+    flex: none !important;
+  }
+  .page-create-mobile .topbar-social {
+    grid-area: social !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+  }
+  .page-create-mobile .topbar-social .share-icon-button {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+/* === PAGE CREATE DESKTOP — TOPBAR AVEC RÉSEAUX SOCIAUX COMME INDEX === */
+@media (min-width: 769px) {
+  .page-create .topbar {
+    position: relative;
+  }
+
+  .page-create .topbar-inner.topbar-home {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "brand logo actions"
+      "social social social";
+    align-items: center;
+    row-gap: 0px;
+    column-gap: 12px;
+  }
+
+  .page-create .home-brand-block {
+    grid-area: brand;
+    position: relative;
+    margin-left: 0;
+  }
+
+  .page-create .home-brand-main {
+    grid-area: logo;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .page-create .home-brand-main .home-logo {
+    pointer-events: auto;
+  }
+
+  .page-create .topbar-actions {
+    grid-area: actions;
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+    margin-top: 0;
+    justify-self: end;
+  }
+
+  .page-create .topbar-social {
+    grid-area: social;
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: -4px;
+    padding-left: 0;
+  }
+
+  .page-create #admin-login-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+
+/* === PAGE CREATE DESKTOP — masquer global-share-bar (garder seulement icônes) === */
+@media (min-width: 769px) {
+  .page-create #global-share-bar {
+    display: none !important;
+  }
+}
+/* PAGE CREATE DESKTOP — menu hamburger s'ouvre en haut à gauche */
+@media (min-width: 769px) {
+  .page-create .home-topbar-menu {
+    left: 12px !important;
+    right: auto !important;
+ top: 200px;
+  }
+}
+@media (min-width: 769px) {
+  .page-create .debate-nav-row {
+    display: none !important;
+  }
+  .page-create .mobile-topbar-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .page-create .topbar-back-arrow {
+    display: inline-flex !important;
+    width: 46px !important;
+    height: 46px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px solid #d1d5db !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    color: #6b7280 !important;
+    text-decoration: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+  }
+}
+/* === PAGE NOTIFICATIONS DESKTOP — flèche retour au lieu du texte === */
+@media (min-width: 769px) {
+  .page-notifications .debate-nav-row {
+    display: none !important;
+  }
+  .page-notifications .mobile-back-button {
+    display: inline-flex !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px solid #d1d5db !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    color: #6b7280 !important;
+    cursor: pointer !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+  }
+}
+@media (min-width: 769px) {
+  .page-create .topbar {
+    padding-bottom: 6px;
+  }
+}
+

@@ -50,37 +50,10 @@
   <div class="container topbar-inner topbar-home">
 
     <div class="home-brand-block">
-
       <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
         <i class="fa-solid fa-gear"></i>
       </button>
 
-      <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
-    </div>
-
-    <div class="topbar-social">
-      <button class="share-icon-button" type="button" onclick="copyDebateLink()" title="Copier le lien">
-        <i class="fa-solid fa-link"></i>
-      </button>
-
-      <button class="share-icon-button" type="button" onclick="shareOnX()" title="Partager sur X">
-        <i class="fa-brands fa-x-twitter"></i>
-      </button>
-
-      <button class="share-icon-button" type="button" onclick="shareOnFacebook()" title="Partager sur Facebook">
-        <i class="fa-brands fa-facebook-f"></i>
-      </button>
-
-      <button class="share-icon-button" type="button" onclick="shareOnWhatsApp()" title="Partager sur WhatsApp">
-        <i class="fa-brands fa-whatsapp"></i>
-      </button>
-
-      <button class="share-icon-button" type="button" onclick="shareByEmail()" title="Partager par mail">
-        <i class="fa-solid fa-envelope"></i>
-      </button>
-    </div>
-
-    <div class="topbar-actions">
       <div class="home-topbar-menu-wrap">
         <button
           type="button"
@@ -105,11 +78,6 @@
             <span>Explorer les arènes</span>
           </a>
 
-          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link">
-            <i class="fa-solid fa-plus"></i>
-            <span>Ouvrir une arène</span>
-          </a>
-
           <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link">
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
@@ -126,9 +94,50 @@
           </button>
         </div>
       </div>
+    </div>
 
+    <div class="home-brand-main">
+      <img src="/logo.jpeg" alt="Logo Agôn" class="home-logo">
+    </div>
+
+    <div class="topbar-social">
+      <button class="share-icon-button copy" type="button" onclick="window.copyDebateLink()" title="Copier le lien">
+        <i class="fa-solid fa-link"></i>
+      </button>
+      <button class="share-icon-button x" type="button" onclick="window.shareOnX()" title="Partager sur X">
+        <i class="fa-brands fa-x-twitter"></i>
+      </button>
+      <button class="share-icon-button facebook" type="button" onclick="window.shareOnFacebook()" title="Partager sur Facebook">
+        <i class="fa-brands fa-facebook-f"></i>
+      </button>
+      <button class="share-icon-button whatsapp" type="button" onclick="window.shareOnWhatsApp()" title="Partager sur WhatsApp">
+        <i class="fa-brands fa-whatsapp"></i>
+      </button>
+      <button class="share-icon-button email" type="button" onclick="window.shareByEmail()" title="Partager par mail">
+        <i class="fa-solid fa-envelope"></i>
+      </button>
+      <button class="share-icon-button linkedin" type="button" onclick="window.shareOnLinkedIn()" title="Partager sur LinkedIn">
+        <i class="fa-brands fa-linkedin-in"></i>
+      </button>
+      <button class="share-icon-button mastodon" type="button" onclick="window.shareOnMastodon()" title="Partager sur Mastodon">
+        <i class="fa-brands fa-mastodon"></i>
+      </button>
+      <button class="share-icon-button reddit" type="button" onclick="window.shareOnReddit()" title="Partager sur Reddit">
+        <i class="fa-brands fa-reddit-alien"></i>
+      </button>
+    </div>
+
+    <div class="topbar-actions">
       <div class="back-notifications-stack">
-        <a href="/" class="back-link create-back-link">← Retour aux arènes</a>
+        <div class="debate-nav-row">
+          <a href="/" class="back-link create-back-link">← Retour aux arènes</a>
+        </div>
+
+        <div class="mobile-topbar-actions">
+          <a href="/" class="topbar-back-arrow" title="Retour aux arènes">
+            <i class="fa-solid fa-arrow-left"></i>
+          </a>
+        </div>
 
         <div id="global-share-bar"></div>
 
