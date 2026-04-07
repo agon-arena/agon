@@ -38,6 +38,8 @@ let pendingVoicesSummaryHighlight = false;
 const INDEX_RETURN_SCROLL_KEY = "agon_index_return_scroll_y";
 const INDEX_RETURN_PATH_KEY = "agon_index_return_path";
 const INDEX_RETURN_HASH_KEY = "agon_index_return_hash";
+const INDEX_RETURN_DEBATE_ID_KEY = "agon_index_return_debate_id";
+const INDEX_RETURN_CARD_INDEX_KEY = "agon_index_return_card_index";
 const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -67,6 +69,12 @@ function ensurePageArrivalLoadingOverlayStyles() {
       background: rgba(17, 24, 39, 0.18);
       backdrop-filter: blur(1.5px);
       -webkit-backdrop-filter: blur(1.5px);
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-opaque {
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.18s ease;
@@ -1222,11 +1230,22 @@ function openIndexDebateFromMedia(debateId, event) {
   const safeDebateId = String(debateId || "").trim();
   if (!safeDebateId) return;
 
-  saveIndexReturnState();
+  const card = document.querySelector(`article[data-debate-id="${safeDebateId}"]`);
+  if (card) {
+    const topbar = document.querySelector(".topbar");
+    const topbarBottom = topbar ? Math.max(0, topbar.getBoundingClientRect().bottom) : 0;
+    const cardTop = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarBottom));
+    const allCards = Array.from(document.querySelectorAll("article[data-debate-id]"));
+    const cardIndex = allCards.findIndex((element) => String(element.dataset.debateId || "") === safeDebateId);
+    saveIndexReturnState(cardTop, safeDebateId, cardIndex >= 0 ? cardIndex : null);
+  } else {
+    saveIndexReturnState();
+  }
+
   window.location.href = `/debate?id=${encodeURIComponent(safeDebateId)}`;
 }
 
-function saveIndexReturnState(scrollY = null) {
+function saveIndexReturnState(scrollY = null, debateId = null, cardIndex = null) {
   if (location.pathname !== "/") return;
 
   try {
@@ -1234,6 +1253,18 @@ function saveIndexReturnState(scrollY = null) {
     sessionStorage.setItem(INDEX_RETURN_SCROLL_KEY, String(y));
     sessionStorage.setItem(INDEX_RETURN_PATH_KEY, location.pathname + location.search);
     sessionStorage.setItem(INDEX_RETURN_HASH_KEY, location.hash || "");
+
+    if (debateId) {
+      sessionStorage.setItem(INDEX_RETURN_DEBATE_ID_KEY, String(debateId));
+    } else {
+      sessionStorage.removeItem(INDEX_RETURN_DEBATE_ID_KEY);
+    }
+
+    if (cardIndex !== null && Number.isFinite(Number(cardIndex)) && Number(cardIndex) >= 0) {
+      sessionStorage.setItem(INDEX_RETURN_CARD_INDEX_KEY, String(Number(cardIndex)));
+    } else {
+      sessionStorage.removeItem(INDEX_RETURN_CARD_INDEX_KEY);
+    }
   } catch (error) {
     console.warn("[index-return] impossible d'enregistrer la position de retour.", error);
   }
@@ -1244,6 +1275,8 @@ function clearIndexReturnState() {
     sessionStorage.removeItem(INDEX_RETURN_SCROLL_KEY);
     sessionStorage.removeItem(INDEX_RETURN_PATH_KEY);
     sessionStorage.removeItem(INDEX_RETURN_HASH_KEY);
+    sessionStorage.removeItem(INDEX_RETURN_DEBATE_ID_KEY);
+    sessionStorage.removeItem(INDEX_RETURN_CARD_INDEX_KEY);
   } catch (error) {
     console.warn("[index-return] impossible d'effacer la position de retour.", error);
   }
@@ -1269,7 +1302,207 @@ function getSavedIndexReturnScrollY() {
   }
 }
 
+function getSavedIndexReturnDebateId() {
+  try {
+    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
+    if (savedPath && savedPath !== location.pathname + location.search) {
+      return null;
+    }
+
+    const rawValue = sessionStorage.getItem(INDEX_RETURN_DEBATE_ID_KEY);
+    if (!rawValue) return null;
+
+    return String(rawValue);
+  } catch (error) {
+    console.warn("[index-return] impossible de lire l'id de retour.", error);
+    return null;
+  }
+}
+
+function getSavedIndexReturnCardIndex() {
+  try {
+    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
+    if (savedPath && savedPath !== location.pathname + location.search) {
+      return null;
+    }
+
+    const rawValue = sessionStorage.getItem(INDEX_RETURN_CARD_INDEX_KEY);
+    if (rawValue === null || rawValue === "") return null;
+
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+
+    return Math.floor(parsed);
+  } catch (error) {
+    console.warn("[index-return] impossible de lire l'index de carte.", error);
+    return null;
+  }
+}
+
+function getIndexReturnTargetCard(savedDebateId = null) {
+  const safeDebateId = String(savedDebateId || getSavedIndexReturnDebateId() || "").trim();
+  if (!safeDebateId) return null;
+  return document.querySelector(`article[data-debate-id="${safeDebateId}"]`);
+}
+
+function scrollToIndexReturnCard(card) {
+  if (!card) return false;
+
+  const topbar = document.querySelector(".topbar");
+  const topbarBottom = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
+  const y = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarBottom));
+
+  document.documentElement.style.scrollBehavior = "auto";
+  document.body.style.scrollBehavior = "auto";
+  window.scrollTo(0, y);
+  document.documentElement.style.scrollBehavior = "";
+  document.body.style.scrollBehavior = "";
+
+  return Math.abs(window.scrollY - y) <= 4;
+}
+
+async function ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex = null) {
+  const safeDebateId = String(savedDebateId || "").trim();
+  if (!safeDebateId) return null;
+
+  let card = getIndexReturnTargetCard(safeDebateId);
+  if (card) return card;
+
+  const getCache = () => Array.isArray(otherDebatesCache) && otherDebatesCache.length ? otherDebatesCache : null;
+  const waitFrame = (delay = 90) => new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, delay);
+    });
+  });
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    card = getIndexReturnTargetCard(safeDebateId);
+    if (card) return card;
+
+    const cache = getCache();
+    if (cache) {
+      const resolvedIndex = cache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
+      const targetIndex = resolvedIndex >= 0
+        ? resolvedIndex
+        : (Number.isFinite(savedCardIndex) ? savedCardIndex : -1);
+
+      if (targetIndex >= 0) {
+        const requiredVisible = Math.min(cache.length, targetIndex + 1);
+        if (otherDebatesVisible < requiredVisible) {
+          otherDebatesVisible = Math.min(
+            cache.length,
+            Math.max(requiredVisible, otherDebatesVisible + INDEX_OTHER_DEBATES_BATCH_SIZE)
+          );
+          renderDebatesList(cache);
+        } else if (otherDebatesVisible < cache.length && attempt >= 8) {
+          otherDebatesVisible = cache.length;
+          renderDebatesList(cache);
+        }
+      } else if (otherDebatesVisible < cache.length && attempt >= 8) {
+        otherDebatesVisible = cache.length;
+        renderDebatesList(cache);
+      }
+    }
+
+    await waitFrame(attempt < 8 ? 90 : 140);
+  }
+
+  return getIndexReturnTargetCard(safeDebateId);
+}
+
+async function restoreIndexReturnCardIfNeeded(options = {}) {
+  if (location.pathname !== "/" || indexReturnRestoreAttempted) return false;
+
+  const savedDebateId = getSavedIndexReturnDebateId();
+  if (!savedDebateId) return false;
+
+  indexReturnRestoreAttempted = true;
+
+  const releaseOverlay = () => {
+    const overlay = document.getElementById("page-arrival-loading-overlay");
+    if (overlay) overlay.classList.remove("page-arrival-loading-overlay-opaque");
+    pageArrivalLoadingOverlayReady = true;
+    hidePageArrivalLoadingOverlay();
+  };
+
+  try {
+    const overlay = document.getElementById("page-arrival-loading-overlay");
+    if (overlay) overlay.classList.add("page-arrival-loading-overlay-opaque");
+
+    const savedCardIndex = getSavedIndexReturnCardIndex();
+    let card = await ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex);
+
+    if (!card) {
+      const cache = Array.isArray(otherDebatesCache) && otherDebatesCache.length ? otherDebatesCache : null;
+      if (cache && otherDebatesVisible < cache.length) {
+        otherDebatesVisible = cache.length;
+        renderDebatesList(cache);
+        await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 140)));
+        card = await ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex);
+      }
+    }
+
+    if (card) {
+      let consecutiveStableHits = 0;
+      let previousTop = null;
+
+      for (let attempt = 0; attempt < 18; attempt += 1) {
+        card = getIndexReturnTargetCard(savedDebateId) || card;
+        if (!card) break;
+
+        scrollToIndexReturnCard(card);
+
+        const currentTop = Math.round(card.getBoundingClientRect().top);
+        if (previousTop !== null && Math.abs(currentTop - previousTop) <= 2) {
+          consecutiveStableHits += 1;
+        } else {
+          consecutiveStableHits = 0;
+        }
+        previousTop = currentTop;
+
+        if (consecutiveStableHits >= 2) {
+          clearIndexReturnState();
+          releaseOverlay();
+          return true;
+        }
+
+        await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 120)));
+      }
+
+      scrollToIndexReturnCard(card);
+      clearIndexReturnState();
+      releaseOverlay();
+      return true;
+    }
+
+    if (options.allowScrollFallback) {
+      const savedScrollY = getSavedIndexReturnScrollY();
+      if (savedScrollY !== null) {
+        window.scrollTo(0, savedScrollY);
+        clearIndexReturnState();
+        releaseOverlay();
+        return true;
+      }
+    }
+
+    releaseOverlay();
+    return false;
+  } catch (error) {
+    console.warn("[index-return] restauration par carte impossible.", error);
+    releaseOverlay();
+    return false;
+  } finally {
+    indexReturnRestoreAttempted = false;
+  }
+}
+
 function restoreIndexReturnStateIfNeeded() {
+  const savedDebateId = getSavedIndexReturnDebateId();
+  if (savedDebateId) {
+    restoreIndexReturnCardIfNeeded({ allowScrollFallback: true });
+    return;
+  }
+
   if (location.pathname !== "/" || indexReturnRestoreAttempted) return;
 
   const savedScrollY = getSavedIndexReturnScrollY();
@@ -1311,6 +1544,7 @@ function restoreIndexReturnStateIfNeeded() {
       setTimeout(() => {
         restoreScroll();
         clearIndexReturnState();
+        indexReturnRestoreAttempted = false;
       }, 120);
       return;
     }
@@ -1334,32 +1568,41 @@ function initIndexReturnNavigation() {
     window.addEventListener("pageshow", (event) => {
       if (!event.persisted) return;
 
-      // Cacher l'overlay immédiatement, sans attendre l'API
-      pageArrivalLoadingOverlayReady = true;
-      hidePageArrivalLoadingOverlay();
+      // Réinitialiser pour permettre la restauration
+      indexReturnRestoreAttempted = false;
 
-      // Restaurer le scroll en une seule instruction, sans polling
+      const savedDebateId = getSavedIndexReturnDebateId();
       const savedScrollY = getSavedIndexReturnScrollY();
-      if (savedScrollY !== null) {
-        window.scrollTo(0, savedScrollY);
-        requestAnimationFrame(() => {
-          window.scrollTo(0, savedScrollY);
-          clearIndexReturnState();
+
+      if (savedDebateId || savedScrollY !== null) {
+        restoreIndexReturnCardIfNeeded({ allowScrollFallback: true }).then((restored) => {
+          if (!restored && savedScrollY !== null) {
+            document.documentElement.style.scrollBehavior = "auto";
+            window.scrollTo(0, savedScrollY);
+            document.documentElement.style.scrollBehavior = "";
+            clearIndexReturnState();
+          }
         });
+      } else {
+        pageArrivalLoadingOverlayReady = true;
+        hidePageArrivalLoadingOverlay();
       }
     });
 
     document.addEventListener("click", (event) => {
       const link = event.target.closest('a[href^="/debate?id="]');
       if (!link) return;
-      if (!document.body.classList.contains("page-home")) return;
+      if (!document.body.classList.contains("page-home") && !document.body.classList.contains("page-home-mobile")) return;
 
       const card = link.closest(".debate-card") || link.closest("article");
       if (card) {
         const topbar = document.querySelector(".topbar");
-        const topbarHeight = topbar ? topbar.offsetHeight : 0;
-        const cardTop = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarHeight));
-        saveIndexReturnState(cardTop);
+        const topbarBottom = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
+        const cardTop = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarBottom));
+        const debateId = card.dataset.debateId || null;
+        const allCards = Array.from(document.querySelectorAll("article[data-debate-id]"));
+        const cardIndex = debateId ? allCards.findIndex((element) => String(element.dataset.debateId || "") === String(debateId)) : -1;
+        saveIndexReturnState(cardTop, debateId, cardIndex >= 0 ? cardIndex : null);
       } else {
         saveIndexReturnState();
       }
@@ -5982,7 +6225,7 @@ const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
 
     return `
-      <article class="debate-card">
+      <article class="debate-card" data-debate-id="${d.id}">
         <a class="debate-card-link" href="/debate?id=${d.id}">
           <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
           <div class="debate-card-type">${debateTypeLabel}</div>
@@ -6224,7 +6467,7 @@ const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
 
   return `
-    <article class="debate-card">
+    <article class="debate-card" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}">
         <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
         <div class="debate-card-type">${debateTypeLabel}</div>
@@ -6543,11 +6786,14 @@ async function initIndex() {
       if (searchInput) searchInput.addEventListener("input", filterDebates);
       setTypeFilter("all");
 
-      // Scroll AVANT de cacher l'overlay : se passe derrière le fondu (180ms)
-      restoreIndexReturnStateIfNeeded();
+      const savedDebateId = getSavedIndexReturnDebateId();
 
-      pageArrivalLoadingOverlayReady = true;
-      hidePageArrivalLoadingOverlay();
+      if (savedDebateId && !indexReturnRestoreAttempted) {
+        restoreIndexReturnCardIfNeeded({ allowScrollFallback: true });
+      } else {
+        pageArrivalLoadingOverlayReady = true;
+        hidePageArrivalLoadingOverlay();
+      }
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(API + "/debates").then((fresh) => {
