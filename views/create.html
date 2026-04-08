@@ -27,18 +27,18 @@
       width: 84px;
       height: 84px;
       margin: 0 auto;
-      border-radius: 24px;
-      border: 1px solid #e5e7eb;
-      background: #ffffff;
-      box-shadow: 0 12px 30px rgba(15,23,42,0.08);
-      animation: createPublishHourglassSpin 1.25s ease-in-out infinite;
-      will-change: transform;
+    }
+
+    .create-publish-hourglass img {
+      width: 84px;
+      height: 84px;
+      object-fit: contain;
+      animation: createPublishHourglassSpin 1s linear infinite;
     }
 
     @keyframes createPublishHourglassSpin {
-      0% { transform: rotate(0deg) scale(1); }
-      50% { transform: rotate(180deg) scale(1.04); }
-      100% { transform: rotate(360deg) scale(1); }
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -188,7 +188,7 @@
 <input
   id="question"
   type="text"
-  placeholder="Ex. Faut-il interdire TikTok aux moins de 16 ans ?"
+  placeholder="Ex. Faut-il interdire TikTok ?"
   maxlength="100"
   required
   oninput="updateCounter('question','question-count',100)"
@@ -223,7 +223,7 @@
     placeholder="Ajoute ici un court texte pour donner le contexte de l’arène..."
     oninput="updateCounter('context_text','context-text-count',1800)"
   ></textarea>
-  <small id="context-text-count">0 / 600</small>
+  <small id="context-text-count">0 / 1800</small>
 </div>
 
 <div class="form-group create-form-group">
@@ -273,18 +273,34 @@
 </div>
 
 <div class="form-group create-form-group">
-  <label for="category">Thématique</label>
-  <select id="category" class="create-category-select" required>
-    <option value="">Sélectionner une thématique</option>
-    <option>Politique française</option>
-    <option>Politique internationale</option>
-    <option>Société</option>
-    <option>Éducation</option>
-    <option>Divertissement</option>
-    <option>Numérique</option>
-    <option>Médias</option>
-    <option>Autre</option>
-  </select>
+  <label for="category">Thématiques</label>
+  <input id="category" type="hidden" value="">
+  <div id="create-category-picker" class="create-category-picker">
+    <button
+      type="button"
+      id="create-category-toggle"
+      class="create-category-toggle"
+      aria-haspopup="true"
+      aria-expanded="false"
+      aria-controls="create-category-panel"
+    >
+      <span id="create-category-toggle-label">Choisir une ou plusieurs thématiques</span>
+      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+    </button>
+
+    <div
+      id="create-category-panel"
+      class="create-category-panel"
+      role="group"
+      aria-label="Choisir une ou plusieurs thématiques"
+      hidden
+    >
+      <div id="create-category-options" class="create-category-options"></div>
+    </div>
+
+    <div id="create-category-selected" class="create-category-selected" aria-live="polite"></div>
+  </div>
+  <small>Tu peux sélectionner une ou plusieurs thématiques pour la même arène.</small>
 </div>
 
 <div class="form-group create-form-group">
@@ -361,7 +377,7 @@
 
   <div id="create-publish-overlay" class="create-publish-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#ffffff; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
     <div class="create-publish-overlay-inner" style="width:min(100%, 600px); margin:0 auto; padding:0; box-sizing:border-box; text-align:center; display:flex; flex-direction:column; gap:18px; align-items:center; justify-content:center;">
-      <div class="create-publish-hourglass" aria-hidden="true" style="font-size:52px; line-height:1;">⌛</div>
+      <div class="create-publish-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
       <h2 id="create-publish-overlay-title" style="margin:0; font-size:32px; line-height:1.2; color:#111111;">Publication en cours</h2>
       <p id="create-publish-overlay-detail" style="margin:0; font-size:16px; line-height:1.6; color:#475569;">Préparation…</p>
 

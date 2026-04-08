@@ -2286,9 +2286,10 @@ app.post("/api/notifications/read-one", async (req, res) => {
 ========================= */
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url, content } = req.body || {};
+    const { question, option_a, option_b, source_url, content, category } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
+    const normalizedCategory = String(category || "").trim() || null;
 
     if (normalizedSourceUrl) {
       try {
@@ -2307,7 +2308,8 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
         option_a,
         option_b,
         source_url: normalizedSourceUrl || "",
-        content: normalizedContent
+        content: normalizedContent,
+        ...(normalizedCategory ? { category: normalizedCategory } : {})
       })
       .eq("id", req.params.id);
 
@@ -2320,7 +2322,8 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
             question,
             option_a,
             option_b,
-            source_url: normalizedSourceUrl || ""
+            source_url: normalizedSourceUrl || "",
+            ...(normalizedCategory ? { category: normalizedCategory } : {})
           })
           .eq("id", req.params.id);
         updateError = fallbackError;
