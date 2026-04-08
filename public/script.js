@@ -6716,7 +6716,7 @@ if (!debates.length) {
   return;
 }
 
-header.style.display = "flex";
+header.style.display = currentTypeFilter === "visited" ? "none" : "flex";
 section.style.display = "block";
 
   const debatesToShow = debates.slice(0, visitedDebatesVisible);
