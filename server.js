@@ -1923,6 +1923,10 @@ app.post("/api/admin/logout", (req, res) => {
   res.json({ success: true });
 });
 
+app.get("/api/admin/session", requireAdmin, (req, res) => {
+  res.json({ success: true });
+});
+
 app.get("/api/admin/visits/today", requireAdmin, async (req, res) => {
   try {
     const start = new Date();

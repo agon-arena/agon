@@ -88,6 +88,124 @@ let indexReturnRestoreAttempted = false;
 let pageArrivalLoadingOverlayHideTimer = null;
 let pageArrivalLoadingOverlayFallbackTimer = null;
 let pageArrivalLoadingOverlayReady = false;
+const PAGE_ARRIVAL_LOCKED_CONTROL_SELECTOR = [
+  'button',
+  '.debate-back-arrow',
+  '.topbar-back-arrow',
+  '.back-link',
+  '.home-bottom-nav .home-bottom-nav-item',
+  '.home-bottom-nav .home-bottom-nav-item-wrap > a',
+  '.home-bottom-nav .home-bottom-nav-item-wrap > button',
+  '.home-topbar-menu-toggle',
+  '.sort-dropdown',
+  '.argument-action-button',
+  '.comment-action-button',
+  '.position-argument-button',
+  '.form-close-btn',
+  '.voice-button',
+  '.vote-button',
+  '.share-icon-button',
+  '[role="button"]'
+].join(', ');
+
+function ensurePageArrivalLockedControlsStyles() {
+  if (document.getElementById('page-arrival-locked-controls-style')) return;
+
+  const style = document.createElement('style');
+  style.id = 'page-arrival-locked-controls-style';
+  style.textContent = `
+    .page-arrival-controls-locked .page-arrival-control-disabled {
+      opacity: 0.45 !important;
+      filter: grayscale(1);
+      pointer-events: none !important;
+      cursor: default !important;
+      transition: opacity 0.18s ease;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function setPageArrivalControlsLocked(isLocked) {
+  if (location.pathname !== '/debate') return;
+
+  ensurePageArrivalLockedControlsStyles();
+
+  const root = document.body;
+  if (!root) return;
+
+  const controls = Array.from(document.querySelectorAll(PAGE_ARRIVAL_LOCKED_CONTROL_SELECTOR));
+
+  if (isLocked) {
+    root.classList.add('page-arrival-controls-locked');
+
+    controls.forEach((control) => {
+      if (!control || control.classList.contains('page-arrival-control-disabled')) return;
+
+      control.classList.add('page-arrival-control-disabled');
+
+      if (control.hasAttribute('tabindex')) {
+        control.dataset.pageArrivalPrevTabindex = control.getAttribute('tabindex') || '';
+      }
+
+      if (control.hasAttribute('aria-disabled')) {
+        control.dataset.pageArrivalPrevAriaDisabled = control.getAttribute('aria-disabled') || '';
+      }
+
+      if ('disabled' in control) {
+        control.dataset.pageArrivalPrevDisabled = control.disabled ? 'true' : 'false';
+        control.disabled = true;
+      }
+
+      control.setAttribute('aria-disabled', 'true');
+      control.setAttribute('tabindex', '-1');
+    });
+
+    return;
+  }
+
+  root.classList.remove('page-arrival-controls-locked');
+
+  controls.forEach((control) => {
+    if (!control || !control.classList.contains('page-arrival-control-disabled')) return;
+
+    control.classList.remove('page-arrival-control-disabled');
+
+    if ('disabled' in control) {
+      const previousDisabled = control.dataset.pageArrivalPrevDisabled;
+      if (previousDisabled === 'true') {
+        control.disabled = true;
+      } else {
+        control.disabled = false;
+      }
+      delete control.dataset.pageArrivalPrevDisabled;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(control.dataset, 'pageArrivalPrevTabindex')) {
+      const previousTabindex = control.dataset.pageArrivalPrevTabindex;
+      if (previousTabindex === '') {
+        control.removeAttribute('tabindex');
+      } else {
+        control.setAttribute('tabindex', previousTabindex);
+      }
+      delete control.dataset.pageArrivalPrevTabindex;
+    } else {
+      control.removeAttribute('tabindex');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(control.dataset, 'pageArrivalPrevAriaDisabled')) {
+      const previousAriaDisabled = control.dataset.pageArrivalPrevAriaDisabled;
+      if (previousAriaDisabled === '') {
+        control.removeAttribute('aria-disabled');
+      } else {
+        control.setAttribute('aria-disabled', previousAriaDisabled);
+      }
+      delete control.dataset.pageArrivalPrevAriaDisabled;
+    } else {
+      control.removeAttribute('aria-disabled');
+    }
+  });
+}
 
 function ensurePageArrivalLoadingOverlayStyles() {
   if (document.getElementById("page-arrival-loading-style")) return;
@@ -239,6 +357,10 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
     updatePageArrivalLoadingOverlayBounds();
   }, 120);
   overlay.classList.add("page-arrival-loading-overlay-visible");
+
+  if (location.pathname === "/debate") {
+    setPageArrivalControlsLocked(true);
+  }
 }
 
 function hidePageArrivalLoadingOverlay() {
@@ -255,6 +377,10 @@ function hidePageArrivalLoadingOverlay() {
     overlay.remove();
     pageArrivalLoadingOverlayHideTimer = null;
   }, 180);
+
+  if (location.pathname === "/debate") {
+    setPageArrivalControlsLocked(false);
+  }
 }
 
 function markPageArrivalLoadingOverlayReady() {
@@ -1813,9 +1939,18 @@ async function fetchJSON(url, opt = {}) {
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
+    const requestUrl = typeof url === "string" ? url : String(url || "");
+    const adminRequest = requestUrl.includes("/admin/") || !!opt?.headers?.["x-admin-token"] || !!opt?.headers?.["X-Admin-Token"];
+
+    if (adminRequest && (r.status === 401 || r.status === 403)) {
+      clearAdminToken();
+      refreshAdminUI();
+    }
+
     const error = new Error(data.error || "Erreur serveur");
     error.code = data.error;
     error.details = data;
+    error.status = r.status;
     throw error;
   }
 
@@ -3371,12 +3506,8 @@ async function renderIndexXShell(shell) {
 
   if (!tweetId || !embed) {
     if (loading) loading.style.display = 'none';
-    showIndexEmbedFallbackState(shell, fallback, {
-      title: 'Contenu indisponible',
-      message: 'Le post X n’a pas pu être chargé pour le moment.',
-      retryLabel: 'Réessayer',
-      retryOnclick: "retryIndexEmbedRender(this, 'x')"
-    });
+    if (fallback) fallback.style.display = '';
+    shell.dataset.rendered = 'failed';
     restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
@@ -3412,23 +3543,18 @@ async function renderIndexXShell(shell) {
     }
 
     shell.dataset.rendered = 'true';
-    sanitizeMobileLoadFailedArtifacts(shell);
     embed.style.display = 'block';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
   } catch (error) {
+    shell.dataset.rendered = 'failed';
     embed.innerHTML = '';
     embed.style.display = 'none';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
-    showIndexEmbedFallbackState(shell, fallback, {
-      title: 'Chargement interrompu',
-      message: 'Le post X n’a pas pu être affiché. Tu peux réessayer ou ouvrir la source.',
-      retryLabel: 'Réessayer',
-      retryOnclick: "retryIndexEmbedRender(this, 'x')"
-    });
+    if (fallback) fallback.style.display = '';
     console.warn('Impossible de rendre le post X sur index:', sourceUrl || tweetId, error);
   } finally {
     shell.dataset.rendering = 'false';
@@ -3510,12 +3636,8 @@ async function renderIndexInstagramShell(shell) {
 
   if (!embedPermalink || !embed) {
     if (loading) loading.style.display = 'none';
-    showIndexEmbedFallbackState(shell, fallback, {
-      title: 'Contenu indisponible',
-      message: 'Le post Instagram n’a pas pu être chargé pour le moment.',
-      retryLabel: 'Réessayer',
-      retryOnclick: "retryIndexEmbedRender(this, 'instagram')"
-    });
+    if (fallback) fallback.style.display = '';
+    shell.dataset.rendered = 'failed';
     restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
@@ -3554,23 +3676,18 @@ async function renderIndexInstagramShell(shell) {
     window.instgrm.Embeds.process();
 
     shell.dataset.rendered = 'true';
-    sanitizeMobileLoadFailedArtifacts(shell);
     embed.style.display = 'flex';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
   } catch (error) {
+    shell.dataset.rendered = 'failed';
     embed.innerHTML = '';
     embed.style.display = 'none';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
-    showIndexEmbedFallbackState(shell, fallback, {
-      title: 'Chargement interrompu',
-      message: 'Le post Instagram n’a pas pu être affiché. Tu peux réessayer ou ouvrir la source.',
-      retryLabel: 'Réessayer',
-      retryOnclick: "retryIndexEmbedRender(this, 'instagram')"
-    });
+    if (fallback) fallback.style.display = '';
     console.warn('Impossible de rendre le post Instagram sur index:', sourceUrl || embedPermalink, error);
   } finally {
     shell.dataset.rendering = 'false';
@@ -3636,196 +3753,6 @@ function initIndexInstagramObserver(root = document) {
       });
     }
   });
-}
-
-
-function removeLoadFailedTextNodes(root) {
-  if (!root || !(root instanceof Element || root instanceof DocumentFragment)) return;
-
-  const blockedTexts = new Set([
-    'load failed',
-    'loading failed',
-    'failed to load'
-  ]);
-
-  const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const textNodesToClear = [];
-
-  while (textWalker.nextNode()) {
-    const node = textWalker.currentNode;
-    const normalizedText = String(node?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    if (!blockedTexts.has(normalizedText)) continue;
-    textNodesToClear.push(node);
-  }
-
-  textNodesToClear.forEach((node) => {
-    const parent = node.parentElement;
-    if (parent && parent.childNodes.length === 1) {
-      parent.remove();
-      return;
-    }
-    node.textContent = '';
-  });
-
-  root.querySelectorAll?.('img[alt], iframe[title], video[title]').forEach((element) => {
-    const altText = String(element.getAttribute('alt') || element.getAttribute('title') || '').trim().toLowerCase();
-    if (!blockedTexts.has(altText)) return;
-    if (element.tagName === 'IMG') {
-      element.removeAttribute('alt');
-    } else {
-      element.removeAttribute('title');
-    }
-  });
-}
-
-function sanitizeMobileLoadFailedArtifacts(root = document) {
-  if (!root) return;
-
-  const targets = [];
-
-  if (root instanceof Element || root instanceof DocumentFragment) {
-    targets.push(root);
-  }
-
-  if (root === document) {
-    targets.push(document.body || document.documentElement);
-  }
-
-  targets.forEach((target) => {
-    if (!target) return;
-    removeLoadFailedTextNodes(target);
-    target.querySelectorAll?.('[data-index-x-shell], [data-index-instagram-shell], [data-index-x-fallback], [data-index-instagram-fallback], .debate-card-media, .debate-card-source').forEach((node) => {
-      removeLoadFailedTextNodes(node);
-    });
-  });
-}
-
-function initLoadFailedTextSanitizer() {
-  if (window.__agonLoadFailedTextSanitizerInitialized) return;
-  window.__agonLoadFailedTextSanitizerInitialized = true;
-
-  const runSanitizer = (root = document) => {
-    requestAnimationFrame(() => {
-      sanitizeMobileLoadFailedArtifacts(root);
-    });
-  };
-
-  runSanitizer(document);
-
-  if (typeof MutationObserver !== 'function') return;
-
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      mutation.addedNodes.forEach((node) => {
-        if (!(node instanceof Element || node instanceof DocumentFragment)) return;
-        runSanitizer(node);
-      });
-
-      if (mutation.type === 'characterData') {
-        const parent = mutation.target?.parentElement;
-        if (parent) {
-          runSanitizer(parent);
-        }
-      }
-    });
-  });
-
-  const observerRoot = document.body || document.documentElement;
-  if (!observerRoot) return;
-
-  observer.observe(observerRoot, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
-}
-
-function buildEmbedLoadFailedNoticeHtml(options = {}) {
-  const title = String(options?.title || "Contenu indisponible").trim() || "Contenu indisponible";
-  const message = String(options?.message || "Ce contenu n’a pas pu être chargé pour le moment.").trim() || "Ce contenu n’a pas pu être chargé pour le moment.";
-  const retryLabel = String(options?.retryLabel || "").trim();
-  const retryOnclick = String(options?.retryOnclick || "").trim();
-  const retryHtml = retryLabel && retryOnclick
-    ? `
-        <button
-          type="button"
-          onclick="${escapeAttribute(retryOnclick)}"
-          style="appearance:none; border:0; border-radius:999px; padding:10px 14px; background:#111111; color:#ffffff; font-size:13px; font-weight:800; line-height:1; cursor:pointer;"
-        >${escapeHtml(retryLabel)}</button>
-      `
-    : "";
-
-  return `
-    <div
-      class="embed-load-failed-notice"
-      style="display:flex; flex-direction:column; gap:10px; margin:0 0 12px; padding:14px 16px; border-radius:18px; background:#fff7ed; border:1px solid #fed7aa; box-shadow:0 8px 22px rgba(15,23,42,0.05);"
-    >
-      <div style="display:flex; align-items:flex-start; gap:10px;">
-        <div aria-hidden="true" style="flex:0 0 auto; width:28px; height:28px; border-radius:999px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #fdba74; font-size:14px;">⚠️</div>
-        <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
-          <div style="font-size:14px; line-height:1.35; font-weight:800; color:#9a3412;">${escapeHtml(title)}</div>
-          <div style="font-size:13px; line-height:1.5; color:#7c2d12;">${escapeHtml(message)}</div>
-        </div>
-      </div>
-      ${retryHtml ? `<div style="display:flex; justify-content:flex-start;">${retryHtml}</div>` : ""}
-    </div>
-  `;
-}
-
-function showIndexEmbedFallbackState(shell, fallback, options = {}) {
-  if (!shell || !fallback) return;
-
-  if (!fallback.dataset.originalHtml) {
-    fallback.dataset.originalHtml = fallback.innerHTML;
-  }
-
-  const originalHtml = fallback.dataset.originalHtml || "";
-  fallback.innerHTML = originalHtml;
-  fallback.style.display = '';
-  shell.dataset.rendered = 'failed';
-  sanitizeMobileLoadFailedArtifacts(fallback);
-}
-
-function retryIndexEmbedRender(button, type) {
-  const trigger = button?.closest('[data-index-x-shell], [data-index-instagram-shell]');
-  if (!trigger) return;
-
-  const normalizedType = String(type || trigger.dataset.embedType || '').trim().toLowerCase();
-  const fallbackSelector = normalizedType === 'instagram' ? '[data-index-instagram-fallback]' : '[data-index-x-fallback]';
-  const loadingSelector = normalizedType === 'instagram' ? '[data-index-instagram-loading]' : '[data-index-x-loading]';
-  const embedSelector = normalizedType === 'instagram' ? '[data-index-instagram-embed]' : '[data-index-x-embed]';
-
-  const fallback = trigger.querySelector(fallbackSelector);
-  const loading = trigger.querySelector(loadingSelector);
-  const embed = trigger.querySelector(embedSelector);
-
-  trigger.dataset.rendered = 'false';
-  trigger.dataset.rendering = 'false';
-
-  if (fallback) {
-    if (fallback.dataset.originalHtml) {
-      fallback.innerHTML = fallback.dataset.originalHtml;
-    }
-    fallback.style.display = 'none';
-  }
-
-  if (embed) {
-    embed.innerHTML = '';
-    embed.style.display = 'none';
-    embed.style.visibility = 'visible';
-    embed.style.minHeight = '';
-  }
-
-  if (loading) {
-    loading.style.display = 'flex';
-  }
-
-  if (normalizedType === 'instagram') {
-    renderIndexInstagramShell(trigger);
-    return;
-  }
-
-  renderIndexXShell(trigger);
 }
 
 function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
@@ -4019,78 +3946,11 @@ function clearNotificationTransitionState() {
   }
 }
 
-let notificationTransitionScrollLockActive = false;
-let notificationTransitionScrollLockCleanup = null;
-
-function lockNotificationTransitionScroll() {
-  if (notificationTransitionScrollLockActive) return;
-
-  const blockedKeys = new Set([
-    "ArrowUp",
-    "ArrowDown",
-    "ArrowLeft",
-    "ArrowRight",
-    "PageUp",
-    "PageDown",
-    "Home",
-    "End",
-    " ",
-    "Spacebar"
-  ]);
-
-  const preventScrollInteraction = (event) => {
-    if (event && typeof event.preventDefault === "function") {
-      event.preventDefault();
-    }
-  };
-
-  const preventKeyScroll = (event) => {
-    if (!event) return;
-    if (!blockedKeys.has(event.key)) return;
-    if (event.target && /^(INPUT|TEXTAREA|SELECT)$/i.test(event.target.tagName || "")) return;
-    preventScrollInteraction(event);
-  };
-
-  window.addEventListener("wheel", preventScrollInteraction, { passive: false });
-  window.addEventListener("touchmove", preventScrollInteraction, { passive: false });
-  window.addEventListener("keydown", preventKeyScroll, { passive: false });
-
-  document.documentElement.style.overscrollBehavior = "none";
-  document.body.style.overscrollBehavior = "none";
-  document.documentElement.style.touchAction = "none";
-  document.body.style.touchAction = "none";
-
-  notificationTransitionScrollLockCleanup = () => {
-    window.removeEventListener("wheel", preventScrollInteraction, { passive: false });
-    window.removeEventListener("touchmove", preventScrollInteraction, { passive: false });
-    window.removeEventListener("keydown", preventKeyScroll, { passive: false });
-    document.documentElement.style.overscrollBehavior = "";
-    document.body.style.overscrollBehavior = "";
-    document.documentElement.style.touchAction = "";
-    document.body.style.touchAction = "";
-  };
-
-  notificationTransitionScrollLockActive = true;
-}
-
-function unlockNotificationTransitionScroll() {
-  if (!notificationTransitionScrollLockActive) return;
-
-  if (typeof notificationTransitionScrollLockCleanup === "function") {
-    notificationTransitionScrollLockCleanup();
-  }
-
-  notificationTransitionScrollLockCleanup = null;
-  notificationTransitionScrollLockActive = false;
-}
-
 function showNotificationTransitionOverlay(message = "Chargement en cours") {
-  lockNotificationTransitionScroll();
   showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
 
 function hideNotificationTransitionOverlay() {
-  unlockNotificationTransitionScroll();
   hidePageArrivalLoadingOverlay();
   clearNotificationTransitionState();
 }
@@ -4134,14 +3994,8 @@ function finalizeNotificationTransitionAtScrollStart() {
   const state = getNotificationTransitionState();
   if (!state?.active) return;
 
-  waitForNotificationTargetScrollToFinish(() => {
-    requestAnimationFrame(() => {
-      hideNotificationTransitionOverlay();
-    });
-  }, {
-    maxWaitMs: 1400,
-    stableFramesNeeded: 4,
-    tolerance: 2
+  requestAnimationFrame(() => {
+    hideNotificationTransitionOverlay();
   });
 }
 
@@ -5422,44 +5276,89 @@ const replyToCommentByArgument = {};
    Admin
 ========================= */
 
+let adminSessionVerified = false;
+let adminSessionVerificationPromise = null;
+
 function getAdminToken() {
   return localStorage.getItem("admin_token");
 }
 
 function isAdmin() {
-  return !!getAdminToken();
+  return !!getAdminToken() && adminSessionVerified;
 }
 
 function setAdminToken(token) {
   localStorage.setItem("admin_token", token);
+  adminSessionVerified = !!token;
 }
 
 function clearAdminToken() {
   localStorage.removeItem("admin_token");
+  adminSessionVerified = false;
 }
 
 function refreshAdminUI() {
-
+  const adminMode = isAdmin();
   const loginBtn = document.getElementById("admin-login-btn");
   const logoutBtn = document.getElementById("admin-logout-btn");
   const badge = document.getElementById("admin-badge");
 
   if (loginBtn) {
-    loginBtn.style.display = isAdmin() ? "none" : "inline-block";
+    loginBtn.style.display = adminMode ? "none" : "inline-block";
   }
 
   if (logoutBtn) {
-    logoutBtn.style.display = isAdmin() ? "inline-block" : "none";
+    logoutBtn.style.display = adminMode ? "inline-block" : "none";
   }
 
   if (badge) {
-    badge.style.display = isAdmin() ? "inline-flex" : "none";
+    badge.style.display = adminMode ? "inline-flex" : "none";
   }
 
   document.querySelectorAll("[data-admin]").forEach(el => {
-    el.style.display = isAdmin() ? "" : "none";
+    el.style.display = adminMode ? "" : "none";
   });
+}
 
+async function verifyAdminSession(force = false) {
+  const token = getAdminToken();
+
+  if (!token) {
+    clearAdminToken();
+    refreshAdminUI();
+    return false;
+  }
+
+  if (!force && adminSessionVerified) {
+    refreshAdminUI();
+    return true;
+  }
+
+  if (!force && adminSessionVerificationPromise) {
+    return adminSessionVerificationPromise;
+  }
+
+  adminSessionVerificationPromise = (async () => {
+    try {
+      await fetchJSON(API + "/admin/session", {
+        headers: {
+          "x-admin-token": token
+        }
+      });
+
+      adminSessionVerified = true;
+      refreshAdminUI();
+      return true;
+    } catch (error) {
+      clearAdminToken();
+      refreshAdminUI();
+      return false;
+    } finally {
+      adminSessionVerificationPromise = null;
+    }
+  })();
+
+  return adminSessionVerificationPromise;
 }
 
 async function adminLogin() {
@@ -5522,6 +5421,7 @@ function attachAdminButtons() {
   }
 
   refreshAdminUI();
+  verifyAdminSession();
 }
 /* =========================
    Notifications
@@ -10444,10 +10344,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
     if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
-    showDebateSourceFallback(sourceUrl, sourcePreviewData, {
-      title: 'Chargement interrompu',
-      message: 'Le post Instagram n’a pas pu être affiché pour le moment.'
-    });
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
     debateInstagramIsRendered = false;
   }
 
@@ -10535,10 +10432,7 @@ sourceFallback.style.display = "flex";
       if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
-    showDebateSourceFallback(sourceUrl, sourcePreviewData, {
-      title: 'Chargement interrompu',
-      message: 'Le post X n’a pas pu être affiché pour le moment.'
-    });
+    showDebateSourceFallback(sourceUrl, sourcePreviewData);
   }
 }
 
@@ -10603,7 +10497,7 @@ function resetDebateSourcePreview() {
 
 }
 
-function showDebateSourceFallback(sourceUrl, preview = null, options = {}) {
+function showDebateSourceFallback(sourceUrl, preview = null) {
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
   const sourceLoading = document.getElementById("debate-source-preview-loading");
@@ -10620,6 +10514,7 @@ function showDebateSourceFallback(sourceUrl, preview = null, options = {}) {
   if (!sourceFallback) return;
 
   const fallbackPreview = normalizeSourcePreviewData(preview, sourceUrl);
+
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
 
@@ -14052,7 +13947,6 @@ function ensureProgressSortOption() {
 }
 
 initPageArrivalLoadingOverlay();
-initLoadFailedTextSanitizer();
 
 document.addEventListener("DOMContentLoaded", () => {
 initMobileIndexCardHighlight();
