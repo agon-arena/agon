@@ -10644,6 +10644,10 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
       element = document.getElementById(highlight);
     }
 
+    const removeEarlyGrey = () => {
+      document.documentElement.classList.remove("notification-transition-pending-early");
+    };
+
 if (element) {
   const stickyHeader = document.querySelector(".debate-hero-top");
   const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
@@ -10653,6 +10657,25 @@ if (element) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+
+  // Retirer le grisage une fois le scroll stabilisé
+  let lastY = window.scrollY;
+  let stableFrames = 0;
+  let hasStartedMoving = false;
+  const startTime = Date.now();
+  const pollScroll = () => {
+    const curY = window.scrollY;
+    const delta = Math.abs(curY - lastY);
+    lastY = curY;
+    if (delta > 1) { hasStartedMoving = true; stableFrames = 0; }
+    else if (hasStartedMoving) { stableFrames++; }
+    if (stableFrames >= 4 || (!hasStartedMoving && Date.now() - startTime > 600) || Date.now() - startTime > 3000) {
+      removeEarlyGrey();
+      return;
+    }
+    requestAnimationFrame(pollScroll);
+  };
+  requestAnimationFrame(pollScroll);
 
   const isGreenTarget =
     element.classList.contains("argument-card-a") ||
@@ -10681,6 +10704,8 @@ if (element) {
       element.classList.remove("admin-highlight");
     }, 5000);
   }
+} else {
+  removeEarlyGrey();
 }
 
     const url = new URL(window.location.href);

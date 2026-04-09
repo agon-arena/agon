@@ -8,6 +8,28 @@
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="stylesheet" href="/style.css?v=20260408-1" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script>
+(function () {
+  try {
+    const state = JSON.parse(sessionStorage.getItem("notification_transition_pending") || "null");
+    if (state && state.active) {
+      document.documentElement.classList.add("notification-transition-pending-early");
+    }
+  } catch (error) {}
+})();
+</script>
+<style>
+html.notification-transition-pending-early body.page-debate::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 17;
+  background: rgba(107, 114, 128, 0.42);
+  backdrop-filter: blur(2.5px);
+  -webkit-backdrop-filter: blur(2.5px);
+  pointer-events: none;
+}
+</style>
 </head>
 <body class="page-debate">
 
