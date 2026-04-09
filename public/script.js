@@ -3371,8 +3371,12 @@ async function renderIndexXShell(shell) {
 
   if (!tweetId || !embed) {
     if (loading) loading.style.display = 'none';
-    if (fallback) fallback.style.display = '';
-    shell.dataset.rendered = 'failed';
+    showIndexEmbedFallbackState(shell, fallback, {
+      title: 'Contenu indisponible',
+      message: 'Le post X n’a pas pu être chargé pour le moment.',
+      retryLabel: 'Réessayer',
+      retryOnclick: "retryIndexEmbedRender(this, 'x')"
+    });
     restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
@@ -3408,18 +3412,23 @@ async function renderIndexXShell(shell) {
     }
 
     shell.dataset.rendered = 'true';
+    sanitizeMobileLoadFailedArtifacts(shell);
     embed.style.display = 'block';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
   } catch (error) {
-    shell.dataset.rendered = 'failed';
     embed.innerHTML = '';
     embed.style.display = 'none';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
-    if (fallback) fallback.style.display = '';
+    showIndexEmbedFallbackState(shell, fallback, {
+      title: 'Chargement interrompu',
+      message: 'Le post X n’a pas pu être affiché. Tu peux réessayer ou ouvrir la source.',
+      retryLabel: 'Réessayer',
+      retryOnclick: "retryIndexEmbedRender(this, 'x')"
+    });
     console.warn('Impossible de rendre le post X sur index:', sourceUrl || tweetId, error);
   } finally {
     shell.dataset.rendering = 'false';
@@ -3501,8 +3510,12 @@ async function renderIndexInstagramShell(shell) {
 
   if (!embedPermalink || !embed) {
     if (loading) loading.style.display = 'none';
-    if (fallback) fallback.style.display = '';
-    shell.dataset.rendered = 'failed';
+    showIndexEmbedFallbackState(shell, fallback, {
+      title: 'Contenu indisponible',
+      message: 'Le post Instagram n’a pas pu être chargé pour le moment.',
+      retryLabel: 'Réessayer',
+      retryOnclick: "retryIndexEmbedRender(this, 'instagram')"
+    });
     restoreIndexEmbedScrollAnchor(shell, scrollAnchor);
     return;
   }
@@ -3541,18 +3554,23 @@ async function renderIndexInstagramShell(shell) {
     window.instgrm.Embeds.process();
 
     shell.dataset.rendered = 'true';
+    sanitizeMobileLoadFailedArtifacts(shell);
     embed.style.display = 'flex';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
   } catch (error) {
-    shell.dataset.rendered = 'failed';
     embed.innerHTML = '';
     embed.style.display = 'none';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
     if (loading) loading.style.display = 'none';
-    if (fallback) fallback.style.display = '';
+    showIndexEmbedFallbackState(shell, fallback, {
+      title: 'Chargement interrompu',
+      message: 'Le post Instagram n’a pas pu être affiché. Tu peux réessayer ou ouvrir la source.',
+      retryLabel: 'Réessayer',
+      retryOnclick: "retryIndexEmbedRender(this, 'instagram')"
+    });
     console.warn('Impossible de rendre le post Instagram sur index:', sourceUrl || embedPermalink, error);
   } finally {
     shell.dataset.rendering = 'false';
@@ -3618,6 +3636,196 @@ function initIndexInstagramObserver(root = document) {
       });
     }
   });
+}
+
+
+function removeLoadFailedTextNodes(root) {
+  if (!root || !(root instanceof Element || root instanceof DocumentFragment)) return;
+
+  const blockedTexts = new Set([
+    'load failed',
+    'loading failed',
+    'failed to load'
+  ]);
+
+  const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodesToClear = [];
+
+  while (textWalker.nextNode()) {
+    const node = textWalker.currentNode;
+    const normalizedText = String(node?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!blockedTexts.has(normalizedText)) continue;
+    textNodesToClear.push(node);
+  }
+
+  textNodesToClear.forEach((node) => {
+    const parent = node.parentElement;
+    if (parent && parent.childNodes.length === 1) {
+      parent.remove();
+      return;
+    }
+    node.textContent = '';
+  });
+
+  root.querySelectorAll?.('img[alt], iframe[title], video[title]').forEach((element) => {
+    const altText = String(element.getAttribute('alt') || element.getAttribute('title') || '').trim().toLowerCase();
+    if (!blockedTexts.has(altText)) return;
+    if (element.tagName === 'IMG') {
+      element.removeAttribute('alt');
+    } else {
+      element.removeAttribute('title');
+    }
+  });
+}
+
+function sanitizeMobileLoadFailedArtifacts(root = document) {
+  if (!root) return;
+
+  const targets = [];
+
+  if (root instanceof Element || root instanceof DocumentFragment) {
+    targets.push(root);
+  }
+
+  if (root === document) {
+    targets.push(document.body || document.documentElement);
+  }
+
+  targets.forEach((target) => {
+    if (!target) return;
+    removeLoadFailedTextNodes(target);
+    target.querySelectorAll?.('[data-index-x-shell], [data-index-instagram-shell], [data-index-x-fallback], [data-index-instagram-fallback], .debate-card-media, .debate-card-source').forEach((node) => {
+      removeLoadFailedTextNodes(node);
+    });
+  });
+}
+
+function initLoadFailedTextSanitizer() {
+  if (window.__agonLoadFailedTextSanitizerInitialized) return;
+  window.__agonLoadFailedTextSanitizerInitialized = true;
+
+  const runSanitizer = (root = document) => {
+    requestAnimationFrame(() => {
+      sanitizeMobileLoadFailedArtifacts(root);
+    });
+  };
+
+  runSanitizer(document);
+
+  if (typeof MutationObserver !== 'function') return;
+
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element || node instanceof DocumentFragment)) return;
+        runSanitizer(node);
+      });
+
+      if (mutation.type === 'characterData') {
+        const parent = mutation.target?.parentElement;
+        if (parent) {
+          runSanitizer(parent);
+        }
+      }
+    });
+  });
+
+  const observerRoot = document.body || document.documentElement;
+  if (!observerRoot) return;
+
+  observer.observe(observerRoot, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+}
+
+function buildEmbedLoadFailedNoticeHtml(options = {}) {
+  const title = String(options?.title || "Contenu indisponible").trim() || "Contenu indisponible";
+  const message = String(options?.message || "Ce contenu n’a pas pu être chargé pour le moment.").trim() || "Ce contenu n’a pas pu être chargé pour le moment.";
+  const retryLabel = String(options?.retryLabel || "").trim();
+  const retryOnclick = String(options?.retryOnclick || "").trim();
+  const retryHtml = retryLabel && retryOnclick
+    ? `
+        <button
+          type="button"
+          onclick="${escapeAttribute(retryOnclick)}"
+          style="appearance:none; border:0; border-radius:999px; padding:10px 14px; background:#111111; color:#ffffff; font-size:13px; font-weight:800; line-height:1; cursor:pointer;"
+        >${escapeHtml(retryLabel)}</button>
+      `
+    : "";
+
+  return `
+    <div
+      class="embed-load-failed-notice"
+      style="display:flex; flex-direction:column; gap:10px; margin:0 0 12px; padding:14px 16px; border-radius:18px; background:#fff7ed; border:1px solid #fed7aa; box-shadow:0 8px 22px rgba(15,23,42,0.05);"
+    >
+      <div style="display:flex; align-items:flex-start; gap:10px;">
+        <div aria-hidden="true" style="flex:0 0 auto; width:28px; height:28px; border-radius:999px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #fdba74; font-size:14px;">⚠️</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+          <div style="font-size:14px; line-height:1.35; font-weight:800; color:#9a3412;">${escapeHtml(title)}</div>
+          <div style="font-size:13px; line-height:1.5; color:#7c2d12;">${escapeHtml(message)}</div>
+        </div>
+      </div>
+      ${retryHtml ? `<div style="display:flex; justify-content:flex-start;">${retryHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+function showIndexEmbedFallbackState(shell, fallback, options = {}) {
+  if (!shell || !fallback) return;
+
+  if (!fallback.dataset.originalHtml) {
+    fallback.dataset.originalHtml = fallback.innerHTML;
+  }
+
+  const originalHtml = fallback.dataset.originalHtml || "";
+  fallback.innerHTML = originalHtml;
+  fallback.style.display = '';
+  shell.dataset.rendered = 'failed';
+  sanitizeMobileLoadFailedArtifacts(fallback);
+}
+
+function retryIndexEmbedRender(button, type) {
+  const trigger = button?.closest('[data-index-x-shell], [data-index-instagram-shell]');
+  if (!trigger) return;
+
+  const normalizedType = String(type || trigger.dataset.embedType || '').trim().toLowerCase();
+  const fallbackSelector = normalizedType === 'instagram' ? '[data-index-instagram-fallback]' : '[data-index-x-fallback]';
+  const loadingSelector = normalizedType === 'instagram' ? '[data-index-instagram-loading]' : '[data-index-x-loading]';
+  const embedSelector = normalizedType === 'instagram' ? '[data-index-instagram-embed]' : '[data-index-x-embed]';
+
+  const fallback = trigger.querySelector(fallbackSelector);
+  const loading = trigger.querySelector(loadingSelector);
+  const embed = trigger.querySelector(embedSelector);
+
+  trigger.dataset.rendered = 'false';
+  trigger.dataset.rendering = 'false';
+
+  if (fallback) {
+    if (fallback.dataset.originalHtml) {
+      fallback.innerHTML = fallback.dataset.originalHtml;
+    }
+    fallback.style.display = 'none';
+  }
+
+  if (embed) {
+    embed.innerHTML = '';
+    embed.style.display = 'none';
+    embed.style.visibility = 'visible';
+    embed.style.minHeight = '';
+  }
+
+  if (loading) {
+    loading.style.display = 'flex';
+  }
+
+  if (normalizedType === 'instagram') {
+    renderIndexInstagramShell(trigger);
+    return;
+  }
+
+  renderIndexXShell(trigger);
 }
 
 function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
@@ -3811,11 +4019,78 @@ function clearNotificationTransitionState() {
   }
 }
 
+let notificationTransitionScrollLockActive = false;
+let notificationTransitionScrollLockCleanup = null;
+
+function lockNotificationTransitionScroll() {
+  if (notificationTransitionScrollLockActive) return;
+
+  const blockedKeys = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+    " ",
+    "Spacebar"
+  ]);
+
+  const preventScrollInteraction = (event) => {
+    if (event && typeof event.preventDefault === "function") {
+      event.preventDefault();
+    }
+  };
+
+  const preventKeyScroll = (event) => {
+    if (!event) return;
+    if (!blockedKeys.has(event.key)) return;
+    if (event.target && /^(INPUT|TEXTAREA|SELECT)$/i.test(event.target.tagName || "")) return;
+    preventScrollInteraction(event);
+  };
+
+  window.addEventListener("wheel", preventScrollInteraction, { passive: false });
+  window.addEventListener("touchmove", preventScrollInteraction, { passive: false });
+  window.addEventListener("keydown", preventKeyScroll, { passive: false });
+
+  document.documentElement.style.overscrollBehavior = "none";
+  document.body.style.overscrollBehavior = "none";
+  document.documentElement.style.touchAction = "none";
+  document.body.style.touchAction = "none";
+
+  notificationTransitionScrollLockCleanup = () => {
+    window.removeEventListener("wheel", preventScrollInteraction, { passive: false });
+    window.removeEventListener("touchmove", preventScrollInteraction, { passive: false });
+    window.removeEventListener("keydown", preventKeyScroll, { passive: false });
+    document.documentElement.style.overscrollBehavior = "";
+    document.body.style.overscrollBehavior = "";
+    document.documentElement.style.touchAction = "";
+    document.body.style.touchAction = "";
+  };
+
+  notificationTransitionScrollLockActive = true;
+}
+
+function unlockNotificationTransitionScroll() {
+  if (!notificationTransitionScrollLockActive) return;
+
+  if (typeof notificationTransitionScrollLockCleanup === "function") {
+    notificationTransitionScrollLockCleanup();
+  }
+
+  notificationTransitionScrollLockCleanup = null;
+  notificationTransitionScrollLockActive = false;
+}
+
 function showNotificationTransitionOverlay(message = "Chargement en cours") {
+  lockNotificationTransitionScroll();
   showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
 
 function hideNotificationTransitionOverlay() {
+  unlockNotificationTransitionScroll();
   hidePageArrivalLoadingOverlay();
   clearNotificationTransitionState();
 }
@@ -3859,8 +4134,14 @@ function finalizeNotificationTransitionAtScrollStart() {
   const state = getNotificationTransitionState();
   if (!state?.active) return;
 
-  requestAnimationFrame(() => {
-    hideNotificationTransitionOverlay();
+  waitForNotificationTargetScrollToFinish(() => {
+    requestAnimationFrame(() => {
+      hideNotificationTransitionOverlay();
+    });
+  }, {
+    maxWaitMs: 1400,
+    stableFramesNeeded: 4,
+    tolerance: 2
   });
 }
 
@@ -4330,17 +4611,40 @@ function shareIdeaByEmail(debateId, encodedArgumentJson) {
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
+function shareIdeaOnLinkedIn(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIdeaOnMastodon(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { text, url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(text + " " + url)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+function shareIdeaOnReddit(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { title, url } = getIdeaShareData(debateId, argument);
+  const shareUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
+  window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
 let openedIdeaShareMenuId = null;
 
 function closeIdeaShareMenus() {
-  if (!openedIdeaShareMenuId) return;
-
-  const openedMenu = document.getElementById(openedIdeaShareMenuId);
-  if (openedMenu) {
-    openedMenu.style.display = 'none';
+  const globalMenu = document.getElementById('idea-share-global-menu');
+  if (globalMenu) {
+    globalMenu.style.display = 'none';
+    globalMenu.innerHTML = '';
   }
-
   openedIdeaShareMenuId = null;
+  if (window.__ideaShareScrollHandler) {
+    window.removeEventListener('scroll', window.__ideaShareScrollHandler, true);
+    window.__ideaShareScrollHandler = null;
+  }
 }
 
 function toggleIdeaShareMenu(event, argumentId) {
@@ -4349,18 +4653,42 @@ function toggleIdeaShareMenu(event, argumentId) {
     event.stopPropagation();
   }
 
-  const menuId = `idea-share-menu-${argumentId}`;
-  const menu = document.getElementById(menuId);
-  if (!menu) return;
-
-  const isSameMenuOpen = openedIdeaShareMenuId === menuId && menu.style.display === 'flex';
+  const sourceMenuId = `idea-share-menu-${argumentId}`;
+  const sourceMenu = document.getElementById(sourceMenuId);
+  const isSameMenuOpen = openedIdeaShareMenuId === sourceMenuId;
 
   closeIdeaShareMenus();
+  if (isSameMenuOpen || !sourceMenu) return;
 
-  if (!isSameMenuOpen) {
-    menu.style.display = 'flex';
-    openedIdeaShareMenuId = menuId;
+  // Menu global dans body — échappe tout contexte d'empilement
+  let globalMenu = document.getElementById('idea-share-global-menu');
+  if (!globalMenu) {
+    globalMenu = document.createElement('div');
+    globalMenu.id = 'idea-share-global-menu';
+    globalMenu.style.cssText = 'display:none;position:fixed;z-index:9999;flex-direction:column;gap:6px;min-width:152px;padding:8px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,0.12);';
+    globalMenu.onclick = (e) => e.stopPropagation();
+    document.body.appendChild(globalMenu);
   }
+
+  globalMenu.innerHTML = sourceMenu.innerHTML;
+
+  const trigger = event.target.closest('button') || event.target;
+  const positionMenu = () => {
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 160;
+    let left = rect.left + rect.width / 2 - menuWidth / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
+    globalMenu.style.top = (rect.bottom + 8) + 'px';
+    globalMenu.style.left = left + 'px';
+  };
+
+  positionMenu();
+  globalMenu.style.display = 'flex';
+  openedIdeaShareMenuId = sourceMenuId;
+
+  // Suivre le scroll pour rester sous le bouton
+  window.__ideaShareScrollHandler = positionMenu;
+  window.addEventListener('scroll', positionMenu, { passive: true, capture: true });
 }
 
 function handleIdeaShareAction(event, callback) {
@@ -4378,14 +4706,16 @@ function handleIdeaShareAction(event, callback) {
 
 if (!window.__ideaShareMenuListenerAttached) {
   document.addEventListener('click', (event) => {
-    if (event.target.closest('.idea-share-discreet-wrap')) return;
+    if (event.target.closest('#idea-share-global-menu')) return;
+    if (event.target.closest('.idea-share-discreet-trigger')) return;
     closeIdeaShareMenus();
   });
 
   document.addEventListener('touchstart', (event) => {
-    if (event.target.closest('.idea-share-discreet-wrap')) return;
+    if (event.target.closest('#idea-share-global-menu')) return;
+    if (event.target.closest('.idea-share-discreet-trigger')) return;
     closeIdeaShareMenus();
-  });
+  }, { passive: true });
 
   window.__ideaShareMenuListenerAttached = true;
 }
@@ -4417,7 +4747,7 @@ function renderIdeaShareButtons(debateId, argument) {
         id="${menuId}"
         class="idea-share-menu"
         onclick="event.stopPropagation()"
-style="display:none; position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%); z-index:30; flex-direction:column; gap:6px; min-width:152px; padding:8px; border:1px solid #e5e7eb; border-radius:12px; background:#ffffff; box-shadow:0 10px 30px rgba(0,0,0,0.12);"
+style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px; min-width:152px; padding:8px; border:1px solid #e5e7eb; border-radius:12px; background:#ffffff; box-shadow:0 10px 30px rgba(0,0,0,0.12);"
       >
         <button
           class="share-icon-button"
@@ -4477,6 +4807,54 @@ style="display:none; position:absolute; left:50%; top:calc(100% + 8px); transfor
         >
           <i class="fa-solid fa-envelope"></i>
           <span>Email</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnFacebook('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur Facebook"
+          aria-label="Partager l'idée sur Facebook"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-facebook"></i>
+          <span>Facebook</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnLinkedIn('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur LinkedIn"
+          aria-label="Partager l'idée sur LinkedIn"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-linkedin-in"></i>
+          <span>LinkedIn</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnMastodon('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur Mastodon"
+          aria-label="Partager l'idée sur Mastodon"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-mastodon"></i>
+          <span>Mastodon</span>
+        </button>
+
+        <button
+          class="share-icon-button"
+          type="button"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnReddit('${debateId}', '${encodedArgument}'); })"
+          title="Partager l'idée sur Reddit"
+          aria-label="Partager l'idée sur Reddit"
+          style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
+        >
+          <i class="fa-brands fa-reddit-alien"></i>
+          <span>Reddit</span>
         </button>
       </div>
     </div>
@@ -9518,6 +9896,46 @@ function renderBottomSimilarDebates(currentDebate, debates) {
 <p>${debate.argument_count || 0} idée(s)</p>            <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
             ${debate.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(debate.last_argument_at))}</p>` : ""}
           </a>
+
+          <div class="debate-card-actions">
+            <div class="debate-card-share-actions">
+              <button class="share-icon-button copy" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${debate.id}', '${encodeURIComponent(String(debate.question || ""))}')"
+                title="Copier le lien"><i class="fa-solid fa-link"></i></button>
+
+              <button class="share-icon-button qrcode" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="QR code"><i class="fa-solid fa-qrcode"></i></button>
+
+              <button class="share-icon-button x" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager sur X"><i class="fa-brands fa-x-twitter"></i></button>
+
+              <button class="share-icon-button facebook" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${debate.id}')"
+                title="Partager sur Facebook"><i class="fa-brands fa-facebook"></i></button>
+
+              <button class="share-icon-button whatsapp" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager sur WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
+
+              <button class="share-icon-button email" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager par email"><i class="fa-solid fa-envelope"></i></button>
+
+              <button class="share-icon-button linkedin" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager sur LinkedIn"><i class="fa-brands fa-linkedin-in"></i></button>
+
+              <button class="share-icon-button mastodon" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager sur Mastodon"><i class="fa-brands fa-mastodon"></i></button>
+
+              <button class="share-icon-button reddit" type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
+                title="Partager sur Reddit"><i class="fa-brands fa-reddit-alien"></i></button>
+            </div>
+          </div>
         </article>
       `;
     }).join("")}
@@ -10026,7 +10444,10 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
     if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
-    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    showDebateSourceFallback(sourceUrl, sourcePreviewData, {
+      title: 'Chargement interrompu',
+      message: 'Le post Instagram n’a pas pu être affiché pour le moment.'
+    });
     debateInstagramIsRendered = false;
   }
 
@@ -10114,7 +10535,10 @@ sourceFallback.style.display = "flex";
       if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
-    showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    showDebateSourceFallback(sourceUrl, sourcePreviewData, {
+      title: 'Chargement interrompu',
+      message: 'Le post X n’a pas pu être affiché pour le moment.'
+    });
   }
 }
 
@@ -10179,7 +10603,7 @@ function resetDebateSourcePreview() {
 
 }
 
-function showDebateSourceFallback(sourceUrl, preview = null) {
+function showDebateSourceFallback(sourceUrl, preview = null, options = {}) {
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourceFallback = document.getElementById("debate-source-fallback");
   const sourceLoading = document.getElementById("debate-source-preview-loading");
@@ -10196,7 +10620,6 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
   if (!sourceFallback) return;
 
   const fallbackPreview = normalizeSourcePreviewData(preview, sourceUrl);
-
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
 
@@ -10658,7 +11081,6 @@ if (element) {
     behavior: "smooth"
   });
 
-  // Retirer le grisage une fois le scroll stabilisé
   let lastY = window.scrollY;
   let stableFrames = 0;
   let hasStartedMoving = false;
@@ -13630,6 +14052,7 @@ function ensureProgressSortOption() {
 }
 
 initPageArrivalLoadingOverlay();
+initLoadFailedTextSanitizer();
 
 document.addEventListener("DOMContentLoaded", () => {
 initMobileIndexCardHighlight();
@@ -14415,7 +14838,8 @@ function updateHomeBottomNavViewportOffset() {
     return;
   }
 
-  const offset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+  const raw = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+  const offset = raw > 120 ? raw : 0;
   document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(offset)}px`);
 }
 
@@ -14569,4 +14993,37 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
 } else {
   initHomeTopbarMenu();
+}
+
+// ===== BOTTOM NAV — GRISAGE AU CLIC =====
+function initBottomNavLoadingState() {
+  const nav = document.querySelector(".home-bottom-nav");
+  if (!nav) return;
+
+  const LOADING_CLASS = "home-bottom-nav-item--loading";
+  const TOGGLE_RESET_DELAY = 350;
+
+  nav.addEventListener("click", (event) => {
+    const item = event.target.closest(".home-bottom-nav-item");
+    if (!item) return;
+    if (item.classList.contains(LOADING_CLASS)) return;
+
+    const isLink = item.tagName === "A";
+    item.classList.add(LOADING_CLASS);
+
+    if (isLink) {
+      window.addEventListener("pagehide", () => {
+        item.classList.remove(LOADING_CLASS);
+      }, { once: true });
+      setTimeout(() => item.classList.remove(LOADING_CLASS), 4000);
+    } else {
+      setTimeout(() => item.classList.remove(LOADING_CLASS), TOGGLE_RESET_DELAY);
+    }
+  }, true);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initBottomNavLoadingState);
+} else {
+  initBottomNavLoadingState();
 }
