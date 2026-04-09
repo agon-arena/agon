@@ -32,12 +32,12 @@ let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
 
 const DEBATE_CATEGORY_OPTIONS = [
+  "Actualités du moment",
   "Politique et société",
   "Sciences et technologies",
   "Santé et bien-être",
   "Sciences humaines",
-  "Arts et littérature",
-  "Actualités du moment"
+  "Arts et littérature"
 ];
 
 const DEBATE_CATEGORY_SEPARATOR = " · ";
