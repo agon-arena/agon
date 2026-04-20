@@ -29,6 +29,410 @@ html.notification-transition-pending-early body.page-debate::before {
   -webkit-backdrop-filter: blur(2.5px);
   pointer-events: none;
 }
+
+/* ── Fond anthracite ── */
+body.page-debate {
+  background-color: #243038;
+}
+
+/* Textes posés directement sur le fond sombre */
+body.page-debate .debate-context-text,
+body.page-debate .debate-sort-bar label,
+body.page-debate .back-link,
+body.page-debate .section-header h3,
+body.page-debate .similar-debates-section .section-header {
+  color: #e8e8e8;
+}
+
+/* Sous-textes / méta sur fond sombre */
+body.page-debate .debate-context-text p,
+body.page-debate .debate-context-text span {
+  color: #c0c0c0;
+}
+
+/* Cartes d'arguments : fond blanc conservé, texte sombre assuré */
+body.page-debate .argument-card {
+  color: revert;
+}
+
+/* Restaurer les couleurs natives des badges favorable/défavorable/proposition */
+body.page-debate .comments-count-favorable {
+  color: #16a34a !important;
+}
+body.page-debate .comments-count-defavorable {
+  color: #dc2626 !important;
+}
+body.page-debate .comment-stance-favorable {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+}
+body.page-debate .comment-stance-defavorable {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
+/* Cartes colorées : couleurs opaques (spécificité suffisante, sans !important pour laisser les animations agir) */
+body.page-debate #arguments-a .argument-card,
+body.page-debate .argument-card-a {
+  background-color: #dcfce7;
+}
+
+body.page-debate #arguments-b .argument-card,
+body.page-debate .argument-card-b {
+  background-color: #fee2e2;
+}
+
+/* Vue liste unifiée */
+body.page-debate .argument-card-unified.argument-card-a {
+  background-color: #dcfce7;
+}
+body.page-debate .argument-card-unified.argument-card-b {
+  background-color: #fee2e2;
+}
+
+/* Chips "mes arguments votés" en haut des colonnes */
+body.page-debate #my-arguments-a .my-argument-chip,
+body.page-debate .my-arguments-summary-left .my-argument-chip {
+  background: #dcfce7;
+  border-color: #86efac;
+}
+body.page-debate #my-arguments-b .my-argument-chip,
+body.page-debate .my-arguments-summary-right .my-argument-chip {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* Alignement vertical — suppression du margin-top décalant le bloc B */
+body.page-debate .my-arguments-summary,
+body.page-debate .my-arguments-summary-left,
+body.page-debate .my-arguments-summary-right {
+  margin-top: 0 !important;
+}
+
+/* Gap entre bloc A et bloc B = même que gap entre chips */
+body.page-debate .my-arguments-row {
+  gap: 6px !important;
+}
+
+/* Boutons commenter / masquer */
+body.page-debate .comments-block .button-small {
+  background: #243038;
+  color: #e8e8e8;
+  border-color: #3a4a55;
+  font-size: 12px;
+}
+body.page-debate .comments-block .button-small:hover {
+  background: #2e3d47;
+  color: #ffffff;
+}
+
+/* Boutons +/− (voice stepper) */
+body.page-debate .voice-stepper {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+body.page-debate .voice-stepper-btn-plus {
+  background: #e5e7eb;
+  color: #374151;
+}
+body.page-debate .voice-stepper-btn-plus:hover {
+  background: #d1d5db;
+}
+body.page-debate .voice-stepper-btn-minus {
+  background: #e5e7eb;
+  color: #374151;
+}
+body.page-debate .voice-stepper-btn-minus:hover {
+  background: #d1d5db;
+}
+
+/* Boutons partage réseaux sociaux */
+body.page-debate .share-button {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+body.page-debate .share-button:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #111827;
+}
+body.page-debate .voice-stepper-value {
+  color: #111827;
+}
+body.page-debate .voice-stepper-label {
+  color: #6b7280;
+}
+
+/* Bouton supprimer l'arène dans le bloc titre — plus petit et discret */
+body.page-debate #delete-debate-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  border-radius: 6px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+body.page-debate #delete-debate-btn:hover {
+  opacity: 1;
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fee2e2;
+}
+body.page-debate .home-topbar-menu-toggle {
+  color: #111827;
+}
+body.page-debate .debate-back-arrow,
+body.page-debate .topbar-back-arrow {
+  color: #111827;
+}
+body.page-debate .back-link {
+  color: #111827 !important;
+}
+body.page-debate .share-icon-button {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #111827;
+}
+body.page-debate .share-icon-button:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #000000;
+}
+
+/* Mobile : bouton partage et signaler sur les cartes d'idées */
+@media (max-width: 768px) {
+  body.page-debate .argument-share-top .share-button,
+  body.page-debate .argument-share-top .share-icon-button {
+    background: #ffffff;
+    border-color: #e5e7eb;
+    color: #374151;
+  }
+  body.page-debate .argument-share-top .share-button:hover,
+  body.page-debate .argument-share-top .share-icon-button:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+  body.page-debate .argument-report-bottom .report-button {
+    background: transparent;
+    border: none;
+    padding: 6px 12px;
+    color: #6b7280;
+    opacity: 1;
+  }
+  body.page-debate .argument-report-bottom .report-button:hover {
+    background: transparent;
+    color: #374151;
+    text-decoration: underline;
+  }
+}
+@keyframes voiceStepperPulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0   rgba(0, 0, 0, 0.00); }
+  50%  { transform: scale(1.12); box-shadow: 0 0 0 10px rgba(0, 0, 0, 0.12); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0   rgba(0, 0, 0, 0.00); }
+}
+
+body.page-debate .voice-stepper-btn-guided,
+body.page-debate .my-argument-chip-stepper-btn-guided {
+  animation: voiceStepperPulse 1.15s ease-in-out infinite;
+}
+
+/* Redéfinition des animations de flash avec les couleurs opaques */
+@keyframes flashGreenCard {
+  0%   { background-color: #dcfce7; box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  50%  { background-color: #86efac; box-shadow: 0 0 0 4px rgba(34,197,94,0.35); }
+  100% { background-color: #dcfce7; box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+/* Vue switch card */
+body.page-debate .debate-view-switch-card {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Hamburger toujours visible — actions ne se réduisent pas */
+body.page-debate .topbar-inner {
+  flex-wrap: nowrap;
+}
+body.page-debate .home-brand-block {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+body.page-debate .topbar-actions {
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+body.page-debate .home-topbar-menu-wrap {
+  flex-shrink: 0;
+}
+
+/* Bloc titre plus proche du bandeau haut */
+body.page-debate .debate-hero-top {
+  margin-top: 4px;
+}
+
+/* Fond de la zone open graph / vidéo = couleur du fond de page */
+body.page-debate .debate-hero {
+  background: transparent;
+}
+body.page-debate .debate-source-preview-wrap,
+body.page-debate #debate-source-preview-wrap {
+  background: transparent;
+}
+body.page-debate .debate-source-preview,
+body.page-debate #debate-source-preview {
+  background: transparent;
+}
+body.page-debate .debate-source-fallback {
+  background: #243038;
+  border-color: transparent;
+}
+body.page-debate .debate-source-domain {
+  color: #e8e8e8;
+}
+body.page-debate .debate-source-link {
+  background: #243038;
+  color: #ffffff !important;
+  display: block;
+  text-align: center;
+  margin: 0 auto;
+}
+body.page-debate .debate-source-link:hover {
+  background: #2e3d47;
+  color: #ffffff !important;
+}
+/* Textes de la carte source — fond blanc, textes sombres natifs */
+body.page-debate .debate-source-card-title {
+  color: #111827 !important;
+}
+body.page-debate .debate-source-card-domain {
+  color: #6b7280 !important;
+}
+body.page-debate .debate-source-card-description {
+  color: #4b5563 !important;
+}
+body.page-debate .debate-score-bar {
+  background: #1a272f;
+  border: 1px solid #3a4a55;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-top: 14px;
+  margin-bottom: 14px;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 1100px;
+  box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+body.page-debate .score-bar {
+  height: 22px;
+  border-radius: 10px;
+  background: #2e3d47;
+}
+body.page-debate .score-bar-label {
+  font-size: 20px;
+  font-weight: 800;
+  min-width: 52px;
+  text-align: center;
+}
+body.page-debate .score-bar-label-a {
+  color: #4ade80;
+}
+body.page-debate .score-bar-label-b {
+  color: #f87171;
+}
+body.page-debate .arguments-list {
+  gap: 8px;
+}
+body.page-debate #voices-summary,
+body.page-debate .voices-summary-container {
+  display: none !important;
+}
+
+/* Arènes similaires — même largeur que la liste index */
+body.page-debate .similar-debates-bottom {
+  width: min(400px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+body.page-debate .similar-debates-results {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  gap: 16px !important;
+}
+@media (min-width: 769px) {
+  body.page-debate .similar-debates-bottom {
+    width: min(780px, 100%);
+  }
+}
+body.page-debate .debate-top-add-button,
+body.page-debate .position-argument-button-a,
+body.page-debate .position-argument-button-b {
+  background: #243038 !important;
+  color: #e8e8e8 !important;
+}
+body.page-debate .debate-top-add-button:hover,
+body.page-debate .position-argument-button-a:hover,
+body.page-debate .position-argument-button-b:hover {
+  background: #2e3d47 !important;
+  color: #ffffff !important;
+}
+body.page-debate .load-more-status {
+  background: #2e3d47;
+  border-color: #4a5a65;
+}
+body.page-debate .load-more-text {
+  color: #e8e8e8;
+}
+body.page-debate .similar-debates-toggle-btn {
+  background: #ffffff !important;
+  color: #374151 !important;
+  border: 1px solid #e5e7eb;
+}
+body.page-debate .similar-debates-toggle-btn:hover {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+}
+body.page-debate .debate-view-toggle-btn {
+  background: none !important;
+  color: #a0b0bb;
+}
+body.page-debate .debate-view-toggle-btn:hover,
+body.page-debate .debate-view-button-active {
+  background: none !important;
+  color: #e8e8e8;
+}
+
+/* Bandeau bas : blanc avec icônes noires */
+body.page-debate .home-bottom-nav {
+  background:
+    linear-gradient(
+      90deg,
+      #f3f4f6 0%,
+      #d1d5db 25%,
+      #9ca3af 50%,
+      #374151 75%,
+      #111827 100%
+    ) bottom / 100% 5px no-repeat,
+    #ffffff !important;
+}
+body.page-debate .home-bottom-nav-item {
+  color: #111827;
+}
+body.page-debate .home-bottom-nav-item:hover,
+body.page-debate .home-bottom-nav-item:focus-visible {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000000;
+}
+
+/* Bandeau bas : bords droits en desktop */
+@media (min-width: 768px) {
+  body.page-debate .home-bottom-nav {
+    border-radius: 0 !important;
+  }
+}
 </style>
 </head>
 <body class="page-debate">
@@ -613,6 +1017,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     <button onclick="closeQRModal()" style="margin-top:20px; padding:10px 28px; border:none; border-radius:12px; background:#111; color:#fff; cursor:pointer; font-size:14px; font-weight:600;">Fermer</button>
   </div>
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 function showQRCode() {
@@ -641,5 +1046,139 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script src="/script.js?v=20260407-1"></script>
+
+<script>
+(function () {
+  const BOTTOM_NAV_HEIGHT = 70; // hauteur du bandeau bas
+
+  function scrollToShowMenu(menu) {
+    const rect = menu.getBoundingClientRect();
+    const viewportBottom = window.innerHeight - BOTTOM_NAV_HEIGHT;
+    const overflow = rect.bottom - viewportBottom;
+    if (overflow > 0) {
+      window.scrollBy({ top: overflow + 12, behavior: 'smooth' });
+    }
+  }
+
+  // Observer le menu global créé dynamiquement par toggleIdeaShareMenu
+  const observer = new MutationObserver(function () {
+    const menu = document.getElementById('idea-share-global-menu');
+    if (menu && menu.style.display === 'flex') {
+      // Attendre que le menu soit positionné
+      requestAnimationFrame(function () {
+        scrollToShowMenu(menu);
+      });
+    }
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+})();
+</script>
+
+<!-- Modale liens externes -->
+<div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
+  <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
+    <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
+      <img src="/favicon.png" alt="Agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
+      <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <a id="ext-link-newtab" href="#" target="_blank" rel="noopener noreferrer" onclick="closeExtPanel()" style="display:inline-flex; align-items:center; gap:5px; padding:6px 12px; background:rgba(255,255,255,0.10); color:#e8e8e8; border-radius:999px; font-size:12px; font-weight:700; text-decoration:none; flex-shrink:0;" title="Ouvrir dans un nouvel onglet">↗ Nouvel onglet</a>
+      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour</button>
+    </div>
+    <div id="ext-link-loading" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; color:#a0b0bb;">
+      <div style="width:36px; height:36px; border:3px solid rgba(255,255,255,0.15); border-top-color:#e8e8e8; border-radius:50%; animation:ext-spin 0.8s linear infinite;"></div>
+      <span style="font-size:14px; font-weight:600;">Chargement…</span>
+    </div>
+    <div id="ext-link-fallback" style="display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:40px 32px; text-align:center;">
+      <div style="width:64px; height:64px; border-radius:999px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:28px;">🔗</div>
+      <div>
+        <p style="color:#e8e8e8; font-size:18px; font-weight:800; margin:0 0 8px;">Ce site ne s'ouvre pas ici</p>
+        <p style="color:#a0b0bb; font-size:14px; margin:0;" id="ext-link-fallback-url"></p>
+      </div>
+      <a id="ext-link-fallback-btn" href="#" target="_blank" rel="noopener noreferrer" onclick="closeExtPanel()" style="display:inline-flex; align-items:center; gap:10px; padding:16px 32px; background:#ffffff; color:#243038; border-radius:999px; font-size:16px; font-weight:800; text-decoration:none; box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+        ↗ Ouvrir le site
+      </a>
+      <p style="color:#6b7280; font-size:12px; margin:0;">S'ouvrira dans un nouvel onglet</p>
+    </div>
+    <iframe id="ext-link-iframe" src="" style="display:none; flex:1; border:none; width:100%; background:#fff;" onload="window._extIframeLoaded()"></iframe>
+  </div>
+</div>
+<style>
+@keyframes ext-spin { to { transform: rotate(360deg); } }
+</style>
+<script>
+(function() {
+  var _extTimer = null;
+  var _extCurrentUrl = '';
+
+  function showExtLoading() {
+    document.getElementById('ext-link-loading').style.display = 'flex';
+    document.getElementById('ext-link-iframe').style.display = 'none';
+  }
+
+
+
+  window._extIframeLoaded = function() {
+    if (_extTimer) { clearTimeout(_extTimer); _extTimer = null; }
+    var iframe = document.getElementById('ext-link-iframe');
+    try {
+      var doc = iframe.contentDocument || iframe.contentWindow.document;
+      if (!doc || !doc.body || doc.body.innerHTML.trim() === '') {
+        showExtFallback(_extCurrentUrl);
+        return;
+      }
+    } catch(e) {
+      // Cross-origin = chargé normalement
+    }
+    document.getElementById('ext-link-loading').style.display = 'none';
+    document.getElementById('ext-link-fallback').style.display = 'none';
+    iframe.style.display = 'block';
+    iframe.style.flex = '1';
+  };
+
+  function openExtPanel(url) {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    var domain = document.getElementById('ext-link-domain');
+    if (!overlay || !iframe) return;
+    _extCurrentUrl = url;
+    try { domain.textContent = new URL(url).hostname; }
+    catch(e) { domain.textContent = url; }
+    var newtab = document.getElementById('ext-link-newtab');
+    if (newtab) newtab.href = url;
+    showExtLoading();
+    iframe.src = url;
+    overlay.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    if (_extTimer) clearTimeout(_extTimer);
+    _extTimer = setTimeout(function() { showExtFallback(url); }, 5000);
+  }
+
+  function closeExtPanel() {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    if (!overlay || !iframe) return;
+    if (_extTimer) { clearTimeout(_extTimer); _extTimer = null; }
+    overlay.style.display = 'none';
+    iframe.src = '';
+    document.body.style.overflow = '';
+  }
+
+  window.closeExtPanel = closeExtPanel;
+
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[target="_blank"]');
+    if (!link) return;
+    if (link.id === 'ext-link-newtab' || link.closest('#ext-link-fallback')) return;
+    var href = link.getAttribute('href');
+    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    e.preventDefault();
+    openExtPanel(href);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeExtPanel();
+  });
+})();
+</script>
 </body>
 </html>

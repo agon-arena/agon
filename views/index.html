@@ -26,6 +26,36 @@
 
   <link rel="stylesheet" href="/style.css?v=20260407-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { background-color: #243038; }
+
+    /* Bandeau bas : blanc avec icônes noires */
+    .home-bottom-nav {
+      background:
+        linear-gradient(
+          90deg,
+          #f3f4f6 0%,
+          #d1d5db 25%,
+          #9ca3af 50%,
+          #374151 75%,
+          #111827 100%
+        ) bottom / 100% 5px no-repeat,
+        #ffffff !important;
+    }
+    .home-bottom-nav-item {
+      color: #111827;
+    }
+    .home-bottom-nav-item:hover,
+    .home-bottom-nav-item:focus-visible {
+      background: rgba(0, 0, 0, 0.06);
+      color: #000000;
+    }
+    @media (min-width: 768px) {
+      .home-bottom-nav {
+        border-radius: 0 !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="page-home page-home-mobile">
@@ -320,5 +350,67 @@
 
 <script src="/script.js?v=20260407-1"></script>
 
+
+<!-- Modale liens externes -->
+<div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
+  <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
+    <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
+      <img src="/favicon.png" alt="Agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
+      <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers Agôn</button>
+    </div>
+    <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
+  </div>
+</div>
+<script>
+(function() {
+  function openExtPanel(url) {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    var favicon = document.getElementById('ext-link-favicon');
+    var domain = document.getElementById('ext-link-domain');
+    var openLink = document.getElementById('ext-link-open');
+    if (!overlay || !iframe) return;
+    try {
+      var parsed = new URL(url);
+      var host = parsed.hostname;
+      domain.textContent = host;
+  
+    } catch(e) {
+      domain.textContent = url;
+      favicon.style.display = 'none';
+    }
+    openLink.href = url;
+    iframe.src = url;
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeExtPanel() {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    if (!overlay || !iframe) return;
+    overlay.style.display = 'none';
+    iframe.src = '';
+    document.body.style.overflow = '';
+  }
+
+  window.closeExtPanel = closeExtPanel;
+
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[target="_blank"]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    e.preventDefault();
+    openExtPanel(href);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeExtPanel();
+  });
+})();
+</script>
 </body>
 </html>

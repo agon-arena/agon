@@ -6339,6 +6339,43 @@ function buildIndexContextPreviewHtml(debate) {
   `;
 }
 
+function buildSimilarDebatePreviewHtml(debate) {
+  const mediaHtml = renderIndexInlineSourceCard(debate);
+  const fullText = String(debate?.content || '').trim();
+  if (!fullText && !mediaHtml) return "";
+
+  const previewLimit = 170;
+  const shortText = fullText.length > previewLimit
+    ? `${fullText.slice(0, previewLimit).trimEnd()}…`
+    : fullText;
+  const needsToggle = fullText.length > previewLimit;
+  const debateId = escapeAttribute(String(debate?.id || ""));
+
+  return `
+    ${mediaHtml ? `<div class="debate-card-media-wrap">${mediaHtml}</div>` : ""}
+    ${fullText ? `
+    <div class="debate-card-context" data-index-context-card>
+      <p
+        class="debate-card-context-text"
+        data-index-context-text
+        data-full-text="${escapeAttribute(fullText)}"
+        data-short-text="${escapeAttribute(shortText)}"
+        data-expanded="false"
+      >${escapeHtml(shortText)}</p>
+      ${needsToggle ? `
+        <button
+          type="button"
+          class="debate-card-context-toggle"
+          data-index-context-toggle
+          data-debate-id="${debateId}"
+          aria-expanded="false"
+          onclick="toggleIndexContextPreview(this)"
+        >Voir plus</button>
+      ` : ""}
+    </div>` : ""}
+  `;
+}
+
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
   const textEl = card?.querySelector('[data-index-context-text]');
@@ -9768,7 +9805,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
             <div class="debate-card-type">${debateTypeLabel}</div>
             <h2>${escapeHtml(debate.question)}</h2>
 
-            ${buildIndexContextPreviewHtml(debate)}
+            ${buildSimilarDebatePreviewHtml(debate)}
 
            ${
   isOpenDebate(debate)
@@ -9841,6 +9878,12 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     }).join("")}
     </div>
   `;
+
+  // Initialiser les embeds (YouTube, vidéo locale, X, Instagram) dans les arènes similaires
+  if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(container);
+  if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(container);
+  if (typeof initIndexXObserver === "function") initIndexXObserver(container);
+  if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
 }
 function toggleSimilarDebates() {
   similarDebatesVisible = !similarDebatesVisible;
