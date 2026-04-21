@@ -1044,7 +1044,7 @@ function updateSortButtonLabel() {
   const mode = getArgumentsSortMode();
 
   const labels = {
-    score: "Plus soutenus",
+    score: "Plus soutenues",
     progress: "Idées en progression",
     comments: "Commentés",
     recent: "Récents",
@@ -1115,6 +1115,137 @@ function movePinnedArgumentToFourthPosition(sortedArgs) {
 function getLastVotedAtTimestamp(arg) {
   return new Date(String(arg?.last_voted_at || "").replace(" ", "T")).getTime() || 0;
 }
+
+const ARGUMENT_VOTE_HISTORY_STORAGE_KEY = "agon_argument_vote_history_v1";
+
+function getArgumentVoteHistoryStore() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ARGUMENT_VOTE_HISTORY_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function setArgumentVoteHistoryStore(store) {
+  try {
+    localStorage.setItem(ARGUMENT_VOTE_HISTORY_STORAGE_KEY, JSON.stringify(store || {}));
+  } catch (error) {
+    console.warn("Impossible d'enregistrer l'historique local des voix.", error);
+  }
+}
+
+function pruneArgumentVoteHistoryEntries(entries, nowTimestamp = Date.now()) {
+  const twentyFourHours = 24 * 60 * 60 * 1000;
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    const timestamp = Number(entry || 0);
+    return Number.isFinite(timestamp) && timestamp > 0 && (nowTimestamp - timestamp) <= twentyFourHours;
+  });
+}
+
+function getLocalArgumentVoteHistoryCount(argId) {
+  const store = getArgumentVoteHistoryStore();
+  const argIdString = String(argId || "");
+  const nowTimestamp = Date.now();
+  const prunedEntries = pruneArgumentVoteHistoryEntries(store[argIdString], nowTimestamp);
+
+  if ((store[argIdString] || []).length !== prunedEntries.length) {
+    if (prunedEntries.length) {
+      store[argIdString] = prunedEntries;
+    } else {
+      delete store[argIdString];
+    }
+    setArgumentVoteHistoryStore(store);
+  }
+
+  return prunedEntries.length;
+}
+
+function recordLocalArgumentVote(argId, timestamp = Date.now()) {
+  const store = getArgumentVoteHistoryStore();
+  const argIdString = String(argId || "");
+  const nextEntries = pruneArgumentVoteHistoryEntries(store[argIdString]);
+  nextEntries.push(Number(timestamp) || Date.now());
+  store[argIdString] = nextEntries;
+  setArgumentVoteHistoryStore(store);
+}
+
+function removeLastLocalArgumentVote(argId) {
+  const store = getArgumentVoteHistoryStore();
+  const argIdString = String(argId || "");
+  const nextEntries = pruneArgumentVoteHistoryEntries(store[argIdString]);
+
+  if (nextEntries.length) {
+    nextEntries.pop();
+  }
+
+  if (nextEntries.length) {
+    store[argIdString] = nextEntries;
+  } else {
+    delete store[argIdString];
+  }
+
+  setArgumentVoteHistoryStore(store);
+}
+
+function getArgumentVotesInLast24Hours(arg) {
+  if (!arg || typeof arg !== "object") return 0;
+
+  const directCandidates = [
+    arg.votes_last_24h,
+    arg.vote_count_24h,
+    arg.recent_votes_24h,
+    arg.recentVotes24h,
+    arg.votesInLast24h,
+    arg.progress_votes_24h
+  ];
+
+  for (const candidate of directCandidates) {
+    const numericCandidate = Number(candidate);
+    if (Number.isFinite(numericCandidate) && numericCandidate >= 0) {
+      return numericCandidate;
+    }
+  }
+
+  const nowTimestamp = Date.now();
+  const twentyFourHours = 24 * 60 * 60 * 1000;
+  const localHistoryCount = getLocalArgumentVoteHistoryCount(arg.id);
+  const totalVotes = Math.max(0, Number(arg.votes || 0));
+  const lastVotedAtTimestamp = new Date(String(arg.last_voted_at || "").replace(" ", "T")).getTime() || 0;
+  const createdAtTimestamp = new Date(String(arg.created_at || "").replace(" ", "T")).getTime() || 0;
+
+  if (localHistoryCount >= 6) {
+    return localHistoryCount;
+  }
+
+  if (totalVotes >= 6 && lastVotedAtTimestamp && (nowTimestamp - lastVotedAtTimestamp) <= twentyFourHours) {
+    return Math.max(localHistoryCount, totalVotes);
+  }
+
+  if (createdAtTimestamp && (nowTimestamp - createdAtTimestamp) <= twentyFourHours) {
+    return Math.max(localHistoryCount, totalVotes);
+  }
+
+  return localHistoryCount;
+}
+
+function isArgumentStronglyTrending(arg) {
+  return getArgumentVotesInLast24Hours(arg) >= 6;
+}
+
+function renderStrongProgressBadge(arg) {
+  if (!isArgumentStronglyTrending(arg)) return "";
+
+  const votesLast24h = getArgumentVotesInLast24Hours(arg);
+
+  return `
+    <div class="argument-trending-badge" title="${votesLast24h} voix reçues sur les dernières 24h">
+      <span class="argument-trending-badge-icon" aria-hidden="true">↗</span>
+      <span class="argument-trending-badge-text">En forte progression</span>
+    </div>
+  `;
+}
+
 function sortArgumentsByScore(args) {
   const ordered = [...(args || [])].sort((a, b) => {
     const votesA = Number(a.votes || 0);
@@ -1151,8 +1282,20 @@ function sortArgumentsByProgress(args) {
   return movePinnedArgumentToFourthPosition(ordered);
 }
 
-function getSupportRankMap(args) {
-  const sortedArgs = sortArgumentsByScore(args || []);
+function getNormalizedArgumentSide(arg) {
+  const side = String(arg?.side || "").trim().toUpperCase();
+  return side === "B" ? "B" : "A";
+}
+
+function getSupportRankMap(args, options = {}) {
+  const sideFilter = String(options?.side || "").trim().toUpperCase();
+  const normalizedSideFilter = sideFilter === "A" || sideFilter === "B" ? sideFilter : "";
+
+  const filteredArgs = normalizedSideFilter
+    ? (args || []).filter((arg) => getNormalizedArgumentSide(arg) === normalizedSideFilter)
+    : (args || []);
+
+  const sortedArgs = sortArgumentsByScore(filteredArgs);
   const rankMap = {};
 
   sortedArgs.forEach((arg, index) => {
@@ -1160,6 +1303,16 @@ function getSupportRankMap(args) {
   });
 
   return rankMap;
+}
+
+function getSupportRankMapBySide(args) {
+  const rankMapA = getSupportRankMap(args, { side: "A" });
+  const rankMapB = getSupportRankMap(args, { side: "B" });
+
+  return {
+    ...rankMapA,
+    ...rankMapB
+  };
 }
 
 function formatIdeaRank(rank) {
@@ -1186,8 +1339,10 @@ function formatIdeaRank(rank) {
 
 function showVoteRankProgress(beforeRankMap, afterArgs, argId) {
   const argIdString = String(argId);
+  const targetArgument = (afterArgs || []).find((arg) => String(arg?.id) === argIdString);
+  const targetSide = getNormalizedArgumentSide(targetArgument);
   const previousRank = Number(beforeRankMap?.[argIdString] || 0);
-  const afterRankMap = getSupportRankMap(afterArgs || []);
+  const afterRankMap = getSupportRankMap(afterArgs || [], { side: targetSide });
   const newRank = Number(afterRankMap[argIdString] || 0);
 
   if (!previousRank || !newRank || newRank >= previousRank) {
@@ -1209,7 +1364,7 @@ if (newRank >= 1 && newRank <= 3) {
 
   showReplacementSuccessMessage(
     topTitle,
-    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`,
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement de sa position.`,
     null,
     medalIcon,
     "ranking-medal-vibrate"
@@ -1220,7 +1375,7 @@ if (newRank >= 1 && newRank <= 3) {
 
   showReplacementSuccessMessage(
     "🚀 Belle progression",
-    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement.`
+    `Vous avez fait gagner ${gainedPlaces} ${placeLabel} à cette idée, qui arrive maintenant à la ${formatIdeaRank(newRank)} du classement de sa position.`
   );
 }
 
@@ -1250,6 +1405,7 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
   const state = getState(debateId);
 
   const sortedArgs = sortArgumentsByScore(args || []);
+  const supportRankMap = getSupportRankMapBySide(args || []);
   const votedArgumentsA = [];
   const votedArgumentsB = [];
 
@@ -1259,7 +1415,7 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
 
     const item = {
       id: a.id,
-      rank: index + 1,
+      rank: Number(supportRankMap[String(a.id)] || 0),
       title: a.title || "Idée sans titre",
       count: myCount
     };
@@ -1533,6 +1689,35 @@ function getSavedIndexReturnCardIndex() {
   }
 }
 
+function expandIndexVisibilityForReturnTarget() {
+  if (location.pathname !== "/") return;
+
+  const savedDebateId = getSavedIndexReturnDebateId();
+  if (!savedDebateId) return;
+
+  const safeDebateId = String(savedDebateId).trim();
+  if (!safeDebateId) return;
+
+  const savedCardIndex = getSavedIndexReturnCardIndex();
+
+  if (Array.isArray(visitedDebatesCache) && visitedDebatesCache.length) {
+    const visitedIndex = visitedDebatesCache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
+    if (visitedIndex >= 0) {
+      visitedDebatesVisible = Math.max(visitedDebatesVisible, visitedIndex + 1);
+    }
+  }
+
+  if (Array.isArray(otherDebatesCache) && otherDebatesCache.length) {
+    const otherIndex = otherDebatesCache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
+    const resolvedIndex = otherIndex >= 0 ? otherIndex : (Number.isFinite(savedCardIndex) ? savedCardIndex : -1);
+
+    if (resolvedIndex >= 0) {
+      const requiredVisible = Math.min(otherDebatesCache.length, resolvedIndex + 1);
+      otherDebatesVisible = Math.max(otherDebatesVisible, requiredVisible);
+    }
+  }
+}
+
 function getIndexReturnTargetCard(savedDebateId = null) {
   const safeDebateId = String(savedDebateId || getSavedIndexReturnDebateId() || "").trim();
   if (!safeDebateId) return null;
@@ -1562,39 +1747,70 @@ async function ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex
   let card = getIndexReturnTargetCard(safeDebateId);
   if (card) return card;
 
-  const getCache = () => Array.isArray(otherDebatesCache) && otherDebatesCache.length ? otherDebatesCache : null;
   const waitFrame = (delay = 90) => new Promise((resolve) => {
     requestAnimationFrame(() => {
       setTimeout(resolve, delay);
     });
   });
 
+  const getVisitedCache = () => (
+    Array.isArray(visitedDebatesCache) && visitedDebatesCache.length
+      ? visitedDebatesCache
+      : null
+  );
+
+  const getOtherCache = () => (
+    Array.isArray(otherDebatesCache) && otherDebatesCache.length
+      ? otherDebatesCache
+      : null
+  );
+
   for (let attempt = 0; attempt < 24; attempt += 1) {
     card = getIndexReturnTargetCard(safeDebateId);
     if (card) return card;
 
-    const cache = getCache();
-    if (cache) {
-      const resolvedIndex = cache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
-      const targetIndex = resolvedIndex >= 0
-        ? resolvedIndex
+    const visitedCache = getVisitedCache();
+    const otherCache = getOtherCache();
+
+    const visitedIndex = visitedCache
+      ? visitedCache.findIndex((debate) => String(debate?.id || "") === safeDebateId)
+      : -1;
+
+    const otherIndex = otherCache
+      ? otherCache.findIndex((debate) => String(debate?.id || "") === safeDebateId)
+      : -1;
+
+    if (visitedCache && visitedIndex >= 0) {
+      const requiredVisible = Math.min(visitedCache.length, visitedIndex + 1);
+
+      if (visitedDebatesVisible < requiredVisible) {
+        visitedDebatesVisible = requiredVisible;
+        renderVisitedDebatesList(visitedCache);
+      } else if (visitedDebatesVisible < visitedCache.length && attempt >= 8) {
+        visitedDebatesVisible = visitedCache.length;
+        renderVisitedDebatesList(visitedCache);
+      }
+    } else if (otherCache) {
+      const targetIndex = otherIndex >= 0
+        ? otherIndex
         : (Number.isFinite(savedCardIndex) ? savedCardIndex : -1);
 
       if (targetIndex >= 0) {
-        const requiredVisible = Math.min(cache.length, targetIndex + 1);
+        const requiredVisible = Math.min(otherCache.length, targetIndex + 1);
+
         if (otherDebatesVisible < requiredVisible) {
           otherDebatesVisible = Math.min(
-            cache.length,
+            otherCache.length,
             Math.max(requiredVisible, otherDebatesVisible + INDEX_OTHER_DEBATES_BATCH_SIZE)
           );
-          renderDebatesList(cache);
-        } else if (otherDebatesVisible < cache.length && attempt >= 8) {
-          otherDebatesVisible = cache.length;
-          renderDebatesList(cache);
+          renderDebatesList(otherCache);
+        } else if (otherDebatesVisible < otherCache.length && attempt >= 8) {
+          otherDebatesVisible = otherCache.length;
+          renderDebatesList(otherCache);
         }
-      } else if (otherDebatesVisible < cache.length && attempt >= 8) {
-        otherDebatesVisible = cache.length;
-        renderDebatesList(cache);
+      } else if (otherDebatesVisible < otherCache.length && attempt >= 8) {
+        otherDebatesVisible = otherCache.length;
+        renderDebatesList(otherCache);
       }
     }
 
@@ -2345,6 +2561,33 @@ function buildIndexDebateNavigationOverlay(debateId, label = "Ouvrir le débat")
   `;
 }
 
+function buildIndexCardBottomEntryHtml(debate, options = {}) {
+  const d = debate || {};
+  const mediaOutsideLink = !!options.mediaOutsideLink;
+  const voteCount = d.vote_count || (Number(d.votes_a || 0) + Number(d.votes_b || 0));
+
+  return `
+    <a
+      class="debate-card-bottom-entry"
+      href="/debate?id=${d.id}"
+      onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;"
+      style="display:block; text-decoration:none; color:inherit;"
+      aria-label="Ouvrir l'arène"
+      title="Ouvrir l'arène"
+    >
+      <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
+        <div class="debate-card-counts-row">
+          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
+          <p class="debate-card-votes-count"${!(voteCount > 0) ? ' style="display:none;"' : ''}>${voteCount} voix</p>
+        </div>
+        <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
+        ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
+      </div>
+    </a>
+  `;
+}
+
 function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const tweetId = getXStatusId(sourceUrl);
   if (!tweetId) {
@@ -2352,12 +2595,16 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   }
 
   return `
-    <div class="debate-card-media debate-card-media-x">
+    <div
+      class="debate-card-media debate-card-media-x"
+      style="cursor:pointer;"
+    >
       <div
         class="debate-card-x-shell"
         data-index-x-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-tweet-id="${escapeAttribute(tweetId)}"
+        onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
         style="position:relative;"
       >
         <div
@@ -2365,8 +2612,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
           style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post X…</div>
         <div data-index-x-embed style="display:none;"></div>
-        <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview)}</div>
-        ${buildIndexDebateNavigationOverlay(debateId, "Ouvrir le débat lié à ce post X")}
+        <div data-index-x-fallback style="display:none;" onclick="event.stopPropagation()">${buildXIndexSourceCardHtml(sourceUrl, preview)}</div>
       </div>
     </div>
   `;
@@ -2421,12 +2667,16 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
   }
 
   return `
-    <div class="debate-card-media debate-card-media-instagram">
+    <div
+      class="debate-card-media debate-card-media-instagram"
+      style="cursor:pointer;"
+    >
       <div
         class="debate-card-instagram-shell"
         data-index-instagram-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-instagram-permalink="${escapeAttribute(embedPermalink)}"
+        onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
         style="position:relative;"
       >
         <div
@@ -2434,8 +2684,7 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
           style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post Instagram…</div>
         <div data-index-instagram-embed style="display:none; justify-content:center;"></div>
-        <div data-index-instagram-fallback style="display:none;">${buildIndexInstagramFallbackHtml(sourceUrl, preview)}</div>
-        ${buildIndexDebateNavigationOverlay(debateId, "Ouvrir le débat lié à ce post Instagram")}
+        <div data-index-instagram-fallback style="display:none;" onclick="event.stopPropagation()">${buildIndexInstagramFallbackHtml(sourceUrl, preview)}</div>
       </div>
     </div>
   `;
@@ -2453,26 +2702,17 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
   const embedData = getEmbeddableSourceData(sourceUrl);
   if (!embedData.videoId || !embedData.embedUrl) return "";
 
+  const directEmbedUrl = `${embedData.embedUrl}${embedData.embedUrl.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
+
   return `
     <div class="debate-card-media debate-card-media-youtube">
       <div
-        class="debate-card-youtube-shell"
+        class="debate-card-youtube-shell debate-card-youtube-shell-direct"
         data-index-youtube-shell
+        data-direct-iframe="true"
         data-embed-base="${escapeAttribute(embedData.embedUrl)}"
-        data-poster-url="${escapeAttribute(embedData.posterUrl || "") }"
+        style="position:relative; overflow:hidden; border-radius:20px; background:#000;"
       >
-        <button
-          type="button"
-          class="debate-card-youtube-poster"
-          data-index-youtube-poster
-          aria-label="Lire la vidéo YouTube"
-        >
-          ${embedData.posterUrl ? `<img class="debate-card-youtube-poster-img" src="${escapeAttribute(embedData.posterUrl)}" alt="Aperçu de la vidéo YouTube" loading="lazy" decoding="async">` : ""}
-          <span class="debate-card-youtube-overlay" data-index-youtube-overlay>
-            <span class="debate-card-youtube-play" aria-hidden="true"><i class="fa-solid fa-play"></i></span>
-            <span class="debate-card-youtube-label">Vidéo YouTube</span>
-          </span>
-        </button>
         <iframe
           class="debate-card-youtube-iframe"
           title="Vidéo YouTube"
@@ -2480,17 +2720,9 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
           referrerpolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowfullscreen
+          src="${escapeAttribute(directEmbedUrl)}"
+          style="display:block; width:100%; aspect-ratio:16 / 9; border:0;"
         ></iframe>
-        <button
-          type="button"
-          class="debate-card-sound-toggle"
-          data-index-youtube-sound-btn
-          aria-label="Activer le son"
-          title="Activer le son"
-          style="display:none;"
-        >
-          <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
-        </button>
       </div>
     </div>
   `;
@@ -2545,11 +2777,11 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
           class="debate-card-youtube-poster debate-card-local-video-poster"
           data-index-local-video-poster
           aria-label="Lire la vidéo importée"
-          style="background:#000;"
+          title="Lire la vidéo importée"
         >
-          <span class="debate-card-youtube-overlay" data-index-local-video-overlay>
-            <span class="debate-card-youtube-play" aria-hidden="true"><i class="fa-solid fa-play"></i></span>
-            <span class="debate-card-youtube-label">Vidéo importée</span>
+          <span class="debate-card-local-video-overlay debate-card-youtube-overlay" data-index-local-video-overlay>
+            <span class="debate-card-local-video-play debate-card-youtube-play" aria-hidden="true"><i class="fa-solid fa-play"></i></span>
+            <span class="debate-card-local-video-label debate-card-youtube-label">Cliquer pour lire</span>
           </span>
         </button>
         <video
@@ -2558,8 +2790,7 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
           playsinline
           muted
           loop
-          preload="none"
-          style="display:block; width:100%; height:100%; border:0; background:#000;"
+          preload="metadata"
         ></video>
         <button
           type="button"
@@ -2688,12 +2919,88 @@ function ensureIndexLocalVideoOverlayLayer(shell) {
   const poster = shell.querySelector('[data-index-local-video-poster]');
   if (!overlay) return null;
 
-  if (poster && overlay.parentElement === poster) {
-    shell.appendChild(overlay);
+  if (poster && overlay.parentElement !== poster) {
+    poster.appendChild(overlay);
   }
 
-  overlay.style.zIndex = '2';
+  if (poster) {
+    poster.style.zIndex = '2';
+  }
+  overlay.style.zIndex = '3';
   return overlay;
+}
+
+function prepareIndexLocalVideoPoster(shell) {
+  if (!shell) return;
+
+  const poster = shell.querySelector('[data-index-local-video-poster]');
+  const player = shell.querySelector('[data-index-local-video-player]');
+  const videoSrc = String(shell.dataset.videoSrc || '').trim();
+  if (!poster || !player || !videoSrc) return;
+
+  if (shell.dataset.posterPrepared === 'true' && player.getAttribute('src') === videoSrc) {
+    updateIndexLocalVideoShellOverlay(shell);
+    return;
+  }
+
+  shell.dataset.posterPrepared = 'true';
+  shell.dataset.posterReady = 'false';
+
+  poster.style.background = 'linear-gradient(180deg, rgba(15,23,42,0.32), rgba(15,23,42,0.68))';
+  poster.style.backgroundImage = '';
+  poster.style.backgroundSize = '';
+  poster.style.backgroundPosition = '';
+  poster.style.backgroundRepeat = '';
+
+  bindIndexLocalVideoPosterLifecycle(shell);
+
+  if (player.getAttribute('src') !== videoSrc) {
+    player.src = videoSrc;
+    player.load();
+  }
+
+  const markReady = () => {
+    shell.dataset.posterReady = player.readyState >= 2 ? 'true' : 'false';
+    updateIndexLocalVideoShellOverlay(shell);
+    syncIndexLocalVideoPosterVisibility(shell);
+  };
+
+  const seekPreviewFrame = () => {
+    const duration = Number(player.duration || 0);
+    if (!Number.isFinite(duration) || duration <= 0.2) {
+      markReady();
+      return;
+    }
+
+    const targetTime = Math.min(1, Math.max(duration * 0.1, 0.08));
+    const onSeeked = () => {
+      try { player.pause(); } catch (error) {}
+      markReady();
+    };
+
+    player.addEventListener('seeked', onSeeked, { once: true });
+    try {
+      player.currentTime = targetTime;
+    } catch (error) {
+      markReady();
+    }
+  };
+
+  if (shell.dataset.previewBound !== 'true') {
+    shell.dataset.previewBound = 'true';
+
+    player.addEventListener('loadedmetadata', seekPreviewFrame);
+    player.addEventListener('loadeddata', markReady);
+    player.addEventListener('canplay', markReady);
+    player.addEventListener('error', () => {
+      shell.dataset.posterReady = 'false';
+      updateIndexLocalVideoShellOverlay(shell);
+      syncIndexLocalVideoPosterVisibility(shell);
+    });
+  }
+
+  updateIndexLocalVideoShellOverlay(shell);
+  syncIndexLocalVideoPosterVisibility(shell);
 }
 
 function queueIndexYouTubeSoundActivation(shell, iframe) {
@@ -2769,8 +3076,9 @@ function activateIndexYouTubeShell(shell) {
   if (!iframe || !baseUrl) return;
 
 const currentSrc = String(iframe.getAttribute('src') || '').trim();
+const isNewLoad = !currentSrc || currentSrc === 'about:blank';
 
-if (!currentSrc || currentSrc === 'about:blank') {
+if (isNewLoad) {
   iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
     muted: true
@@ -2778,18 +3086,31 @@ if (!currentSrc || currentSrc === 'about:blank') {
 }
 
   shell.dataset.active = 'true';
-  if (poster) poster.style.display = 'none';
   updateIndexYouTubeShellOverlay(shell);
 
-  if (shell.dataset.userActivated === 'true') {
+  if (isNewLoad) {
+    // Garder le poster visible jusqu'au chargement de l'iframe (évite l'écran noir)
     iframe.onload = () => {
-      queueIndexYouTubeSoundActivation(shell, iframe);
+      if (poster) poster.style.display = 'none';
+      if (shell.dataset.userActivated === 'true') {
+        queueIndexYouTubeSoundActivation(shell, iframe);
+      }
       iframe.onload = null;
     };
-
-    queueIndexYouTubeSoundActivation(shell, iframe);
+    if (shell.dataset.userActivated === 'true') {
+      queueIndexYouTubeSoundActivation(shell, iframe);
+    }
   } else {
-    iframe.onload = null;
+    if (poster) poster.style.display = 'none';
+    if (shell.dataset.userActivated === 'true') {
+      iframe.onload = () => {
+        queueIndexYouTubeSoundActivation(shell, iframe);
+        iframe.onload = null;
+      };
+      queueIndexYouTubeSoundActivation(shell, iframe);
+    } else {
+      iframe.onload = null;
+    }
   }
 }
 
@@ -2870,7 +3191,10 @@ const bottomTolerance = window.innerHeight * 0.18 + 120;
   }
 
   state.activeShell = bestShell;
-  activateIndexYouTubeShell(bestShell);
+
+  if (bestShell.dataset.userStarted === 'true') {
+    activateIndexYouTubeShell(bestShell);
+  }
 
   candidates.forEach((shell) => {
     if (shell !== bestShell) {
@@ -2896,15 +3220,28 @@ function updateIndexLocalVideoShellOverlay(shell) {
   const label = overlay?.querySelector('.debate-card-youtube-label');
   const soundButton = shell.querySelector('[data-index-local-video-sound-btn]');
   const isActive = shell.dataset.active === 'true';
+  const isUserStarted = shell.dataset.userStarted === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
+  const hasPosterReady = shell.dataset.posterReady === 'true';
 
   if (!overlay) return;
+
+  if (!isUserStarted) {
+    overlay.style.display = '';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.cursor = '';
+    if (label) {
+      label.textContent = hasPosterReady ? 'Cliquer pour lire' : 'Vidéo importée';
+    }
+    if (soundButton) soundButton.style.display = 'none';
+    return;
+  }
 
   if (!isActive) {
     overlay.style.display = '';
     overlay.style.pointerEvents = 'none';
     overlay.style.cursor = '';
-    if (label) label.textContent = 'Vidéo importée';
+    if (label) label.textContent = 'Cliquer pour relire';
     if (soundButton) soundButton.style.display = 'none';
     return;
   }
@@ -2921,6 +3258,35 @@ function updateIndexLocalVideoShellOverlay(shell) {
     soundButton.setAttribute('aria-label', isUserActivated ? 'Couper le son' : 'Activer le son');
     soundButton.setAttribute('title', isUserActivated ? 'Couper le son' : 'Activer le son');
   }
+}
+
+function syncIndexLocalVideoPosterVisibility(shell) {
+  if (!shell) return;
+
+  const video = shell.querySelector('[data-index-local-video-player]');
+  const poster = shell.querySelector('[data-index-local-video-poster]');
+  if (!video || !poster) return;
+
+  const isUserStarted = shell.dataset.userStarted === 'true';
+  const isPlaying = video.readyState >= 2 && !video.paused && !video.ended;
+  poster.style.display = isUserStarted && isPlaying ? 'none' : '';
+}
+
+function bindIndexLocalVideoPosterLifecycle(shell) {
+  if (!shell || shell.dataset.posterLifecycleBound === 'true') return;
+
+  const video = shell.querySelector('[data-index-local-video-player]');
+  if (!video) return;
+
+  shell.dataset.posterLifecycleBound = 'true';
+
+  const updateVisibility = () => {
+    syncIndexLocalVideoPosterVisibility(shell);
+  };
+
+  ['loadeddata', 'canplay', 'playing', 'pause', 'waiting', 'emptied', 'ended'].forEach((eventName) => {
+    video.addEventListener(eventName, updateVisibility);
+  });
 }
 
 function unloadIndexLocalVideoShell(shell) {
@@ -2942,6 +3308,7 @@ function unloadIndexLocalVideoShell(shell) {
   video.controls = false;
   shell.dataset.active = 'false';
   shell.dataset.userActivated = 'false';
+  shell.dataset.userStarted = 'false';
 
   if (poster) poster.style.display = '';
   updateIndexLocalVideoShellOverlay(shell);
@@ -2954,25 +3321,37 @@ function activateIndexLocalVideoShell(shell) {
   const videoSrc = String(shell.dataset.videoSrc || '').trim();
   if (!video || !videoSrc) return;
 
+  bindIndexLocalVideoPosterLifecycle(shell);
+
   if (video.getAttribute('src') !== videoSrc) {
+    if (poster) poster.style.display = '';
     video.src = videoSrc;
     video.load();
   }
 
+  const hasUserStarted = shell.dataset.userStarted === 'true';
   const shouldStartMuted = shell.dataset.userActivated !== 'true';
   video.defaultMuted = shouldStartMuted;
   video.muted = shouldStartMuted;
-  video.controls = shell.dataset.userActivated === 'true';
+  video.controls = hasUserStarted || shell.dataset.userActivated === 'true';
   shell.dataset.active = 'true';
+
+  if (!hasUserStarted) {
+    prepareIndexLocalVideoPoster(shell);
+    updateIndexLocalVideoShellOverlay(shell);
+    syncIndexLocalVideoPosterVisibility(shell);
+    return;
+  }
+
+  syncIndexLocalVideoPosterVisibility(shell);
 
   const playPromise = video.play();
   if (playPromise && typeof playPromise.catch === 'function') {
     playPromise.catch(() => {
-      // noop
+      syncIndexLocalVideoPosterVisibility(shell);
     });
   }
 
-  if (poster) poster.style.display = 'none';
   updateIndexLocalVideoShellOverlay(shell);
 }
 
@@ -3230,6 +3609,7 @@ function initIndexLocalVideoObserver(root = document) {
     shell.dataset.active = 'false';
     shell.dataset.userActivated = 'false';
     ensureIndexLocalVideoOverlayLayer(shell);
+    prepareIndexLocalVideoPoster(shell);
     unloadIndexLocalVideoShell(shell);
 
     const poster = shell.querySelector('[data-index-local-video-poster]');
@@ -3239,8 +3619,13 @@ function initIndexLocalVideoObserver(root = document) {
     if (poster) {
       poster.onclick = (event) => {
         event.preventDefault();
+        shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
-        scheduleIndexLocalVideoActiveUpdate();
+        if (state.activeShell && state.activeShell !== shell) {
+          unloadIndexLocalVideoShell(state.activeShell);
+        }
+        state.activeShell = shell;
+        activateIndexLocalVideoShell(shell);
       };
     }
 
@@ -3248,8 +3633,13 @@ function initIndexLocalVideoObserver(root = document) {
       overlay.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
+        shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
-        scheduleIndexLocalVideoActiveUpdate();
+        if (state.activeShell && state.activeShell !== shell) {
+          unloadIndexLocalVideoShell(state.activeShell);
+        }
+        state.activeShell = shell;
+        activateIndexLocalVideoShell(shell);
       };
     }
 
@@ -3257,6 +3647,7 @@ function initIndexLocalVideoObserver(root = document) {
       soundButton.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
+        shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
 
         if (state.activeShell !== shell) {
@@ -3300,20 +3691,36 @@ function initIndexYouTubeObserver(root = document) {
   const shells = Array.from(root.querySelectorAll('[data-index-youtube-shell]'));
   const previousState = window.indexYouTubePlaybackState;
 
-  if (previousState?.observer) {
-    previousState.observer.disconnect();
-  }
-
-  if (previousState?.resizeHandler) {
-    window.removeEventListener('resize', previousState.resizeHandler);
-  }
-
-  if (previousState?.scrollHandler) {
-    window.removeEventListener('scroll', previousState.scrollHandler, { passive: true });
-  }
+  if (previousState?.observer) previousState.observer.disconnect();
+  if (previousState?.resizeHandler) window.removeEventListener('resize', previousState.resizeHandler);
+  if (previousState?.scrollHandler) window.removeEventListener('scroll', previousState.scrollHandler, { passive: true });
 
   if (!shells.length) {
     window.indexYouTubePlaybackState = null;
+    return;
+  }
+
+  const directOnlyShells = shells.filter((shell) => shell.dataset.directIframe === 'true');
+  if (directOnlyShells.length === shells.length) {
+    window.indexYouTubePlaybackState = {
+      observer: null,
+      shells: new Set(shells),
+      activeShell: null,
+      rafId: null,
+      resizeHandler: null,
+      scrollHandler: null
+    };
+
+    directOnlyShells.forEach((shell) => {
+      shell.dataset.inView = 'true';
+      shell.dataset.active = 'true';
+      shell.dataset.userActivated = 'true';
+      const iframe = shell.querySelector('.debate-card-youtube-iframe');
+      if (iframe && !iframe.getAttribute('src')) {
+        const base = String(shell.dataset.embedBase || '').trim();
+        if (base) iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
+      }
+    });
     return;
   }
 
@@ -3342,8 +3749,13 @@ function initIndexYouTubeObserver(root = document) {
     if (poster) {
       poster.onclick = (event) => {
         event.preventDefault();
+        shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
-        scheduleIndexYouTubeActiveUpdate();
+        if (state.activeShell && state.activeShell !== shell) {
+          unloadIndexYouTubeShell(state.activeShell);
+        }
+        state.activeShell = shell;
+        activateIndexYouTubeShell(shell);
       };
     }
 
@@ -3351,8 +3763,13 @@ function initIndexYouTubeObserver(root = document) {
       overlay.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
+        shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
-        scheduleIndexYouTubeActiveUpdate();
+        if (state.activeShell && state.activeShell !== shell) {
+          unloadIndexYouTubeShell(state.activeShell);
+        }
+        state.activeShell = shell;
+        activateIndexYouTubeShell(shell);
       };
     }
 
@@ -3360,33 +3777,36 @@ function initIndexYouTubeObserver(root = document) {
       soundButton.onclick = (event) => {
         event.preventDefault();
         event.stopPropagation();
-        shell.dataset.inView = 'true';
-
-        if (state.activeShell !== shell) {
+        const currentlyMuted = shell.dataset.soundEnabled !== 'true';
+        if (shell.dataset.active !== 'true') {
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+          if (state.activeShell && state.activeShell !== shell) {
+            unloadIndexYouTubeShell(state.activeShell);
+          }
           state.activeShell = shell;
-          activateIndexYouTubeShell(shell);
+          activateIndexYouTubeShell(shell, { enableSound: currentlyMuted });
+          return;
         }
 
-        toggleSoundOnIndexYouTubeShell(shell);
+        setIndexYouTubeSoundEnabled(shell, currentlyMuted);
       };
     }
   });
 
-state.observer = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
-    const shell = entry.target;
-    shell.dataset.inView = entry.isIntersecting ? 'true' : 'false';
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      entry.target.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.35 ? 'true' : 'false';
+    });
+    scheduleIndexYouTubeActiveUpdate();
+  }, {
+    threshold: [0, 0.1, 0.35, 0.7],
+    rootMargin: '120px 0px 120px 0px'
   });
 
-  scheduleIndexYouTubeActiveUpdate();
-}, {
-  threshold: [0, 0.05, 0.12, 0.25, 0.55, 0.85],
-  rootMargin: '0px 0px 120px 0px'
-});
-
-
-
-  shells.forEach((shell) => state.observer.observe(shell));
+  shells.forEach((shell) => {
+    state.observer.observe(shell);
+  });
 
   state.resizeHandler = () => scheduleIndexYouTubeActiveUpdate();
   state.scrollHandler = () => scheduleIndexYouTubeActiveUpdate();
@@ -3396,6 +3816,7 @@ state.observer = new IntersectionObserver((entries) => {
 
   scheduleIndexYouTubeActiveUpdate();
 }
+
 
 
 function isElementNearViewport(element, extraMargin = 160) {
@@ -3622,6 +4043,44 @@ function initIndexXObserver(root = document) {
   });
 }
 
+function applyIndexInstagramDesktopSizing(shell) {
+  if (!shell) return;
+
+  const embed = shell.querySelector('[data-index-instagram-embed]');
+  if (!embed) return;
+
+  const isDesktop = window.innerWidth >= 769;
+  embed.style.justifyContent = 'center';
+  embed.style.width = '100%';
+  embed.style.maxWidth = isDesktop ? '420px' : '100%';
+  embed.style.margin = '0 auto';
+
+  const blockquote = embed.querySelector('.instagram-media');
+  if (blockquote) {
+    blockquote.style.width = '100%';
+    blockquote.style.maxWidth = isDesktop ? '420px' : '100%';
+    blockquote.style.margin = '0 auto';
+  }
+}
+
+function applyDebateInstagramDesktopSizing() {
+  const embed = document.getElementById('debate-source-instagram-embed');
+  if (!embed) return;
+
+  const isDesktop = window.innerWidth >= 769;
+  embed.style.justifyContent = 'center';
+  embed.style.width = '100%';
+  embed.style.maxWidth = isDesktop ? '420px' : '100%';
+  embed.style.margin = '0 auto';
+
+  const blockquote = embed.querySelector('.instagram-media');
+  if (blockquote) {
+    blockquote.style.width = '100%';
+    blockquote.style.maxWidth = isDesktop ? '420px' : '100%';
+    blockquote.style.margin = '0 auto';
+  }
+}
+
 async function renderIndexInstagramShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
@@ -3679,6 +4138,7 @@ async function renderIndexInstagramShell(shell) {
     embed.style.display = 'flex';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
+    applyIndexInstagramDesktopSizing(shell);
     if (loading) loading.style.display = 'none';
   } catch (error) {
     shell.dataset.rendered = 'failed';
@@ -3753,6 +4213,15 @@ function initIndexInstagramObserver(root = document) {
       });
     }
   });
+
+  if (!window.__indexInstagramDesktopResizeBound) {
+    window.__indexInstagramDesktopResizeBound = true;
+    window.addEventListener('resize', () => {
+      document.querySelectorAll('[data-index-instagram-shell]').forEach((shell) => {
+        applyIndexInstagramDesktopSizing(shell);
+      });
+    });
+  }
 }
 
 function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
@@ -4487,6 +4956,23 @@ function shareIdeaOnReddit(debateId, encodedArgumentJson) {
 }
 
 let openedIdeaShareMenuId = null;
+let _ideaShareScrolling = false;
+
+function removeIdeaShareAutoCloseListeners() {
+  if (window.__ideaShareAutoCloseHandler) {
+    window.removeEventListener('scroll', window.__ideaShareAutoCloseHandler, true);
+    window.removeEventListener('wheel', window.__ideaShareAutoCloseHandler, true);
+    window.removeEventListener('resize', window.__ideaShareAutoCloseHandler, true);
+    window.__ideaShareAutoCloseHandler = null;
+  }
+
+  if (window.__ideaShareTouchMoveHandler) {
+    window.removeEventListener('touchstart', window.__ideaShareTouchStartHandler, true);
+    window.removeEventListener('touchmove', window.__ideaShareTouchMoveHandler, true);
+    window.__ideaShareTouchStartHandler = null;
+    window.__ideaShareTouchMoveHandler = null;
+  }
+}
 
 function closeIdeaShareMenus() {
   const globalMenu = document.getElementById('idea-share-global-menu');
@@ -4494,11 +4980,14 @@ function closeIdeaShareMenus() {
     globalMenu.style.display = 'none';
     globalMenu.innerHTML = '';
   }
+
+  document
+    .querySelectorAll('.idea-share-discreet-trigger[aria-expanded="true"]')
+    .forEach((button) => button.setAttribute('aria-expanded', 'false'));
+
   openedIdeaShareMenuId = null;
-  if (window.__ideaShareScrollHandler) {
-    window.removeEventListener('scroll', window.__ideaShareScrollHandler, true);
-    window.__ideaShareScrollHandler = null;
-  }
+  _ideaShareScrolling = false;
+  removeIdeaShareAutoCloseListeners();
 }
 
 function toggleIdeaShareMenu(event, argumentId) {
@@ -4510,11 +4999,11 @@ function toggleIdeaShareMenu(event, argumentId) {
   const sourceMenuId = `idea-share-menu-${argumentId}`;
   const sourceMenu = document.getElementById(sourceMenuId);
   const isSameMenuOpen = openedIdeaShareMenuId === sourceMenuId;
+  const trigger = event?.target?.closest('button') || event?.currentTarget || event?.target || null;
 
   closeIdeaShareMenus();
-  if (isSameMenuOpen || !sourceMenu) return;
+  if (isSameMenuOpen || !sourceMenu || !trigger) return;
 
-  // Menu global dans body — échappe tout contexte d'empilement
   let globalMenu = document.getElementById('idea-share-global-menu');
   if (!globalMenu) {
     globalMenu = document.createElement('div');
@@ -4526,7 +5015,6 @@ function toggleIdeaShareMenu(event, argumentId) {
 
   globalMenu.innerHTML = sourceMenu.innerHTML;
 
-  const trigger = event.target.closest('button') || event.target;
   const positionMenu = () => {
     const rect = trigger.getBoundingClientRect();
     const menuWidth = 160;
@@ -4539,10 +5027,41 @@ function toggleIdeaShareMenu(event, argumentId) {
   positionMenu();
   globalMenu.style.display = 'flex';
   openedIdeaShareMenuId = sourceMenuId;
+  trigger.setAttribute('aria-expanded', 'true');
 
-  // Suivre le scroll pour rester sous le bouton
-  window.__ideaShareScrollHandler = positionMenu;
-  window.addEventListener('scroll', positionMenu, { passive: true, capture: true });
+  // Si le menu dépasse en bas du viewport, scroller pour le dégager puis repositionner
+  requestAnimationFrame(() => {
+    const menuRect = globalMenu.getBoundingClientRect();
+    const safeMargin = 8;
+    const overflow = menuRect.bottom - (window.innerHeight - safeMargin);
+    if (overflow > 0) {
+      _ideaShareScrolling = true;
+      window.scrollBy({ top: overflow, behavior: 'smooth' });
+      setTimeout(() => {
+        positionMenu(); // repositionne après que le trigger ait bougé
+        _ideaShareScrolling = false;
+      }, 400);
+    }
+  });
+
+  // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
+  window.__ideaShareAutoCloseHandler = () => {
+    if (_ideaShareScrolling) return;
+    closeIdeaShareMenus();
+  };
+  window.addEventListener('scroll', window.__ideaShareAutoCloseHandler, { passive: true, capture: true });
+  window.addEventListener('wheel', window.__ideaShareAutoCloseHandler, { passive: true, capture: true });
+  window.addEventListener('resize', window.__ideaShareAutoCloseHandler, { passive: true, capture: true });
+
+  // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
+  let _ideaShareTouchStartY = 0;
+  window.__ideaShareTouchStartHandler = (e) => { _ideaShareTouchStartY = e.touches[0]?.clientY ?? 0; };
+  window.__ideaShareTouchMoveHandler = (e) => {
+    if (_ideaShareScrolling) return;
+    if (Math.abs((e.touches[0]?.clientY ?? 0) - _ideaShareTouchStartY) > 10) closeIdeaShareMenus();
+  };
+  window.addEventListener('touchstart', window.__ideaShareTouchStartHandler, { passive: true, capture: true });
+  window.addEventListener('touchmove', window.__ideaShareTouchMoveHandler, { passive: true, capture: true });
 }
 
 function handleIdeaShareAction(event, callback) {
@@ -4564,12 +5083,6 @@ if (!window.__ideaShareMenuListenerAttached) {
     if (event.target.closest('.idea-share-discreet-trigger')) return;
     closeIdeaShareMenus();
   });
-
-  document.addEventListener('touchstart', (event) => {
-    if (event.target.closest('#idea-share-global-menu')) return;
-    if (event.target.closest('.idea-share-discreet-trigger')) return;
-    closeIdeaShareMenus();
-  }, { passive: true });
 
   window.__ideaShareMenuListenerAttached = true;
 }
@@ -6317,7 +6830,15 @@ function buildIndexContextPreviewHtml(debate) {
   const debateId = escapeAttribute(String(debate?.id || ""));
 
   return `
-    <div class="debate-card-context" data-index-context-card>
+    <div
+      class="debate-card-context"
+      data-index-context-card
+      role="link"
+      tabindex="0"
+      onclick="openIndexDebateFromMedia('${debateId}', event)"
+      onkeydown="handleIndexContextTextKeydown(event, '${debateId}')"
+      style="cursor:pointer;"
+    >
       <p
         class="debate-card-context-text"
         data-index-context-text
@@ -6332,7 +6853,7 @@ function buildIndexContextPreviewHtml(debate) {
           data-index-context-toggle
           data-debate-id="${debateId}"
           aria-expanded="false"
-          onclick="toggleIndexContextPreview(this)"
+          onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
         >Voir plus</button>
       ` : ""}
     </div>
@@ -6354,7 +6875,15 @@ function buildSimilarDebatePreviewHtml(debate) {
   return `
     ${mediaHtml ? `<div class="debate-card-media-wrap">${mediaHtml}</div>` : ""}
     ${fullText ? `
-    <div class="debate-card-context" data-index-context-card>
+    <div
+      class="debate-card-context"
+      data-index-context-card
+      role="link"
+      tabindex="0"
+      onclick="openIndexDebateFromMedia('${debateId}', event)"
+      onkeydown="handleIndexContextTextKeydown(event, '${debateId}')"
+      style="cursor:pointer;"
+    >
       <p
         class="debate-card-context-text"
         data-index-context-text
@@ -6369,7 +6898,7 @@ function buildSimilarDebatePreviewHtml(debate) {
           data-index-context-toggle
           data-debate-id="${debateId}"
           aria-expanded="false"
-          onclick="toggleIndexContextPreview(this)"
+          onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
         >Voir plus</button>
       ` : ""}
     </div>` : ""}
@@ -6391,6 +6920,16 @@ function toggleIndexContextPreview(button) {
   textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
   button.textContent = nextExpanded ? 'Voir moins' : 'Voir plus';
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+}
+
+function handleIndexContextTextKeydown(event, debateId) {
+  if (!event) return;
+
+  const key = event.key;
+  if (key !== 'Enter' && key !== ' ') return;
+
+  event.preventDefault();
+  openIndexDebateFromMedia(debateId, event);
 }
 
 
@@ -7079,14 +7618,7 @@ const contextHtml = buildIndexContextPreviewHtml(d);
         ${mediaOutsideLink ? mediaHtml : ""}
         ${contextHtml}
 
-<div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
-          <div class="debate-card-counts-row">
-            <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
-            <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
-          </div>
-          <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
-          ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
-        </div>
+${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
 
         <div class="debate-card-actions">
 
@@ -7325,14 +7857,7 @@ ${
       ${mediaOutsideLink ? mediaHtml : ""}
       ${contextHtml}
 
-      <div class="debate-card-meta-below-media">
-        <div class="debate-card-counts-row">
-          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
-          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
-        </div>
-        <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
-        ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
-      </div>
+      ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
 
       <div class="debate-card-actions">
 
@@ -7552,6 +8077,7 @@ function updateIndexLists(debates) {
   if (currentTypeFilter === "visited") {
     visitedDebatesCache = visitedDebates;
     otherDebatesCache = [];
+    expandIndexVisibilityForReturnTarget();
 
     if (otherHeaderTitle) {
       otherHeaderTitle.textContent = "Arènes ouvertes";
@@ -7564,6 +8090,7 @@ function updateIndexLists(debates) {
 
   visitedDebatesCache = [];
   otherDebatesCache = allDebates;
+  expandIndexVisibilityForReturnTarget();
 
   if (otherHeaderTitle) {
     otherHeaderTitle.textContent = "Arènes ouvertes";
@@ -7670,10 +8197,25 @@ async function initIndex() {
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(API + "/debates").then((fresh) => {
+        const savedDebateId = getSavedIndexReturnDebateId();
+        const savedScrollY = getSavedIndexReturnScrollY();
+
         saveDebatesToSessionCache(fresh);
         debatesCache = fresh;
         refreshCategoryFilterOptions(debatesCache);
         applyIndexFilters();
+
+        if (savedDebateId) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              restoreIndexReturnCardIfNeeded({ allowScrollFallback: true }).then((restored) => {
+                if (!restored && savedScrollY !== null) {
+                  window.scrollTo(0, savedScrollY);
+                }
+              });
+            });
+          });
+        }
       }).catch(() => {});
 
     } else {
@@ -9888,6 +10430,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
               <div class="debate-card-counts-row">
                 <p class="debate-card-ideas-count">${debate.argument_count || 0} idée(s)</p>
                 <p class="debate-card-comments-count">${debate.comment_count || 0} commentaire(s)</p>
+                <p class="debate-card-votes-count"${!(debate.vote_count > 0) ? ' style="display:none;"' : ''}>${debate.vote_count || 0} voix</p>
               </div>
               <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
               ${debate.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(debate.last_argument_at))}</p>` : ""}
@@ -10433,7 +10976,14 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
       </blockquote>
     `;
 
+    applyDebateInstagramDesktopSizing();
     window.instgrm.Embeds.process();
+    setTimeout(() => {
+      applyDebateInstagramDesktopSizing();
+    }, 250);
+    setTimeout(() => {
+      applyDebateInstagramDesktopSizing();
+    }, 900);
 
     if (sourceLoading) {
       setTimeout(() => {
@@ -11143,7 +11693,7 @@ function renderArgs(container, args, debateId, commentsByArgument) {
   const state = getState(debateId);
   const commentLikeState = getCommentLikeState(debateId);
 
-  const supportRankMap = getSupportRankMap(args);
+  const supportRankMap = getSupportRankMap(args, { side: container === "arguments-b" ? "B" : "A" });
 args = sortArgumentsByMode(args, commentsByArgument);
 
   let visibleArgs = args.slice(0, argumentsVisible);
@@ -11197,7 +11747,7 @@ const votedArgumentsForColumn = args
 
     return {
       id: a.id,
-      rank: i + 1,
+      rank: Number(supportRankMap[String(a.id)] || 0),
       title: a.title || "Idée sans titre",
       count: myCount
     };
@@ -11340,6 +11890,7 @@ return `
 <article id="argument-${a.id}"
          class="argument-card ${voted ? "argument-card-voted" : ""}"
   ondblclick="handleArgumentDoubleClick(event, '${a.side === "A" ? "a" : "b"}', '${a.id}')">
+  ${renderStrongProgressBadge(a)}
   ${(isOwner || isAdmin()) ? `
     <button
       class="argument-owner-delete"
@@ -11352,7 +11903,12 @@ return `
   ` : ""}
   <div class="argument-top">
     <span class="vote-badge">
-      ${medal}${rankLabel ? " " + rankLabel : ""}
+      ${(medal || rankLabel) ? `
+        <span class="vote-rank-group">
+          ${medal ? `<span class="vote-medal">${medal}</span>` : ""}
+          ${rankLabel ? `<span class="vote-rank-label">${rankLabel}</span>` : ""}
+        </span>
+      ` : ""}
       ${(medal || rankLabel) ? '<span class="vote-separator">•</span>' : ""}
       <span class="vote-count">${a.votes} voix</span>
     </span>
@@ -11702,7 +12258,7 @@ if (hiddenArgs.length > 0) {
 function renderUnifiedArgs(container, args, debateId, commentsByArgument) {
   const state = getState(debateId);
   const commentLikeState = getCommentLikeState(debateId);
-  const supportRankMap = getSupportRankMap(args || []);
+  const supportRankMap = getSupportRankMapBySide(args || []);
 const sortedArgs = sortArgumentsByMode(args || [], commentsByArgument);  const visibleArgs = sortedArgs.slice(0, argumentsVisible);
   const hiddenArgs = sortedArgs.slice(argumentsVisible);
 
@@ -11784,6 +12340,7 @@ const cardSideClass = debateIsOpen
    
 return `
     <article id="list-argument-${a.id}" class="argument-card argument-card-unified ${cardSideClass} ${voted ? "argument-card-voted" : ""}">
+      ${renderStrongProgressBadge(a)}
       ${(isOwner || isAdmin()) ? `
         <button
           class="argument-owner-delete"
@@ -11796,10 +12353,15 @@ return `
       ` : ""}
       <div class="argument-top argument-top-unified">
 <span class="vote-badge">
-
-  ${medal}${rankLabel ? " " + rankLabel : ""}
+  ${(medal || rankLabel) ? `
+    <span class="vote-rank-group">
+      ${medal ? `<span class="vote-medal">${medal}</span>` : ""}
+      ${rankLabel ? `<span class="vote-rank-label">${rankLabel}</span>` : ""}
+    </span>
+  ` : ""}
   ${(medal || rankLabel) ? '<span class="vote-separator">•</span>' : ""}
-<span class="vote-count">${a.votes} voix</span>
+  <span class="vote-count">${a.votes} voix</span>
+</span>
 </div>
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
@@ -12422,13 +12984,32 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = n
   const numericVotes = Math.max(0, Number(votes || 0));
   const numericMyVotes = Math.max(0, Number(myVoteCount || 0));
 
+  const votes24hFields = [
+    "votes_last_24h", "vote_count_24h", "recent_votes_24h",
+    "recentVotes24h", "votesInLast24h", "progress_votes_24h"
+  ];
+
   currentAllArguments = (currentAllArguments || []).map((arg) => {
     if (String(arg.id) !== argIdString) return arg;
-    return {
+
+    const delta = numericVotes - Math.max(0, Number(arg.votes || 0));
+    const updated = {
       ...arg,
       votes: numericVotes,
       ...(lastVotedAt ? { last_voted_at: lastVotedAt } : {})
     };
+
+    // Décrémenter les champs 24h pour que le badge "forte progression"
+    // disparaisse immédiatement quand des voix sont retirées
+    if (delta < 0) {
+      votes24hFields.forEach((field) => {
+        if (Number.isFinite(Number(updated[field]))) {
+          updated[field] = Math.max(0, Number(updated[field]) + delta);
+        }
+      });
+    }
+
+    return updated;
   });
 
   const visibleCards = [
@@ -12677,6 +13258,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     state[argIdString] = optimisticMyVotesOnArgument;
     setState(debateId, state);
     clearPinnedNewArgumentIfMatches(argIdString);
+    recordLocalArgumentVote(argIdString);
 
     refreshVoteUiAfterLocalChange(
       debateId,
@@ -12730,6 +13312,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   } catch (error) {
     if (optimisticApplied) {
       setState(debateId, previousState);
+      removeLastLocalArgumentVote(argIdString);
 
       try {
         refreshVoteUiAfterLocalChange(
@@ -12800,6 +13383,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     }
 
     setState(debateId, state);
+    removeLastLocalArgumentVote(argIdString);
 
     refreshVoteUiAfterLocalChange(
       debateId,
@@ -12848,6 +13432,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
   } catch (error) {
     if (optimisticApplied) {
       setState(debateId, previousState);
+      recordLocalArgumentVote(argIdString);
 
       try {
         refreshVoteUiAfterLocalChange(
@@ -14692,6 +15277,23 @@ window.closeIdeaShareMenus = closeIdeaShareMenus;
 ========================= */
 
 let homeBottomShareMenuOpen = false;
+let _homeBottomShareScrolling = false;
+
+function removeHomeBottomShareAutoCloseListeners() {
+  if (window.__homeBottomShareAutoCloseHandler) {
+    window.removeEventListener("scroll", window.__homeBottomShareAutoCloseHandler, true);
+    window.removeEventListener("wheel", window.__homeBottomShareAutoCloseHandler, true);
+    window.removeEventListener("resize", window.__homeBottomShareAutoCloseHandler, true);
+    window.__homeBottomShareAutoCloseHandler = null;
+  }
+
+  if (window.__homeBottomShareTouchMoveHandler) {
+    window.removeEventListener("touchstart", window.__homeBottomShareTouchStartHandler, true);
+    window.removeEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, true);
+    window.__homeBottomShareTouchStartHandler = null;
+    window.__homeBottomShareTouchMoveHandler = null;
+  }
+}
 
 function closeHomeBottomShareMenu() {
   const menu = document.getElementById("home-bottom-share-menu");
@@ -14706,6 +15308,8 @@ function closeHomeBottomShareMenu() {
   }
 
   homeBottomShareMenuOpen = false;
+  _homeBottomShareScrolling = false;
+  removeHomeBottomShareAutoCloseListeners();
 }
 
 function toggleHomeBottomShareMenu(event) {
@@ -14729,6 +15333,37 @@ function toggleHomeBottomShareMenu(event) {
       trigger.setAttribute("aria-expanded", "true");
     }
     homeBottomShareMenuOpen = true;
+
+    // Si le menu dépasse en haut du viewport, scroller pour le dégager
+    requestAnimationFrame(() => {
+      const menuRect = menu.getBoundingClientRect();
+      const safeMargin = 8;
+      if (menuRect.top < safeMargin) {
+        const scrollAmount = menuRect.top - safeMargin; // valeur négative → remonte la page
+        _homeBottomShareScrolling = true;
+        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        setTimeout(() => { _homeBottomShareScrolling = false; }, 600);
+      }
+    });
+
+    // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
+    window.__homeBottomShareAutoCloseHandler = () => {
+      if (_homeBottomShareScrolling) return;
+      closeHomeBottomShareMenu();
+    };
+    window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+    window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+    window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+
+    // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
+    let _homeBottomShareTouchStartY = 0;
+    window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
+    window.__homeBottomShareTouchMoveHandler = (e) => {
+      if (_homeBottomShareScrolling) return;
+      if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
+    };
+    window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
+    window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
   }
 }
 
@@ -14753,11 +15388,6 @@ function initHomeBottomShareMenu() {
     if (event.target.closest(".home-bottom-nav-item-wrap")) return;
     closeHomeBottomShareMenu();
   });
-
-  document.addEventListener("touchstart", (event) => {
-    if (event.target.closest(".home-bottom-nav-item-wrap")) return;
-    closeHomeBottomShareMenu();
-  }, { passive: true });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {

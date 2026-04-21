@@ -53,7 +53,111 @@ body.page-debate .debate-context-text span {
 /* Cartes d'arguments : fond blanc conservé, texte sombre assuré */
 body.page-debate .argument-card {
   color: revert;
+  position: relative;
 }
+
+body.page-debate .argument-trending-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  color: #374151;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body.page-debate .argument-trending-badge-icon {
+  font-size: 11px;
+  opacity: 0.78;
+}
+
+body.page-debate .argument-trending-badge-text {
+  white-space: nowrap;
+}
+
+body.page-debate .argument-card-a .argument-trending-badge,
+body.page-debate .argument-card-unified.argument-card-a .argument-trending-badge,
+body.page-debate #arguments-a .argument-card .argument-trending-badge {
+  background: rgba(240, 253, 244, 0.82);
+  border-color: rgba(22, 101, 52, 0.14);
+  color: #166534;
+}
+
+body.page-debate .argument-card-b .argument-trending-badge,
+body.page-debate .argument-card-unified.argument-card-b .argument-trending-badge,
+body.page-debate #arguments-b .argument-card .argument-trending-badge {
+  background: rgba(254, 242, 242, 0.82);
+  border-color: rgba(153, 27, 27, 0.12);
+  color: #991b1b;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-trending-badge {
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+}
+
+
+body.page-debate .argument-card {
+  position: relative;
+  overflow: visible;
+}
+
+body.page-debate .argument-trending-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 52px);
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed 0%, #ec4899 55%, #f59e0b 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.30);
+  border: 1px solid rgba(255,255,255,0.28);
+}
+
+body.page-debate .argument-trending-badge-icon {
+  font-size: 12px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
+}
+
+body.page-debate .argument-trending-badge-text {
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-trending-badge {
+    top: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    font-size: 10px;
+    gap: 5px;
+    max-width: calc(100% - 44px);
+  }
+}
+
 
 /* Restaurer les couleurs natives des badges favorable/défavorable/proposition */
 body.page-debate .comments-count-favorable {
@@ -88,6 +192,17 @@ body.page-debate .argument-card-unified.argument-card-a {
 }
 body.page-debate .argument-card-unified.argument-card-b {
   background-color: #fee2e2;
+}
+
+/* Petits traits = couleur du fond de page (#243038) */
+body.page-debate .argument-card::before {
+  background: #243038 !important;
+  height: 1px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+body.page-debate .argument-card .comments-block {
+  border-top-color: #243038 !important;
 }
 
 /* Chips "mes arguments votés" en haut des colonnes */
@@ -183,8 +298,58 @@ body.page-debate .share-button:hover {
 body.page-debate .voice-stepper-value {
   color: #111827;
 }
+
+body.page-debate .argument-top,
+body.page-debate .argument-top-unified {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+body.page-debate .vote-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: auto;
+}
+body.page-debate .vote-rank-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+body.page-debate .vote-medal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body.page-debate .vote-rank-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body.page-debate .vote-separator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 body.page-debate .voice-stepper-label {
   color: #6b7280;
+}
+
+/* ── Médaille plus proche du point séparateur · numéro de classement plus grand ── */
+body.page-debate .argument-medal {
+  margin-right: 1px !important;
+}
+body.page-debate .argument-top {
+  gap: 2px !important;
+}
+body.page-debate .vote-rank-label {
+  font-size: 20px !important;
+  font-weight: 800 !important;
 }
 
 /* Bouton supprimer l'arène dans le bloc titre — plus petit et discret */
@@ -304,6 +469,24 @@ body.page-debate .home-topbar-menu-wrap {
 /* Bloc titre plus proche du bandeau haut */
 body.page-debate .debate-hero-top {
   margin-top: 4px;
+}
+
+/* Icônes de partage légèrement plus basses sur desktop */
+@media (min-width: 769px) {
+  body.page-debate #global-share-bar {
+    margin-top: 8px;
+  }
+}
+
+/* Titres bloc titre légèrement plus petits sur desktop */
+@media (min-width: 769px) {
+  body.page-debate #debate-question,
+  body.page-debate .debate-hero h1 {
+    font-size: 26px !important;
+  }
+  body.page-debate .column-header h2 {
+    font-size: 18px !important;
+  }
 }
 
 /* Fond de la zone open graph / vidéo = couleur du fond de page */

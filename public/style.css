@@ -434,7 +434,7 @@ main.create-page {
 .debate-card {
   display: grid;
   gap: 14px;
-  background: white;
+  background: #ededeb;
   padding: 22px;
   border-radius: 14px;
   border: 1px solid #e5e7eb;
@@ -583,6 +583,84 @@ margin: 6px 0 8px 0;  font-size: 20px;
   aspect-ratio:16/9;
   background:#000000;
 }
+.debate-card-media-local-video{
+  margin:2px 0 4px 0;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  overflow:hidden;
+  background:#000000;
+}
+
+.debate-card-local-video-shell{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/9;
+  background:#000000;
+  overflow:hidden;
+  isolation:isolate;
+}
+
+.debate-card-local-video-poster{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  display:block;
+  width:100%;
+  height:100%;
+  padding:0;
+  border:0;
+  background:#000000 center center / cover no-repeat;
+  cursor:pointer;
+  transition:opacity 0.18s ease;
+}
+
+.debate-card-local-video-overlay{
+  position:absolute;
+  inset:0;
+  z-index:3;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  background:linear-gradient(180deg, rgba(15,23,42,0.20), rgba(15,23,42,0.58));
+  color:#ffffff;
+  pointer-events:none;
+}
+
+.debate-card-local-video-play{
+  width:56px;
+  height:56px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,0.14);
+  border:1px solid rgba(255,255,255,0.2);
+  font-size:18px;
+}
+
+.debate-card-local-video-label{
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+
+.debate-card-local-video-player{
+  display:block;
+  width:100%;
+  height:100%;
+  border:0;
+  background:#000000;
+  object-fit:cover;
+}
+
+.debate-card-local-video-shell[data-active="true"] .debate-card-local-video-poster{
+  opacity:0;
+  pointer-events:none;
+}
+
 @media (min-width: 769px) {
   .debate-card-media-youtube,
   .debate-card-media-local-video {
@@ -686,6 +764,58 @@ margin: 6px 0 8px 0;  font-size: 20px;
   height:100%;
   border:0;
   background:#000000;
+}
+
+.debate-card-media-local-video{
+  margin:2px 0 4px 0;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  overflow:hidden;
+  background:#000000;
+}
+
+.debate-card-local-video-shell{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/9;
+  background:#000000;
+  overflow:hidden;
+}
+
+.debate-card-local-video-player{
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  border:0;
+  background:#000000;
+  object-fit:cover;
+  z-index:1;
+}
+
+.debate-card-local-video-poster{
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  border:0;
+  padding:0;
+  cursor:pointer;
+  background:#111111;
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  z-index:2;
+}
+
+.debate-card-local-video-shell [data-index-local-video-overlay]{
+  z-index:3 !important;
+}
+
+.debate-card-local-video-shell .debate-card-sound-toggle{
+  z-index:4;
 }
 
 
@@ -1459,6 +1589,12 @@ body.debate-topbar-hidden .debate-compact-bell {
   align-items: start;
   max-width: 1100px;
   margin: 0 auto;
+}
+
+@media (min-width: 769px) {
+  .debate-columns {
+    max-width: 1180px;
+  }
 }
 
 .debate-column {
@@ -3287,6 +3423,10 @@ body.debate-topbar-hidden .debate-compact-bell {
 .arguments-list-unified {
   display: grid;
   gap: 18px;
+}
+
+.argument-card-unified {
+  background: #f5f5f4;
 }
 
 .argument-card-unified::before {
@@ -6794,6 +6934,18 @@ padding:4px 14px 12px 14px;
   color: #9ca3af;
 }
 
+.debate-card-votes-count {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.debate-card-votes-count::before {
+  content: "•";
+  margin-right: 8px;
+  color: #9ca3af;
+}
+
 .debate-card-meta-below-media .debate-date,
 .debate-card-meta-below-media .debate-last-argument {
   text-align: center;
@@ -6985,7 +7137,15 @@ padding:4px 14px 12px 14px;
   }
 
   .page-home .debate-card-x-shell {
-    min-height: 540px;
+    width: fit-content;
+    max-width: min(100%, 560px);
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 0;
+  }
+
+  .page-home .debate-card-x-shell [data-index-x-loading] {
+    min-height: 220px !important;
   }
 }
 
@@ -6995,7 +7155,15 @@ padding:4px 14px 12px 14px;
   }
 
   .page-home .debate-card-x-shell {
-    min-height: 500px;
+    width: fit-content;
+    max-width: min(100%, 560px);
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 0;
+  }
+
+  .page-home .debate-card-x-shell [data-index-x-loading] {
+    min-height: 220px !important;
   }
 }
 
@@ -8859,4 +9027,70 @@ body.index-batch-loading-active {
   line-height: 1.3;
   position: relative;
   top: 8px;
+}
+
+
+/* FIX INDEX LOCAL VIDEO */
+.debate-card-media-local-video {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.debate-card-local-video-shell {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+}
+
+.debate-card-local-video-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: #000;
+  z-index: 1;
+}
+
+.debate-card-local-video-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background-color: transparent !important;
+}
+
+.debate-card-local-video-overlay {
+  z-index: 3;
+}
+
+.debate-card-local-video-shell .debate-card-sound-toggle {
+  z-index: 4;
+}
+
+
+/* FIX FINAL INDEX LOCAL VIDEO CTA */
+.debate-card-local-video-shell[data-active="true"] .debate-card-local-video-poster {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.debate-card-local-video-shell[data-active="true"][data-user-started="true"] .debate-card-local-video-poster {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.debate-card-local-video-shell:not([data-user-started="true"]) .debate-card-local-video-overlay {
+  display: flex !important;
+}
+
+.debate-card-local-video-shell:not([data-user-started="true"]) .debate-card-local-video-poster {
+  display: block !important;
 }

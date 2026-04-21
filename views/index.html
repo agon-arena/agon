@@ -24,7 +24,7 @@
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
-  <link rel="stylesheet" href="/style.css?v=20260407-1">
+  <link rel="stylesheet" href="/style.css?v=20260421-7">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     body { background-color: #243038; }
@@ -423,14 +423,63 @@
     return null;
   }
 
+  function pickVotesCount(item){
+    // votes_a + votes_b sont déjà calculés côté serveur dans la liste
+    if (item && (item.votes_a !== undefined || item.votes_b !== undefined)) {
+      return Number(item.votes_a || 0) + Number(item.votes_b || 0);
+    }
+
+    var candidates = [
+      item && item.vote_count,
+      item && item.votesCount,
+      item && item.voteCount,
+      item && item.totalVotes,
+      item && item.votes_count,
+      item && item.total_votes,
+      item && item.nbVoix,
+      item && item.nbVotes
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var n = toNumber(candidates[i]);
+      if (n !== null) return n;
+    }
+
+    // Calculer depuis les tableaux d'arguments (page détail)
+    var arrCandidates = [
+      item && item.optionA,
+      item && item.optionB,
+      item && item.arguments,
+      item && item.ideas,
+      item && item.allArguments,
+      item && item.argumentList
+    ];
+
+    var total = 0;
+    var found = false;
+    for (var j = 0; j < arrCandidates.length; j++) {
+      if (Array.isArray(arrCandidates[j])) {
+        arrCandidates[j].forEach(function(arg){
+          var v = toNumber(arg && arg.votes);
+          if (v !== null) { total += v; found = true; }
+        });
+      }
+    }
+    return found ? total : null;
+  }
+
   function storeDebateMeta(item){
     if (!item || typeof item !== 'object') return;
     var id = item.id || item._id || item.slug || item.debateId;
     if (id === undefined || id === null) return;
 
+    var existing = debateMetaById.get(String(id)) || {};
+    var newVotes = pickVotesCount(item);
+
     debateMetaById.set(String(id), {
-      ideasCount: pickIdeasCount(item),
-      commentsCount: pickCommentsCount(item)
+      ideasCount: pickIdeasCount(item) !== null ? pickIdeasCount(item) : (existing.ideasCount || null),
+      commentsCount: pickCommentsCount(item) !== null ? pickCommentsCount(item) : (existing.commentsCount || null),
+      votesCount: newVotes !== null ? newVotes : (existing.votesCount || null)
     });
   }
 
@@ -488,7 +537,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260407-1"></script>
+<script src="/script.js?v=20260421-6"></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
@@ -536,6 +585,8 @@
 
   var activeDropdown = null;
   var activeButton = null;
+  var _indexShareScrolling = false;
+  var _touchStartY = 0;
 
   function closeAllDropdowns(){
     document.querySelectorAll('.index-share-dropdown.open').forEach(function(d){
@@ -544,6 +595,7 @@
     });
     activeDropdown = null;
     activeButton = null;
+    _indexShareScrolling = false;
   }
 
   function positionDropdown(btn, dd){
@@ -577,6 +629,27 @@
     dd.style.visibility = 'visible';
   }
 
+  // Si le menu dépasse du viewport, scrolle pour le dégager puis repositionne
+  function scrollToFit(btn, dd){
+    var menuRect = dd.getBoundingClientRect();
+    var spacing = 8;
+    var overflowBottom = menuRect.bottom - (window.innerHeight - spacing);
+    var overflowTop = spacing - menuRect.top;
+    var scrollAmount = 0;
+
+    if (overflowBottom > 0) scrollAmount = overflowBottom;       // scroll vers le bas
+    else if (overflowTop > 0) scrollAmount = -overflowTop;       // scroll vers le haut
+
+    if (scrollAmount === 0) return;
+
+    _indexShareScrolling = true;
+    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+    setTimeout(function(){
+      positionDropdown(btn, dd); // repositionne après que le trigger ait bougé
+      _indexShareScrolling = false;
+    }, 400);
+  }
+
   function toggleDropdown(btn, dd){
     var isOpen = dd.classList.contains('open');
     closeAllDropdowns();
@@ -584,6 +657,11 @@
     positionDropdown(btn, dd);
     activeDropdown = dd;
     activeButton = btn;
+
+    // Scroll-to-fit après rendu
+    requestAnimationFrame(function(){
+      scrollToFit(btn, dd);
+    });
   }
 
   function transform(block){
@@ -649,11 +727,23 @@
     }
   });
 
+  // Fermeture au scroll (ignore les scrolls programmatiques d'ouverture)
   window.addEventListener('scroll', function(){
-    if (activeDropdown && activeButton) {
-      positionDropdown(activeButton, activeDropdown);
-    }
-  }, true);
+    if (_indexShareScrolling) return;
+    if (activeDropdown) closeAllDropdowns();
+  }, { passive: true, capture: true });
+
+  // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
+  window.addEventListener('touchstart', function(e){
+    _touchStartY = e.touches[0] ? e.touches[0].clientY : 0;
+  }, { passive: true });
+
+  window.addEventListener('touchmove', function(e){
+    if (_indexShareScrolling) return;
+    if (!activeDropdown) return;
+    var deltaY = Math.abs((e.touches[0] ? e.touches[0].clientY : 0) - _touchStartY);
+    if (deltaY > 10) closeAllDropdowns();
+  }, { passive: true });
 
   var tries = 0;
   var interval = setInterval(function(){
@@ -718,6 +808,16 @@
         row.appendChild(comments);
       }
 
+      var votes = meta.querySelector('.debate-card-votes-count');
+      if (!votes) {
+        votes = document.createElement('p');
+        votes.className = 'debate-card-votes-count';
+        votes.style.display = 'none';
+        row.appendChild(votes);
+      } else {
+        row.appendChild(votes);
+      }
+
       meta.insertBefore(row, meta.firstChild);
     }
 
@@ -733,6 +833,7 @@
     var row = ensureStatsRow(card);
     var ideasEl = row.querySelector('.debate-card-ideas-count');
     var commentsEl = row.querySelector('.debate-card-comments-count');
+    var votesEl = row.querySelector('.debate-card-votes-count');
 
     if (ideasEl && data.ideasCount !== null && data.ideasCount !== undefined) {
       ideasEl.textContent = pluralize(data.ideasCount, 'idée', 'idées');
@@ -743,6 +844,13 @@
       commentsEl.style.display = '';
     } else if (commentsEl) {
       commentsEl.style.display = 'none';
+    }
+
+    if (votesEl && data.votesCount !== null && data.votesCount !== undefined) {
+      votesEl.textContent = pluralize(data.votesCount, 'voix', 'voix');
+      votesEl.style.display = '';
+    } else if (votesEl) {
+      votesEl.style.display = 'none';
     }
   }
 

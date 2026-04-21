@@ -2466,6 +2466,7 @@ app.get("/api/debates", async (req, res) => {
         last_argument_at,
         votes_a,
         votes_b,
+        vote_count: votes_a + votes_b,
         percent_a: percentA,
         percent_b: percentB
       };
