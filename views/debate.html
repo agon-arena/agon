@@ -114,7 +114,30 @@ body.page-debate .my-arguments-row {
   gap: 6px !important;
 }
 
-/* Boutons commenter / masquer */
+/* Réduire l'écart entre le % et le bouton "Ajouter une idée" */
+body.page-debate .position-argument-button {
+  margin-top: 10px !important;
+}
+body.page-debate .column-header {
+  min-height: auto !important;
+}
+@media (max-width: 768px) {
+  body.page-debate .debate-title-share-actions {
+    width: 100%;
+    justify-content: space-evenly;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  body.page-debate .debate-title-share-actions .share-icon-button {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+  body.page-debate .position-argument-button {
+    font-size: 12px !important;
+  }
+}
+
 body.page-debate .comments-block .button-small {
   background: #243038;
   color: #e8e8e8;
@@ -200,6 +223,16 @@ body.page-debate .share-icon-button:hover {
   border-color: #d1d5db;
   color: #000000;
 }
+body.page-debate #idea-share-global-menu .share-icon-button,
+body.page-debate .idea-share-menu .share-icon-button {
+  background: #ffffff;
+  color: #111827;
+  border-color: transparent;
+}
+body.page-debate #idea-share-global-menu .share-icon-button:hover,
+body.page-debate .idea-share-menu .share-icon-button:hover {
+  background: #f3f4f6;
+}
 
 /* Mobile : bouton partage et signaler sur les cartes d'idées */
 @media (max-width: 768px) {
@@ -276,6 +309,20 @@ body.page-debate .debate-hero-top {
 /* Fond de la zone open graph / vidéo = couleur du fond de page */
 body.page-debate .debate-hero {
   background: transparent;
+  margin-top: 8px !important;
+  padding-top: 0 !important;
+}
+body.page-debate .debate-source-preview-wrap,
+body.page-debate #debate-source-preview-wrap {
+  margin: 0 !important;
+}
+body.page-debate .debate-source-fallback,
+body.page-debate #debate-source-fallback {
+  margin-top: 0 !important;
+}
+body.page-debate .debate-video-wrap,
+body.page-debate #debate-video-wrap {
+  margin-top: 0 !important;
 }
 body.page-debate .debate-source-preview-wrap,
 body.page-debate #debate-source-preview-wrap {
@@ -288,6 +335,8 @@ body.page-debate #debate-source-preview {
 body.page-debate .debate-source-fallback {
   background: #243038;
   border-color: transparent;
+  padding: 0;
+  margin-top: 0 !important;
 }
 body.page-debate .debate-source-domain {
   color: #e8e8e8;
@@ -431,6 +480,21 @@ body.page-debate .home-bottom-nav-item:focus-visible {
 @media (min-width: 768px) {
   body.page-debate .home-bottom-nav {
     border-radius: 0 !important;
+  }
+}
+</style>
+<style>
+@media (max-width: 768px) {
+  #voices-float-badge { bottom: 66px !important; }
+  #focus-left-arrow   { bottom: 66px !important; }
+}
+
+    left: 8px !important;
+    right: 8px !important;
+    top: 64px;
+    width: auto !important;
+    max-height: calc(100vh - 150px) !important;
+    bottom: auto !important;
   }
 }
 </style>
@@ -586,7 +650,7 @@ body.page-debate .home-bottom-nav-item:focus-visible {
           class="debate-side-focus-btn debate-side-focus-btn-left"
           onclick="setDebateColumnFocus('a')"
         >
-          Ouvrir A
+  Ouvrir A
         </button>
 
 <button
@@ -1046,6 +1110,222 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script src="/script.js?v=20260407-1"></script>
+<script>
+// Neutralise le -8px injecté par updateDebateSourcePreviewVerticalOffset
+// Le CSS sur body.page-debate .debate-hero gère l'écart
+window.updateDebateSourcePreviewVerticalOffset = function() {
+  var el = document.getElementById('debate-source-preview-wrap');
+  if (el) el.style.marginTop = '';
+};
+
+
+// Scroll jusqu'au bloc titre à l'ouverture du formulaire d'idée
+(function(){
+  var _origOpen = null;
+  function patchOpenArgumentComposer(){
+    if(typeof window.openArgumentComposer !== 'function') {
+      setTimeout(patchOpenArgumentComposer, 100);
+      return;
+    }
+    _origOpen = window.openArgumentComposer;
+    window.openArgumentComposer = function(side){
+      _origOpen(side);
+      setTimeout(function(){
+        var form = document.getElementById('form-list');
+        var titleBlock = document.querySelector('.debate-hero-top');
+        if(!form || !titleBlock) return;
+        // Scroller pour que le haut du formulaire soit juste sous le bloc titre
+        var y = form.offsetTop - titleBlock.offsetHeight;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }, 60);
+    };
+  }
+  patchOpenArgumentComposer();
+})();
+</script>
+
+<!-- Badge voix utilisées + panneau -->
+<div id="voices-float-badge" style="position:fixed;bottom:78px;right:16px;z-index:900;background:rgba(26,39,47,0.85);color:#a0b0bb;font-size:18px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);letter-spacing:0.04em;cursor:pointer;display:none;user-select:none;">0/5</div>
+
+<div id="voices-panel-overlay" style="display:none;position:fixed;inset:0;z-index:901;background:rgba(0,0,0,0.35);" onclick="closeVoicesPanel()"></div>
+<div id="voices-panel" style="display:none;position:fixed;top:68px;right:16px;z-index:902;width:min(640px,calc(100vw - 16px));max-height:calc(100vh - 160px);background:#1a272f;border:1px solid rgba(255,255,255,0.12);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);overflow:hidden;flex-direction:column;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.08);">
+    <span style="color:#e8e8e8;font-size:14px;font-weight:700;">Mes voix attribuées</span>
+    <span id="voices-panel-count" style="color:#a0b0bb;font-size:13px;font-weight:600;">0 / 5</span>
+    <button onclick="closeVoicesPanel()" style="background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer;padding:0;line-height:1;">✕</button>
+  </div>
+  <div id="voices-panel-body" style="overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+</div>
+
+<script>
+(function(){
+  var badge = document.getElementById('voices-float-badge');
+  var panel = document.getElementById('voices-panel');
+  var overlay = document.getElementById('voices-panel-overlay');
+  var panelBody = document.getElementById('voices-panel-body');
+
+  function getDebateId(){ return new URLSearchParams(window.location.search).get('id'); }
+
+  function getVoteState(){
+    var id = getDebateId(); if(!id) return {};
+    try{ var s=localStorage.getItem('votes_'+id); return s ? JSON.parse(s)||{} : {}; }
+    catch(e){ return {}; }
+  }
+
+  function getVotesUsed(){
+    var state = getVoteState();
+    if(Array.isArray(state)) return state.length;
+    return Object.values(state).reduce(function(sum,v){return sum+Number(v||0);},0);
+  }
+
+  function updateBadge(){
+    var used = getVotesUsed();
+    badge.textContent = used + '\u202F/ 5';
+    badge.style.display = 'block';
+    var pc = document.getElementById('voices-panel-count');
+    if(pc) pc.textContent = used + '\u202F/\u202F5';
+    var newCount = getVotesUsed();
+    if(newCount !== badge._lastCount){
+      badge._lastCount = newCount;
+      badge.style.transition = 'none';
+      badge.style.transform = 'scale(2.8)';
+      badge.style.color = '#ffffff';
+      setTimeout(function(){
+        badge.style.transition = 'transform 0.3s ease, color 0.3s ease';
+        badge.style.transform = 'scale(1)';
+        badge.style.color = '#a0b0bb';
+      }, 140);
+    }
+  }
+
+  function openVoicesPanel(){
+    var state = getVoteState();
+    var optA = (document.getElementById('title-a') && document.getElementById('title-a').textContent.trim()) || (window.currentDebateShareData && window.currentDebateShareData.optionA) || 'Position A';
+    var optB = (document.getElementById('title-b') && document.getElementById('title-b').textContent.trim()) || (window.currentDebateShareData && window.currentDebateShareData.optionB) || 'Position B';
+
+    // Collecter les arguments votés en lisant les titres directement dans le DOM
+    var voted = [];
+    Object.entries(state).forEach(function(entry){
+      var argId = entry[0], count = Number(entry[1]||0);
+      if(count <= 0) return;
+
+      // Lire le titre depuis la carte rendue dans la page
+      var card = document.getElementById('argument-' + argId) || document.getElementById('list-argument-' + argId);
+      var titleEl = card && card.querySelector('.argument-title');
+      var title = titleEl ? titleEl.textContent.trim() : null;
+
+      // Fallback sur currentAllArguments si le DOM ne contient pas la carte
+      if(!title){
+        var args = window.currentAllArguments || [];
+        var arg = args.find(function(a){ return String(a.id) === String(argId); });
+        title = (arg && (arg.title || arg.body)) || '(idée #' + argId + ')';
+      }
+
+      // Déterminer le camp depuis la classe de la carte ou currentAllArguments
+      var side = 'A';
+      if(card){
+        side = card.classList.contains('argument-card-b') || card.closest('#arguments-b') ? 'B' : 'A';
+      } else {
+        var args2 = window.currentAllArguments || [];
+        var arg2 = args2.find(function(a){ return String(a.id) === String(argId); });
+        side = arg2 ? String(arg2.side||'A').toUpperCase() : 'A';
+      }
+
+      // Récupérer le body depuis le DOM ou currentAllArguments
+      var bodyEl = card && card.querySelector('.argument-body');
+      var body = bodyEl ? bodyEl.textContent.trim() : null;
+      if(!body){
+        var args3 = window.currentAllArguments || [];
+        var arg3 = args3.find(function(a){ return String(a.id) === String(argId); });
+        body = (arg3 && arg3.body) || null;
+      }
+      voted.push({ title: title, body: body, side: side, count: count, argId: argId });
+    });
+
+    if(voted.length === 0){
+      panelBody.innerHTML = '<p style="color:#6b7280;font-size:13px;text-align:center;margin:8px 0;">Aucune voix attribuée pour l\'instant.</p>';
+    } else {
+      var sideA = voted.filter(function(v){ return v.side === 'A'; });
+      var sideB = voted.filter(function(v){ return v.side === 'B'; });
+
+      var debId = getDebateId();
+      function renderGroup(items, label, color, borderColor){
+        if(!items.length) return '';
+        return '<div style="margin-bottom:10px;">'
+          + '<div style="font-size:11px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">'+label+'</div>'
+          + items.map(function(v){
+              var disabled = v.count <= 0 ? 'disabled' : '';
+              var bodyHtml = v.body ? '<div id="vp-body-'+v.argId+'" style="display:none;padding:8px 12px 10px;color:#a0b0bb;font-size:13px;line-height:1.5;border-top:1px solid rgba(255,255,255,0.07);">'+v.body+'</div>' : '';
+              var cursor = v.body ? 'cursor:pointer;' : '';
+              var chevron = v.body ? '<span id="vp-chev-'+v.argId+'" style="color:#6b7280;font-size:11px;flex-shrink:0;">▸</span>' : '';
+              return '<div style="background:rgba(255,255,255,0.04);border:1px solid '+borderColor+';border-radius:10px;overflow:hidden;">'
+                + '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;'+cursor+'" '+(v.body ? 'onclick="vpToggle(\''+v.argId+'\')"' : '')+'>'
+                +   chevron
+                +   '<span style="color:#e8e8e8;font-size:13px;font-weight:600;line-height:1.4;flex:1;">'+v.title+'</span>'
+                +   '<div class="voice-stepper" onclick="event.stopPropagation()">'
+                +     '<button class="voice-stepper-btn voice-stepper-btn-minus" type="button" data-voice-arg-id="'+v.argId+'" data-voice-action="minus" '+disabled+' onclick="unvote(\''+debId+'\',\''+v.argId+'\',false)" title="Retirer une voix">−</button>'
+                +     '<div class="voice-stepper-center"><div class="voice-stepper-value">'+v.count+'</div><div class="voice-stepper-label">Mes voix</div></div>'
+                +     '<button class="voice-stepper-btn voice-stepper-btn-plus" type="button" data-voice-arg-id="'+v.argId+'" data-voice-action="plus" onclick="vote(\''+debId+'\',\''+v.argId+'\',false)" title="Ajouter une voix">+</button>'
+                +   '</div>'
+                + '</div>'
+                + bodyHtml
+                + '</div>';
+            }).join('')
+          + '</div>';
+      }
+
+
+
+      panelBody.innerHTML =
+        renderGroup(sideA, optA, '#4ade80', 'rgba(74,222,128,0.2)') +
+        renderGroup(sideB, optB, '#f87171', 'rgba(248,113,113,0.2)');
+    }
+
+    panel.style.display = 'flex';
+    overlay.style.display = 'block';
+  }
+
+  window.vpToggle = function(argId){
+    var el = document.getElementById('vp-body-' + argId);
+    var chev = document.getElementById('vp-chev-' + argId);
+    if(!el) return;
+    var isOpen = el.style.display === 'block';
+    el.style.display = isOpen ? 'none' : 'block';
+    if(chev) chev.textContent = isOpen ? '▸' : '▾';
+
+    // Sur mobile : déplacer le panneau vers le haut quand un développement s'ouvre
+    if(window.innerWidth <= 768){
+      panel.style.transition = 'top 0.35s ease';
+      if(!isOpen){
+        panel.style.top = '8px';
+      } else {
+        var anyOpen = panelBody.querySelector('[id^="vp-body-"][style*="block"]');
+        if(!anyOpen) panel.style.top = '64px';
+      }
+    }
+  };
+
+  window.closeVoicesPanel = function(){
+    panel.style.display = 'none';
+    overlay.style.display = 'none';
+  };
+
+  badge.addEventListener('click', function(){
+    if(panel.style.display === 'flex') closeVoicesPanel();
+    else openVoicesPanel();
+  });
+
+  updateBadge();
+  var _origSetItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function(key, value){
+    _origSetItem.call(this, key, value);
+    if(typeof key === 'string' && key.startsWith('votes_')){
+      try { updateBadge(); } catch(e){}
+      try { if(panel.style.display==='flex') openVoicesPanel(); } catch(e){}
+    }
+  };
+})();
+</script>
 
 <script>
 (function () {
@@ -1180,5 +1460,92 @@ document.addEventListener('keydown', function(e) {
   });
 })();
 </script>
+
+
+
+
+
+
+
+
+<!-- Indicateur de scroll -->
+<style>
+.scroll-arrows {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.scroll-arrows-left  { left: 4px; }
+.scroll-arrows-right { right: 4px; }
+.scroll-arrows.visible { opacity: 1; }
+
+@keyframes arrowFall {
+  0%   { opacity: 0; transform: translateY(-3px); }
+  35%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(3px); }
+}
+.scroll-arrows.visible .arr1 { animation: arrowFall 1.6s ease-in-out infinite 0.0s; }
+.scroll-arrows.visible .arr2 { animation: arrowFall 1.6s ease-in-out infinite 0.15s; }
+.scroll-arrows.visible .arr3 { animation: arrowFall 1.6s ease-in-out infinite 0.3s; }
+.scroll-arrows.visible .arr4 { animation: arrowFall 1.6s ease-in-out infinite 0.45s; }
+.scroll-arrows.visible .arr5 { animation: arrowFall 1.6s ease-in-out infinite 0.6s; }
+.scroll-arrows.visible .arr6 { animation: arrowFall 1.6s ease-in-out infinite 0.75s; }
+.scroll-arrows.visible .arr7 { animation: arrowFall 1.6s ease-in-out infinite 0.9s; }
+.scroll-arrows.visible .arr8 { animation: arrowFall 1.6s ease-in-out infinite 1.05s; }
+.scroll-arrows.visible .arr9 { animation: arrowFall 1.6s ease-in-out infinite 1.2s; }
+.scroll-arrows svg { display: block; opacity: 0; }
+</style>
+
+<div class="scroll-arrows scroll-arrows-left" id="scroll-hint-l">
+  <svg class="arr1" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr2" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr3" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr4" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr5" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr6" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr7" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr8" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr9" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+<div class="scroll-arrows scroll-arrows-right" id="scroll-hint-r">
+  <svg class="arr1" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr2" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr3" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr4" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr5" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr6" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr7" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr8" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr9" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+
+<script>
+(function(){
+  var els = [document.getElementById('scroll-hint-l'), document.getElementById('scroll-hint-r')];
+  var gone = false;
+  setTimeout(function(){ if(!gone) els.forEach(function(e){ e.classList.add('visible'); }); }, 1000);
+  function hide(){
+    if(gone) return; gone = true;
+    els.forEach(function(e){ e.classList.remove('visible'); });
+    window.removeEventListener('scroll', hide);
+    window.removeEventListener('touchmove', hide);
+  }
+  window.addEventListener('scroll', hide, { passive: true });
+  window.addEventListener('touchmove', hide, { passive: true });
+})();
+</script>
+
+
+<!-- Flèche ∨ fixe bas gauche -->
+<a id="focus-left-arrow" href="/" title="Retour aux arènes" style="position:fixed;bottom:78px;left:16px;z-index:900;background:rgba(26,39,47,0.85);color:#a0b0bb;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:center;text-decoration:none;"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
 </body>
 </html>

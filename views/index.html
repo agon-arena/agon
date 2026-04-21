@@ -348,69 +348,419 @@
 </nav>
 
 
+
+<script>
+(function(){
+  if (window.__agonIndexMetaCaptureInstalled) return;
+  window.__agonIndexMetaCaptureInstalled = true;
+
+  var debateMetaById = new Map();
+  window.__agonIndexDebateMeta = debateMetaById;
+
+  function toNumber(value){
+    var n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function pickIdeasCount(item){
+    var candidates = [
+      item && item.ideasCount,
+      item && item.ideaCount,
+      item && item.totalIdeas,
+      item && item.argumentsCount,
+      item && item.argumentCount,
+      item && item.totalArguments,
+      item && item.nbArguments,
+      item && item.idea_count,
+      item && item.ideas_count,
+      item && item.arguments_count
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var n = toNumber(candidates[i]);
+      if (n !== null) return n;
+    }
+
+    var arrCandidates = [
+      item && item.ideas,
+      item && item.arguments,
+      item && item.allArguments,
+      item && item.argumentList
+    ];
+
+    for (var j = 0; j < arrCandidates.length; j++) {
+      if (Array.isArray(arrCandidates[j])) return arrCandidates[j].length;
+    }
+
+    return null;
+  }
+
+  function pickCommentsCount(item){
+    var candidates = [
+      item && item.commentsCount,
+      item && item.commentCount,
+      item && item.totalComments,
+      item && item.nbComments,
+      item && item.comments_count,
+      item && item.comment_count
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var n = toNumber(candidates[i]);
+      if (n !== null) return n;
+    }
+
+    var arrCandidates = [
+      item && item.comments,
+      item && item.commentList,
+      item && item.allComments
+    ];
+
+    for (var j = 0; j < arrCandidates.length; j++) {
+      if (Array.isArray(arrCandidates[j])) return arrCandidates[j].length;
+    }
+
+    return null;
+  }
+
+  function storeDebateMeta(item){
+    if (!item || typeof item !== 'object') return;
+    var id = item.id || item._id || item.slug || item.debateId;
+    if (id === undefined || id === null) return;
+
+    debateMetaById.set(String(id), {
+      ideasCount: pickIdeasCount(item),
+      commentsCount: pickCommentsCount(item)
+    });
+  }
+
+  function walkPayload(payload){
+    if (!payload) return;
+
+    if (Array.isArray(payload)) {
+      payload.forEach(walkPayload);
+      return;
+    }
+
+    if (typeof payload !== 'object') return;
+
+    var looksLikeDebate = (
+      payload.id !== undefined ||
+      payload._id !== undefined ||
+      payload.slug !== undefined ||
+      payload.debateId !== undefined
+    ) && (
+      payload.question !== undefined ||
+      payload.title !== undefined ||
+      payload.positionA !== undefined ||
+      payload.positionB !== undefined ||
+      payload.arguments !== undefined ||
+      payload.comments !== undefined
+    );
+
+    if (looksLikeDebate) {
+      storeDebateMeta(payload);
+    }
+
+    Object.keys(payload).forEach(function(key){
+      walkPayload(payload[key]);
+    });
+  }
+
+  var originalFetch = window.fetch;
+  if (typeof originalFetch === 'function') {
+    window.fetch = function(){
+      return originalFetch.apply(this, arguments).then(function(response){
+        try {
+          var clone = response.clone();
+          var contentType = (clone.headers && clone.headers.get && clone.headers.get('content-type')) || '';
+          if (contentType.indexOf('application/json') !== -1) {
+            clone.json().then(function(data){
+              walkPayload(data);
+              document.dispatchEvent(new CustomEvent('agon:index-meta-updated'));
+            }).catch(function(){});
+          }
+        } catch (err) {}
+        return response;
+      });
+    };
+  }
+})();
+</script>
+
 <script src="/script.js?v=20260407-1"></script>
 
 
-<!-- Modale liens externes -->
-<div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
-  <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
-    <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
-      <img src="/favicon.png" alt="Agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
-      <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers Agôn</button>
-    </div>
-    <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
-  </div>
-</div>
+<!-- Remplacement des icônes de partage par un bouton unique -->
+<style>
+.debate-card-share-actions { position: relative; }
+.index-share-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; font-weight: 600; color: #374151;
+  cursor: pointer; white-space: nowrap; transition: background 0.15s;
+}
+.index-share-btn:hover { background: #e5e7eb; }
+.index-share-dropdown {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: auto;
+  transform: none;
+  z-index: 99999;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.index-share-dropdown.open { display: flex; }
+.index-share-dropdown .isd-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; border: none; border-radius: 8px;
+  background: #fff; color: #111827; font-size: 13px; cursor: pointer;
+}
+.index-share-dropdown .isd-item:hover { background: #f3f4f6; }
+</style>
 <script>
-(function() {
-  function openExtPanel(url) {
-    var overlay = document.getElementById('ext-link-overlay');
-    var iframe = document.getElementById('ext-link-iframe');
-    var favicon = document.getElementById('ext-link-favicon');
-    var domain = document.getElementById('ext-link-domain');
-    var openLink = document.getElementById('ext-link-open');
-    if (!overlay || !iframe) return;
-    try {
-      var parsed = new URL(url);
-      var host = parsed.hostname;
-      domain.textContent = host;
-  
-    } catch(e) {
-      domain.textContent = url;
-      favicon.style.display = 'none';
+(function(){
+  var labels = {
+    copy:'Copier le lien', qrcode:'QR Code', x:'X', facebook:'Facebook',
+    whatsapp:'WhatsApp', email:'Email', linkedin:'LinkedIn', mastodon:'Mastodon', reddit:'Reddit'
+  };
+
+  var activeDropdown = null;
+  var activeButton = null;
+
+  function closeAllDropdowns(){
+    document.querySelectorAll('.index-share-dropdown.open').forEach(function(d){
+      d.classList.remove('open');
+      d.style.visibility = '';
+    });
+    activeDropdown = null;
+    activeButton = null;
+  }
+
+  function positionDropdown(btn, dd){
+    var rect = btn.getBoundingClientRect();
+    var spacing = 8;
+
+    dd.style.visibility = 'hidden';
+    dd.classList.add('open');
+
+    var menuRect = dd.getBoundingClientRect();
+    var left = rect.left + (rect.width / 2) - (menuRect.width / 2);
+    var top = rect.top - menuRect.height - spacing;
+
+    if (left < spacing) left = spacing;
+    if (left + menuRect.width > window.innerWidth - spacing) {
+      left = window.innerWidth - menuRect.width - spacing;
     }
-    openLink.href = url;
-    iframe.src = url;
-    overlay.style.display = 'flex';
-    overlay.style.flexDirection = 'column';
-    document.body.style.overflow = 'hidden';
+
+    if (top < spacing) {
+      top = rect.bottom + spacing;
+    }
+
+    if (top + menuRect.height > window.innerHeight - spacing) {
+      top = Math.max(spacing, window.innerHeight - menuRect.height - spacing);
+    }
+
+    dd.style.left = left + 'px';
+    dd.style.top = top + 'px';
+    dd.style.bottom = 'auto';
+    dd.style.transform = 'none';
+    dd.style.visibility = 'visible';
   }
 
-  function closeExtPanel() {
-    var overlay = document.getElementById('ext-link-overlay');
-    var iframe = document.getElementById('ext-link-iframe');
-    if (!overlay || !iframe) return;
-    overlay.style.display = 'none';
-    iframe.src = '';
-    document.body.style.overflow = '';
+  function toggleDropdown(btn, dd){
+    var isOpen = dd.classList.contains('open');
+    closeAllDropdowns();
+    if (isOpen) return;
+    positionDropdown(btn, dd);
+    activeDropdown = dd;
+    activeButton = btn;
   }
 
-  window.closeExtPanel = closeExtPanel;
+  function transform(block){
+    if(block.getAttribute('data-share-transformed')) return;
+    var btns = Array.from(block.querySelectorAll('.share-icon-button'));
+    if(!btns.length) return;
+    block.setAttribute('data-share-transformed','1');
 
-  document.addEventListener('click', function(e) {
-    var link = e.target.closest('a[target="_blank"]');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-    e.preventDefault();
-    openExtPanel(href);
+    btns.forEach(function(b){ b.style.display='none'; });
+
+    var btn = document.createElement('button');
+    btn.className = 'index-share-btn';
+    btn.type = 'button';
+    btn.innerHTML = '<i class="fa-solid fa-share-nodes"></i> Partager';
+
+    var dd = document.createElement('div');
+    dd.className = 'index-share-dropdown';
+
+    btns.forEach(function(ob){
+      var cls = Array.from(ob.classList).find(function(c){ return labels[c]; }) || '';
+      var icon = ob.querySelector('i');
+      var item = document.createElement('button');
+      item.className = 'isd-item';
+      item.type = 'button';
+      if(icon) item.appendChild(icon.cloneNode(true));
+      var span = document.createElement('span');
+      span.textContent = labels[cls] || ob.title || cls;
+      item.appendChild(span);
+      item.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        closeAllDropdowns();
+        ob.dispatchEvent(new MouseEvent('click', { bubbles:false, cancelable:true }));
+      });
+      dd.appendChild(item);
+    });
+
+    dd.addEventListener('click', function(e){
+      e.stopPropagation();
+    });
+
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDropdown(btn, dd);
+    });
+
+    block.appendChild(btn);
+    document.body.appendChild(dd);
+  }
+
+  function scan(){
+    document.querySelectorAll('.debate-card-share-actions:not([data-share-transformed])').forEach(transform);
+  }
+
+  document.addEventListener('click', function(){
+    closeAllDropdowns();
   });
 
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeExtPanel();
+  window.addEventListener('resize', function(){
+    if (activeDropdown && activeButton) {
+      positionDropdown(activeButton, activeDropdown);
+    }
   });
+
+  window.addEventListener('scroll', function(){
+    if (activeDropdown && activeButton) {
+      positionDropdown(activeButton, activeDropdown);
+    }
+  }, true);
+
+  var tries = 0;
+  var interval = setInterval(function(){
+    scan();
+    tries++;
+    if(tries > 60) clearInterval(interval);
+  }, 300);
+
+  new MutationObserver(scan).observe(document.body, { childList:true, subtree:true });
+})();</script>
+
+<script>
+(function(){
+  function pluralize(count, singular, plural){
+    return count + ' ' + (count > 1 ? plural : singular);
+  }
+
+  function getDebateIdFromCard(card){
+    var link = card.querySelector('a[href*="/debate/"]');
+    if (!link) return null;
+    var match = link.getAttribute('href').match(/\/debate\/([^/?#]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function findMetaContainer(card){
+    return card.querySelector('.debate-card-meta-below-media');
+  }
+
+  function ensureStatsRow(card){
+    var meta = findMetaContainer(card);
+    if (!meta) {
+      meta = document.createElement('div');
+      meta.className = 'debate-card-meta-below-media';
+      var actions = card.querySelector('.debate-card-actions');
+      if (actions && actions.parentNode === card) {
+        card.insertBefore(meta, actions);
+      } else {
+        card.appendChild(meta);
+      }
+    }
+
+    var row = meta.querySelector('.debate-card-stats-row');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'debate-card-stats-row';
+
+      var ideas = meta.querySelector('.debate-card-ideas-count');
+      if (!ideas) {
+        ideas = document.createElement('p');
+        ideas.className = 'debate-card-ideas-count';
+        row.appendChild(ideas);
+      } else {
+        row.appendChild(ideas);
+      }
+
+      var comments = meta.querySelector('.debate-card-comments-count');
+      if (!comments) {
+        comments = document.createElement('p');
+        comments.className = 'debate-card-comments-count';
+        row.appendChild(comments);
+      } else {
+        row.appendChild(comments);
+      }
+
+      meta.insertBefore(row, meta.firstChild);
+    }
+
+    return row;
+  }
+
+  function applyCounts(card){
+    var id = getDebateIdFromCard(card);
+    if (!id || !window.__agonIndexDebateMeta) return;
+    var data = window.__agonIndexDebateMeta.get(String(id));
+    if (!data) return;
+
+    var row = ensureStatsRow(card);
+    var ideasEl = row.querySelector('.debate-card-ideas-count');
+    var commentsEl = row.querySelector('.debate-card-comments-count');
+
+    if (ideasEl && data.ideasCount !== null && data.ideasCount !== undefined) {
+      ideasEl.textContent = pluralize(data.ideasCount, 'idée', 'idées');
+    }
+
+    if (commentsEl && data.commentsCount !== null && data.commentsCount !== undefined) {
+      commentsEl.textContent = pluralize(data.commentsCount, 'commentaire', 'commentaires');
+      commentsEl.style.display = '';
+    } else if (commentsEl) {
+      commentsEl.style.display = 'none';
+    }
+  }
+
+  function scanCards(){
+    document.querySelectorAll('.debate-card').forEach(applyCounts);
+  }
+
+  var tries = 0;
+  var interval = setInterval(function(){
+    scanCards();
+    tries += 1;
+    if (tries > 80) clearInterval(interval);
+  }, 300);
+
+  document.addEventListener('agon:index-meta-updated', scanCards);
+  new MutationObserver(scanCards).observe(document.body, { childList: true, subtree: true });
 })();
 </script>
+
 </body>
 </html>

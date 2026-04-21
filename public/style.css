@@ -6774,6 +6774,26 @@ padding:4px 14px 12px 14px;
   font-weight: 600;
 }
 
+.debate-card-counts-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.debate-card-comments-count {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.debate-card-comments-count::before {
+  content: "•";
+  margin-right: 8px;
+  color: #9ca3af;
+}
+
 .debate-card-meta-below-media .debate-date,
 .debate-card-meta-below-media .debate-last-argument {
   text-align: center;

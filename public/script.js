@@ -7080,7 +7080,10 @@ const contextHtml = buildIndexContextPreviewHtml(d);
         ${contextHtml}
 
 <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
-          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+          <div class="debate-card-counts-row">
+            <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+            <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
+          </div>
           <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
           ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
         </div>
@@ -7323,7 +7326,10 @@ ${
       ${contextHtml}
 
       <div class="debate-card-meta-below-media">
-        <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+        <div class="debate-card-counts-row">
+          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
+          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
+        </div>
         <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
         ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
       </div>
@@ -7574,6 +7580,52 @@ function saveDebatesToSessionCache(debates) {
   } catch (e) {}
 }
 
+function syncIndexDebatesSessionCache() {
+  saveDebatesToSessionCache(debatesCache || []);
+}
+
+function updateDebateCommentCountInCollection(collection, debateId, delta) {
+  if (!Array.isArray(collection)) return collection;
+
+  const debateIdString = String(debateId || "");
+  if (!debateIdString) return collection;
+
+  const numericDelta = Number(delta || 0);
+  if (!numericDelta) return collection;
+
+  return collection.map((item) => {
+    if (String(item?.id || "") !== debateIdString) {
+      return item;
+    }
+
+    return {
+      ...item,
+      comment_count: Math.max(0, Number(item?.comment_count || 0) + numericDelta)
+    };
+  });
+}
+
+function updateDebateCommentCountCaches(debateId, delta) {
+  const debateIdString = String(debateId || "");
+  const numericDelta = Number(delta || 0);
+
+  if (!debateIdString || !numericDelta) return;
+
+  debatesCache = updateDebateCommentCountInCollection(debatesCache, debateIdString, numericDelta);
+  visitedDebatesCache = updateDebateCommentCountInCollection(visitedDebatesCache, debateIdString, numericDelta);
+  otherDebatesCache = updateDebateCommentCountInCollection(otherDebatesCache, debateIdString, numericDelta);
+  similarDebatesCache = updateDebateCommentCountInCollection(similarDebatesCache, debateIdString, numericDelta);
+
+  if (String(currentDebateCache?.id || "") === debateIdString) {
+    currentDebateCache = {
+      ...currentDebateCache,
+      comment_count: Math.max(0, Number(currentDebateCache?.comment_count || 0) + numericDelta)
+    };
+  }
+
+  syncIndexDebatesSessionCache();
+}
+
 function getDebatesFromSessionCache() {
   try {
     const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
@@ -7620,6 +7672,8 @@ async function initIndex() {
       fetchJSON(API + "/debates").then((fresh) => {
         saveDebatesToSessionCache(fresh);
         debatesCache = fresh;
+        refreshCategoryFilterOptions(debatesCache);
+        applyIndexFilters();
       }).catch(() => {});
 
     } else {
@@ -9830,8 +9884,14 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     `
 }
 
-<p>${debate.argument_count || 0} idée(s)</p>            <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
-            ${debate.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(debate.last_argument_at))}</p>` : ""}
+<div class="debate-card-meta-below-media">
+              <div class="debate-card-counts-row">
+                <p class="debate-card-ideas-count">${debate.argument_count || 0} idée(s)</p>
+                <p class="debate-card-comments-count">${debate.comment_count || 0} commentaire(s)</p>
+              </div>
+              <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
+              ${debate.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(debate.last_argument_at))}</p>` : ""}
+            </div>
           </a>
 
           <div class="debate-card-actions">
@@ -12308,6 +12368,7 @@ try {
 
   pendingCommentScrollId = String(localComment.id);
   pinnedNewCommentId = String(localComment.id);
+  updateDebateCommentCountCaches(debateId, 1);
 
   try {
     const existingComments = Array.isArray(currentCommentsByArgument[argumentId])
@@ -13402,6 +13463,8 @@ async function deleteComment(debateId, commentId) {
 
         const commentIdString = String(commentId);
         let hasLocalUpdate = false;
+
+        updateDebateCommentCountCaches(debateId, -1);
 
         if (currentCommentsByArgument && typeof currentCommentsByArgument === "object") {
           Object.keys(currentCommentsByArgument).forEach((argumentId) => {

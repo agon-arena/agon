@@ -2406,14 +2406,38 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const argsByDebate = new Map();
+    const debateIdByArgumentId = new Map();
     for (const arg of args || []) {
       if (!argsByDebate.has(arg.debate_id)) argsByDebate.set(arg.debate_id, []);
       argsByDebate.get(arg.debate_id).push(arg);
+      debateIdByArgumentId.set(String(arg.id), arg.debate_id);
+    }
+
+    const commentCountByDebate = new Map();
+    const argumentIds = (args || []).map((arg) => arg.id);
+
+    if (argumentIds.length) {
+      const { data: commentRows, error: commentsErr } = await supabase
+        .from("comments")
+        .select("id,argument_id")
+        .in("argument_id", argumentIds);
+
+      if (commentsErr) {
+        console.error(commentsErr);
+        return sendServerError(res, "Erreur lecture débats.");
+      }
+
+      for (const comment of commentRows || []) {
+        const debateId = debateIdByArgumentId.get(String(comment.argument_id));
+        if (!debateId) continue;
+        commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
+      }
     }
 
     const rows = debateRows.map((d) => {
       const debateArgs = argsByDebate.get(d.id) || [];
       const argument_count = debateArgs.length;
+      const comment_count = Number(commentCountByDebate.get(d.id) || 0);
       const last_argument_at = debateArgs.length
         ? debateArgs
             .map((a) => a.created_at)
@@ -2438,6 +2462,7 @@ app.get("/api/debates", async (req, res) => {
       return {
         ...enrichDebateWithStoredImage(d),
         argument_count,
+        comment_count,
         last_argument_at,
         votes_a,
         votes_b,
