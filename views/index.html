@@ -664,6 +664,42 @@
     });
   }
 
+  function getActionFromButton(ob){
+    if (!ob) return null;
+
+    var classList = Array.from(ob.classList || []);
+
+    if (classList.indexOf('copy') !== -1 && typeof window.copyIndexDebateLink === 'function') {
+      return function(){ window.copyIndexDebateLink(ob); };
+    }
+    if (classList.indexOf('qrcode') !== -1 && typeof window.showIndexDebateQrCode === 'function') {
+      return function(){ window.showIndexDebateQrCode(ob); };
+    }
+    if (classList.indexOf('x') !== -1 && typeof window.shareIndexDebateOnX === 'function') {
+      return function(){ window.shareIndexDebateOnX(ob); };
+    }
+    if (classList.indexOf('facebook') !== -1 && typeof window.shareIndexDebateOnFacebook === 'function') {
+      return function(){ window.shareIndexDebateOnFacebook(ob); };
+    }
+    if (classList.indexOf('whatsapp') !== -1 && typeof window.shareIndexDebateOnWhatsApp === 'function') {
+      return function(){ window.shareIndexDebateOnWhatsApp(ob); };
+    }
+    if (classList.indexOf('email') !== -1 && typeof window.shareIndexDebateByEmail === 'function') {
+      return function(){ window.shareIndexDebateByEmail(ob); };
+    }
+    if (classList.indexOf('linkedin') !== -1 && typeof window.shareIndexDebateOnLinkedIn === 'function') {
+      return function(){ window.shareIndexDebateOnLinkedIn(ob); };
+    }
+    if (classList.indexOf('mastodon') !== -1 && typeof window.shareIndexDebateOnMastodon === 'function') {
+      return function(){ window.shareIndexDebateOnMastodon(ob); };
+    }
+    if (classList.indexOf('reddit') !== -1 && typeof window.shareIndexDebateOnReddit === 'function') {
+      return function(){ window.shareIndexDebateOnReddit(ob); };
+    }
+
+    return null;
+  }
+
   function transform(block){
     if(block.getAttribute('data-share-transformed')) return;
     var btns = Array.from(block.querySelectorAll('.share-icon-button'));
@@ -683,6 +719,7 @@
     btns.forEach(function(ob){
       var cls = Array.from(ob.classList).find(function(c){ return labels[c]; }) || '';
       var icon = ob.querySelector('i');
+      var action = getActionFromButton(ob);
       var item = document.createElement('button');
       item.className = 'isd-item';
       item.type = 'button';
@@ -690,12 +727,20 @@
       var span = document.createElement('span');
       span.textContent = labels[cls] || ob.title || cls;
       item.appendChild(span);
-      item.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        closeAllDropdowns();
-        ob.dispatchEvent(new MouseEvent('click', { bubbles:false, cancelable:true }));
-      });
+
+      if (!action) {
+        item.disabled = true;
+        item.style.opacity = '0.5';
+        item.style.cursor = 'not-allowed';
+      } else {
+        item.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          closeAllDropdowns();
+          action();
+        });
+      }
+
       dd.appendChild(item);
     });
 
