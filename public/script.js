@@ -1706,6 +1706,20 @@ function openDebateIframeModal(url) {
   const closeBtn = document.getElementById("debate-iframe-modal-close");
   if (closeBtn) closeBtn.style.display = "flex";
 
+  // Alignement mobile : les deux éléments fixés au même instant, même mécanisme, même valeur
+  if (window.innerWidth <= 768) {
+    var BOTTOM = "20px";
+    var badge = document.getElementById("voices-float-badge");
+    if (badge) {
+      badge.style.setProperty("bottom", BOTTOM, "important");
+      badge.style.setProperty("right", "8px", "important");
+    }
+    if (closeBtn) {
+      closeBtn.style.setProperty("bottom", BOTTOM, "important");
+      closeBtn.style.setProperty("left", "8px", "important");
+    }
+  }
+
   // Verrouillage scroll robuste (iOS Safari inclus)
   document.body.style.overflow = "hidden";
   document.body.style.position = "fixed";
@@ -1725,6 +1739,15 @@ function closeDebateIframeModal() {
 
   const closeBtn = document.getElementById("debate-iframe-modal-close");
   if (closeBtn) closeBtn.style.display = "none";
+
+  // Restaure la position du badge (desktop)
+  if (window.innerWidth <= 768) {
+    var badge = document.getElementById("voices-float-badge");
+    if (badge) {
+      badge.style.removeProperty("bottom");
+      badge.style.removeProperty("right");
+    }
+  }
 
   // Restaure le body et le scroll
   document.body.style.overflow = "";
