@@ -1609,7 +1609,6 @@ function ensureDebateIframeModal() {
     }
     #debate-iframe-modal-close {
       position: fixed;
-      bottom: 78px;
       left: 16px;
       z-index: 10000;
       display: flex;
@@ -1629,12 +1628,6 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal-close:hover {
       background: rgba(26,39,47,1);
       color: #e0e8ee;
-    }
-    @media (max-width: 768px) {
-      #debate-iframe-modal-close {
-        bottom: 16px;
-        left: 16px;
-      }
     }
     @media (min-width: 769px) {
       #debate-iframe-modal-close {
@@ -1668,6 +1661,8 @@ function ensureDebateIframeModal() {
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Fermer");
   closeBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  // Inline style pour bottom : même mécanisme que #voices-float-badge
+  closeBtn.style.bottom = window.innerWidth <= 768 ? "16px" : "78px";
   closeBtn.style.display = "none";
   document.body.appendChild(closeBtn);
 
