@@ -682,8 +682,12 @@ body.page-debate .home-bottom-nav-item:focus-visible {
 </style>
 <style>
 @media (max-width: 768px) {
-  #voices-float-badge { bottom: 66px !important; }
-  #focus-left-arrow   { bottom: 66px !important; }
+  body.page-debate .home-bottom-nav {
+    display: none !important;
+  }
+
+  #voices-float-badge { bottom: 12px !important; }
+  #focus-left-arrow   { bottom: 12px !important; }
 }
 
     left: 8px !important;
@@ -1505,11 +1509,13 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 <script>
 (function () {
-  const BOTTOM_NAV_HEIGHT = 70; // hauteur du bandeau bas
+  function getBottomNavHeight() {
+    return window.innerWidth <= 768 ? 0 : 70;
+  }
 
   function scrollToShowMenu(menu) {
     const rect = menu.getBoundingClientRect();
-    const viewportBottom = window.innerHeight - BOTTOM_NAV_HEIGHT;
+    const viewportBottom = window.innerHeight - getBottomNavHeight();
     const overflow = rect.bottom - viewportBottom;
     if (overflow > 0) {
       window.scrollBy({ top: overflow + 12, behavior: 'smooth' });
