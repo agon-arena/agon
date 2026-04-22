@@ -1565,6 +1565,14 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 .scroll-arrows-right { right: 4px; }
 .scroll-arrows.visible { opacity: 1; }
 
+@media (max-width: 768px) {
+  .scroll-arrows-right {
+    top: auto;
+    bottom: 12px;
+    transform: none;
+  }
+}
+
 @keyframes arrowFall {
   0%   { opacity: 0; transform: translateY(-3px); }
   35%  { opacity: 1; }
