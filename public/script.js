@@ -1658,15 +1658,11 @@ function ensureDebateIframeModal() {
   `;
   document.body.appendChild(modal);
 
-  // Synchronisation mobile : lire la position exacte du badge et l'appliquer à la flèche
+  // Synchronisation mobile : même position que #voices-float-badge
   if (window.innerWidth <= 768) {
     const closeBtn = document.getElementById("debate-iframe-modal-close");
     if (closeBtn) {
-      const badge = document.getElementById("voices-float-badge");
-      const bottomVal = badge
-        ? window.getComputedStyle(badge).bottom
-        : "20px";
-      closeBtn.style.setProperty("bottom", bottomVal, "important");
+      closeBtn.style.setProperty("bottom", "20px", "important");
       closeBtn.style.setProperty("left", "8px", "important");
     }
   }
