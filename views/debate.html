@@ -686,12 +686,10 @@ body.page-debate .home-bottom-nav-item:focus-visible {
     display: none !important;
   }
 
-  #voices-float-badge {
-    bottom: 14px !important;
-    right: 12px !important;
-  }
+  #voices-float-badge { bottom: 12px !important; }
+  #focus-left-arrow   { bottom: 12px !important; }
+}
 
-  #voices-panel {
     left: 8px !important;
     right: 8px !important;
     top: 64px;
@@ -1566,14 +1564,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 .scroll-arrows-left  { left: 4px; }
 .scroll-arrows-right { right: 4px; }
 .scroll-arrows.visible { opacity: 1; }
-
-@media (max-width: 768px) {
-  .scroll-arrows-right {
-    top: auto;
-    bottom: 12px;
-    transform: none;
-  }
-}
 
 @keyframes arrowFall {
   0%   { opacity: 0; transform: translateY(-3px); }
