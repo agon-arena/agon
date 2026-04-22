@@ -1632,7 +1632,7 @@ function ensureDebateIframeModal() {
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: calc(5vh + 66px);
+        bottom: 12px;
       }
     }
     @media (min-width: 769px) {
