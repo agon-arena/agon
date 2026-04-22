@@ -1676,6 +1676,16 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var voicesPanelScrollLocked = false;
   var hiddenIframeCloseButtons = [];
 
+  function forceShowIframeCloseButton(button){
+    if(!button) return;
+    button.style.display = 'flex';
+    button.style.visibility = 'visible';
+    button.style.pointerEvents = 'auto';
+    button.style.opacity = '1';
+    button.setAttribute('aria-hidden', 'false');
+    button.tabIndex = 0;
+  }
+
   function setIframeCloseButtonsHidden(shouldHide){
     var buttons = [];
     var localButton = document.getElementById('debate-iframe-modal-close');
@@ -1695,21 +1705,59 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
           el: button,
           display: button.style.display || '',
           visibility: button.style.visibility || '',
-          pointerEvents: button.style.pointerEvents || ''
+          pointerEvents: button.style.pointerEvents || '',
+          opacity: button.style.opacity || '',
+          ariaHidden: button.getAttribute('aria-hidden') || '',
+          tabIndex: button.getAttribute('tabindex') || ''
         });
         button.style.display = 'none';
         button.style.visibility = 'hidden';
         button.style.pointerEvents = 'none';
+        button.style.opacity = '0';
+        button.setAttribute('aria-hidden', 'true');
+        button.tabIndex = -1;
       });
       return;
     }
 
     hiddenIframeCloseButtons.forEach(function(entry){
       if(!entry || !entry.el) return;
-      entry.el.style.display = entry.display;
-      entry.el.style.visibility = entry.visibility;
-      entry.el.style.pointerEvents = entry.pointerEvents;
+      var button = entry.el;
+      forceShowIframeCloseButton(button);
+      if(entry.ariaHidden === '') button.removeAttribute('aria-hidden');
+      else button.setAttribute('aria-hidden', entry.ariaHidden);
+      if(entry.tabIndex === '') button.removeAttribute('tabindex');
+      else button.setAttribute('tabindex', entry.tabIndex);
     });
+
+    try {
+      if(typeof window.setDebateIframeModalCloseButtonVisible === 'function'){
+        window.setDebateIframeModalCloseButtonVisible(true);
+      }
+    } catch (error) {}
+
+    try {
+      if(window.parent && window.parent !== window && typeof window.parent.setDebateIframeModalCloseButtonVisible === 'function'){
+        window.parent.setDebateIframeModalCloseButtonVisible(true);
+      }
+    } catch (error) {}
+
+    buttons.forEach(function(button){
+      forceShowIframeCloseButton(button);
+    });
+
+    requestAnimationFrame(function(){
+      buttons.forEach(function(button){
+        forceShowIframeCloseButton(button);
+      });
+    });
+
+    setTimeout(function(){
+      buttons.forEach(function(button){
+        forceShowIframeCloseButton(button);
+      });
+    }, 0);
+
     hiddenIframeCloseButtons = [];
   }
 
@@ -1958,9 +2006,9 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   };
 
   window.closeVoicesPanel = function(){
+    setIframeCloseButtonsHidden(false);
     panel.style.display = 'none';
     overlay.style.display = 'none';
-    setIframeCloseButtonsHidden(false);
     unlockVoicesPanelBackgroundScroll();
   };
 
