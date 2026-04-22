@@ -1441,6 +1441,13 @@ function wrapTextCentered(ctx, text, centerX, y, maxWidth, lineHeight) {
 }
 
 function getDebateShareDescription(debate, percentA, percentB) {
+  const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
+  const question = String(debate?.question || "Arène sur Agôn").trim() || "Arène sur Agôn";
+
+  if (isOpen) {
+    return `${question} | Découvrez les idées partagées sur Agôn - l'arène des idées`;
+  }
+
   return `${percentA}% — ${debate.option_a} | ${percentB}% — ${debate.option_b} | Comparez les arguments sur agôn - l'arène des idées`;
 }
 
@@ -1699,73 +1706,8 @@ app.get("/debate/:id", async (req, res) => {
 
     if (!debate) {
       return res.status(404).send("Débat introuvable.");
-    }
-
-    const { percentA, percentB } = computeDebatePercents(args);
-
-    const shareTitle = debate.question || "Débat sur Agôn";
-    const shareDescription = getDebateShareDescription(debate, percentA, percentB);
-
-    const canonicalUrl = buildAbsoluteUrl(req, `/debate/${id}`);
-    const redirectUrl = `/debate?id=${id}`;
-    const ogImageUrl = buildAbsoluteUrl(req, `/share-image/${id}`);
-
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-
-    res.send(`<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <title>${escapeHtml(shareTitle)}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <meta property="og:site_name" content="Agôn" />
-  <meta property="og:type" content="article" />
-  <meta property="og:title" content="${escapeMetaContent(shareTitle)}" />
-  <meta property="og:description" content="${escapeMetaContent(shareDescription)}" />
-  <meta property="og:url" content="${escapeMetaContent(canonicalUrl)}" />
-  <meta property="og:image" content="${escapeMetaContent(ogImageUrl)}" />
-  <meta property="og:image:alt" content="${escapeMetaContent(`AGÔN — ${shareTitle}`)}" />
-
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapeMetaContent(shareTitle)}" />
-  <meta name="twitter:description" content="${escapeMetaContent(shareDescription)}" />
-  <meta name="twitter:image" content="${escapeMetaContent(ogImageUrl)}" />
-
-  <meta http-equiv="refresh" content="0; url=${escapeMetaContent(redirectUrl)}" />
-  <link rel="canonical" href="${escapeMetaContent(canonicalUrl)}" />
-</head>
-<body>
-  <script>
-    window.location.replace(${JSON.stringify(redirectUrl)});
-  </script>
-
-  <noscript>
-    <p>Redirection vers le débat…</p>
-    <p><a href="${escapeHtml(redirectUrl)}">Cliquez ici si rien ne se passe</a></p>
-  </noscript>
-</body>
-</html>`);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).send("Erreur serveur.");
-  }
-});
-
-app.get("/share-image/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-
-const [debate, args] = await Promise.all([
-  getDebateById(id),
-  getArgumentsByDebateId(id)
-]);
-
-if (!debate) {
-  return res.status(404).json({ error: "Débat introuvable." });
-}
-
-    const { percentA, percentB } = computeDebatePercents(args);
+    }    const { percentA, percentB } = computeDebatePercents(args);
+    const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
 
     const canvas = createCanvas(1200, 630);
     const ctx = canvas.getContext("2d");
@@ -1789,55 +1731,71 @@ if (!debate) {
     ctx.font = "bold 42px Arial";
     wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur Agôn"), cardWidth / 2, 250, 920, 52);
 
-    const barX = 140;
-    const barY = 340;
-    const barWidth = 920;
-    const barHeight = 26;
+    if (isOpen) {
+      ctx.fillStyle = "#111111";
+      ctx.font = "bold 32px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Arène libre", cardWidth / 2, 345);
 
-    const fillA = Math.round((barWidth * percentA) / 100);
-    const fillB = barWidth - fillA;
+      ctx.fillStyle = "#4b5563";
+      ctx.font = "28px Arial";
+      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur Agôn - l'arène des idées"), cardWidth / 2, 430, 860, 38);
 
-    ctx.font = "bold 32px Arial";
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "24px Arial";
+      ctx.fillText("Participez et ajoutez votre réponse", cardWidth / 2, 560);
+      ctx.textAlign = "left";
+    } else {
+      const barX = 140;
+      const barY = 340;
+      const barWidth = 920;
+      const barHeight = 26;
 
-    ctx.fillStyle = "#0f766e";
-    ctx.fillText(`${percentA}%`, 140, 315);
+      const fillA = Math.round((barWidth * percentA) / 100);
+      const fillB = barWidth - fillA;
 
-    ctx.fillStyle = "#b91c1c";
-    const textB = `${percentB}%`;
-    const textBWidth = ctx.measureText(textB).width;
-    ctx.fillText(textB, 1060 - textBWidth, 315);
+      ctx.font = "bold 32px Arial";
 
-    ctx.fillStyle = "#e5e7eb";
-    ctx.fillRect(barX, barY, barWidth, barHeight);
+      ctx.fillStyle = "#0f766e";
+      ctx.fillText(`${percentA}%`, 140, 315);
 
-    ctx.fillStyle = "#0f766e";
-    ctx.fillRect(barX, barY, fillA, barHeight);
+      ctx.fillStyle = "#b91c1c";
+      const textB = `${percentB}%`;
+      const textBWidth = ctx.measureText(textB).width;
+      ctx.fillText(textB, 1060 - textBWidth, 315);
 
-    ctx.fillStyle = "#b91c1c";
-    ctx.fillRect(barX + fillA, barY, fillB, barHeight);
+      ctx.fillStyle = "#e5e7eb";
+      ctx.fillRect(barX, barY, barWidth, barHeight);
 
-    ctx.strokeStyle = "#d1d5db";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
+      ctx.fillStyle = "#0f766e";
+      ctx.fillRect(barX, barY, fillA, barHeight);
 
-    ctx.fillStyle = "#111111";
-    ctx.font = "bold 28px Arial";
+      ctx.fillStyle = "#b91c1c";
+      ctx.fillRect(barX + fillA, barY, fillB, barHeight);
 
-    wrapText(ctx, normalizeOgCanvasText(debate.option_a || ""), 140, 430, 380, 38);
-    wrapText(ctx, normalizeOgCanvasText(debate.option_b || ""), 680, 430, 380, 38);
+      ctx.strokeStyle = "#d1d5db";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
 
-    ctx.strokeStyle = "#e5e7eb";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(600, 405);
-    ctx.lineTo(600, 530);
-    ctx.stroke();
+      ctx.fillStyle = "#111111";
+      ctx.font = "bold 28px Arial";
 
-    ctx.fillStyle = "#4b5563";
-    ctx.font = "28px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(normalizeOgCanvasText("Comparez les arguments sur agôn - l\'arène des idées"), cardWidth / 2, 590);
-    ctx.textAlign = "left";
+      wrapText(ctx, normalizeOgCanvasText(debate.option_a || ""), 140, 430, 380, 38);
+      wrapText(ctx, normalizeOgCanvasText(debate.option_b || ""), 680, 430, 380, 38);
+
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(600, 405);
+      ctx.lineTo(600, 530);
+      ctx.stroke();
+
+      ctx.fillStyle = "#4b5563";
+      ctx.font = "28px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(normalizeOgCanvasText("Comparez les arguments sur agôn - l'arène des idées"), cardWidth / 2, 590);
+      ctx.textAlign = "left";
+    }
 
     res.setHeader("Content-Type", "image/png");
     canvas.createPNGStream().pipe(res);

@@ -664,40 +664,32 @@
     });
   }
 
+  function triggerOriginalShareButton(ob){
+    if (!ob || typeof ob.dispatchEvent !== 'function') return false;
+
+    var event = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+
+    return ob.dispatchEvent(event);
+  }
+
   function getActionFromButton(ob){
     if (!ob) return null;
 
     var classList = Array.from(ob.classList || []);
+    var supported = ['copy', 'qrcode', 'x', 'facebook', 'whatsapp', 'email', 'linkedin', 'mastodon', 'reddit'];
+    var hasSupportedClass = supported.some(function(name){
+      return classList.indexOf(name) !== -1;
+    });
 
-    if (classList.indexOf('copy') !== -1 && typeof window.copyIndexDebateLink === 'function') {
-      return function(){ window.copyIndexDebateLink(ob); };
-    }
-    if (classList.indexOf('qrcode') !== -1 && typeof window.showIndexDebateQrCode === 'function') {
-      return function(){ window.showIndexDebateQrCode(ob); };
-    }
-    if (classList.indexOf('x') !== -1 && typeof window.shareIndexDebateOnX === 'function') {
-      return function(){ window.shareIndexDebateOnX(ob); };
-    }
-    if (classList.indexOf('facebook') !== -1 && typeof window.shareIndexDebateOnFacebook === 'function') {
-      return function(){ window.shareIndexDebateOnFacebook(ob); };
-    }
-    if (classList.indexOf('whatsapp') !== -1 && typeof window.shareIndexDebateOnWhatsApp === 'function') {
-      return function(){ window.shareIndexDebateOnWhatsApp(ob); };
-    }
-    if (classList.indexOf('email') !== -1 && typeof window.shareIndexDebateByEmail === 'function') {
-      return function(){ window.shareIndexDebateByEmail(ob); };
-    }
-    if (classList.indexOf('linkedin') !== -1 && typeof window.shareIndexDebateOnLinkedIn === 'function') {
-      return function(){ window.shareIndexDebateOnLinkedIn(ob); };
-    }
-    if (classList.indexOf('mastodon') !== -1 && typeof window.shareIndexDebateOnMastodon === 'function') {
-      return function(){ window.shareIndexDebateOnMastodon(ob); };
-    }
-    if (classList.indexOf('reddit') !== -1 && typeof window.shareIndexDebateOnReddit === 'function') {
-      return function(){ window.shareIndexDebateOnReddit(ob); };
-    }
+    if (!hasSupportedClass) return null;
 
-    return null;
+    return function(){
+      triggerOriginalShareButton(ob);
+    };
   }
 
   function transform(block){

@@ -1608,26 +1608,37 @@ function ensureDebateIframeModal() {
       flex-direction: column;
     }
     #debate-iframe-modal-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      z-index: 10;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(0,0,0,0.55);
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
+      position: fixed;
+      bottom: calc(5vh + 78px);
+      left: 16px;
+      z-index: 10000;
       display: flex;
       align-items: center;
       justify-content: center;
-      line-height: 1;
-      transition: background 0.15s;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(26,39,47,0.85);
+      color: #a0b0bb;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s, color 0.15s;
     }
     #debate-iframe-modal-close:hover {
-      background: rgba(0,0,0,0.8);
+      background: rgba(26,39,47,1);
+      color: #e0e8ee;
+    }
+    @media (max-width: 768px) {
+      #debate-iframe-modal-close {
+        bottom: calc(5vh + 66px);
+      }
+    }
+    @media (min-width: 769px) {
+      #debate-iframe-modal-close {
+        left: max(16px, calc((100vw - 1100px) / 2 + 16px));
+      }
     }
     #debate-iframe-modal-frame {
       width: 100%;
@@ -1645,7 +1656,7 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
-      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer">✕</button>
+      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
@@ -1681,7 +1692,14 @@ function openDebateIframeModal(url) {
   const frame = document.getElementById("debate-iframe-modal-frame");
   frame.src = url;
   modal.classList.add("open");
+
+  // Verrouillage scroll robuste (iOS Safari inclus)
   document.body.style.overflow = "hidden";
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${_debateModalSavedScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
 }
 
 function closeDebateIframeModal() {
@@ -1690,10 +1708,16 @@ function closeDebateIframeModal() {
   if (!modal) return;
 
   modal.classList.remove("open");
-  document.body.style.overflow = "";
   window.__agonDebateModalOpen = false;
 
-  // Restaure exactement la position de scroll avant d'appliquer le re-rendu différé
+  // Restaure le body et le scroll
+  document.body.style.overflow = "";
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+
   if (_debateModalSavedScrollY !== null) {
     document.documentElement.style.scrollBehavior = "auto";
     window.scrollTo(0, _debateModalSavedScrollY);
@@ -1707,7 +1731,6 @@ function closeDebateIframeModal() {
     window.__agonDebateModalPendingDebates = null;
     requestAnimationFrame(() => {
       renderDebatesList(pending);
-      // Restaure une deuxième fois après le re-rendu pour absorber tout décalage de layout
       if (_debateModalSavedScrollY !== null) {
         document.documentElement.style.scrollBehavior = "auto";
         window.scrollTo(0, _debateModalSavedScrollY);
@@ -2642,19 +2665,22 @@ function isWeakSourcePreviewData(preview, sourceUrl = "") {
   return blockedMarkers.some((marker) => title.includes(marker) || description.includes(marker));
 }
 
-function buildXIndexSourceCardHtml(sourceUrl, preview = null) {
+function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
   const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
-  const safeUrl = normalizedPreview.url || String(sourceUrl || "").trim() || "#";
   const title = normalizedPreview.title && normalizedPreview.title !== "Source externe"
     ? normalizedPreview.title
     : "Source publiée sur X";
   const description = normalizedPreview.description || "Voir le post source sur X.";
   const image = normalizedPreview.image || "";
+  const safeDebateId = escapeAttribute(String(debateId || "").trim());
+  const rootClickAttr = safeDebateId
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
 
   return `
     <div
       class="debate-card-source debate-card-source-x"
-      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+      ${rootClickAttr}
     >
       ${image ? `
         <div style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
@@ -2672,15 +2698,6 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null) {
         <div style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">𝕏 Source</div>
         <div style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
         <div style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>
-        <div>
-          <a
-            class="debate-source-link"
-            href="${escapeAttribute(safeUrl)}"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
-          >↗ Voir le post sur X</a>
-        </div>
       </div>
     </div>
   `;
@@ -2733,12 +2750,13 @@ function buildIndexCardBottomEntryHtml(debate, options = {}) {
 function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const tweetId = getXStatusId(sourceUrl);
   if (!tweetId) {
-    return buildXIndexSourceCardHtml(sourceUrl, preview);
+    return buildXIndexSourceCardHtml(sourceUrl, preview, debateId);
   }
 
   return `
     <div
       class="debate-card-media debate-card-media-x"
+      onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
       style="cursor:pointer;"
     >
       <div
@@ -2746,31 +2764,33 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         data-index-x-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-tweet-id="${escapeAttribute(tweetId)}"
-        onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
         style="position:relative;"
       >
         <div
           data-index-x-loading
           style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post X…</div>
-        <div data-index-x-embed style="display:none;"></div>
-        <div data-index-x-fallback style="display:none;" onclick="event.stopPropagation()">${buildXIndexSourceCardHtml(sourceUrl, preview)}</div>
+        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none;"></div>
+        <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
       </div>
     </div>
   `;
 }
 
-function buildIndexInstagramFallbackHtml(sourceUrl, preview = null) {
+function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "") {
   const normalizedPreview = normalizeSourcePreviewData(preview, sourceUrl);
-  const safeUrl = getInstagramEmbedPermalink(sourceUrl) || normalizedPreview.url || String(sourceUrl || "").trim() || "#";
   const image = normalizedPreview.image || "";
   const title = normalizedPreview.title || "Post Instagram";
   const description = normalizedPreview.description || "Ouvrir ce post Instagram.";
+  const safeDebateId = escapeAttribute(String(debateId || "").trim());
+  const rootClickAttr = safeDebateId
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
 
   return `
     <div
       class="debate-card-source debate-card-source-instagram"
-      style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"
+      ${rootClickAttr}
     >
       ${image ? `
         <div style="display:block; width:100%; aspect-ratio:16/9; background:#f3f4f6; overflow:hidden;">
@@ -2788,15 +2808,6 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null) {
         <div style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em;">Instagram</div>
         <div style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
         <div style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>
-        <div>
-          <a
-            class="debate-source-link"
-            href="${escapeAttribute(safeUrl)}"
-            target="_blank"
-            rel="noopener noreferrer"
-            style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
-          >↗ Voir le post sur Instagram</a>
-        </div>
       </div>
     </div>
   `;
@@ -2805,12 +2816,13 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null) {
 function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const embedPermalink = getInstagramEmbedPermalink(sourceUrl);
   if (!embedPermalink) {
-    return buildIndexInstagramFallbackHtml(sourceUrl, preview);
+    return buildIndexInstagramFallbackHtml(sourceUrl, preview, debateId);
   }
 
   return `
     <div
       class="debate-card-media debate-card-media-instagram"
+      onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
       style="cursor:pointer;"
     >
       <div
@@ -2818,15 +2830,14 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
         data-index-instagram-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-instagram-permalink="${escapeAttribute(embedPermalink)}"
-        onclick="openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"
         style="position:relative;"
       >
         <div
           data-index-instagram-loading
           style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post Instagram…</div>
-        <div data-index-instagram-embed style="display:none; justify-content:center;"></div>
-        <div data-index-instagram-fallback style="display:none;" onclick="event.stopPropagation()">${buildIndexInstagramFallbackHtml(sourceUrl, preview)}</div>
+        <div data-index-instagram-embed onclick="event.stopPropagation()" style="display:none; justify-content:center;"></div>
+        <div data-index-instagram-fallback style="display:none;">${buildIndexInstagramFallbackHtml(sourceUrl, preview, debateId)}</div>
       </div>
     </div>
   `;
@@ -2840,14 +2851,18 @@ function isIndexYouTubeSourceDebate(debate) {
   return !!String(embedData.videoId || "").trim();
 }
 
-function buildIndexYouTubeEmbedHtml(sourceUrl) {
+function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
   const embedData = getEmbeddableSourceData(sourceUrl);
   if (!embedData.videoId || !embedData.embedUrl) return "";
 
   const directEmbedUrl = `${embedData.embedUrl}${embedData.embedUrl.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
+  const safeDebateId = escapeAttribute(String(debateId || "").trim());
 
   return `
-    <div class="debate-card-media debate-card-media-youtube">
+    <div
+      class="debate-card-media debate-card-media-youtube"
+      ${safeDebateId ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="cursor:pointer;"` : ""}
+    >
       <div
         class="debate-card-youtube-shell debate-card-youtube-shell-direct"
         data-index-youtube-shell
@@ -2863,6 +2878,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl) {
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowfullscreen
           src="${escapeAttribute(directEmbedUrl)}"
+          onclick="event.stopPropagation()"
           style="display:block; width:100%; aspect-ratio:16 / 9; border:0;"
         ></iframe>
       </div>
@@ -2881,16 +2897,14 @@ function buildIndexLocalImageCardHtml(imageUrl, debateId = "") {
   const safeImageUrl = String(imageUrl || "").trim();
   if (!safeImageUrl) return "";
 
-  const safeDebateId = String(debateId || "").trim();
-  const debateHref = safeDebateId ? `/debate?id=${encodeURIComponent(safeDebateId)}` : "";
-  const wrapperTag = debateHref ? "a" : "div";
-  const wrapperAttributes = debateHref
-    ? `class="debate-card-local-image-shell" href="${escapeAttribute(debateHref)}" style="display:block; text-decoration:none;"`
-    : `class="debate-card-local-image-shell"`;
+  const safeDebateId = escapeAttribute(String(debateId || "").trim());
+  const wrapperAttrs = safeDebateId
+    ? `class="debate-card-local-image-shell" onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; cursor:pointer;"`
+    : `class="debate-card-local-image-shell" style="display:block;"`;
 
   return `
     <div class="debate-card-media debate-card-media-local-image">
-      <${wrapperTag} ${wrapperAttributes}>
+      <div ${wrapperAttrs}>
         <img
           class="debate-card-local-image"
           src="${escapeAttribute(safeImageUrl)}"
@@ -2898,7 +2912,7 @@ function buildIndexLocalImageCardHtml(imageUrl, debateId = "") {
           loading="lazy"
           decoding="async"
         >
-      </${wrapperTag}>
+      </div>
     </div>
   `;
 }
@@ -2970,7 +2984,7 @@ function renderIndexInlineSourceCard(debate) {
   }
 
   if (isIndexYouTubeSourceDebate(debate)) {
-    return buildIndexYouTubeEmbedHtml(sourceUrl);
+    return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId);
   }
 
   const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
@@ -2990,7 +3004,7 @@ function renderIndexInlineSourceCard(debate) {
     return "";
   }
 
-  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl, { debateHref });
+  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl, { debateId: safeDebateId });
 }
 
 function getIndexYouTubeEmbedSrc(baseUrl, options = {}) {
@@ -3618,30 +3632,35 @@ function scheduleIndexLocalVideoActiveUpdate() {
 
 function clearMobileIndexCardHighlight() {
   document.querySelectorAll(
-    '.page-home-mobile .debate-card.index-card-active, .page-debate .similar-debate-item.index-card-active'
+    '.page-home-mobile .debate-card.index-card-active, .page-home .debate-card.index-card-active, .page-debate .similar-debate-item.index-card-active'
   ).forEach((card) => {
     card.classList.remove('index-card-active');
   });
 }
 function updateMobileIndexCardHighlight() {
-  if (window.innerWidth > 768) {
-    clearMobileIndexCardHighlight();
-    return;
-  }
-
 const isMobileHome =
   document.body.classList.contains('page-home-mobile') &&
   !getDebateId();
 
+  const isDesktopHome =
+    document.body.classList.contains('page-home') &&
+    !document.body.classList.contains('page-home-mobile') &&
+    !getDebateId();
+
   const isMobileOpenDebate =
     document.body.classList.contains('page-debate') &&
-    !!getDebateId();
+    !!getDebateId() &&
+    window.innerWidth <= 768;
 
   let cards = [];
 
   if (isMobileHome) {
     cards = Array.from(
       document.querySelectorAll('.page-home-mobile .debates-list .debate-card')
+    ).filter((card) => card.offsetParent !== null);
+  } else if (isDesktopHome) {
+    cards = Array.from(
+      document.querySelectorAll('.page-home .debates-list .debate-card')
     ).filter((card) => card.offsetParent !== null);
   } else if (isMobileOpenDebate) {
     cards = Array.from(
@@ -3700,6 +3719,34 @@ function scheduleMobileIndexCardHighlightUpdate() {
 function initMobileIndexCardHighlight() {
   if (indexCardHighlightBound) return;
   indexCardHighlightBound = true;
+
+  // Inject desktop card highlight CSS
+  if (!document.getElementById('index-card-active-desktop-style')) {
+    const s = document.createElement('style');
+    s.id = 'index-card-active-desktop-style';
+    s.textContent = `
+      @media (min-width: 769px) {
+        .page-home .debate-card.index-card-active {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 22px rgba(15, 23, 42, 0.11);
+          border-color: #c7d0db;
+          background: #ffffff;
+        }
+        .page-home .debate-card.index-card-active h2 {
+          color: #111111;
+        }
+        .page-home .debate-card.index-card-active .debate-card-source,
+        .page-home .debate-card.index-card-active .debate-card-youtube-shell,
+        .page-home .debate-card.index-card-active .debate-card-instagram-shell,
+        .page-home .debate-card.index-card-active .debate-card-local-image-shell,
+        .page-home .debate-card.index-card-active .debate-card-local-video-shell,
+        .page-home .debate-card.index-card-active .debate-card-x-shell {
+          box-shadow: none;
+        }
+      }
+    `;
+    document.head.appendChild(s);
+  }
 
   window.addEventListener('scroll', scheduleMobileIndexCardHighlightUpdate, { passive: true });
   window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
@@ -4374,13 +4421,23 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const description = normalizedPreview.description || "";
   const image = normalizedPreview.image || "";
   const debateHref = String(options?.debateHref || "").trim();
-  const cardTag = debateHref ? "a" : "div";
-  const cardAttributes = debateHref
-    ? `class="debate-source-card" href="${escapeAttribute(debateHref)}" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; text-decoration:none;"`
-    : `class="debate-source-card" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
-  const openSourceHtml = debateHref
-    ? ""
-    : `<div>
+  const debateId = escapeAttribute(String(options?.debateId || "").trim());
+
+  let cardTag, cardAttributes, openSourceHtml;
+
+  if (debateId) {
+    // Index : toute la carte ouvre la modale iframe
+    cardTag = "div";
+    cardAttributes = `class="debate-source-card" onclick="openIndexDebateFromMedia('${debateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`;
+    openSourceHtml = "";
+  } else if (debateHref) {
+    cardTag = "a";
+    cardAttributes = `class="debate-source-card" href="${escapeAttribute(debateHref)}" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; text-decoration:none;"`;
+    openSourceHtml = "";
+  } else {
+    cardTag = "div";
+    cardAttributes = `class="debate-source-card" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    openSourceHtml = `<div>
           <a
             class="debate-source-link"
             href="${escapeAttribute(safeUrl)}"
@@ -4389,6 +4446,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
             style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
           >↗ Ouvrir la source</a>
         </div>`;
+  }
 
   return `
     <${cardTag}
@@ -4989,6 +5047,15 @@ function getDebateShareText() {
   const optionB = currentDebateShareData.optionB || "";
   const percentA = currentDebateShareData.percentA ?? 50;
   const percentB = currentDebateShareData.percentB ?? 50;
+  const isOpenMode = isCurrentOpenDebateMode();
+
+  if (isOpenMode) {
+    return [
+      question,
+      "",
+      "Qu’est-ce qui vous paraît le plus convaincant ?"
+    ].join("\n");
+  }
 
   return [
     question,
@@ -4996,8 +5063,22 @@ function getDebateShareText() {
     `${percentA}% — ${optionA}`,
     `${percentB}% — ${optionB}`,
     "",
-"Qu’est-ce qui vous paraît le plus convaincant ?\n→"
+    "Qu’est-ce qui vous paraît le plus convaincant ?"
   ].join("\n");
+}
+
+function buildVisibleShareMessage(text, url) {
+  const cleanText = String(text || "")
+    .trim()
+    .replace(/(?:\n\s*)?→\s*Agôn\s*:\s*\S+\s*$/u, "")
+    .trim();
+  const cleanUrl = String(url || "").trim();
+
+  if (!cleanUrl) {
+    return cleanText;
+  }
+
+  return [cleanText, `→ Agôn : ${cleanUrl}`].filter(Boolean).join("\n\n");
 }
 
 function getIdeaShareUrl(debateId, argumentId) {
@@ -5650,13 +5731,14 @@ function shareOnFacebook() {
 
 function shareOnWhatsApp() {
   const { text, url } = getGlobalShareData();
-  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const message = buildVisibleShareMessage(text, url);
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
 function shareByEmail() {
   const { title, text, url } = getGlobalShareData();
-const body = text;
+  const body = buildVisibleShareMessage(text, url);
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -5668,7 +5750,8 @@ function shareOnLinkedIn() {
 
 function shareOnMastodon() {
   const { text, url } = getGlobalShareData();
-  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(text)}`;
+  const message = buildVisibleShareMessage(text, url);
+  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(message)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -5862,6 +5945,11 @@ function normalizeSharePercentValue(value, fallback = 50) {
   return fallback;
 }
 
+function isOpenDebateShareType(type) {
+  const normalizedType = String(type || "").trim().toLowerCase();
+  return normalizedType === "open" || normalizedType === "question";
+}
+
 function getIndexDebateResolvedShareFields(debateId, question, optionA = "", optionB = "", percentA = 50, percentB = 50, type = "debate") {
   const debate = findIndexDebateById(debateId);
   const domSnapshot = getIndexDebateShareSnapshotFromDom(debateId);
@@ -5873,7 +5961,7 @@ function getIndexDebateResolvedShareFields(debateId, question, optionA = "", opt
       || "debate"
   ).trim().toLowerCase();
 
-  const isOpen = resolvedType === "open";
+  const isOpen = isOpenDebateShareType(resolvedType);
 
   const title = String(
     domSnapshot?.title
@@ -5940,7 +6028,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
 
   const lines = [resolved.title, ""];
 
-  if (resolved.type !== "open") {
+  if (!isOpenDebateShareType(resolved.type)) {
     lines.push(`${resolved.percentA}% — ${resolved.optionA}`);
     lines.push(`${resolved.percentB}% — ${resolved.optionB}`);
     lines.push("");
@@ -7853,7 +7941,7 @@ const contextHtml = buildIndexContextPreviewHtml(d);
 
     return `
       <article class="debate-card" data-debate-id="${d.id}">
-        <a class="debate-card-link" href="/debate?id=${d.id}">
+        <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
           <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
           <div class="debate-card-type">${debateTypeLabel}</div>
           <h2>${escapeHtml(d.question)}</h2>
@@ -8098,7 +8186,7 @@ const contextHtml = buildIndexContextPreviewHtml(d);
 
   return `
     <article class="debate-card" data-debate-id="${d.id}">
-      <a class="debate-card-link" href="/debate?id=${d.id}">
+      <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
         <div class="debate-card-type">${debateTypeLabel}</div>
         <h2>${escapeHtml(d.question)}</h2>
