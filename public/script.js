@@ -83,6 +83,8 @@ const INDEX_RETURN_CARD_INDEX_KEY = "agon_index_return_card_index";
 const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
+const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
 let indexReturnRestoreAttempted = false;
 
 let pageArrivalLoadingOverlayHideTimer = null;
@@ -227,6 +229,15 @@ function ensurePageArrivalLoadingOverlayStyles() {
       background: rgba(17, 24, 39, 0.18);
       backdrop-filter: blur(1.5px);
       -webkit-backdrop-filter: blur(1.5px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-iframe-debate {
+      background: rgba(36, 48, 56, 0.28);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
 
     .page-arrival-loading-overlay.page-arrival-loading-overlay-opaque {
@@ -236,6 +247,68 @@ function ensurePageArrivalLoadingOverlayStyles() {
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.18s ease;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-return-to-debate {
+      background: rgba(36, 48, 56, 0.34);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-return-to-debate .page-arrival-loading-box {
+      width: auto;
+      max-width: min(90vw, 220px);
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-return-to-debate .page-arrival-loading-title {
+      display: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-return-to-debate .page-arrival-loading-hourglass {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-return-to-debate .page-arrival-loading-hourglass img {
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28));
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate {
+      background: rgba(36, 48, 56, 0.36);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate .page-arrival-loading-box {
+      width: auto;
+      max-width: min(90vw, 200px);
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate .page-arrival-loading-title {
+      display: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate .page-arrival-loading-hourglass {
+      width: 78px;
+      height: 78px;
+      margin: 0 auto;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate .page-arrival-loading-hourglass img {
+      width: 78px;
+      height: 78px;
+      filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.30));
     }
 
     .page-arrival-loading-overlay.page-arrival-loading-overlay-visible {
@@ -251,6 +324,15 @@ function ensurePageArrivalLoadingOverlayStyles() {
       border: 1px solid rgba(17, 17, 17, 0.08);
       box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
       text-align: center;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-iframe-debate .page-arrival-loading-box {
+      width: auto;
+      max-width: min(90vw, 220px);
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
     }
 
     .page-arrival-loading-hourglass {
@@ -275,6 +357,12 @@ function ensurePageArrivalLoadingOverlayStyles() {
       font-weight: 700;
       line-height: 1.4;
       color: #111111;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-iframe-debate .page-arrival-loading-title {
+      margin-top: 8px;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
     }
 
     @keyframes pageArrivalLogoSpin {
@@ -314,13 +402,91 @@ function getStableBottomBarOffset() {
   return Math.max(0, Math.round(occupiedHeight));
 }
 
+function isIframeDebateLoadingOverlayContext() {
+  return location.pathname === "/debate" && window.self !== window.top;
+}
+
+function isCreateToDebateLoadingTransition() {
+  if (location.pathname !== "/debate") return false;
+
+  try {
+    const raw = sessionStorage.getItem(CREATE_TO_DEBATE_LOADING_KEY);
+    if (!raw) return false;
+
+    const parsed = JSON.parse(raw);
+    const ts = Number(parsed?.ts || 0);
+    if (!ts || Date.now() - ts > 15000) {
+      sessionStorage.removeItem(CREATE_TO_DEBATE_LOADING_KEY);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function markCreateToDebateLoadingTransition() {
+  try {
+    sessionStorage.setItem(CREATE_TO_DEBATE_LOADING_KEY, JSON.stringify({ ts: Date.now() }));
+  } catch (error) {}
+}
+
+function clearCreateToDebateLoadingTransition() {
+  try {
+    sessionStorage.removeItem(CREATE_TO_DEBATE_LOADING_KEY);
+  } catch (error) {}
+}
+
+function isCreateToDebateOverlayContext() {
+  return location.pathname === "/debate" && isCreateToDebateLoadingTransition();
+}
+
+function getPageArrivalLoadingImageSrc() {
+  if (isCreateToDebateOverlayContext()) {
+    return "/robot-head.png";
+  }
+
+  return "/sablier.png";
+}
+
+function applyPageArrivalLoadingVisuals() {
+  const overlay = document.getElementById("page-arrival-loading-overlay");
+  if (!overlay) return;
+
+  const isIframeDebateContext = isIframeDebateLoadingOverlayContext();
+  const isCreateReturnTransition = isCreateToDebateLoadingTransition();
+  const isCreateToDebate = isCreateToDebateOverlayContext();
+  const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
+
+  overlay.classList.toggle("page-arrival-loading-overlay-iframe-debate", isIframeDebateContext);
+  overlay.classList.toggle("page-arrival-loading-overlay-return-to-debate", isCreateReturnTransition);
+  overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate);
+
+  if (loadingImage) {
+    const desiredSrc = getPageArrivalLoadingImageSrc();
+    if (!loadingImage.dataset.defaultSrc) {
+      loadingImage.dataset.defaultSrc = "/sablier.png";
+    }
+    loadingImage.onerror = () => {
+      if (loadingImage.dataset.fallbackApplied === "true") return;
+      loadingImage.dataset.fallbackApplied = "true";
+      loadingImage.src = loadingImage.dataset.defaultSrc || "/sablier.png";
+    };
+    loadingImage.dataset.fallbackApplied = "false";
+    loadingImage.src = desiredSrc;
+  }
+}
+
 function updatePageArrivalLoadingOverlayBounds() {
   const overlay = document.getElementById("page-arrival-loading-overlay");
   if (!overlay) return;
 
   const isDebatePage = location.pathname === "/debate";
-  const top = isDebatePage ? 0 : getStableTopbarBottomOffset();
-  const bottom = getStableBottomBarOffset();
+  const isDebateMobile = isDebatePage && window.innerWidth <= 768;
+  const preserveTopbar = isDebatePage && (isIframeDebateLoadingOverlayContext() || isCreateToDebateLoadingTransition());
+  const top = preserveTopbar ? getStableTopbarBottomOffset() : 0;
+  const bottom = isDebateMobile ? 0 : getStableBottomBarOffset();
 
   overlay.style.setProperty("--page-arrival-loading-top", `${top}px`);
   overlay.style.setProperty("--page-arrival-loading-bottom", `${bottom}px`);
@@ -343,6 +509,8 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
     `;
     document.body.appendChild(overlay);
   }
+
+  applyPageArrivalLoadingVisuals();
 
   const title = document.getElementById("page-arrival-loading-title");
   if (title) {
@@ -367,6 +535,8 @@ function hidePageArrivalLoadingOverlay() {
   const overlay = document.getElementById("page-arrival-loading-overlay");
   if (!overlay) return;
 
+  clearCreateToDebateLoadingTransition();
+
   if (pageArrivalLoadingOverlayHideTimer) {
     clearTimeout(pageArrivalLoadingOverlayHideTimer);
     pageArrivalLoadingOverlayHideTimer = null;
@@ -385,6 +555,12 @@ function hidePageArrivalLoadingOverlay() {
 
 function markPageArrivalLoadingOverlayReady() {
   pageArrivalLoadingOverlayReady = true;
+
+  if (isIframeDebateLoadingOverlayContext()) {
+    try {
+      window.parent.postMessage({ type: "agon:debate-iframe-ready" }, "*");
+    } catch (error) {}
+  }
 
   if (document.documentElement.dataset.pageArrivalLoadingInitialized !== "true") return;
 
@@ -406,7 +582,11 @@ function initPageArrivalLoadingOverlay() {
   document.documentElement.dataset.pageArrivalLoadingInitialized = "true";
   pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/";
 
-  showPageArrivalLoadingOverlay("Chargement en cours");
+  const shouldShowOverlayImmediately = !isIframeDebateLoadingOverlayContext() || hasActiveNotificationTransition();
+
+  if (shouldShowOverlayImmediately) {
+    showPageArrivalLoadingOverlay("Chargement en cours");
+  }
 
   const refreshBounds = () => {
     requestAnimationFrame(updatePageArrivalLoadingOverlayBounds);
@@ -1572,6 +1752,225 @@ function getDebateId() {
 }
 
 let _debateModalSavedScrollY = null;
+let debateIframeParentLoadingFallbackTimer = null;
+
+function ensureDebateIframeParentLoadingStyles() {
+  if (document.getElementById("debate-iframe-parent-loading-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "debate-iframe-parent-loading-style";
+  style.textContent = `
+    body.debate-iframe-parent-loading-open .topbar {
+      position: relative;
+      z-index: 10001 !important;
+    }
+
+    #debate-iframe-parent-loading-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--debate-iframe-parent-loading-top, 0px);
+      bottom: 0;
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(36, 48, 56, 0.30);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+
+    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-overlay-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-hourglass {
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-hourglass img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      animation: pageArrivalLogoSpin 1s linear infinite;
+      transform-origin: center;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-title {
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function updateDebateIframeParentLoadingOverlayBounds() {
+  const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
+  if (!overlay) return;
+
+  overlay.style.setProperty("--debate-iframe-parent-loading-top", `${getStableTopbarBottomOffset()}px`);
+}
+
+function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
+  if (location.pathname !== "/") return;
+
+  ensurePageArrivalLoadingOverlayStyles();
+  ensureDebateIframeParentLoadingStyles();
+
+  let overlay = document.getElementById("debate-iframe-parent-loading-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "debate-iframe-parent-loading-overlay";
+    overlay.setAttribute("aria-live", "polite");
+    overlay.innerHTML = `
+      <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
+        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const title = document.getElementById("debate-iframe-parent-loading-title");
+  if (title) {
+    title.textContent = String(message || "").trim() || "Chargement en cours";
+  }
+
+  document.body.classList.add("debate-iframe-parent-loading-open");
+  updateDebateIframeParentLoadingOverlayBounds();
+  requestAnimationFrame(updateDebateIframeParentLoadingOverlayBounds);
+  overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
+}
+
+function hideDebateIframeParentLoadingOverlay() {
+  const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
+  document.body.classList.remove("debate-iframe-parent-loading-open");
+
+  if (debateIframeParentLoadingFallbackTimer) {
+    clearTimeout(debateIframeParentLoadingFallbackTimer);
+    debateIframeParentLoadingFallbackTimer = null;
+  }
+
+  if (!overlay) return;
+  overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
+}
+
+function setDebateIframeModalCloseButtonVisible(isVisible) {
+  const closeButton = document.getElementById("debate-iframe-modal-close");
+  if (!closeButton) return;
+
+  closeButton.style.display = isVisible ? "flex" : "none";
+  closeButton.setAttribute("aria-hidden", isVisible ? "false" : "true");
+  closeButton.tabIndex = isVisible ? 0 : -1;
+}
+
+function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
+  const normalizedPath = String(pathname || "").trim().toLowerCase();
+  return normalizedPath === "/notifications" || normalizedPath === "/create";
+}
+
+function syncDebateIframeModalCloseButtonWithFramePage(frame) {
+  if (!frame) {
+    setDebateIframeModalCloseButtonVisible(true);
+    return;
+  }
+
+  try {
+    const framePathname = String(frame.contentWindow?.location?.pathname || "");
+    if (framePathname) {
+      setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(framePathname));
+      return;
+    }
+  } catch (error) {}
+
+  try {
+    const frameSrc = String(frame.getAttribute("src") || frame.src || "");
+    if (frameSrc) {
+      const parsedUrl = new URL(frameSrc, window.location.origin);
+      setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(parsedUrl.pathname));
+      return;
+    }
+  } catch (error) {}
+
+  setDebateIframeModalCloseButtonVisible(true);
+}
+
+function notifyParentAboutIframePageContext(pathname = location.pathname) {
+  if (window.self === window.top) return;
+
+  try {
+    window.parent.postMessage({
+      type: "agon:iframe-page-context",
+      pathname: String(pathname || location.pathname || "")
+    }, "*");
+  } catch (error) {}
+}
+
+function initIframePageContextBridge() {
+  if (window.self === window.top) return;
+  if (document.documentElement.dataset.iframePageContextBridgeInitialized === "true") return;
+
+  document.documentElement.dataset.iframePageContextBridgeInitialized = "true";
+
+  const notifyCurrentPath = () => {
+    notifyParentAboutIframePageContext(location.pathname);
+  };
+
+  notifyCurrentPath();
+  window.addEventListener("pageshow", notifyCurrentPath);
+  window.addEventListener("popstate", notifyCurrentPath);
+  window.addEventListener("hashchange", notifyCurrentPath);
+
+  document.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!link) return;
+
+    const href = String(link.getAttribute("href") || "").trim();
+    if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+    if (link.target && link.target !== "_self") return;
+
+    try {
+      const parsedUrl = new URL(href, window.location.origin);
+      notifyParentAboutIframePageContext(parsedUrl.pathname);
+    } catch (error) {}
+  }, true);
+}
+
+function setDebateIframeModalLoadingState(isLoading) {
+  const modal = document.getElementById("debate-iframe-modal");
+  if (!modal) return;
+
+  modal.classList.toggle("loading", !!isLoading);
+  modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
+
+  if (isLoading) {
+    showDebateIframeParentLoadingOverlay("Entrée dans l'arène en cours");
+  } else {
+    hideDebateIframeParentLoadingOverlay();
+  }
+}
 
 function ensureDebateIframeModal() {
   if (document.getElementById("debate-iframe-modal")) return;
@@ -1595,6 +1994,24 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.open {
       display: flex;
     }
+    #debate-iframe-modal.loading {
+      inset: var(--debate-iframe-modal-top, 0px) 0 0 0;
+      padding: 0;
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    #debate-iframe-modal.loading #debate-iframe-modal-inner {
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: none;
+    }
+    #debate-iframe-modal.loading #debate-iframe-modal-close {
+      opacity: 0;
+      pointer-events: none;
+    }
     #debate-iframe-modal-inner {
       position: relative;
       width: 100%;
@@ -1610,13 +2027,13 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal-close {
       position: fixed;
       bottom: calc(5vh + 78px);
-      left: 16px;
+      left: 26px;
       z-index: 10000;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 6px 14px;
-      border-radius: 20px;
+      padding: 10px 20px;
+      border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(26,39,47,0.85);
       color: #a0b0bb;
@@ -1630,9 +2047,14 @@ function ensureDebateIframeModal() {
       background: rgba(26,39,47,1);
       color: #e0e8ee;
     }
+    #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close {
+      filter: blur(4px);
+      opacity: 0.45;
+      pointer-events: none;
+    }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: calc(5vh + 66px);
+        bottom: calc(5vh + -26px);
       }
     }
     @media (min-width: 769px) {
@@ -1670,18 +2092,99 @@ function ensureDebateIframeModal() {
     if (e.key === "Escape") closeDebateIframeModal();
   });
 
-  document.getElementById("debate-iframe-modal-close").addEventListener("click", closeDebateIframeModal);
+  const debateIframeModalCloseButton = document.getElementById("debate-iframe-modal-close");
+  debateIframeModalCloseButton.addEventListener("click", closeDebateIframeModal);
+  setDebateIframeModalCloseButtonVisible(true);
 
   // Écoute le postMessage envoyé par les flèches retour de la page débat
   window.addEventListener("message", (e) => {
-    if (e.data && e.data.type === "agon:close-debate-modal") {
+    if (!e.data || typeof e.data !== "object") return;
+
+    if (e.data.type === "agon:close-debate-modal") {
       closeDebateIframeModal();
+      return;
+    }
+
+    if (e.data.type === "agon:debate-iframe-ready") {
+      window.__agonIframeCurrentPathname = "/debate";
+      requestAnimationFrame(() => {
+        setDebateIframeModalLoadingState(false);
+      });
+      return;
+    }
+
+    if (e.data.type === "agon:notification-back-transition-start") {
+      window.__agonIframeCurrentPathname = String(e.data.pathname || "/notifications");
+      setDebateIframeModalLoadingState(true);
+      setDebateIframeModalCloseButtonVisible(false);
+      if (debateIframeParentLoadingFallbackTimer) {
+        clearTimeout(debateIframeParentLoadingFallbackTimer);
+      }
+      debateIframeParentLoadingFallbackTimer = setTimeout(() => {
+        setDebateIframeModalLoadingState(false);
+        syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
+      }, 9000);
+      return;
+    }
+
+    if (e.data.type === "agon:iframe-page-context") {
+      const newPathname = String(e.data.pathname || e.data.page || "");
+      setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(newPathname));
+
+      // Si l'iframe revient sur /debate depuis une autre page (ex: /notifications)
+      // → déclencher le loading overlay pour masquer l'écran blanc
+      const prevPathname = window.__agonIframeCurrentPathname || "";
+      if (newPathname === "/debate" && prevPathname !== "/debate" && prevPathname !== "") {
+        setDebateIframeModalLoadingState(true);
+        if (debateIframeParentLoadingFallbackTimer) {
+          clearTimeout(debateIframeParentLoadingFallbackTimer);
+        }
+        debateIframeParentLoadingFallbackTimer = setTimeout(() => {
+          setDebateIframeModalLoadingState(false);
+        }, 9000);
+      }
+
+      window.__agonIframeCurrentPathname = newPathname;
+      return;
+    }
+
+    if (e.data.type === "agon:argument-form-visibility") {
+      const debateModal = document.getElementById("debate-iframe-modal");
+      if (debateModal) {
+        debateModal.classList.toggle("argument-form-open-in-child", !!e.data.open);
+      }
     }
   });
+
+  const refreshModalLoadingBounds = () => {
+    updateDebateIframeParentLoadingOverlayBounds();
+    const modal = document.getElementById("debate-iframe-modal");
+    if (modal && modal.classList.contains("loading")) {
+      modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
+    }
+  };
+
+  window.addEventListener("resize", refreshModalLoadingBounds);
+  window.addEventListener("orientationchange", refreshModalLoadingBounds);
+  window.addEventListener("scroll", refreshModalLoadingBounds, { passive: true });
+
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  if (frame && !frame.dataset.closeButtonSyncBound) {
+    frame.dataset.closeButtonSyncBound = "true";
+    frame.addEventListener("load", () => {
+      syncDebateIframeModalCloseButtonWithFramePage(frame);
+    });
+  }
 }
 
 function openDebateIframeModal(url) {
   ensureDebateIframeModal();
+  setDebateIframeModalCloseButtonVisible(true);
+
+  const existingModal = document.getElementById("debate-iframe-modal");
+  if (existingModal) {
+    existingModal.classList.remove("argument-form-open-in-child");
+  }
 
   // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
   _debateModalSavedScrollY = Math.round(window.scrollY || 0);
@@ -1690,8 +2193,19 @@ function openDebateIframeModal(url) {
 
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
+
+  window.__agonIframeCurrentPathname = "/debate";
+  setDebateIframeModalLoadingState(true);
+  setDebateIframeModalCloseButtonVisible(true);
   frame.src = url;
   modal.classList.add("open");
+
+  if (debateIframeParentLoadingFallbackTimer) {
+    clearTimeout(debateIframeParentLoadingFallbackTimer);
+  }
+  debateIframeParentLoadingFallbackTimer = setTimeout(() => {
+    setDebateIframeModalLoadingState(false);
+  }, 9000);
 
   // Verrouillage scroll robuste (iOS Safari inclus)
   document.body.style.overflow = "hidden";
@@ -1708,6 +2222,8 @@ function closeDebateIframeModal() {
   if (!modal) return;
 
   modal.classList.remove("open");
+  modal.classList.remove("argument-form-open-in-child");
+  setDebateIframeModalLoadingState(false);
   window.__agonDebateModalOpen = false;
 
   // Restaure le body et le scroll
@@ -2460,6 +2976,31 @@ function ensureArgumentCardVisibleForScroll(argumentId) {
 
   return element || getVisibleArgumentElement(argIdString);
 }
+function flashArgumentCard(argumentId) {
+  const element = ensureArgumentCardVisibleForScroll(argumentId);
+  if (!element) return;
+
+  const isGreenTarget =
+    element.classList.contains("argument-card-a") ||
+    !!element.closest(".argument-card-a") ||
+    !!element.closest("#arguments-a") ||
+    !!element.closest(".column-a");
+
+  element.classList.remove("flash-green", "admin-highlight");
+  void element.offsetWidth;
+
+  if (isGreenTarget) {
+    element.classList.add("flash-green");
+    setTimeout(() => {
+      element.classList.remove("flash-green");
+    }, 5000);
+  } else {
+    element.classList.add("admin-highlight");
+    setTimeout(() => {
+      element.classList.remove("admin-highlight");
+    }, 5000);
+  }
+}
 function scrollToTopOfArgumentCardAndFlash(argumentId) {
   const element = ensureArgumentCardVisibleForScroll(argumentId);
   if (!element) return;
@@ -2484,26 +3025,7 @@ function scrollToTopOfArgumentCardAndFlash(argumentId) {
   }, 260);
 
   setTimeout(() => {
-    const isGreenTarget =
-      element.classList.contains("argument-card-a") ||
-      !!element.closest(".argument-card-a") ||
-      !!element.closest("#arguments-a") ||
-      !!element.closest(".column-a");
-
-    element.classList.remove("flash-green", "admin-highlight");
-    void element.offsetWidth;
-
-    if (isGreenTarget) {
-      element.classList.add("flash-green");
-      setTimeout(() => {
-        element.classList.remove("flash-green");
-      }, 5000);
-    } else {
-      element.classList.add("admin-highlight");
-      setTimeout(() => {
-        element.classList.remove("admin-highlight");
-      }, 5000);
-    }
+    flashArgumentCard(argumentId);
   }, 420);
 }
 function scrollToTopOfArgumentCard(argumentId) {
@@ -4615,6 +5137,34 @@ function clearNotificationTransitionState() {
   }
 }
 
+function hasActiveNotificationTransition(maxAgeMs = 15000) {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return false;
+
+  const startedAt = Number(state.startedAt || 0);
+  if (!startedAt) return false;
+
+  if (Date.now() - startedAt > maxAgeMs) {
+    clearNotificationTransitionState();
+    return false;
+  }
+
+  return true;
+}
+
+function notifyParentAboutNotificationBackTransition(payload = {}) {
+  if (window.self === window.top) return;
+
+  try {
+    window.parent.postMessage({
+      type: "agon:notification-back-transition-start",
+      pathname: location.pathname || "/notifications",
+      targetPathname: "/debate",
+      ...payload
+    }, "*");
+  } catch (error) {}
+}
+
 function showNotificationTransitionOverlay(message = "Chargement en cours") {
   showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
@@ -4633,6 +5183,26 @@ function beginNotificationTransition(link) {
 
   setNotificationTransitionState(state);
   showNotificationTransitionOverlay();
+}
+
+function handleNotificationsBackNavigation(event, fallbackHref = "/") {
+  if (event?.preventDefault) {
+    event.preventDefault();
+  }
+
+  beginNotificationTransition("__history_back__");
+  notifyParentAboutNotificationBackTransition({ source: "notifications-back" });
+
+  window.setTimeout(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    window.location.href = fallbackHref || "/";
+  }, 40);
+
+  return false;
 }
 
 function initNotificationTransitionOverlay() {
@@ -5240,31 +5810,61 @@ function toggleIdeaShareMenu(event, argumentId) {
 
   const positionMenu = () => {
     const rect = trigger.getBoundingClientRect();
-    const menuWidth = 160;
-    let left = rect.left + rect.width / 2 - menuWidth / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
-    globalMenu.style.top = (rect.bottom + 8) + 'px';
+    const spacing = 8;
+
+    globalMenu.style.visibility = 'hidden';
+    globalMenu.style.display = 'flex';
+
+    const menuRect = globalMenu.getBoundingClientRect();
+    let left = rect.left + (rect.width / 2) - (menuRect.width / 2);
+    let top = rect.top - menuRect.height - spacing;
+
+    if (left < spacing) left = spacing;
+    if (left + menuRect.width > window.innerWidth - spacing) {
+      left = window.innerWidth - menuRect.width - spacing;
+    }
+
+    if (top < spacing) {
+      top = rect.bottom + spacing;
+    }
+
+    if (top + menuRect.height > window.innerHeight - spacing) {
+      top = Math.max(spacing, window.innerHeight - menuRect.height - spacing);
+    }
+
     globalMenu.style.left = left + 'px';
+    globalMenu.style.top = top + 'px';
+    globalMenu.style.bottom = 'auto';
+    globalMenu.style.transform = 'none';
+    globalMenu.style.visibility = 'visible';
+  };
+
+  const scrollToFitMenu = () => {
+    const menuRect = globalMenu.getBoundingClientRect();
+    const spacing = 8;
+    const overflowBottom = menuRect.bottom - (window.innerHeight - spacing);
+    const overflowTop = spacing - menuRect.top;
+    let scrollAmount = 0;
+
+    if (overflowBottom > 0) scrollAmount = overflowBottom;
+    else if (overflowTop > 0) scrollAmount = -overflowTop;
+
+    if (scrollAmount === 0) return;
+
+    _ideaShareScrolling = true;
+    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+    setTimeout(() => {
+      positionMenu();
+      _ideaShareScrolling = false;
+    }, 400);
   };
 
   positionMenu();
-  globalMenu.style.display = 'flex';
   openedIdeaShareMenuId = sourceMenuId;
   trigger.setAttribute('aria-expanded', 'true');
 
-  // Si le menu dépasse en bas du viewport, scroller pour le dégager puis repositionner
   requestAnimationFrame(() => {
-    const menuRect = globalMenu.getBoundingClientRect();
-    const safeMargin = 8;
-    const overflow = menuRect.bottom - (window.innerHeight - safeMargin);
-    if (overflow > 0) {
-      _ideaShareScrolling = true;
-      window.scrollBy({ top: overflow, behavior: 'smooth' });
-      setTimeout(() => {
-        positionMenu(); // repositionne après que le trigger ait bougé
-        _ideaShareScrolling = false;
-      }, 400);
-    }
+    scrollToFitMenu();
   });
 
   // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
@@ -9427,6 +10027,161 @@ function closeDebateImageLightbox() {
   lightboxImg.removeAttribute("src");
 }
 
+function getCreateReturnContext() {
+  try {
+    const raw = sessionStorage.getItem(CREATE_RETURN_CONTEXT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const url = String(parsed.url || "").trim();
+    const ts = Number(parsed.ts || 0);
+    if (!url || !Number.isFinite(ts) || ts <= 0) return null;
+
+    return { url, ts };
+  } catch (error) {
+    return null;
+  }
+}
+
+function setCreateReturnContext(url) {
+  const normalizedUrl = String(url || "").trim();
+
+  try {
+    if (!normalizedUrl) {
+      sessionStorage.removeItem(CREATE_RETURN_CONTEXT_KEY);
+      return;
+    }
+
+    sessionStorage.setItem(CREATE_RETURN_CONTEXT_KEY, JSON.stringify({
+      url: normalizedUrl,
+      ts: Date.now()
+    }));
+  } catch (error) {
+    // noop
+  }
+}
+
+function isValidCreateReturnUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""), window.location.origin);
+    return parsed.origin === window.location.origin && parsed.pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
+function resolveCreateReturnUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  const returnToParam = params.get("returnTo");
+
+  if (isValidCreateReturnUrl(returnToParam)) {
+    setCreateReturnContext(returnToParam);
+    return returnToParam;
+  }
+
+  try {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    if (referrer && referrer.origin === window.location.origin && referrer.pathname === "/debate") {
+      const referrerUrl = referrer.toString();
+      setCreateReturnContext(referrerUrl);
+      return referrerUrl;
+    }
+  } catch (error) {
+    // noop
+  }
+
+  const stored = getCreateReturnContext();
+  const maxAgeMs = 30 * 60 * 1000;
+  if (stored && Date.now() - stored.ts <= maxAgeMs && isValidCreateReturnUrl(stored.url)) {
+    return stored.url;
+  }
+
+  setCreateReturnContext("");
+  return "";
+}
+
+function buildCreateUrlWithReturnContext() {
+  const currentUrl = window.location.href;
+  setCreateReturnContext(currentUrl);
+
+  const createUrl = new URL('/create', window.location.origin);
+  createUrl.searchParams.set('returnTo', currentUrl);
+  return createUrl.toString();
+}
+
+function initDebateCreateEntryPoints() {
+  if (location.pathname !== "/debate") return;
+
+  const createLinks = Array.from(document.querySelectorAll('a[href="/create"], a[href^="/create?"]'));
+  if (!createLinks.length) return;
+
+  const targetUrl = buildCreateUrlWithReturnContext();
+
+  createLinks.forEach((link) => {
+    if (!link || link.dataset.createReturnBound === "true") return;
+
+    link.href = targetUrl;
+    link.dataset.createReturnBound = "true";
+
+    link.addEventListener('click', () => {
+      const nextUrl = buildCreateUrlWithReturnContext();
+      link.href = nextUrl;
+    });
+  });
+}
+
+function applyCreateBackLinks() {
+  if (location.pathname !== "/create") return;
+
+  const returnUrl = resolveCreateReturnUrl();
+  const textBackLink = document.querySelector('.create-back-link');
+  const arrowBackLink = document.querySelector('.mobile-topbar-actions .topbar-back-arrow');
+  const backLinks = [textBackLink, arrowBackLink].filter(Boolean);
+
+  if (!backLinks.length) return;
+
+  if (!returnUrl) {
+    backLinks.forEach((link) => {
+      link.setAttribute('href', '/');
+      if (link.classList.contains('create-back-link')) {
+        link.textContent = '← Retour aux arènes';
+      }
+      if (link.classList.contains('topbar-back-arrow')) {
+        link.setAttribute('title', 'Retour aux arènes');
+        link.setAttribute('aria-label', 'Retour aux arènes');
+      }
+    });
+    return;
+  }
+
+  backLinks.forEach((link) => {
+    link.setAttribute('href', returnUrl);
+    link.dataset.returnToDebate = 'true';
+
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      markCreateToDebateLoadingTransition();
+
+      try {
+        notifyParentAboutIframePageContext('/debate');
+      } catch (error) {}
+
+      window.location.href = returnUrl;
+    });
+  });
+
+  if (textBackLink) {
+    textBackLink.textContent = '← Retour au débat';
+  }
+
+  if (arrowBackLink) {
+    arrowBackLink.setAttribute('title', 'Retour au débat');
+    arrowBackLink.setAttribute('aria-label', 'Retour au débat');
+  }
+}
+
 function initDebateImageLightbox() {
   const imageEl = document.getElementById("debate-image");
   const lightbox = document.getElementById("debate-image-lightbox");
@@ -10459,6 +11214,7 @@ form.addEventListener("submit", async e => {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
+    markCreateToDebateLoadingTransition();
     location = "/debate?id=" + r.id;
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
@@ -13642,11 +14398,19 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     const optimisticArgsSameSide = (currentAllArguments || []).filter(
       (arg) => String(arg.side || "") === optimisticAfterSide
     );
+    const optimisticAfterRankMap = getSupportRankMap(optimisticArgsSameSide);
+    const previousRank = Number(beforeRankMap[argIdString] || 0);
+    const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
+    const didRankChange = !!previousRank && !!nextRank && previousRank !== nextRank;
 
     showVoteRankProgress(beforeRankMap, optimisticArgsSameSide, argId);
 
     if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
+      if (didRankChange) {
+        scrollToTopOfArgumentCardAndFlash(argId);
+      } else {
+        flashArgumentCard(argId);
+      }
     }
 
     const response = await fetchJSON(API + "/arguments/" + argId + "/vote", {
@@ -13728,6 +14492,14 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     (arg) => String(arg.id) === argIdString
   );
 
+  const targetSide = targetBefore ? String(targetBefore.side || "") : "";
+
+  const beforeRankMap = getSupportRankMap(
+    (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === targetSide
+    )
+  );
+
   const previousState = { ...state };
   const previousMyVotesOnArgument = Number(state[argIdString] || 0);
   const previousVotes = Number(targetBefore?.votes || 0);
@@ -13758,8 +14530,26 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     );
     optimisticApplied = true;
 
+    const targetAfterOptimistic = (currentAllArguments || []).find(
+      (arg) => String(arg.id) === argIdString
+    );
+
+    const optimisticAfterSide = targetAfterOptimistic ? String(targetAfterOptimistic.side || "") : targetSide;
+
+    const optimisticArgsSameSide = (currentAllArguments || []).filter(
+      (arg) => String(arg.side || "") === optimisticAfterSide
+    );
+    const optimisticAfterRankMap = getSupportRankMap(optimisticArgsSameSide);
+    const previousRank = Number(beforeRankMap[argIdString] || 0);
+    const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
+    const didRankChange = !!previousRank && !!nextRank && previousRank !== nextRank;
+
     if (shouldScroll) {
-      scrollToTopOfArgumentCardAndFlash(argId);
+      if (didRankChange) {
+        scrollToTopOfArgumentCardAndFlash(argId);
+      } else {
+        flashArgumentCard(argId);
+      }
     }
 
     const response = await fetchJSON(API + "/arguments/" + argId + "/unvote", {
@@ -14611,6 +15401,56 @@ function initDebateTopbarAutoHide() {
   updateTopbar();
 }
 
+function initDebateTitleAutoHide() {
+  if (window.location.pathname !== "/debate") return;
+
+  const titleBlock = document.querySelector(".debate-hero-top");
+  if (!titleBlock) return;
+
+  let ticking = false;
+  let lastScrollY = window.scrollY;
+  const HIDE_THRESHOLD = 10;
+  const SHOW_THRESHOLD = 10;
+
+  function updateDebateTitleVisibility() {
+    const currentScrollY = window.scrollY;
+    const delta = currentScrollY - lastScrollY;
+
+    if (currentScrollY <= 10) {
+      document.body.classList.remove("debate-title-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      return;
+    }
+
+    if (delta < -HIDE_THRESHOLD) {
+      document.body.classList.add("debate-title-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      return;
+    }
+
+    if (delta > SHOW_THRESHOLD) {
+      document.body.classList.remove("debate-title-hidden");
+      lastScrollY = currentScrollY;
+      ticking = false;
+      return;
+    }
+
+    lastScrollY = currentScrollY;
+    ticking = false;
+  }
+
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      window.requestAnimationFrame(updateDebateTitleVisibility);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  updateDebateTitleVisibility();
+}
+
 function rerenderCurrentDebateArguments() {
   const debateId = getDebateId();
   if (!debateId) return;
@@ -15004,6 +15844,7 @@ function ensureProgressSortOption() {
 initPageArrivalLoadingOverlay();
 
 document.addEventListener("DOMContentLoaded", () => {
+  initIframePageContextBridge();
 initMobileIndexCardHighlight();
 scheduleMobileIndexCardHighlightUpdate();
   initNotificationTransitionOverlay();
@@ -15012,14 +15853,17 @@ scheduleMobileIndexCardHighlightUpdate();
   renderGlobalShareBar();
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
+  initDebateTitleAutoHide();
   initHomeTopbarAutoHide();
   initHomeBottomShareMenu();
   initIndexReturnNavigation();
+  applyCreateBackLinks();
 
   if (location.pathname === "/") initIndex();
   if (location.pathname === "/create") initCreate();
 if (location.pathname === "/debate") {
   localStorage.setItem("debate_view_mode", "columns");
+  initDebateCreateEntryPoints();
   initDebate();
 }  if (location.pathname === "/admin-reports") initAdminReports();
   if (location.pathname === "/notifications") loadNotificationsPage();
@@ -15246,6 +16090,18 @@ function closeListArgumentForm() {
   }
 
   document.body.classList.remove("argument-form-open");
+  syncIframeParentArgumentFormState(false);
+}
+
+function syncIframeParentArgumentFormState(isOpen) {
+  if (window.parent === window) return;
+
+  try {
+    window.parent.postMessage({
+      type: "agon:argument-form-visibility",
+      open: !!isOpen
+    }, "*");
+  } catch (error) {}
 }
 
 function closeArgumentForm() {
@@ -15258,6 +16114,7 @@ function closeArgumentForm() {
 
   openedArgumentForm = null;
   document.body.classList.remove("argument-form-open");
+  syncIframeParentArgumentFormState(false);
 }
 
 
@@ -15274,6 +16131,7 @@ function openListArgumentForm(side = "a") {
   form.style.display = "grid";
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
+  syncIframeParentArgumentFormState(true);
 
 setListArgumentSide("");
 
@@ -15297,6 +16155,7 @@ function openArgumentFormAndScroll(side) {
   form.style.display = "grid";
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
+  syncIframeParentArgumentFormState(true);
 
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
@@ -15332,6 +16191,7 @@ function openArgumentComposer(side) {
   listForm.style.display = "grid";
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
+  syncIframeParentArgumentFormState(true);
 
   setListArgumentSide(normalizedSide);
 
@@ -15882,13 +16742,12 @@ function positionHomeTopbarMenu() {
   }
 
   if (isDebatePage) {
-    menu.style.setProperty("--home-topbar-menu-right", `1050px`);
+    menu.style.setProperty("--home-topbar-menu-right", `760px`);
+    menu.style.removeProperty("--home-topbar-menu-left");
   } else {
     menu.style.setProperty("--home-topbar-menu-right", `80px`);
+    menu.style.removeProperty("--home-topbar-menu-left");
   }
-
-  menu.style.removeProperty("--home-topbar-menu-left");
-
 }
 
 function syncHomeTopbarMenuOpenState(isOpen) {

@@ -7803,12 +7803,12 @@ body.page-home.page-home-mobile {
 }
 
 .home-topbar-menu-item-primary{
-  background:#111827;
+  background:#243038;
   color:#ffffff;
 }
 
 .home-topbar-menu-item-primary:hover{
-  background:#1f2937;
+  background:#2e3d47;
 }
 
 .page-home-mobile .topbar-inner,
@@ -9100,5 +9100,53 @@ body.index-batch-loading-active {
   #voices-float-badge {
     bottom: 28px !important;
     right: 10px !important;
+  }
+}
+
+/* Bouton fermer iframe — suppression de l'offset de l'ancienne bottom nav mobile */
+@media (max-width: 768px) {
+  body.page-debate #debate-iframe-modal-close {
+    bottom: 5vh !important;
+    left: auto !important;
+    right: 16px !important;
+  }
+}
+
+/* Bouton "Découvrir des arènes similaires" — fond gris foncé */
+body.page-debate .similar-debates-toggle-btn {
+  background: #2e3d47 !important;
+  background-color: #2e3d47 !important;
+  background-image: none !important;
+  color: #e8e8e8 !important;
+  border: 1px solid #3a4a55 !important;
+  box-shadow: none !important;
+}
+body.page-debate .similar-debates-toggle-btn:hover,
+body.page-debate .similar-debates-toggle-btn:focus,
+body.page-debate .similar-debates-toggle-btn:focus-visible {
+  background: #3a4a55 !important;
+  background-color: #3a4a55 !important;
+  color: #ffffff !important;
+  border-color: #4a5a65 !important;
+  box-shadow: none !important;
+}
+
+/* Fix centrage bloc titre débat entre 769px et 900px */
+@media (min-width: 769px) {
+  body.page-debate .debate-hero-top {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+  }
+  body.page-debate .debate-hero-top > div:first-child {
+    flex: 1 !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+  body.page-debate .debate-title-row {
+    width: 100% !important;
+    justify-content: center !important;
   }
 }

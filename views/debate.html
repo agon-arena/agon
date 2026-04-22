@@ -458,6 +458,72 @@ body.page-debate .my-argument-chip-stepper-btn-guided {
 }
 
 /* Vue switch card */
+
+body.page-debate.argument-form-open {
+  overflow: hidden;
+}
+
+body.page-debate.argument-form-open::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 999;
+}
+
+body.page-debate .argument-form {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  z-index: 1000;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+body.page-debate .argument-form-list {
+  width: min(720px, calc(100vw - 24px));
+}
+
+body.page-debate .argument-form-list-top {
+  position: relative;
+}
+
+body.page-debate .argument-form .form-close-btn {
+  position: sticky;
+  top: 0;
+  margin-left: auto;
+  z-index: 2;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-form,
+  body.page-debate .argument-form-list {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    border-radius: 16px;
+  }
+
+  body.page-debate .argument-form-list-top {
+    padding-right: 44px;
+  }
+
+  body.page-debate .argument-form .form-close-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-left: 0;
+    z-index: 3;
+  }
+}
+
 body.page-debate .debate-view-switch-card {
   background: transparent;
   border-color: transparent;
@@ -476,13 +542,117 @@ body.page-debate .topbar-actions {
   flex-shrink: 0;
   min-width: fit-content;
 }
+
+body.page-debate .topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+body.page-debate .topbar-notification-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+body.page-debate .topbar-notification-link:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #000000;
+}
+body.page-debate .topbar-notification-link i {
+  font-size: 15px;
+}
+body.page-debate #notifications-count-compact {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+@media (max-width: 768px) {
+  body.page-debate .topbar-actions {
+    gap: 8px;
+  }
+  body.page-debate .topbar-notification-link {
+    width: 34px;
+    height: 34px;
+  }
+}
+@media (min-width: 769px) {
+  body.page-debate #notifications-bell {
+    display: none !important;
+  }
+}
 body.page-debate .home-topbar-menu-wrap {
   flex-shrink: 0;
+}
+body.page-debate .debate-topbar-notification-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+body.page-debate .debate-topbar-notification-link:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #000000;
+}
+body.page-debate .debate-topbar-notification-link .notifications-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+@media (max-width: 768px) {
+  body.page-debate .debate-topbar-notification-link {
+    width: 34px;
+    height: 34px;
+    margin-left: 6px;
+  }
 }
 
 /* Bloc titre plus proche du bandeau haut */
 body.page-debate .debate-hero-top {
   margin-top: 4px;
+  overflow: hidden;
+  max-height: 420px;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 0.24s ease, opacity 0.18s ease, transform 0.24s ease, margin-top 0.24s ease;
+  will-change: max-height, opacity, transform;
+}
+
+body.page-debate.debate-title-hidden .debate-hero-top {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-12px);
+  margin-top: 0 !important;
+  pointer-events: none;
 }
 
 /* Icônes de partage légèrement plus basses sur desktop */
@@ -608,6 +778,27 @@ body.page-debate .similar-debates-results {
   grid-template-columns: 1fr;
   gap: 16px !important;
 }
+
+/* Arènes similaires : même surbrillance que les cartes de l'index au scroll */
+body.page-debate .similar-debate-item {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+  will-change: transform, box-shadow, border-color, background-color;
+}
+
+body.page-debate .similar-debate-item.index-card-active {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.11) !important;
+  border-color: #c7d0db !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+body.page-debate .similar-debate-item.index-card-active,
+body.page-debate .similar-debate-item.index-card-active .similar-debate-question,
+body.page-debate .similar-debate-item.index-card-active .similar-debate-meta {
+  color: #111827 !important;
+}
+
 @media (min-width: 769px) {
   body.page-debate .similar-debates-bottom {
     width: min(780px, 100%);
@@ -633,13 +824,47 @@ body.page-debate .load-more-text {
   color: #e8e8e8;
 }
 body.page-debate .similar-debates-toggle-btn {
-  background: #ffffff !important;
-  color: #374151 !important;
-  border: 1px solid #e5e7eb;
+  background: #2e3d47 !important;
+  background-color: #2e3d47 !important;
+  background-image: none !important;
+  color: #e8e8e8 !important;
+  border: 1px solid #3a4a55 !important;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
 }
-body.page-debate .similar-debates-toggle-btn:hover {
-  background: #f3f4f6 !important;
-  color: #111827 !important;
+body.page-debate .similar-debates-toggle-btn:hover,
+body.page-debate .similar-debates-toggle-btn:focus,
+body.page-debate .similar-debates-toggle-btn:focus-visible {
+  background: #3a4a55 !important;
+  background-color: #3a4a55 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border-color: #4a5a65 !important;
+  box-shadow: none !important;
+}
+
+/* Bouton tri + menu tri */
+body.page-debate .sort-button {
+  background: #2e3d47 !important;
+  border-color: #3a4a55 !important;
+  color: #e8e8e8 !important;
+}
+body.page-debate .sort-button:hover {
+  background: #3a4a55 !important;
+  border-color: #4a5a65 !important;
+  color: #ffffff !important;
+}
+body.page-debate .sort-menu {
+  background: #2e3d47 !important;
+  border-color: #3a4a55 !important;
+}
+body.page-debate .sort-menu button {
+  color: #e8e8e8 !important;
+}
+body.page-debate .sort-menu button:hover {
+  background: #3a4a55 !important;
+  color: #ffffff !important;
 }
 body.page-debate .debate-view-toggle-btn {
   background: none !important;
@@ -681,9 +906,26 @@ body.page-debate .home-bottom-nav-item:focus-visible {
 }
 </style>
 <style>
+
+/* Mobile : descendre légèrement le bloc titre fixe */
+@media (max-width: 768px) {
+  body.page-debate .debate-hero-top {
+    top: 16px !important;
+  }
+
+  body.page-debate.debate-topbar-hidden .debate-hero-top {
+    top: 16px !important;
+    margin-top: 0 !important;
+  }
+}
+
 /* Desktop : badge au-dessus de la nav bar */
 @media (min-width: 769px) {
   #voices-float-badge { bottom: 78px !important; }
+  #voices-panel {
+    top: 0 !important;
+    max-height: calc(100vh - 2px) !important;
+  }
 }
 
 @media (max-width: 768px) {
@@ -692,13 +934,84 @@ body.page-debate .home-bottom-nav-item:focus-visible {
   }
 
   #voices-panel {
-    left: 8px !important;
-    right: 8px !important;
-    top: 64px;
+    left: 18px !important;
+    right: 18px !important;
+    top: 10px !important;
     width: auto !important;
-    max-height: calc(100vh - 150px) !important;
-    bottom: auto !important;
+    max-height: none !important;
+    bottom: 0 !important;
   }
+
+  #voices-panel-body {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #voices-panel .voice-stepper {
+    width: 92px;
+    min-width: 92px;
+    max-width: 92px;
+    flex: 0 0 92px;
+    gap: 2px;
+    padding-left: 4px;
+    padding-right: 4px;
+    justify-content: space-between;
+  }
+
+  #voices-panel .voice-stepper-btn {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    padding: 0;
+  }
+
+  #voices-panel .voice-stepper-center {
+    width: 34px;
+    min-width: 34px;
+    max-width: 34px;
+    flex: 0 0 34px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  #voices-panel .voice-stepper-value {
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  #voices-panel .voice-stepper-label {
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+}
+
+body.voices-panel-open {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+#voices-panel-body {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#voices-panel .voice-stepper {
+  gap: 4px;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+#voices-panel .voice-stepper-center {
+  min-width: 34px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+#voices-panel .voice-stepper-value {
+  min-width: 0;
 }
 </style>
 </head>
@@ -738,6 +1051,11 @@ body.page-debate .home-bottom-nav-item:focus-visible {
     onclick="event.stopPropagation()"
     aria-label="Menu du bandeau"
   >
+  <a href="/" class="home-topbar-menu-item" id="home-topbar-explorer-link">
+      <i class="fa-solid fa-compass"></i>
+      <span>Explorer les arènes</span>
+    </a>
+
   <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link">
       <i class="fa-solid fa-plus"></i>
       <span>Ouvrir une arène</span>
@@ -773,6 +1091,10 @@ body.page-debate .home-bottom-nav-item:focus-visible {
           </a>
         </div>
       </div>
+      <a href="/notifications" id="notifications-bell" class="topbar-notification-link" aria-label="Notifications">
+        <i class="fa-regular fa-bell"></i>
+        <span id="notifications-count-compact" style="display:none;"></span>
+      </a>
     </div>
 
   </div>
@@ -1291,7 +1613,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260407-1"></script>
+<script src="/script.js?v=20260422-2"></script>
 <script>
 // Neutralise le -8px injecté par updateDebateSourcePreviewVerticalOffset
 // Le CSS sur body.page-debate .debate-hero gère l'écart
@@ -1345,6 +1667,84 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var panel = document.getElementById('voices-panel');
   var overlay = document.getElementById('voices-panel-overlay');
   var panelBody = document.getElementById('voices-panel-body');
+  var previousBodyOverflow = '';
+  var previousHtmlOverflow = '';
+  var previousBodyTouchAction = '';
+  var previousHtmlTouchAction = '';
+  var voicesPanelScrollLocked = false;
+
+  function lockVoicesPanelBackgroundScroll(){
+    if(voicesPanelScrollLocked) return;
+    voicesPanelScrollLocked = true;
+
+    previousBodyOverflow = document.body.style.overflow || '';
+    previousHtmlOverflow = document.documentElement.style.overflow || '';
+    previousBodyTouchAction = document.body.style.touchAction || '';
+    previousHtmlTouchAction = document.documentElement.style.touchAction || '';
+
+    document.body.classList.add('voices-panel-open');
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    document.documentElement.style.touchAction = 'none';
+  }
+
+  function unlockVoicesPanelBackgroundScroll(){
+    if(!voicesPanelScrollLocked) return;
+    voicesPanelScrollLocked = false;
+
+    document.body.classList.remove('voices-panel-open');
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousHtmlOverflow;
+    document.body.style.touchAction = previousBodyTouchAction;
+    document.documentElement.style.touchAction = previousHtmlTouchAction;
+  }
+
+  function stopPanelScrollBleed(){
+    if(!panelBody || panelBody.dataset.scrollBleedBound === 'true') return;
+    panelBody.dataset.scrollBleedBound = 'true';
+
+    panelBody.addEventListener('wheel', function(event){
+      var delta = event.deltaY;
+      var canScroll = panelBody.scrollHeight > panelBody.clientHeight;
+      if(!canScroll){
+        event.preventDefault();
+        return;
+      }
+
+      var atTop = panelBody.scrollTop <= 0;
+      var atBottom = Math.ceil(panelBody.scrollTop + panelBody.clientHeight) >= panelBody.scrollHeight;
+      if((delta < 0 && atTop) || (delta > 0 && atBottom)){
+        event.preventDefault();
+      }
+    }, { passive: false });
+
+    var touchStartY = 0;
+    panelBody.addEventListener('touchstart', function(event){
+      if(event.touches && event.touches.length){
+        touchStartY = event.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    panelBody.addEventListener('touchmove', function(event){
+      if(!(event.touches && event.touches.length)) return;
+      var currentY = event.touches[0].clientY;
+      var delta = touchStartY - currentY;
+      var canScroll = panelBody.scrollHeight > panelBody.clientHeight;
+      if(!canScroll){
+        event.preventDefault();
+        return;
+      }
+
+      var atTop = panelBody.scrollTop <= 0;
+      var atBottom = Math.ceil(panelBody.scrollTop + panelBody.clientHeight) >= panelBody.scrollHeight;
+      if((delta < 0 && atTop) || (delta > 0 && atBottom)){
+        event.preventDefault();
+      }
+    }, { passive: false });
+  }
+
+  stopPanelScrollBleed();
 
   function getDebateId(){ return new URLSearchParams(window.location.search).get('id'); }
 
@@ -1465,6 +1865,29 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
     panel.style.display = 'flex';
     overlay.style.display = 'block';
+    lockVoicesPanelBackgroundScroll();
+  }
+
+  function ensureVoicesPanelSectionVisible(argId){
+    var sectionBody = document.getElementById('vp-body-' + argId);
+    if(!sectionBody || sectionBody.style.display !== 'block') return;
+
+    var sectionCard = sectionBody.parentElement;
+    if(!sectionCard || !panelBody) return;
+
+    var containerRect = panelBody.getBoundingClientRect();
+    var cardRect = sectionCard.getBoundingClientRect();
+    var visibleTop = containerRect.top + 8;
+    var visibleBottom = containerRect.bottom - 8;
+
+    if(cardRect.top < visibleTop){
+      panelBody.scrollTop -= (visibleTop - cardRect.top);
+      return;
+    }
+
+    if(cardRect.bottom > visibleBottom){
+      panelBody.scrollTop += (cardRect.bottom - visibleBottom);
+    }
   }
 
   window.vpToggle = function(argId){
@@ -1485,12 +1908,37 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
         if(!anyOpen) panel.style.top = '64px';
       }
     }
+
+    if(!isOpen){
+      requestAnimationFrame(function(){
+        ensureVoicesPanelSectionVisible(argId);
+      });
+    }
   };
 
   window.closeVoicesPanel = function(){
     panel.style.display = 'none';
     overlay.style.display = 'none';
+    unlockVoicesPanelBackgroundScroll();
   };
+
+  document.addEventListener('keydown', function(event){
+    if(event.key === 'Escape' && panel.style.display === 'flex'){
+      closeVoicesPanel();
+    }
+  });
+
+  window.addEventListener('pageshow', function(){
+    if(panel.style.display !== 'flex'){
+      unlockVoicesPanelBackgroundScroll();
+    }
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden' && panel.style.display !== 'flex'){
+      unlockVoicesPanelBackgroundScroll();
+    }
+  });
 
   badge.addEventListener('click', function(){
     if(panel.style.display === 'flex') closeVoicesPanel();

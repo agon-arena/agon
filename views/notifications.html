@@ -38,6 +38,12 @@
         border-radius: 0 !important;
       }
     }
+
+    @media (max-width: 767px) {
+      .home-bottom-nav {
+        display: none !important;
+      }
+    }
     /* Textes sur fond sombre — page notifications */
     .page-notifications .section-header h3,
     .page-notifications-mobile .section-header h3 {
@@ -71,6 +77,13 @@
       background: #1a3456;
     }
 
+    /* Si la modale iframe débat existe encore pendant la transition,
+       on masque son bouton de fermeture sur la page notifications */
+    body.page-notifications #debate-iframe-modal-close,
+    body.page-notifications-mobile #debate-iframe-modal-close {
+      display: none !important;
+    }
+
   </style>
 </head>
 <body class="page-notifications page-notifications-mobile">
@@ -95,14 +108,14 @@
   <button
     type="button"
     class="mobile-back-button"
-    onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='/' }"
+    onclick="return handleNotificationsBackNavigation(event, '/')"
     aria-label="Revenir à la page précédente"
   >
     <i class="fa-solid fa-arrow-left"></i>
   </button>
 
   <div class="debate-nav-row">
-    <a href="javascript:history.back()" class="back-link">← Retour</a>
+    <a href="/" class="back-link" onclick="return handleNotificationsBackNavigation(event, '/')">← Retour</a>
 </div>
 
         <div class="admin-controls-row" data-admin style="display:none;">
@@ -261,7 +274,23 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260407-1"></script>
+<script src="/script.js?v=20260422-2"></script>
+<script>
+(function() {
+  function notifyParentIframePageContext() {
+    if (window.self === window.top) return;
+    try {
+      window.parent.postMessage({ type: "agon:iframe-page-context", page: "notifications" }, "*");
+    } catch (error) {}
+  }
+
+  notifyParentIframePageContext();
+  window.addEventListener('load', notifyParentIframePageContext);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) notifyParentIframePageContext();
+  });
+})();
+</script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
