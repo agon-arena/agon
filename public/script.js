@@ -1630,12 +1630,7 @@ function ensureDebateIframeModal() {
       background: rgba(26,39,47,1);
       color: #e0e8ee;
     }
-    @media (max-width: 768px) {
-      #debate-iframe-modal-close {
-        bottom: 14px;
-        left: 12px;
-      }
-    }
+    /* Position mobile gérée par JS (sync avec #voices-float-badge) */
     @media (min-width: 769px) {
       #debate-iframe-modal-close {
         left: max(16px, calc((100vw - 1100px) / 2 + 16px));
@@ -1663,10 +1658,17 @@ function ensureDebateIframeModal() {
   `;
   document.body.appendChild(modal);
 
-  // Synchronisation mobile : aligner sur #voices-float-badge
+  // Synchronisation mobile : lire la position exacte du badge et l'appliquer à la flèche
   if (window.innerWidth <= 768) {
     const closeBtn = document.getElementById("debate-iframe-modal-close");
-    if (closeBtn) { closeBtn.style.bottom = "14px"; closeBtn.style.left = "12px"; }
+    if (closeBtn) {
+      const badge = document.getElementById("voices-float-badge");
+      const bottomVal = badge
+        ? window.getComputedStyle(badge).bottom
+        : "20px";
+      closeBtn.style.setProperty("bottom", bottomVal, "important");
+      closeBtn.style.setProperty("left", "8px", "important");
+    }
   }
 
   modal.addEventListener("click", (e) => {
