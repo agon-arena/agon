@@ -1652,19 +1652,24 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
-      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
   document.body.appendChild(modal);
 
-  // Synchronisation mobile : même position que #voices-float-badge
+  // Bouton close en dehors de la modal pour éviter le containing-block créé par backdrop-filter
+  const closeBtn = document.createElement("button");
+  closeBtn.id = "debate-iframe-modal-close";
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  closeBtn.style.display = "none";
+  document.body.appendChild(closeBtn);
+
+  // Position mobile : même bottom que #voices-float-badge
   if (window.innerWidth <= 768) {
-    const closeBtn = document.getElementById("debate-iframe-modal-close");
-    if (closeBtn) {
-      closeBtn.style.setProperty("bottom", "20px", "important");
-      closeBtn.style.setProperty("left", "8px", "important");
-    }
+    closeBtn.style.setProperty("bottom", "20px", "important");
+    closeBtn.style.setProperty("left", "8px", "important");
   }
 
   modal.addEventListener("click", (e) => {
@@ -1698,6 +1703,9 @@ function openDebateIframeModal(url) {
   frame.src = url;
   modal.classList.add("open");
 
+  const closeBtn = document.getElementById("debate-iframe-modal-close");
+  if (closeBtn) closeBtn.style.display = "flex";
+
   // Verrouillage scroll robuste (iOS Safari inclus)
   document.body.style.overflow = "hidden";
   document.body.style.position = "fixed";
@@ -1714,6 +1722,9 @@ function closeDebateIframeModal() {
 
   modal.classList.remove("open");
   window.__agonDebateModalOpen = false;
+
+  const closeBtn = document.getElementById("debate-iframe-modal-close");
+  if (closeBtn) closeBtn.style.display = "none";
 
   // Restaure le body et le scroll
   document.body.style.overflow = "";
