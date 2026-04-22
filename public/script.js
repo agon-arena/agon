@@ -2933,9 +2933,9 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
       >
         <div
           data-index-x-loading
-          style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
+          style="display:flex; align-items:center; justify-content:center; min-height:170px; padding:16px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post X…</div>
-        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none;"></div>
+        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:420px; margin:0 auto;"></div>
         <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
       </div>
     </div>
@@ -4191,7 +4191,7 @@ function getDefaultIndexEmbedReservedHeight(type = '') {
   }
 
   if (normalizedType === 'x') {
-    return isMobile ? 540 : 500;
+    return isMobile ? 350 : 380;
   }
 
   return isMobile ? 520 : 480;
@@ -4310,7 +4310,8 @@ async function renderIndexXShell(shell) {
       align: 'center',
       theme: 'light',
       dnt: true,
-      conversation: 'all'
+      conversation: 'none',
+      width: window.innerWidth <= 768 ? 320 : 400
     });
 
     if (!created) {
@@ -4321,6 +4322,8 @@ async function renderIndexXShell(shell) {
     embed.style.display = 'block';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
+    embed.style.maxWidth = window.innerWidth <= 768 ? '320px' : '400px';
+    embed.style.margin = '0 auto';
     if (loading) loading.style.display = 'none';
   } catch (error) {
     shell.dataset.rendered = 'failed';
@@ -6437,9 +6440,15 @@ function clearAdminToken() {
 
 function refreshAdminUI() {
   const adminMode = isAdmin();
+  const root = document.documentElement;
   const loginBtn = document.getElementById("admin-login-btn");
   const logoutBtn = document.getElementById("admin-logout-btn");
   const badge = document.getElementById("admin-badge");
+
+  if (root) {
+    root.classList.add("admin-ui-ready");
+    root.classList.toggle("admin-mode", adminMode);
+  }
 
   if (loginBtn) {
     loginBtn.style.display = adminMode ? "none" : "inline-block";
@@ -6782,6 +6791,21 @@ async function markOneNotificationAsRead(notificationId) {
     })
   });
 }
+function shouldOpenNotificationTargetInIframeModal(link) {
+  if (window.self !== window.top) return false;
+  if (typeof openDebateIframeModal !== "function") return false;
+
+  const currentPath = String(location.pathname || "").trim().toLowerCase();
+  if (!["/", "/notifications"].includes(currentPath)) return false;
+
+  try {
+    const parsedUrl = new URL(String(link || ""), window.location.origin);
+    return parsedUrl.pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   beginNotificationTransition(link);
@@ -6793,6 +6817,11 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   }
 
   fireAndForgetMarkOneNotificationAsRead(notificationId);
+
+  if (shouldOpenNotificationTargetInIframeModal(link)) {
+    openDebateIframeModal(link);
+    return;
+  }
 
   window.location.href = link;
 }

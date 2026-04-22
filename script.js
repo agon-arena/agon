@@ -77,17 +77,11 @@ let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
 
-const INDEX_RETURN_SCROLL_KEY = "agon_index_return_scroll_y";
-const INDEX_RETURN_PATH_KEY = "agon_index_return_path";
-const INDEX_RETURN_HASH_KEY = "agon_index_return_hash";
-const INDEX_RETURN_DEBATE_ID_KEY = "agon_index_return_debate_id";
-const INDEX_RETURN_CARD_INDEX_KEY = "agon_index_return_card_index";
 const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
-let indexReturnRestoreAttempted = false;
 
 let pageArrivalLoadingOverlayHideTimer = null;
 let pageArrivalLoadingOverlayFallbackTimer = null;
@@ -1890,7 +1884,7 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
   const normalizedPath = String(pathname || "").trim().toLowerCase();
-  return normalizedPath === "/notifications" || normalizedPath === "/create";
+  return normalizedPath === "/create";
 }
 
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
@@ -2218,6 +2212,82 @@ function openDebateIframeModal(url) {
   document.body.style.width = "100%";
 }
 
+function getIndexEmbedShellsAboveScrollY(targetScrollY = 0) {
+  const safeTargetY = Math.max(0, Number(targetScrollY) || 0);
+  const allShells = Array.from(document.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]'));
+
+  return allShells.filter((shell) => {
+    if (!shell || !shell.isConnected || !shell.offsetParent) return false;
+    const rect = shell.getBoundingClientRect();
+    const absoluteTop = Math.round(rect.top + (window.scrollY || 0));
+    return absoluteTop <= safeTargetY;
+  });
+}
+
+async function waitForIndexEmbedShellsReady(shells = [], timeoutMs = 9000) {
+  const shellList = Array.from(new Set((Array.isArray(shells) ? shells : []).filter(Boolean)));
+  if (!shellList.length) return;
+
+  const renderPromises = shellList.map((shell) => {
+    if (shell.hasAttribute('data-index-instagram-shell')) {
+      return typeof renderIndexInstagramShell === 'function' ? renderIndexInstagramShell(shell) : Promise.resolve();
+    }
+    return typeof renderIndexXShell === 'function' ? renderIndexXShell(shell) : Promise.resolve();
+  });
+
+  await Promise.race([
+    Promise.all(renderPromises),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
+
+  const deadline = Date.now() + timeoutMs;
+  const previousHeights = new Map();
+  const stablePasses = new Map();
+
+  while (Date.now() < deadline) {
+    let allStable = true;
+
+    for (const shell of shellList) {
+      if (!shell || !shell.isConnected) continue;
+
+      if (shell.dataset.rendering === 'true') {
+        allStable = false;
+        continue;
+      }
+
+      const currentHeight = Math.round(shell.getBoundingClientRect().height || shell.offsetHeight || 0);
+      const previousHeight = previousHeights.get(shell);
+
+      if (previousHeight === currentHeight) {
+        stablePasses.set(shell, (stablePasses.get(shell) || 0) + 1);
+      } else {
+        previousHeights.set(shell, currentHeight);
+        stablePasses.set(shell, 0);
+        allStable = false;
+      }
+
+      if ((stablePasses.get(shell) || 0) < 2) {
+        allStable = false;
+      }
+    }
+
+    if (allStable) break;
+
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 90)));
+  }
+
+  const hasInstagram = shellList.some((shell) => shell.hasAttribute('data-index-instagram-shell') && shell.dataset.rendered === 'true');
+  const hasX = shellList.some((shell) => shell.hasAttribute('data-index-x-shell') && shell.dataset.rendered === 'true');
+  const extraWait = hasInstagram ? 1400 : hasX ? 600 : 180;
+
+  await new Promise((resolve) => setTimeout(resolve, extraWait));
+}
+
+async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
+  const shellsBefore = getIndexEmbedShellsAboveScrollY(targetScrollY);
+  await waitForIndexEmbedShellsReady(shellsBefore, timeoutMs);
+}
+
 function closeDebateIframeModal() {
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
@@ -2228,6 +2298,10 @@ function closeDebateIframeModal() {
   setDebateIframeModalLoadingState(false);
   window.__agonDebateModalOpen = false;
 
+  const restoredScrollY = _debateModalSavedScrollY !== null
+    ? Math.max(0, Math.round(_debateModalSavedScrollY))
+    : null;
+
   // Restaure le body et le scroll
   document.body.style.overflow = "";
   document.body.style.position = "";
@@ -2236,28 +2310,73 @@ function closeDebateIframeModal() {
   document.body.style.right = "";
   document.body.style.width = "";
 
-  if (_debateModalSavedScrollY !== null) {
+  if (restoredScrollY !== null) {
     document.documentElement.style.scrollBehavior = "auto";
-    window.scrollTo(0, _debateModalSavedScrollY);
+    window.scrollTo(0, restoredScrollY);
     document.documentElement.style.scrollBehavior = "";
     _debateModalSavedScrollY = null;
   }
 
-  // Applique le re-rendu différé (depuis le refresh silencieux) sans toucher au scroll
+  // Applique le re-rendu différé seulement après stabilisation des embeds
+  // X / Instagram au-dessus de la zone à restaurer.
   if (window.__agonDebateModalPendingDebates !== null) {
     const pending = window.__agonDebateModalPendingDebates;
     window.__agonDebateModalPendingDebates = null;
-    requestAnimationFrame(() => {
+    requestAnimationFrame(async () => {
       renderDebatesList(pending);
-      if (_debateModalSavedScrollY !== null) {
+
+      if (restoredScrollY !== null) {
+        await waitForEmbedsAboveScrollY(restoredScrollY);
         document.documentElement.style.scrollBehavior = "auto";
-        window.scrollTo(0, _debateModalSavedScrollY);
+        window.scrollTo(0, restoredScrollY);
         document.documentElement.style.scrollBehavior = "";
       }
     });
   }
 
   setTimeout(() => { if (frame) frame.src = ""; }, 300);
+}
+
+function isTopLevelDebatePage() {
+  return location.pathname === "/debate" && window.self === window.top;
+}
+
+function openNotificationsInDebateIframeModal(event = null) {
+  if (event?.preventDefault) {
+    event.preventDefault();
+  }
+
+  if (event?.stopPropagation) {
+    event.stopPropagation();
+  }
+
+  if (!isTopLevelDebatePage()) return false;
+
+  if (typeof closeHomeTopbarMenu === "function") {
+    closeHomeTopbarMenu();
+  }
+
+  openDebateIframeModal("/notifications");
+  return false;
+}
+
+function bindDebateNotificationIframeTrigger(selector) {
+  const element = document.querySelector(selector);
+  if (!element || element.dataset.debateNotificationIframeBound === "true") return;
+
+  element.dataset.debateNotificationIframeBound = "true";
+  element.addEventListener("click", (event) => {
+    if (!isTopLevelDebatePage()) return;
+    openNotificationsInDebateIframeModal(event);
+  });
+}
+
+function initDebateNotificationIframeTriggers() {
+  if (!isTopLevelDebatePage()) return;
+
+  bindDebateNotificationIframeTrigger("#notifications-bell");
+  bindDebateNotificationIframeTrigger("#notifications-bell-bottom");
+  bindDebateNotificationIframeTrigger("#home-topbar-notifications-link");
 }
 
 function openIndexDebateFromMedia(debateId, event) {
@@ -2272,484 +2391,7 @@ function openIndexDebateFromMedia(debateId, event) {
   openDebateIframeModal(`/debate?id=${encodeURIComponent(safeDebateId)}`);
 }
 
-function saveIndexReturnState(scrollY = null, debateId = null, cardIndex = null) {
-  if (location.pathname !== "/") return;
-
-  try {
-    const y = scrollY !== null ? scrollY : Math.max(0, Math.round(window.scrollY || 0));
-    sessionStorage.setItem(INDEX_RETURN_SCROLL_KEY, String(y));
-    sessionStorage.setItem(INDEX_RETURN_PATH_KEY, location.pathname + location.search);
-    sessionStorage.setItem(INDEX_RETURN_HASH_KEY, location.hash || "");
-
-    if (debateId) {
-      sessionStorage.setItem(INDEX_RETURN_DEBATE_ID_KEY, String(debateId));
-    } else {
-      sessionStorage.removeItem(INDEX_RETURN_DEBATE_ID_KEY);
-    }
-
-    if (cardIndex !== null && Number.isFinite(Number(cardIndex)) && Number(cardIndex) >= 0) {
-      sessionStorage.setItem(INDEX_RETURN_CARD_INDEX_KEY, String(Number(cardIndex)));
-    } else {
-      sessionStorage.removeItem(INDEX_RETURN_CARD_INDEX_KEY);
-    }
-  } catch (error) {
-    console.warn("[index-return] impossible d'enregistrer la position de retour.", error);
-  }
-}
-
-function clearIndexReturnState() {
-  try {
-    sessionStorage.removeItem(INDEX_RETURN_SCROLL_KEY);
-    sessionStorage.removeItem(INDEX_RETURN_PATH_KEY);
-    sessionStorage.removeItem(INDEX_RETURN_HASH_KEY);
-    sessionStorage.removeItem(INDEX_RETURN_DEBATE_ID_KEY);
-    sessionStorage.removeItem(INDEX_RETURN_CARD_INDEX_KEY);
-  } catch (error) {
-    console.warn("[index-return] impossible d'effacer la position de retour.", error);
-  }
-}
-
-function getSavedIndexReturnScrollY() {
-  try {
-    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
-    if (savedPath && savedPath !== location.pathname + location.search) {
-      return null;
-    }
-
-    const rawValue = sessionStorage.getItem(INDEX_RETURN_SCROLL_KEY);
-    if (rawValue === null || rawValue === "") return null;
-
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed < 0) return null;
-
-    return parsed;
-  } catch (error) {
-    console.warn("[index-return] impossible de lire la position de retour.", error);
-    return null;
-  }
-}
-
-function getSavedIndexReturnDebateId() {
-  try {
-    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
-    if (savedPath && savedPath !== location.pathname + location.search) {
-      return null;
-    }
-
-    const rawValue = sessionStorage.getItem(INDEX_RETURN_DEBATE_ID_KEY);
-    if (!rawValue) return null;
-
-    return String(rawValue);
-  } catch (error) {
-    console.warn("[index-return] impossible de lire l'id de retour.", error);
-    return null;
-  }
-}
-
-function getSavedIndexReturnCardIndex() {
-  try {
-    const savedPath = sessionStorage.getItem(INDEX_RETURN_PATH_KEY);
-    if (savedPath && savedPath !== location.pathname + location.search) {
-      return null;
-    }
-
-    const rawValue = sessionStorage.getItem(INDEX_RETURN_CARD_INDEX_KEY);
-    if (rawValue === null || rawValue === "") return null;
-
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed < 0) return null;
-
-    return Math.floor(parsed);
-  } catch (error) {
-    console.warn("[index-return] impossible de lire l'index de carte.", error);
-    return null;
-  }
-}
-
-function expandIndexVisibilityForReturnTarget() {
-  if (location.pathname !== "/") return;
-
-  const savedDebateId = getSavedIndexReturnDebateId();
-  if (!savedDebateId) return;
-
-  const safeDebateId = String(savedDebateId).trim();
-  if (!safeDebateId) return;
-
-  const savedCardIndex = getSavedIndexReturnCardIndex();
-
-  if (Array.isArray(visitedDebatesCache) && visitedDebatesCache.length) {
-    const visitedIndex = visitedDebatesCache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
-    if (visitedIndex >= 0) {
-      visitedDebatesVisible = Math.max(visitedDebatesVisible, visitedIndex + 1);
-    }
-  }
-
-  if (Array.isArray(otherDebatesCache) && otherDebatesCache.length) {
-    const otherIndex = otherDebatesCache.findIndex((debate) => String(debate?.id || "") === safeDebateId);
-    const resolvedIndex = otherIndex >= 0 ? otherIndex : (Number.isFinite(savedCardIndex) ? savedCardIndex : -1);
-
-    if (resolvedIndex >= 0) {
-      const requiredVisible = Math.min(otherDebatesCache.length, resolvedIndex + 1);
-      otherDebatesVisible = Math.max(otherDebatesVisible, requiredVisible);
-    }
-  }
-}
-
-function getIndexReturnTargetCard(savedDebateId = null) {
-  const safeDebateId = String(savedDebateId || getSavedIndexReturnDebateId() || "").trim();
-  if (!safeDebateId) return null;
-  return document.querySelector(`article[data-debate-id="${safeDebateId}"]`);
-}
-
-function scrollToIndexReturnCard(card) {
-  if (!card) return false;
-
-  const topbar = document.querySelector(".topbar");
-  const topbarBottom = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
-  const y = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarBottom));
-
-  document.documentElement.style.scrollBehavior = "auto";
-  document.body.style.scrollBehavior = "auto";
-  window.scrollTo(0, y);
-  document.documentElement.style.scrollBehavior = "";
-  document.body.style.scrollBehavior = "";
-
-  return Math.abs(window.scrollY - y) <= 4;
-}
-
-async function ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex = null) {
-  const safeDebateId = String(savedDebateId || "").trim();
-  if (!safeDebateId) return null;
-
-  let card = getIndexReturnTargetCard(safeDebateId);
-  if (card) return card;
-
-  const waitFrame = (delay = 90) => new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, delay);
-    });
-  });
-
-  const getVisitedCache = () => (
-    Array.isArray(visitedDebatesCache) && visitedDebatesCache.length
-      ? visitedDebatesCache
-      : null
-  );
-
-  const getOtherCache = () => (
-    Array.isArray(otherDebatesCache) && otherDebatesCache.length
-      ? otherDebatesCache
-      : null
-  );
-
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    card = getIndexReturnTargetCard(safeDebateId);
-    if (card) return card;
-
-    const visitedCache = getVisitedCache();
-    const otherCache = getOtherCache();
-
-    const visitedIndex = visitedCache
-      ? visitedCache.findIndex((debate) => String(debate?.id || "") === safeDebateId)
-      : -1;
-
-    const otherIndex = otherCache
-      ? otherCache.findIndex((debate) => String(debate?.id || "") === safeDebateId)
-      : -1;
-
-    if (visitedCache && visitedIndex >= 0) {
-      const requiredVisible = Math.min(visitedCache.length, visitedIndex + 1);
-
-      if (visitedDebatesVisible < requiredVisible) {
-        visitedDebatesVisible = requiredVisible;
-        renderVisitedDebatesList(visitedCache);
-      } else if (visitedDebatesVisible < visitedCache.length && attempt >= 8) {
-        visitedDebatesVisible = visitedCache.length;
-        renderVisitedDebatesList(visitedCache);
-      }
-    } else if (otherCache) {
-      const targetIndex = otherIndex >= 0
-        ? otherIndex
-        : (Number.isFinite(savedCardIndex) ? savedCardIndex : -1);
-
-      if (targetIndex >= 0) {
-        const requiredVisible = Math.min(otherCache.length, targetIndex + 1);
-
-        if (otherDebatesVisible < requiredVisible) {
-          otherDebatesVisible = Math.min(
-            otherCache.length,
-            Math.max(requiredVisible, otherDebatesVisible + INDEX_OTHER_DEBATES_BATCH_SIZE)
-          );
-          renderDebatesList(otherCache);
-        } else if (otherDebatesVisible < otherCache.length && attempt >= 8) {
-          otherDebatesVisible = otherCache.length;
-          renderDebatesList(otherCache);
-        }
-      } else if (otherDebatesVisible < otherCache.length && attempt >= 8) {
-        otherDebatesVisible = otherCache.length;
-        renderDebatesList(otherCache);
-      }
-    }
-
-    await waitFrame(attempt < 8 ? 90 : 140);
-  }
-
-  return getIndexReturnTargetCard(safeDebateId);
-}
-
-async function waitForEmbedsAboveCard(card, timeoutMs = 9000) {
-  if (!card) return;
-
-  // Trouve tous les shells X et Instagram qui précèdent la carte cible dans le DOM
-  const allXShells = Array.from(document.querySelectorAll('[data-index-x-shell]'));
-  const allIgShells = Array.from(document.querySelectorAll('[data-index-instagram-shell]'));
-
-  const isAboveCard = (shell) =>
-    !!(shell.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
-
-  const xShellsBefore = allXShells.filter(isAboveCard);
-  const igShellsBefore = allIgShells.filter(isAboveCard);
-  const shellsBefore = [...xShellsBefore, ...igShellsBefore];
-
-  if (!shellsBefore.length) return;
-
-  // Force le rendu de tous les shells au-dessus (bypasse l'IntersectionObserver)
-  const renderPromises = shellsBefore.map((shell) => {
-    if (shell.hasAttribute('data-index-x-shell')) {
-      return typeof renderIndexXShell === 'function' ? renderIndexXShell(shell) : Promise.resolve();
-    } else {
-      return typeof renderIndexInstagramShell === 'function' ? renderIndexInstagramShell(shell) : Promise.resolve();
-    }
-  });
-
-  // Attend la fin de tous les rendus, avec timeout de sécurité
-  await Promise.race([
-    Promise.all(renderPromises),
-    new Promise((resolve) => setTimeout(resolve, timeoutMs))
-  ]);
-
-  // Attend que plus aucun shell ne soit en cours de rendu
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const stillRendering = shellsBefore.some((s) => s.dataset.rendering === 'true');
-    if (!stillRendering) break;
-    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 80)));
-  }
-
-  // Laisse le temps aux iframes Instagram/X de s'expanser (resize interne)
-  const hasIg = igShellsBefore.some((s) => s.dataset.rendered === 'true');
-  const hasX  = xShellsBefore.some((s) => s.dataset.rendered === 'true');
-  const extraWait = hasIg ? 1800 : hasX ? 800 : 200;
-  await new Promise((resolve) => setTimeout(resolve, extraWait));
-}
-
-async function restoreIndexReturnCardIfNeeded(options = {}) {
-  if (location.pathname !== "/" || indexReturnRestoreAttempted) return false;
-
-  const savedDebateId = getSavedIndexReturnDebateId();
-  if (!savedDebateId) return false;
-
-  indexReturnRestoreAttempted = true;
-
-  const releaseOverlay = () => {
-    const overlay = document.getElementById("page-arrival-loading-overlay");
-    if (overlay) overlay.classList.remove("page-arrival-loading-overlay-opaque");
-    pageArrivalLoadingOverlayReady = true;
-    hidePageArrivalLoadingOverlay();
-  };
-
-  try {
-    const overlay = document.getElementById("page-arrival-loading-overlay");
-    if (overlay) overlay.classList.add("page-arrival-loading-overlay-opaque");
-
-    const savedCardIndex = getSavedIndexReturnCardIndex();
-    let card = await ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex);
-
-    if (!card) {
-      const cache = Array.isArray(otherDebatesCache) && otherDebatesCache.length ? otherDebatesCache : null;
-      if (cache && otherDebatesVisible < cache.length) {
-        otherDebatesVisible = cache.length;
-        renderDebatesList(cache);
-        await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 140)));
-        card = await ensureIndexReturnTargetCardRendered(savedDebateId, savedCardIndex);
-      }
-    }
-
-    if (card) {
-      // Attend que tous les embeds X/Instagram au-dessus de la carte soient chargés
-      // avant de scroller, pour éviter le décalage de position
-      await waitForEmbedsAboveCard(card);
-
-      card = getIndexReturnTargetCard(savedDebateId) || card;
-
-      let consecutiveStableHits = 0;
-      let previousTop = null;
-
-      for (let attempt = 0; attempt < 18; attempt += 1) {
-        card = getIndexReturnTargetCard(savedDebateId) || card;
-        if (!card) break;
-
-        scrollToIndexReturnCard(card);
-
-        const currentTop = Math.round(card.getBoundingClientRect().top);
-        if (previousTop !== null && Math.abs(currentTop - previousTop) <= 2) {
-          consecutiveStableHits += 1;
-        } else {
-          consecutiveStableHits = 0;
-        }
-        previousTop = currentTop;
-
-        if (consecutiveStableHits >= 2) {
-          clearIndexReturnState();
-          releaseOverlay();
-          return true;
-        }
-
-        await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 120)));
-      }
-
-      scrollToIndexReturnCard(card);
-      clearIndexReturnState();
-      releaseOverlay();
-      return true;
-    }
-
-    if (options.allowScrollFallback) {
-      const savedScrollY = getSavedIndexReturnScrollY();
-      if (savedScrollY !== null) {
-        window.scrollTo(0, savedScrollY);
-        clearIndexReturnState();
-        releaseOverlay();
-        return true;
-      }
-    }
-
-    releaseOverlay();
-    return false;
-  } catch (error) {
-    console.warn("[index-return] restauration par carte impossible.", error);
-    releaseOverlay();
-    return false;
-  } finally {
-    indexReturnRestoreAttempted = false;
-  }
-}
-
-function restoreIndexReturnStateIfNeeded() {
-  const savedDebateId = getSavedIndexReturnDebateId();
-  if (savedDebateId) {
-    restoreIndexReturnCardIfNeeded({ allowScrollFallback: true });
-    return;
-  }
-
-  if (location.pathname !== "/" || indexReturnRestoreAttempted) return;
-
-  const savedScrollY = getSavedIndexReturnScrollY();
-  if (savedScrollY === null) return;
-
-  indexReturnRestoreAttempted = true;
-
-  let attempts = 0;
-  let stableHeightCount = 0;
-  let lastScrollHeight = 0;
-  const maxAttempts = 30;
-
-  const restoreScroll = () => {
-    window.scrollTo(0, savedScrollY);
-  };
-
-  const tick = () => {
-    attempts += 1;
-
-    const currentScrollHeight = Math.max(
-      document.body ? document.body.scrollHeight : 0,
-      document.documentElement ? document.documentElement.scrollHeight : 0
-    );
-
-    restoreScroll();
-
-    if (currentScrollHeight === lastScrollHeight) {
-      stableHeightCount += 1;
-    } else {
-      stableHeightCount = 0;
-      lastScrollHeight = currentScrollHeight;
-    }
-
-    const reachedTarget = Math.abs(window.scrollY - savedScrollY) <= 4;
-    const pageStable = stableHeightCount >= 3;
-
-    if ((reachedTarget && pageStable) || attempts >= maxAttempts) {
-      restoreScroll();
-      setTimeout(() => {
-        restoreScroll();
-        clearIndexReturnState();
-        indexReturnRestoreAttempted = false;
-      }, 120);
-      return;
-    }
-
-    setTimeout(() => {
-      requestAnimationFrame(tick);
-    }, 120);
-  };
-
-  requestAnimationFrame(() => {
-    setTimeout(tick, 80);
-  });
-}
-
 function initIndexReturnNavigation() {
-  if (location.pathname === "/") {
-    if (window.__agonIndexReturnNavigationInitialized) return;
-    window.__agonIndexReturnNavigationInitialized = true;
-
-    // Bfcache restore : page déjà prête, overlay et scroll immédiats
-    window.addEventListener("pageshow", (event) => {
-      if (!event.persisted) return;
-
-      // Réinitialiser pour permettre la restauration
-      indexReturnRestoreAttempted = false;
-
-      const savedDebateId = getSavedIndexReturnDebateId();
-      const savedScrollY = getSavedIndexReturnScrollY();
-
-      if (savedDebateId || savedScrollY !== null) {
-        restoreIndexReturnCardIfNeeded({ allowScrollFallback: true }).then((restored) => {
-          if (!restored && savedScrollY !== null) {
-            document.documentElement.style.scrollBehavior = "auto";
-            window.scrollTo(0, savedScrollY);
-            document.documentElement.style.scrollBehavior = "";
-            clearIndexReturnState();
-          }
-        });
-      } else {
-        pageArrivalLoadingOverlayReady = true;
-        hidePageArrivalLoadingOverlay();
-      }
-    });
-
-    document.addEventListener("click", (event) => {
-      const link = event.target.closest('a[href^="/debate?id="]');
-      if (!link) return;
-      if (!document.body.classList.contains("page-home") && !document.body.classList.contains("page-home-mobile")) return;
-
-      const card = link.closest(".debate-card") || link.closest("article");
-      if (card) {
-        const topbar = document.querySelector(".topbar");
-        const topbarBottom = topbar ? Math.max(0, Math.round(topbar.getBoundingClientRect().bottom)) : 0;
-        const cardTop = Math.max(0, Math.round(card.getBoundingClientRect().top + window.scrollY - topbarBottom));
-        const debateId = card.dataset.debateId || null;
-        const allCards = Array.from(document.querySelectorAll("article[data-debate-id]"));
-        const cardIndex = debateId ? allCards.findIndex((element) => String(element.dataset.debateId || "") === String(debateId)) : -1;
-        saveIndexReturnState(cardTop, debateId, cardIndex >= 0 ? cardIndex : null);
-      } else {
-        saveIndexReturnState();
-      }
-    });
-
-    return;
-  }
-
   if (location.pathname !== "/debate") return;
   if (window.__agonDebateBackNavigationInitialized) return;
   window.__agonDebateBackNavigationInitialized = true;
@@ -2815,10 +2457,9 @@ function initIndexReturnNavigation() {
       return;
     }
 
-    const hasSavedIndexState = getSavedIndexReturnScrollY() !== null;
     setPendingBackButtonsState();
 
-    if (hasSavedIndexState && window.history.length > 1) {
+    if (window.history.length > 1) {
       window.history.back();
       return;
     }
@@ -3292,9 +2933,9 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
       >
         <div
           data-index-x-loading
-          style="display:flex; align-items:center; justify-content:center; min-height:220px; padding:18px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
+          style="display:flex; align-items:center; justify-content:center; min-height:170px; padding:16px; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:#374151; font-size:14px; font-weight:700; text-align:center;"
         >Chargement du post X…</div>
-        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none;"></div>
+        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:420px; margin:0 auto;"></div>
         <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
       </div>
     </div>
@@ -4550,7 +4191,7 @@ function getDefaultIndexEmbedReservedHeight(type = '') {
   }
 
   if (normalizedType === 'x') {
-    return isMobile ? 540 : 500;
+    return isMobile ? 350 : 380;
   }
 
   return isMobile ? 520 : 480;
@@ -4669,7 +4310,8 @@ async function renderIndexXShell(shell) {
       align: 'center',
       theme: 'light',
       dnt: true,
-      conversation: 'all'
+      conversation: 'none',
+      width: window.innerWidth <= 768 ? 320 : 400
     });
 
     if (!created) {
@@ -4680,6 +4322,8 @@ async function renderIndexXShell(shell) {
     embed.style.display = 'block';
     embed.style.visibility = 'visible';
     embed.style.minHeight = '';
+    embed.style.maxWidth = window.innerWidth <= 768 ? '320px' : '400px';
+    embed.style.margin = '0 auto';
     if (loading) loading.style.display = 'none';
   } catch (error) {
     shell.dataset.rendered = 'failed';
@@ -5192,10 +4836,34 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
     event.preventDefault();
   }
 
+  const cameFromDebateIframe = window.self !== window.top;
+  const cameFromDebateReferrer = (() => {
+    try {
+      const referrer = String(document.referrer || "").trim();
+      if (!referrer) return false;
+      const referrerUrl = new URL(referrer, window.location.origin);
+      return referrerUrl.origin === window.location.origin && referrerUrl.pathname === "/debate";
+    } catch (error) {
+      return false;
+    }
+  })();
+
+  if (cameFromDebateIframe) {
+    try {
+      window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+    } catch (error) {}
+    return false;
+  }
+
   beginNotificationTransition("__history_back__");
   notifyParentAboutNotificationBackTransition({ source: "notifications-back" });
 
   window.setTimeout(() => {
+    if (cameFromDebateReferrer && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
     if (window.history.length > 1) {
       window.history.back();
       return;
@@ -6772,9 +6440,15 @@ function clearAdminToken() {
 
 function refreshAdminUI() {
   const adminMode = isAdmin();
+  const root = document.documentElement;
   const loginBtn = document.getElementById("admin-login-btn");
   const logoutBtn = document.getElementById("admin-logout-btn");
   const badge = document.getElementById("admin-badge");
+
+  if (root) {
+    root.classList.add("admin-ui-ready");
+    root.classList.toggle("admin-mode", adminMode);
+  }
 
   if (loginBtn) {
     loginBtn.style.display = adminMode ? "none" : "inline-block";
@@ -7117,6 +6791,21 @@ async function markOneNotificationAsRead(notificationId) {
     })
   });
 }
+function shouldOpenNotificationTargetInIframeModal(link) {
+  if (window.self !== window.top) return false;
+  if (typeof openDebateIframeModal !== "function") return false;
+
+  const currentPath = String(location.pathname || "").trim().toLowerCase();
+  if (!["/", "/notifications"].includes(currentPath)) return false;
+
+  try {
+    const parsedUrl = new URL(String(link || ""), window.location.origin);
+    return parsedUrl.pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
   beginNotificationTransition(link);
@@ -7128,6 +6817,11 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   }
 
   fireAndForgetMarkOneNotificationAsRead(notificationId);
+
+  if (shouldOpenNotificationTargetInIframeModal(link)) {
+    openDebateIframeModal(link);
+    return;
+  }
 
   window.location.href = link;
 }
@@ -9043,7 +8737,6 @@ function updateIndexLists(debates) {
   if (currentTypeFilter === "visited") {
     visitedDebatesCache = visitedDebates;
     otherDebatesCache = [];
-    expandIndexVisibilityForReturnTarget();
 
     if (otherHeaderTitle) {
       otherHeaderTitle.textContent = "Arènes ouvertes";
@@ -9056,7 +8749,6 @@ function updateIndexLists(debates) {
 
   visitedDebatesCache = [];
   otherDebatesCache = allDebates;
-  expandIndexVisibilityForReturnTarget();
 
   if (otherHeaderTitle) {
     otherHeaderTitle.textContent = "Arènes ouvertes";
@@ -9152,36 +8844,15 @@ async function initIndex() {
       if (searchInput) searchInput.addEventListener("input", filterDebates);
       setTypeFilter("all");
 
-      const savedDebateId = getSavedIndexReturnDebateId();
-
-      if (savedDebateId && !indexReturnRestoreAttempted) {
-        restoreIndexReturnCardIfNeeded({ allowScrollFallback: true });
-      } else {
-        pageArrivalLoadingOverlayReady = true;
-        hidePageArrivalLoadingOverlay();
-      }
+      pageArrivalLoadingOverlayReady = true;
+      hidePageArrivalLoadingOverlay();
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(API + "/debates").then((fresh) => {
-        const savedDebateId = getSavedIndexReturnDebateId();
-        const savedScrollY = getSavedIndexReturnScrollY();
-
         saveDebatesToSessionCache(fresh);
         debatesCache = fresh;
         refreshCategoryFilterOptions(debatesCache);
         applyIndexFilters();
-
-        if (savedDebateId) {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              restoreIndexReturnCardIfNeeded({ allowScrollFallback: true }).then((restored) => {
-                if (!restored && savedScrollY !== null) {
-                  window.scrollTo(0, savedScrollY);
-                }
-              });
-            });
-          });
-        }
       }).catch(() => {});
 
     } else {
@@ -9202,7 +8873,6 @@ async function initIndex() {
       const searchInput = document.getElementById("debate-search");
       if (searchInput) searchInput.addEventListener("input", filterDebates);
       setTypeFilter("all");
-      restoreIndexReturnStateIfNeeded();
     }
 
   } catch (error) {
@@ -10068,7 +9738,35 @@ function setCreateReturnContext(url) {
 function isValidCreateReturnUrl(url) {
   try {
     const parsed = new URL(String(url || ""), window.location.origin);
-    return parsed.origin === window.location.origin && parsed.pathname === "/debate";
+    if (parsed.origin !== window.location.origin) return false;
+    return parsed.pathname === "/" || parsed.pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
+function getCreateReturnTargetType(url) {
+  try {
+    const parsed = new URL(String(url || ""), window.location.origin);
+    if (parsed.origin !== window.location.origin) return "";
+    if (parsed.pathname === "/debate") return "debate";
+    if (parsed.pathname === "/") return "index";
+    return "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function canUseHistoryBackForCreateReturn(targetUrl) {
+  if (window.history.length <= 1) return false;
+
+  try {
+    if (!document.referrer) return false;
+
+    const target = new URL(String(targetUrl || ""), window.location.origin);
+    const referrer = new URL(document.referrer, window.location.origin);
+
+    return target.origin === referrer.origin && target.pathname === referrer.pathname && target.search === referrer.search && target.hash === referrer.hash;
   } catch (error) {
     return false;
   }
@@ -10085,7 +9783,7 @@ function resolveCreateReturnUrl() {
 
   try {
     const referrer = document.referrer ? new URL(document.referrer) : null;
-    if (referrer && referrer.origin === window.location.origin && referrer.pathname === "/debate") {
+    if (referrer && referrer.origin === window.location.origin && (referrer.pathname === "/debate" || referrer.pathname === "/")) {
       const referrerUrl = referrer.toString();
       setCreateReturnContext(referrerUrl);
       return referrerUrl;
@@ -10127,9 +9825,20 @@ function initDebateCreateEntryPoints() {
     link.href = targetUrl;
     link.dataset.createReturnBound = "true";
 
-    link.addEventListener('click', () => {
+    link.addEventListener('click', (event) => {
       const nextUrl = buildCreateUrlWithReturnContext();
       link.href = nextUrl;
+
+      if (!isTopLevelDebatePage()) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (typeof closeHomeTopbarMenu === "function") {
+        closeHomeTopbarMenu();
+      }
+
+      openDebateIframeModal(nextUrl);
     });
   });
 }
@@ -10138,50 +9847,68 @@ function applyCreateBackLinks() {
   if (location.pathname !== "/create") return;
 
   const returnUrl = resolveCreateReturnUrl();
+  const returnTargetType = getCreateReturnTargetType(returnUrl);
   const textBackLink = document.querySelector('.create-back-link');
   const arrowBackLink = document.querySelector('.mobile-topbar-actions .topbar-back-arrow');
   const backLinks = [textBackLink, arrowBackLink].filter(Boolean);
+  const isOpenedInsideDebateIframe = window.self !== window.top;
+  const fallbackUrl = returnUrl || '/';
+  const isReturnToDebate = returnTargetType === 'debate';
+  const textLabel = isReturnToDebate ? '← Retour au débat' : '← Retour aux arènes';
+  const arrowLabel = isReturnToDebate ? 'Retour au débat' : 'Retour aux arènes';
 
   if (!backLinks.length) return;
 
-  if (!returnUrl) {
-    backLinks.forEach((link) => {
-      link.setAttribute('href', '/');
-      if (link.classList.contains('create-back-link')) {
-        link.textContent = '← Retour aux arènes';
-      }
-      if (link.classList.contains('topbar-back-arrow')) {
-        link.setAttribute('title', 'Retour aux arènes');
-        link.setAttribute('aria-label', 'Retour aux arènes');
-      }
-    });
-    return;
-  }
-
   backLinks.forEach((link) => {
-    link.setAttribute('href', returnUrl);
-    link.dataset.returnToDebate = 'true';
+    link.setAttribute('href', fallbackUrl);
+
+    if (isReturnToDebate) {
+      link.dataset.returnToDebate = 'true';
+    } else {
+      delete link.dataset.returnToDebate;
+    }
+
+    if (link.classList.contains('create-back-link')) {
+      link.textContent = textLabel;
+    }
+
+    if (link.classList.contains('topbar-back-arrow')) {
+      link.setAttribute('title', arrowLabel);
+      link.setAttribute('aria-label', arrowLabel);
+    }
+
+    if (link.dataset.createReturnBound === 'true') return;
+    link.dataset.createReturnBound = 'true';
 
     link.addEventListener('click', (event) => {
       event.preventDefault();
-      markCreateToDebateLoadingTransition();
 
-      try {
-        notifyParentAboutIframePageContext('/debate');
-      } catch (error) {}
+      if (typeof closeHomeTopbarMenu === 'function') {
+        closeHomeTopbarMenu();
+      }
 
-      window.location.href = returnUrl;
+      if (isOpenedInsideDebateIframe) {
+        if (isReturnToDebate) {
+          try {
+            window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*');
+            return;
+          } catch (error) {}
+        }
+
+        try {
+          window.top.location.href = fallbackUrl;
+          return;
+        } catch (error) {}
+      }
+
+      if (canUseHistoryBackForCreateReturn(fallbackUrl)) {
+        window.history.back();
+        return;
+      }
+
+      window.location.href = fallbackUrl;
     });
   });
-
-  if (textBackLink) {
-    textBackLink.textContent = '← Retour au débat';
-  }
-
-  if (arrowBackLink) {
-    arrowBackLink.setAttribute('title', 'Retour au débat');
-    arrowBackLink.setAttribute('aria-label', 'Retour au débat');
-  }
 }
 
 function initDebateImageLightbox() {
@@ -12204,10 +11931,6 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
       tabindex="0"
       aria-label="Ouvrir le post Instagram"
     >
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
-        <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
-        <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
-      </div>
       <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
     </div>
   `;
@@ -12255,9 +11978,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
         data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
         data-instgrm-version="14"
         style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:100%; padding:0; width:100%;"
-      >
-        <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
-      </blockquote>
+      ></blockquote>
     `;
 
     applyDebateInstagramDesktopSizing();
@@ -17008,8 +16729,10 @@ window.closeHomeTopbarMenu = closeHomeTopbarMenu;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
+  document.addEventListener("DOMContentLoaded", initDebateNotificationIframeTriggers);
 } else {
   initHomeTopbarMenu();
+  initDebateNotificationIframeTriggers();
 }
 
 // ===== BOTTOM NAV — GRISAGE AU CLIC =====
