@@ -23,6 +23,8 @@ let currentAllArguments = [];
 let currentCommentsByArgument = {};
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
+let similarDebatesLoading = false;
+let similarDebatesLoadingTimer = null;
 let currentDebateCache = null;
 let similarDebatesCache = null;
 let currentTypeFilter = "all";
@@ -11433,9 +11435,131 @@ function renderSimilarArgumentsForForm(formKey) {
 }
 
 
+function ensureSimilarDebatesLoadingStyles() {
+  if (document.getElementById("similar-debates-loading-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "similar-debates-loading-style";
+  style.textContent = `
+    .similar-debates-loading-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: min(420px, 100%);
+      margin: 0 auto 16px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e8e8e8;
+      box-sizing: border-box;
+    }
+
+    .similar-debates-loading-spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.24);
+      border-top-color: rgba(255, 255, 255, 0.88);
+      animation: similarDebatesSpinner 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .similar-debates-loading-text {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .similar-debates-skeleton-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .similar-debates-skeleton-card {
+      border-radius: 18px;
+      padding: 18px 16px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+
+    .similar-debates-skeleton-line {
+      height: 11px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+      background-size: 200% 100%;
+      animation: similarDebatesSkeletonPulse 1.1s ease-in-out infinite;
+    }
+
+    .similar-debates-skeleton-line + .similar-debates-skeleton-line {
+      margin-top: 10px;
+    }
+
+    @keyframes similarDebatesSpinner {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes similarDebatesSkeletonPulse {
+      0% { background-position: 200% 0; opacity: 0.88; }
+      50% { opacity: 1; }
+      100% { background-position: -200% 0; opacity: 0.88; }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function renderSimilarDebatesLoadingState(container) {
+  if (!container) return;
+
+  ensureSimilarDebatesLoadingStyles();
+
+  container.innerHTML = `
+    <div class="similar-debates-toggle-wrap">
+      <button
+        type="button"
+        class="button button-small similar-debates-toggle-btn"
+        disabled
+        aria-busy="true"
+      >
+        Chargement...
+      </button>
+    </div>
+
+    <div class="similar-debates-loading-box" role="status" aria-live="polite">
+      <span class="similar-debates-loading-spinner" aria-hidden="true"></span>
+      <span class="similar-debates-loading-text">Les arènes similaires arrivent...</span>
+    </div>
+
+    <div class="similar-debates-skeleton-list" aria-hidden="true">
+      ${Array.from({ length: 3 }).map(() => `
+        <article class="similar-debates-skeleton-card">
+          <div class="similar-debates-skeleton-line" style="width: 34%;"></div>
+          <div class="similar-debates-skeleton-line" style="width: 82%; margin-top: 14px; height: 15px;"></div>
+          <div class="similar-debates-skeleton-line" style="width: 68%;"></div>
+          <div class="similar-debates-skeleton-line" style="width: 100%; margin-top: 16px;"></div>
+          <div class="similar-debates-skeleton-line" style="width: 92%;"></div>
+          <div class="similar-debates-skeleton-line" style="width: 54%; margin-top: 16px;"></div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderBottomSimilarDebates(currentDebate, debates) {
   const container = document.getElementById("similar-debates-bottom");
   if (!container) return;
+
+  if (similarDebatesLoading) {
+    renderSimilarDebatesLoadingState(container);
+    return;
+  }
 
   const currentId = Number(currentDebate.id);
   const currentQuestion = normalizeText(currentDebate.question);
@@ -11609,10 +11733,50 @@ function renderBottomSimilarDebates(currentDebate, debates) {
   if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
 }
 function toggleSimilarDebates() {
-  similarDebatesVisible = !similarDebatesVisible;
+  if (similarDebatesLoadingTimer) {
+    clearTimeout(similarDebatesLoadingTimer);
+    similarDebatesLoadingTimer = null;
+  }
+
+  const nextVisibleState = !similarDebatesVisible;
+  similarDebatesVisible = nextVisibleState;
+
+  if (!nextVisibleState) {
+    similarDebatesLoading = false;
+
+    if (currentDebateCache && Array.isArray(similarDebatesCache)) {
+      renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+      return;
+    }
+
+    const debateId = getDebateId();
+    if (!debateId) return;
+
+    loadDebate(debateId);
+    return;
+  }
+
+  similarDebatesLoading = true;
+
+  if (currentDebateCache) {
+    renderBottomSimilarDebates(currentDebateCache, similarDebatesCache || []);
+  } else {
+    const container = document.getElementById("similar-debates-bottom");
+    renderSimilarDebatesLoadingState(container);
+  }
+
+  similarDebatesLoadingTimer = setTimeout(() => {
+    similarDebatesLoading = false;
+    similarDebatesLoadingTimer = null;
+
+    if (!similarDebatesVisible) return;
+
+    if (currentDebateCache && Array.isArray(similarDebatesCache)) {
+      renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+    }
+  }, 450);
 
   if (currentDebateCache && Array.isArray(similarDebatesCache)) {
-    renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
     return;
   }
 

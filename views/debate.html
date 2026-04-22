@@ -936,10 +936,10 @@ body.page-debate .home-bottom-nav-item:focus-visible {
   #voices-panel {
     left: 18px !important;
     right: 18px !important;
-    top: 10px !important;
+    top: 16px !important;
     width: auto !important;
-    max-height: none !important;
-    bottom: 0 !important;
+    max-height: calc(100vh - 28px) !important;
+    bottom: auto !important;
   }
 
   #voices-panel-body {
@@ -948,41 +948,41 @@ body.page-debate .home-bottom-nav-item:focus-visible {
   }
 
   #voices-panel .voice-stepper {
-    width: 92px;
-    min-width: 92px;
-    max-width: 92px;
-    flex: 0 0 92px;
+    width: 84px;
+    min-width: 84px;
+    max-width: 84px;
+    flex: 0 0 84px;
     gap: 2px;
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 3px;
+    padding-right: 3px;
     justify-content: space-between;
   }
 
   #voices-panel .voice-stepper-btn {
-    width: 24px;
-    min-width: 24px;
-    height: 24px;
-    flex: 0 0 24px;
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
     padding: 0;
   }
 
   #voices-panel .voice-stepper-center {
-    width: 34px;
-    min-width: 34px;
-    max-width: 34px;
-    flex: 0 0 34px;
+    width: 30px;
+    min-width: 30px;
+    max-width: 30px;
+    flex: 0 0 30px;
     padding-left: 0;
     padding-right: 0;
   }
 
   #voices-panel .voice-stepper-value {
     min-width: 0;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1;
   }
 
   #voices-panel .voice-stepper-label {
-    font-size: 9px;
+    font-size: 8px;
     line-height: 1;
     white-space: nowrap;
   }
@@ -999,15 +999,17 @@ body.voices-panel-open {
 }
 
 #voices-panel .voice-stepper {
-  gap: 4px;
-  padding-left: 6px;
-  padding-right: 6px;
+  gap: 3px;
+  padding-left: 4px;
+  padding-right: 4px;
+  border-radius: 999px;
+  min-height: 30px;
 }
 
 #voices-panel .voice-stepper-center {
-  min-width: 34px;
-  padding-left: 4px;
-  padding-right: 4px;
+  min-width: 30px;
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
 #voices-panel .voice-stepper-value {
@@ -1649,16 +1651,16 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 </script>
 
 <!-- Badge voix utilisées + panneau -->
-<div id="voices-float-badge" style="position:fixed;bottom:16px;right:16px;z-index:900;background:rgba(26,39,47,0.85);color:#a0b0bb;font-size:22px;font-weight:700;padding:9px 18px;border-radius:24px;border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);letter-spacing:0.04em;cursor:pointer;display:none;user-select:none;">0/5</div>
+<div id="voices-float-badge" style="position:fixed;bottom:16px;right:16px;z-index:900;background:rgba(26,39,47,0.82);color:#cbd5e1;font-size:18px;font-weight:700;padding:7px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.10);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);letter-spacing:0.03em;cursor:pointer;display:none;user-select:none;box-shadow:0 8px 24px rgba(0,0,0,0.22);">0/5</div>
 
-<div id="voices-panel-overlay" style="display:none;position:fixed;inset:0;z-index:901;background:rgba(0,0,0,0.35);" onclick="closeVoicesPanel()"></div>
-<div id="voices-panel" style="display:none;position:fixed;top:68px;right:16px;z-index:902;width:min(640px,calc(100vw - 16px));max-height:calc(100vh - 160px);background:#1a272f;border:1px solid rgba(255,255,255,0.12);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);overflow:hidden;flex-direction:column;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.08);">
-    <span style="color:#e8e8e8;font-size:14px;font-weight:700;">Mes voix attribuées</span>
-    <span id="voices-panel-count" style="color:#a0b0bb;font-size:13px;font-weight:600;">0 / 5</span>
-    <button onclick="closeVoicesPanel()" style="background:none;border:none;color:#6b7280;font-size:18px;cursor:pointer;padding:0;line-height:1;">✕</button>
+<div id="voices-panel-overlay" style="display:none;position:fixed;inset:0;z-index:901;background:rgba(8,12,16,0.34);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);" onclick="closeVoicesPanel()"></div>
+<div id="voices-panel" style="display:none;position:fixed;top:76px;right:16px;z-index:902;width:min(480px,calc(100vw - 24px));max-height:calc(100vh - 170px);background:#1f2b33;border:1px solid rgba(255,255,255,0.10);border-radius:18px;box-shadow:0 18px 42px rgba(0,0,0,0.34);overflow:hidden;flex-direction:column;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 9px;border-bottom:1px solid rgba(255,255,255,0.07);gap:10px;">
+    <span style="color:#f3f4f6;font-size:13px;font-weight:700;letter-spacing:0.01em;">Mes voix attribuées</span>
+    <span id="voices-panel-count" style="color:#94a3b8;font-size:12px;font-weight:600;">0 / 5</span>
+    <button onclick="closeVoicesPanel()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);color:#94a3b8;font-size:18px;cursor:pointer;padding:5px 9px;line-height:1;border-radius:10px;font-weight:700;">✕</button>
   </div>
-  <div id="voices-panel-body" style="overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="voices-panel-body" style="overflow-y:auto;padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;"></div>
 </div>
 
 <script>
@@ -1672,6 +1674,44 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var previousBodyTouchAction = '';
   var previousHtmlTouchAction = '';
   var voicesPanelScrollLocked = false;
+  var hiddenIframeCloseButtons = [];
+
+  function setIframeCloseButtonsHidden(shouldHide){
+    var buttons = [];
+    var localButton = document.getElementById('debate-iframe-modal-close');
+    if(localButton) buttons.push(localButton);
+
+    try {
+      if(window.parent && window.parent !== window && window.parent.document){
+        var parentButton = window.parent.document.getElementById('debate-iframe-modal-close');
+        if(parentButton && buttons.indexOf(parentButton) === -1) buttons.push(parentButton);
+      }
+    } catch (error) {}
+
+    if(shouldHide){
+      hiddenIframeCloseButtons = [];
+      buttons.forEach(function(button){
+        hiddenIframeCloseButtons.push({
+          el: button,
+          display: button.style.display || '',
+          visibility: button.style.visibility || '',
+          pointerEvents: button.style.pointerEvents || ''
+        });
+        button.style.display = 'none';
+        button.style.visibility = 'hidden';
+        button.style.pointerEvents = 'none';
+      });
+      return;
+    }
+
+    hiddenIframeCloseButtons.forEach(function(entry){
+      if(!entry || !entry.el) return;
+      entry.el.style.display = entry.display;
+      entry.el.style.visibility = entry.visibility;
+      entry.el.style.pointerEvents = entry.pointerEvents;
+    });
+    hiddenIframeCloseButtons = [];
+  }
 
   function lockVoicesPanelBackgroundScroll(){
     if(voicesPanelScrollLocked) return;
@@ -1833,17 +1873,17 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       var debId = getDebateId();
       function renderGroup(items, label, color, borderColor){
         if(!items.length) return '';
-        return '<div style="margin-bottom:10px;">'
-          + '<div style="font-size:11px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">'+label+'</div>'
+        return '<div style="margin-bottom:8px;">'
+          + '<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px;padding-left:2px;">'+label+'</div>'
           + items.map(function(v){
               var disabled = v.count <= 0 ? 'disabled' : '';
-              var bodyHtml = v.body ? '<div id="vp-body-'+v.argId+'" style="display:none;padding:8px 12px 10px;color:#a0b0bb;font-size:13px;line-height:1.5;border-top:1px solid rgba(255,255,255,0.07);">'+v.body+'</div>' : '';
+              var bodyHtml = v.body ? '<div id="vp-body-'+v.argId+'" style="display:none;padding:7px 11px 9px;color:#a0b0bb;font-size:12px;line-height:1.45;border-top:1px solid rgba(255,255,255,0.06);">'+v.body+'</div>' : '';
               var cursor = v.body ? 'cursor:pointer;' : '';
-              var chevron = v.body ? '<span id="vp-chev-'+v.argId+'" style="color:#6b7280;font-size:11px;flex-shrink:0;">▸</span>' : '';
-              return '<div style="background:rgba(255,255,255,0.04);border:1px solid '+borderColor+';border-radius:10px;overflow:hidden;">'
-                + '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;'+cursor+'" '+(v.body ? 'onclick="vpToggle(\''+v.argId+'\')"' : '')+'>'
+              var chevron = v.body ? '<span id="vp-chev-'+v.argId+'" style="color:#6b7280;font-size:10px;flex-shrink:0;">▸</span>' : '';
+              return '<div style="background:rgba(255,255,255,0.035);border:1px solid '+borderColor+';border-radius:12px;overflow:hidden;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">'
+                + '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;'+cursor+'" '+(v.body ? 'onclick="vpToggle(\''+v.argId+'\')"' : '')+'>'
                 +   chevron
-                +   '<span style="color:#e8e8e8;font-size:13px;font-weight:600;line-height:1.4;flex:1;">'+v.title+'</span>'
+                +   '<span style="color:#f3f4f6;font-size:12px;font-weight:600;line-height:1.35;flex:1;">'+v.title+'</span>'
                 +   '<div class="voice-stepper" onclick="event.stopPropagation()">'
                 +     '<button class="voice-stepper-btn voice-stepper-btn-minus" type="button" data-voice-arg-id="'+v.argId+'" data-voice-action="minus" '+disabled+' onclick="unvote(\''+debId+'\',\''+v.argId+'\',false)" title="Retirer une voix">−</button>'
                 +     '<div class="voice-stepper-center"><div class="voice-stepper-value">'+v.count+'</div><div class="voice-stepper-label">Mes voix</div></div>'
@@ -1865,6 +1905,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
     panel.style.display = 'flex';
     overlay.style.display = 'block';
+    setIframeCloseButtonsHidden(true);
     lockVoicesPanelBackgroundScroll();
   }
 
@@ -1902,10 +1943,10 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     if(window.innerWidth <= 768){
       panel.style.transition = 'top 0.35s ease';
       if(!isOpen){
-        panel.style.top = '8px';
+        panel.style.top = '12px';
       } else {
         var anyOpen = panelBody.querySelector('[id^="vp-body-"][style*="block"]');
-        if(!anyOpen) panel.style.top = '64px';
+        if(!anyOpen) panel.style.top = '16px';
       }
     }
 
@@ -1919,6 +1960,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   window.closeVoicesPanel = function(){
     panel.style.display = 'none';
     overlay.style.display = 'none';
+    setIframeCloseButtonsHidden(false);
     unlockVoicesPanelBackgroundScroll();
   };
 
