@@ -9094,3 +9094,11 @@ body.index-batch-loading-active {
 .debate-card-local-video-shell:not([data-user-started="true"]) .debate-card-local-video-poster {
   display: block !important;
 }
+
+/* Badge voix — ajustement position mobile */
+@media (max-width: 768px) {
+  #voices-float-badge {
+    bottom: 28px !important;
+    right: 10px !important;
+  }
+}

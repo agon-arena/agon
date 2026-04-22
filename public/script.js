@@ -1609,13 +1609,14 @@ function ensureDebateIframeModal() {
     }
     #debate-iframe-modal-close {
       position: fixed;
+      bottom: calc(5vh + 78px);
       left: 16px;
       z-index: 10000;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 9px 18px;
-      border-radius: 24px;
+      padding: 6px 14px;
+      border-radius: 20px;
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(26,39,47,0.85);
       color: #a0b0bb;
@@ -1628,6 +1629,11 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal-close:hover {
       background: rgba(26,39,47,1);
       color: #e0e8ee;
+    }
+    @media (max-width: 768px) {
+      #debate-iframe-modal-close {
+        bottom: calc(5vh + 66px);
+      }
     }
     @media (min-width: 769px) {
       #debate-iframe-modal-close {
@@ -1650,21 +1656,11 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
+      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
   document.body.appendChild(modal);
-
-  // Bouton close en dehors de la modal pour éviter le containing-block créé par backdrop-filter
-  const closeBtn = document.createElement("button");
-  closeBtn.id = "debate-iframe-modal-close";
-  closeBtn.type = "button";
-  closeBtn.setAttribute("aria-label", "Fermer");
-  closeBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  // Inline style pour bottom : même mécanisme que #voices-float-badge
-  closeBtn.style.bottom = window.innerWidth <= 768 ? "16px" : "78px";
-  closeBtn.style.display = "none";
-  document.body.appendChild(closeBtn);
 
   modal.addEventListener("click", (e) => {
     if (e.target === modal) closeDebateIframeModal();
@@ -1697,9 +1693,6 @@ function openDebateIframeModal(url) {
   frame.src = url;
   modal.classList.add("open");
 
-  const closeBtn = document.getElementById("debate-iframe-modal-close");
-  if (closeBtn) closeBtn.style.display = "flex";
-
   // Verrouillage scroll robuste (iOS Safari inclus)
   document.body.style.overflow = "hidden";
   document.body.style.position = "fixed";
@@ -1716,9 +1709,6 @@ function closeDebateIframeModal() {
 
   modal.classList.remove("open");
   window.__agonDebateModalOpen = false;
-
-  const closeBtn = document.getElementById("debate-iframe-modal-close");
-  if (closeBtn) closeBtn.style.display = "none";
 
   // Restaure le body et le scroll
   document.body.style.overflow = "";
