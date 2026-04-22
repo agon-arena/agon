@@ -1615,8 +1615,8 @@ function ensureDebateIframeModal() {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 6px 14px;
-      border-radius: 20px;
+      padding: 9px 18px;
+      border-radius: 24px;
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(26,39,47,0.85);
       color: #a0b0bb;
@@ -1632,7 +1632,7 @@ function ensureDebateIframeModal() {
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: calc(5vh + 66px);
+        bottom: 12px;
       }
     }
     @media (min-width: 769px) {
@@ -1656,7 +1656,7 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
-      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="22" height="22" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
