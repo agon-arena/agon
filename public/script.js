@@ -1632,7 +1632,8 @@ function ensureDebateIframeModal() {
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: 20px;
+        bottom: 14px;
+        left: 12px;
       }
     }
     @media (min-width: 769px) {
@@ -1662,10 +1663,10 @@ function ensureDebateIframeModal() {
   `;
   document.body.appendChild(modal);
 
-  // Synchronisation mobile : forcer le même bottom que #voices-float-badge
+  // Synchronisation mobile : aligner sur #voices-float-badge
   if (window.innerWidth <= 768) {
     const closeBtn = document.getElementById("debate-iframe-modal-close");
-    if (closeBtn) closeBtn.style.bottom = "20px";
+    if (closeBtn) { closeBtn.style.bottom = "14px"; closeBtn.style.left = "12px"; }
   }
 
   modal.addEventListener("click", (e) => {
