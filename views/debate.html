@@ -2193,89 +2193,122 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 <script>
 (function(){
-  function removeFallbackLabels(config){
+  function normalizeText(value){
+    return String(value || '')
+      .replace(/ /g, ' ')
+      .replace(/[𝕏]/g, 'x')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function shouldRemoveLabel(text, type){
+    var txt = normalizeText(text);
+    if(!txt) return false;
+    if(type === 'instagram') {
+      return txt === 'instagram'
+        || txt.includes('voir le post sur instagram')
+        || txt.includes('see this post on instagram');
+    }
+    if(type === 'x') {
+      return txt === 'x'
+        || txt === 'source'
+        || txt === 'x source'
+        || txt === 'source x'
+        || txt === 'post x'
+        || txt === 'post sur x'
+        || txt.includes('x source')
+        || txt.includes('source x')
+        || txt.includes('voir le post sur x')
+        || txt.includes('see post on x')
+        || txt.includes('view post on x')
+        || txt.includes('voir le post sur twitter')
+        || txt.includes('see post on twitter')
+        || txt.includes('view post on twitter');
+    }
+    return false;
+  }
+
+  function cleanWrap(type){
     var wrap = document.getElementById('debate-source-fallback');
     if(!wrap) return;
-    var hasEmbed = !!wrap.querySelector(config.embedSelector);
-    if(!hasEmbed) return;
 
-    wrap.querySelectorAll('.debate-source-domain, .debate-source-link').forEach(function(el){
-      el.remove();
-    });
+    var embedSelector = type === 'instagram'
+      ? 'blockquote.instagram-media, iframe[src*="instagram.com"]'
+      : 'blockquote.twitter-tweet, iframe[src*="x.com"], iframe[src*="twitter.com"]';
 
-    wrap.querySelectorAll('p, a, span, div').forEach(function(el){
-      if(el.closest(config.protectedSelector)) return;
-      var txt = (el.textContent || '').trim().toLowerCase();
-      if(!txt) return;
-      if(config.matchers.some(function(matcher){ return matcher(txt); })){
-        el.remove();
-      }
+    var protectedSelector = type === 'instagram'
+      ? 'blockquote.instagram-media, iframe[src*="instagram.com"]'
+      : 'blockquote.twitter-tweet, iframe[src*="x.com"], iframe[src*="twitter.com"]';
+
+    if(!wrap.querySelector(embedSelector)) return;
+
+    if(type === 'x') wrap.setAttribute('data-cleaned-x-source', 'true');
+
+    wrap.querySelectorAll('.debate-source-domain, .debate-source-link, .debate-source-label, .debate-source-title').forEach(function(el){
+      if(!el.closest(protectedSelector)) el.remove();
     });
 
     Array.from(wrap.childNodes).forEach(function(node){
-      if(node.nodeType !== Node.TEXT_NODE) return;
-      var txt = (node.textContent || '').trim().toLowerCase();
-      if(!txt) return;
-      if(config.matchers.some(function(matcher){ return matcher(txt); })){
+      if(node.nodeType === Node.TEXT_NODE) {
+        if(shouldRemoveLabel(node.textContent, type)) node.remove();
+        return;
+      }
+      if(node.nodeType !== Node.ELEMENT_NODE) return;
+      if(node.matches(protectedSelector)) return;
+      if(shouldRemoveLabel(node.textContent, type)) {
         node.remove();
       }
     });
-  }
 
-  function cleanInstagramFallbackText(){
-    removeFallbackLabels({
-      embedSelector: 'blockquote.instagram-media, iframe[src*="instagram.com"]',
-      protectedSelector: 'blockquote.instagram-media',
-      matchers: [
-        function(txt){ return txt === 'instagram'; },
-        function(txt){ return txt.includes('voir le post sur instagram'); },
-        function(txt){ return txt.includes('see this post on instagram'); }
-      ]
+    wrap.querySelectorAll('*').forEach(function(el){
+      if(el.closest(protectedSelector)) return;
+      if(shouldRemoveLabel(el.textContent, type)) {
+        el.remove();
+        return;
+      }
+      Array.from(el.childNodes).forEach(function(node){
+        if(node.nodeType === Node.TEXT_NODE && shouldRemoveLabel(node.textContent, type)) {
+          node.remove();
+        }
+      });
     });
+
+    var firstEmbed = wrap.querySelector(embedSelector);
+    if(firstEmbed) {
+      var node = firstEmbed.previousSibling;
+      while(node) {
+        var prev = node.previousSibling;
+        if(node.nodeType === Node.TEXT_NODE) {
+          if(normalizeText(node.textContent)) node.remove();
+        } else if(node.nodeType === Node.ELEMENT_NODE) {
+          node.remove();
+        }
+        node = prev;
+      }
+    }
   }
 
-  function cleanXFallbackText(){
-    removeFallbackLabels({
-      embedSelector: 'blockquote.twitter-tweet, iframe[src*="x.com"], iframe[src*="twitter.com"]',
-      protectedSelector: 'blockquote.twitter-tweet',
-      matchers: [
-        function(txt){ return txt === 'post x'; },
-        function(txt){ return txt === 'x'; },
-        function(txt){ return txt === 'source'; },
-        function(txt){ return txt === '𝕏 source'.toLowerCase(); },
-        function(txt){ return txt === 'x source'; },
-        function(txt){ return txt === 'post sur x'; },
-        function(txt){ return txt === 'source x'; },
-        function(txt){ return txt.includes('𝕏 source'.toLowerCase()); },
-        function(txt){ return txt.includes('x source'); },
-        function(txt){ return txt.includes('source x'); },
-        function(txt){ return txt.includes('voir le post sur x'); },
-        function(txt){ return txt.includes('see post on x'); },
-        function(txt){ return txt.includes('view post on x'); },
-        function(txt){ return txt.includes('voir le post sur twitter'); },
-        function(txt){ return txt.includes('see post on twitter'); },
-        function(txt){ return txt.includes('view post on twitter'); }
-      ]
-    });
+  function cleanAll(){
+    cleanWrap('instagram');
+    cleanWrap('x');
   }
 
-  function cleanSocialFallbackTexts(){
-    cleanInstagramFallbackText();
-    cleanXFallbackText();
-  }
-
-  document.addEventListener('DOMContentLoaded', function(){
-    cleanSocialFallbackTexts();
+  function boot(){
+    cleanAll();
     var wrap = document.getElementById('debate-source-fallback');
     if(!wrap) return;
-    var observer = new MutationObserver(function(){
-      cleanSocialFallbackTexts();
-    });
+    var observer = new MutationObserver(function(){ cleanAll(); });
     observer.observe(wrap, { childList: true, subtree: true, characterData: true });
-    setTimeout(cleanSocialFallbackTexts, 300);
-    setTimeout(cleanSocialFallbackTexts, 1000);
-    setTimeout(cleanSocialFallbackTexts, 2000);
-  });
+    [150, 400, 900, 1600, 2600, 4200].forEach(function(delay){ setTimeout(cleanAll, delay); });
+  }
+
+  if(document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+  window.addEventListener('load', cleanAll);
 })();
 </script>
 
