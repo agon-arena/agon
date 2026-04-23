@@ -434,6 +434,90 @@ function clearCreateToDebateLoadingTransition() {
   } catch (error) {}
 }
 
+function ensureInlineIframeCloseButton() {
+  if (location.pathname !== "/debate") return;
+  if (window.self === window.top) return;
+
+  if (!document.getElementById("agon-inline-iframe-close-style")) {
+    const style = document.createElement("style");
+    style.id = "agon-inline-iframe-close-style";
+    style.textContent = `
+      #agon-inline-iframe-close {
+        position: fixed;
+        top: max(10px, calc(env(safe-area-inset-top, 0px) + 10px));
+        left: 10px;
+        z-index: 2147483646;
+        width: 38px;
+        height: 38px;
+        border: none;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(17, 24, 39, 0.88);
+        color: #ffffff;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        cursor: pointer;
+      }
+
+      #agon-inline-iframe-close:hover {
+        background: rgba(17, 24, 39, 0.96);
+      }
+
+      #agon-inline-iframe-close svg {
+        width: 18px;
+        height: 18px;
+        display: block;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  let button = document.getElementById("agon-inline-iframe-close");
+  if (!button) {
+    button = document.createElement("button");
+    button.id = "agon-inline-iframe-close";
+    button.type = "button";
+    button.setAttribute("aria-label", "Fermer l'iframe");
+    button.setAttribute("title", "Fermer");
+    button.innerHTML = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><polyline points="13,3 5,9 13,15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    button.addEventListener("click", () => {
+      try {
+        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+        return;
+      } catch (error) {}
+
+      try {
+        window.history.back();
+      } catch (error) {}
+    });
+    document.body.appendChild(button);
+  }
+}
+
+function navigateToCreatedDebate(debateId) {
+  const normalizedId = String(debateId || "").trim();
+  if (!normalizedId) return;
+
+  const targetUrl = `/debate?id=${encodeURIComponent(normalizedId)}`;
+
+  markCreateToDebateLoadingTransition();
+
+  if (window.self !== window.top) {
+    try {
+      window.parent.postMessage({
+        type: "agon:navigate-iframe-to-created-debate",
+        url: targetUrl
+      }, "*");
+      return;
+    } catch (error) {}
+  }
+
+  location = targetUrl;
+}
+
 function isCreateToDebateOverlayContext() {
   return location.pathname === "/debate" && isCreateToDebateLoadingTransition();
 }
@@ -2106,6 +2190,27 @@ function ensureDebateIframeModal() {
       requestAnimationFrame(() => {
         setDebateIframeModalLoadingState(false);
       });
+      return;
+    }
+
+    if (e.data.type === "agon:navigate-iframe-to-created-debate") {
+      const nextUrl = String(e.data.url || "").trim();
+      const modal = document.getElementById("debate-iframe-modal");
+      const frame = document.getElementById("debate-iframe-modal-frame");
+      const modalIsOpen = !!(modal && modal.classList.contains("open"));
+
+      if (nextUrl) {
+        window.__agonIframeCurrentPathname = "/debate";
+
+        if (!frame || !modalIsOpen) {
+          openDebateIframeModal(nextUrl);
+          return;
+        }
+
+        setDebateIframeModalLoadingState(true);
+        setDebateIframeModalCloseButtonVisible(true);
+        frame.src = nextUrl;
+      }
       return;
     }
 
@@ -10029,7 +10134,7 @@ async function resumePendingCreateVideoUpload() {
     if (status?.finalized) {
       clearCreatePendingVideoUploadState();
       setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l’arène…");
-      window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+      navigateToCreatedDebate(debateId);
       return true;
     }
 
@@ -10067,7 +10172,7 @@ async function resumePendingCreateVideoUpload() {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l’arène. Redirection…");
-    window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+    navigateToCreatedDebate(debateId);
     return true;
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
@@ -10943,8 +11048,7 @@ form.addEventListener("submit", async e => {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
-    markCreateToDebateLoadingTransition();
-    location = "/debate?id=" + r.id;
+    navigateToCreatedDebate(r.id);
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
       hideCreatePublishProgress();
@@ -11577,6 +11681,8 @@ function updateDeleteDebateButtonVisibility(debate) {
 }
 
 async function initDebate() {
+  ensureInlineIframeCloseButton();
+
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
 
@@ -11931,6 +12037,10 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
       tabindex="0"
       aria-label="Ouvrir le post Instagram"
     >
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
+        <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
+        <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
+      </div>
       <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
     </div>
   `;
@@ -11978,7 +12088,9 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
         data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
         data-instgrm-version="14"
         style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:100%; padding:0; width:100%;"
-      ></blockquote>
+      >
+        <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
+      </blockquote>
     `;
 
     applyDebateInstagramDesktopSizing();

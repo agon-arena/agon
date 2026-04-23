@@ -82,6 +82,7 @@ const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
+const CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY = "agon_create_pending_iframe_debate_open";
 
 let pageArrivalLoadingOverlayHideTimer = null;
 let pageArrivalLoadingOverlayFallbackTimer = null;
@@ -432,6 +433,100 @@ function clearCreateToDebateLoadingTransition() {
   try {
     sessionStorage.removeItem(CREATE_TO_DEBATE_LOADING_KEY);
   } catch (error) {}
+}
+
+function ensureInlineIframeCloseButton() {
+  return;
+}
+
+function navigateToCreatedDebate(debateId) {
+  const normalizedId = String(debateId || "").trim();
+  if (!normalizedId) return;
+
+  const targetUrl = `/debate?id=${encodeURIComponent(normalizedId)}`;
+
+  markCreateToDebateLoadingTransition();
+
+  if (window.self !== window.top) {
+    try {
+      window.parent.postMessage({
+        type: "agon:navigate-iframe-to-created-debate",
+        url: targetUrl
+      }, "*");
+      return;
+    } catch (error) {}
+  }
+
+  setPendingCreateDebateIframeOpenState({
+    debateUrl: targetUrl,
+    returnUrl: '/'
+  });
+
+  location = '/';
+}
+
+function setPendingCreateDebateIframeOpenState(payload) {
+  try {
+    if (!payload || typeof payload !== "object") {
+      sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
+      return;
+    }
+
+    const debateUrl = String(payload.debateUrl || "").trim();
+    const returnUrl = String(payload.returnUrl || "").trim();
+    if (!debateUrl || !returnUrl) {
+      sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
+      return;
+    }
+
+    sessionStorage.setItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY, JSON.stringify({
+      debateUrl,
+      returnUrl,
+      ts: Date.now()
+    }));
+  } catch (error) {}
+}
+
+function consumePendingCreateDebateIframeOpenState(currentUrl = window.location.href) {
+  try {
+    const raw = sessionStorage.getItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
+    if (!raw) return null;
+
+    sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const debateUrl = String(parsed.debateUrl || "").trim();
+    const returnUrl = String(parsed.returnUrl || "").trim();
+    const ts = Number(parsed.ts || 0);
+    if (!debateUrl || !returnUrl || !ts || Date.now() - ts > 10 * 60 * 1000) return null;
+
+    const normalizedCurrentUrl = new URL(String(currentUrl || ""), window.location.origin).toString();
+    const normalizedReturnUrl = new URL(returnUrl, window.location.origin).toString();
+    if (normalizedCurrentUrl !== normalizedReturnUrl) return null;
+
+    return { debateUrl, returnUrl: normalizedReturnUrl, ts };
+  } catch (error) {
+    return null;
+  }
+}
+
+function canOpenPendingCreatedDebateInIframeHere() {
+  return window.self === window.top && (location.pathname === "/" || location.pathname === "/debate");
+}
+
+function maybeOpenPendingCreatedDebateInIframe() {
+  if (!canOpenPendingCreatedDebateInIframeHere()) return false;
+
+  const pendingState = consumePendingCreateDebateIframeOpenState(window.location.href);
+  if (!pendingState || !pendingState.debateUrl) return false;
+
+  showPageArrivalLoadingOverlay("Chargement en cours");
+  requestAnimationFrame(() => {
+    openDebateIframeModal(pendingState.debateUrl);
+  });
+  return true;
 }
 
 function isCreateToDebateOverlayContext() {
@@ -2106,6 +2201,27 @@ function ensureDebateIframeModal() {
       requestAnimationFrame(() => {
         setDebateIframeModalLoadingState(false);
       });
+      return;
+    }
+
+    if (e.data.type === "agon:navigate-iframe-to-created-debate") {
+      const nextUrl = String(e.data.url || "").trim();
+      const modal = document.getElementById("debate-iframe-modal");
+      const frame = document.getElementById("debate-iframe-modal-frame");
+      const modalIsOpen = !!(modal && modal.classList.contains("open"));
+
+      if (nextUrl) {
+        window.__agonIframeCurrentPathname = "/debate";
+
+        if (!frame || !modalIsOpen) {
+          openDebateIframeModal(nextUrl);
+          return;
+        }
+
+        setDebateIframeModalLoadingState(true);
+        setDebateIframeModalCloseButtonVisible(true);
+        frame.src = nextUrl;
+      }
       return;
     }
 
@@ -9812,7 +9928,8 @@ function buildCreateUrlWithReturnContext() {
 }
 
 function initDebateCreateEntryPoints() {
-  if (location.pathname !== "/debate") return;
+  if (!(location.pathname === "/debate" || location.pathname === "/")) return;
+  if (window.self !== window.top) return;
 
   const createLinks = Array.from(document.querySelectorAll('a[href="/create"], a[href^="/create?"]'));
   if (!createLinks.length) return;
@@ -9829,7 +9946,7 @@ function initDebateCreateEntryPoints() {
       const nextUrl = buildCreateUrlWithReturnContext();
       link.href = nextUrl;
 
-      if (!isTopLevelDebatePage()) return;
+      if (window.self !== window.top) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -9841,6 +9958,44 @@ function initDebateCreateEntryPoints() {
       openDebateIframeModal(nextUrl);
     });
   });
+}
+
+function initIframeEscapeToTopLevelIndexLinks() {
+  if (location.pathname !== "/debate") return;
+  if (window.self === window.top) return;
+  if (document.documentElement.dataset.iframeIndexEscapeBound === "true") return;
+  document.documentElement.dataset.iframeIndexEscapeBound = "true";
+
+  document.addEventListener("click", (event) => {
+    const link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+    if (!link) return;
+
+    const rawHref = String(link.getAttribute('href') || '').trim();
+    if (!rawHref) return;
+    if (rawHref.startsWith('#') || /^javascript:/i.test(rawHref)) return;
+
+    let parsed;
+    try {
+      parsed = new URL(rawHref, window.location.origin);
+    } catch (error) {
+      return;
+    }
+
+    if (parsed.origin !== window.location.origin) return;
+    if (parsed.pathname !== "/") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      window.top.location.href = parsed.toString();
+      return;
+    } catch (error) {}
+
+    try {
+      window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+    } catch (error) {}
+  }, true);
 }
 
 function applyCreateBackLinks() {
@@ -10029,7 +10184,7 @@ async function resumePendingCreateVideoUpload() {
     if (status?.finalized) {
       clearCreatePendingVideoUploadState();
       setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l’arène…");
-      window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+      navigateToCreatedDebate(debateId);
       return true;
     }
 
@@ -10067,7 +10222,7 @@ async function resumePendingCreateVideoUpload() {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l’arène. Redirection…");
-    window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
+    navigateToCreatedDebate(debateId);
     return true;
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
@@ -10943,8 +11098,7 @@ form.addEventListener("submit", async e => {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
-    markCreateToDebateLoadingTransition();
-    location = "/debate?id=" + r.id;
+    navigateToCreatedDebate(r.id);
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
       hideCreatePublishProgress();
@@ -11577,6 +11731,8 @@ function updateDeleteDebateButtonVisibility(debate) {
 }
 
 async function initDebate() {
+  ensureInlineIframeCloseButton();
+
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
 
@@ -15750,11 +15906,16 @@ scheduleMobileIndexCardHighlightUpdate();
   initIndexReturnNavigation();
   applyCreateBackLinks();
 
-  if (location.pathname === "/") initIndex();
+  if (location.pathname === "/") {
+    initIndex();
+    initDebateCreateEntryPoints();
+    maybeOpenPendingCreatedDebateInIframe();
+  }
   if (location.pathname === "/create") initCreate();
 if (location.pathname === "/debate") {
   localStorage.setItem("debate_view_mode", "columns");
   initDebateCreateEntryPoints();
+  initIframeEscapeToTopLevelIndexLinks();
   initDebate();
 }  if (location.pathname === "/admin-reports") initAdminReports();
   if (location.pathname === "/notifications") loadNotificationsPage();
