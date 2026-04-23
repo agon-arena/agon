@@ -55,6 +55,61 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
+function readViewTemplate(templateName) {
+  return fs.readFileSync(path.join(__dirname, "views", templateName), "utf8");
+}
+
+function replaceMetaPlaceholders(template, meta) {
+  return String(template || "")
+    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
+    .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
+    .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
+    .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
+    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"));
+}
+
+function buildIndexMeta(req) {
+  return {
+    title: "Agôn – L'arène des idées | Réseau social européen de veille thématique",
+    description: "Agôn est le réseau social européen de veille thématique où les idées s'affrontent, les arguments circulent et les positions les plus convaincantes émergent.",
+    url: buildAbsoluteUrl(req, "/"),
+    image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+    imageAlt: "Agôn — l'arène des idées"
+  };
+}
+
+function normalizeMetaText(value, maxLength = 220) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function buildDebateMeta(req, debate) {
+  const debateId = String(debate?.id || "").trim();
+  const debateUrl = debateId
+    ? buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`)
+    : buildAbsoluteUrl(req, "/debate");
+  const ogImageUrl = debateId
+    ? buildAbsoluteUrl(req, `/debate/${encodeURIComponent(debateId)}`)
+    : buildAbsoluteUrl(req, "/logo2.jpeg");
+  const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
+  const question = normalizeMetaText(debate?.question || "Débat sur Agôn", 110);
+  const optionA = normalizeMetaText(debate?.option_a || "", 80);
+  const optionB = normalizeMetaText(debate?.option_b || "", 80);
+  const title = isOpen
+    ? `${question} | Arène libre sur Agôn`
+    : `${question} | Agôn`;
+  const description = isOpen
+    ? "Découvrez les réponses déjà proposées et ajoutez votre idée dans cette arène libre sur Agôn."
+    : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur Agôn.`;
+
+  return {
+    title,
+    description,
+    url: debateUrl,
+    image: ogImageUrl,
+    imageAlt: question
+  };
+}
+
 function normalizeExternalUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -1672,7 +1727,9 @@ async function getVoteRow(argumentId, voterKey) {
 }
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/index.html"));
+  const template = readViewTemplate("index.html");
+  const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
+  res.type("html").send(html);
 });
 
 app.get("/create", (req, res) => {
@@ -1683,8 +1740,47 @@ app.get("/notifications", (req, res) => {
   res.sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
-app.get("/debate", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/debate.html"));
+app.get("/debate", async (req, res) => {
+  const template = readViewTemplate("debate.html");
+  const debateId = String(req.query.id || "").trim();
+
+  if (!debateId) {
+    const html = replaceMetaPlaceholders(template, {
+      title: "Débat | Agôn",
+      description: "Découvrez les débats et les idées qui s'affrontent sur Agôn.",
+      url: buildAbsoluteUrl(req, "/debate"),
+      image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+      imageAlt: "Agôn — l'arène des idées"
+    });
+    return res.type("html").send(html);
+  }
+
+  try {
+    const debate = await getDebateById(debateId);
+    if (!debate) {
+      const html = replaceMetaPlaceholders(template, {
+        title: "Débat introuvable | Agôn",
+        description: "Cette arène n'est plus disponible sur Agôn.",
+        url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
+        image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+        imageAlt: "Agôn — l'arène des idées"
+      });
+      return res.status(404).type("html").send(html);
+    }
+
+    const html = replaceMetaPlaceholders(template, buildDebateMeta(req, debate));
+    return res.type("html").send(html);
+  } catch (error) {
+    console.error(error);
+    const html = replaceMetaPlaceholders(template, {
+      title: "Débat | Agôn",
+      description: "Découvrez les débats et les idées qui s'affrontent sur Agôn.",
+      url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
+      image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+      imageAlt: "Agôn — l'arène des idées"
+    });
+    return res.type("html").send(html);
+  }
 });
 
 app.get("/admin-reports", (req, res) => {

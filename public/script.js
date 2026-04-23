@@ -82,7 +82,7 @@ const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
-const CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY = "agon_create_pending_iframe_debate_open";
+const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
 
 let pageArrivalLoadingOverlayHideTimer = null;
 let pageArrivalLoadingOverlayFallbackTimer = null;
@@ -104,6 +104,7 @@ const PAGE_ARRIVAL_LOCKED_CONTROL_SELECTOR = [
   '.voice-button',
   '.vote-button',
   '.share-icon-button',
+  '#created-debate-floating-close',
   '[role="button"]'
 ].join(', ');
 
@@ -435,102 +436,55 @@ function clearCreateToDebateLoadingTransition() {
   } catch (error) {}
 }
 
-function ensureInlineIframeCloseButton() {
-  return;
+function isCreateToDebateOverlayContext() {
+  return location.pathname === "/debate" && isCreateToDebateLoadingTransition();
 }
 
-function navigateToCreatedDebate(debateId) {
-  const normalizedId = String(debateId || "").trim();
-  if (!normalizedId) return;
-
-  const targetUrl = `/debate?id=${encodeURIComponent(normalizedId)}`;
-
-  markCreateToDebateLoadingTransition();
-
-  if (window.self !== window.top) {
-    try {
-      window.parent.postMessage({
-        type: "agon:navigate-iframe-to-created-debate",
-        url: targetUrl
-      }, "*");
-      return;
-    } catch (error) {}
-  }
-
-  setPendingCreateDebateIframeOpenState({
-    debateUrl: targetUrl,
-    returnUrl: '/'
-  });
-
-  location = '/';
-}
-
-function setPendingCreateDebateIframeOpenState(payload) {
+function getCreatedDebateContext() {
   try {
-    if (!payload || typeof payload !== "object") {
-      sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
-      return;
-    }
-
-    const debateUrl = String(payload.debateUrl || "").trim();
-    const returnUrl = String(payload.returnUrl || "").trim();
-    if (!debateUrl || !returnUrl) {
-      sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
-      return;
-    }
-
-    sessionStorage.setItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY, JSON.stringify({
-      debateUrl,
-      returnUrl,
-      ts: Date.now()
-    }));
-  } catch (error) {}
-}
-
-function consumePendingCreateDebateIframeOpenState(currentUrl = window.location.href) {
-  try {
-    const raw = sessionStorage.getItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
+    const raw = sessionStorage.getItem(CREATE_NEW_DEBATE_CONTEXT_KEY);
     if (!raw) return null;
-
-    sessionStorage.removeItem(CREATE_PENDING_IFRAME_DEBATE_OPEN_KEY);
 
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
 
-    const debateUrl = String(parsed.debateUrl || "").trim();
+    const debateId = String(parsed.debateId || "").trim();
     const returnUrl = String(parsed.returnUrl || "").trim();
     const ts = Number(parsed.ts || 0);
-    if (!debateUrl || !returnUrl || !ts || Date.now() - ts > 10 * 60 * 1000) return null;
 
-    const normalizedCurrentUrl = new URL(String(currentUrl || ""), window.location.origin).toString();
-    const normalizedReturnUrl = new URL(returnUrl, window.location.origin).toString();
-    if (normalizedCurrentUrl !== normalizedReturnUrl) return null;
+    if (!debateId || !Number.isFinite(ts) || ts <= 0) {
+      sessionStorage.removeItem(CREATE_NEW_DEBATE_CONTEXT_KEY);
+      return null;
+    }
 
-    return { debateUrl, returnUrl: normalizedReturnUrl, ts };
+    if (Date.now() - ts > 6 * 60 * 60 * 1000) {
+      sessionStorage.removeItem(CREATE_NEW_DEBATE_CONTEXT_KEY);
+      return null;
+    }
+
+    return { debateId, returnUrl, ts };
   } catch (error) {
     return null;
   }
 }
 
-function canOpenPendingCreatedDebateInIframeHere() {
-  return window.self === window.top && (location.pathname === "/" || location.pathname === "/debate");
+function markCreatedDebateContext(debateId, returnUrl = "") {
+  const normalizedDebateId = String(debateId || "").trim();
+  if (!normalizedDebateId) return;
+
+  try {
+    sessionStorage.setItem(CREATE_NEW_DEBATE_CONTEXT_KEY, JSON.stringify({
+      debateId: normalizedDebateId,
+      returnUrl: String(returnUrl || "").trim(),
+      ts: Date.now()
+    }));
+  } catch (error) {}
 }
 
-function maybeOpenPendingCreatedDebateInIframe() {
-  if (!canOpenPendingCreatedDebateInIframeHere()) return false;
-
-  const pendingState = consumePendingCreateDebateIframeOpenState(window.location.href);
-  if (!pendingState || !pendingState.debateUrl) return false;
-
-  showPageArrivalLoadingOverlay("Chargement en cours");
-  requestAnimationFrame(() => {
-    openDebateIframeModal(pendingState.debateUrl);
-  });
-  return true;
-}
-
-function isCreateToDebateOverlayContext() {
-  return location.pathname === "/debate" && isCreateToDebateLoadingTransition();
+function clearCreatedDebateContext() {
+  try {
+    sessionStorage.removeItem(CREATE_NEW_DEBATE_CONTEXT_KEY);
+  } catch (error) {}
 }
 
 function getPageArrivalLoadingImageSrc() {
@@ -2201,27 +2155,6 @@ function ensureDebateIframeModal() {
       requestAnimationFrame(() => {
         setDebateIframeModalLoadingState(false);
       });
-      return;
-    }
-
-    if (e.data.type === "agon:navigate-iframe-to-created-debate") {
-      const nextUrl = String(e.data.url || "").trim();
-      const modal = document.getElementById("debate-iframe-modal");
-      const frame = document.getElementById("debate-iframe-modal-frame");
-      const modalIsOpen = !!(modal && modal.classList.contains("open"));
-
-      if (nextUrl) {
-        window.__agonIframeCurrentPathname = "/debate";
-
-        if (!frame || !modalIsOpen) {
-          openDebateIframeModal(nextUrl);
-          return;
-        }
-
-        setDebateIframeModalLoadingState(true);
-        setDebateIframeModalCloseButtonVisible(true);
-        frame.src = nextUrl;
-      }
       return;
     }
 
@@ -5426,7 +5359,7 @@ function getDebateShareText() {
 function buildVisibleShareMessage(text, url) {
   const cleanText = String(text || "")
     .trim()
-    .replace(/(?:\n\s*)?→\s*Agôn\s*:\s*\S+\s*$/u, "")
+    .replace(/(?:\n\s*)?(?:→\s*)?Agôn\s*:\s*\S+\s*$/u, "")
     .trim();
   const cleanUrl = String(url || "").trim();
 
@@ -5434,7 +5367,7 @@ function buildVisibleShareMessage(text, url) {
     return cleanText;
   }
 
-  return [cleanText, `→ Agôn : ${cleanUrl}`].filter(Boolean).join("\n\n");
+  return [cleanText, `→ Agôn ${cleanUrl}`].filter(Boolean).join("\n\n");
 }
 
 function getIdeaShareUrl(debateId, argumentId) {
@@ -5452,7 +5385,7 @@ function getIdeaShareData(debateId, argument) {
 
   const ideaTitle = String(argument?.title || "Idée sans titre").trim();
   const ideaBody = String(argument?.body || "").trim();
-const shortBody = ideaBody;
+  const shortBody = ideaBody;
   const textParts = [
     question,
     "",
@@ -5465,7 +5398,7 @@ const shortBody = ideaBody;
     textParts.push("");
   }
 
-  textParts.push("Qu’est-ce qui vous paraît le plus convaincant ?\n→");
+  textParts.push("Qu’est-ce qui vous paraît le plus convaincant ?");
 
   return {
     title: `${ideaTitle} — ${question}`,
@@ -5502,14 +5435,15 @@ function shareIdeaOnFacebook(debateId, encodedArgumentJson) {
 function shareIdeaOnWhatsApp(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
   const { text, url } = getIdeaShareData(debateId, argument);
-  const shareUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const message = buildVisibleShareMessage(text, url);
+  const shareUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
 function shareIdeaByEmail(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
   const { title, text, url } = getIdeaShareData(debateId, argument);
-  const body = text;
+  const body = buildVisibleShareMessage(text, url);
   window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -5523,7 +5457,8 @@ function shareIdeaOnLinkedIn(debateId, encodedArgumentJson) {
 function shareIdeaOnMastodon(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
   const { text, url } = getIdeaShareData(debateId, argument);
-  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(text)}`;
+  const message = buildVisibleShareMessage(text, url);
+  const shareUrl = `https://mastodon.social/share?text=${encodeURIComponent(message)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -5703,6 +5638,7 @@ function renderIdeaShareButtons(debateId, argument) {
     body: argument?.body || "",
     side: argument?.side || ""
   }));
+  const inlineEncodedArgument = encodedArgument.replaceAll("'", "%27");
   const menuId = `idea-share-menu-${argument?.id || ''}`;
 
   return `
@@ -5728,7 +5664,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ copyIdeaLink('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ copyIdeaLink('${debateId}', '${inlineEncodedArgument}'); })"
           title="Copier le lien de l'idée"
           aria-label="Copier le lien de l'idée"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5740,7 +5676,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ showIdeaQrCode('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ showIdeaQrCode('${debateId}', '${inlineEncodedArgument}'); })"
           title="Afficher le QR code de l'idée"
           aria-label="Afficher le QR code de l'idée"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5752,7 +5688,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnWhatsApp('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnWhatsApp('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur WhatsApp"
           aria-label="Partager l'idée sur WhatsApp"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5764,7 +5700,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnX('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnX('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur X"
           aria-label="Partager l'idée sur X"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5776,7 +5712,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaByEmail('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaByEmail('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée par email"
           aria-label="Partager l'idée par email"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5788,7 +5724,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnFacebook('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnFacebook('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur Facebook"
           aria-label="Partager l'idée sur Facebook"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5800,7 +5736,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnLinkedIn('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnLinkedIn('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur LinkedIn"
           aria-label="Partager l'idée sur LinkedIn"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5812,7 +5748,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnMastodon('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnMastodon('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur Mastodon"
           aria-label="Partager l'idée sur Mastodon"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -5824,7 +5760,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         <button
           class="share-icon-button"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnReddit('${debateId}', '${encodedArgument}'); })"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnReddit('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur Reddit"
           aria-label="Partager l'idée sur Reddit"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
@@ -6421,8 +6357,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
   }
 
   lines.push("Qu’est-ce qui vous paraît le plus convaincant ?");
-  lines.push("→ Agôn");
-  lines.push(url);
+  lines.push(`→ Agôn ${url}`);
 
   return {
     url,
@@ -8112,6 +8047,17 @@ function initIndexExplorerControls() {
   });
 }
 
+document.addEventListener("click", function(event) {
+  const controls = document.getElementById("index-explorer-controls");
+  const topToggle = document.getElementById("index-sort-toggle");
+
+  if (!controls || !topToggle) return;
+  if (controls.style.display === "none") return;
+  if (topToggle.contains(event.target) || controls.contains(event.target)) return;
+
+  setIndexExplorerControlsOpen(false);
+});
+
 function ensureCategoryFilterControl() {
   const searchInput = document.getElementById("debate-search");
   if (!searchInput) return null;
@@ -8318,6 +8264,17 @@ function toggleIndexSortMenu() {
   if (!menu) return;
   menu.classList.toggle("sort-menu-visible");
 }
+
+document.addEventListener("click", function(event) {
+  const dropdown = document.querySelector(".debate-sort-bar .sort-dropdown");
+  const menu = document.getElementById("index-sort-menu");
+
+  if (!dropdown || !menu) return;
+
+  if (!dropdown.contains(event.target)) {
+    menu.classList.remove("sort-menu-visible");
+  }
+});
 
 function applyIndexFilters() {
   const filteredDebates = getFilteredDebatesForIndex(debatesCache);
@@ -9928,8 +9885,7 @@ function buildCreateUrlWithReturnContext() {
 }
 
 function initDebateCreateEntryPoints() {
-  if (!(location.pathname === "/debate" || location.pathname === "/")) return;
-  if (window.self !== window.top) return;
+  if (location.pathname !== "/debate") return;
 
   const createLinks = Array.from(document.querySelectorAll('a[href="/create"], a[href^="/create?"]'));
   if (!createLinks.length) return;
@@ -9946,7 +9902,7 @@ function initDebateCreateEntryPoints() {
       const nextUrl = buildCreateUrlWithReturnContext();
       link.href = nextUrl;
 
-      if (window.self !== window.top) return;
+      if (!isTopLevelDebatePage()) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -9958,44 +9914,6 @@ function initDebateCreateEntryPoints() {
       openDebateIframeModal(nextUrl);
     });
   });
-}
-
-function initIframeEscapeToTopLevelIndexLinks() {
-  if (location.pathname !== "/debate") return;
-  if (window.self === window.top) return;
-  if (document.documentElement.dataset.iframeIndexEscapeBound === "true") return;
-  document.documentElement.dataset.iframeIndexEscapeBound = "true";
-
-  document.addEventListener("click", (event) => {
-    const link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
-    if (!link) return;
-
-    const rawHref = String(link.getAttribute('href') || '').trim();
-    if (!rawHref) return;
-    if (rawHref.startsWith('#') || /^javascript:/i.test(rawHref)) return;
-
-    let parsed;
-    try {
-      parsed = new URL(rawHref, window.location.origin);
-    } catch (error) {
-      return;
-    }
-
-    if (parsed.origin !== window.location.origin) return;
-    if (parsed.pathname !== "/") return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    try {
-      window.top.location.href = parsed.toString();
-      return;
-    } catch (error) {}
-
-    try {
-      window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
-    } catch (error) {}
-  }, true);
 }
 
 function applyCreateBackLinks() {
@@ -10064,6 +9982,92 @@ function applyCreateBackLinks() {
       window.location.href = fallbackUrl;
     });
   });
+}
+
+function ensureCreatedDebateFloatingCloseButton() {
+  if (location.pathname !== "/debate") return null;
+
+  if (!document.getElementById("created-debate-floating-close-style")) {
+    const style = document.createElement("style");
+    style.id = "created-debate-floating-close-style";
+    style.textContent = `
+      #created-debate-floating-close {
+        position: fixed;
+        bottom: 78px;
+        left: 16px;
+        z-index: 10000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(26,39,47,0.85);
+        color: #a0b0bb;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.15s, color 0.15s;
+      }
+      #created-debate-floating-close:hover {
+        background: rgba(26,39,47,1);
+        color: #e0e8ee;
+      }
+      @media (max-width: 768px) {
+        #created-debate-floating-close {
+          bottom: 16px;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  let button = document.getElementById("created-debate-floating-close");
+  if (button) return button;
+
+  button = document.createElement("button");
+  button.id = "created-debate-floating-close";
+  button.type = "button";
+  button.setAttribute("aria-label", "Fermer");
+  button.setAttribute("title", "Fermer");
+  button.setAttribute("aria-hidden", "true");
+  button.tabIndex = -1;
+  button.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  button.addEventListener("click", handleCreatedDebateFloatingCloseButtonClick);
+  document.body.appendChild(button);
+  return button;
+}
+
+function updateCreatedDebateFloatingCloseButtonVisibility() {
+  if (location.pathname !== "/debate") return;
+
+  const button = ensureCreatedDebateFloatingCloseButton();
+  if (!button) return;
+
+  const context = getCreatedDebateContext();
+  const currentDebateId = String(getDebateId() || "").trim();
+  const isVisible = !!context && !!currentDebateId && context.debateId === currentDebateId;
+
+  button.style.display = isVisible ? "flex" : "none";
+  button.setAttribute("aria-hidden", isVisible ? "false" : "true");
+  button.tabIndex = isVisible ? 0 : -1;
+}
+
+function handleCreatedDebateFloatingCloseButtonClick(event) {
+  if (event?.preventDefault) {
+    event.preventDefault();
+  }
+
+  clearCreatedDebateContext();
+  updateCreatedDebateFloatingCloseButtonVisibility();
+  window.location.href = "/";
+}
+
+function initCreatedDebateFloatingCloseButton() {
+  if (location.pathname !== "/debate") return;
+  ensureCreatedDebateFloatingCloseButton();
+  updateCreatedDebateFloatingCloseButtonVisibility();
 }
 
 function initDebateImageLightbox() {
@@ -10184,7 +10188,8 @@ async function resumePendingCreateVideoUpload() {
     if (status?.finalized) {
       clearCreatePendingVideoUploadState();
       setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l’arène…");
-      navigateToCreatedDebate(debateId);
+      markCreatedDebateContext(debateId, resolveCreateReturnUrl());
+      window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
       return true;
     }
 
@@ -10222,7 +10227,8 @@ async function resumePendingCreateVideoUpload() {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l’arène. Redirection…");
-    navigateToCreatedDebate(debateId);
+    markCreatedDebateContext(debateId, resolveCreateReturnUrl());
+    window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
     return true;
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
@@ -11098,7 +11104,9 @@ form.addEventListener("submit", async e => {
 
     clearCreatePendingVideoUploadState();
     setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
-    navigateToCreatedDebate(r.id);
+    markCreateToDebateLoadingTransition();
+    markCreatedDebateContext(r.id, resolveCreateReturnUrl());
+    location = "/debate?id=" + r.id;
   } catch (error) {
     if (createPublishCancelRequested || getCreatePublishSignal()?.aborted || /annul/i.test(String(error?.message || ""))) {
       hideCreatePublishProgress();
@@ -11731,8 +11739,6 @@ function updateDeleteDebateButtonVisibility(debate) {
 }
 
 async function initDebate() {
-  ensureInlineIframeCloseButton();
-
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
 
@@ -12087,10 +12093,6 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
       tabindex="0"
       aria-label="Ouvrir le post Instagram"
     >
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; width:100%;">
-        <span style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:800; letter-spacing:0.01em; color:#111827;">Instagram</span>
-        <a class="debate-source-link" href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir le post sur Instagram</a>
-      </div>
       <div id="debate-source-instagram-embed" style="width:100%; display:flex; justify-content:center;"></div>
     </div>
   `;
@@ -12138,9 +12140,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
         data-instgrm-permalink="${escapeAttribute(embedPermalink)}?utm_source=ig_embed&amp;utm_campaign=loading"
         data-instgrm-version="14"
         style="background:#fff; border:0; border-radius:18px; box-shadow:0 10px 28px rgba(15,23,42,0.08); margin:0; max-width:100%; padding:0; width:100%;"
-      >
-        <a href="${escapeAttribute(embedPermalink)}" target="_blank" rel="noopener noreferrer">Voir ce post sur Instagram</a>
-      </blockquote>
+      ></blockquote>
     `;
 
     applyDebateInstagramDesktopSizing();
@@ -15906,16 +15906,12 @@ scheduleMobileIndexCardHighlightUpdate();
   initIndexReturnNavigation();
   applyCreateBackLinks();
 
-  if (location.pathname === "/") {
-    initIndex();
-    initDebateCreateEntryPoints();
-    maybeOpenPendingCreatedDebateInIframe();
-  }
+  if (location.pathname === "/") initIndex();
   if (location.pathname === "/create") initCreate();
 if (location.pathname === "/debate") {
   localStorage.setItem("debate_view_mode", "columns");
   initDebateCreateEntryPoints();
-  initIframeEscapeToTopLevelIndexLinks();
+  initCreatedDebateFloatingCloseButton();
   initDebate();
 }  if (location.pathname === "/admin-reports") initAdminReports();
   if (location.pathname === "/notifications") loadNotificationsPage();
