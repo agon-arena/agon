@@ -1644,7 +1644,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260423-1"></script>
+<script src="/script.js?v=20260422-2"></script>
 <script>
 // Neutralise le -8px injecté par updateDebateSourcePreviewVerticalOffset
 // Le CSS sur body.page-debate .debate-hero gère l'écart
@@ -1703,8 +1703,91 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var previousBodyTouchAction = '';
   var previousHtmlTouchAction = '';
   var voicesPanelScrollLocked = false;
-  function setIframeCloseButtonsHidden(){
-    return;
+  var hiddenIframeCloseButtons = [];
+
+  function forceShowIframeCloseButton(button){
+    if(!button) return;
+    button.style.display = 'flex';
+    button.style.visibility = 'visible';
+    button.style.pointerEvents = 'auto';
+    button.style.opacity = '1';
+    button.setAttribute('aria-hidden', 'false');
+    button.tabIndex = 0;
+  }
+
+  function setIframeCloseButtonsHidden(shouldHide){
+    var buttons = [];
+    var localButton = document.getElementById('debate-iframe-modal-close');
+    if(localButton) buttons.push(localButton);
+
+    try {
+      if(window.parent && window.parent !== window && window.parent.document){
+        var parentButton = window.parent.document.getElementById('debate-iframe-modal-close');
+        if(parentButton && buttons.indexOf(parentButton) === -1) buttons.push(parentButton);
+      }
+    } catch (error) {}
+
+    if(shouldHide){
+      hiddenIframeCloseButtons = [];
+      buttons.forEach(function(button){
+        hiddenIframeCloseButtons.push({
+          el: button,
+          display: button.style.display || '',
+          visibility: button.style.visibility || '',
+          pointerEvents: button.style.pointerEvents || '',
+          opacity: button.style.opacity || '',
+          ariaHidden: button.getAttribute('aria-hidden') || '',
+          tabIndex: button.getAttribute('tabindex') || ''
+        });
+        button.style.display = 'none';
+        button.style.visibility = 'hidden';
+        button.style.pointerEvents = 'none';
+        button.style.opacity = '0';
+        button.setAttribute('aria-hidden', 'true');
+        button.tabIndex = -1;
+      });
+      return;
+    }
+
+    hiddenIframeCloseButtons.forEach(function(entry){
+      if(!entry || !entry.el) return;
+      var button = entry.el;
+      forceShowIframeCloseButton(button);
+      if(entry.ariaHidden === '') button.removeAttribute('aria-hidden');
+      else button.setAttribute('aria-hidden', entry.ariaHidden);
+      if(entry.tabIndex === '') button.removeAttribute('tabindex');
+      else button.setAttribute('tabindex', entry.tabIndex);
+    });
+
+    try {
+      if(typeof window.setDebateIframeModalCloseButtonVisible === 'function'){
+        window.setDebateIframeModalCloseButtonVisible(true);
+      }
+    } catch (error) {}
+
+    try {
+      if(window.parent && window.parent !== window && typeof window.parent.setDebateIframeModalCloseButtonVisible === 'function'){
+        window.parent.setDebateIframeModalCloseButtonVisible(true);
+      }
+    } catch (error) {}
+
+    buttons.forEach(function(button){
+      forceShowIframeCloseButton(button);
+    });
+
+    requestAnimationFrame(function(){
+      buttons.forEach(function(button){
+        forceShowIframeCloseButton(button);
+      });
+    });
+
+    setTimeout(function(){
+      buttons.forEach(function(button){
+        forceShowIframeCloseButton(button);
+      });
+    }, 0);
+
+    hiddenIframeCloseButtons = [];
   }
 
   function lockVoicesPanelBackgroundScroll(){
