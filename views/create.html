@@ -226,14 +226,15 @@
       <form id="create-form" class="create-form" novalidate>
 <div class="form-group create-form-group create-form-group-primary">
   <label for="question">Sujet de l'arène</label>
-<input
+<textarea
   id="question"
-  type="text"
+  rows="1"
   placeholder="Ex. Faut-il interdire TikTok ?"
   maxlength="100"
   required
-  oninput="updateCounter('question','question-count',100)"
->
+  oninput="updateCounter('question','question-count',100); autoResizeTextarea(this)"
+  style="overflow:hidden; resize:none; min-height:48px; line-height:1.4; padding-top:12px; padding-bottom:12px;"
+></textarea>
 <small id="question-count">0 / 100</small>
 <small>Ecris ici le sujet de ton arène. </small>
 
@@ -558,6 +559,16 @@ function closeQRModal() {
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeQRModal();
+});
+
+function autoResizeTextarea(element) {
+  if (!element) return;
+  element.style.height = 'auto';
+  element.style.height = element.scrollHeight + 'px';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  autoResizeTextarea(document.getElementById('question'));
 });
 </script>
 

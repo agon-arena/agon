@@ -34,13 +34,14 @@ let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
 
 const DEBATE_CATEGORY_OPTIONS = [
-  "Actualités du moment",
   "Politique et société",
+  "Économie et travail",
   "Sciences et technologies",
-  "Santé et bien-être",
   "Sciences humaines",
-  "Arts et littérature"
+  "Arts et culture",
+  "Santé et bien-être",
 ];
+
 
 const DEBATE_CATEGORY_SEPARATOR = " · ";
 
@@ -1163,9 +1164,9 @@ if (sideFocusLeft) {
     sideFocusLeft.style.color = "#ffffff";
     sideFocusLeft.style.border = "1px solid #111111";
   } else {
-    sideFocusLeft.style.background = "#dcfce7";
-    sideFocusLeft.style.color = "#166534";
-    sideFocusLeft.style.border = "1px solid #86efac";
+    sideFocusLeft.style.background = "#FFF0E0";
+    sideFocusLeft.style.color = "#7C4A15";
+    sideFocusLeft.style.border = "1px solid #F5BF8E";
   }
 }
 
@@ -1179,9 +1180,9 @@ if (sideFocusRight) {
     sideFocusRight.style.color = "#ffffff";
     sideFocusRight.style.border = "1px solid #111111";
   } else {
-    sideFocusRight.style.background = "#fee2e2";
-    sideFocusRight.style.color = "#991b1b";
-    sideFocusRight.style.border = "1px solid #fca5a5";
+    sideFocusRight.style.background = "#EAF0F8";
+    sideFocusRight.style.color = "#3D5A80";
+    sideFocusRight.style.border = "1px solid #8AAEC8";
   }
 }
 }
@@ -2703,7 +2704,7 @@ function flashArgumentCard(argumentId) {
     !!element.closest("#arguments-a") ||
     !!element.closest(".column-a");
 
-  element.classList.remove("flash-green", "admin-highlight");
+  element.classList.remove("flash-green", "flash-blue");
   void element.offsetWidth;
 
   if (isGreenTarget) {
@@ -2712,9 +2713,9 @@ function flashArgumentCard(argumentId) {
       element.classList.remove("flash-green");
     }, 5000);
   } else {
-    element.classList.add("admin-highlight");
+    element.classList.add("flash-blue");
     setTimeout(() => {
-      element.classList.remove("admin-highlight");
+      element.classList.remove("flash-blue");
     }, 5000);
   }
 }
@@ -2965,14 +2966,7 @@ function buildIndexCardBottomEntryHtml(debate, options = {}) {
   const voteCount = d.vote_count || (Number(d.votes_a || 0) + Number(d.votes_b || 0));
 
   return `
-    <a
-      class="debate-card-bottom-entry"
-      href="/debate?id=${d.id}"
-      onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;"
-      style="display:block; text-decoration:none; color:inherit;"
-      aria-label="Ouvrir l'arène"
-      title="Ouvrir l'arène"
-    >
+    <div class="debate-card-bottom-entry">
       <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
         <div class="debate-card-counts-row">
           <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
@@ -2980,9 +2974,36 @@ function buildIndexCardBottomEntryHtml(debate, options = {}) {
           <p class="debate-card-votes-count"${!(voteCount > 0) ? ' style="display:none;"' : ''}>${voteCount} voix</p>
         </div>
         <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
-        ${d.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(d.last_argument_at))}</p>` : ""}
+        ${getDebateLastActivityAt(d) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(d)))}</p>` : ""}
       </div>
-    </a>
+    </div>
+  `;
+}
+
+function buildIndexCardFooterActionsHtml(debate) {
+  const d = debate || {};
+
+  return `
+    <div class="debate-card-footer-actions">
+      <button
+        class="report-button debate-card-footer-report"
+        type="button"
+        onclick="openReportBox('debate', '${d.id}')"
+      >
+        Signaler
+      </button>
+
+      <a
+        class="debate-card-entry-cta"
+        href="/debate?id=${d.id}"
+        onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;"
+        aria-label="Entrer dans l'arene"
+        title="Entrer dans l'arene"
+      >
+        Entrer dans l'arene
+        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+      </a>
+    </div>
   `;
 }
 
@@ -5324,6 +5345,19 @@ function formatDebateDate(dateString) {
   return `Publié le ${date} à ${hour}`;
 }
 
+function getDebateLastActivityAt(debate) {
+  return debate?.last_activity_at || debate?.last_argument_at || debate?.created_at || "";
+}
+
+function isDebateNew(createdAt) {
+  if (!createdAt) return false;
+
+  const createdAtTimestamp = new Date(String(createdAt).replace(" ", "T")).getTime();
+  if (!createdAtTimestamp) return false;
+
+  return (Date.now() - createdAtTimestamp) < 24 * 60 * 60 * 1000;
+}
+
 function formatLastArgumentDate(dateString) {
   if (!dateString) return "";
 
@@ -5342,6 +5376,26 @@ function formatLastArgumentDate(dateString) {
   });
 
 return `Dernière idée le ${date} à ${hour}`;}
+
+function formatLastActivityDate(dateString) {
+  if (!dateString) return "";
+
+  const normalized = String(dateString).includes("T")
+    ? String(dateString)
+    : String(dateString).replace(" ", "T");
+
+  const d = new Date(normalized);
+
+  if (Number.isNaN(d.getTime())) return "";
+
+  const date = d.toLocaleDateString("fr-FR");
+  const hour = d.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  return `Dernière activité le ${date} à ${hour}`;
+}
 
 function getDebateShareUrl() {
   const id = getDebateId();
@@ -7431,7 +7485,7 @@ async function saveAdminCardEdit(debateId, btn) {
     // Feedback visuel
     if (saveBtn) {
       saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé';
-      saveBtn.style.background = '#16a34a';
+      saveBtn.style.background = '#FFD9B3';
       setTimeout(() => {
         saveBtn.innerHTML = origHtml;
         saveBtn.style.background = '';
@@ -8243,24 +8297,60 @@ function sortDebatesForIndex(debates) {
   if (currentIndexSortMode === "ideas") {
     return sorted.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
-      const dateA = new Date(a.last_argument_at || a.created_at || 0).getTime();
-      const dateB = new Date(b.last_argument_at || b.created_at || 0).getTime();
+      const dateA = new Date(getDebateLastActivityAt(a) || 0).getTime();
+      const dateB = new Date(getDebateLastActivityAt(b) || 0).getTime();
       return dateB - dateA;
     });
   }
 
-  // "popular" (default) : argument_count + bonus de fraîcheur décroissant sur 14 jours
+   // "popular" (default) : récence forte au départ, activité continue, profondeur historique
+
   const now = Date.now();
   return sorted.sort((a, b) => {
-    const activityA = new Date(a.last_argument_at || a.created_at || 0).getTime();
-    const activityB = new Date(b.last_argument_at || b.created_at || 0).getTime();
-    const freshnessA = Math.max(0, 1 - (now - activityA) / (14 * 24 * 60 * 60 * 1000));
-    const freshnessB = Math.max(0, 1 - (now - activityB) / (14 * 24 * 60 * 60 * 1000));
-    const scoreA = (a.argument_count || 0) + freshnessA * 10;
-    const scoreB = (b.argument_count || 0) + freshnessB * 10;
+    const createdAtA = new Date(a.created_at || 0).getTime();
+    const createdAtB = new Date(b.created_at || 0).getTime();
+
+    const lastActivityA = new Date(getDebateLastActivityAt(a) || a.created_at || 0).getTime();
+    const lastActivityB = new Date(getDebateLastActivityAt(b) || b.created_at || 0).getTime();
+
+    const ageHoursA = Math.max(0, (now - createdAtA) / (1000 * 60 * 60));
+    const ageHoursB = Math.max(0, (now - createdAtB) / (1000 * 60 * 60));
+
+    const activityHoursA = Math.max(0, (now - lastActivityA) / (1000 * 60 * 60));
+    const activityHoursB = Math.max(0, (now - lastActivityB) / (1000 * 60 * 60));
+
+    const contributionsA =
+      Number(a.argument_count || 0) +
+      Number(a.comment_count || 0) +
+      Number(a.vote_count || 0);
+
+    const contributionsB =
+      Number(b.argument_count || 0) +
+      Number(b.comment_count || 0) +
+      Number(b.vote_count || 0);
+
+    const recencyBoostA = Math.max(0, 24 * (1 - ageHoursA / 72));
+    const recencyBoostB = Math.max(0, 24 * (1 - ageHoursB / 72));
+
+    const activityBoostA = Math.max(0, 18 * (1 - activityHoursA / 96));
+    const activityBoostB = Math.max(0, 18 * (1 - activityHoursB / 96));
+
+    const contributionBoostA = Math.sqrt(contributionsA) * 2;
+    const contributionBoostB = Math.sqrt(contributionsB) * 2;
+
+    const inactivityPenaltyA =
+      ageHoursA > 24 && activityHoursA > 24 ? Math.min(12, (activityHoursA - 24) / 12) : 0;
+
+    const inactivityPenaltyB =
+      ageHoursB > 24 && activityHoursB > 24 ? Math.min(12, (activityHoursB - 24) / 12) : 0;
+
+    const scoreA = recencyBoostA + activityBoostA + contributionBoostA - inactivityPenaltyA;
+    const scoreB = recencyBoostB + activityBoostB + contributionBoostB - inactivityPenaltyB;
+
     if (scoreB !== scoreA) return scoreB - scoreA;
     return Number(b.id || 0) - Number(a.id || 0);
   });
+
 }
 
 const INDEX_SORT_LABELS = {
@@ -8332,11 +8422,16 @@ section.style.display = "block";
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
+const isNewDebate = isDebateNew(d.created_at);
+const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
 
     return `
       <article class="debate-card" data-debate-id="${d.id}">
         <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
-          <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+          <div class="debate-card-top-row">
+            <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+            ${newBadgeHtml}
+          </div>
           <div class="debate-card-type">${debateTypeLabel}</div>
           <h2>${escapeHtml(d.question)}</h2>
 
@@ -8513,16 +8608,9 @@ ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
             </button>
           </div>
 
-          <button
-            class="report-button"
-            type="button"
-            onclick="openReportBox('debate', '${d.id}')"
-          >
-            Signaler
-          </button>
-
           ${getDebateCardDeleteButtonHtml(d)}
         </div>
+        ${buildIndexCardFooterActionsHtml(d)}
         ${buildAdminEditPanelHtml(d)}
       </article>
     `;
@@ -8577,11 +8665,16 @@ div.innerHTML = debatesToShow.map(d => {
 const mediaHtml = renderIndexInlineSourceCard(d);
 const mediaOutsideLink = !!mediaHtml;
 const contextHtml = buildIndexContextPreviewHtml(d);
+const isNewDebate = isDebateNew(d.created_at);
+const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
 
   return `
     <article class="debate-card" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
-        <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+        <div class="debate-card-top-row">
+          <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+          ${newBadgeHtml}
+        </div>
         <div class="debate-card-type">${debateTypeLabel}</div>
         <h2>${escapeHtml(d.question)}</h2>
 
@@ -8720,16 +8813,9 @@ onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmai
             </button>
         </div>
 
-        <button
-          class="report-button"
-          type="button"
-          onclick="openReportBox('debate', '${d.id}')"
-        >
-          Signaler
-        </button>
-
         ${getDebateCardDeleteButtonHtml(d)}
       </div>
+      ${buildIndexCardFooterActionsHtml(d)}
       ${buildAdminEditPanelHtml(d)}
     </article>
   `;
@@ -11591,7 +11677,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
                 <p class="debate-card-votes-count"${!(debate.vote_count > 0) ? ' style="display:none;"' : ''}>${debate.vote_count || 0} voix</p>
               </div>
               <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
-              ${debate.last_argument_at ? `<p class="debate-last-argument">${escapeHtml(formatLastArgumentDate(debate.last_argument_at))}</p>` : ""}
+              ${getDebateLastActivityAt(debate) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(debate)))}</p>` : ""}
             </div>
           </a>
 
@@ -12676,10 +12762,10 @@ else if (pendingArgumentScrollId) {
           element.classList.remove("flash-green");
         }, 2000);
       } else {
-        element.classList.add("admin-highlight");
+        element.classList.add("flash-blue");
 
         setTimeout(() => {
-          element.classList.remove("admin-highlight");
+          element.classList.remove("flash-blue");
         }, 2000);
       }
 
@@ -12860,10 +12946,10 @@ if (element) {
       }, 5000);
     }
   } else {
-    element.classList.add("admin-highlight");
+    element.classList.add("flash-blue");
 
     setTimeout(() => {
-      element.classList.remove("admin-highlight");
+      element.classList.remove("flash-blue");
     }, 5000);
   }
 } else {

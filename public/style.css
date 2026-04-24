@@ -308,9 +308,9 @@ body {
 .admin-badge {
   display: inline-flex;
   align-items: center;
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
+  background: #daf0f8;
+  color: #7ABADC;
+  border: 1px solid #daf0f8;
   padding: 8px 12px;
   border-radius: 999px;
   font-size: 13px;
@@ -452,15 +452,41 @@ main.create-page {
   color: inherit;
 }
 
+.debate-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 1px;
+}
+
 .debate-card-category {
   display: inline-block;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
   background: #eef2ff;
   color: #4338ca;
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
+}
+
+.debate-card-top-row .debate-card-category {
+  margin-bottom: 0;
+}
+
+.debate-card-new-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .debate-card h2 {
@@ -908,12 +934,12 @@ margin: 6px 0 8px 0;  font-size: 20px;
   }
 }
 .pos-a{
-  color:#2e7d32;
+  color:#7ABADC;
   font-weight:500;
 }
 
 .pos-b{
-  color:#c62828;
+  color:#3D5A80;
   font-weight:500;
 }
 
@@ -930,11 +956,11 @@ margin: 6px 0 8px 0;  font-size: 20px;
 }
 
 .debate-card-score .score-a{
-  background:#9fe3b0;
+  background:#7ABADC;
 }
 
 .debate-card-score .score-b{
-  background:#f5a3a3;
+  background:#7A9EC0;
 }
 
 .score-labels{
@@ -942,6 +968,14 @@ margin: 6px 0 8px 0;  font-size: 20px;
   justify-content:space-between;
   font-size:12px;
   margin-top:4px;
+}
+.score-labels span:first-child{
+  color:#7ABADC;
+  font-weight:600;
+}
+.score-labels span:last-child{
+  color:#3D5A80;
+  font-weight:600;
 }
 
 .debate-date {
@@ -1247,13 +1281,13 @@ margin: 6px 0 8px 0;  font-size: 20px;
 }
 
 .position-a {
-  background: #eefbf1;
-  border-color: #cfead6;
+  background: #daf0f8;
+  border-color: #7ABADC;
 }
 
 .position-b {
-  background: #fff3f3;
-  border-color: #f2d2d2;
+  background: #EAF0F8;
+  border-color: #8AAEC8;
 }
 
 .create-actions {
@@ -1359,21 +1393,21 @@ select:focus {
 }
 
 .debate-focus-btn-a{
-  background:#dcfce7;
-  color:#166534;
+  background:#daf0f8;
+  color:#7ABADC;
 }
 
 .debate-focus-btn-a:hover{
-  background:#bbf7d0;
+  background:#daf0f8;
 }
 
 .debate-focus-btn-b{
-  background:#fee2e2;
-  color:#991b1b;
+  background:#EAF0F8;
+  color:#3D5A80;
 }
 
 .debate-focus-btn-b:hover{
-  background:#fecaca;
+  background:#D5E2F0;
 }
 
 .debate-focus-btn-reset{
@@ -1626,14 +1660,14 @@ body.debate-topbar-hidden .debate-compact-bell {
 
 .column-header.position-a,
 .column-a .column-header {
-  background:#eefbf1;
-  border-color:#cfead6;
+  background:#daf0f8;
+  border-color:#7ABADC;
 }
 
 .column-header.position-b,
 .column-b .column-header {
-  background:#fff3f3;
-  border-color:#f2d2d2;
+  background:#EAF0F8;
+  border-color:#8AAEC8;
 }
 .position-focus-active{
   transform: scale(1.01);
@@ -1642,13 +1676,13 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .position-focus-a{
-  border-color: #16a34a !important;
-  background: #dcfce7 !important;
+  border-color: #7ABADC !important;
+  background: #daf0f8 !important;
 }
 
 .position-focus-b{
-  border-color: #dc2626 !important;
-  background: #fee2e2 !important;
+  border-color: #B0C4DE !important;
+  background: #EAF0F8 !important;
 }
 
 .column-header h2 {
@@ -1661,6 +1695,14 @@ body.debate-topbar-hidden .debate-compact-bell {
   font-weight:800;
   margin-bottom:8px;
   color:#111827;
+}
+
+#score-a{
+  color:#7ABADC;
+}
+
+#score-b{
+  color:#3D5A80;
 }
 
 .position-score strong{
@@ -1694,21 +1736,21 @@ body.debate-topbar-hidden .debate-compact-bell {
   }
 }
 .position-argument-button-a{
-  background:#dcfce7;
-  color:#166534;
+  background:#daf0f8;
+  color:#7ABADC;
 }
 
 .position-argument-button-a:hover{
-  background:#bbf7d0;
+  background:#daf0f8;
 }
 
 .position-argument-button-b{
-  background:#fee2e2;
-  color:#991b1b;
+  background:#EAF0F8;
+  color:#3D5A80;
 }
 
 .position-argument-button-b:hover{
-  background:#fecaca;
+  background:#D5E2F0;
 }
 @media (min-width: 769px) {
   .position-argument-button {
@@ -1939,19 +1981,19 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 #arguments-a .argument-card {
-  background-color: rgba(34,197,94,0.08);
+  background-color: rgba(122,186,220,0.08);
 }
 
 #arguments-b .argument-card {
-  background-color: rgba(239,68,68,0.08);
+  background-color: rgba(176,196,222,0.08);
 }
 
 .argument-card-a {
-  background-color: rgba(34,197,94,0.08);
+  background-color: rgba(122,186,220,0.08);
 }
 
 .argument-card-b {
-  background-color: rgba(239,68,68,0.08);
+  background-color: rgba(176,196,222,0.08);
 }
 
 .argument-top {
@@ -1988,8 +2030,8 @@ body.debate-topbar-hidden .debate-compact-bell {
 
 .my-vote-badge {
   display: inline-block;
-  background: #dcfce7;
-  color: #166534;
+  background: #daf0f8;
+  color: #7ABADC;
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 13px;
@@ -2043,12 +2085,12 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .vote-button-active {
-  background: #dcfce7;
-  color: #166534;
+  background: #daf0f8;
+  color: #7ABADC;
 }
 
 .vote-button-active:hover {
-  background: #bbf7d0;
+  background: #daf0f8;
 }
 
 .vote-button[disabled]{
@@ -2209,14 +2251,14 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 #my-arguments-a .my-argument-chip,
 .my-arguments-summary-left .my-argument-chip {
-  background: rgba(34,197,94,0.08);
-  border-color: #cfead6;
+  background: rgba(122,186,220,0.08);
+  border-color: #7ABADC;
 }
 
 #my-arguments-b .my-argument-chip,
 .my-arguments-summary-right .my-argument-chip {
-  background: rgba(239,68,68,0.08);
-  border-color: #f2d2d2;
+  background: rgba(176,196,222,0.08);
+  border-color: #8AAEC8;
 }
 
 .my-argument-chip-text{
@@ -2406,12 +2448,12 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .comments-count-favorable{
-  color:#16a34a;
+  color:#7ABADC;
   font-weight:600;
 }
 
 .comments-count-defavorable{
-  color:#dc2626;
+  color:#B0C4DE;
   font-weight:600;
 }
 
@@ -2468,13 +2510,13 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .comment-stance-favorable{
-  background:#dcfce7;
-  color:#166534;
+  background:#daf0f8;
+  color:#7ABADC;
 }
 
 .comment-stance-defavorable{
-  background:#fee2e2;
-  color:#991b1b;
+  background:#EAF0F8;
+  color:#3D5A80;
 }
 
 .comments-list {
@@ -2515,8 +2557,8 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .comment-owner-delete:hover {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: #EAF0F8;
+  color: #4A6A8A;
   transform: scale(1.05);
 }
 
@@ -2709,12 +2751,12 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .score-bar-a{
-  background:#16a34a;
+  background:#7ABADC;
   height:100%;
 }
 
 .score-bar-b{
-  background:#dc2626;
+  background:#7A9EC0;
   height:100%;
 }
 
@@ -2724,11 +2766,11 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .score-bar-label-a{
-  color:#166534;
+  color:#7ABADC;
 }
 
 .score-bar-label-b{
-  color:#991b1b;
+  color:#3D5A80;
 }
 
 /* Admin */
@@ -3393,30 +3435,30 @@ body.debate-topbar-hidden .debate-compact-bell {
 }
 
 .list-position-button-a{
-  color:#166534;
-  background:rgba(22,163,74,0.08);
-  border-color:#86efac;
+  color:#7ABADC;
+  background:rgba(122,186,220,0.08);
+  border-color:#7ABADC;
 }
 
 .list-position-button-b{
-  color:#991b1b;
-  background:rgba(220,38,38,0.08);
-  border-color:#fca5a5;
+  color:#3D5A80;
+  background:rgba(176,196,222,0.08);
+  border-color:#8AAEC8;
 }
 
 .list-position-button-a.list-position-button-active{
-  background:#16a34a;
+  background:#7ABADC;
   color:#ffffff;
-  border-color:#15803d;
-  box-shadow:0 0 0 3px rgba(22,163,74,0.18), 0 8px 18px rgba(22,163,74,0.18);
+  border-color:#7ABADC;
+  box-shadow:0 0 0 3px rgba(122,186,220,0.18), 0 8px 18px rgba(122,186,220,0.18);
   transform:translateY(-1px);
 }
 
 .list-position-button-b.list-position-button-active{
-  background:#dc2626;
+  background:#B0C4DE;
   color:#ffffff;
-  border-color:#b91c1c;
-  box-shadow:0 0 0 3px rgba(220,38,38,0.16), 0 8px 18px rgba(220,38,38,0.16);
+  border-color:#4A6A8A;
+  box-shadow:0 0 0 3px rgba(176,196,222,0.16), 0 8px 18px rgba(176,196,222,0.16);
   transform:translateY(-1px);
 }
 
@@ -3598,11 +3640,11 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
 }
 .voice-title-highlight {
   display: inline-block;
-  border: 3px solid #ff3b3b !important;
+  border: 3px solid #B0C4DE !important;
   border-radius: 8px;
   padding: 2px 6px;
-  background: #fff5f5 !important;
-  box-shadow: 0 0 0 4px rgba(255,0,0,0.25);
+  background: #EAF0F8 !important;
+  box-shadow: 0 0 0 4px rgba(176,196,222,0.25);
   text-decoration: none !important;
   color: #374151 !important;
   animation: voiceTitleFlash 1s ease-in-out 2;
@@ -3611,21 +3653,21 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
 @keyframes voiceTitleFlash {
   0% {
     background: #fff;
-    box-shadow: 0 0 0 0 rgba(255,0,0,0);
+    box-shadow: 0 0 0 0 rgba(176,196,222,0);
   }
   50% {
-    background: #ffe5e5;
-    box-shadow: 0 0 0 4px rgba(255,0,0,0.25);
+    background: #EAF0F8;
+    box-shadow: 0 0 0 4px rgba(176,196,222,0.25);
   }
   100% {
     background: #fff;
-    box-shadow: 0 0 0 0 rgba(255,0,0,0);
+    box-shadow: 0 0 0 0 rgba(176,196,222,0);
   }
 }
 
 .debate-card-type{
   display:inline-block;
-  margin-bottom:10px;
+  margin-bottom:2px;
   background:#f3f4f6;
   color:#374151;
   padding:5px 10px;
@@ -5276,7 +5318,17 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .debate-card-category,
   .page-home-mobile .debate-card-type {
     font-size: 12px;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
+  }
+
+  .page-home-mobile .debate-card-top-row {
+    gap: 8px;
+    margin-bottom: 1px;
+  }
+
+  .page-home-mobile .debate-card-new-badge {
+    font-size: 11px;
+    padding: 4px 8px;
   }
 
 .page-home-mobile .debate-card-positions {
@@ -5317,6 +5369,18 @@ body.debate-topbar-hidden .debate-hero-top {
   .page-home-mobile .debate-date,
   .page-home-mobile .debate-last-argument {
     font-size: 12px;
+  }
+
+  .page-home-mobile .debate-card-bottom-entry {
+    width: 100%;
+  }
+
+  .page-home-mobile .debate-card-entry-cta {
+    font-size: 12px;
+  }
+
+  .page-home-mobile .debate-card-footer-actions {
+    gap: 10px;
   }
 }
 @media (max-width: 480px) {
@@ -5863,11 +5927,11 @@ body.debate-topbar-hidden .debate-hero-top {
 
 .voice-title-highlight-green {
   display: inline-block;
-  border: 3px solid #22c55e !important;
+  border: 3px solid #7ABADC !important;
   border-radius: 8px;
   padding: 2px 6px;
-  background: #f0fff4 !important;
-  box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+  background: #daf0f8 !important;
+  box-shadow: 0 0 0 4px rgba(122,186,220,0.25);
   text-decoration: none !important;
   color: #374151 !important;
   animation: voiceTitleFlashGreen 1s ease-in-out 2;
@@ -5876,45 +5940,45 @@ body.debate-topbar-hidden .debate-hero-top {
 @keyframes voiceTitleFlashGreen {
   0% {
     background: #fff;
-    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+    box-shadow: 0 0 0 0 rgba(122,186,220,0);
   }
   50% {
-    background: #dcfce7;
-    box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+    background: #daf0f8;
+    box-shadow: 0 0 0 4px rgba(122,186,220,0.25);
   }
   100% {
     background: #fff;
-    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+    box-shadow: 0 0 0 0 rgba(122,186,220,0);
   }
 }
 
 /* ADMIN VERT */
 
 .admin-highlight-green {
-  border: 3px solid #22c55e;
-  box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
-  background: #f0fff4;
+  border: 3px solid #7ABADC;
+  box-shadow: 0 0 0 4px rgba(122,186,220,0.25);
+  background: #daf0f8;
   animation: reportFlashGreen 1s ease-in-out 3;
 }
 
 @keyframes reportFlashGreen {
   0% { background: #fff; }
-  50% { background: #dcfce7; }
+  50% { background: #daf0f8; }
   100% { background: #fff; }
 }
 
 @keyframes flashGreenCard {
   0% {
-    background-color: rgba(34,197,94,0.08);
-    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+    background-color: rgba(122,186,220,0.08);
+    box-shadow: 0 0 0 0 rgba(122,186,220,0);
   }
   50% {
-    background-color: rgba(34,197,94,0.28);
-    box-shadow: 0 0 0 4px rgba(34,197,94,0.25);
+    background-color: rgba(122,186,220,0.28);
+    box-shadow: 0 0 0 4px rgba(122,186,220,0.25);
   }
   100% {
-    background-color: rgba(34,197,94,0.08);
-    box-shadow: 0 0 0 0 rgba(34,197,94,0);
+    background-color: rgba(122,186,220,0.08);
+    box-shadow: 0 0 0 0 rgba(122,186,220,0);
   }
 }
 
@@ -5922,6 +5986,26 @@ body.debate-topbar-hidden .debate-hero-top {
 .argument-card.argument-card-a.flash-green,
 #arguments-a .argument-card.flash-green {
   animation: flashGreenCard 1s ease-in-out 2;
+}
+
+@keyframes flashBlueCard {
+  0% {
+    background-color: rgba(176,196,222,0.08);
+    box-shadow: 0 0 0 0 rgba(176,196,222,0);
+  }
+  50% {
+    background-color: rgba(176,196,222,0.28);
+    box-shadow: 0 0 0 4px rgba(176,196,222,0.25);
+  }
+  100% {
+    background-color: rgba(176,196,222,0.08);
+    box-shadow: 0 0 0 0 rgba(176,196,222,0);
+  }
+}
+
+.argument-card.argument-card-b.flash-blue,
+#arguments-b .argument-card.flash-blue {
+  animation: flashBlueCard 1s ease-in-out 2;
 }
 
 @media (max-width: 768px) {
@@ -6893,6 +6977,11 @@ padding:4px 14px 12px 14px;
     transform: rotate(360deg);
   }
 }
+
+.debate-card-bottom-entry {
+  width: 100%;
+}
+
 .debate-card-meta-below-media {
   display: flex;
   flex-direction: column;
@@ -6944,6 +7033,33 @@ padding:4px 14px 12px 14px;
   content: "•";
   margin-right: 8px;
   color: #9ca3af;
+}
+
+.debate-card-entry-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.debate-card-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.debate-card-footer-report {
+  flex: 0 0 auto;
+}
+
+.debate-card-footer-actions .debate-card-entry-cta {
+  margin-left: auto;
 }
 
 .debate-card-meta-below-media .debate-date,
@@ -9149,4 +9265,18 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
     width: 100% !important;
     justify-content: center !important;
   }
+}
+#index-active-filters,
+.index-active-filters {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.index-active-filter-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

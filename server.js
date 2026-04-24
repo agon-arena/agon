@@ -2468,12 +2468,14 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const commentCountByDebate = new Map();
+    const lastCommentAtByDebate = new Map();
+    const lastVoteAtByDebate = new Map();
     const argumentIds = (args || []).map((arg) => arg.id);
 
     if (argumentIds.length) {
       const { data: commentRows, error: commentsErr } = await supabase
         .from("comments")
-        .select("id,argument_id")
+        .select("id,argument_id,created_at")
         .in("argument_id", argumentIds);
 
       if (commentsErr) {
@@ -2485,6 +2487,33 @@ app.get("/api/debates", async (req, res) => {
         const debateId = debateIdByArgumentId.get(String(comment.argument_id));
         if (!debateId) continue;
         commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
+
+        if (comment.created_at) {
+          const previousLastCommentAt = lastCommentAtByDebate.get(debateId);
+          if (!previousLastCommentAt || new Date(comment.created_at) > new Date(previousLastCommentAt)) {
+            lastCommentAtByDebate.set(debateId, comment.created_at);
+          }
+        }
+      }
+
+      const { data: voteRows, error: votesErr } = await supabase
+        .from("votes")
+        .select("argument_id,created_at")
+        .in("argument_id", argumentIds);
+
+      if (votesErr) {
+        console.error(votesErr);
+        return sendServerError(res, "Erreur lecture débats.");
+      }
+
+      for (const vote of voteRows || []) {
+        const debateId = debateIdByArgumentId.get(String(vote.argument_id));
+        if (!debateId || !vote.created_at) continue;
+
+        const previousLastVoteAt = lastVoteAtByDebate.get(debateId);
+        if (!previousLastVoteAt || new Date(vote.created_at) > new Date(previousLastVoteAt)) {
+          lastVoteAtByDebate.set(debateId, vote.created_at);
+        }
       }
     }
 
@@ -2499,6 +2528,12 @@ app.get("/api/debates", async (req, res) => {
             .sort()
             .slice(-1)[0]
         : null;
+      const last_comment_at = lastCommentAtByDebate.get(d.id) || null;
+      const last_vote_at = lastVoteAtByDebate.get(d.id) || null;
+      const last_activity_at = [last_argument_at, last_comment_at, last_vote_at, d.created_at]
+        .filter(Boolean)
+        .sort()
+        .slice(-1)[0] || null;
 
       const votes_a = debateArgs
         .filter((a) => a.side === "A")
@@ -2518,6 +2553,9 @@ app.get("/api/debates", async (req, res) => {
         argument_count,
         comment_count,
         last_argument_at,
+        last_comment_at,
+        last_vote_at,
+        last_activity_at,
         votes_a,
         votes_b,
         vote_count: votes_a + votes_b,
@@ -2542,8 +2580,8 @@ app.get("/api/debates", async (req, res) => {
 
     rowsWithSourcePreview.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
-      const aDate = a.last_argument_at || a.created_at || "";
-      const bDate = b.last_argument_at || b.created_at || "";
+      const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
+      const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
       if (bDate !== aDate) return new Date(bDate) - new Date(aDate);
       return Number(b.id) - Number(a.id);
     });
