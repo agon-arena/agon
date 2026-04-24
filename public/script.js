@@ -1879,7 +1879,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
-  if (location.pathname !== "/") return;
+  if (!isTopLevelIframeModalPage()) return;
 
   ensurePageArrivalLoadingOverlayStyles();
   ensureDebateIframeParentLoadingStyles();
@@ -2003,7 +2003,7 @@ function initIframePageContextBridge() {
   }, true);
 }
 
-function setDebateIframeModalLoadingState(isLoading) {
+function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours") {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
 
@@ -2011,7 +2011,7 @@ function setDebateIframeModalLoadingState(isLoading) {
   modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
 
   if (isLoading) {
-    showDebateIframeParentLoadingOverlay("Entrée dans l'arène en cours");
+    showDebateIframeParentLoadingOverlay(message);
   } else {
     hideDebateIframeParentLoadingOverlay();
   }
@@ -2180,7 +2180,7 @@ function ensureDebateIframeModal() {
       // → déclencher le loading overlay pour masquer l'écran blanc
       const prevPathname = window.__agonIframeCurrentPathname || "";
       if (newPathname === "/debate" && prevPathname !== "/debate" && prevPathname !== "") {
-        setDebateIframeModalLoadingState(true);
+        setDebateIframeModalLoadingState(true, "Entrée dans l'arène en cours");
         if (debateIframeParentLoadingFallbackTimer) {
           clearTimeout(debateIframeParentLoadingFallbackTimer);
         }
@@ -2239,8 +2239,11 @@ function openDebateIframeModal(url) {
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
 
-  window.__agonIframeCurrentPathname = "/debate";
-  setDebateIframeModalLoadingState(true);
+  let iframeUrlPathname = url;
+  try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
+  const isDebateUrl = iframeUrlPathname === "/debate";
+  window.__agonIframeCurrentPathname = iframeUrlPathname;
+  setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
   frame.src = url;
   modal.classList.add("open");
@@ -2390,6 +2393,11 @@ function isTopLevelDebatePage() {
   return location.pathname === "/debate" && window.self === window.top;
 }
 
+function isTopLevelIframeModalPage() {
+  if (window.self !== window.top) return false;
+  return location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create";
+}
+
 function openNotificationsInDebateIframeModal(event = null) {
   if (event?.preventDefault) {
     event.preventDefault();
@@ -2399,7 +2407,7 @@ function openNotificationsInDebateIframeModal(event = null) {
     event.stopPropagation();
   }
 
-  if (!isTopLevelDebatePage()) return false;
+  if (!isTopLevelIframeModalPage()) return false;
 
   if (typeof closeHomeTopbarMenu === "function") {
     closeHomeTopbarMenu();
@@ -2415,13 +2423,13 @@ function bindDebateNotificationIframeTrigger(selector) {
 
   element.dataset.debateNotificationIframeBound = "true";
   element.addEventListener("click", (event) => {
-    if (!isTopLevelDebatePage()) return;
+    if (!isTopLevelIframeModalPage()) return;
     openNotificationsInDebateIframeModal(event);
   });
 }
 
 function initDebateNotificationIframeTriggers() {
-  if (!isTopLevelDebatePage()) return;
+  if (!isTopLevelIframeModalPage()) return;
 
   bindDebateNotificationIframeTrigger("#notifications-bell");
   bindDebateNotificationIframeTrigger("#notifications-bell-bottom");
