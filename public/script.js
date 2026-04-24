@@ -1879,7 +1879,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
-  if (location.pathname !== "/") return;
+  if (!(["/", "/notifications"].includes(location.pathname))) return;
 
   ensurePageArrivalLoadingOverlayStyles();
   ensureDebateIframeParentLoadingStyles();
@@ -1891,7 +1891,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/robot-head.png" alt=""></div>
         <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
       </div>
     `;
