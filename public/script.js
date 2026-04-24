@@ -2500,8 +2500,25 @@ function initIndexReturnNavigation() {
   const goBackToIndex = (event) => {
     event.preventDefault();
 
-    // Si on est dans un iframe (ouvert depuis l'index), on ferme la modale
+    const iframeReferrerPathname = (() => {
+      try {
+        const referrer = String(document.referrer || "").trim();
+        if (!referrer) return "";
+        const referrerUrl = new URL(referrer, window.location.origin);
+        if (referrerUrl.origin !== window.location.origin) return "";
+        return referrerUrl.pathname || "";
+      } catch (error) {
+        return "";
+      }
+    })();
+
+    // Dans l'iframe, après notifications -> débat, on revient d'abord à notifications.
     if (window.parent !== window) {
+      if (iframeReferrerPathname === "/notifications" && window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+
       window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
       return;
     }
