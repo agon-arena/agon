@@ -1879,7 +1879,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
-  if (!(["/", "/notifications"].includes(location.pathname))) return;
+  if (location.pathname !== "/") return;
 
   ensurePageArrivalLoadingOverlayStyles();
   ensureDebateIframeParentLoadingStyles();
@@ -1891,7 +1891,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/robot-head.png" alt=""></div>
+        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
         <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
       </div>
     `;
@@ -16725,6 +16725,11 @@ window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
 
 function updateHomeBottomNavViewportOffset() {
   if (window.innerWidth > 768) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  if (document.body.classList.contains('page-home-mobile')) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
     return;
   }

@@ -70,8 +70,8 @@ function replaceMetaPlaceholders(template, meta) {
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn – L'arène des idées | Réseau social européen",
-    description: "Agôn est un réseau social d'idées au service de l'intelligence collective, favorisant l'ouverture d'esprit, la réflexion et l'engagement.",
+    title: "Agôn – L'arène des idées | Réseau social européen de veille thématique",
+    description: "Agôn est le réseau social européen de veille thématique où les idées s'affrontent, les arguments circulent et les positions les plus convaincantes émergent.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
     imageAlt: "Agôn — l'arène des idées"
