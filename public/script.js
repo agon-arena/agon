@@ -14385,13 +14385,51 @@ function refreshAllVoiceButtonsDisabledState(debateId) {
   });
 }
 
-function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null) {
+function refreshVoteUiAfterLocalChange(debateId, argId, votes, myVotesOnArgument, lastVotedAt = null, options = {}) {
+  const shouldRerenderArguments = options && options.rerenderArguments === true;
+
   updateLocalArgumentVoteState(argId, votes, myVotesOnArgument, lastVotedAt);
-  rerenderArgumentsAfterLocalVoteChange(debateId);
+
+  if (shouldRerenderArguments) {
+    rerenderArgumentsAfterLocalVoteChange(debateId);
+  }
+
   renderUnifiedVoicesSummary(debateId, currentAllArguments);
   renderUnifiedVotedArgumentsSummary(debateId, currentAllArguments);
   refreshDebateScoreFromCurrentArguments();
   refreshAllVoiceButtonsDisabledState(debateId);
+}
+
+function shouldRerenderArgumentsAfterVoteChange(argId, beforeRankMap = {}, beforeArgument = null) {
+  const argIdString = String(argId);
+  const mode = getArgumentsSortMode();
+  const targetAfter = (currentAllArguments || []).find(
+    (arg) => String(arg.id) === argIdString
+  );
+
+  if (!targetAfter) return true;
+
+  const beforeTrending = beforeArgument ? isArgumentStronglyTrending(beforeArgument) : false;
+  const afterTrending = isArgumentStronglyTrending(targetAfter);
+
+  if (beforeTrending !== afterTrending) {
+    return true;
+  }
+
+  if (mode === "progress") {
+    return true;
+  }
+
+  if (mode !== "score") {
+    return false;
+  }
+
+  const targetSide = getNormalizedArgumentSide(targetAfter);
+  const afterRankMap = getSupportRankMap(currentAllArguments || [], { side: targetSide });
+  const previousRank = Number(beforeRankMap?.[argIdString] || 0);
+  const nextRank = Number(afterRankMap?.[argIdString] || 0);
+
+  return !!previousRank && !!nextRank && previousRank !== nextRank;
 }
 
 function clearPinnedNewArgumentIfMatches(argumentId) {
@@ -14474,6 +14512,15 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
     const previousRank = Number(beforeRankMap[argIdString] || 0);
     const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
     const didRankChange = !!previousRank && !!nextRank && previousRank !== nextRank;
+    const shouldRerenderArguments = shouldRerenderArgumentsAfterVoteChange(
+      argId,
+      beforeRankMap,
+      targetBefore
+    );
+
+    if (shouldRerenderArguments) {
+      rerenderArgumentsAfterLocalVoteChange(debateId);
+    }
 
     showVoteRankProgress(beforeRankMap, optimisticArgsSameSide, argId);
 
@@ -14615,6 +14662,15 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
     const previousRank = Number(beforeRankMap[argIdString] || 0);
     const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
     const didRankChange = !!previousRank && !!nextRank && previousRank !== nextRank;
+    const shouldRerenderArguments = shouldRerenderArgumentsAfterVoteChange(
+      argId,
+      beforeRankMap,
+      targetBefore
+    );
+
+    if (shouldRerenderArguments) {
+      rerenderArgumentsAfterLocalVoteChange(debateId);
+    }
 
     if (shouldScroll) {
       if (didRankChange) {

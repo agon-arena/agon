@@ -186,6 +186,64 @@ body.page-debate .argument-trending-badge-text {
 }
 
 
+
+
+/* Position affichée dans les cartes d'idées — discrète, sans chevaucher le badge "forte progression" */
+body.page-debate .argument-position-label {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  max-width: 100%;
+  margin: 6px 0 7px;
+  padding: 4px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
+  box-sizing: border-box;
+}
+
+body.page-debate .argument-card-has-trending-badge .argument-position-label {
+  margin-top: 20px;
+}
+
+body.page-debate .argument-card-a .argument-position-label,
+body.page-debate #arguments-a .argument-card .argument-position-label,
+body.page-debate .argument-card-unified.argument-card-a .argument-position-label {
+  background: rgba(22, 101, 52, 0.10);
+  border: 1px solid rgba(22, 101, 52, 0.16);
+  color: #166534;
+}
+
+body.page-debate .argument-card-b .argument-position-label,
+body.page-debate #arguments-b .argument-card .argument-position-label,
+body.page-debate .argument-card-unified.argument-card-b .argument-position-label {
+  background: rgba(153, 27, 27, 0.09);
+  border: 1px solid rgba(153, 27, 27, 0.14);
+  color: #991b1b;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-position-label {
+    max-width: 100%;
+    margin-top: 5px;
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  body.page-debate .argument-card-has-trending-badge .argument-position-label {
+    margin-top: 18px;
+  }
+}
+
 /* Restaurer les couleurs natives des badges favorable/défavorable/proposition */
 body.page-debate .comments-count-favorable {
   color: #16a34a !important;
@@ -1658,6 +1716,105 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script src="/script.js?v=20260422-2"></script>
+
+<script>
+// Affiche la position de l'idée dans chaque carte, sans toucher au rendu principal de script.js
+(function(){
+  function escapeHTML(value){
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function normalizePositionTitle(value, fallback){
+    var text = String(value || '').replace(/\s+/g, ' ').trim();
+    return text || fallback;
+  }
+
+  function getPositionTitle(side){
+    var id = side === 'b' ? 'title-b' : 'title-a';
+    var fallback = side === 'b' ? 'Position B' : 'Position A';
+    var titleEl = document.getElementById(id);
+    var title = titleEl ? titleEl.textContent : '';
+
+    if(!title && window.currentDebateShareData){
+      title = side === 'b'
+        ? window.currentDebateShareData.optionB
+        : window.currentDebateShareData.optionA;
+    }
+
+    return normalizePositionTitle(title, fallback);
+  }
+
+  function getCardSide(card){
+    if(!card) return null;
+    if(card.classList.contains('argument-card-b') || card.closest('#arguments-b')) return 'b';
+    if(card.classList.contains('argument-card-a') || card.closest('#arguments-a')) return 'a';
+
+    var argId = String(card.id || '').replace(/^list-argument-/, '').replace(/^argument-/, '');
+    if(argId && Array.isArray(window.currentAllArguments)){
+      var arg = window.currentAllArguments.find(function(item){
+        return String(item && item.id) === argId;
+      });
+      if(arg && arg.side){
+        var side = String(arg.side).toLowerCase();
+        if(side === 'a' || side === 'b') return side;
+      }
+    }
+
+    return null;
+  }
+
+  function upsertPositionLabel(card){
+    var side = getCardSide(card);
+    if(!side) return;
+
+    card.classList.toggle('argument-card-has-trending-badge', !!card.querySelector('.argument-trending-badge'));
+
+    var titleEl = card.querySelector('.argument-title');
+    if(!titleEl) return;
+
+    var label = card.querySelector(':scope > .argument-position-label');
+    if(!label){
+      label = document.createElement('div');
+      label.className = 'argument-position-label';
+      titleEl.parentNode.insertBefore(label, titleEl);
+    }
+
+    label.innerHTML = 'Position&nbsp;: ' + escapeHTML(getPositionTitle(side));
+  }
+
+  function refreshArgumentPositionLabels(){
+    document.querySelectorAll('body.page-debate .argument-card').forEach(upsertPositionLabel);
+  }
+
+  var refreshTimer = null;
+  function scheduleRefresh(){
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshArgumentPositionLabels, 40);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    refreshArgumentPositionLabels();
+
+    var observer = new MutationObserver(scheduleRefresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    ['title-a', 'title-b'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      new MutationObserver(scheduleRefresh).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+
+    setTimeout(refreshArgumentPositionLabels, 250);
+    setTimeout(refreshArgumentPositionLabels, 900);
+  });
+})();
+</script>
+
 <script>
 // Neutralise le -8px injecté par updateDebateSourcePreviewVerticalOffset
 // Le CSS sur body.page-debate .debate-hero gère l'écart
