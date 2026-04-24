@@ -16729,11 +16729,6 @@ function updateHomeBottomNavViewportOffset() {
     return;
   }
 
-  if (document.body.classList.contains('page-home-mobile')) {
-    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
-    return;
-  }
-
   const vv = window.visualViewport;
   if (!vv) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
