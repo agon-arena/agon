@@ -1164,9 +1164,9 @@ if (sideFocusLeft) {
     sideFocusLeft.style.color = "#ffffff";
     sideFocusLeft.style.border = "1px solid #111111";
   } else {
-    sideFocusLeft.style.background = "#FFF0E0";
-    sideFocusLeft.style.color = "#7C4A15";
-    sideFocusLeft.style.border = "1px solid #F5BF8E";
+    sideFocusLeft.style.background = "#dcfce7";
+    sideFocusLeft.style.color = "#166534";
+    sideFocusLeft.style.border = "1px solid #86efac";
   }
 }
 
@@ -1180,9 +1180,9 @@ if (sideFocusRight) {
     sideFocusRight.style.color = "#ffffff";
     sideFocusRight.style.border = "1px solid #111111";
   } else {
-    sideFocusRight.style.background = "#EAF0F8";
-    sideFocusRight.style.color = "#3D5A80";
-    sideFocusRight.style.border = "1px solid #8AAEC8";
+    sideFocusRight.style.background = "#fee2e2";
+    sideFocusRight.style.color = "#dc2626";
+    sideFocusRight.style.border = "1px solid #fca5a5";
   }
 }
 }
@@ -7485,7 +7485,7 @@ async function saveAdminCardEdit(debateId, btn) {
     // Feedback visuel
     if (saveBtn) {
       saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé';
-      saveBtn.style.background = '#FFD9B3';
+      saveBtn.style.background = '#dcfce7';
       setTimeout(() => {
         saveBtn.innerHTML = origHtml;
         saveBtn.style.background = '';

@@ -104,15 +104,15 @@ body.page-debate .argument-card-unified.argument-card-a .argument-trending-badge
 body.page-debate #arguments-a .argument-card .argument-trending-badge {
   background: rgba(255,245,235,0.82);
   border-color: rgba(124,74,21,0.14);
-  color: #7C4A15;
+  color: #166534;
 }
 
 body.page-debate .argument-card-b .argument-trending-badge,
 body.page-debate .argument-card-unified.argument-card-b .argument-trending-badge,
 body.page-debate #arguments-b .argument-card .argument-trending-badge {
-  background: rgba(234,240,248,0.82);
-  border-color: rgba(61,90,128,0.12);
-  color: #3D5A80;
+  background: rgba(254,226,226,0.82);
+  border-color: rgba(220,38,38,0.12);
+  color: #dc2626;
 }
 
 @media (max-width: 768px) {
@@ -219,15 +219,15 @@ body.page-debate #arguments-a .argument-card .argument-position-label,
 body.page-debate .argument-card-unified.argument-card-a .argument-position-label {
   background: rgba(124,74,21,0.10);
   border: 1px solid rgba(124,74,21,0.16);
-  color: #7C4A15;
+  color: #166534;
 }
 
 body.page-debate .argument-card-b .argument-position-label,
 body.page-debate #arguments-b .argument-card .argument-position-label,
 body.page-debate .argument-card-unified.argument-card-b .argument-position-label {
-  background: rgba(61,90,128,0.09);
-  border: 1px solid rgba(61,90,128,0.14);
-  color: #3D5A80;
+  background: rgba(220,38,38,0.09);
+  border: 1px solid rgba(220,38,38,0.14);
+  color: #dc2626;
 }
 
 @media (max-width: 768px) {
@@ -246,10 +246,10 @@ body.page-debate .argument-card-unified.argument-card-b .argument-position-label
 
 /* Badges de position des commentaires : icônes explicites, sans fond coloré */
 body.page-debate .comments-count-favorable {
-  color: #FFD9B3 !important;
+  color: #86efac !important;
 }
 body.page-debate .comments-count-defavorable {
-  color: #B0C4DE !important;
+  color: #fca5a5 !important;
 }
 body.page-debate .comment-stance-favorable,
 body.page-debate .comment-stance-defavorable {
@@ -264,10 +264,10 @@ body.page-debate .comment-stance-defavorable {
   line-height: 1.2;
 }
 body.page-debate .comment-stance-favorable {
-  color: #7C4A15 !important;
+  color: #166534 !important;
 }
 body.page-debate .comment-stance-defavorable {
-  color: #3D5A80 !important;
+  color: #dc2626 !important;
 }
 body.page-debate .comment-stance-favorable::before,
 body.page-debate .comment-stance-defavorable::before {
@@ -287,20 +287,20 @@ body.page-debate .comment-stance-defavorable::before {
 /* Cartes colorées : couleurs opaques (spécificité suffisante, sans !important pour laisser les animations agir) */
 body.page-debate #arguments-a .argument-card,
 body.page-debate .argument-card-a {
-  background-color: #FFF0E0;
+  background-color: #dcfce7;
 }
 
 body.page-debate #arguments-b .argument-card,
 body.page-debate .argument-card-b {
-  background-color: #EAF0F8;
+  background-color: #fee2e2;
 }
 
 /* Vue liste unifiée */
 body.page-debate .argument-card-unified.argument-card-a {
-  background-color: #FFF0E0;
+  background-color: #dcfce7;
 }
 body.page-debate .argument-card-unified.argument-card-b {
-  background-color: #EAF0F8;
+  background-color: #fee2e2;
 }
 
 /* Petits traits = couleur du fond de page (#243038) */
@@ -317,13 +317,13 @@ body.page-debate .argument-card .comments-block {
 /* Chips "mes arguments votés" en haut des colonnes */
 body.page-debate #my-arguments-a .my-argument-chip,
 body.page-debate .my-arguments-summary-left .my-argument-chip {
-  background: #FFF0E0;
-  border-color: #F5BF8E;
+  background: #dcfce7;
+  border-color: #86efac;
 }
 body.page-debate #my-arguments-b .my-argument-chip,
 body.page-debate .my-arguments-summary-right .my-argument-chip {
-  background: #EAF0F8;
-  border-color: #8AAEC8;
+  background: #fee2e2;
+  border-color: #fca5a5;
 }
 
 /* Alignement vertical — suppression du margin-top décalant le bloc B */
@@ -547,9 +547,14 @@ body.page-debate .my-argument-chip-stepper-btn-guided {
 
 /* Redéfinition des animations de flash avec les couleurs opaques */
 @keyframes flashGreenCard {
-  0%   { background-color: #FFF0E0; box-shadow: 0 0 0 0 rgba(255,185,100,0); }
-  50%  { background-color: #F5BF8E; box-shadow: 0 0 0 4px rgba(255,185,100,0.35); }
-  100% { background-color: #FFF0E0; box-shadow: 0 0 0 0 rgba(255,185,100,0); }
+  0%   { background-color: #dcfce7; box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+  50%  { background-color: #86efac; box-shadow: 0 0 0 4px rgba(22,163,74,0.35); }
+  100% { background-color: #dcfce7; box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+@keyframes flashBlueCard {
+  0%   { background-color: #fee2e2; box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+  50%  { background-color: #fca5a5; box-shadow: 0 0 0 4px rgba(220,38,38,0.35); }
+  100% { background-color: #fee2e2; box-shadow: 0 0 0 0 rgba(220,38,38,0); }
 }
 
 /* Vue switch card */
@@ -732,9 +737,9 @@ body.page-debate .debate-topbar-notification-link .notifications-count {
 }
 
 /* Bloc titre plus proche du bandeau haut */
-body.page-debate .debate-hero-top {
-  margin-top: 4px;
-  overflow: hidden;
+body.page-debate .debate-hero-outer {
+  margin-top: 2px;
+  overflow: visible;
   max-height: 420px;
   opacity: 1;
   transform: translateY(0);
@@ -742,7 +747,7 @@ body.page-debate .debate-hero-top {
   will-change: max-height, opacity, transform;
 }
 
-body.page-debate.debate-title-hidden .debate-hero-top {
+body.page-debate.debate-title-hidden .debate-hero-outer {
   max-height: 0;
   opacity: 0;
   transform: translateY(-12px);
@@ -878,10 +883,10 @@ body.page-debate .score-bar-label {
   text-align: center;
 }
 body.page-debate .score-bar-label-a {
-  color: #FFD9B3;
+  color: #86efac;
 }
 body.page-debate .score-bar-label-b {
-  color: #B0C4DE;
+  color: #fca5a5;
 }
 body.page-debate .arguments-list {
   gap: 8px;
@@ -940,6 +945,16 @@ body.page-debate .position-argument-button-b:hover {
   background: #2e3d47 !important;
   color: #ffffff !important;
 }
+/* Cadre des blocs position en mode focus */
+body.page-debate .column-header.position-focus-a {
+  border: 3px solid #16a34a !important;
+  background: #dcfce7 !important;
+}
+body.page-debate .column-header.position-focus-b {
+  border: 3px solid #dc2626 !important;
+  background: #fee2e2 !important;
+}
+
 body.page-debate .load-more-status {
   background: #2e3d47;
   border-color: #4a5a65;
@@ -1033,11 +1048,11 @@ body.page-debate .home-bottom-nav-item:focus-visible {
 
 /* Mobile : descendre légèrement le bloc titre fixe */
 @media (max-width: 768px) {
-  body.page-debate .debate-hero-top {
+  body.page-debate .debate-hero-outer {
     top: 16px !important;
   }
 
-  body.page-debate.debate-topbar-hidden .debate-hero-top {
+  body.page-debate.debate-topbar-hidden .debate-hero-outer {
     top: 16px !important;
     margin-top: 0 !important;
   }
@@ -1240,6 +1255,43 @@ body.voices-panel-open {
 
 
  
+<div class="debate-hero-outer">
+<div class="scroll-arrows-wrap">
+<div class="scroll-arrows scroll-arrows-left" id="scroll-hint-l">
+  <svg class="arr1" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr2" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr3" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr4" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr5" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr6" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr7" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr8" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr9" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr10" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr11" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr12" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr13" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr14" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr15" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+<div class="scroll-arrows scroll-arrows-right" id="scroll-hint-r">
+  <svg class="arr1" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr2" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr3" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr4" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr5" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr6" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr7" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr8" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr9" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr10" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr11" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr12" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr13" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr14" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <svg class="arr15" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+</div>
 <div class="debate-hero-top">
 
     <div>
@@ -1329,6 +1381,7 @@ body.voices-panel-open {
 
   <img id="debate-image-lightbox-img" class="debate-image-lightbox-img" alt="Image du débat agrandie">
 </div>
+</div><!-- .debate-hero-outer -->
 
 <section class="debate-hero">
 
@@ -2208,8 +2261,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 
       panelBody.innerHTML =
-        renderGroup(sideA, optA, '#FFD9B3', 'rgba(255,185,100,0.2)') +
-        renderGroup(sideB, optB, '#B0C4DE', 'rgba(176,196,222,0.2)');
+        renderGroup(sideA, optA, '#86efac', 'rgba(22,163,74,0.2)') +
+        renderGroup(sideB, optB, '#fca5a5', 'rgba(220,38,38,0.2)');
     }
 
     panel.style.display = 'flex';
@@ -2349,21 +2402,28 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 <!-- Indicateur de scroll -->
 <style>
-.scroll-arrows {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
+.scroll-arrows-wrap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   z-index: 9999;
+}
+.scroll-arrows {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  justify-content: space-between;
+  padding: 6px 0;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.6s ease;
+  width: 10px;
 }
-.scroll-arrows-left  { left: 4px; }
-.scroll-arrows-right { right: 4px; }
+.scroll-arrows-left  { left: -8px; }
+.scroll-arrows-right { right: -8px; }
 .scroll-arrows.visible { opacity: 1; }
 
 @keyframes arrowFall {
@@ -2381,31 +2441,17 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 .scroll-arrows.visible .arr7 { animation: arrowFall 1.6s ease-in-out infinite 0.9s; }
 .scroll-arrows.visible .arr8 { animation: arrowFall 1.6s ease-in-out infinite 1.05s; }
 .scroll-arrows.visible .arr9 { animation: arrowFall 1.6s ease-in-out infinite 1.2s; }
+.scroll-arrows.visible .arr10 { animation: arrowFall 1.6s ease-in-out infinite 1.35s; }
+.scroll-arrows.visible .arr11 { animation: arrowFall 1.6s ease-in-out infinite 1.5s; }
+.scroll-arrows.visible .arr12 { animation: arrowFall 1.6s ease-in-out infinite 1.65s; }
+.scroll-arrows.visible .arr13 { animation: arrowFall 1.6s ease-in-out infinite 1.8s; }
+.scroll-arrows.visible .arr14 { animation: arrowFall 1.6s ease-in-out infinite 1.95s; }
+.scroll-arrows.visible .arr15 { animation: arrowFall 1.6s ease-in-out infinite 2.1s; }
 .scroll-arrows svg { display: block; opacity: 0; }
 </style>
 
-<div class="scroll-arrows scroll-arrows-left" id="scroll-hint-l">
-  <svg class="arr1" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr2" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr3" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr4" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr5" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr6" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr7" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr8" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr9" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</div>
-<div class="scroll-arrows scroll-arrows-right" id="scroll-hint-r">
-  <svg class="arr1" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr2" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr3" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr4" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr5" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr6" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr7" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr8" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr9" width="10" height="6" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</div>
+
+
 
 <script>
 (function(){
