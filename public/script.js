@@ -13338,17 +13338,17 @@ ${
       <div class="comment-stance-row">
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          Favorable à l'idée
+          ✓ Soutient l’idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          Défavorable à l'idée
+          ✕ Conteste l’idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-          Proposition d'amélioration
+          ↻ Propose une amélioration
         </label>
       </div>
     `
@@ -13415,11 +13415,11 @@ const likes = Number(c.likes || 0);
   ` : ""}             
 ${
   c.stance === "favorable"
-    ? `<div class="comment-stance-badge comment-stance-favorable">Commentaire favorable à l'idée</div>`
+    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
     : c.stance === "defavorable"
-      ? `<div class="comment-stance-badge comment-stance-defavorable">Commentaire défavorable à l'idée</div>`
+      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
       : c.stance === "amelioration"
-        ? `<div class="comment-stance-badge comment-stance-amelioration">Proposition d'amélioration</div>`
+        ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
         : ""
 }
 
@@ -13783,17 +13783,17 @@ ${
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          Favorable à l'idée
+          ✓ Soutient l’idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          Défavorable à l'idée
+          ✕ Conteste l’idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-          Proposition d'amélioration
+          ↻ Propose une amélioration
         </label>
       </div>
     `
@@ -13864,11 +13864,11 @@ const likes = Number(c.likes || 0);
 
 ${
   c.stance === "favorable"
-    ? `<div class="comment-stance-badge comment-stance-favorable">Commentaire favorable à l'idée</div>`
+    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
     : c.stance === "defavorable"
-      ? `<div class="comment-stance-badge comment-stance-defavorable">Commentaire défavorable à l'idée</div>`
+      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
       : c.stance === "amelioration"
-        ? `<div class="comment-stance-badge comment-stance-amelioration">Proposition d'amélioration</div>`
+        ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
         : ""
 }
 
@@ -15508,39 +15508,163 @@ async function toggleComments(argumentId, button = null) {
   }
 }
 
-document.addEventListener("click", function(event) {
-  const radio = event.target;
+function ensureCommentStanceMobileStyles() {
+  if (document.getElementById("comment-stance-mobile-style")) return;
 
-  if (
-    radio.tagName === "INPUT" &&
-    radio.type === "radio" &&
-    radio.name.startsWith("comment-stance-")
-  ) {
-    if (radio.dataset.waschecked === "true") {
+  const style = document.createElement("style");
+  style.id = "comment-stance-mobile-style";
+  style.textContent = `
+    @media (max-width: 768px) {
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-row {
+        justify-content: flex-start !important;
+        align-items: flex-start !important;
+        text-align: left !important;
+        gap: 5px !important;
+        margin-left: -10px !important;
+        margin-right: auto !important;
+        padding-left: 0 !important;
+        width: calc(100% + 10px) !important;
+        transform: none !important;
+      }
+
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option {
+        justify-content: flex-start !important;
+        align-items: center !important;
+        text-align: left !important;
+        margin-left: 0 !important;
+        margin-right: auto !important;
+        padding: 4px 7px !important;
+        border-radius: 999px !important;
+        border: 1px solid transparent !important;
+        background: transparent !important;
+        font-size: 10px !important;
+        gap: 4px !important;
+      }
+
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
+        background: #111111 !important;
+        border-color: #111111 !important;
+        color: #ffffff !important;
+      }
+
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"] {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        width: 10px !important;
+        height: 10px !important;
+        min-width: 10px !important;
+        max-width: 10px !important;
+        min-height: 10px !important;
+        max-height: 10px !important;
+        flex: 0 0 10px !important;
+        box-sizing: border-box !important;
+        margin: 0 2px 0 0 !important;
+        padding: 0 !important;
+        border: 1px solid currentColor !important;
+        border-radius: 999px !important;
+        background: transparent !important;
+        transform: none !important;
+      }
+
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"]:checked {
+        background: currentColor !important;
+        box-shadow: inset 0 0 0 3px #ffffff !important;
+      }
+
+      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
+        border-color: #ffffff !important;
+        background: #ffffff !important;
+        box-shadow: inset 0 0 0 3px #111111 !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function syncCommentStanceFormDisplay(commentForm) {
+  ensureCommentStanceMobileStyles();
+
+  if (!commentForm) return;
+
+  const selectedRadio = commentForm.querySelector('input[type="radio"][name^="comment-stance-"]:checked');
+  const ameliorationFields = commentForm.querySelector(".comment-amelioration-fields");
+  const mainField = commentForm.querySelector(".comment-main-field");
+  const shouldShowAmelioration = !!selectedRadio && selectedRadio.value === "amelioration";
+
+  if (ameliorationFields) {
+    ameliorationFields.style.display = shouldShowAmelioration ? "grid" : "none";
+  }
+
+  if (mainField) {
+    mainField.style.display = shouldShowAmelioration ? "none" : "block";
+  }
+}
+
+function clearCommentStanceChoice(commentForm) {
+  if (!commentForm) return;
+
+  commentForm
+    .querySelectorAll('input[type="radio"][name^="comment-stance-"]')
+    .forEach((radio) => {
+      radio.checked = false;
+      radio.dataset.waschecked = "false";
+    });
+
+  syncCommentStanceFormDisplay(commentForm);
+}
+
+document.addEventListener("click", function(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const radio = target.closest('input[type="radio"][name^="comment-stance-"]');
+
+  if (radio) {
+    const commentForm = radio.closest(".comment-form");
+    const wasChecked = radio.dataset.waschecked === "true";
+
+    if (wasChecked) {
       radio.checked = false;
       radio.dataset.waschecked = "false";
     } else {
-      document
-        .querySelectorAll(`input[name="${radio.name}"]`)
-        .forEach((r) => (r.dataset.waschecked = "false"));
+      if (commentForm) {
+        commentForm
+          .querySelectorAll(`input[name="${radio.name}"]`)
+          .forEach((r) => (r.dataset.waschecked = "false"));
+      }
 
+      radio.checked = true;
       radio.dataset.waschecked = "true";
     }
 
-    const commentForm = radio.closest(".comment-form");
-    const ameliorationFields = commentForm?.querySelector(".comment-amelioration-fields");
-    const mainField = commentForm?.querySelector(".comment-main-field");
-
-    if (ameliorationFields) {
-      const shouldShow = radio.checked && radio.value === "amelioration";
-      ameliorationFields.style.display = shouldShow ? "grid" : "none";
-
-      if (mainField) {
-        mainField.style.display = shouldShow ? "none" : "block";
-      }
-    }
+    syncCommentStanceFormDisplay(commentForm);
+    return;
   }
+
+  const argumentCard = target.closest(".argument-card");
+  if (!argumentCard) return;
+
+  if (target.closest(".comment-stance-row")) return;
+  if (target.closest(".comment-amelioration-fields")) return;
+
+  const clickedInteractiveElement = target.closest(
+    'textarea, input, button, a, select, option, label, .comment-actions, .argument-actions, .comments-list, .comment-card-menu, .argument-card-menu, .share-menu, .idea-share-menu'
+  );
+
+  if (clickedInteractiveElement) return;
+
+  const commentForm = argumentCard.querySelector(".comment-form");
+  if (!commentForm) return;
+
+  clearCommentStanceChoice(commentForm);
 });
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", ensureCommentStanceMobileStyles, { once: true });
+} else {
+  ensureCommentStanceMobileStyles();
+}
 
 async function loadMoreComments(argumentId, button = null) {
   visibleCommentsByArgument[argumentId] =

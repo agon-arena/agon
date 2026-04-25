@@ -244,20 +244,44 @@ body.page-debate .argument-card-unified.argument-card-b .argument-position-label
   }
 }
 
-/* Restaurer les couleurs natives des badges favorable/défavorable/proposition */
+/* Badges de position des commentaires : icônes explicites, sans fond coloré */
 body.page-debate .comments-count-favorable {
   color: #FFD9B3 !important;
 }
 body.page-debate .comments-count-defavorable {
   color: #B0C4DE !important;
 }
+body.page-debate .comment-stance-favorable,
+body.page-debate .comment-stance-defavorable {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
 body.page-debate .comment-stance-favorable {
-  background: #FFF0E0 !important;
   color: #7C4A15 !important;
 }
 body.page-debate .comment-stance-defavorable {
-  background: #EAF0F8 !important;
   color: #3D5A80 !important;
+}
+body.page-debate .comment-stance-favorable::before,
+body.page-debate .comment-stance-defavorable::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  line-height: 1;
+}
+body.page-debate .comment-stance-favorable::before {
+  content: "✓";
+}
+body.page-debate .comment-stance-defavorable::before {
+  content: "✕";
 }
 
 /* Cartes colorées : couleurs opaques (spécificité suffisante, sans !important pour laisser les animations agir) */
@@ -1716,6 +1740,44 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script src="/script.js?v=20260422-2"></script>
+<script>
+// Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
+// par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
+(function(){
+  function normalizeCommentStanceLabels(){
+    document.querySelectorAll('body.page-debate .comment-stance-favorable').forEach(function(el){
+      if(el.textContent.trim() !== 'Soutient l’idée'){
+        el.textContent = 'Soutient l’idée';
+      }
+      el.setAttribute('aria-label', 'Soutient l’idée');
+    });
+
+    document.querySelectorAll('body.page-debate .comment-stance-defavorable').forEach(function(el){
+      if(el.textContent.trim() !== 'Conteste l’idée'){
+        el.textContent = 'Conteste l’idée';
+      }
+      el.setAttribute('aria-label', 'Conteste l’idée');
+    });
+  }
+
+  var commentStanceTimer = null;
+  function scheduleCommentStanceRefresh(){
+    clearTimeout(commentStanceTimer);
+    commentStanceTimer = setTimeout(normalizeCommentStanceLabels, 40);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    normalizeCommentStanceLabels();
+
+    var observer = new MutationObserver(scheduleCommentStanceRefresh);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(normalizeCommentStanceLabels, 250);
+    setTimeout(normalizeCommentStanceLabels, 900);
+  });
+})();
+</script>
+
 
 <script>
 // Affiche la position de l'idée dans chaque carte, sans toucher au rendu principal de script.js
