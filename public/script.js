@@ -25,6 +25,8 @@ let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let similarDebatesLoading = false;
 let similarDebatesLoadingTimer = null;
+const SIMILAR_DEBATES_BATCH_SIZE = 4;
+let similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
 let currentDebateCache = null;
 let similarDebatesCache = null;
 let currentTypeFilter = "all";
@@ -2170,6 +2172,13 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:open-debate-in-parent-modal") {
+      const nextUrl = String(e.data.url || "").trim();
+      if (!nextUrl) return;
+      openDebateIframeModal(nextUrl);
+      return;
+    }
+
     if (e.data.type === "agon:debate-iframe-ready") {
       window.__agonIframeCurrentPathname = "/debate";
       requestAnimationFrame(() => {
@@ -2478,7 +2487,22 @@ function openIndexDebateFromMedia(debateId, event) {
   const safeDebateId = String(debateId || "").trim();
   if (!safeDebateId) return;
 
-  openDebateIframeModal(`/debate?id=${encodeURIComponent(safeDebateId)}`);
+  const nextUrl = `/debate?id=${encodeURIComponent(safeDebateId)}`;
+
+  if (window.self !== window.top) {
+    try {
+      window.parent.postMessage({
+        type: "agon:open-debate-in-parent-modal",
+        url: nextUrl
+      }, "*");
+      return;
+    } catch (error) {
+      window.location.href = nextUrl;
+      return;
+    }
+  }
+
+  openDebateIframeModal(nextUrl);
 }
 
 function initIndexReturnNavigation() {
@@ -2852,6 +2876,16 @@ function flashArgumentCard(argumentId) {
   const element = ensureArgumentCardVisibleForScroll(argumentId);
   if (!element) return;
 
+  if (isOpenDebate(currentDebateCache)) {
+    element.classList.remove("flash-green", "flash-blue");
+    void element.offsetWidth;
+    element.classList.add("flash-green");
+    setTimeout(() => {
+      element.classList.remove("flash-green");
+    }, 5000);
+    return;
+  }
+
   const isGreenTarget =
     element.classList.contains("argument-card-a") ||
     !!element.closest(".argument-card-a") ||
@@ -2914,6 +2948,11 @@ function scrollToTopOfArgumentCard(argumentId) {
     top: Math.max(0, y),
     behavior: "smooth"
   });
+}
+
+function shouldFlashArgumentCardOnVoiceChange(shouldScroll = true) {
+  if (shouldScroll) return true;
+  return isOpenDebate(currentDebateCache);
 }
 function escapeHtml(str) {
   return String(str)
@@ -3171,6 +3210,350 @@ function buildIndexCardFooterActionsHtml(debate) {
       ${buildIndexCardEnterButtonHtml(d)}
     </div>
   `;
+}
+
+function buildIndexCardShareActionsHtml(debate) {
+  const d = debate || {};
+
+  return `
+<div class="debate-card-share-actions">
+  <button
+    class="share-icon-button copy"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Copier le lien"
+  >
+    <i class="fa-solid fa-link"></i>
+  </button>
+
+  <button
+    class="share-icon-button qrcode"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Afficher le QR code"
+  >
+    <i class="fa-solid fa-qrcode"></i>
+  </button>
+
+  <button
+    class="share-icon-button x"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur X"
+  >
+    <i class="fa-brands fa-x-twitter"></i>
+  </button>
+
+  <button
+    class="share-icon-button facebook"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"
+    title="Partager sur Facebook"
+  >
+    <i class="fa-brands fa-facebook"></i>
+  </button>
+
+  <button
+    class="share-icon-button whatsapp"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur WhatsApp"
+  >
+    <i class="fa-brands fa-whatsapp"></i>
+  </button>
+
+  <button
+    class="share-icon-button email"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager par email"
+  >
+    <i class="fa-solid fa-envelope"></i>
+  </button>
+
+  <button
+    class="share-icon-button linkedin"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur LinkedIn"
+  >
+    <i class="fa-brands fa-linkedin-in"></i>
+  </button>
+
+  <button
+    class="share-icon-button mastodon"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur Mastodon"
+  >
+    <i class="fa-brands fa-mastodon"></i>
+  </button>
+
+  <button
+    class="share-icon-button reddit"
+    type="button"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur Reddit"
+  >
+    <i class="fa-brands fa-reddit-alien"></i>
+  </button>
+</div>
+  `;
+}
+
+function buildIndexLikeDebateCardHtml(debate, options = {}) {
+  const d = debate || {};
+  const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
+  const mediaHtml = renderIndexInlineSourceCard(d);
+  const mediaOutsideLink = !!mediaHtml;
+  const contextHtml = buildIndexContextPreviewHtml(d);
+  const isNewDebate = isDebateNew(d.created_at);
+  const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
+  const includeDeleteButton = options.includeDeleteButton === true;
+
+  return `
+    <article class="debate-card" data-debate-id="${d.id}">
+      <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
+        <div class="debate-card-top-row">
+          <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+          ${newBadgeHtml}
+        </div>
+        <div class="debate-card-type">${debateTypeLabel}</div>
+        <h2>${escapeHtml(d.question)}</h2>
+
+        ${mediaOutsideLink ? "" : mediaHtml}
+
+${
+  isOpenDebate(d)
+    ? ""
+    : `
+      <div class="debate-card-positions">
+        <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
+        <span class="pos-b">${escapeHtml(d.option_b || "Position B")}</span>
+      </div>
+
+      <div class="debate-card-score">
+        <div class="score-bar">
+          <div class="score-a" style="width:${d.percent_a ?? 50}%"></div>
+          <div class="score-b" style="width:${d.percent_b ?? 50}%"></div>
+        </div>
+
+        <div class="score-labels">
+          <span>${d.percent_a ?? 50}%</span>
+          <span>${d.percent_b ?? 50}%</span>
+        </div>
+      </div>
+    `
+}
+      </a>
+
+      ${mediaOutsideLink ? mediaHtml : ""}
+      ${contextHtml}
+      ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
+
+      <div class="debate-card-actions">
+        ${buildIndexCardShareActionsHtml(d)}
+        ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
+      </div>
+      ${buildIndexCardFooterActionsHtml(d)}
+    </article>
+  `;
+}
+
+
+function initIndexCardShareMenus(root = document) {
+  if (typeof document === "undefined" || !document.body) return;
+
+  const labels = {
+    copy: "Copier le lien",
+    qrcode: "QR Code",
+    x: "X",
+    facebook: "Facebook",
+    whatsapp: "WhatsApp",
+    email: "Email",
+    linkedin: "LinkedIn",
+    mastodon: "Mastodon",
+    reddit: "Reddit"
+  };
+  const supported = Object.keys(labels);
+  const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+  const selector = [
+    '.page-home .debate-card .debate-card-share-actions',
+    '.page-home-mobile .debate-card .debate-card-share-actions',
+    '.page-debate .similar-debates-results .debate-card .debate-card-share-actions'
+  ].join(', ');
+
+  if (!initIndexCardShareMenus._bound) {
+    initIndexCardShareMenus._bound = true;
+    initIndexCardShareMenus._activeDropdown = null;
+    initIndexCardShareMenus._activeButton = null;
+    initIndexCardShareMenus._scrolling = false;
+    initIndexCardShareMenus._touchStartY = 0;
+
+    initIndexCardShareMenus.closeAll = function closeAllDropdowns() {
+      document.querySelectorAll('.index-share-dropdown.open').forEach((dropdown) => {
+        dropdown.classList.remove('open');
+        dropdown.style.visibility = '';
+      });
+      initIndexCardShareMenus._activeDropdown = null;
+      initIndexCardShareMenus._activeButton = null;
+      initIndexCardShareMenus._scrolling = false;
+    };
+
+    initIndexCardShareMenus.positionDropdown = function positionDropdown(btn, dd) {
+      const rect = btn.getBoundingClientRect();
+      const spacing = 8;
+
+      dd.style.visibility = 'hidden';
+      dd.classList.add('open');
+
+      const menuRect = dd.getBoundingClientRect();
+      let left = rect.left + (rect.width / 2) - (menuRect.width / 2);
+      let top = rect.top - menuRect.height - spacing;
+
+      if (left < spacing) left = spacing;
+      if (left + menuRect.width > window.innerWidth - spacing) {
+        left = window.innerWidth - menuRect.width - spacing;
+      }
+
+      if (top < spacing) {
+        top = rect.bottom + spacing;
+      }
+
+      if (top + menuRect.height > window.innerHeight - spacing) {
+        top = Math.max(spacing, window.innerHeight - menuRect.height - spacing);
+      }
+
+      dd.style.left = `${left}px`;
+      dd.style.top = `${top}px`;
+      dd.style.bottom = 'auto';
+      dd.style.transform = 'none';
+      dd.style.visibility = 'visible';
+    };
+
+    initIndexCardShareMenus.scrollToFit = function scrollToFit(btn, dd) {
+      const menuRect = dd.getBoundingClientRect();
+      const spacing = 8;
+      const overflowBottom = menuRect.bottom - (window.innerHeight - spacing);
+      const overflowTop = spacing - menuRect.top;
+      let scrollAmount = 0;
+
+      if (overflowBottom > 0) scrollAmount = overflowBottom;
+      else if (overflowTop > 0) scrollAmount = -overflowTop;
+
+      if (scrollAmount === 0) return;
+
+      initIndexCardShareMenus._scrolling = true;
+      window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+      setTimeout(() => {
+        initIndexCardShareMenus.positionDropdown(btn, dd);
+        initIndexCardShareMenus._scrolling = false;
+      }, 400);
+    };
+
+    initIndexCardShareMenus.toggleDropdown = function toggleDropdown(btn, dd) {
+      const isOpen = dd.classList.contains('open');
+      initIndexCardShareMenus.closeAll();
+      if (isOpen) return;
+      initIndexCardShareMenus.positionDropdown(btn, dd);
+      initIndexCardShareMenus._activeDropdown = dd;
+      initIndexCardShareMenus._activeButton = btn;
+      requestAnimationFrame(() => {
+        initIndexCardShareMenus.scrollToFit(btn, dd);
+      });
+    };
+
+    document.addEventListener('click', () => {
+      initIndexCardShareMenus.closeAll();
+    });
+
+    window.addEventListener('resize', () => {
+      if (initIndexCardShareMenus._activeDropdown && initIndexCardShareMenus._activeButton) {
+        initIndexCardShareMenus.positionDropdown(
+          initIndexCardShareMenus._activeButton,
+          initIndexCardShareMenus._activeDropdown
+        );
+      }
+    });
+
+    window.addEventListener('scroll', () => {
+      if (initIndexCardShareMenus._scrolling) return;
+      if (initIndexCardShareMenus._activeDropdown) initIndexCardShareMenus.closeAll();
+    }, { passive: true, capture: true });
+
+    window.addEventListener('touchstart', (event) => {
+      initIndexCardShareMenus._touchStartY = event.touches[0] ? event.touches[0].clientY : 0;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (event) => {
+      if (initIndexCardShareMenus._scrolling) return;
+      if (!initIndexCardShareMenus._activeDropdown) return;
+      const deltaY = Math.abs((event.touches[0] ? event.touches[0].clientY : 0) - initIndexCardShareMenus._touchStartY);
+      if (deltaY > 10) initIndexCardShareMenus.closeAll();
+    }, { passive: true });
+  }
+
+  scope.querySelectorAll(selector).forEach((block) => {
+    if (block.getAttribute('data-share-transformed')) return;
+
+    const btns = Array.from(block.querySelectorAll('.share-icon-button'));
+    if (!btns.length) return;
+
+    block.setAttribute('data-share-transformed', '1');
+    btns.forEach((button) => {
+      button.style.display = 'none';
+    });
+
+    const btn = document.createElement('button');
+    btn.className = 'index-share-btn';
+    btn.type = 'button';
+    btn.innerHTML = '<i class="fa-solid fa-share-nodes"></i> Partager';
+
+    const dd = document.createElement('div');
+    dd.className = 'index-share-dropdown';
+
+    btns.forEach((originalButton) => {
+      const cls = Array.from(originalButton.classList).find((className) => labels[className]) || '';
+      const hasSupportedClass = supported.some((name) => originalButton.classList.contains(name));
+      if (!hasSupportedClass) return;
+
+      const icon = originalButton.querySelector('i');
+      const item = document.createElement('button');
+      item.className = 'isd-item';
+      item.type = 'button';
+
+      if (icon) item.appendChild(icon.cloneNode(true));
+      const span = document.createElement('span');
+      span.textContent = labels[cls] || originalButton.title || cls;
+      item.appendChild(span);
+
+      item.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        initIndexCardShareMenus.closeAll();
+        originalButton.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        }));
+      });
+
+      dd.appendChild(item);
+    });
+
+    dd.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      initIndexCardShareMenus.toggleDropdown(btn, dd);
+    });
+
+    block.appendChild(btn);
+    document.body.appendChild(dd);
+  });
 }
 
 function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
@@ -4058,7 +4441,7 @@ function scheduleIndexLocalVideoActiveUpdate() {
 
 function clearMobileIndexCardHighlight() {
   document.querySelectorAll(
-    '.page-home-mobile .debate-card.index-card-active, .page-home .debate-card.index-card-active, .page-debate .similar-debate-item.index-card-active'
+    '.page-home-mobile .debate-card.index-card-active, .page-home .debate-card.index-card-active, .page-debate .similar-debates-results .debate-card.index-card-active'
   ).forEach((card) => {
     card.classList.remove('index-card-active');
   });
@@ -4090,7 +4473,7 @@ const isMobileHome =
     ).filter((card) => card.offsetParent !== null);
   } else if (isMobileOpenDebate) {
     cards = Array.from(
-      document.querySelectorAll('.page-debate .similar-debates-list .similar-debate-item')
+      document.querySelectorAll('.page-debate .similar-debates-results .debate-card')
     ).filter((card) => card.offsetParent !== null);
   } else {
     clearMobileIndexCardHighlight();
@@ -4152,13 +4535,15 @@ function initMobileIndexCardHighlight() {
     s.id = 'index-card-active-desktop-style';
     s.textContent = `
       @media (min-width: 769px) {
-        .page-home .debate-card.index-card-active {
+        .page-home .debate-card.index-card-active,
+        .page-debate .similar-debates-results .debate-card.index-card-active {
           transform: translateY(-3px);
           box-shadow: 0 12px 22px rgba(15, 23, 42, 0.11);
           border-color: #c7d0db;
           background: #ffffff;
         }
-        .page-home .debate-card.index-card-active h2 {
+        .page-home .debate-card.index-card-active h2,
+        .page-debate .similar-debates-results .debate-card.index-card-active h2 {
           color: #111111;
         }
         .page-home .debate-card.index-card-active .debate-card-source,
@@ -4166,7 +4551,13 @@ function initMobileIndexCardHighlight() {
         .page-home .debate-card.index-card-active .debate-card-instagram-shell,
         .page-home .debate-card.index-card-active .debate-card-local-image-shell,
         .page-home .debate-card.index-card-active .debate-card-local-video-shell,
-        .page-home .debate-card.index-card-active .debate-card-x-shell {
+        .page-home .debate-card.index-card-active .debate-card-x-shell,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-source,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-youtube-shell,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-instagram-shell,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-local-image-shell,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-local-video-shell,
+        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-x-shell {
           box-shadow: none;
         }
       }
@@ -8151,11 +8542,26 @@ function getIndexTypeFilterLabel(type) {
   return "Tous";
 }
 
+function getCurrentIndexSearchQuery() {
+  const input = document.getElementById("debate-search");
+  return String(input?.value || "").trim();
+}
+
 function renderIndexActiveFilterTags() {
   const container = document.getElementById("index-active-filters");
   if (!container) return;
 
   const tags = [];
+  const searchQuery = getCurrentIndexSearchQuery();
+
+  if (searchQuery) {
+    tags.push(`
+      <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('search')" aria-label="Retirer la recherche ${escapeAttribute(searchQuery)}">
+        <span>${escapeHtml(searchQuery)}</span>
+        <span class="index-active-filter-tag-close" aria-hidden="true">×</span>
+      </button>
+    `);
+  }
 
   if (currentTypeFilter && currentTypeFilter !== "all") {
     tags.push(`
@@ -8180,6 +8586,17 @@ function renderIndexActiveFilterTags() {
 }
 
 function removeIndexActiveFilterTag(kind, value = "") {
+  if (kind === "search") {
+    const searchInput = document.getElementById("debate-search");
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    visitedDebatesVisible = 5;
+    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+    applyIndexFilters();
+    return;
+  }
+
   if (kind === "type") {
     setTypeFilter("all");
     return;
@@ -8579,202 +8996,8 @@ section.style.display = "block";
 
   const debatesToShow = debates.slice(0, visitedDebatesVisible);
 
-  div.innerHTML = debatesToShow.map(d => {
-    const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
-const mediaHtml = renderIndexInlineSourceCard(d);
-const mediaOutsideLink = !!mediaHtml;
-const contextHtml = buildIndexContextPreviewHtml(d);
-const isNewDebate = isDebateNew(d.created_at);
-const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-
-    return `
-      <article class="debate-card" data-debate-id="${d.id}">
-        <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
-          <div class="debate-card-top-row">
-            <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
-            ${newBadgeHtml}
-          </div>
-          <div class="debate-card-type">${debateTypeLabel}</div>
-          <h2>${escapeHtml(d.question)}</h2>
-
-          ${mediaOutsideLink ? "" : mediaHtml}
-
-         ${
-  isOpenDebate(d)
-    ? ""
-    : `
-      <div class="debate-card-positions">
-        <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
-        <span class="pos-b">${escapeHtml(d.option_b || "Position B")}</span>
-      </div>
-
-      <div class="debate-card-score">
-        <div class="score-bar">
-          <div class="score-a" style="width:${d.percent_a ?? 50}%"></div>
-          <div class="score-b" style="width:${d.percent_b ?? 50}%"></div>
-        </div>
-
-        <div class="score-labels">
-          <span>${d.percent_a ?? 50}%</span>
-          <span>${d.percent_b ?? 50}%</span>
-        </div>
-      </div>
-    `
-}
-
-        </a>
-
-        ${mediaOutsideLink ? mediaHtml : ""}
-        ${contextHtml}
-
-${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
-
-        <div class="debate-card-actions">
-<div class="debate-card-share-actions">
-            <button
-              class="share-icon-button copy"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}')"
-              title="Copier le lien"
-            >
-              <i class="fa-solid fa-link"></i>
-            </button>
-
-            <button
-              class="share-icon-button qrcode"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Afficher le QR code"
-            >
-              <i class="fa-solid fa-qrcode"></i>
-            </button>
-
-            <button
-              class="share-icon-button x"
-              type="button"
-         onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur X"
-            >
-              <i class="fa-brands fa-x-twitter"></i>
-            </button>
-
-            <button
-              class="share-icon-button facebook"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"
-              title="Partager sur Facebook"
-            >
-              <i class="fa-brands fa-facebook"></i>
-            </button>
-
-            <button
-              class="share-icon-button whatsapp"
-              type="button"
-             onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur WhatsApp"
-            >
-              <i class="fa-brands fa-whatsapp"></i>
-            </button>
-
-            <button
-              class="share-icon-button email"
-              type="button"
-             onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager par email"
-            >
-              <i class="fa-solid fa-envelope"></i>
-            </button>
-
-            <button
-              class="share-icon-button linkedin"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur LinkedIn"
-            >
-              <i class="fa-brands fa-linkedin-in"></i>
-            </button>
-
-            <button
-              class="share-icon-button mastodon"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur Mastodon"
-            >
-              <i class="fa-brands fa-mastodon"></i>
-            </button>
-
-            <button
-              class="share-icon-button reddit"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur Reddit"
-            >
-              <i class="fa-brands fa-reddit-alien"></i>
-            </button>
-          </div>
-
-          ${getDebateCardDeleteButtonHtml(d)}
-        </div>
-        ${buildIndexCardFooterActionsHtml(d)}
-        ${buildAdminEditPanelHtml(d)}
-      </article>
-    `;
+  div.innerHTML = debatesToShow.map((d) => {
+    return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
   }).join("");
 
   if (debatesToShow.length < debates.length) {
@@ -8788,6 +9011,7 @@ ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
   }
 
   refreshAdminUI();
+  initIndexCardShareMenus(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
@@ -8821,164 +9045,8 @@ if (!debates.length) {
 
 if (header) header.style.display = "none";
 
-div.innerHTML = debatesToShow.map(d => {
-  const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
-const mediaHtml = renderIndexInlineSourceCard(d);
-const mediaOutsideLink = !!mediaHtml;
-const contextHtml = buildIndexContextPreviewHtml(d);
-const isNewDebate = isDebateNew(d.created_at);
-const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-
-  return `
-    <article class="debate-card" data-debate-id="${d.id}">
-      <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
-        <div class="debate-card-top-row">
-          <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
-          ${newBadgeHtml}
-        </div>
-        <div class="debate-card-type">${debateTypeLabel}</div>
-        <h2>${escapeHtml(d.question)}</h2>
-
-        ${mediaOutsideLink ? "" : mediaHtml}
-
-${
-  isOpenDebate(d)
-    ? ""
-    : `
-      <div class="debate-card-positions">
-        <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
-        <span class="pos-b">${escapeHtml(d.option_b || "Position B")}</span>
-      </div>
-
-      <div class="debate-card-score">
-        <div class="score-bar">
-          <div class="score-a" style="width:${d.percent_a ?? 50}%"></div>
-          <div class="score-b" style="width:${d.percent_b ?? 50}%"></div>
-        </div>
-
-        <div class="score-labels">
-          <span>${d.percent_a ?? 50}%</span>
-          <span>${d.percent_b ?? 50}%</span>
-        </div>
-      </div>
-    `
-}
-
-          </a>
-
-      ${mediaOutsideLink ? mediaHtml : ""}
-      ${contextHtml}
-
-      ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
-
-      <div class="debate-card-actions">
-<div class="debate-card-share-actions">
-          <button
-            class="share-icon-button copy"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Copier le lien"
-          >
-            <i class="fa-solid fa-link"></i>
-          </button>
-
-          <button
-            class="share-icon-button qrcode"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Afficher le QR code"
-          >
-            <i class="fa-solid fa-qrcode"></i>
-          </button>
-
-          <button
-            class="share-icon-button x"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Partager sur X"
-          >
-            <i class="fa-brands fa-x-twitter"></i>
-          </button>
-
-          <button
-            class="share-icon-button facebook"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"            title="Partager sur Facebook"
-          >
-            <i class="fa-brands fa-facebook"></i>
-          </button>
-
-          <button
-            class="share-icon-button whatsapp"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Partager sur WhatsApp"
-          >
-            <i class="fa-brands fa-whatsapp"></i>
-          </button>
-
-          <button
-            class="share-icon-button email"
-            type="button"
-onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"            title="Partager par email"
-          >
-            <i class="fa-solid fa-envelope"></i>
-          </button>
-
-            <button
-              class="share-icon-button linkedin"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur LinkedIn"
-            >
-              <i class="fa-brands fa-linkedin-in"></i>
-            </button>
-
-            <button
-              class="share-icon-button mastodon"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur Mastodon"
-            >
-              <i class="fa-brands fa-mastodon"></i>
-            </button>
-
-            <button
-              class="share-icon-button reddit"
-              type="button"
-              onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit(
-  '${d.id}',
-  '${encodeURIComponent(String(d.question || ""))}',
-  '${encodeURIComponent(String(d.option_a || ""))}',
-  '${encodeURIComponent(String(d.option_b || ""))}',
-  '${d.percent_a ?? 50}',
-  '${d.percent_b ?? 50}',
-  '${encodeURIComponent(String(d.type || "debate"))}'
-)"
-              title="Partager sur Reddit"
-            >
-              <i class="fa-brands fa-reddit-alien"></i>
-            </button>
-          </div>
-
-          ${getDebateCardDeleteButtonHtml(d)}
-        </div>
-        ${buildIndexCardFooterActionsHtml(d)}
-        ${buildAdminEditPanelHtml(d)}
-      </article>
-  `;
+div.innerHTML = debatesToShow.map((d) => {
+  return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
 }).join("");
 
  if (debatesToShow.length < debates.length) {
@@ -8995,6 +9063,7 @@ onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmai
 
   refreshAdminUI();
   setupIndexInfiniteScroll();
+  initIndexCardShareMenus(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
@@ -11760,8 +11829,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
       return { debate, score };
     })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 4);
+    .sort((a, b) => b.score - a.score);
 
   if (!matches.length) {
     container.innerHTML = `<div class="empty-state">Aucune arène similaire pour le moment.</div>`;
@@ -11795,102 +11863,58 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     </div>
 
     <div class="similar-debates-results">
-    ${matches.map(({ debate }) => {
-      const debateTypeLabel = isOpenDebate(debate) ? "Arène libre" : "Arène à position";
-
-      return `
-        <article class="debate-card">
-          <a class="debate-card-link" href="/debate?id=${debate.id}">
-            <div class="debate-card-category">${escapeHtml(debate.category || "Sans catégorie")}</div>
-            <div class="debate-card-type">${debateTypeLabel}</div>
-            <h2>${escapeHtml(debate.question)}</h2>
-
-            ${buildSimilarDebatePreviewHtml(debate)}
-
-           ${
-  isOpenDebate(debate)
-    ? ""
-    : `
-      <div class="debate-card-positions">
-        <span class="pos-a">${escapeHtml(debate.option_a || "Position A")}</span>
-        <span class="pos-b">${escapeHtml(debate.option_b || "Position B")}</span>
-      </div>
-
-      <div class="debate-card-score">
-        <div class="score-bar">
-          <div class="score-a" style="width:${debate.percent_a ?? 50}%"></div>
-          <div class="score-b" style="width:${debate.percent_b ?? 50}%"></div>
-        </div>
-
-        <div class="score-labels">
-          <span>${debate.percent_a ?? 50}%</span>
-          <span>${debate.percent_b ?? 50}%</span>
-        </div>
-      </div>
-    `
-}
-
-<div class="debate-card-meta-below-media">
-              <div class="debate-card-counts-row">
-                <p class="debate-card-ideas-count">${debate.argument_count || 0} idée(s)</p>
-                <p class="debate-card-comments-count">${debate.comment_count || 0} commentaire${(debate.comment_count || 0) > 1 ? "s" : ""}</p>
-                <p class="debate-card-votes-count"${!(debate.vote_count > 0) ? ' style="display:none;"' : ''}>${debate.vote_count || 0} voix</p>
-              </div>
-              <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
-              ${getDebateLastActivityAt(debate) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(debate)))}</p>` : ""}
-            </div>
-          </a>
-
-          <div class="debate-card-actions">
-            <div class="debate-card-share-actions">
-              <button class="share-icon-button copy" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${debate.id}', '${encodeURIComponent(String(debate.question || ""))}')"
-                title="Copier le lien"><i class="fa-solid fa-link"></i></button>
-
-              <button class="share-icon-button qrcode" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="QR code"><i class="fa-solid fa-qrcode"></i></button>
-
-              <button class="share-icon-button x" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager sur X"><i class="fa-brands fa-x-twitter"></i></button>
-
-              <button class="share-icon-button facebook" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${debate.id}')"
-                title="Partager sur Facebook"><i class="fa-brands fa-facebook"></i></button>
-
-              <button class="share-icon-button whatsapp" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager sur WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
-
-              <button class="share-icon-button email" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager par email"><i class="fa-solid fa-envelope"></i></button>
-
-              <button class="share-icon-button linkedin" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager sur LinkedIn"><i class="fa-brands fa-linkedin-in"></i></button>
-
-              <button class="share-icon-button mastodon" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager sur Mastodon"><i class="fa-brands fa-mastodon"></i></button>
-
-              <button class="share-icon-button reddit" type="button"
-                onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${debate.id}','${encodeURIComponent(String(debate.question || ""))}','${encodeURIComponent(String(debate.option_a || ""))}','${encodeURIComponent(String(debate.option_b || ""))}','${debate.percent_a ?? 50}','${debate.percent_b ?? 50}','${encodeURIComponent(String(debate.type || "debate"))}')"
-                title="Partager sur Reddit"><i class="fa-brands fa-reddit-alien"></i></button>
-            </div>
-          </div>
-        </article>
-      `;
-    }).join("")}
+      ${matches
+        .slice(0, Math.max(SIMILAR_DEBATES_BATCH_SIZE, similarDebatesVisibleCount))
+        .map(({ debate }) => buildIndexLikeDebateCardHtml(debate))
+        .join("")}
     </div>
+
+    ${
+      matches.length > Math.max(SIMILAR_DEBATES_BATCH_SIZE, similarDebatesVisibleCount)
+        ? `
+          <div class="similar-debates-toggle-wrap">
+            <button
+              type="button"
+              class="button button-small similar-debates-toggle-btn"
+              onclick="loadMoreSimilarDebates()"
+            >
+              Découvrir des arènes similaires
+            </button>
+          </div>
+        `
+        : ""
+    }
   `;
+
+  initIndexCardShareMenus(container);
 
   // Initialiser les embeds (YouTube, vidéo locale, X, Instagram) dans les arènes similaires
   if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(container);
   if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(container);
   if (typeof initIndexXObserver === "function") initIndexXObserver(container);
   if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
+
+  // Les arènes similaires affichent peu de cartes: on lance aussi un rendu eager
+  // des posts X/Instagram pour éviter qu'ils restent bloqués en simple vignette.
+  container.querySelectorAll('[data-index-x-shell]').forEach((shell) => {
+    renderIndexXShell(shell);
+  });
+  container.querySelectorAll('[data-index-instagram-shell]').forEach((shell) => {
+    renderIndexInstagramShell(shell);
+  });
+
+  window.setTimeout(() => {
+    container.querySelectorAll('[data-index-x-shell]').forEach((shell) => {
+      if (shell.dataset.rendered !== 'true') {
+        renderIndexXShell(shell);
+      }
+    });
+    container.querySelectorAll('[data-index-instagram-shell]').forEach((shell) => {
+      if (shell.dataset.rendered !== 'true') {
+        renderIndexInstagramShell(shell);
+      }
+    });
+  }, 250);
 }
 function toggleSimilarDebates() {
   if (similarDebatesLoadingTimer) {
@@ -11902,6 +11926,7 @@ function toggleSimilarDebates() {
   similarDebatesVisible = nextVisibleState;
 
   if (!nextVisibleState) {
+    similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
     similarDebatesLoading = false;
 
     if (currentDebateCache && Array.isArray(similarDebatesCache)) {
@@ -11917,6 +11942,7 @@ function toggleSimilarDebates() {
   }
 
   similarDebatesLoading = true;
+  similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
 
   if (currentDebateCache) {
     renderBottomSimilarDebates(currentDebateCache, similarDebatesCache || []);
@@ -11934,7 +11960,7 @@ function toggleSimilarDebates() {
     if (currentDebateCache && Array.isArray(similarDebatesCache)) {
       renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
     }
-  }, 450);
+  }, 900);
 
   if (currentDebateCache && Array.isArray(similarDebatesCache)) {
     return;
@@ -11944,6 +11970,13 @@ function toggleSimilarDebates() {
   if (!debateId) return;
 
   loadDebate(debateId);
+}
+function loadMoreSimilarDebates() {
+  similarDebatesVisibleCount += SIMILAR_DEBATES_BATCH_SIZE;
+
+  if (currentDebateCache && Array.isArray(similarDebatesCache)) {
+    renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+  }
 }
 /* =========================
    Debate
@@ -14686,7 +14719,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     showVoteRankProgress(beforeRankMap, optimisticArgsSameSide, argId);
 
-    if (shouldScroll) {
+    if (shouldFlashArgumentCardOnVoiceChange(shouldScroll)) {
       if (didRankChange) {
         scrollToTopOfArgumentCardAndFlash(argId);
       } else {
@@ -14834,7 +14867,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
       rerenderArgumentsAfterLocalVoteChange(debateId);
     }
 
-    if (shouldScroll) {
+    if (shouldFlashArgumentCardOnVoiceChange(shouldScroll)) {
       if (didRankChange) {
         scrollToTopOfArgumentCardAndFlash(argId);
       } else {
@@ -15591,24 +15624,7 @@ function ensureCommentStanceMobileStyles() {
   style.id = "comment-stance-mobile-style";
   style.textContent = `
     @media (max-width: 768px) {
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-row {
-        justify-content: flex-start !important;
-        align-items: flex-start !important;
-        text-align: left !important;
-        gap: 5px !important;
-        margin-left: -10px !important;
-        margin-right: auto !important;
-        padding-left: 0 !important;
-        width: calc(100% + 10px) !important;
-        transform: none !important;
-      }
-
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option {
-        justify-content: flex-start !important;
-        align-items: center !important;
-        text-align: left !important;
-        margin-left: 0 !important;
-        margin-right: auto !important;
         padding: 4px 7px !important;
         border-radius: 999px !important;
         border: 1px solid transparent !important;
@@ -16270,6 +16286,7 @@ scheduleMobileIndexCardHighlightUpdate();
   initDebateTitleAutoHide();
   initHomeTopbarAutoHide();
   initHomeBottomShareMenu();
+  initIndexCardShareMenus(document);
   initIndexReturnNavigation();
   applyCreateBackLinks();
 
@@ -16879,6 +16896,7 @@ window.toggleIndexSortMenu = toggleIndexSortMenu;
 window.loadMoreArguments = loadMoreArguments;
 window.setDebateViewMode = setDebateViewMode;
 window.toggleSimilarDebates = toggleSimilarDebates;
+window.loadMoreSimilarDebates = loadMoreSimilarDebates;
 window.scrollToArgumentFromSummary = scrollToArgumentFromSummary;
 window.setDebateColumnFocus = setDebateColumnFocus;
 window.closeReplacementSuccessMessage = closeReplacementSuccessMessage;

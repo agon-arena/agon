@@ -908,12 +908,12 @@ body.page-debate .similar-debates-results {
 }
 
 /* Arènes similaires : même surbrillance que les cartes de l'index au scroll */
-body.page-debate .similar-debate-item {
+body.page-debate .similar-debates-results .debate-card {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
   will-change: transform, box-shadow, border-color, background-color;
 }
 
-body.page-debate .similar-debate-item.index-card-active {
+body.page-debate .similar-debates-results .debate-card.index-card-active {
   transform: translateY(-3px);
   box-shadow: 0 12px 22px rgba(15, 23, 42, 0.11) !important;
   border-color: #c7d0db !important;
@@ -921,9 +921,12 @@ body.page-debate .similar-debate-item.index-card-active {
   background-color: #ffffff !important;
 }
 
-body.page-debate .similar-debate-item.index-card-active,
-body.page-debate .similar-debate-item.index-card-active .similar-debate-question,
-body.page-debate .similar-debate-item.index-card-active .similar-debate-meta {
+body.page-debate .similar-debates-results .debate-card.index-card-active,
+body.page-debate .similar-debates-results .debate-card.index-card-active h2,
+body.page-debate .similar-debates-results .debate-card.index-card-active p,
+body.page-debate .similar-debates-results .debate-card.index-card-active .pos-a,
+body.page-debate .similar-debates-results .debate-card.index-card-active .pos-b,
+body.page-debate .similar-debates-results .debate-card.index-card-active .score-labels span {
   color: #111827 !important;
 }
 
@@ -1047,11 +1050,11 @@ body.page-debate .home-bottom-nav-item:focus-visible {
 
 /* Mobile : descendre légèrement le bloc titre fixe */
 @media (max-width: 768px) {
-  body.page-debate .debate-hero-outer {
+  body.page-debate .debate-hero-top {
     top: 16px !important;
   }
 
-  body.page-debate.debate-topbar-hidden .debate-hero-outer {
+  body.page-debate.debate-topbar-hidden .debate-hero-top {
     top: 16px !important;
     margin-top: 0 !important;
   }
@@ -1359,15 +1362,6 @@ body.voices-panel-open {
 
 </div>
 
-<div id="debate-context-wrap" class="debate-context-wrap" style="display:none;">
-  <div id="debate-context-text" class="debate-context-text"></div>
-</div>
-
-
-<div id="debate-image-wrap" class="debate-image-wrap" style="display:none;">
-  <img id="debate-image" class="debate-image" alt="Image du débat">
-</div>
-
 <div id="debate-image-lightbox" class="debate-image-lightbox" style="display:none;" aria-hidden="true">
   <button
     type="button"
@@ -1383,6 +1377,10 @@ body.voices-panel-open {
 </div><!-- .debate-hero-outer -->
 
 <section class="debate-hero">
+
+<div id="debate-image-wrap" class="debate-image-wrap" style="display:none;">
+  <img id="debate-image" class="debate-image" alt="Image du débat">
+</div>
 
 <div id="debate-video-wrap" class="debate-video-wrap" style="display:none;">
   <video
@@ -1433,6 +1431,10 @@ body.voices-panel-open {
 </div>
 
 <div id="debate-source-fallback" class="debate-source-fallback" style="display:none;"></div>
+
+<div id="debate-context-wrap" class="debate-context-wrap" style="display:none;">
+  <div id="debate-context-text" class="debate-context-text"></div>
+</div>
 
 </section>
 

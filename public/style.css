@@ -911,6 +911,66 @@ margin: 6px 0 8px 0;  font-size: 20px;
   background: #2e3d47;
 }
 
+.index-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.index-share-btn:hover {
+  background: #e5e7eb;
+}
+
+.index-share-dropdown {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: auto;
+  transform: none;
+  z-index: 99999;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.index-share-dropdown.open {
+  display: flex;
+}
+
+.index-share-dropdown .isd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.index-share-dropdown .isd-item:hover {
+  background: #f3f4f6;
+}
+
 .debate-card-share-actions {
   display: flex;
   align-items: center;
@@ -1422,13 +1482,14 @@ select:focus {
 }
 
 .debate-hero-outer{
-  position: sticky;
-  top: 0;
-  z-index: 30;
+  position: relative;
   margin-top: 4px;
 }
 
 .debate-hero-top{
+  position: sticky;
+  top: 0;
+  z-index: 30;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
@@ -5896,6 +5957,25 @@ body.page-debate .topbar::after {
     width: 100%;
   }
 
+  .debate-columns:not(.focus-a):not(.focus-b) .argument-card {
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .argument-top {
+    justify-content: center !important;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .argument-actions-vertical {
+    width: 100% !important;
+    align-items: center !important;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .voice-stepper {
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
   .debate-columns:not(.focus-a):not(.focus-b) .comments-content {
     width: 100%;
     max-width: 100%;
@@ -5908,9 +5988,27 @@ body.page-debate .topbar::after {
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    padding: 12px;
+    padding: 0;
     box-sizing: border-box;
     overflow: hidden;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-row {
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form .comment-main-field,
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form textarea,
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form input[type="text"],
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-form button[type="submit"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   .debate-columns:not(.focus-a):not(.focus-b) .comment-main-field {
@@ -6040,6 +6138,7 @@ body.page-debate .topbar::after {
 }
 
 /* UNIQUEMENT cartes vertes */
+.argument-card.flash-green,
 .argument-card.argument-card-a.flash-green,
 #arguments-a .argument-card.flash-green {
   animation: flashGreenCard 1s ease-in-out 2;
@@ -6060,6 +6159,7 @@ body.page-debate .topbar::after {
   }
 }
 
+.argument-card.flash-blue,
 .argument-card.argument-card-b.flash-blue,
 #arguments-b .argument-card.flash-blue {
   animation: flashBlueCard 1s ease-in-out 2;
@@ -7365,7 +7465,7 @@ padding:4px 14px 12px 14px;
   background: #ffffff;
 }
 
-  .page-debate .similar-debate-item.index-card-active {
+  .page-debate .similar-debates-results .debate-card.index-card-active {
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.20);
     border-color: #b6c2d1;
     background: #ffffff;
