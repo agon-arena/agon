@@ -1482,14 +1482,13 @@ select:focus {
 }
 
 .debate-hero-outer{
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 30;
   margin-top: 4px;
 }
 
 .debate-hero-top{
-  position: sticky;
-  top: 0;
-  z-index: 30;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
