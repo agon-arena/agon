@@ -489,6 +489,10 @@ function clearCreatedDebateContext() {
 }
 
 function getPageArrivalLoadingImageSrc() {
+  if (isNotificationToDebateLoadingTransition()) {
+    return "/robot-head.png";
+  }
+
   if (isCreateToDebateOverlayContext()) {
     return "/robot-head.png";
   }
@@ -503,11 +507,12 @@ function applyPageArrivalLoadingVisuals() {
   const isIframeDebateContext = isIframeDebateLoadingOverlayContext();
   const isCreateReturnTransition = isCreateToDebateLoadingTransition();
   const isCreateToDebate = isCreateToDebateOverlayContext();
+  const isNotificationToDebate = isNotificationToDebateLoadingTransition();
   const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
 
   overlay.classList.toggle("page-arrival-loading-overlay-iframe-debate", isIframeDebateContext);
   overlay.classList.toggle("page-arrival-loading-overlay-return-to-debate", isCreateReturnTransition);
-  overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate);
+  overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate || isNotificationToDebate);
 
   if (loadingImage) {
     const desiredSrc = getPageArrivalLoadingImageSrc();
@@ -530,7 +535,8 @@ function updatePageArrivalLoadingOverlayBounds() {
 
   const isDebatePage = location.pathname === "/debate";
   const isDebateMobile = isDebatePage && window.innerWidth <= 768;
-  const preserveTopbar = isDebatePage && (isIframeDebateLoadingOverlayContext() || isCreateToDebateLoadingTransition());
+  const preserveTopbar = (isDebatePage && (isIframeDebateLoadingOverlayContext() || isCreateToDebateLoadingTransition()))
+    || isNotificationToDebateLoadingTransition();
   const top = preserveTopbar ? getStableTopbarBottomOffset() : 0;
   const bottom = isDebateMobile ? 0 : getStableBottomBarOffset();
 
@@ -1879,6 +1885,10 @@ function updateDebateIframeParentLoadingOverlayBounds() {
   overlay.style.setProperty("--debate-iframe-parent-loading-top", `${getStableTopbarBottomOffset()}px`);
 }
 
+function getDebateIframeParentLoadingImageSrc() {
+  return location.pathname === "/notifications" ? "/robot-head.png" : "/sablier.png";
+}
+
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   if (!isTopLevelIframeModalPage()) return;
 
@@ -1902,6 +1912,15 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   const title = document.getElementById("debate-iframe-parent-loading-title");
   if (title) {
     title.textContent = String(message || "").trim() || "Chargement en cours";
+  }
+
+  const image = overlay.querySelector(".debate-iframe-parent-loading-hourglass img");
+  if (image) {
+    image.onerror = () => {
+      image.onerror = null;
+      image.src = "/sablier.png";
+    };
+    image.src = getDebateIframeParentLoadingImageSrc();
   }
 
   document.body.classList.add("debate-iframe-parent-loading-open");
@@ -2226,6 +2245,7 @@ function ensureDebateIframeModal() {
 function openDebateIframeModal(url) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
+  window.__agonDebateModalOpenedFromNotifications = location.pathname === "/notifications";
 
   const existingModal = document.getElementById("debate-iframe-modal");
   if (existingModal) {
@@ -2345,11 +2365,13 @@ function closeDebateIframeModal() {
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   if (!modal) return;
+  const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
 
   modal.classList.remove("open");
   modal.classList.remove("argument-form-open-in-child");
   setDebateIframeModalLoadingState(false);
   window.__agonDebateModalOpen = false;
+  window.__agonDebateModalOpenedFromNotifications = false;
 
   const restoredScrollY = _debateModalSavedScrollY !== null
     ? Math.max(0, Math.round(_debateModalSavedScrollY))
@@ -2368,6 +2390,11 @@ function closeDebateIframeModal() {
     window.scrollTo(0, restoredScrollY);
     document.documentElement.style.scrollBehavior = "";
     _debateModalSavedScrollY = null;
+  }
+
+  if (openedFromNotifications && location.pathname === "/notifications") {
+    window.location.href = "/";
+    return;
   }
 
   // Applique le re-rendu différé seulement après stabilisation des embeds
@@ -2396,7 +2423,7 @@ function isTopLevelDebatePage() {
 
 function isTopLevelIframeModalPage() {
   if (window.self !== window.top) return false;
-  return location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create";
+  return location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create" || location.pathname === "/notifications";
 }
 
 function openNotificationsInDebateIframeModal(event = null) {
@@ -2412,6 +2439,11 @@ function openNotificationsInDebateIframeModal(event = null) {
 
   if (typeof closeHomeTopbarMenu === "function") {
     closeHomeTopbarMenu();
+  }
+
+  if (location.pathname === "/") {
+    window.location.href = "/notifications";
+    return false;
   }
 
   openDebateIframeModal("/notifications");
@@ -2665,6 +2697,128 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight");
   element.classList.remove("voice-title-highlight-green");
 }
+
+function highlightNotificationTargetElement(element, highlight, durationMs = 2000) {
+  if (!element) return;
+
+  const isOpenArena =
+    currentDebateViewMode === "list" ||
+    isOpenDebate(currentDebateCache) ||
+    !!element.closest("#arguments-unified") ||
+    String(element.id || "").startsWith("list-");
+
+  if (isOpenArena) {
+    applyVoiceHighlight(element);
+    setTimeout(() => {
+      removeVoiceHighlight(element);
+    }, durationMs);
+    return;
+  }
+
+  const isGreenTarget =
+    element.classList.contains("argument-card-a") ||
+    !!element.closest(".argument-card-a") ||
+    !!element.closest("#arguments-a") ||
+    !!element.closest(".column-a");
+
+  if (isGreenTarget) {
+    if (String(highlight || "").startsWith("argument-")) {
+      element.classList.add("flash-green");
+
+      setTimeout(() => {
+        element.classList.remove("flash-green");
+      }, durationMs);
+    } else {
+      element.classList.add("admin-highlight-green");
+
+      setTimeout(() => {
+        element.classList.remove("admin-highlight-green");
+      }, durationMs);
+    }
+  } else {
+    element.classList.add("flash-blue");
+
+    setTimeout(() => {
+      element.classList.remove("flash-blue");
+    }, durationMs);
+  }
+}
+
+function getNotificationTargetScrollOffset(element, highlight = "") {
+  const normalizedHighlight = String(highlight || "");
+  const isOpenArena =
+    currentDebateViewMode === "list" ||
+    isOpenDebate(currentDebateCache) ||
+    !!element?.closest("#arguments-unified") ||
+    String(element?.id || "").startsWith("list-");
+
+  if (isOpenArena) {
+    const topbar = document.querySelector(".topbar");
+    const baseOffset = topbar ? topbar.offsetHeight : 80;
+    return baseOffset + (normalizedHighlight.startsWith("comment-") ? 24 : 16);
+  }
+
+  const stickyHeader = document.querySelector(".debate-hero-top");
+  return (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
+}
+
+async function waitForDebateSourcePreviewStability(timeoutMs = 2600) {
+  const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
+  if (!sourcePreviewWrap || sourcePreviewWrap.style.display === "none") return;
+
+  const start = Date.now();
+  let previousHeight = -1;
+  let stableFrames = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    const currentHeight = Math.round(sourcePreviewWrap.getBoundingClientRect().height || 0);
+    const sourceLoading = document.getElementById("debate-source-preview-loading");
+    const loadingVisible = !!sourceLoading && sourceLoading.style.display !== "none";
+
+    if (currentHeight === previousHeight && !loadingVisible) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+      previousHeight = currentHeight;
+    }
+
+    if (stableFrames >= 4) {
+      return;
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+}
+
+async function scrollNotificationTargetIntoPlace(element, highlight, options = {}) {
+  if (!element) return;
+
+  const behavior = options.behavior || "smooth";
+  const shouldWaitForSourcePreview = options.waitForSourcePreview !== false;
+  const finalizeTransition = options.finalizeTransition !== false;
+
+  const scrollToElement = (targetElement, scrollBehavior) => {
+    const offset = getNotificationTargetScrollOffset(targetElement, highlight);
+    const y = targetElement.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({
+      top: Math.max(0, y),
+      behavior: scrollBehavior
+    });
+  };
+
+  scrollToElement(element, behavior);
+
+  if (shouldWaitForSourcePreview) {
+    await waitForDebateSourcePreviewStability();
+    scrollToElement(element, "auto");
+  }
+
+  if (finalizeTransition) {
+    finalizeNotificationTransitionAtScrollStart();
+  }
+}
+
 function ensureArgumentCardVisibleForScroll(argumentId) {
   const argIdString = String(argumentId || "");
   if (!argIdString) return null;
@@ -2964,19 +3118,41 @@ function buildIndexCardBottomEntryHtml(debate, options = {}) {
   const d = debate || {};
   const mediaOutsideLink = !!options.mediaOutsideLink;
   const voteCount = d.vote_count || (Number(d.votes_a || 0) + Number(d.votes_b || 0));
+  const safeDebateId = escapeAttribute(String(d.id || ""));
 
   return `
-    <div class="debate-card-bottom-entry">
+    <div
+      class="debate-card-bottom-entry"
+      role="link"
+      tabindex="0"
+      onclick="openIndexDebateFromMedia('${safeDebateId}', event)"
+      onkeydown="handleIndexContextTextKeydown(event, '${safeDebateId}')"
+      style="cursor:pointer;"
+    >
       <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
         <div class="debate-card-counts-row">
           <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
-          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire(s)</p>
+          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire${(d.comment_count || 0) > 1 ? "s" : ""}</p>
           <p class="debate-card-votes-count"${!(voteCount > 0) ? ' style="display:none;"' : ''}>${voteCount} voix</p>
         </div>
         <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
         ${getDebateLastActivityAt(d) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(d)))}</p>` : ""}
       </div>
     </div>
+  `;
+}
+
+function buildIndexCardEnterButtonHtml(debate) {
+  const debateId = escapeAttribute(String(debate?.id || ""));
+
+  return `
+    <button
+      type="button"
+      class="debate-card-entry-button"
+      onclick="openIndexDebateFromMedia('${debateId}', event)"
+    >
+      Entrer dans l'arène →
+    </button>
   `;
 }
 
@@ -2992,17 +3168,7 @@ function buildIndexCardFooterActionsHtml(debate) {
       >
         Signaler
       </button>
-
-      <a
-        class="debate-card-entry-cta"
-        href="/debate?id=${d.id}"
-        onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;"
-        aria-label="Entrer dans l'arene"
-        title="Entrer dans l'arene"
-      >
-        Entrer dans l'arene
-        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-      </a>
+      ${buildIndexCardEnterButtonHtml(d)}
     </div>
   `;
 }
@@ -4811,6 +4977,21 @@ function clearActionLoading(element, loadingClass = "button-loading") {
 
 const NOTIFICATION_TRANSITION_STORAGE_KEY = "notification_transition_pending";
 
+function isNotificationToDebateLoadingTransition(maxAgeMs = 15000) {
+  const state = getNotificationTransitionState();
+  if (!state?.active) return false;
+
+  const startedAt = Number(state.startedAt || 0);
+  if (!startedAt || Date.now() - startedAt > maxAgeMs) return false;
+
+  try {
+    const parsedUrl = new URL(String(state.link || ""), window.location.origin);
+    return parsedUrl.pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
 function ensureNotificationTransitionOverlayStyles() {
   if (document.getElementById("notification-transition-overlay-styles")) return;
 
@@ -4932,16 +5113,6 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
   }
 
   const cameFromDebateIframe = window.self !== window.top;
-  const cameFromDebateReferrer = (() => {
-    try {
-      const referrer = String(document.referrer || "").trim();
-      if (!referrer) return false;
-      const referrerUrl = new URL(referrer, window.location.origin);
-      return referrerUrl.origin === window.location.origin && referrerUrl.pathname === "/debate";
-    } catch (error) {
-      return false;
-    }
-  })();
 
   if (cameFromDebateIframe) {
     try {
@@ -4954,16 +5125,6 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
   notifyParentAboutNotificationBackTransition({ source: "notifications-back" });
 
   window.setTimeout(() => {
-    if (cameFromDebateReferrer && window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-
     window.location.href = fallbackHref || "/";
   }, 40);
 
@@ -6926,7 +7087,7 @@ function shouldOpenNotificationTargetInIframeModal(link) {
   if (typeof openDebateIframeModal !== "function") return false;
 
   const currentPath = String(location.pathname || "").trim().toLowerCase();
-  if (!["/", "/notifications"].includes(currentPath)) return false;
+  if (!(currentPath === "/" || currentPath === "/notifications" || currentPath.startsWith("/notifications/"))) return false;
 
   try {
     const parsedUrl = new URL(String(link || ""), window.location.origin);
@@ -6938,7 +7099,6 @@ function shouldOpenNotificationTargetInIframeModal(link) {
 
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
-  beginNotificationTransition(link);
   setActionLoading(element);
 
   const wasUnread = markNotificationElementAsReadLocally(element);
@@ -6949,10 +7109,12 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   if (shouldOpenNotificationTargetInIframeModal(link)) {
+    clearNotificationTransitionState();
     openDebateIframeModal(link);
     return;
   }
 
+  beginNotificationTransition(link);
   window.location.href = link;
 }
 
@@ -8468,7 +8630,6 @@ const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</
 ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
 
         <div class="debate-card-actions">
-
 <div class="debate-card-share-actions">
             <button
               class="share-icon-button copy"
@@ -8711,7 +8872,6 @@ ${
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
 
       <div class="debate-card-actions">
-
 <div class="debate-card-share-actions">
           <button
             class="share-icon-button copy"
@@ -8811,13 +8971,13 @@ onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmai
             >
               <i class="fa-brands fa-reddit-alien"></i>
             </button>
-        </div>
+          </div>
 
-        ${getDebateCardDeleteButtonHtml(d)}
-      </div>
-      ${buildIndexCardFooterActionsHtml(d)}
-      ${buildAdminEditPanelHtml(d)}
-    </article>
+          ${getDebateCardDeleteButtonHtml(d)}
+        </div>
+        ${buildIndexCardFooterActionsHtml(d)}
+        ${buildAdminEditPanelHtml(d)}
+      </article>
   `;
 }).join("");
 
@@ -11673,7 +11833,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
 <div class="debate-card-meta-below-media">
               <div class="debate-card-counts-row">
                 <p class="debate-card-ideas-count">${debate.argument_count || 0} idée(s)</p>
-                <p class="debate-card-comments-count">${debate.comment_count || 0} commentaire(s)</p>
+                <p class="debate-card-comments-count">${debate.comment_count || 0} commentaire${(debate.comment_count || 0) > 1 ? "s" : ""}</p>
                 <p class="debate-card-votes-count"${!(debate.vote_count > 0) ? ' style="display:none;"' : ''}>${debate.vote_count || 0} voix</p>
               </div>
               <p class="debate-date">${escapeHtml(formatDebateDate(debate.created_at))}</p>
@@ -12714,22 +12874,9 @@ else if (pendingCommentScrollId) {
 
   waitForNotificationTargetElement(
     () => getVisibleCommentElement(targetId),
-    (element) => {
-      const topbar = document.querySelector(".topbar");
-      const offset = (topbar ? topbar.offsetHeight : 80) + 140;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-      finalizeNotificationTransitionAtScrollStart();
-
-      applyVoiceHighlight(element);
-
-      setTimeout(() => {
-        removeVoiceHighlight(element);
-      }, 2000);
+    async (element) => {
+      await scrollNotificationTargetIntoPlace(element, `comment-${targetId}`);
+      highlightNotificationTargetElement(element, `comment-${targetId}`, 2000);
 
       pendingCommentScrollId = null;
     },
@@ -12744,30 +12891,9 @@ else if (pendingArgumentScrollId) {
 
   waitForNotificationTargetElement(
     () => getVisibleArgumentElement(targetId),
-    (element) => {
-      const stickyHeader = document.querySelector(".debate-hero-top");
-      const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-      const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-      window.scrollTo({
-        top: Math.max(0, y),
-        behavior: "smooth"
-      });
-      finalizeNotificationTransitionAtScrollStart();
-
-      if (element.classList.contains("argument-card-a") || element.closest("#arguments-a")) {
-        element.classList.add("flash-green");
-
-        setTimeout(() => {
-          element.classList.remove("flash-green");
-        }, 2000);
-      } else {
-        element.classList.add("flash-blue");
-
-        setTimeout(() => {
-          element.classList.remove("flash-blue");
-        }, 2000);
-      }
+    async (element) => {
+      await scrollNotificationTargetIntoPlace(element, `argument-${targetId}`);
+      highlightNotificationTargetElement(element, `argument-${targetId}`, 2000);
 
       pendingArgumentScrollId = null;
       pinnedNewArgumentId = null;
@@ -12898,15 +13024,6 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
     };
 
 if (element) {
-  const stickyHeader = document.querySelector(".debate-hero-top");
-  const offset = (stickyHeader ? stickyHeader.offsetHeight : 120) + 12;
-  const y = element.getBoundingClientRect().top + window.scrollY - offset;
-
-  window.scrollTo({
-    top: Math.max(0, y),
-    behavior: "smooth"
-  });
-
   let lastY = window.scrollY;
   let stableFrames = 0;
   let hasStartedMoving = false;
@@ -12925,33 +13042,8 @@ if (element) {
   };
   requestAnimationFrame(pollScroll);
 
-  const isGreenTarget =
-    element.classList.contains("argument-card-a") ||
-    !!element.closest(".argument-card-a") ||
-    !!element.closest("#arguments-a") ||
-    !!element.closest(".column-a");
-
-  if (isGreenTarget) {
-    if (highlight.startsWith("argument-")) {
-      element.classList.add("flash-green");
-
-      setTimeout(() => {
-        element.classList.remove("flash-green");
-      }, 5000);
-    } else {
-      element.classList.add("admin-highlight-green");
-
-      setTimeout(() => {
-        element.classList.remove("admin-highlight-green");
-      }, 5000);
-    }
-  } else {
-    element.classList.add("flash-blue");
-
-    setTimeout(() => {
-      element.classList.remove("flash-blue");
-    }, 5000);
-  }
+  scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false });
+  highlightNotificationTargetElement(element, highlight, 5000);
 } else {
   removeEarlyGrey();
 }
@@ -13272,27 +13364,19 @@ return `
 <div class="comments-block">
   <div class="comments-summary">
     <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-      ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
+      ${commentsOpen ? "Masquer" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
     </button>
 
 <div class="comments-summary-details">
-  <span class="comments-count-favorable">
-    ${favorableCommentsCount} favorable${favorableCommentsCount > 1 ? "s" : ""}
-  </span>
-
-  <span class="comments-count-defavorable">
-    ${defavorableCommentsCount} défavorable${defavorableCommentsCount > 1 ? "s" : ""}
-  </span>
-
-  <span class="comments-count-amelioration">
-    ${ameliorationCommentsCount} amélioration${ameliorationCommentsCount > 1 ? "s" : ""}
-  </span>
+  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l’idée</span>
+  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l’idée</span>
+  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d’amélioration</span>
 </div>
   </div>
 
           ${commentsOpen ? `
             <div class="comments-content">
-              <h4>Commentaires (${comments.length})</h4>
+              <h4>${comments.length} commentaire${comments.length > 1 ? "s" : ""}</h4>
 
 <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
 
@@ -13718,28 +13802,20 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
         <div class="comments-block">
           <div class="comments-summary">
             <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-              ${commentsOpen ? "Masquer" : "Commentaires"} (${comments.length})
+              ${commentsOpen ? "Masquer" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
             </button>
 
 <div class="comments-summary-details">
-  <span class="comments-count-favorable">
-    ${favorableCommentsCount} favorable${favorableCommentsCount > 1 ? "s" : ""}
-  </span>
-
-  <span class="comments-count-defavorable">
-    ${defavorableCommentsCount} défavorable${defavorableCommentsCount > 1 ? "s" : ""}
-  </span>
-
-  <span class="comments-count-amelioration">
-    ${ameliorationCommentsCount} amélioration${ameliorationCommentsCount > 1 ? "s" : ""}
-  </span>
+  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l’idée</span>
+  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l’idée</span>
+  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d’amélioration</span>
 </div>
 </div>
           </div>
 
           ${commentsOpen ? `
             <div class="comments-content">
-              <h4>Commentaires (${comments.length})</h4>
+              <h4>${comments.length} commentaire${comments.length > 1 ? "s" : ""}</h4>
 
 <form class="comment-form" onsubmit="submitComment(event, '${debateId}', '${a.id}')">
 
@@ -15542,8 +15618,8 @@ function ensureCommentStanceMobileStyles() {
       }
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
-        background: #111111 !important;
-        border-color: #111111 !important;
+        background: #243038 !important;
+        border-color: #243038 !important;
         color: #ffffff !important;
       }
 
@@ -15574,7 +15650,7 @@ function ensureCommentStanceMobileStyles() {
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
         border-color: #ffffff !important;
         background: #ffffff !important;
-        box-shadow: inset 0 0 0 3px #111111 !important;
+        box-shadow: inset 0 0 0 3px #243038 !important;
       }
     }
   `;

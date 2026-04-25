@@ -79,14 +79,19 @@
 
     /* Si la modale iframe débat existe encore pendant la transition,
        on masque son bouton de fermeture sur la page notifications */
-    body.page-notifications #debate-iframe-modal-close,
-    body.page-notifications-mobile #debate-iframe-modal-close {
+    html.notifications-embedded body.page-notifications #debate-iframe-modal-close,
+    html.notifications-embedded body.page-notifications-mobile #debate-iframe-modal-close {
       display: none !important;
     }
 
   </style>
 </head>
 <body class="page-notifications page-notifications-mobile">
+<script>
+  if (window.self !== window.top) {
+    document.documentElement.classList.add('notifications-embedded');
+  }
+</script>
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
 
