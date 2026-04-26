@@ -9371,7 +9371,7 @@ body.index-batch-loading-active {
 /* Badge voix — ajustement position mobile */
 @media (max-width: 768px) {
   #voices-float-badge {
-    bottom: 28px !important;
+    bottom: 5vh !important;
     right: 10px !important;
   }
 }

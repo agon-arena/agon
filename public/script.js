@@ -2121,7 +2121,7 @@ function ensureDebateIframeModal() {
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: calc(5vh + -26px);
+        bottom: 16px;
       }
     }
     @media (min-width: 769px) {
@@ -7754,6 +7754,7 @@ function detachIndexBatchScrollLockHandlers() {
 
 function lockIndexBatchScroll() {
   if (document.body.classList.contains('index-batch-loading-active')) return;
+  if (window.innerWidth <= 768) return;
 
   indexBatchScrollLockY = window.scrollY || window.pageYOffset || 0;
   document.documentElement.style.top = `-${indexBatchScrollLockY}px`;
@@ -7766,6 +7767,11 @@ function lockIndexBatchScroll() {
 function unlockIndexBatchScroll() {
   const wasLocked = document.body.classList.contains('index-batch-loading-active');
   const savedY = Number(indexBatchScrollLockY || 0);
+
+  if (window.innerWidth <= 768 && !wasLocked) {
+    indexBatchScrollLockY = null;
+    return;
+  }
 
   document.documentElement.classList.remove('index-batch-loading-active');
   document.body.classList.remove('index-batch-loading-active');
@@ -9265,7 +9271,13 @@ async function initIndex() {
         saveDebatesToSessionCache(fresh);
         debatesCache = fresh;
         refreshCategoryFilterOptions(debatesCache);
-        applyIndexFilters();
+        const currentScrollY = Math.round(window.scrollY || 0);
+
+        // Evite un rerender silencieux qui recrée tout le DOM et provoque
+        // un saut visuel quand l'utilisateur a déjà commencé à faire défiler la page.
+        if (currentScrollY <= 8) {
+          applyIndexFilters();
+        }
       }).catch(() => {});
 
     } else {
@@ -11072,12 +11084,12 @@ form.addEventListener("submit", async e => {
   }
 
 
-  if (content.length > 600) {
+  if (content.length > 1800) {
     hideCreatePublishProgress();
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Texte trop long",
-      "Le texte de contexte ne peut pas dépasser 600 caractères.",
+      "Le texte de contexte ne peut pas dépasser 1800 caractères.",
       null,
       "⚠️"
     );
@@ -14167,6 +14179,7 @@ async function submitListArgument(debateId) {
 
     openedArgumentForm = null;
     document.body.classList.remove("argument-form-open");
+    syncIframeParentArgumentFormState(false);
 
     if (typeof updateCounter === "function") {
       updateCounter("list-title", "count-title-list", 100);
@@ -15580,10 +15593,12 @@ function toggleForm(side) {
     form.style.display = "grid";
     openedArgumentForm = form;
     document.body.classList.add("argument-form-open");
+    syncIframeParentArgumentFormState(true);
   } else {
     form.style.display = "none";
     openedArgumentForm = null;
     document.body.classList.remove("argument-form-open");
+    syncIframeParentArgumentFormState(false);
   }
 }
 
@@ -17115,6 +17130,23 @@ function updateHomeBottomNavViewportOffset() {
   }
 
   if (document.body.classList.contains('page-home-mobile')) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  const nav = document.querySelector('.home-bottom-nav');
+  if (!nav) {
+    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
+    return;
+  }
+
+  const navStyles = window.getComputedStyle(nav);
+  const navVisible =
+    navStyles.display !== 'none' &&
+    navStyles.visibility !== 'hidden' &&
+    nav.getClientRects().length > 0;
+
+  if (!navVisible) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
     return;
   }

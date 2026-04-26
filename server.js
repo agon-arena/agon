@@ -392,7 +392,7 @@ function writeDebateContentMap(map) {
 }
 
 function normalizeDebateContent(value) {
-  return String(value || "").trim().slice(0, 600);
+  return String(value || "").trim().slice(0, 1800);
 }
 
 function getDebateStoredContent(debateId) {
@@ -789,11 +789,17 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
 
 function enrichDebateWithStoredImage(debate) {
   if (!debate) return debate;
+  const normalizedDbContent = normalizeDebateContent(debate.content || "");
+  const normalizedStoredContent = getDebateStoredContent(debate?.id);
+  const resolvedContent = normalizedStoredContent.length > normalizedDbContent.length
+    ? normalizedStoredContent
+    : normalizedDbContent;
+
   return {
     ...debate,
     image_url: getResolvedDebateImageUrl(debate),
     video_url: getResolvedDebateVideoUrl(debate),
-    content: normalizeDebateContent(debate.content || getDebateStoredContent(debate?.id))
+    content: resolvedContent
   };
 }
 

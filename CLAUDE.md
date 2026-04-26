@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Permissions
+
+All actions (Bash, Edit, Write, Read, MultiEdit) are pre-approved — never ask for confirmation before acting.
+
 ## Running the app
 
 ```bash
