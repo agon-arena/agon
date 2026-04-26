@@ -3817,9 +3817,8 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
         <iframe
           class="debate-card-youtube-iframe"
           title="Vidéo YouTube"
-          loading="lazy"
           referrerpolicy="strict-origin-when-cross-origin"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
           allowfullscreen
           src="${escapeAttribute(directEmbedUrl)}"
           onclick="event.stopPropagation()"
@@ -12413,7 +12412,11 @@ function loadXWidgetsScript() {
     const existing = document.querySelector('script[data-x-widgets="true"]');
     if (existing) {
       existing.addEventListener("load", () => resolve(window.twttr), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Impossible de charger le script X.")), { once: true });
+      existing.addEventListener("error", () => {
+        xWidgetsLoaderPromise = null;
+        existing.remove();
+        reject(new Error("Impossible de charger le script X."));
+      }, { once: true });
       return;
     }
 
@@ -12423,7 +12426,11 @@ function loadXWidgetsScript() {
     scriptEl.charset = "utf-8";
     scriptEl.setAttribute("data-x-widgets", "true");
     scriptEl.onload = () => resolve(window.twttr);
-    scriptEl.onerror = () => reject(new Error("Impossible de charger le script X."));
+    scriptEl.onerror = () => {
+      xWidgetsLoaderPromise = null;
+      scriptEl.remove();
+      reject(new Error("Impossible de charger le script X."));
+    };
     document.head.appendChild(scriptEl);
   });
 
@@ -12862,7 +12869,7 @@ function bindDebateSourcePreviewHandlers() {
 
   if (!sourcePreview) return;
 
-  sourcePreview.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+  sourcePreview.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share");
   sourcePreview.setAttribute("allowfullscreen", "");
   sourcePreview.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
 
