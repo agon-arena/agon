@@ -2372,6 +2372,59 @@ function openDebateIframeModal(url) {
   document.body.style.width = "100%";
 }
 
+const prefetchedDebateUrls = new Set();
+
+function prewarmDebateUrl(url) {
+  const href = String(url || "").trim();
+  if (!href) return;
+
+  let resolvedUrl;
+  try {
+    resolvedUrl = new URL(href, window.location.origin);
+  } catch (error) {
+    return;
+  }
+
+  if (resolvedUrl.origin !== window.location.origin) return;
+  if (resolvedUrl.pathname !== "/debate") return;
+
+  const cacheKey = resolvedUrl.toString();
+  if (prefetchedDebateUrls.has(cacheKey)) return;
+  prefetchedDebateUrls.add(cacheKey);
+
+  const prefetchLink = document.createElement("link");
+  prefetchLink.rel = "prefetch";
+  prefetchLink.href = cacheKey;
+  prefetchLink.as = "document";
+  document.head.appendChild(prefetchLink);
+}
+
+function initDebateLinkPrewarm() {
+  if (document.documentElement.dataset.debateLinkPrewarmInitialized === "true") return;
+  document.documentElement.dataset.debateLinkPrewarmInitialized = "true";
+
+  const maybePrewarmFromEventTarget = (target) => {
+    const link = target instanceof Element ? target.closest('a[href]') : null;
+    if (!link) return;
+
+    const href = String(link.getAttribute("href") || "").trim();
+    if (!href) return;
+    prewarmDebateUrl(href);
+  };
+
+  document.addEventListener("pointerenter", (event) => {
+    maybePrewarmFromEventTarget(event.target);
+  }, true);
+
+  document.addEventListener("focusin", (event) => {
+    maybePrewarmFromEventTarget(event.target);
+  });
+
+  document.addEventListener("touchstart", (event) => {
+    maybePrewarmFromEventTarget(event.target);
+  }, { passive: true });
+}
+
 function getIndexEmbedShellsAboveScrollY(targetScrollY = 0) {
   const safeTargetY = Math.max(0, Number(targetScrollY) || 0);
   const allShells = Array.from(document.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]'));
@@ -16417,6 +16470,7 @@ initPageArrivalLoadingOverlay();
 
 document.addEventListener("DOMContentLoaded", () => {
   initIframePageContextBridge();
+  initDebateLinkPrewarm();
 initMobileIndexCardHighlight();
 scheduleMobileIndexCardHighlightUpdate();
   initNotificationTransitionOverlay();

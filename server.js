@@ -2952,18 +2952,21 @@ app.get("/api/debates/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    const debate = await getDebateById(id);
+    const [debate, args] = await Promise.all([
+      getDebateById(id),
+      getArgumentsByDebateId(id)
+    ]);
+
     if (!debate) {
       return res.status(404).json({ error: "Débat introuvable." });
     }
 
-    const args = await getArgumentsByDebateId(id);
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
-    const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
-
     const argumentIds = args.map((a) => a.id);
+
     if (!argumentIds.length) {
+      const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
       return res.json({
         debate,
         optionA,
@@ -2973,7 +2976,11 @@ app.get("/api/debates/:id", async (req, res) => {
       });
     }
 
-    const comments = await getCommentsByArgumentIds(argumentIds);
+    const [sourcePreview, comments] = await Promise.all([
+      debate.source_url ? getExternalLinkPreview(debate.source_url) : Promise.resolve(null),
+      getCommentsByArgumentIds(argumentIds)
+    ]);
+
     const commentsByArgument = {};
 
     for (const comment of comments) {
