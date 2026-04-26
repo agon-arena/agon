@@ -12380,6 +12380,10 @@ let debateInstagramVisibilityObserver = null;
 let debateInstagramCurrentUrl = "";
 let debateInstagramCurrentPreviewData = null;
 let debateInstagramIsRendered = false;
+let debateXCurrentUrl = "";
+let debateXCurrentPreviewData = null;
+let debateXTabletRefreshTimer = null;
+let debateXTabletRefreshBound = false;
 
 function isXStatusUrl(url) {
   try {
@@ -12413,6 +12417,34 @@ function waitForXEmbedRetry(delayMs) {
   return new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
+function hasRenderedDebateXEmbed() {
+  const sourceFallback = document.getElementById("debate-source-fallback");
+  if (!sourceFallback) return false;
+  return !!sourceFallback.querySelector("iframe[src*=\"x.com\"], iframe[src*=\"twitter.com\"], blockquote.twitter-tweet");
+}
+
+function scheduleTabletXEmbedRefresh() {
+  if (!isTabletXEmbedContext() || !debateXCurrentUrl) return;
+  if (debateXTabletRefreshTimer) clearTimeout(debateXTabletRefreshTimer);
+  debateXTabletRefreshTimer = setTimeout(() => {
+    debateXTabletRefreshTimer = null;
+    if (!debateXCurrentUrl || !isTabletXEmbedContext() || hasRenderedDebateXEmbed()) return;
+    renderXSourcePreview(debateXCurrentUrl, debateXCurrentPreviewData);
+  }, 650);
+}
+
+function bindTabletXEmbedRefresh() {
+  if (debateXTabletRefreshBound) return;
+  const refresh = () => {
+    scheduleTabletXEmbedRefresh();
+  };
+  window.addEventListener("resize", refresh, { passive: true });
+  window.addEventListener("orientationchange", refresh, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", refresh);
+  }
+  debateXTabletRefreshBound = true;
+}
 function loadXWidgetsScript() {
   if (window.twttr?.widgets?.createTweet) {
     return Promise.resolve(window.twttr);
@@ -12685,6 +12717,10 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
   const sourceLoading = document.getElementById("debate-source-preview-loading");
   const sourceFallback = document.getElementById("debate-source-fallback");
 
+  debateXCurrentUrl = String(sourceUrl || "").trim();
+  debateXCurrentPreviewData = sourcePreviewData;
+  bindTabletXEmbedRefresh();
+
   if (!sourceFallback) {
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
     return;
@@ -12788,12 +12824,19 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
+
+    if (isTabletContext) {
+      scheduleTabletXEmbedRefresh();
+    }
   } catch (error) {
     sourceFallback.classList.remove("debate-source-fallback-x");
     if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
+    if (isTabletXEmbedContext()) {
+      scheduleTabletXEmbedRefresh();
+    }
   }
 }
 
@@ -12813,6 +12856,12 @@ function resetDebateSourcePreview() {
   debateInstagramIsRendered = false;
   debateInstagramCurrentUrl = "";
   debateInstagramCurrentPreviewData = null;
+  debateXCurrentUrl = "";
+  debateXCurrentPreviewData = null;
+  if (debateXTabletRefreshTimer) {
+    clearTimeout(debateXTabletRefreshTimer);
+    debateXTabletRefreshTimer = null;
+  }
 
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
   const sourcePreview = document.getElementById("debate-source-preview");
