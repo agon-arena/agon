@@ -2428,6 +2428,19 @@ function closeDebateIframeModal() {
   const frame = document.getElementById("debate-iframe-modal-frame");
   if (!modal) return;
   const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
+  const shouldReturnDirectlyToIndex = openedFromNotifications && location.pathname === "/notifications";
+
+  if (shouldReturnDirectlyToIndex) {
+    setDebateIframeModalLoadingState(true, "Retour aux arènes en cours");
+    setDebateIframeModalCloseButtonVisible(false);
+    window.__agonDebateModalOpen = false;
+    window.__agonDebateModalOpenedFromNotifications = false;
+    window.__agonIframeVoicesBadgeMetrics = null;
+    resetDebateIframeModalCloseButtonBadgeAlignment();
+    _debateModalSavedScrollY = null;
+    window.location.href = "/";
+    return;
+  }
 
   modal.classList.remove("open");
   modal.classList.remove("argument-form-open-in-child");
@@ -2454,11 +2467,6 @@ function closeDebateIframeModal() {
     window.scrollTo(0, restoredScrollY);
     document.documentElement.style.scrollBehavior = "";
     _debateModalSavedScrollY = null;
-  }
-
-  if (openedFromNotifications && location.pathname === "/notifications") {
-    window.location.href = "/";
-    return;
   }
 
   // Applique le re-rendu différé seulement après stabilisation des embeds
