@@ -2570,19 +2570,28 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    const rowsWithSourcePreview = rows.map((row) => {
+    const rowsWithSourcePreview = await Promise.all(rows.map(async (row) => {
       if (!String(row.source_url || "").trim()) {
         return row;
       }
 
-      const sourcePreview = getCachedExternalLinkPreview(row.source_url);
+      let sourcePreview = getCachedExternalLinkPreview(row.source_url);
+
+      if (!sourcePreview) {
+        try {
+          sourcePreview = await getExternalLinkPreview(row.source_url);
+        } catch (error) {
+          sourcePreview = null;
+        }
+      }
+
       return sourcePreview
         ? {
             ...row,
             source_preview: sourcePreview
           }
         : row;
-    });
+    }));
 
     rowsWithSourcePreview.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
