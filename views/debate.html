@@ -44,8 +44,13 @@ html.notification-transition-pending-early body.page-debate::before {
 }
 
 /* ── Fond anthracite ── */
+html,
 body.page-debate {
   background-color: #243038;
+}
+
+body.page-debate {
+  min-height: 100dvh;
 }
 
 /* Textes posés directement sur le fond sombre */
@@ -1029,6 +1034,10 @@ body.page-debate .home-bottom-nav {
       #111827 100%
     ) bottom / 100% 5px no-repeat,
     #ffffff !important;
+}
+body.page-debate .home-bottom-nav::after {
+  bottom: -1px;
+  height: 6px;
 }
 body.page-debate .home-bottom-nav-item {
   color: #111827;

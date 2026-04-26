@@ -27,7 +27,7 @@ body {
       #111827 100%
     ) top / 100% 5px no-repeat,
     #ffffff;
-  border-top: 1px solid rgba(0,0,0,0.05);
+  border-top: none;
   border-bottom: 1px solid rgba(0,0,0,0.05);
   padding-top: 5px;
   box-sizing: border-box;
@@ -7582,7 +7582,7 @@ body.page-home.page-home-mobile {
     ) bottom / 100% 5px no-repeat,
     #f3f4f6;
   border-top: 1px solid rgba(17, 24, 39, 0.08);
-  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+  border-bottom: none;
   box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.06);
  
   pointer-events: auto;
@@ -7759,9 +7759,9 @@ body.page-home.page-home-mobile {
   }
 
   .home-bottom-nav {
-    transform: translateY(calc(var(--home-bottom-nav-offset, 0px) * -1));
+    transform: none;
     min-height: 54px;
-    padding: 3px 8px 3px 8px;
+    padding: 3px 8px calc(3px + var(--home-bottom-nav-offset, 0px)) 8px;
   }
 
   .home-bottom-nav-item {

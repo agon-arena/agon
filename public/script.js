@@ -29,6 +29,7 @@ const SIMILAR_DEBATES_BATCH_SIZE = 4;
 let similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
 let currentDebateCache = null;
 let similarDebatesCache = null;
+let similarDebatesCachePromise = null;
 let currentTypeFilter = "all";
 let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
@@ -2179,7 +2180,17 @@ function ensureDebateIframeModal() {
       }
     }
     @media (min-width: 769px) {
+      #debate-iframe-modal.open {
+        padding: 16px 16px 0 16px;
+        align-items: flex-end;
+        justify-content: center;
+      }
+      #debate-iframe-modal-inner {
+        height: calc(100vh - 16px);
+        border-radius: 20px 20px 0 0;
+      }
       #debate-iframe-modal-close {
+        bottom: 78px;
         left: max(16px, calc((100vw - 1100px) / 2 + 16px));
       }
     }
@@ -11999,6 +12010,28 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     });
   }, 250);
 }
+
+function ensureSimilarDebatesCacheLoaded() {
+  if (Array.isArray(similarDebatesCache)) {
+    return Promise.resolve(similarDebatesCache);
+  }
+
+  if (similarDebatesCachePromise) {
+    return similarDebatesCachePromise;
+  }
+
+  similarDebatesCachePromise = fetchJSON(API + "/debates")
+    .then((debates) => {
+      similarDebatesCache = Array.isArray(debates) ? debates : [];
+      return similarDebatesCache;
+    })
+    .finally(() => {
+      similarDebatesCachePromise = null;
+    });
+
+  return similarDebatesCachePromise;
+}
+
 function toggleSimilarDebates() {
   if (similarDebatesLoadingTimer) {
     clearTimeout(similarDebatesLoadingTimer);
@@ -12051,6 +12084,21 @@ function toggleSimilarDebates() {
 
   const debateId = getDebateId();
   if (!debateId) return;
+
+  if (currentDebateCache) {
+    const container = document.getElementById("similar-debates-bottom");
+    renderSimilarDebatesLoadingState(container);
+    ensureSimilarDebatesCacheLoaded()
+      .then(() => {
+        if (currentDebateCache && similarDebatesVisible) {
+          renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+        }
+      })
+      .catch(() => {
+        similarDebatesLoading = false;
+      });
+    return;
+  }
 
   loadDebate(debateId);
 }
@@ -13085,10 +13133,17 @@ currentDebateShareData = {
   percentB
 };
 currentDebateCache = data.debate;
-if (!Array.isArray(similarDebatesCache)) {
-  similarDebatesCache = await fetchJSON(API + "/debates");
+if (Array.isArray(similarDebatesCache)) {
+  renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+} else {
+  ensureSimilarDebatesCacheLoaded()
+    .then(() => {
+      if (currentDebateCache && String(currentDebateCache.id) === String(data.debate.id)) {
+        renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+      }
+    })
+    .catch(() => {});
 }
-renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
 
 refreshAdminUI();
 
