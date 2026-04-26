@@ -4221,9 +4221,13 @@ body.page-debate .topbar::after {
 }
 
 #debate-source-preview-wrap {
+  position: relative;
   width: 100%;
   max-width: 860px;
+  aspect-ratio: 16/9;
+  min-height: 260px;
   margin: 0px auto 18px auto;
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {
@@ -4239,15 +4243,15 @@ body.page-debate .topbar::after {
 #debate-source-preview-poster {
   display: block;
   width: 100%;
+  height: 100%;
   max-width: 860px;
   margin: 0 auto;
 }
 
 .debate-source-preview,
 #debate-source-preview {
-  aspect-ratio: 16 / 9;
-  min-height: 260px;
-  height: auto;
+  position: absolute;
+  inset: 0;
   border: 0;
   border-radius: 16px;
   overflow: hidden;
@@ -4257,12 +4261,11 @@ body.page-debate .topbar::after {
 
 .debate-source-preview-poster,
 #debate-source-preview-poster {
-  position: relative;
+  position: absolute;
+  inset: 0;
   display: flex;
   justify-content: center;
   align-items: center;
-  aspect-ratio: 16 / 9;
-  min-height: 260px;
   border-radius: 16px;
   overflow: hidden;
   background: #111827;
@@ -4548,15 +4551,12 @@ body.page-debate .topbar::after {
   max-width: 100%;
 }
 
-.debate-source-preview,
-#debate-source-preview {
+.debate-source-preview-wrap,
+#debate-source-preview-wrap {
   min-height: 190px;
 }
 
-.debate-source-preview-poster,
-#debate-source-preview-poster {
-  min-height: 190px;
-}
+
 
 .debate-source-fallback {
   width: 100%;

@@ -12323,21 +12323,21 @@ function isDirectImageUrl(url) {
 
 function getEmbeddableSourceData(url) {
   if (!url) {
-return { embedUrl: "", forceShowPreview: false, videoId: "", posterUrl: "" };
-}
+    return { embedUrl: "", forceShowPreview: false, videoId: "", posterUrl: "" };
+  }
 
-const videoId = getYouTubeVideoId(url);
-if (videoId) {
+  const videoId = getYouTubeVideoId(url);
+  if (videoId) {
+    return {
+      embedUrl: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`,
+      forceShowPreview: true,
+      videoId,
+      posterUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    };
+  }
+
   return {
-    embedUrl: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`,
-    forceShowPreview: true,
-    videoId,
-    posterUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-  };
-}
-
-return {
-  embedUrl: url,
+    embedUrl: url,
     forceShowPreview: false,
     videoId: "",
     posterUrl: ""
@@ -12400,6 +12400,17 @@ function getXStatusId(url) {
   } catch (error) {
     return "";
   }
+}
+function isTabletXEmbedContext() {
+  const ua = navigator.userAgent || "";
+  const isIPad = /\biPad\b/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const coarsePointer = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+  const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+  return isIPad || (coarsePointer && viewportWidth >= 769 && viewportWidth <= 1180);
+}
+
+function waitForXEmbedRetry(delayMs) {
+  return new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
 function loadXWidgetsScript() {
@@ -12685,7 +12696,6 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     return;
   }
 
-
   if (sourcePreviewWrap) {
     sourcePreviewWrap.style.display = "flex";
     updateDebateSourcePreviewVerticalOffset();
@@ -12716,7 +12726,8 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     <div class="debate-source-x-embed" id="debate-source-x-embed"></div>
     <a class="debate-source-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">Voir le post sur X</a>
   `;
-sourceFallback.style.display = "flex";
+  sourceFallback.style.display = "flex";
+
   try {
     await loadXWidgetsScript();
 
@@ -12729,16 +12740,49 @@ sourceFallback.style.display = "flex";
       throw new Error("Conteneur X introuvable.");
     }
 
-    embedContainer.innerHTML = "";
-    const created = await window.twttr.widgets.createTweet(tweetId, embedContainer, {
-      align: "center",
-      theme: "light",
-      dnt: true,
-      conversation: "all"
-    });
+    const isTabletContext = isTabletXEmbedContext();
+    const retryDelays = isTabletContext ? [0, 350, 900] : [0];
+    let created = null;
+    let lastError = null;
+
+    if (isTabletContext) {
+      await waitForXEmbedRetry(120);
+    }
+
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      if (attempt > 0) {
+        if (sourceLoading) {
+          sourceLoading.textContent = "Nouvelle tentative de chargement du post X…";
+        }
+        await waitForXEmbedRetry(retryDelays[attempt]);
+      }
+
+      if (!document.body.contains(embedContainer)) {
+        throw new Error("Conteneur X indisponible.");
+      }
+
+      embedContainer.innerHTML = "";
+
+      try {
+        created = await window.twttr.widgets.createTweet(tweetId, embedContainer, {
+          align: "center",
+          theme: "light",
+          dnt: true,
+          conversation: "all",
+          width: isTabletContext ? 400 : undefined
+        });
+      } catch (error) {
+        lastError = error;
+        created = null;
+      }
+
+      if (created) {
+        break;
+      }
+    }
 
     if (!created) {
-      throw new Error("Embed X non généré.");
+      throw lastError || new Error("Embed X non généré.");
     }
 
     if (sourceLoading) {
@@ -12746,13 +12790,12 @@ sourceFallback.style.display = "flex";
     }
   } catch (error) {
     sourceFallback.classList.remove("debate-source-fallback-x");
-      if (sourceLoading) {
+    if (sourceLoading) {
       sourceLoading.style.display = "none";
     }
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
   }
 }
-
 
 function clearDebateSourcePreviewTimers() {
   debateSourcePreviewState.retryTimers.forEach(timer => clearTimeout(timer));
@@ -13006,10 +13049,8 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   const token = debateSourcePreviewState.currentToken;
   loadDebateSourceIframe(embedUrl, token, 0);
 }
-
-
 async function loadDebate(id) {
-saveVisitedDebate(id);
+  saveVisitedDebate(id);
 
   try {
     const data = await fetchJSON(API + "/debates/" + id);
