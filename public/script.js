@@ -9165,6 +9165,7 @@ div.innerHTML = debatesToShow.map((d) => {
     indexDeferQueuedPreloadOnce = false;
   }
 }
+
 async function loadMoreOtherDebates() {
   if (indexInfiniteScrollLoading) return;
   if (otherDebatesVisible >= otherDebatesCache.length) return;

@@ -2479,17 +2479,21 @@ app.get("/api/debates", async (req, res) => {
     const argumentIds = (args || []).map((arg) => arg.id);
 
     if (argumentIds.length) {
-      const { data: commentRows, error: commentsErr } = await supabase
-        .from("comments")
-        .select("id,argument_id,created_at")
-        .in("argument_id", argumentIds);
+      const [commentsResult, votesResult] = await Promise.all([
+        supabase.from("comments").select("id,argument_id,created_at").in("argument_id", argumentIds),
+        supabase.from("votes").select("argument_id,created_at").in("argument_id", argumentIds)
+      ]);
 
-      if (commentsErr) {
-        console.error(commentsErr);
+      if (commentsResult.error) {
+        console.error(commentsResult.error);
+        return sendServerError(res, "Erreur lecture débats.");
+      }
+      if (votesResult.error) {
+        console.error(votesResult.error);
         return sendServerError(res, "Erreur lecture débats.");
       }
 
-      for (const comment of commentRows || []) {
+      for (const comment of commentsResult.data || []) {
         const debateId = debateIdByArgumentId.get(String(comment.argument_id));
         if (!debateId) continue;
         commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
@@ -2502,17 +2506,7 @@ app.get("/api/debates", async (req, res) => {
         }
       }
 
-      const { data: voteRows, error: votesErr } = await supabase
-        .from("votes")
-        .select("argument_id,created_at")
-        .in("argument_id", argumentIds);
-
-      if (votesErr) {
-        console.error(votesErr);
-        return sendServerError(res, "Erreur lecture débats.");
-      }
-
-      for (const vote of voteRows || []) {
+      for (const vote of votesResult.data || []) {
         const debateId = debateIdByArgumentId.get(String(vote.argument_id));
         if (!debateId || !vote.created_at) continue;
 
@@ -2570,28 +2564,24 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    const rowsWithSourcePreview = await Promise.all(rows.map(async (row) => {
-      if (!String(row.source_url || "").trim()) {
-        return row;
-      }
+    const urlsToWarm = [];
+    const rowsWithSourcePreview = rows.map((row) => {
+      if (!String(row.source_url || "").trim()) return row;
 
-      let sourcePreview = getCachedExternalLinkPreview(row.source_url);
+      const sourcePreview = getCachedExternalLinkPreview(row.source_url);
+      if (sourcePreview) return { ...row, source_preview: sourcePreview };
 
-      if (!sourcePreview) {
-        try {
-          sourcePreview = await getExternalLinkPreview(row.source_url);
-        } catch (error) {
-          sourcePreview = null;
+      urlsToWarm.push(row.source_url);
+      return row;
+    });
+
+    if (urlsToWarm.length) {
+      setImmediate(() => {
+        for (const url of urlsToWarm) {
+          getExternalLinkPreview(url).catch(() => {});
         }
-      }
-
-      return sourcePreview
-        ? {
-            ...row,
-            source_preview: sourcePreview
-          }
-        : row;
-    }));
+      });
+    }
 
     rowsWithSourcePreview.sort((a, b) => {
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
