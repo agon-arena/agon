@@ -3991,7 +3991,7 @@ function postMessageToIndexYouTubeIframe(iframe, command) {
       event: 'command',
       func: command,
       args: []
-    }), 'https://www.youtube-nocookie.com');
+    }), 'https://www.youtube.com');
   } catch (error) {
     // noop
   }
