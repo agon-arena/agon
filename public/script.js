@@ -12874,6 +12874,9 @@ function bindDebateSourcePreviewHandlers() {
   sourcePreview.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
 
   sourcePreview.addEventListener("load", () => {
+    const loadedSrc = sourcePreview.getAttribute("src") || "";
+    if (!loadedSrc || loadedSrc === "about:blank") return;
+
     sourcePreview.dataset.loaded = "1";
     sourcePreview.style.visibility = "visible";
     sourcePreview.style.display = "block";
