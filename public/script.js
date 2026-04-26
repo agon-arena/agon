@@ -12603,8 +12603,8 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
   }
 
   if (sourcePreviewWrap) {
-    sourcePreviewWrap.style.display = "flex";
-    updateDebateSourcePreviewVerticalOffset();
+    sourcePreviewWrap.style.display = "none";
+    sourcePreviewWrap.style.marginTop = "";
   }
 
   if (sourcePreview) {
@@ -12733,8 +12733,8 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
   }
 
   if (sourcePreviewWrap) {
-    sourcePreviewWrap.style.display = "flex";
-    updateDebateSourcePreviewVerticalOffset();
+    sourcePreviewWrap.style.display = "none";
+    sourcePreviewWrap.style.marginTop = "";
   }
 
   if (sourcePreview) {
@@ -12912,8 +12912,8 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
   const sourceLoading = document.getElementById("debate-source-preview-loading");
 
   if (sourcePreviewWrap) {
-    sourcePreviewWrap.style.display = "flex";
-    updateDebateSourcePreviewVerticalOffset();
+    sourcePreviewWrap.style.display = "none";
+    sourcePreviewWrap.style.marginTop = "";
   }
 
   if (sourceLoading) {
