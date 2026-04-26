@@ -492,11 +492,11 @@ function clearCreatedDebateContext() {
 
 function getPageArrivalLoadingImageSrc() {
   if (isNotificationToDebateLoadingTransition()) {
-    return "/robot-head.png";
+    return "/sablier.png";
   }
 
   if (isCreateToDebateOverlayContext()) {
-    return "/robot-head.png";
+    return "/sablier.png";
   }
 
   return "/sablier.png";
@@ -1888,7 +1888,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function getDebateIframeParentLoadingImageSrc() {
-  return location.pathname === "/notifications" ? "/robot-head.png" : "/sablier.png";
+  return "/sablier.png";
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
