@@ -1958,9 +1958,46 @@ function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
   return normalizedPath === "/create";
 }
 
+function resetDebateIframeModalCloseButtonBadgeAlignment() {
+  const closeButton = document.getElementById("debate-iframe-modal-close");
+  if (!closeButton) return;
+
+  closeButton.style.top = "";
+  closeButton.style.bottom = "";
+}
+
+function applyDebateIframeModalCloseButtonBadgeAlignment() {
+  const closeButton = document.getElementById("debate-iframe-modal-close");
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  const metrics = window.__agonIframeVoicesBadgeMetrics || null;
+
+  if (!closeButton || !frame || window.innerWidth > 768 || !metrics || !metrics.visible) {
+    resetDebateIframeModalCloseButtonBadgeAlignment();
+    return;
+  }
+
+  const frameRect = frame.getBoundingClientRect();
+  const buttonHeight = Math.max(
+    Number(closeButton.offsetHeight || 0),
+    Number(closeButton.getBoundingClientRect().height || 0)
+  );
+
+  if (!buttonHeight) {
+    resetDebateIframeModalCloseButtonBadgeAlignment();
+    return;
+  }
+
+  const badgeTopInParentViewport = frameRect.top + Number(metrics.top || 0);
+  const alignedTop = badgeTopInParentViewport + ((Number(metrics.height || 0) - buttonHeight) / 2);
+
+  closeButton.style.top = `${Math.round(alignedTop)}px`;
+  closeButton.style.bottom = "auto";
+}
+
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
   if (!frame) {
     setDebateIframeModalCloseButtonVisible(true);
+    applyDebateIframeModalCloseButtonBadgeAlignment();
     return;
   }
 
@@ -1968,6 +2005,7 @@ function syncDebateIframeModalCloseButtonWithFramePage(frame) {
     const framePathname = String(frame.contentWindow?.location?.pathname || "");
     if (framePathname) {
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(framePathname));
+      applyDebateIframeModalCloseButtonBadgeAlignment();
       return;
     }
   } catch (error) {}
@@ -1977,11 +2015,13 @@ function syncDebateIframeModalCloseButtonWithFramePage(frame) {
     if (frameSrc) {
       const parsedUrl = new URL(frameSrc, window.location.origin);
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(parsedUrl.pathname));
+      applyDebateIframeModalCloseButtonBadgeAlignment();
       return;
     }
   } catch (error) {}
 
   setDebateIframeModalCloseButtonVisible(true);
+  applyDebateIframeModalCloseButtonBadgeAlignment();
 }
 
 function notifyParentAboutIframePageContext(pathname = location.pathname) {
@@ -2121,7 +2161,7 @@ function ensureDebateIframeModal() {
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-close {
-        bottom: 16px;
+        bottom: calc(5vh + 32px + env(safe-area-inset-bottom, 0px));
       }
     }
     @media (min-width: 769px) {
@@ -2222,6 +2262,16 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:voices-badge-position") {
+      window.__agonIframeVoicesBadgeMetrics = {
+        visible: !!e.data.visible,
+        top: Number(e.data.top || 0),
+        height: Number(e.data.height || 0)
+      };
+      applyDebateIframeModalCloseButtonBadgeAlignment();
+      return;
+    }
+
     if (e.data.type === "agon:argument-form-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) {
@@ -2236,6 +2286,7 @@ function ensureDebateIframeModal() {
     if (modal && modal.classList.contains("loading")) {
       modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
     }
+    applyDebateIframeModalCloseButtonBadgeAlignment();
   };
 
   window.addEventListener("resize", refreshModalLoadingBounds);
@@ -2255,6 +2306,8 @@ function openDebateIframeModal(url) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
   window.__agonDebateModalOpenedFromNotifications = location.pathname === "/notifications";
+  window.__agonIframeVoicesBadgeMetrics = null;
+  resetDebateIframeModalCloseButtonBadgeAlignment();
 
   const existingModal = document.getElementById("debate-iframe-modal");
   if (existingModal) {
@@ -2381,6 +2434,8 @@ function closeDebateIframeModal() {
   setDebateIframeModalLoadingState(false);
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
+  window.__agonIframeVoicesBadgeMetrics = null;
+  resetDebateIframeModalCloseButtonBadgeAlignment();
 
   const restoredScrollY = _debateModalSavedScrollY !== null
     ? Math.max(0, Math.round(_debateModalSavedScrollY))

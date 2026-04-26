@@ -1075,7 +1075,7 @@ body.page-debate .home-bottom-nav-item:focus-visible {
   }
 
   #voices-float-badge {
-    bottom: calc(32px + var(--home-bottom-nav-offset, 0px)) !important;
+    bottom: calc(32px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   #voices-panel {
@@ -1994,6 +1994,37 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var previousHtmlTouchAction = '';
   var voicesPanelScrollLocked = false;
   var hiddenIframeCloseButtons = [];
+  var voicesBadgePositionSyncQueued = false;
+
+  function syncVoicesBadgePositionWithParent(){
+    if(window.self === window.top || !badge) return;
+
+    var isVisible = badge.style.display !== 'none' && badge.getClientRects().length > 0;
+    var payload = {
+      type: 'agon:voices-badge-position',
+      visible: isVisible
+    };
+
+    if(isVisible){
+      var rect = badge.getBoundingClientRect();
+      payload.top = rect.top;
+      payload.height = rect.height;
+    }
+
+    try {
+      window.parent.postMessage(payload, '*');
+    } catch (error) {}
+  }
+
+  function queueVoicesBadgePositionSync(){
+    if(voicesBadgePositionSyncQueued) return;
+    voicesBadgePositionSyncQueued = true;
+
+    requestAnimationFrame(function(){
+      voicesBadgePositionSyncQueued = false;
+      syncVoicesBadgePositionWithParent();
+    });
+  }
 
   function forceShowIframeCloseButton(button){
     if(!button) return;
@@ -2075,6 +2106,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       buttons.forEach(function(button){
         forceShowIframeCloseButton(button);
       });
+      queueVoicesBadgePositionSync();
     }, 0);
 
     hiddenIframeCloseButtons = [];
@@ -2185,6 +2217,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
         badge.style.color = '#a0b0bb';
       }, 140);
     }
+
+    queueVoicesBadgePositionSync();
   }
 
   function openVoicesPanel(){
@@ -2329,6 +2363,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     panel.style.display = 'none';
     overlay.style.display = 'none';
     unlockVoicesPanelBackgroundScroll();
+    queueVoicesBadgePositionSync();
   };
 
   document.addEventListener('keydown', function(event){
@@ -2349,12 +2384,20 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     }
   });
 
+  window.addEventListener('resize', queueVoicesBadgePositionSync, { passive: true });
+  window.addEventListener('orientationchange', queueVoicesBadgePositionSync, { passive: true });
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', queueVoicesBadgePositionSync);
+    window.visualViewport.addEventListener('scroll', queueVoicesBadgePositionSync);
+  }
+
   badge.addEventListener('click', function(){
     if(panel.style.display === 'flex') closeVoicesPanel();
     else openVoicesPanel();
   });
 
   updateBadge();
+  queueVoicesBadgePositionSync();
   var _origSetItem = Storage.prototype.setItem;
   Storage.prototype.setItem = function(key, value){
     _origSetItem.call(this, key, value);
