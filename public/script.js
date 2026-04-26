@@ -2160,6 +2160,20 @@ function ensureDebateIframeModal() {
       pointer-events: none;
     }
     @media (max-width: 768px) {
+      #debate-iframe-modal.open {
+        inset: 0;
+        padding: 0;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+      #debate-iframe-modal.loading {
+        inset: 0;
+      }
+      #debate-iframe-modal-inner {
+        max-width: none;
+        height: 100%;
+        border-radius: 0;
+      }
       #debate-iframe-modal-close {
         bottom: calc(5vh + 32px + env(safe-area-inset-bottom, 0px));
       }

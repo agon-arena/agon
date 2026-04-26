@@ -1058,6 +1058,12 @@ body.page-debate .home-bottom-nav-item:focus-visible {
     top: 16px !important;
     margin-top: 0 !important;
   }
+
+  body.page-debate.debate-embedded-frame .debate-hero-outer,
+  body.page-debate.debate-embedded-frame.debate-topbar-hidden .debate-hero-outer {
+    top: 0 !important;
+    margin-top: 0 !important;
+  }
 }
 
 /* Desktop : badge au-dessus de la nav bar */
@@ -1840,6 +1846,38 @@ document.addEventListener('keydown', function(e) {
 <script>
 // Affiche la position de l'idée dans chaque carte, sans toucher au rendu principal de script.js
 (function(){
+  if (window.self !== window.top) {
+    document.body.classList.add('debate-embedded-frame');
+  } else {
+    document.body.classList.remove('debate-embedded-frame');
+  }
+
+  function updateEmbeddedDebateTopOffset(){
+    if (window.self === window.top) {
+      document.documentElement.style.setProperty('--debate-embedded-top-offset', '0px');
+      return;
+    }
+
+    var topOffset = 0;
+
+    if (window.visualViewport) {
+      topOffset = Math.max(
+        0,
+        Math.round(Number(window.visualViewport.offsetTop || 0))
+      );
+    }
+
+    document.documentElement.style.setProperty('--debate-embedded-top-offset', topOffset + 'px');
+  }
+
+  updateEmbeddedDebateTopOffset();
+  window.addEventListener('resize', updateEmbeddedDebateTopOffset, { passive: true });
+  window.addEventListener('orientationchange', updateEmbeddedDebateTopOffset, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateEmbeddedDebateTopOffset);
+    window.visualViewport.addEventListener('scroll', updateEmbeddedDebateTopOffset);
+  }
+
   function escapeHTML(value){
     return String(value || '')
       .replace(/&/g, '&amp;')
