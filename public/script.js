@@ -2632,13 +2632,7 @@ function initIndexReturnNavigation() {
       }
     })();
 
-    // Dans l'iframe, après notifications -> débat, on revient d'abord à notifications.
     if (window.parent !== window) {
-      if (iframeReferrerPathname === "/notifications" && window.history.length > 1) {
-        window.history.back();
-        return;
-      }
-
       window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
       return;
     }
