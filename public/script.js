@@ -3961,6 +3961,7 @@ function getIndexYouTubeEmbedSrc(baseUrl, options = {}) {
     const parsed = new URL(raw);
     parsed.searchParams.set("playsinline", "1");
     parsed.searchParams.set("enablejsapi", "1");
+    parsed.searchParams.set("origin", window.location.origin);
     parsed.searchParams.set("rel", parsed.searchParams.get("rel") || "0");
     parsed.searchParams.set("modestbranding", parsed.searchParams.get("modestbranding") || "1");
 
@@ -3990,7 +3991,7 @@ function postMessageToIndexYouTubeIframe(iframe, command) {
       event: 'command',
       func: command,
       args: []
-    }), '*');
+    }), 'https://www.youtube-nocookie.com');
   } catch (error) {
     // noop
   }
@@ -12322,21 +12323,21 @@ function isDirectImageUrl(url) {
 
 function getEmbeddableSourceData(url) {
   if (!url) {
-    return { embedUrl: "", forceShowPreview: false, videoId: "", posterUrl: "" };
-  }
+return { embedUrl: "", forceShowPreview: false, videoId: "", posterUrl: "" };
+}
 
-  const videoId = getYouTubeVideoId(url);
-  if (videoId) {
-    return {
-      embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`,
-      forceShowPreview: true,
-      videoId,
-      posterUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-    };
-  }
-
+const videoId = getYouTubeVideoId(url);
+if (videoId) {
   return {
-    embedUrl: url,
+    embedUrl: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`,
+    forceShowPreview: true,
+    videoId,
+    posterUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  };
+}
+
+return {
+  embedUrl: url,
     forceShowPreview: false,
     videoId: "",
     posterUrl: ""

@@ -34,6 +34,14 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 app.use("/migration-export", express.static("/var/data"));
 
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "autoplay=*, fullscreen=*, picture-in-picture=*, web-share=*"
+  );
+  next();
+});
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
