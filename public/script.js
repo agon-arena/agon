@@ -5301,7 +5301,7 @@ function bindIndexXTabletRefresh() {
     const shells = Array.from(document.querySelectorAll('[data-index-x-shell]'));
     shells.forEach((shell) => {
       if (shell.dataset.rendered === 'true' || shell.dataset.rendering === 'true') return;
-      if (!isElementNearViewport(shell, 260)) return;
+      if (!isElementNearViewport(shell, 180)) return;
       renderIndexXShell(shell);
     });
   };
@@ -5435,7 +5435,7 @@ function initIndexXObserver(root = document) {
       shell.dataset.rendering = 'false';
       state.observer.observe(shell);
 
-      if (isElementNearViewport(shell, 220)) {
+      if (isElementNearViewport(shell, 140)) {
         requestAnimationFrame(() => {
           renderIndexXShell(shell);
         });
@@ -5487,13 +5487,13 @@ function initIndexXObserver(root = document) {
     });
   }, {
     threshold: [0, 0.1, 0.35, 0.7],
-    rootMargin: '120px 0px 120px 0px'
+    rootMargin: '80px 0px 80px 0px'
   });
 
   shells.forEach((shell) => {
     state.observer.observe(shell);
 
-    if (isElementNearViewport(shell, 220)) {
+    if (isElementNearViewport(shell, 140)) {
       requestAnimationFrame(() => {
         renderIndexXShell(shell);
       });
@@ -5632,7 +5632,7 @@ function initIndexInstagramObserver(root = document) {
       shell.dataset.rendering = 'false';
       state.observer.observe(shell);
 
-      if (isElementNearViewport(shell, 220)) {
+      if (isElementNearViewport(shell, 140)) {
         requestAnimationFrame(() => {
           renderIndexInstagramShell(shell);
         });
@@ -5684,13 +5684,13 @@ function initIndexInstagramObserver(root = document) {
     });
   }, {
     threshold: [0, 0.1, 0.35, 0.7],
-    rootMargin: '120px 0px 120px 0px'
+    rootMargin: '80px 0px 80px 0px'
   });
 
   shells.forEach((shell) => {
     state.observer.observe(shell);
 
-    if (isElementNearViewport(shell, 220)) {
+    if (isElementNearViewport(shell, 140)) {
       requestAnimationFrame(() => {
         renderIndexInstagramShell(shell);
       });

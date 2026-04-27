@@ -5359,7 +5359,9 @@ body.page-debate .topbar::after {
 
   .page-home-mobile .index-search-submit {
     width: auto;
-    min-width: 170px;
+    min-width: 0;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .page-home-mobile .debate-type-filter {
