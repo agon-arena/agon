@@ -8063,12 +8063,6 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
   const loading = !!isLoading;
   const safeMessage = String(message || '').trim() || 'Chargement des arènes';
 
-  if (loading) {
-    lockIndexBatchScroll();
-  } else {
-    unlockIndexBatchScroll();
-  }
-
   if (sentinel) {
     sentinel.classList.toggle('load-more-container-loading', loading);
     sentinel.setAttribute('aria-busy', loading ? 'true' : 'false');
