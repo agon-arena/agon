@@ -35,6 +35,7 @@ let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
 let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
+let currentIndexSearchQuery = "";
 let indexLastUserScrollTs = 0;
 let indexUserScrollGuardBound = false;
 let indexXTabletRefreshBound = false;
@@ -5058,6 +5059,14 @@ function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
     if (Math.abs(window.scrollY - Number(anchor.scrollY || 0)) > 140) return;
 
     const rect = shell.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const topbar = document.querySelector('.topbar');
+    const topbarHeight = topbar ? topbar.offsetHeight : 0;
+    const visibleTopLimit = Math.max(0, topbarHeight - 8);
+    const isStillNearViewport = rect.bottom > visibleTopLimit - 24 && rect.top < viewportHeight + 24;
+
+    if (!isStillNearViewport) return;
+
     const delta = rect.top - Number(anchor.top || 0);
 
     if (Math.abs(delta) < 2) return;
@@ -8525,10 +8534,10 @@ function ensureCategoryFilterVisualStyles() {
       order: 99;
       margin: 4px 0 0;
       padding: 10px 12px;
-      border: 1px solid #e5e7eb;
+      border: 1px solid #111827;
       border-radius: 16px;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+      background: #111827;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
       max-width: 100%;
       box-sizing: border-box;
     }
@@ -8539,7 +8548,7 @@ function ensureCategoryFilterVisualStyles() {
       gap: 8px;
       font-size: 13px;
       font-weight: 700;
-      color: #374151;
+      color: #ffffff;
       white-space: nowrap;
       flex-shrink: 0;
       letter-spacing: -0.01em;
@@ -8552,11 +8561,11 @@ function ensureCategoryFilterVisualStyles() {
       width: 28px;
       height: 28px;
       border-radius: 999px;
-      background: linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%);
-      color: #4b5563;
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
       font-size: 12px;
-      border: 1px solid #d1d5db;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
 
     .index-theme-filter-field {
@@ -8625,18 +8634,18 @@ function ensureCategoryFilterVisualStyles() {
     }
 
     .index-theme-filter-wrap[data-active="true"] {
-      border-color: #cbd5e1;
-      background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
+      border-color: #111827;
+      background: #111827;
     }
 
     .index-theme-filter-wrap[data-active="true"] .index-theme-filter-label {
-      color: #111827;
+      color: #ffffff;
     }
 
     .index-theme-filter-wrap[data-active="true"] .index-theme-filter-label-icon {
-      background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-      color: #111827;
-      border-color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.18);
     }
 
     .index-theme-filter-wrap[data-active="true"] .index-theme-filter-select {
@@ -8761,8 +8770,7 @@ function getIndexTypeFilterLabel(type) {
 }
 
 function getCurrentIndexSearchQuery() {
-  const input = document.getElementById("debate-search");
-  return String(input?.value || "").trim();
+  return String(currentIndexSearchQuery || "").trim();
 }
 
 function renderIndexActiveFilterTags() {
@@ -8809,6 +8817,7 @@ function removeIndexActiveFilterTag(kind, value = "") {
     if (searchInput) {
       searchInput.value = "";
     }
+    currentIndexSearchQuery = "";
     visitedDebatesVisible = 5;
     otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
     applyIndexFilters();
@@ -9022,9 +9031,7 @@ function refreshCategoryFilterOptions(debates) {
 
 function getFilteredDebatesForIndex(baseDebates) {
   let filteredDebates = Array.isArray(baseDebates) ? [...baseDebates] : [];
-
-  const searchInput = document.getElementById("debate-search");
-  const query = String(searchInput?.value || "").trim().toLowerCase();
+  const query = getCurrentIndexSearchQuery().toLowerCase();
 
   if (query) {
     filteredDebates = filteredDebates.filter((debate) => {
@@ -9369,12 +9376,15 @@ async function loadMoreOtherDebates() {
   }
 }
 function filterDebates() {
-  const input = document.getElementById("debate-search");
-  if (!input) return;
-
   visitedDebatesVisible = 5;
   otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
   applyIndexFilters();
+}
+
+function applyIndexSearch() {
+  const input = document.getElementById("debate-search");
+  currentIndexSearchQuery = String(input?.value || "").trim();
+  filterDebates();
 }
 
 function setTypeFilter(type) {
@@ -9516,11 +9526,20 @@ async function initIndex() {
       currentTypeFilter = "all";
       currentCategoryFilter = "all";
       currentCategoryFilters = [];
+      currentIndexSearchQuery = "";
       refreshCategoryFilterOptions(debatesCache);
       applyIndexFilters();
 
       const searchInput = document.getElementById("debate-search");
-      if (searchInput) searchInput.addEventListener("input", filterDebates);
+      if (searchInput) {
+        searchInput.value = "";
+        searchInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applyIndexSearch();
+          }
+        });
+      }
       setTypeFilter("all");
 
       pageArrivalLoadingOverlayReady = true;
@@ -9550,13 +9569,22 @@ async function initIndex() {
       currentTypeFilter = "all";
       currentCategoryFilter = "all";
       currentCategoryFilters = [];
+      currentIndexSearchQuery = "";
       refreshCategoryFilterOptions(debatesCache);
       applyIndexFilters();
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
 
       const searchInput = document.getElementById("debate-search");
-      if (searchInput) searchInput.addEventListener("input", filterDebates);
+      if (searchInput) {
+        searchInput.value = "";
+        searchInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applyIndexSearch();
+          }
+        });
+      }
       setTypeFilter("all");
     }
 
@@ -17311,6 +17339,7 @@ window.cancelReply = cancelReply;
 window.changeArgumentsSort = changeArgumentsSort;
 window.setTypeFilter = setTypeFilter;
 window.removeIndexActiveFilterTag = removeIndexActiveFilterTag;
+window.applyIndexSearch = applyIndexSearch;
 window.toggleSortMenu = toggleSortMenu;
 window.setIndexSort = setIndexSort;
 window.toggleIndexSortMenu = toggleIndexSortMenu;

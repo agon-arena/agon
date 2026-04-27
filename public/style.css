@@ -5112,6 +5112,9 @@ body.page-debate .topbar::after {
 /* ===== INDEX PAGE MOBILE ===== */
 .search-box {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .search-box input {
@@ -5132,11 +5135,16 @@ body.page-debate .topbar::after {
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.15);
 }
 
+.index-search-submit {
+  align-self: center;
+}
+
 .debate-type-filter {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
 }
 
 .index-explorer-topbar {
@@ -5347,6 +5355,10 @@ body.page-debate .topbar::after {
     padding: 13px 14px;
     font-size: 16px;
     border-radius: 12px;
+  }
+
+  .page-home-mobile .index-search-submit {
+    width: 100%;
   }
 
   .page-home-mobile .debate-type-filter {

@@ -25,7 +25,7 @@
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
-  <link rel="stylesheet" href="/style.css?v=20260427-4">
+<link rel="stylesheet" href="/style.css?v=20260427-7">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -203,7 +203,7 @@
         onclick="toggleIndexSortControls(event)"
       >
         <i class="fa-solid fa-sliders"></i>
-        <span>Trier</span>
+        <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> rechercher</span>
       </button>
     </div>
 
@@ -217,6 +217,10 @@
           placeholder="Découvrir une arène ouverte..."
           autocomplete="off"
         >
+        <button type="button" class="button index-search-submit" onclick="applyIndexSearch()">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <span>Rechercher</span>
+        </button>
       </div>
 
       <div class="debate-type-filter">
@@ -549,7 +553,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260427-7" defer></script>
+<script src="/script.js?v=20260427-10" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
