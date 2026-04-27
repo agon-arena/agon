@@ -1821,6 +1821,7 @@ function getDebateId() {
 }
 
 let _debateModalSavedScrollY = null;
+let _debateModalSavedScrollAnchor = null;
 let debateIframeParentLoadingFallbackTimer = null;
 
 function ensureDebateIframeParentLoadingStyles() {
@@ -2355,6 +2356,7 @@ function openDebateIframeModal(url) {
 
   // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
   _debateModalSavedScrollY = Math.round(window.scrollY || 0);
+  _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor();
   window.__agonDebateModalOpen = true;
   window.__agonDebateModalPendingDebates = null;
 
@@ -2451,6 +2453,72 @@ function getIndexEmbedShellsAboveScrollY(targetScrollY = 0) {
   });
 }
 
+function captureIndexScrollRestoreAnchor() {
+  const cards = Array.from(document.querySelectorAll('.debate-card[data-debate-id]')).filter((card) => {
+    if (!card || !card.isConnected || !card.offsetParent) return false;
+    const rect = card.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < (window.innerHeight || document.documentElement.clientHeight || 0);
+  });
+
+  if (!cards.length) return null;
+
+  const topbar = document.querySelector('.topbar');
+  const topLimit = Math.max(0, (topbar ? topbar.offsetHeight : 0) + 8);
+  let bestCard = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  cards.forEach((card) => {
+    const rect = card.getBoundingClientRect();
+    const distance = Math.abs(rect.top - topLimit);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestCard = card;
+    }
+  });
+
+  if (!bestCard) return null;
+
+  const rect = bestCard.getBoundingClientRect();
+  return {
+    debateId: String(bestCard.dataset.debateId || '').trim(),
+    top: rect.top
+  };
+}
+
+function restoreIndexScrollFromAnchor(anchor = null, fallbackScrollY = null) {
+  const safeFallback = fallbackScrollY !== null && fallbackScrollY !== undefined
+    ? Math.max(0, Math.round(Number(fallbackScrollY) || 0))
+    : null;
+
+  const debateId = String(anchor?.debateId || '').trim();
+  if (!debateId) {
+    if (safeFallback !== null) {
+      window.scrollTo(0, safeFallback);
+      return true;
+    }
+    return false;
+  }
+
+  const targetCard = Array.from(document.querySelectorAll('.debate-card[data-debate-id]')).find((card) => {
+    return String(card?.dataset?.debateId || '').trim() === debateId;
+  });
+
+  if (!targetCard) {
+    if (safeFallback !== null) {
+      window.scrollTo(0, safeFallback);
+      return true;
+    }
+    return false;
+  }
+
+  const rect = targetCard.getBoundingClientRect();
+  const anchorTop = Number(anchor?.top || 0);
+  const nextTop = Math.max(0, Math.round((window.scrollY || 0) + (rect.top - anchorTop)));
+
+  window.scrollTo(0, nextTop);
+  return true;
+}
+
 async function waitForIndexEmbedShellsReady(shells = [], timeoutMs = 9000) {
   const shellList = Array.from(new Set((Array.isArray(shells) ? shells : []).filter(Boolean)));
   if (!shellList.length) return;
@@ -2530,6 +2598,7 @@ function closeDebateIframeModal() {
     window.__agonIframeVoicesBadgeMetrics = null;
     resetDebateIframeModalCloseButtonBadgeAlignment();
     _debateModalSavedScrollY = null;
+    _debateModalSavedScrollAnchor = null;
     window.location.href = "/";
     return;
   }
@@ -2545,6 +2614,7 @@ function closeDebateIframeModal() {
   const restoredScrollY = _debateModalSavedScrollY !== null
     ? Math.max(0, Math.round(_debateModalSavedScrollY))
     : null;
+  const restoredScrollAnchor = _debateModalSavedScrollAnchor;
 
   // Restaure le body et le scroll
   document.body.style.overflow = "";
@@ -2556,10 +2626,11 @@ function closeDebateIframeModal() {
 
   if (restoredScrollY !== null) {
     document.documentElement.style.scrollBehavior = "auto";
-    window.scrollTo(0, restoredScrollY);
+    restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
     document.documentElement.style.scrollBehavior = "";
     _debateModalSavedScrollY = null;
   }
+  _debateModalSavedScrollAnchor = null;
 
   // Applique le re-rendu différé seulement après stabilisation des embeds
   // X / Instagram au-dessus de la zone à restaurer.
@@ -2572,7 +2643,7 @@ function closeDebateIframeModal() {
       if (restoredScrollY !== null) {
         await waitForEmbedsAboveScrollY(restoredScrollY);
         document.documentElement.style.scrollBehavior = "auto";
-        window.scrollTo(0, restoredScrollY);
+        restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
         document.documentElement.style.scrollBehavior = "";
       }
     });
