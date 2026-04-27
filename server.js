@@ -3198,81 +3198,38 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
   try {
     const id = req.params.id;
     const { voterKey } = req.body || {};
+    const numericArgumentId = Number.parseInt(String(id || ""), 10);
+    const { data: voteResult, error: voteError } = await supabase.rpc("cast_argument_vote", {
+      p_argument_id: numericArgumentId,
+      p_voter_key: voterKey
+    });
 
-    const argument = await getArgumentById(id);
-    if (!argument) {
-      return res.status(404).json({ error: "Argument introuvable." });
+    if (voteError) {
+      if (String(voteError.message || "").includes("ARGUMENT_NOT_FOUND")) {
+        return res.status(404).json({ error: "Argument introuvable." });
+      }
+
+      console.error(voteError);
+      return res.status(500).json({ error: "Erreur mise à jour vote." });
     }
 
-    const totalVotesUsed = await getUserVotesUsedInDebate(argument.debate_id, voterKey);
+    const payload = Array.isArray(voteResult) ? voteResult[0] : voteResult;
+    if (!payload) {
+      return res.status(500).json({ error: "Erreur mise à jour vote." });
+    }
 
-    if (totalVotesUsed >= MAX_VOTES_PER_DEBATE) {
+    if (payload.limit_reached) {
       return res.status(400).json({ error: "limit" });
     }
 
-    const existingVote = await getVoteRow(id, voterKey);
-
-    if (existingVote) {
-      const { error: updateVoteErr } = await supabase
-        .from("votes")
-        .update({ vote_count: Number(existingVote.vote_count || 0) + 1 })
-        .eq("id", existingVote.id);
-
-      if (updateVoteErr) {
-        console.error(updateVoteErr);
-        return res.status(500).json({ error: "Erreur mise à jour vote." });
-      }
-    } else {
-      const { error: insertErr } = await supabase
-        .from("votes")
-        .insert({
-          argument_id: id,
-          voter_key: voterKey,
-          vote_count: 1
-        });
-
-      if (insertErr) {
-        console.error(insertErr);
-        return res.status(500).json({ error: "Erreur création vote." });
-      }
-    }
-
-    const newVotes = Number(argument.votes || 0) + 1;
-    const latestVoteAt = nowIso();
-    let effectiveLastVotedAt = latestVoteAt;
-
-    let { error: updateArgErr } = await supabase
-      .from("arguments")
-      .update({
-        votes: newVotes,
-        last_voted_at: latestVoteAt
-      })
-      .eq("id", id);
-
-    if (updateArgErr && /last_voted_at/i.test(String(updateArgErr.message || ""))) {
-      effectiveLastVotedAt = argument.last_voted_at || null;
-      const fallbackUpdate = await supabase
-        .from("arguments")
-        .update({ votes: newVotes })
-        .eq("id", id);
-      updateArgErr = fallbackUpdate.error;
-    }
-
-    if (updateArgErr) {
-      console.error(updateArgErr);
-      return res.status(500).json({ error: "Erreur mise à jour argument." });
-    }
-
-    const myVotesOnArgument = existingVote
-      ? Number(existingVote.vote_count || 0) + 1
-      : 1;
-
     res.json({
-      votes: newVotes,
-      myVotesOnArgument,
-      remainingVotes: MAX_VOTES_PER_DEBATE - (totalVotesUsed + 1),
-      lastVotedAt: effectiveLastVotedAt
+      votes: Number(payload.votes || 0),
+      myVotesOnArgument: Number(payload.my_votes_on_argument || 0),
+      remainingVotes: Number(payload.remaining_votes || 0),
+      lastVotedAt: payload.last_voted_at || null
     });
+
+    const argument = await getArgumentById(id);
 
     if (argument.author_key && argument.author_key !== voterKey) {
       createNotification({
