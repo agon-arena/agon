@@ -4727,10 +4727,81 @@ function initMobileIndexCardHighlight() {
 }
 
 function initIndexLocalVideoObserver(root = document) {
-
-
   const shells = Array.from(root.querySelectorAll('[data-index-local-video-shell]'));
   const previousState = window.indexLocalVideoPlaybackState;
+  const isIncrementalInit = root !== document && !!previousState?.observer;
+
+  if (isIncrementalInit) {
+    const state = previousState;
+    const newShells = shells.filter((shell) => !state.shells.has(shell));
+
+    if (!newShells.length) {
+      scheduleIndexLocalVideoActiveUpdate();
+      return;
+    }
+
+    newShells.forEach((shell) => {
+      state.shells.add(shell);
+      shell.dataset.inView = 'false';
+      shell.dataset.active = 'false';
+      shell.dataset.userActivated = 'false';
+      ensureIndexLocalVideoOverlayLayer(shell);
+      prepareIndexLocalVideoPoster(shell);
+      unloadIndexLocalVideoShell(shell);
+
+      const poster = shell.querySelector('[data-index-local-video-poster]');
+      const overlay = shell.querySelector('[data-index-local-video-overlay]');
+      const soundButton = shell.querySelector('[data-index-local-video-sound-btn]');
+
+      if (poster) {
+        poster.onclick = (event) => {
+          event.preventDefault();
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+          if (state.activeShell && state.activeShell !== shell) {
+            unloadIndexLocalVideoShell(state.activeShell);
+          }
+          state.activeShell = shell;
+          activateIndexLocalVideoShell(shell);
+        };
+      }
+
+      if (overlay) {
+        overlay.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+          if (state.activeShell && state.activeShell !== shell) {
+            unloadIndexLocalVideoShell(state.activeShell);
+          }
+          state.activeShell = shell;
+          activateIndexLocalVideoShell(shell);
+        };
+      }
+
+      if (soundButton) {
+        soundButton.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+
+          if (state.activeShell !== shell) {
+            state.activeShell = shell;
+            activateIndexLocalVideoShell(shell);
+          }
+
+          toggleSoundOnIndexLocalVideoShell(shell);
+        };
+      }
+
+      state.observer.observe(shell);
+    });
+
+    scheduleIndexLocalVideoActiveUpdate();
+    return;
+  }
 
   if (previousState?.observer) {
     previousState.observer.disconnect();
@@ -4846,6 +4917,109 @@ function initIndexLocalVideoObserver(root = document) {
 function initIndexYouTubeObserver(root = document) {
   const shells = Array.from(root.querySelectorAll('[data-index-youtube-shell]'));
   const previousState = window.indexYouTubePlaybackState;
+  const needsFullResetFromDirectOnlyState =
+    root !== document &&
+    previousState &&
+    !previousState.observer &&
+    shells.some((shell) => shell.dataset.directIframe !== 'true');
+  const isIncrementalInit =
+    root !== document &&
+    !!previousState &&
+    !needsFullResetFromDirectOnlyState;
+
+  if (isIncrementalInit) {
+    const state = previousState;
+    const newShells = shells.filter((shell) => !state.shells.has(shell));
+
+    if (!newShells.length) {
+      if (state.observer) {
+        scheduleIndexYouTubeActiveUpdate();
+      }
+      return;
+    }
+
+    const standardShells = newShells.filter((shell) => shell.dataset.directIframe !== 'true');
+    const directOnlyShells = newShells.filter((shell) => shell.dataset.directIframe === 'true');
+
+    directOnlyShells.forEach((shell) => {
+      state.shells.add(shell);
+      shell.dataset.inView = 'true';
+      shell.dataset.active = 'true';
+      shell.dataset.userActivated = 'true';
+      const iframe = shell.querySelector('.debate-card-youtube-iframe');
+      if (iframe && !iframe.getAttribute('src')) {
+        const base = String(shell.dataset.embedBase || '').trim();
+        if (base) iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
+      }
+    });
+
+    standardShells.forEach((shell) => {
+      state.shells.add(shell);
+      shell.dataset.inView = 'false';
+      shell.dataset.active = 'false';
+      shell.dataset.userActivated = 'false';
+      ensureIndexYouTubeOverlayLayer(shell);
+      unloadIndexYouTubeShell(shell);
+
+      const poster = shell.querySelector('[data-index-youtube-poster]');
+      const overlay = shell.querySelector('[data-index-youtube-overlay]');
+      const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+
+      if (poster) {
+        poster.onclick = (event) => {
+          event.preventDefault();
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+          if (state.activeShell && state.activeShell !== shell) {
+            unloadIndexYouTubeShell(state.activeShell);
+          }
+          state.activeShell = shell;
+          activateIndexYouTubeShell(shell);
+        };
+      }
+
+      if (overlay) {
+        overlay.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          shell.dataset.userStarted = 'true';
+          shell.dataset.inView = 'true';
+          if (state.activeShell && state.activeShell !== shell) {
+            unloadIndexYouTubeShell(state.activeShell);
+          }
+          state.activeShell = shell;
+          activateIndexYouTubeShell(shell);
+        };
+      }
+
+      if (soundButton) {
+        soundButton.onclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const currentlyMuted = shell.dataset.soundEnabled !== 'true';
+          if (shell.dataset.active !== 'true') {
+            shell.dataset.userStarted = 'true';
+            shell.dataset.inView = 'true';
+            if (state.activeShell && state.activeShell !== shell) {
+              unloadIndexYouTubeShell(state.activeShell);
+            }
+            state.activeShell = shell;
+            activateIndexYouTubeShell(shell, { enableSound: currentlyMuted });
+            return;
+          }
+
+          setIndexYouTubeSoundEnabled(shell, currentlyMuted);
+        };
+      }
+
+      state.observer?.observe(shell);
+    });
+
+    if (state.observer) {
+      scheduleIndexYouTubeActiveUpdate();
+    }
+    return;
+  }
 
   if (previousState?.observer) previousState.observer.disconnect();
   if (previousState?.resizeHandler) window.removeEventListener('resize', previousState.resizeHandler);
@@ -5222,6 +5396,31 @@ async function renderIndexXShell(shell) {
 function initIndexXObserver(root = document) {
   const shells = Array.from(root.querySelectorAll('[data-index-x-shell]'));
   const previousState = window.indexXEmbedState;
+  const isIncrementalInit = root !== document && !!previousState?.observer;
+
+  if (isIncrementalInit) {
+    const state = previousState;
+    const newShells = shells.filter((shell) => !state.shells.has(shell));
+
+    if (!newShells.length) return;
+
+    newShells.forEach((shell) => {
+      state.shells.add(shell);
+      if (!shell.dataset.rendered) {
+        shell.dataset.rendered = 'false';
+      }
+      shell.dataset.rendering = 'false';
+      state.observer.observe(shell);
+
+      if (isElementNearViewport(shell, 220)) {
+        requestAnimationFrame(() => {
+          renderIndexXShell(shell);
+        });
+      }
+    });
+
+    return;
+  }
 
   if (previousState?.observer) {
     previousState.observer.disconnect();
@@ -5394,6 +5593,31 @@ async function renderIndexInstagramShell(shell) {
 function initIndexInstagramObserver(root = document) {
   const shells = Array.from(root.querySelectorAll('[data-index-instagram-shell]'));
   const previousState = window.indexInstagramEmbedState;
+  const isIncrementalInit = root !== document && !!previousState?.observer;
+
+  if (isIncrementalInit) {
+    const state = previousState;
+    const newShells = shells.filter((shell) => !state.shells.has(shell));
+
+    if (!newShells.length) return;
+
+    newShells.forEach((shell) => {
+      state.shells.add(shell);
+      if (!shell.dataset.rendered) {
+        shell.dataset.rendered = 'false';
+      }
+      shell.dataset.rendering = 'false';
+      state.observer.observe(shell);
+
+      if (isElementNearViewport(shell, 220)) {
+        requestAnimationFrame(() => {
+          renderIndexInstagramShell(shell);
+        });
+      }
+    });
+
+    return;
+  }
 
   if (previousState?.observer) {
     previousState.observer.disconnect();
