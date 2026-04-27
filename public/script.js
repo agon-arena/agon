@@ -2378,6 +2378,7 @@ function openDebateIframeModal(url, options = {}) {
   _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
   window.__agonDebateModalOpen = true;
   window.__agonDebateModalPendingDebates = null;
+  cleanupIndexInfiniteScrollObserver();
 
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
@@ -2672,6 +2673,10 @@ function closeDebateIframeModal() {
         restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
         document.documentElement.style.scrollBehavior = "";
       }
+    });
+  } else {
+    requestAnimationFrame(() => {
+      setupIndexInfiniteScroll();
     });
   }
 
