@@ -37,6 +37,9 @@ let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
 let currentIndexSearchQuery = "";
 let indexLastUserScrollTs = 0;
+let indexLastEmbedScrollRestoreTs = 0;
+let indexEmbedScrollRestoreRaf = null;
+let indexPendingEmbedScrollRestoreTop = null;
 let indexUserScrollGuardBound = false;
 let indexXTabletRefreshBound = false;
 
@@ -5244,15 +5247,35 @@ function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
     const delta = rect.top - Number(anchor.top || 0);
 
     if (Math.abs(delta) < 2) return;
+    if (Date.now() - indexLastEmbedScrollRestoreTs < 120) return;
 
-    window.scrollTo({
-      top: Math.max(0, window.scrollY + delta),
-      behavior: 'auto'
-    });
+    scheduleIndexEmbedScrollRestore(window.scrollY + delta);
   };
 
   requestAnimationFrame(() => {
     requestAnimationFrame(finalize);
+  });
+}
+
+function scheduleIndexEmbedScrollRestore(nextTop) {
+  const normalizedTop = Math.max(0, Number(nextTop) || 0);
+  indexPendingEmbedScrollRestoreTop = normalizedTop;
+
+  if (indexEmbedScrollRestoreRaf) return;
+
+  indexEmbedScrollRestoreRaf = requestAnimationFrame(() => {
+    indexEmbedScrollRestoreRaf = null;
+
+    const targetTop = Math.max(0, Number(indexPendingEmbedScrollRestoreTop) || 0);
+    indexPendingEmbedScrollRestoreTop = null;
+
+    if (Date.now() - indexLastUserScrollTs < 450) return;
+
+    indexLastEmbedScrollRestoreTs = Date.now();
+    window.scrollTo({
+      top: targetTop,
+      behavior: 'auto'
+    });
   });
 }
 
