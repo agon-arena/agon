@@ -8550,8 +8550,6 @@ async function preloadIndexEmbedsForDebateRange(startIndex = 0, endIndex = 0) {
 
   if (!shells.length) return;
 
-  setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
-
   for (const shell of shells) {
     const isInstagram = shell.hasAttribute('data-index-instagram-shell');
 
@@ -8561,8 +8559,6 @@ async function preloadIndexEmbedsForDebateRange(startIndex = 0, endIndex = 0) {
       await renderIndexXShell(shell);
     }
   }
-
-  setIndexInfiniteScrollLoadingState(false);
 }
 
 function queueIndexEmbedPreloadRange(startIndex = 0, endIndex = 0) {
@@ -8584,12 +8580,10 @@ function runQueuedIndexEmbedPreloadIfNeeded() {
   const job = preloadIndexEmbedsForDebateRange(range.start, range.end)
     .catch((error) => {
       console.warn('Préchargement des embeds index interrompu :', error);
-    })
-    .finally(() => {
+    }).finally(() => {
       if (indexEmbedBatchPreloadPromise === job) {
         indexEmbedBatchPreloadPromise = null;
       }
-      setIndexInfiniteScrollLoadingState(false);
       scheduleMobileIndexCardHighlightUpdate();
     });
 
@@ -9786,12 +9780,12 @@ async function loadMoreOtherDebates() {
 
   try {
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    await runQueuedIndexEmbedPreloadIfNeeded();
   } catch (error) {
     console.warn('Chargement des prochains posts index interrompu :', error);
   } finally {
     indexInfiniteScrollLoading = false;
     setIndexInfiniteScrollLoadingState(false);
+    runQueuedIndexEmbedPreloadIfNeeded();
   }
 }
 function filterDebates() {
