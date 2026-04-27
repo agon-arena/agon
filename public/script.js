@@ -1822,7 +1822,76 @@ function getDebateId() {
 
 let _debateModalSavedScrollY = null;
 let _debateModalSavedScrollAnchor = null;
+let _debateModalScrollLockMode = "";
+let _debateModalTouchBlockHandler = null;
+let _debateModalWheelBlockHandler = null;
 let debateIframeParentLoadingFallbackTimer = null;
+
+function shouldUseMobileDebateModalScrollLock() {
+  return window.innerWidth <= 768;
+}
+
+function lockPageScrollForDebateModal(savedScrollY = 0) {
+  const safeScrollY = Math.max(0, Math.round(Number(savedScrollY) || 0));
+
+  if (shouldUseMobileDebateModalScrollLock()) {
+    _debateModalScrollLockMode = "mobile";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.width = "100%";
+
+    _debateModalTouchBlockHandler = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest?.("#debate-iframe-modal-inner")) return;
+      event.preventDefault();
+    };
+
+    _debateModalWheelBlockHandler = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest?.("#debate-iframe-modal-inner")) return;
+      event.preventDefault();
+    };
+
+    document.addEventListener("touchmove", _debateModalTouchBlockHandler, { passive: false, capture: true });
+    document.addEventListener("wheel", _debateModalWheelBlockHandler, { passive: false, capture: true });
+    return;
+  }
+
+  _debateModalScrollLockMode = "desktop";
+  document.body.style.overflow = "hidden";
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${safeScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+}
+
+function unlockPageScrollForDebateModal() {
+  if (_debateModalScrollLockMode === "mobile") {
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+    document.body.style.width = "";
+
+    if (_debateModalTouchBlockHandler) {
+      document.removeEventListener("touchmove", _debateModalTouchBlockHandler, { capture: true });
+      _debateModalTouchBlockHandler = null;
+    }
+
+    if (_debateModalWheelBlockHandler) {
+      document.removeEventListener("wheel", _debateModalWheelBlockHandler, { capture: true });
+      _debateModalWheelBlockHandler = null;
+    }
+  } else {
+    document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+  }
+
+  _debateModalScrollLockMode = "";
+}
 
 function ensureDebateIframeParentLoadingStyles() {
   if (document.getElementById("debate-iframe-parent-loading-style")) return;
@@ -2399,13 +2468,7 @@ function openDebateIframeModal(url, options = {}) {
     setDebateIframeModalLoadingState(false);
   }, 9000);
 
-  // Verrouillage scroll robuste (iOS Safari inclus)
-  document.body.style.overflow = "hidden";
-  document.body.style.position = "fixed";
-  document.body.style.top = `-${_debateModalSavedScrollY}px`;
-  document.body.style.left = "0";
-  document.body.style.right = "0";
-  document.body.style.width = "100%";
+  lockPageScrollForDebateModal(_debateModalSavedScrollY);
 }
 
 const prefetchedDebateUrls = new Set();
@@ -2625,6 +2688,7 @@ function closeDebateIframeModal() {
     window.__agonDebateModalOpenedFromNotifications = false;
     window.__agonIframeVoicesBadgeMetrics = null;
     resetDebateIframeModalCloseButtonBadgeAlignment();
+    unlockPageScrollForDebateModal();
     _debateModalSavedScrollY = null;
     _debateModalSavedScrollAnchor = null;
     window.location.href = "/";
@@ -2650,13 +2714,7 @@ function closeDebateIframeModal() {
     document.documentElement.style.scrollBehavior = "";
   };
 
-  // Restaure le body et le scroll
-  document.body.style.overflow = "";
-  document.body.style.position = "";
-  document.body.style.top = "";
-  document.body.style.left = "";
-  document.body.style.right = "";
-  document.body.style.width = "";
+  unlockPageScrollForDebateModal();
 
   if (closeButton && document.activeElement === closeButton) {
     closeButton.blur();
