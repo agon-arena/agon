@@ -9894,6 +9894,9 @@ async function initIndex() {
         saveDebatesToSessionCache(fresh);
         debatesCache = fresh;
         refreshCategoryFilterOptions(debatesCache);
+        if (window.__agonDebateModalOpen) {
+          return;
+        }
         const currentScrollY = Math.round(window.scrollY || 0);
 
         // Evite un rerender silencieux qui recrée tout le DOM et provoque
