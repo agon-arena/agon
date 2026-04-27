@@ -1275,6 +1275,32 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
 
 const externalPreviewCache = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
+const debatesApiResponseCache = new Map();
+const DEBATES_API_CACHE_TTL_MS = 15 * 1000;
+
+function getDebatesApiCacheKey({ limit = null, offset = 0 } = {}) {
+  return JSON.stringify({
+    limit: Number.isFinite(limit) && limit > 0 ? limit : null,
+    offset: Number.isFinite(offset) && offset > 0 ? offset : 0
+  });
+}
+
+function getCachedDebatesApiResponse(key) {
+  const entry = debatesApiResponseCache.get(String(key || ""));
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    debatesApiResponseCache.delete(String(key || ""));
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedDebatesApiResponse(key, value) {
+  debatesApiResponseCache.set(String(key || ""), {
+    value,
+    expiresAt: Date.now() + DEBATES_API_CACHE_TTL_MS
+  });
+}
 
 function ensureExternalPreviewCacheDir() {
   try {
@@ -2445,6 +2471,20 @@ app.put("/api/admin/argument/:id", requireAdmin, async (req, res) => {
 
 app.get("/api/debates", async (req, res) => {
   try {
+    const rawLimit = Number.parseInt(String(req.query.limit || ""), 10);
+    const rawOffset = Number.parseInt(String(req.query.offset || ""), 10);
+    const hasPaginationLimit = Number.isFinite(rawLimit) && rawLimit > 0;
+    const safeOffset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+    const cacheKey = getDebatesApiCacheKey({
+      limit: hasPaginationLimit ? rawLimit : null,
+      offset: safeOffset
+    });
+    const cachedResponse = getCachedDebatesApiResponse(cacheKey);
+
+    if (cachedResponse) {
+      return res.json(cachedResponse);
+    }
+
     const { data: debates, error } = await supabase
       .from("debates")
       .select("*")
@@ -2572,8 +2612,20 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
+    rows.sort((a, b) => {
+      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
+      const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
+      const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
+      if (bDate !== aDate) return new Date(bDate) - new Date(aDate);
+      return Number(b.id) - Number(a.id);
+    });
+
+    const pagedRows = hasPaginationLimit || safeOffset > 0
+      ? rows.slice(safeOffset, hasPaginationLimit ? safeOffset + rawLimit : undefined)
+      : rows;
+
     const urlsToWarm = [];
-    const rowsWithSourcePreview = rows.map((row) => {
+    const rowsWithSourcePreview = pagedRows.map((row) => {
       if (!String(row.source_url || "").trim()) return row;
 
       const sourcePreview = getCachedExternalLinkPreview(row.source_url);
@@ -2591,14 +2643,7 @@ app.get("/api/debates", async (req, res) => {
       });
     }
 
-    rowsWithSourcePreview.sort((a, b) => {
-      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
-      const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
-      const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
-      if (bDate !== aDate) return new Date(bDate) - new Date(aDate);
-      return Number(b.id) - Number(a.id);
-    });
-
+    setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview);
     res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);

@@ -97,7 +97,10 @@ let pendingVoicesSummaryHighlight = false;
 
 const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
+const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 20;
+const INDEX_DEBATES_PAGE_SIZE = INDEX_INITIAL_DEBATES_FETCH_LIMIT;
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
 const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
@@ -8341,6 +8344,8 @@ async function initAdminReports() {
 let debatesCache = [];
 let visitedDebatesCache = [];
 let otherDebatesCache = [];
+let indexDebatesApiNextOffset = 0;
+let indexDebatesApiHasMore = true;
 let visitedDebatesVisible = 5;
 const INDEX_OTHER_DEBATES_BATCH_SIZE = 10;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
@@ -9695,8 +9700,12 @@ function renderDebatesList(debates) {
 
 if (!debates.length) {
   if (header) header.style.display = "none";
-  div.innerHTML = "";
+  div.innerHTML = shouldShowIndexInfiniteScrollSentinel(0, 0)
+    ? buildIndexInfiniteScrollSentinelHtml()
+    : "";
   refreshAdminUI();
+  setupIndexInfiniteScroll();
+  setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
   return;
 }
 
@@ -9704,7 +9713,7 @@ if (header) header.style.display = "none";
 
 div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
 
- if (debatesToShow.length < debates.length) {
+ if (shouldShowIndexInfiniteScrollSentinel(debatesToShow.length, debates.length)) {
   div.innerHTML += buildIndexInfiniteScrollSentinelHtml();
 }
 
@@ -9743,7 +9752,7 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
 
   div.insertAdjacentHTML("beforeend", buildIndexDebatesListHtml(nextDebates));
 
-  if (end < safeDebates.length) {
+  if (shouldShowIndexInfiniteScrollSentinel(end, safeDebates.length)) {
     div.insertAdjacentHTML("beforeend", buildIndexInfiniteScrollSentinelHtml());
   }
 
@@ -9761,25 +9770,45 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
 
 async function loadMoreOtherDebates() {
   if (indexInfiniteScrollLoading) return;
-  if (otherDebatesVisible >= otherDebatesCache.length) return;
+  if (otherDebatesVisible >= otherDebatesCache.length && !indexDebatesApiHasMore) return;
 
   indexInfiniteScrollLoading = true;
   const previousVisible = otherDebatesVisible;
-  otherDebatesVisible = Math.min(
-    otherDebatesVisible + INDEX_OTHER_DEBATES_BATCH_SIZE,
-    otherDebatesCache.length
-  );
-  queueIndexEmbedPreloadRange(previousVisible, otherDebatesVisible);
   setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
   indexDeferQueuedPreloadOnce = true;
-
-  const appended = appendDebatesToList(otherDebatesCache, previousVisible, otherDebatesVisible);
-  if (!appended) {
-    renderDebatesList(otherDebatesCache);
-  }
+  const targetVisible = previousVisible + INDEX_OTHER_DEBATES_BATCH_SIZE;
 
   try {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (previousVisible < otherDebatesCache.length) {
+      otherDebatesVisible = Math.min(targetVisible, otherDebatesCache.length);
+      queueIndexEmbedPreloadRange(previousVisible, otherDebatesVisible);
+
+      const appended = appendDebatesToList(otherDebatesCache, previousVisible, otherDebatesVisible);
+      if (!appended) {
+        renderDebatesList(otherDebatesCache);
+      }
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      return;
+    }
+
+    const restoreAnchor = captureIndexScrollRestoreAnchor();
+    const fallbackScrollY = Math.max(0, Math.round(window.scrollY || 0));
+    const fetchedDebates = await fetchAndMergeNextIndexDebatesPage();
+
+    otherDebatesVisible = targetVisible;
+    refreshCategoryFilterOptions(debatesCache);
+    applyIndexFilters();
+
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    });
+
+    if (fetchedDebates.length) {
+      restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
+    }
   } catch (error) {
     console.warn('Chargement des prochains posts index interrompu :', error);
   } finally {
@@ -9860,15 +9889,24 @@ function updateIndexLists(debates) {
   renderVisitedDebatesList([]);
   renderDebatesList(otherDebatesCache);
 }
-function saveDebatesToSessionCache(debates) {
+function saveDebatesToSessionCache(debates, meta = null) {
   try {
     sessionStorage.setItem(INDEX_DEBATES_CACHE_KEY, JSON.stringify(debates));
     sessionStorage.setItem(INDEX_DEBATES_CACHE_TIME_KEY, String(Date.now()));
+    if (meta && typeof meta === "object") {
+      sessionStorage.setItem(INDEX_DEBATES_CACHE_META_KEY, JSON.stringify({
+        nextOffset: Math.max(0, Number(meta.nextOffset) || 0),
+        hasMore: meta.hasMore !== false
+      }));
+    }
   } catch (e) {}
 }
 
 function syncIndexDebatesSessionCache() {
-  saveDebatesToSessionCache(debatesCache || []);
+  saveDebatesToSessionCache(debatesCache || [], {
+    nextOffset: indexDebatesApiNextOffset,
+    hasMore: indexDebatesApiHasMore
+  });
 }
 
 function updateDebateCommentCountInCollection(collection, debateId, delta) {
@@ -9925,6 +9963,93 @@ function getDebatesFromSessionCache() {
   }
 }
 
+function getIndexDebatesCacheMetaFromSessionCache() {
+  try {
+    const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
+    if (Date.now() - time > INDEX_DEBATES_CACHE_TTL) return null;
+
+    const raw = sessionStorage.getItem(INDEX_DEBATES_CACHE_META_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      nextOffset: Math.max(0, Number(parsed?.nextOffset) || 0),
+      hasMore: parsed?.hasMore !== false
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function getIndexDebatesApiUrl(limit = INDEX_DEBATES_PAGE_SIZE, offset = 0) {
+  const safeLimit = Math.max(1, Number(limit) || INDEX_DEBATES_PAGE_SIZE);
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  return `${API}/debates?limit=${safeLimit}&offset=${safeOffset}`;
+}
+
+function resetIndexDebatesPaginationState(count = 0, hasMore = true) {
+  indexDebatesApiNextOffset = Math.max(0, Number(count) || 0);
+  indexDebatesApiHasMore = hasMore !== false;
+}
+
+function restoreIndexDebatesPaginationStateFromCache(cachedDebates = []) {
+  const safeDebates = Array.isArray(cachedDebates) ? cachedDebates : [];
+  const cachedMeta = getIndexDebatesCacheMetaFromSessionCache();
+
+  if (cachedMeta) {
+    resetIndexDebatesPaginationState(cachedMeta.nextOffset, cachedMeta.hasMore);
+    return;
+  }
+
+  const count = safeDebates.length;
+  resetIndexDebatesPaginationState(count, count >= INDEX_DEBATES_PAGE_SIZE);
+}
+
+function mergeIndexDebatesPageIntoCache(pageDebates = [], offset = 0) {
+  const safePage = Array.isArray(pageDebates) ? pageDebates : [];
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const current = Array.isArray(debatesCache) ? debatesCache : [];
+  const prefix = safeOffset > 0 ? current.slice(0, safeOffset) : [];
+  const suffix = current.slice(Math.max(safeOffset + safePage.length, 0));
+  const merged = [...prefix, ...safePage, ...suffix];
+  const seenIds = new Set();
+
+  return merged.filter((debate) => {
+    const debateId = String(debate?.id || "").trim();
+    if (!debateId) return true;
+    if (seenIds.has(debateId)) return false;
+    seenIds.add(debateId);
+    return true;
+  });
+}
+
+async function fetchAndMergeNextIndexDebatesPage() {
+  if (!indexDebatesApiHasMore) return [];
+
+  const requestOffset = Math.max(0, Number(indexDebatesApiNextOffset) || 0);
+  const nextPage = await fetchJSON(getIndexDebatesApiUrl(INDEX_DEBATES_PAGE_SIZE, requestOffset));
+  const safePage = Array.isArray(nextPage) ? nextPage : [];
+
+  debatesCache = mergeIndexDebatesPageIntoCache(safePage, requestOffset);
+  indexDebatesApiNextOffset = requestOffset + safePage.length;
+  indexDebatesApiHasMore = safePage.length >= INDEX_DEBATES_PAGE_SIZE;
+  saveDebatesToSessionCache(debatesCache, {
+    nextOffset: indexDebatesApiNextOffset,
+    hasMore: indexDebatesApiHasMore
+  });
+
+  return safePage;
+}
+
+function shouldShowIndexInfiniteScrollSentinel(visibleCount = 0, totalCount = 0) {
+  if (currentTypeFilter === "visited") return false;
+
+  const safeVisible = Math.max(0, Number(visibleCount) || 0);
+  const safeTotal = Math.max(0, Number(totalCount) || 0);
+
+  return safeVisible < safeTotal || indexDebatesApiHasMore;
+}
+
 async function initIndex() {
   try {
     initIndexExplorerControls();
@@ -9934,6 +10059,7 @@ async function initIndex() {
     if (cached) {
       // Rendu immédiat depuis le cache — pas d'appel API pour l'affichage initial
       debatesCache = cached;
+      restoreIndexDebatesPaginationStateFromCache(debatesCache);
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
       currentTypeFilter = "all";
@@ -9959,9 +10085,19 @@ async function initIndex() {
       hidePageArrivalLoadingOverlay();
 
       // Rafraîchissement silencieux en arrière-plan
-      fetchJSON(API + "/debates").then((fresh) => {
-        saveDebatesToSessionCache(fresh);
-        debatesCache = fresh;
+      fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0)).then((fresh) => {
+        const safeFresh = Array.isArray(fresh) ? fresh : [];
+        debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
+        if (safeFresh.length < INDEX_INITIAL_DEBATES_FETCH_LIMIT) {
+          indexDebatesApiHasMore = false;
+        } else if (debatesCache.length >= safeFresh.length) {
+          indexDebatesApiHasMore = true;
+        }
+        indexDebatesApiNextOffset = Math.max(indexDebatesApiNextOffset, safeFresh.length);
+        saveDebatesToSessionCache(debatesCache, {
+          nextOffset: indexDebatesApiNextOffset,
+          hasMore: indexDebatesApiHasMore
+        });
         refreshCategoryFilterOptions(debatesCache);
         if (window.__agonDebateModalOpen) {
           return;
@@ -9977,9 +10113,16 @@ async function initIndex() {
 
     } else {
       // Première visite — comportement normal
-      const debates = await fetchJSON(API + "/debates");
-      saveDebatesToSessionCache(debates);
-      debatesCache = debates;
+      const debates = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
+      debatesCache = Array.isArray(debates) ? debates : [];
+      resetIndexDebatesPaginationState(
+        debatesCache.length,
+        debatesCache.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT
+      );
+      saveDebatesToSessionCache(debatesCache, {
+        nextOffset: indexDebatesApiNextOffset,
+        hasMore: indexDebatesApiHasMore
+      });
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
       currentTypeFilter = "all";
