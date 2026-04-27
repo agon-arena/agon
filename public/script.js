@@ -2342,7 +2342,25 @@ function ensureDebateIframeModal() {
   }
 }
 
-function openDebateIframeModal(url) {
+function getDebateIdFromUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""), window.location.origin);
+    return String(parsed.searchParams.get("id") || "").trim();
+  } catch (error) {
+    return "";
+  }
+}
+
+function findIndexDebateCardById(debateId = "") {
+  const safeDebateId = String(debateId || "").trim();
+  if (!safeDebateId) return null;
+
+  return Array.from(document.querySelectorAll('.debate-card[data-debate-id]')).find((card) => {
+    return String(card?.dataset?.debateId || "").trim() === safeDebateId;
+  }) || null;
+}
+
+function openDebateIframeModal(url, options = {}) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
   window.__agonDebateModalOpenedFromNotifications = location.pathname === "/notifications";
@@ -2356,7 +2374,8 @@ function openDebateIframeModal(url) {
 
   // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
   _debateModalSavedScrollY = Math.round(window.scrollY || 0);
-  _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor();
+  const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
+  _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
   window.__agonDebateModalOpen = true;
   window.__agonDebateModalPendingDebates = null;
 
@@ -2453,7 +2472,16 @@ function getIndexEmbedShellsAboveScrollY(targetScrollY = 0) {
   });
 }
 
-function captureIndexScrollRestoreAnchor() {
+function captureIndexScrollRestoreAnchor(preferredDebateId = "") {
+  const preferredCard = findIndexDebateCardById(preferredDebateId);
+  if (preferredCard && preferredCard.isConnected && preferredCard.offsetParent) {
+    const rect = preferredCard.getBoundingClientRect();
+    return {
+      debateId: String(preferredCard.dataset.debateId || '').trim(),
+      top: rect.top
+    };
+  }
+
   const cards = Array.from(document.querySelectorAll('.debate-card[data-debate-id]')).filter((card) => {
     if (!card || !card.isConnected || !card.offsetParent) return false;
     const rect = card.getBoundingClientRect();
@@ -2499,9 +2527,7 @@ function restoreIndexScrollFromAnchor(anchor = null, fallbackScrollY = null) {
     return false;
   }
 
-  const targetCard = Array.from(document.querySelectorAll('.debate-card[data-debate-id]')).find((card) => {
-    return String(card?.dataset?.debateId || '').trim() === debateId;
-  });
+  const targetCard = findIndexDebateCardById(debateId);
 
   if (!targetCard) {
     if (safeFallback !== null) {
@@ -2728,7 +2754,7 @@ function openIndexDebateFromMedia(debateId, event) {
     }
   }
 
-  openDebateIframeModal(nextUrl);
+  openDebateIframeModal(nextUrl, { debateId: safeDebateId });
 }
 
 function initIndexReturnNavigation() {
