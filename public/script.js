@@ -2693,7 +2693,6 @@ function closeDebateIframeModal() {
     });
   }
 
-  setTimeout(() => { if (frame) frame.src = ""; }, 300);
 }
 
 function isTopLevelDebatePage() {
