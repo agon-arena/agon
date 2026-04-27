@@ -9246,6 +9246,25 @@ function loadMoreVisitedDebates() {
   visitedDebatesVisible += 5;
   renderVisitedDebatesList(visitedDebatesCache);
 }
+
+function buildIndexDebatesListHtml(debates = []) {
+  return (Array.isArray(debates) ? debates : []).map((d) => {
+    return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
+  }).join("");
+}
+
+function buildIndexInfiniteScrollSentinelHtml() {
+  return `
+    <div
+      id="index-infinite-scroll-sentinel"
+      class="load-more-container"
+      aria-live="polite"
+      aria-busy="false"
+      data-base-message="Fais défiler pour charger la suite"
+    ></div>
+  `;
+}
+
 function renderDebatesList(debates) {
   // Si la modale iframe est ouverte, on ne re-rend pas maintenant
   // pour ne pas perturber la position de scroll ni recréer le DOM
@@ -9269,20 +9288,10 @@ if (!debates.length) {
 
 if (header) header.style.display = "none";
 
-div.innerHTML = debatesToShow.map((d) => {
-  return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
-}).join("");
+div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
 
  if (debatesToShow.length < debates.length) {
-  div.innerHTML += `
-    <div
-      id="index-infinite-scroll-sentinel"
-      class="load-more-container"
-      aria-live="polite"
-      aria-busy="false"
-      data-base-message="Fais défiler pour charger la suite"
-    ></div>
-  `;
+  div.innerHTML += buildIndexInfiniteScrollSentinelHtml();
 }
 
   refreshAdminUI();
@@ -9302,6 +9311,40 @@ div.innerHTML = debatesToShow.map((d) => {
   }
 }
 
+function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
+  const div = document.getElementById("debates-list");
+  if (!div) return false;
+
+  const safeDebates = Array.isArray(debates) ? debates : [];
+  const start = Math.max(0, Number(startIndex) || 0);
+  const end = Math.max(start, Number(endIndex) || 0);
+  const nextDebates = safeDebates.slice(start, end);
+
+  if (!nextDebates.length) return true;
+
+  const existingSentinel = document.getElementById("index-infinite-scroll-sentinel");
+  if (existingSentinel) {
+    existingSentinel.remove();
+  }
+
+  div.insertAdjacentHTML("beforeend", buildIndexDebatesListHtml(nextDebates));
+
+  if (end < safeDebates.length) {
+    div.insertAdjacentHTML("beforeend", buildIndexInfiniteScrollSentinelHtml());
+  }
+
+  refreshAdminUI();
+  setupIndexInfiniteScroll();
+  initIndexCardShareMenus(div);
+  initIndexYouTubeObserver(div);
+  initIndexLocalVideoObserver(div);
+  initIndexXObserver(div);
+  initIndexInstagramObserver(div);
+  setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
+
+  return true;
+}
+
 async function loadMoreOtherDebates() {
   if (indexInfiniteScrollLoading) return;
   if (otherDebatesVisible >= otherDebatesCache.length) return;
@@ -9315,7 +9358,11 @@ async function loadMoreOtherDebates() {
   queueIndexEmbedPreloadRange(previousVisible, otherDebatesVisible);
   setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
   indexDeferQueuedPreloadOnce = true;
-  renderDebatesList(otherDebatesCache);
+
+  const appended = appendDebatesToList(otherDebatesCache, previousVisible, otherDebatesVisible);
+  if (!appended) {
+    renderDebatesList(otherDebatesCache);
+  }
 
   try {
     await new Promise((resolve) => requestAnimationFrame(resolve));
