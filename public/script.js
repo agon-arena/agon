@@ -2613,6 +2613,7 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 function closeDebateIframeModal() {
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
+  const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!modal) return;
   const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
   const shouldReturnDirectlyToIndex = openedFromNotifications && location.pathname === "/notifications";
@@ -2642,6 +2643,12 @@ function closeDebateIframeModal() {
     ? Math.max(0, Math.round(_debateModalSavedScrollY))
     : null;
   const restoredScrollAnchor = _debateModalSavedScrollAnchor;
+  const restoreScrollPosition = () => {
+    if (restoredScrollY === null) return;
+    document.documentElement.style.scrollBehavior = "auto";
+    restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
+    document.documentElement.style.scrollBehavior = "";
+  };
 
   // Restaure le body et le scroll
   document.body.style.overflow = "";
@@ -2651,10 +2658,16 @@ function closeDebateIframeModal() {
   document.body.style.right = "";
   document.body.style.width = "";
 
+  if (closeButton && document.activeElement === closeButton) {
+    closeButton.blur();
+  }
+
   if (restoredScrollY !== null) {
-    document.documentElement.style.scrollBehavior = "auto";
-    restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
-    document.documentElement.style.scrollBehavior = "";
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreScrollPosition();
+      });
+    });
     _debateModalSavedScrollY = null;
   }
   _debateModalSavedScrollAnchor = null;
@@ -2669,9 +2682,9 @@ function closeDebateIframeModal() {
 
       if (restoredScrollY !== null) {
         await waitForEmbedsAboveScrollY(restoredScrollY);
-        document.documentElement.style.scrollBehavior = "auto";
-        restoreIndexScrollFromAnchor(restoredScrollAnchor, restoredScrollY);
-        document.documentElement.style.scrollBehavior = "";
+        requestAnimationFrame(() => {
+          restoreScrollPosition();
+        });
       }
     });
   } else {
