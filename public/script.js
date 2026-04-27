@@ -35,6 +35,9 @@ let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
 let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
+let indexLastUserScrollTs = 0;
+let indexUserScrollGuardBound = false;
+let indexXTabletRefreshBound = false;
 
 const DEBATE_CATEGORY_OPTIONS = [
   "Politique et société",
@@ -68,6 +71,13 @@ function getDebateCategoryList(value) {
 
 function joinDebateCategories(values) {
   return getDebateCategoryList(values).join(DEBATE_CATEGORY_SEPARATOR);
+}
+
+function getIndexCardCategoryLabel(value) {
+  const categories = getDebateCategoryList(value);
+  if (!categories.length) return "Sans catégorie";
+  if (categories.length === 1) return categories[0];
+  return categories.join(" · ");
 }
 
 function debateHasCategory(value, category) {
@@ -3445,12 +3455,16 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isNewDebate = isDebateNew(d.created_at);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const includeDeleteButton = options.includeDeleteButton === true;
+  const categoryList = getDebateCategoryList(d.category);
+  const categoryClassName = categoryList.length > 1
+    ? "debate-card-category debate-card-category-multi"
+    : "debate-card-category";
 
   return `
     <article class="debate-card" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
-          <div class="debate-card-category">${escapeHtml(d.category || "Sans catégorie")}</div>
+          <div class="${categoryClassName}">${escapeHtml(getIndexCardCategoryLabel(d.category))}</div>
           ${newBadgeHtml}
         </div>
         <div class="debate-card-type">${debateTypeLabel}</div>
@@ -5004,6 +5018,8 @@ function reserveIndexEmbedShellHeight(shell, type = '') {
 }
 
 function captureIndexEmbedScrollAnchor(shell, type = '') {
+  bindIndexUserScrollGuard();
+
   if (!shell || typeof shell.getBoundingClientRect !== 'function') return null;
 
   reserveIndexEmbedShellHeight(shell, type);
@@ -5027,6 +5043,8 @@ function captureIndexEmbedScrollAnchor(shell, type = '') {
 function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
   if (!shell) return;
 
+  bindIndexUserScrollGuard();
+
   const finalize = () => {
     const finalHeight = Math.max(shell.getBoundingClientRect().height || 0, Number(shell.dataset.reservedHeight || 0));
 
@@ -5036,6 +5054,7 @@ function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
     }
 
     if (!anchor) return;
+    if (Date.now() - indexLastUserScrollTs < 450) return;
     if (Math.abs(window.scrollY - Number(anchor.scrollY || 0)) > 140) return;
 
     const rect = shell.getBoundingClientRect();
@@ -5054,10 +5073,48 @@ function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
   });
 }
 
+function bindIndexUserScrollGuard() {
+  if (indexUserScrollGuardBound) return;
+
+  const markUserScroll = () => {
+    indexLastUserScrollTs = Date.now();
+  };
+
+  window.addEventListener('scroll', markUserScroll, { passive: true });
+  window.addEventListener('wheel', markUserScroll, { passive: true });
+  window.addEventListener('touchmove', markUserScroll, { passive: true });
+  indexUserScrollGuardBound = true;
+}
+
+function bindIndexXTabletRefresh() {
+  if (indexXTabletRefreshBound) return;
+
+  const rerenderVisibleXShells = () => {
+    if (!isTabletXEmbedContext()) return;
+
+    const shells = Array.from(document.querySelectorAll('[data-index-x-shell]'));
+    shells.forEach((shell) => {
+      if (shell.dataset.rendered === 'true' || shell.dataset.rendering === 'true') return;
+      if (!isElementNearViewport(shell, 260)) return;
+      renderIndexXShell(shell);
+    });
+  };
+
+  window.addEventListener('resize', rerenderVisibleXShells, { passive: true });
+  window.addEventListener('orientationchange', rerenderVisibleXShells, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', rerenderVisibleXShells);
+  }
+
+  indexXTabletRefreshBound = true;
+}
+
 async function renderIndexXShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
   if (shell.dataset.rendering === 'true') return;
+
+  bindIndexXTabletRefresh();
 
   const tweetId = String(shell.dataset.tweetId || '').trim();
   const sourceUrl = String(shell.dataset.sourceUrl || '').trim();
@@ -5093,16 +5150,42 @@ async function renderIndexXShell(shell) {
       throw new Error('API widgets X indisponible.');
     }
 
-    const created = await window.twttr.widgets.createTweet(tweetId, embed, {
-      align: 'center',
-      theme: 'light',
-      dnt: true,
-      conversation: 'none',
-      width: window.innerWidth <= 768 ? 320 : 400
-    });
+    const isTabletContext = isTabletXEmbedContext();
+    const retryDelays = isTabletContext ? [0, 350, 900] : [0];
+    let created = null;
+    let lastError = null;
+
+    if (isTabletContext) {
+      await waitForXEmbedRetry(120);
+    }
+
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      if (attempt > 0) {
+        await waitForXEmbedRetry(retryDelays[attempt]);
+      }
+
+      embed.innerHTML = '';
+
+      try {
+        created = await window.twttr.widgets.createTweet(tweetId, embed, {
+          align: 'center',
+          theme: 'light',
+          dnt: true,
+          conversation: 'none',
+          width: window.innerWidth <= 768 ? 320 : 400
+        });
+      } catch (error) {
+        lastError = error;
+        created = null;
+      }
+
+      if (created) {
+        break;
+      }
+    }
 
     if (!created) {
-      throw new Error('Embed X non généré.');
+      throw lastError || new Error('Embed X non généré.');
     }
 
     shell.dataset.rendered = 'true';

@@ -5442,6 +5442,15 @@ body.page-debate .topbar::after {
     margin-bottom: 2px;
   }
 
+  .page-home-mobile .debate-card-category-multi {
+    padding-left: 8px;
+    padding-right: 8px;
+    max-width: 74%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+
   .page-home-mobile .debate-card-top-row {
     gap: 8px;
     margin-bottom: 1px;
