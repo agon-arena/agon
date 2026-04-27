@@ -25,7 +25,7 @@
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
-<link rel="stylesheet" href="/style.css?v=20260427-9">
+<link rel="stylesheet" href="/style.css?v=20260427-17">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -91,8 +91,8 @@
     <i class="fa-brands fa-x-twitter"></i>
   </button>
 
-  <button class="share-icon-button facebook" type="button" onclick="window.shareOnFacebook()" title="Partager sur Facebook">
-    <i class="fa-brands fa-facebook-f"></i>
+  <button class="share-icon-button instagram" type="button" onclick="window.shareOnInstagram()" title="Partager sur Instagram">
+    <i class="fa-brands fa-instagram"></i>
   </button>
 
   <button class="share-icon-button whatsapp" type="button" onclick="window.shareOnWhatsApp()" title="Partager sur WhatsApp">
@@ -314,42 +314,42 @@
       onclick="event.stopPropagation()"
       aria-label="Options de partage"
     >
-      <button type="button" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
+      <button type="button" class="home-bottom-share-copy" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
         <i class="fa-solid fa-link"></i>
         <span>Copier le lien</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnX)">
+      <button type="button" class="home-bottom-share-x" onclick="handleHomeBottomShareAction(event, shareOnX)">
         <i class="fa-brands fa-x-twitter"></i>
         <span>X</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnFacebook)">
-        <i class="fa-brands fa-facebook-f"></i>
-        <span>Facebook</span>
+      <button type="button" class="home-bottom-share-instagram" onclick="handleHomeBottomShareAction(event, shareOnInstagram)">
+        <i class="fa-brands fa-instagram"></i>
+        <span>Instagram</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
+      <button type="button" class="home-bottom-share-whatsapp" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
         <i class="fa-brands fa-whatsapp"></i>
         <span>WhatsApp</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareByEmail)">
+      <button type="button" class="home-bottom-share-email" onclick="handleHomeBottomShareAction(event, shareByEmail)">
         <i class="fa-solid fa-envelope"></i>
         <span>Email</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
+      <button type="button" class="home-bottom-share-linkedin" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
         <i class="fa-brands fa-linkedin-in"></i>
         <span>LinkedIn</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
+      <button type="button" class="home-bottom-share-mastodon" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
         <i class="fa-brands fa-mastodon"></i>
         <span>Mastodon</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
+      <button type="button" class="home-bottom-share-reddit" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
         <i class="fa-brands fa-reddit-alien"></i>
         <span>Reddit</span>
       </button>
@@ -553,7 +553,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260427-23" defer></script>
+<script src="/script.js?v=20260427-33" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
@@ -595,7 +595,7 @@
 <script>
 (function(){
   var labels = {
-    copy:'Copier le lien', qrcode:'QR Code', x:'X', facebook:'Facebook',
+    copy:'Copier le lien', qrcode:'QR Code', x:'X', instagram:'Instagram',
     whatsapp:'WhatsApp', email:'Email', linkedin:'LinkedIn', mastodon:'Mastodon', reddit:'Reddit'
   };
 
@@ -696,7 +696,7 @@
     if (!ob) return null;
 
     var classList = Array.from(ob.classList || []);
-    var supported = ['copy', 'qrcode', 'x', 'facebook', 'whatsapp', 'email', 'linkedin', 'mastodon', 'reddit'];
+    var supported = ['copy', 'qrcode', 'x', 'instagram', 'whatsapp', 'email', 'linkedin', 'mastodon', 'reddit'];
     var hasSupportedClass = supported.some(function(name){
       return classList.indexOf(name) !== -1;
     });

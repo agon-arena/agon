@@ -3569,12 +3569,12 @@ function buildIndexCardShareActionsHtml(debate) {
   </button>
 
   <button
-    class="share-icon-button facebook"
+    class="share-icon-button instagram"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnFacebook('${d.id}')"
-    title="Partager sur Facebook"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnInstagram('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    title="Partager sur Instagram"
   >
-    <i class="fa-brands fa-facebook"></i>
+    <i class="fa-brands fa-instagram"></i>
   </button>
 
   <button
@@ -3696,7 +3696,7 @@ function initIndexCardShareMenus(root = document) {
     copy: "Copier le lien",
     qrcode: "QR Code",
     x: "X",
-    facebook: "Facebook",
+    instagram: "Instagram",
     whatsapp: "WhatsApp",
     email: "Email",
     linkedin: "LinkedIn",
@@ -3832,33 +3832,22 @@ function initIndexCardShareMenus(root = document) {
       button.style.display = 'none';
     });
 
-    const btn = document.createElement('button');
-    btn.className = 'index-share-btn';
-    btn.type = 'button';
-    btn.innerHTML = '<i class="fa-solid fa-share-nodes"></i> Partager';
-
-    const dd = document.createElement('div');
-    dd.className = 'index-share-dropdown';
+    const inlineRow = document.createElement('div');
+    inlineRow.className = 'index-share-inline-row';
 
     btns.forEach((originalButton) => {
       const cls = Array.from(originalButton.classList).find((className) => labels[className]) || '';
       const hasSupportedClass = supported.some((name) => originalButton.classList.contains(name));
       if (!hasSupportedClass) return;
 
-      const icon = originalButton.querySelector('i');
-      const item = document.createElement('button');
-      item.className = 'isd-item';
-      item.type = 'button';
-
-      if (icon) item.appendChild(icon.cloneNode(true));
-      const span = document.createElement('span');
-      span.textContent = labels[cls] || originalButton.title || cls;
-      item.appendChild(span);
+      const item = originalButton.cloneNode(true);
+      item.style.display = 'inline-flex';
+      item.removeAttribute('onclick');
+      item.setAttribute('title', labels[cls] || originalButton.title || cls);
 
       item.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        initIndexCardShareMenus.closeAll();
         originalButton.dispatchEvent(new MouseEvent('click', {
           bubbles: true,
           cancelable: true,
@@ -3866,21 +3855,10 @@ function initIndexCardShareMenus(root = document) {
         }));
       });
 
-      dd.appendChild(item);
+      inlineRow.appendChild(item);
     });
 
-    dd.addEventListener('click', (event) => {
-      event.stopPropagation();
-    });
-
-    btn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      initIndexCardShareMenus.toggleDropdown(btn, dd);
-    });
-
-    block.appendChild(btn);
-    document.body.appendChild(dd);
+    block.appendChild(inlineRow);
   });
 }
 
@@ -6639,7 +6617,7 @@ function getDebateShareText() {
 function buildVisibleShareMessage(text, url) {
   const cleanText = String(text || "")
     .trim()
-    .replace(/(?:\n\s*)?(?:→\s*)?Agôn\s*:\s*\S+\s*$/u, "")
+    .replace(/(?:\n\s*)?(?:→\s*)?Agôn\s*:?\s*\S+\s*$/u, "")
     .trim();
   const cleanUrl = String(url || "").trim();
 
@@ -6648,6 +6626,40 @@ function buildVisibleShareMessage(text, url) {
   }
 
   return [cleanText, `→ Agôn ${cleanUrl}`].filter(Boolean).join("\n\n");
+}
+
+async function writeTextToClipboard(text) {
+  const safeText = String(text || "");
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(safeText);
+      return true;
+    } catch (error) {
+      // Fallback below
+    }
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = safeText;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    return !!copied;
+  } catch (error) {
+    return false;
+  }
 }
 
 function getIdeaShareUrl(debateId, argumentId) {
@@ -6691,10 +6703,17 @@ async function copyIdeaLink(debateId, encodedArgumentJson) {
   try {
     const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
     const { url } = getIdeaShareData(debateId, argument);
-    await navigator.clipboard.writeText(url);
+    const copied = await writeTextToClipboard(url);
+    if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
-    alert("Impossible de copier le lien automatiquement.");
+    try {
+      const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+      const { url } = getIdeaShareData(debateId, argument);
+      showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
+    } catch (innerError) {
+      alert("Impossible de copier le lien automatiquement.");
+    }
   }
 }
 
@@ -7055,10 +7074,11 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
 async function copyDebateLink() {
   const { url } = getGlobalShareData();
   try {
-    await navigator.clipboard.writeText(url);
+    const copied = await writeTextToClipboard(url);
+    if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
-    alert("Impossible de copier le lien automatiquement.");
+    showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
   }
 }
 
@@ -7269,10 +7289,11 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
   if (copyBtn) {
     copyBtn.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(safeUrl);
+        const copied = await writeTextToClipboard(safeUrl);
+        if (!copied) throw new Error("clipboard_copy_failed");
         showCopyLinkSuccessMessage();
       } catch (error) {
-        alert("Impossible de copier le lien automatiquement.");
+        showShareCopyManualMessage("Copie manuelle du lien", safeUrl, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
       }
     };
   }
@@ -7364,13 +7385,15 @@ function shareOnReddit() {
 }
 
 async function shareOnInstagram() {
-  const { url } = getGlobalShareData();
+  const { text, url } = getGlobalShareData();
+  const message = buildVisibleShareMessage(text, url);
 
   try {
-    await navigator.clipboard.writeText(url);
-    alert("Lien copié. Collez-le dans votre story, votre bio ou votre publication Instagram.");
+    const copied = await writeTextToClipboard(message);
+    if (!copied) throw new Error("clipboard_copy_failed");
+    showInstagramShareCopySuccessMessage();
   } catch (error) {
-    alert("Impossible de copier automatiquement. Copiez ce lien pour Instagram : " + url);
+    showShareCopyManualMessage("Copie manuelle du texte", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous pour Instagram.", "📸");
   }
 }
 function getGlobalShareData() {
@@ -7469,8 +7492,8 @@ function renderGlobalShareBar() {
         <i class="fa-brands fa-x-twitter"></i> X
       </button>
 
-      <button class="share-button share-facebook" type="button" onclick="shareOnFacebook()">
-        <i class="fa-brands fa-facebook"></i> Facebook
+      <button class="share-button share-instagram" type="button" onclick="shareOnInstagram()">
+        <i class="fa-brands fa-instagram"></i> Instagram
       </button>
 
       <button class="share-button share-whatsapp" type="button" onclick="shareOnWhatsApp()">
@@ -7481,9 +7504,6 @@ function renderGlobalShareBar() {
         <i class="fa-solid fa-envelope"></i> Email
       </button>
 
-      <button class="share-button share-instagram" type="button" onclick="shareOnInstagram()">
-        <i class="fa-brands fa-instagram"></i> Instagram
-      </button>
     </div>
   `;
 }
@@ -7669,10 +7689,11 @@ async function copyIndexDebateLink(
   );
 
   try {
-    await navigator.clipboard.writeText(url);
+    const copied = await writeTextToClipboard(url);
+    if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
-    alert("Impossible de copier le lien automatiquement.");
+    showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
   }
 }
 
@@ -7689,6 +7710,38 @@ function shareIndexDebateOnFacebook(debateId) {
   const { url } = getIndexDebateShareData(debateId, "");
   const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
+}
+
+async function shareIndexDebateOnInstagram(
+  debateId,
+  encodedQuestion = "",
+  encodedOptionA = "",
+  encodedOptionB = "",
+  percentA = 50,
+  percentB = 50,
+  type = "debate"
+) {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { text, url } = getIndexDebateShareData(
+    debateId,
+    question,
+    optionA,
+    optionB,
+    percentA,
+    percentB,
+    type
+  );
+  const message = buildVisibleShareMessage(text, url);
+
+  try {
+    const copied = await writeTextToClipboard(message);
+    if (!copied) throw new Error("clipboard_copy_failed");
+    showInstagramShareCopySuccessMessage();
+  } catch (error) {
+    showShareCopyManualMessage("Copie manuelle du texte", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous pour Instagram.", "📸");
+  }
 }
 
 function shareIndexDebateOnWhatsApp(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
@@ -17188,6 +17241,69 @@ function showCopyLinkSuccessMessage() {
   );
 }
 
+function showInstagramShareCopySuccessMessage() {
+  showReplacementSuccessMessage(
+    "Texte de partage copié",
+    "Collez-le dans votre story, votre bio ou votre publication Instagram.",
+    null,
+    "📸"
+  );
+}
+
+function showShareCopyManualMessage(title, textToCopy, description = "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", iconHtml = "📋") {
+  const existing = document.getElementById("replacement-success-overlay");
+  if (existing) existing.remove();
+
+  const safeTitle = String(title || "Copie manuelle");
+  const safeDescription = String(description || "").trim();
+  const safeText = String(textToCopy || "").trim();
+
+  const overlay = document.createElement("div");
+  overlay.id = "replacement-success-overlay";
+  overlay.className = "replacement-success-overlay replacement-success-overlay-visible";
+
+  overlay.innerHTML = `
+    <div class="replacement-success-box replacement-success-copy-box">
+      <div class="replacement-success-icon">${iconHtml}</div>
+      <div class="replacement-success-title">${escapeHtml(safeTitle)}</div>
+      <div class="replacement-success-text">${escapeHtml(safeDescription)}</div>
+      <textarea
+        class="replacement-success-copy-field"
+        readonly
+        aria-label="${escapeAttribute(safeTitle)}"
+      >${escapeHtml(safeText)}</textarea>
+      <button
+        type="button"
+        class="replacement-success-button"
+        id="replacement-success-close-btn"
+      >
+        Compris
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const field = overlay.querySelector(".replacement-success-copy-field");
+  if (field) {
+    field.addEventListener("focus", () => {
+      field.select();
+    });
+    requestAnimationFrame(() => {
+      field.focus();
+      field.select();
+    });
+  }
+
+  const closeBtn = document.getElementById("replacement-success-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      overlay.classList.remove("replacement-success-overlay-visible");
+      setTimeout(() => overlay.remove(), 250);
+    });
+  }
+}
+
 function showReplacementSuccessMessage(title, message, onClose = null, iconHtml = "💡", iconClass = "") {
   const existing = document.getElementById("replacement-success-overlay");
   if (existing) existing.remove();
@@ -17876,6 +17992,7 @@ window.shareOnInstagram = shareOnInstagram;
 window.copyIndexDebateLink = copyIndexDebateLink;
 window.shareIndexDebateOnX = shareIndexDebateOnX;
 window.shareIndexDebateOnFacebook = shareIndexDebateOnFacebook;
+window.shareIndexDebateOnInstagram = shareIndexDebateOnInstagram;
 window.shareIndexDebateOnWhatsApp = shareIndexDebateOnWhatsApp;
 window.shareIndexDebateByEmail = shareIndexDebateByEmail;
 window.shareIndexDebateOnLinkedIn = shareIndexDebateOnLinkedIn;
