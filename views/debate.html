@@ -7,7 +7,7 @@
 <title>__META_TITLE__</title>
 <meta name="description" content="__META_DESCRIPTION__">
 <meta property="og:site_name" content="Agôn">
-<meta property="og:type" content="article">
+<meta property="og:type" content="website">
 <meta property="og:title" content="__META_TITLE__">
 <meta property="og:description" content="__META_DESCRIPTION__">
 <meta property="og:url" content="__META_URL__">
@@ -20,7 +20,7 @@
 <meta name="twitter:image" content="__META_IMAGE__">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-<link rel="stylesheet" href="/style.css?v=20260426-4" />
+<link rel="stylesheet" href="/style.css?v=20260428-5" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script>
 (function () {
@@ -214,6 +214,75 @@ body.page-debate .argument-position-label {
   word-break: normal;
   hyphens: auto;
   box-sizing: border-box;
+}
+
+body.page-debate .voice-dictation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+}
+
+body.page-debate .voice-dictation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+body.page-debate .voice-dictation-button:hover,
+body.page-debate .voice-dictation-button:focus-visible {
+  background: #dbeafe;
+  color: #1d4ed8;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
+body.page-debate .voice-dictation-button.voice-dictation-button-active {
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(29, 78, 216, 0.18);
+}
+
+body.page-debate .voice-dictation-button.voice-dictation-button-active i {
+  animation: voiceDictationPulse 1s ease-in-out infinite;
+}
+
+body.page-debate .voice-dictation-hint {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.35;
+}
+
+@keyframes voiceDictationPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.78; }
+}
+
+@media (max-width: 768px) {
+  body.page-debate .voice-dictation-row {
+    gap: 8px;
+    margin-top: 7px;
+  }
+
+  body.page-debate .voice-dictation-button {
+    padding: 8px 11px;
+    font-size: 11px;
+  }
+
+  body.page-debate .voice-dictation-hint {
+    font-size: 10px;
+  }
 }
 
 body.page-debate .argument-card-has-trending-badge .argument-position-label {
@@ -1556,6 +1625,18 @@ body.voices-panel-open {
       placeholder="Développez votre idée clairement. Si vous avez plusieurs idées, publiez-les séparément."
       oninput="handleArgumentInput('list'); updateCounter('list-body','count-body-list',600)"
     ></textarea>
+    <div class="voice-dictation-row">
+      <button
+        type="button"
+        class="voice-dictation-button"
+        data-speech-target="list-body"
+        onclick="toggleIdeaVoiceDictation(event, 'list-body', this)"
+      >
+        <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+        <span>Dicter</span>
+      </button>
+      <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
+    </div>
     <small id="count-body-list">0 / 600</small>
 
 <button type="submit" class="button">Publier l'idée</button>
@@ -1630,6 +1711,18 @@ body.voices-panel-open {
 Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         oninput="handleArgumentInput('a'); updateCounter('a-body','count-body-a',600)"
       ></textarea>
+      <div class="voice-dictation-row">
+        <button
+          type="button"
+          class="voice-dictation-button"
+          data-speech-target="a-body"
+          onclick="toggleIdeaVoiceDictation(event, 'a-body', this)"
+        >
+          <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+          <span>Dicter</span>
+        </button>
+        <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
+      </div>
       <small id="count-body-a">0 / 600</small>
 <button type="submit" class="button">Publier l'idée</button>
     </form>
@@ -1661,6 +1754,18 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         placeholder="Développez votre idée clairement. Si vous avez plusieurs idées, publiez-les séparément."
         oninput="handleArgumentInput('b'); updateCounter('b-body','count-body-b',600)"
       ></textarea>
+      <div class="voice-dictation-row">
+        <button
+          type="button"
+          class="voice-dictation-button"
+          data-speech-target="b-body"
+          onclick="toggleIdeaVoiceDictation(event, 'b-body', this)"
+        >
+          <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+          <span>Dicter</span>
+        </button>
+        <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
+      </div>
       <small id="count-body-b">0 / 600</small>
 
 <button type="submit" class="button">Publier l'idée</button>
@@ -1695,7 +1800,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
-  <a href="/" class="home-bottom-nav-item" aria-label="Explorer">
+  <a href="/" id="debate-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Explorer">
     <i class="fa-regular fa-compass"></i>
     <span>Explorer</span>
   </a>
@@ -1816,7 +1921,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260426-8"></script>
+<script src="/script.js?v=20260428-11"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

@@ -2382,65 +2382,213 @@ app.post("/api/notifications/read-one", async (req, res) => {
 /* =========================
    ADMIN EDIT
 ========================= */
+function addToMediaExtras(currentExtras, type, url) {
+  const arr = Array.isArray(currentExtras) ? [...currentExtras] : [];
+  const normalized = String(url || "").trim();
+  if (!normalized) return arr;
+  if (arr.some(e => e.url === normalized)) return arr;
+  arr.push({ type, url: normalized, added_at: new Date().toISOString() });
+  return arr;
+}
+
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url, content, category } = req.body || {};
+    const { question, option_a, option_b, source_url, content, category, image_url, video_url } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedCategory = String(category || "").trim() || null;
+    const imageUrlSent = 'image_url' in (req.body || {});
+    const videoUrlSent = 'video_url' in (req.body || {});
+    const sourceUrlSent = 'source_url' in (req.body || {});
+    const normalizedImageUrl = imageUrlSent ? String(image_url || "").trim() : undefined;
+    const normalizedVideoUrl = videoUrlSent ? String(video_url || "").trim() : undefined;
 
     if (normalizedSourceUrl) {
-      try {
-        await getExternalLinkPreview(normalizedSourceUrl);
-      } catch (error) {
-        console.error("Erreur préchargement aperçu source (admin edit):", error);
+      try { await getExternalLinkPreview(normalizedSourceUrl); } catch (e) {
+        console.error("Erreur préchargement aperçu source (admin edit):", e);
       }
     }
 
-    let updateError = null;
-
-    const { error } = await supabase
+    const { data: currentRow } = await supabase
       .from("debates")
-      .update({
-        question,
-        option_a,
-        option_b,
-        source_url: normalizedSourceUrl || "",
-        content: normalizedContent,
-        ...(normalizedCategory ? { category: normalizedCategory } : {})
-      })
-      .eq("id", req.params.id);
+      .select("image_url, video_url, source_url, media_extras")
+      .eq("id", req.params.id)
+      .single();
+
+    let newExtras = Array.isArray(currentRow?.media_extras) ? [...currentRow.media_extras] : [];
+
+    if (currentRow) {
+      // image_url : si remplacée → historique ; si vidée → supprime storage
+      if (imageUrlSent && normalizedImageUrl !== currentRow.image_url) {
+        if (normalizedImageUrl) {
+          newExtras = addToMediaExtras(newExtras, 'image', currentRow.image_url);
+        } else {
+          await deleteStoredMediaAsset(currentRow.image_url, debateImagesDir);
+        }
+      }
+      // video_url : même logique
+      if (videoUrlSent && normalizedVideoUrl !== currentRow.video_url) {
+        if (normalizedVideoUrl) {
+          newExtras = addToMediaExtras(newExtras, 'video', currentRow.video_url);
+        } else {
+          await deleteStoredMediaAsset(currentRow.video_url, debateVideosDir);
+        }
+      }
+      // source_url : si remplacée → historique
+      if (sourceUrlSent && normalizedSourceUrl !== currentRow.source_url && currentRow.source_url) {
+        if (normalizedSourceUrl) {
+          newExtras = addToMediaExtras(newExtras, 'source', currentRow.source_url);
+        }
+      }
+    }
+
+    const extrasChanged = JSON.stringify(newExtras) !== JSON.stringify(currentRow?.media_extras || []);
+
+    const updateFields = {
+      question, option_a, option_b,
+      source_url: normalizedSourceUrl || "",
+      content: normalizedContent,
+      ...(normalizedCategory ? { category: normalizedCategory } : {}),
+      ...(imageUrlSent ? { image_url: normalizedImageUrl || "" } : {}),
+      ...(videoUrlSent ? { video_url: normalizedVideoUrl || "" } : {}),
+      ...(extrasChanged ? { media_extras: newExtras } : {})
+    };
+
+    const { error } = await supabase.from("debates").update(updateFields).eq("id", req.params.id);
 
     if (error) {
       const combined = `${String(error.message || "")} ${String(error.details || "")} ${String(error.hint || "")}`.toLowerCase();
-      if (combined.includes("content") || combined.includes("column")) {
-        const { error: fallbackError } = await supabase
-          .from("debates")
-          .update({
-            question,
-            option_a,
-            option_b,
-            source_url: normalizedSourceUrl || "",
-            ...(normalizedCategory ? { category: normalizedCategory } : {})
-          })
-          .eq("id", req.params.id);
-        updateError = fallbackError;
+      if (combined.includes("content") || combined.includes("column") || combined.includes("media_extras")) {
+        const safe = { ...updateFields };
+        delete safe.content;
+        delete safe.media_extras;
+        const { error: fallbackError } = await supabase.from("debates").update(safe).eq("id", req.params.id);
+        if (fallbackError) {
+          console.error(fallbackError);
+          return res.status(500).json({ error: "Erreur modification débat." });
+        }
       } else {
-        updateError = error;
+        console.error(error);
+        return res.status(500).json({ error: "Erreur modification débat." });
       }
     }
 
-    if (updateError) {
-      console.error(updateError);
-      return res.status(500).json({ error: "Erreur modification débat." });
-    }
-
     setDebateStoredContent(req.params.id, normalizedContent);
-
     res.json({ success: true });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Erreur modification débat." });
+  }
+});
+
+app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const { media_extras } = req.body || {};
+    if (!Array.isArray(media_extras)) {
+      return res.status(400).json({ error: "media_extras doit être un tableau." });
+    }
+    const sanitized = media_extras
+      .filter(e => e && String(e.url || "").trim())
+      .map(e => ({
+        type: ["image", "video", "source"].includes(e.type) ? e.type : "source",
+        url: String(e.url).trim(),
+        ...(e.added_at ? { added_at: e.added_at } : {})
+      }));
+    const { error } = await supabase.from("debates").update({ media_extras: sanitized }).eq("id", debateId);
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Erreur mise à jour sources." });
+    }
+    debatesApiResponseCache.clear();
+    res.json({ success: true, media_extras: sanitized });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erreur mise à jour sources." });
+  }
+});
+
+app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const { error } = await supabase
+      .from("debates")
+      .update({ bumped_at: new Date().toISOString() })
+      .eq("id", debateId);
+    if (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Erreur bump débat." });
+    }
+    debatesApiResponseCache.clear();
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erreur bump débat." });
+  }
+});
+
+app.post("/api/admin/debate/:id/image", requireAdmin, express.json({ limit: "20mb" }), async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const { dataUrl, type } = req.body || {};
+    const debateRow = await getDebateById(debateId);
+    if (!debateRow) return res.status(404).json({ error: "Débat introuvable." });
+
+    // Upload sans supprimer l'ancien (gardé en historique)
+    const publicUrl = await saveUploadedDebateImage(debateId, { dataUrl, type });
+
+    const newExtras = addToMediaExtras(
+      Array.isArray(debateRow.media_extras) ? debateRow.media_extras : [],
+      'image', debateRow.image_url
+    );
+
+    await supabase.from("debates")
+      .update({ image_url: publicUrl, media_extras: newExtras })
+      .eq("id", debateId);
+
+    return res.json({ success: true, image_url: publicUrl });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error.message || "Erreur upload image." });
+  }
+});
+
+app.post("/api/admin/debate/:id/video", requireAdmin, express.raw({
+  type: (req) => {
+    const ct = String(req.get("content-type") || "").toLowerCase().split(";")[0].trim();
+    return ["application/octet-stream","video/mp4","video/webm","video/quicktime","video/x-m4v"].includes(ct);
+  },
+  limit: `${MAX_DEBATE_VIDEO_BYTES}b`
+}), async (req, res) => {
+  try {
+    const debateId = req.params.id;
+    const debateRow = await getDebateById(debateId);
+    if (!debateRow) return res.status(404).json({ error: "Débat introuvable." });
+
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    if (!buffer.length) return res.status(400).json({ error: "Vidéo manquante." });
+
+    const fileName = String(req.get("x-file-name") || "video").trim();
+    const mimeType = String(req.get("x-file-type") || req.get("content-type") || "").trim();
+
+    // Upload sans supprimer l'ancien (gardé en historique)
+    const storedVideo = await saveUploadedDebateVideo(debateId, buffer, fileName, mimeType);
+
+    const newExtras = addToMediaExtras(
+      Array.isArray(debateRow.media_extras) ? debateRow.media_extras : [],
+      'video', debateRow.video_url
+    );
+
+    await supabase.from("debates")
+      .update({ video_url: storedVideo.url, media_extras: newExtras })
+      .eq("id", debateId);
+
+    return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
+  } catch (error) {
+    console.error(error);
+    const msg = ["Vidéo trop lourde.", "Format vidéo non pris en charge.", "Vidéo vide."].includes(error?.message)
+      ? error.message : "Erreur upload vidéo.";
+    return res.status(500).json({ error: msg });
   }
 });
 
@@ -2612,7 +2760,15 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
+    const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
     rows.sort((a, b) => {
+      const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
+      const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
+      const aRecent = aBump > now - BUMP_WINDOW_MS;
+      const bRecent = bBump > now - BUMP_WINDOW_MS;
+      if (aRecent !== bRecent) return bRecent ? 1 : -1;
+      if (aRecent && bRecent && aBump !== bBump) return bBump - aBump;
       if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
       const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
       const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";

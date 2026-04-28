@@ -105,6 +105,14 @@ const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
 const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
 
+function clearIndexDebatesSessionCache() {
+  try {
+    sessionStorage.removeItem(INDEX_DEBATES_CACHE_KEY);
+    sessionStorage.removeItem(INDEX_DEBATES_CACHE_TIME_KEY);
+    sessionStorage.removeItem(INDEX_DEBATES_CACHE_META_KEY);
+  } catch (error) {}
+}
+
 let pageArrivalLoadingOverlayHideTimer = null;
 let pageArrivalLoadingOverlayFallbackTimer = null;
 let pageArrivalLoadingOverlayReady = false;
@@ -494,6 +502,7 @@ function markCreatedDebateContext(debateId, returnUrl = "") {
   if (!normalizedDebateId) return;
 
   try {
+    clearIndexDebatesSessionCache();
     sessionStorage.setItem(CREATE_NEW_DEBATE_CONTEXT_KEY, JSON.stringify({
       debateId: normalizedDebateId,
       returnUrl: String(returnUrl || "").trim(),
@@ -2374,6 +2383,11 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:pause-page-media") {
+      pauseDebatePageMediaForIframeClose();
+      return;
+    }
+
     if (e.data.type === "agon:voices-badge-position") {
       window.__agonIframeVoicesBadgeMetrics = {
         visible: !!e.data.visible,
@@ -2493,6 +2507,48 @@ function resumeIndexEmbedsAfterDebateModal() {
     try {
       video.pause();
     } catch (error) {}
+  });
+}
+
+function pauseDebatePageMediaForIframeClose() {
+  document.querySelectorAll('video, audio').forEach((media) => {
+    if (!(media instanceof HTMLMediaElement)) return;
+    try {
+      media.pause();
+    } catch (error) {}
+  });
+
+  const sourcePreview = document.getElementById('debate-source-preview');
+  if (sourcePreview instanceof HTMLIFrameElement) {
+    const currentSrc = String(sourcePreview.getAttribute('src') || '').trim();
+    if (currentSrc && currentSrc !== 'about:blank') {
+      try {
+        sourcePreview.setAttribute('src', 'about:blank');
+      } catch (error) {}
+    }
+  }
+
+  document.querySelectorAll('#debate-source-fallback iframe').forEach((iframe) => {
+    if (!(iframe instanceof HTMLIFrameElement)) return;
+    const currentSrc = String(iframe.getAttribute('src') || '').trim();
+    if (!currentSrc || currentSrc === 'about:blank') return;
+    try {
+      iframe.setAttribute('src', 'about:blank');
+    } catch (error) {}
+  });
+}
+
+function scheduleDebateIframeFrameTeardown(frame, modal) {
+  if (!(frame instanceof HTMLIFrameElement)) return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (modal?.classList?.contains('open')) return;
+      try {
+        frame.removeAttribute('src');
+        frame.src = 'about:blank';
+      } catch (error) {}
+    });
   });
 }
 
@@ -2763,6 +2819,10 @@ function closeDebateIframeModal() {
     return;
   }
 
+  try {
+    frame?.contentWindow?.postMessage({ type: "agon:pause-page-media" }, "*");
+  } catch (error) {}
+
   modal.classList.remove("open");
   modal.classList.remove("argument-form-open-in-child");
   setDebateIframeModalLoadingState(false);
@@ -2788,6 +2848,8 @@ function closeDebateIframeModal() {
   if (closeButton && document.activeElement === closeButton) {
     closeButton.blur();
   }
+
+  scheduleDebateIframeFrameTeardown(frame, modal);
 
   if (restoredScrollY !== null) {
     requestAnimationFrame(() => {
@@ -2872,6 +2934,52 @@ function initDebateNotificationIframeTriggers() {
   bindDebateNotificationIframeTrigger("#notifications-bell");
   bindDebateNotificationIframeTrigger("#notifications-bell-bottom");
   bindDebateNotificationIframeTrigger("#home-topbar-notifications-link");
+}
+
+function initDebateBottomExplorerLink() {
+  const explorerLink = document.getElementById("debate-bottom-nav-explorer");
+  if (!explorerLink || explorerLink.dataset.bottomExplorerBound === "true") return;
+
+  explorerLink.dataset.bottomExplorerBound = "true";
+  explorerLink.addEventListener("click", (event) => {
+    if (window.parent === window) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      window.parent.location.href = "/";
+    } catch (error) {
+      try {
+        window.top.location.href = "/";
+      } catch (nestedError) {
+        window.location.href = "/";
+      }
+    }
+  });
+}
+
+function initDebateTopExplorerLink() {
+  const explorerLink = document.getElementById("home-topbar-explorer-link");
+  if (!explorerLink || explorerLink.dataset.topExplorerBound === "true") return;
+
+  explorerLink.dataset.topExplorerBound = "true";
+  explorerLink.addEventListener("click", (event) => {
+    if (window.parent === window) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      window.parent.location.href = "/";
+    } catch (error) {
+      try {
+        window.top.location.href = "/";
+      } catch (nestedError) {
+        window.location.href = "/";
+      }
+    }
+  });
 }
 
 function openIndexDebateFromMedia(debateId, event) {
@@ -3747,13 +3855,13 @@ ${
 }
       </a>
 
+      ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       ${mediaOutsideLink ? mediaHtml : ""}
       ${contextHtml}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
 
       <div class="debate-card-actions">
         ${buildIndexCardShareActionsHtml(d)}
-        ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       </div>
       ${buildIndexCardFooterActionsHtml(d)}
     </article>
@@ -8755,7 +8863,9 @@ async function saveAdminCardEdit(debateId, btn) {
     option_a:   get("option_a"),
     option_b:   get("option_b"),
     source_url: get("source_url"),
-    content:    get("content")
+    content:    get("content"),
+    image_url:  get("image_url"),
+    video_url:  get("video_url")
   };
 
   const saveBtn = panel.querySelector('.admin-edit-save');
@@ -8795,6 +8905,42 @@ async function saveAdminCardEdit(debateId, btn) {
       const catEl = card.querySelector('.debate-card-category');
       if (catEl && body.category) catEl.textContent = body.category;
 
+      // Met à jour le bloc contexte/contenu
+      const contextWrap = card.querySelector('[data-index-context-card]');
+      const newContent = String(body.content || '').trim();
+      if (contextWrap) {
+        if (!newContent) {
+          contextWrap.remove();
+        } else {
+          const previewLimit = 170;
+          const shortText = newContent.length > previewLimit
+            ? `${newContent.slice(0, previewLimit).trimEnd()}…`
+            : newContent;
+          const needsToggle = newContent.length > previewLimit;
+          const ctxText = contextWrap.querySelector('[data-index-context-text]');
+          if (ctxText) {
+            ctxText.textContent = shortText;
+            ctxText.dataset.fullText = newContent;
+            ctxText.dataset.shortText = shortText;
+            ctxText.dataset.expanded = "false";
+          }
+          const ctxToggle = contextWrap.querySelector('[data-index-context-toggle]');
+          if (needsToggle && !ctxToggle) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'debate-card-context-toggle';
+            btn.setAttribute('data-index-context-toggle', '');
+            btn.setAttribute('data-debate-id', String(debateId));
+            btn.setAttribute('aria-expanded', 'false');
+            btn.setAttribute('onclick', 'event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)');
+            btn.textContent = 'Voir plus';
+            contextWrap.appendChild(btn);
+          } else if (!needsToggle && ctxToggle) {
+            ctxToggle.remove();
+          }
+        }
+      }
+
       // Met à jour les champs affichés dans le panel
       panel.querySelectorAll('[data-edit-field]').forEach(el => {
         const field = el.dataset.editField;
@@ -8819,6 +8965,146 @@ async function saveAdminCardEdit(debateId, btn) {
       saveBtn.disabled = false;
     }
     alert("Erreur : " + (err.message || err));
+  }
+}
+
+async function saveAdminMediaExtras(debateId, btn) {
+  const panel = btn.closest('.debate-card-admin-edit');
+  if (!panel) return;
+  const items = [...panel.querySelectorAll('.admin-extras-item')].map(row => ({
+    type: row.dataset.extrasType || 'source',
+    url: row.querySelector('.admin-extras-url')?.value?.trim() || '',
+    added_at: row.dataset.extrasAddedAt || undefined
+  })).filter(e => e.url);
+
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Sauvegarde…';
+  try {
+    const result = await fetchJSON(API + "/admin/debate/" + debateId + "/media-extras", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
+      body: JSON.stringify({ media_extras: items })
+    });
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé';
+    btn.style.background = '#dcfce7';
+    // Met à jour le cache local
+    const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
+      .flat().find(d => d && String(d.id) === String(debateId));
+    if (cached) {
+      cached.media_extras = result.media_extras;
+      updateDebateCachesAfterEdit({ ...cached });
+    }
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      btn.style.background = '';
+      btn.disabled = false;
+    }, 1200);
+  } catch(err) {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+    alert("Erreur : " + (err.message || err));
+  }
+}
+
+async function bumpAdminDebate(debateId, btn) {
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Republication…';
+  }
+  try {
+    await fetchJSON(API + "/admin/debate/" + debateId + "/bump", {
+      method: "POST",
+      headers: { 'x-admin-token': getAdminToken() }
+    });
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Republié !';
+      btn.style.background = '#dcfce7';
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+        btn.style.background = '';
+        btn.disabled = false;
+      }, 1500);
+    }
+    clearIndexDebatesSessionCache();
+    const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
+    const safeFresh = Array.isArray(fresh) ? fresh : [];
+    debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
+    indexDebatesApiNextOffset = safeFresh.length;
+    indexDebatesApiHasMore = safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT;
+    saveDebatesToSessionCache(debatesCache, { nextOffset: indexDebatesApiNextOffset, hasMore: indexDebatesApiHasMore });
+    applyIndexFilters();
+  } catch(err) {
+    if (btn) {
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
+    }
+    alert("Erreur : " + (err.message || err));
+  }
+}
+
+async function adminUploadMediaFile(input, mediaType) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  const row = input.closest('.admin-edit-media-row');
+  const debateId = row && row.dataset.debateId;
+  if (!debateId) return;
+
+  const urlInput = row.querySelector(`[data-edit-field="${mediaType}_url"]`);
+  const uploadBtn = row.querySelector('.admin-edit-upload-media');
+  const origIcon = uploadBtn ? uploadBtn.innerHTML : '';
+
+  if (uploadBtn) {
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;">';
+  }
+
+  try {
+    let resultUrl;
+
+    if (mediaType === 'image') {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const data = await fetchJSON(API + '/admin/debate/' + debateId + '/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() },
+        body: JSON.stringify({ dataUrl, type: file.type })
+      });
+      resultUrl = data.image_url;
+
+    } else {
+      const data = await fetchJSON(API + '/admin/debate/' + debateId + '/video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-file-name': file.name || 'video',
+          'x-file-type': file.type || 'application/octet-stream',
+          'x-admin-token': getAdminToken()
+        },
+        body: file
+      });
+      resultUrl = data.video_url;
+    }
+
+    if (urlInput && resultUrl) {
+      urlInput.value = resultUrl;
+    }
+
+  } catch (err) {
+    alert('Erreur upload : ' + (err.message || err));
+  } finally {
+    if (uploadBtn) {
+      uploadBtn.innerHTML = origIcon;
+      uploadBtn.disabled = false;
+    }
+    input.value = '';
   }
 }
 
@@ -8866,14 +9152,7 @@ function buildAdminEditPanelHtml(d) {
         <div class="admin-edit-field">
           <label class="admin-edit-label">Catégorie</label>
           <select class="admin-edit-input" data-edit-field="category">
-          <option value="Politique française" ${escapeAttribute(d.category || '') === 'Politique française' ? 'selected' : ''}>Politique française</option>
-          <option value="Politique internationale" ${escapeAttribute(d.category || '') === 'Politique internationale' ? 'selected' : ''}>Politique internationale</option>
-          <option value="Société" ${escapeAttribute(d.category || '') === 'Société' ? 'selected' : ''}>Société</option>
-          <option value="Éducation" ${escapeAttribute(d.category || '') === 'Éducation' ? 'selected' : ''}>Éducation</option>
-          <option value="Divertissement" ${escapeAttribute(d.category || '') === 'Divertissement' ? 'selected' : ''}>Divertissement</option>
-          <option value="Numérique" ${escapeAttribute(d.category || '') === 'Numérique' ? 'selected' : ''}>Numérique</option>
-          <option value="Médias" ${escapeAttribute(d.category || '') === 'Médias' ? 'selected' : ''}>Médias</option>
-          <option value="Autre" ${escapeAttribute(d.category || '') === 'Autre' ? 'selected' : ''}>Autre</option>
+          ${DEBATE_CATEGORY_OPTIONS.map(cat => `<option value="${escapeAttribute(cat)}" ${escapeAttribute(d.category || '') === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('\n          ')}
           </select>
         </div>
         <div class="admin-edit-field">
@@ -8891,8 +9170,26 @@ function buildAdminEditPanelHtml(d) {
         </div>
         <div class="admin-edit-info">
           <span>Type : <strong>${escapeHtml(d.type || 'debate')}</strong></span>
-          ${d.image_url ? `<span>Image : <a href="${escapeAttribute(d.image_url)}" target="_blank" rel="noopener" class="admin-edit-link">voir</a></span>` : ''}
-          ${d.video_url ? `<span>Vidéo : <a href="${escapeAttribute(d.video_url)}" target="_blank" rel="noopener" class="admin-edit-link">voir</a></span>` : ''}
+        </div>
+        <div class="admin-edit-field">
+          <label class="admin-edit-label">Image</label>
+          <div class="admin-edit-media-row" data-debate-id="${escapeAttribute(String(d.id || ''))}">
+            <input class="admin-edit-input" type="text" data-edit-field="image_url" value="${escapeAttribute(d.image_url || '')}" placeholder="https://…">
+            ${d.image_url ? `<a href="${escapeAttribute(d.image_url)}" target="_blank" rel="noopener" class="admin-edit-media-preview" title="Voir"><i class="fa-solid fa-eye"></i></a>` : ''}
+            <button type="button" class="admin-edit-upload-media" title="Choisir un fichier" onclick="event.stopPropagation(); this.closest('.admin-edit-media-row').querySelector('.admin-edit-file-input').click();"><i class="fa-solid fa-upload"></i></button>
+            <button type="button" class="admin-edit-clear-media" onclick="event.stopPropagation(); this.closest('.admin-edit-media-row').querySelector('[data-edit-field=image_url]').value='';" title="Supprimer l'image"><i class="fa-solid fa-trash"></i></button>
+            <input type="file" class="admin-edit-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="event.stopPropagation(); adminUploadMediaFile(this, 'image')">
+          </div>
+        </div>
+        <div class="admin-edit-field">
+          <label class="admin-edit-label">Vidéo</label>
+          <div class="admin-edit-media-row" data-debate-id="${escapeAttribute(String(d.id || ''))}">
+            <input class="admin-edit-input" type="text" data-edit-field="video_url" value="${escapeAttribute(d.video_url || '')}" placeholder="https://…">
+            ${d.video_url ? `<a href="${escapeAttribute(d.video_url)}" target="_blank" rel="noopener" class="admin-edit-media-preview" title="Voir"><i class="fa-solid fa-eye"></i></a>` : ''}
+            <button type="button" class="admin-edit-upload-media" title="Choisir un fichier" onclick="event.stopPropagation(); this.closest('.admin-edit-media-row').querySelector('.admin-edit-file-input').click();"><i class="fa-solid fa-upload"></i></button>
+            <button type="button" class="admin-edit-clear-media" onclick="event.stopPropagation(); this.closest('.admin-edit-media-row').querySelector('[data-edit-field=video_url]').value='';" title="Supprimer la vidéo"><i class="fa-solid fa-trash"></i></button>
+            <input type="file" class="admin-edit-file-input" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" onchange="event.stopPropagation(); adminUploadMediaFile(this, 'video')">
+          </div>
         </div>
         <div class="admin-edit-actions">
           <button class="admin-edit-save" type="button"
@@ -8904,6 +9201,37 @@ function buildAdminEditPanelHtml(d) {
             Annuler
           </button>
         </div>
+        <div class="admin-edit-actions" style="margin-top:6px;">
+          <button class="admin-edit-bump" type="button"
+            onclick="event.stopPropagation(); bumpAdminDebate('${escapeAttribute(String(d.id || ''))}', this)">
+            <i class="fa-solid fa-arrow-up"></i> Republier en haut
+          </button>
+        </div>
+        ${(() => {
+          const extras = Array.isArray(d.media_extras) ? d.media_extras.filter(e => e && e.url) : [];
+          if (!extras.length) return '';
+          const iconMap = { video: 'fa-video', image: 'fa-image', source: 'fa-link' };
+          const labelMap = { video: 'Vidéo', image: 'Image', source: 'Source' };
+          const debId = escapeAttribute(String(d.id || ''));
+          return `
+        <div class="admin-extras-section">
+          <div class="admin-extras-title">Historique des sources</div>
+          ${extras.map((e, i) => {
+            const dateStr = e.added_at ? new Date(e.added_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+            return `<div class="admin-extras-item" data-extras-type="${escapeAttribute(e.type || 'source')}" data-extras-added-at="${escapeAttribute(e.added_at || '')}">
+              <i class="fa-solid ${iconMap[e.type] || 'fa-link'}" style="color:#6b7280;font-size:11px;flex-shrink:0;"></i>
+              <input class="admin-extras-url admin-edit-input" type="text" value="${escapeAttribute(e.url || '')}" placeholder="https://…" style="flex:1;min-width:0;">
+              ${dateStr ? `<span class="admin-extras-date">${escapeHtml(dateStr)}</span>` : ''}
+              <button type="button" class="admin-extras-delete" title="Supprimer" onclick="event.stopPropagation(); this.closest('.admin-extras-item').remove()"><i class="fa-solid fa-trash"></i></button>
+            </div>`;
+          }).join('')}
+          <div class="admin-edit-actions" style="margin-top:6px;">
+            <button class="admin-edit-save" type="button" onclick="event.stopPropagation(); saveAdminMediaExtras('${debId}', this)">
+              <i class="fa-solid fa-floppy-disk"></i> Sauvegarder les sources
+            </button>
+          </div>
+        </div>`;
+        })()}
       </div>
     </div>`;
 }
@@ -8913,11 +9241,13 @@ function getDebateCardDeleteButtonHtml(debate) {
 
   return `
     <button
-      class="delete-button"
+      class="delete-button debate-card-delete-button"
       type="button"
-      onclick="deleteDebate('${debate.id}', false)"
+      onclick="event.stopPropagation(); deleteDebate('${debate.id}', false)"
+      aria-label="Supprimer cette arène"
+      title="Supprimer cette arène"
     >
-      Supprimer
+      <span aria-hidden="true">&times;</span>
     </button>
   `;
 }
@@ -13060,6 +13390,128 @@ function updateDeleteDebateButtonVisibility(debate) {
   deleteDebateBtn.style.display = "none";
 }
 
+function initDebateMediaHistory(debate) {
+  const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
+  if (!extras.length) return;
+
+  const currentType = debate.video_url ? 'video' : debate.image_url ? 'image' : debate.source_url ? 'source' : null;
+  const currentUrl = debate.video_url || debate.image_url || debate.source_url || '';
+  if (!currentType) return;
+
+  const allItems = [
+    { type: currentType, url: currentUrl, isCurrent: true },
+    ...extras
+  ];
+
+  const iconMap = { video: 'fa-video', image: 'fa-image', source: 'fa-link' };
+  const labelMap = { video: 'Vidéo', image: 'Image', source: 'Source' };
+
+  const selector = document.createElement('div');
+  selector.id = 'debate-media-history';
+  selector.className = 'debate-media-history';
+  selector.innerHTML = allItems.map((item, i) => {
+    const typeLabel = labelMap[item.type] || item.type;
+    let tooltipLabel;
+    if (item.isCurrent) {
+      tooltipLabel = typeLabel + " actuel";
+    } else if (item.added_at) {
+      const d = new Date(item.added_at);
+      const dateStr = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+      tooltipLabel = typeLabel + " · Publié jusqu'au " + dateStr;
+    } else {
+      tooltipLabel = typeLabel;
+    }
+    return `
+    <button type="button" class="debate-media-history-btn${item.isCurrent ? ' active' : ''}" data-index="${i}" title="${escapeAttribute(tooltipLabel)}" data-tooltip="${escapeAttribute(tooltipLabel)}">
+      <i class="fa-solid ${iconMap[item.type] || 'fa-file'}"></i>
+      <span>${i + 1}</span>
+    </button>
+  `;
+  }).join('');
+
+  // Tooltip fixe pour éviter le clipping par overflow:hidden des parents
+  let mediaTooltipEl = document.getElementById('debate-media-tooltip');
+  if (!mediaTooltipEl) {
+    mediaTooltipEl = document.createElement('div');
+    mediaTooltipEl.id = 'debate-media-tooltip';
+    document.body.appendChild(mediaTooltipEl);
+  }
+  let mediaTooltipHideTimer = null;
+
+  function showMediaTooltip(btn) {
+    const text = btn.dataset.tooltip;
+    if (!text) return;
+    const rect = btn.getBoundingClientRect();
+    mediaTooltipEl.textContent = text;
+    mediaTooltipEl.style.opacity = '0';
+    mediaTooltipEl.style.display = 'block';
+    const tipW = mediaTooltipEl.offsetWidth;
+    let left = rect.left + rect.width / 2 - tipW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
+    mediaTooltipEl.style.left = left + 'px';
+    mediaTooltipEl.style.top = (rect.bottom + 7) + 'px';
+    mediaTooltipEl.style.opacity = '1';
+  }
+
+  function hideMediaTooltip() {
+    mediaTooltipEl.style.opacity = '0';
+  }
+
+  selector.querySelectorAll('.debate-media-history-btn[data-tooltip]').forEach(btn => {
+    btn.addEventListener('mouseenter', () => showMediaTooltip(btn));
+    btn.addEventListener('mouseleave', hideMediaTooltip);
+    btn.addEventListener('focus', () => showMediaTooltip(btn));
+    btn.addEventListener('blur', hideMediaTooltip);
+    btn.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      showMediaTooltip(btn);
+      clearTimeout(mediaTooltipHideTimer);
+      mediaTooltipHideTimer = setTimeout(hideMediaTooltip, 2500);
+    }, { passive: true });
+  });
+
+  selector.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.debate-media-history-btn');
+    if (!btn) return;
+    const item = allItems[parseInt(btn.dataset.index, 10)];
+    if (!item) return;
+    await loadDebateMediaHistoryItem(item);
+    selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+
+  const hero = document.querySelector('.debate-hero');
+  const firstMedia = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
+  if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
+}
+
+async function loadDebateMediaHistoryItem(item) {
+  if (item.type === 'video') {
+    renderDebateVideo(item.url);
+    renderDebateImage('');
+    resetDebateSourcePreview();
+  } else if (item.type === 'image') {
+    resetDebateVideo();
+    renderDebateImage(item.url);
+    resetDebateSourcePreview();
+  } else if (item.type === 'source') {
+    resetDebateVideo();
+    renderDebateImage('');
+    try {
+      const resp = await fetchJSON(API + '/link-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: item.url })
+      });
+      renderDebateSourcePreview(item.url, resp.preview || null);
+      hydrateDebateSourcePreviewIfNeeded(item.url, resp.preview || null);
+    } catch {
+      renderDebateSourcePreview(item.url, null);
+      hydrateDebateSourcePreviewIfNeeded(item.url, null);
+    }
+  }
+}
+
 async function initDebate() {
   const id = getDebateId();
 localStorage.removeItem("debate_column_focus");
@@ -13071,6 +13523,7 @@ localStorage.removeItem("debate_column_focus");
 
   currentDebateViewMode = getDebateViewMode();
   updateDebateViewModeUI();
+  syncIdeaVoiceDictationAvailability();
 
   const formA = document.getElementById("form-a");
   const formB = document.getElementById("form-b");
@@ -13081,7 +13534,7 @@ localStorage.removeItem("debate_column_focus");
 if (formA) {
   formA.addEventListener("submit", async (e) => {
     e.preventDefault();
-
+    stopIdeaVoiceDictation();
     await submitArgument(id, "A");
   });
 }
@@ -13089,6 +13542,7 @@ if (formA) {
 if (formB) {
   formB.addEventListener("submit", async (e) => {
     e.preventDefault();
+    stopIdeaVoiceDictation();
     await submitArgument(id, "B");
   });
 }
@@ -13097,6 +13551,7 @@ const formList = document.getElementById("form-list");
 if (formList) {
   formList.addEventListener("submit", async (e) => {
     e.preventDefault();
+    stopIdeaVoiceDictation();
     await submitListArgument(id);
   });
 }
@@ -13954,6 +14409,7 @@ if (debateVideoUrl) {
   renderDebateSourcePreview(sourceUrl, initialSourcePreview);
   hydrateDebateSourcePreviewIfNeeded(sourceUrl, initialSourcePreview);
 }
+initDebateMediaHistory(data.debate);
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
@@ -15268,6 +15724,7 @@ async function submitListArgument(debateId) {
   setButtonLoading(submitButton);
 
   try {
+    stopIdeaVoiceDictation();
     const r = await fetchJSON(API + "/arguments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -17663,6 +18120,212 @@ function handleArgumentInput(side) {
   }
 }
 
+const ideaVoiceDictationState = {
+  recognition: null,
+  targetId: "",
+  button: null,
+  baseText: "",
+  finalTranscript: "",
+  shouldStayActive: false
+};
+
+function getIdeaVoiceRecognitionCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function supportsIdeaVoiceDictation() {
+  return typeof getIdeaVoiceRecognitionCtor() === "function";
+}
+
+function syncIdeaVoiceDictationAvailability() {
+  const isSupported = supportsIdeaVoiceDictation();
+
+  document.querySelectorAll('.voice-dictation-row').forEach((row) => {
+    if (!(row instanceof HTMLElement)) return;
+    row.style.display = isSupported ? '' : 'none';
+  });
+}
+
+function mergeIdeaVoiceText(baseText = "", transcript = "") {
+  const safeBase = String(baseText || "");
+  const safeTranscript = String(transcript || "").trim();
+  if (!safeTranscript) return safeBase;
+  if (!safeBase.trim()) return safeTranscript;
+  const separator = /[\s\n]$/.test(safeBase) ? "" : " ";
+  return `${safeBase}${separator}${safeTranscript}`;
+}
+
+function updateIdeaVoiceDictationButtonState(button, isActive) {
+  if (!(button instanceof HTMLElement)) return;
+  button.classList.toggle("voice-dictation-button-active", !!isActive);
+  button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  const label = button.querySelector("span");
+  if (label) {
+    label.textContent = isActive ? "Écoute…" : "Dicter";
+  }
+}
+
+function applyIdeaVoiceDictationText(target, nextText) {
+  if (!(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) return;
+  target.value = String(nextText || "");
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function stopIdeaVoiceDictation({ keepText = true } = {}) {
+  const recognition = ideaVoiceDictationState.recognition;
+  const button = ideaVoiceDictationState.button;
+  const target = ideaVoiceDictationState.targetId
+    ? document.getElementById(ideaVoiceDictationState.targetId)
+    : null;
+
+  ideaVoiceDictationState.shouldStayActive = false;
+
+  if (keepText && target) {
+    applyIdeaVoiceDictationText(
+      target,
+      mergeIdeaVoiceText(ideaVoiceDictationState.baseText, ideaVoiceDictationState.finalTranscript)
+    );
+  }
+
+  if (recognition) {
+    try {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.stop();
+    } catch (error) {}
+  }
+
+  updateIdeaVoiceDictationButtonState(button, false);
+
+  ideaVoiceDictationState.recognition = null;
+  ideaVoiceDictationState.targetId = "";
+  ideaVoiceDictationState.button = null;
+  ideaVoiceDictationState.baseText = "";
+  ideaVoiceDictationState.finalTranscript = "";
+}
+
+function startIdeaVoiceDictation(targetId, button) {
+  const RecognitionCtor = getIdeaVoiceRecognitionCtor();
+  const target = document.getElementById(String(targetId || ""));
+
+  if (!RecognitionCtor || !(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
+    showReplacementSuccessMessage(
+      "Dictée vocale indisponible",
+      "Ce navigateur ne prend pas en charge la dictée vocale en direct pour ce champ.",
+      null,
+      "🎙️"
+    );
+    return;
+  }
+
+  if (ideaVoiceDictationState.recognition) {
+    stopIdeaVoiceDictation();
+  }
+
+  const recognition = new RecognitionCtor();
+  recognition.lang = "fr-FR";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  ideaVoiceDictationState.recognition = recognition;
+  ideaVoiceDictationState.targetId = String(targetId || "");
+  ideaVoiceDictationState.button = button instanceof HTMLElement ? button : null;
+  ideaVoiceDictationState.baseText = String(target.value || "");
+  ideaVoiceDictationState.finalTranscript = "";
+  ideaVoiceDictationState.shouldStayActive = true;
+
+  updateIdeaVoiceDictationButtonState(ideaVoiceDictationState.button, true);
+
+  recognition.onresult = (event) => {
+    let finalTranscript = ideaVoiceDictationState.finalTranscript;
+    let interimTranscript = "";
+
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      const transcript = String(result?.[0]?.transcript || "");
+      if (!transcript) continue;
+
+      if (result.isFinal) {
+        finalTranscript += transcript.trim() ? `${transcript.trim()} ` : "";
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+
+    ideaVoiceDictationState.finalTranscript = finalTranscript.trim();
+
+    applyIdeaVoiceDictationText(
+      target,
+      mergeIdeaVoiceText(
+        ideaVoiceDictationState.baseText,
+        `${ideaVoiceDictationState.finalTranscript}${interimTranscript ? ` ${interimTranscript.trim()}` : ""}`.trim()
+      )
+    );
+  };
+
+  recognition.onerror = (event) => {
+    const errorCode = String(event?.error || "").trim();
+    if (errorCode && errorCode !== "no-speech" && errorCode !== "aborted") {
+      let message = "La dictée vocale n’a pas pu démarrer correctement.";
+      if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+        message = "Le micro n’est pas autorisé. Autorise l’accès au micro dans le navigateur pour utiliser la dictée.";
+      } else if (errorCode === "audio-capture") {
+        message = "Aucun micro utilisable n’a été détecté.";
+      }
+
+      showReplacementSuccessMessage(
+        "Dictée vocale interrompue",
+        message,
+        null,
+        "🎙️"
+      );
+    }
+  };
+
+  recognition.onend = () => {
+    const shouldStayActive = ideaVoiceDictationState.shouldStayActive;
+    stopIdeaVoiceDictation();
+
+    if (shouldStayActive) {
+      // Certains navigateurs mobiles coupent la reconnaissance automatiquement :
+      // on laisse l'utilisateur relancer manuellement pour éviter des boucles instables.
+    }
+  };
+
+  try {
+    recognition.start();
+    target.focus();
+  } catch (error) {
+    stopIdeaVoiceDictation({ keepText: false });
+    showReplacementSuccessMessage(
+      "Dictée vocale indisponible",
+      "La dictée vocale n’a pas pu être démarrée sur ce navigateur.",
+      null,
+      "🎙️"
+    );
+  }
+}
+
+function toggleIdeaVoiceDictation(event, targetId, button = null) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const normalizedTargetId = String(targetId || "").trim();
+  if (!normalizedTargetId) return;
+
+  if (
+    ideaVoiceDictationState.recognition &&
+    ideaVoiceDictationState.targetId === normalizedTargetId
+  ) {
+    stopIdeaVoiceDictation();
+    return;
+  }
+
+  startIdeaVoiceDictation(normalizedTargetId, button);
+}
+
 function setListArgumentSide(side = "") {
   const normalizedSide = side === "a" || side === "b" ? side : "";
 
@@ -17708,6 +18371,7 @@ function closeListArgumentForm() {
   const form = document.getElementById("form-list");
   if (!form) return;
 
+  stopIdeaVoiceDictation();
   form.style.display = "none";
 
   if (openedArgumentForm === form) {
@@ -17730,6 +18394,7 @@ function syncIframeParentArgumentFormState(isOpen) {
 }
 
 function closeArgumentForm() {
+  stopIdeaVoiceDictation();
   ["form-a", "form-b", "form-list"].forEach((id) => {
     const form = document.getElementById(id);
     if (form) {
@@ -18034,6 +18699,7 @@ window.setListArgumentSide = setListArgumentSide;
 window.closeListArgumentForm = closeListArgumentForm;
 window.openListArgumentForm = openListArgumentForm;
 window.openArgumentFormAndScroll = openArgumentFormAndScroll;
+window.toggleIdeaVoiceDictation = toggleIdeaVoiceDictation;
 window.openArgumentComposer = openArgumentComposer;
 window.vote = vote;
 window.unvote = unvote;
@@ -18303,13 +18969,11 @@ window.toggleHomeBottomShareMenu = toggleHomeBottomShareMenu;
 window.handleHomeBottomShareAction = handleHomeBottomShareAction;
 window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
 
+let homeBottomNavViewportOffsetRaf = null;
+let homeBottomNavViewportOffsetTimeout = null;
+
 function updateHomeBottomNavViewportOffset() {
   if (window.innerWidth > 768) {
-    document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
-    return;
-  }
-
-  if (document.body.classList.contains('page-home-mobile')) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
     return;
   }
@@ -18337,22 +19001,44 @@ function updateHomeBottomNavViewportOffset() {
     return;
   }
 
-  const raw = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-  const offset = raw > 120 ? raw : 0;
+  const raw = Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop)));
+  const maxToolbarOffset = Math.max(96, Math.round(window.innerHeight * 0.18));
+  const offset = raw <= maxToolbarOffset ? raw : 0;
   document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(offset)}px`);
 }
 
-function initHomeBottomNavViewportOffset() {
-  updateHomeBottomNavViewportOffset();
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateHomeBottomNavViewportOffset);
-    window.visualViewport.addEventListener('scroll', updateHomeBottomNavViewportOffset);
+function scheduleHomeBottomNavViewportOffsetUpdate() {
+  if (homeBottomNavViewportOffsetRaf !== null) {
+    cancelAnimationFrame(homeBottomNavViewportOffsetRaf);
   }
 
-  window.addEventListener('resize', updateHomeBottomNavViewportOffset);
-  window.addEventListener('orientationchange', updateHomeBottomNavViewportOffset);
-  window.addEventListener('scroll', updateHomeBottomNavViewportOffset, { passive: true });
+  homeBottomNavViewportOffsetRaf = requestAnimationFrame(() => {
+    homeBottomNavViewportOffsetRaf = null;
+    updateHomeBottomNavViewportOffset();
+  });
+
+  if (homeBottomNavViewportOffsetTimeout !== null) {
+    clearTimeout(homeBottomNavViewportOffsetTimeout);
+  }
+
+  homeBottomNavViewportOffsetTimeout = window.setTimeout(() => {
+    homeBottomNavViewportOffsetTimeout = null;
+    updateHomeBottomNavViewportOffset();
+  }, 120);
+}
+
+function initHomeBottomNavViewportOffset() {
+  scheduleHomeBottomNavViewportOffsetUpdate();
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleHomeBottomNavViewportOffsetUpdate);
+    window.visualViewport.addEventListener('scroll', scheduleHomeBottomNavViewportOffsetUpdate);
+  }
+
+  window.addEventListener('resize', scheduleHomeBottomNavViewportOffsetUpdate);
+  window.addEventListener('orientationchange', scheduleHomeBottomNavViewportOffsetUpdate);
+  window.addEventListener('scroll', scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  window.addEventListener('pageshow', scheduleHomeBottomNavViewportOffsetUpdate);
 }
 
 function positionHomeTopbarMenu() {
@@ -18491,9 +19177,13 @@ window.closeHomeTopbarMenu = closeHomeTopbarMenu;
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
   document.addEventListener("DOMContentLoaded", initDebateNotificationIframeTriggers);
+  document.addEventListener("DOMContentLoaded", initDebateBottomExplorerLink);
+  document.addEventListener("DOMContentLoaded", initDebateTopExplorerLink);
 } else {
   initHomeTopbarMenu();
   initDebateNotificationIframeTriggers();
+  initDebateBottomExplorerLink();
+  initDebateTopExplorerLink();
 }
 
 // ===== BOTTOM NAV — GRISAGE AU CLIC =====
