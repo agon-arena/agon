@@ -30,6 +30,10 @@ let similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
 let currentDebateCache = null;
 let similarDebatesCache = null;
 let similarDebatesCachePromise = null;
+let currentDebateSourceHistoryItems = [];
+let currentDebateSourceHistoryIndex = -1;
+let debateSourceSwipeTouchState = null;
+let debateSourceSwipeHandlersBound = false;
 let currentTypeFilter = "all";
 let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
@@ -2060,15 +2064,26 @@ function resetDebateIframeModalCloseButtonBadgeAlignment() {
   if (!closeButton) return;
 
   closeButton.style.top = "";
-  closeButton.style.bottom = "";
+  closeButton.style.bottom = window.innerWidth <= 768
+    ? "calc(5vh + env(safe-area-inset-bottom, 0px))"
+    : "";
 }
 
 function applyDebateIframeModalCloseButtonBadgeAlignment() {
   const closeButton = document.getElementById("debate-iframe-modal-close");
   const frame = document.getElementById("debate-iframe-modal-frame");
+  const modal = document.getElementById("debate-iframe-modal");
   const metrics = window.__agonIframeVoicesBadgeMetrics || null;
 
-  if (!closeButton || !frame || window.innerWidth > 768 || !metrics || !metrics.visible) {
+  if (
+    !closeButton ||
+    !frame ||
+    !modal ||
+    window.innerWidth > 768 ||
+    modal.classList.contains("argument-form-open-in-child") ||
+    !metrics ||
+    !metrics.visible
+  ) {
     resetDebateIframeModalCloseButtonBadgeAlignment();
     return;
   }
@@ -2402,6 +2417,15 @@ function ensureDebateIframeModal() {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) {
         debateModal.classList.toggle("argument-form-open-in-child", !!e.data.open);
+      }
+      window.__agonIframeVoicesBadgeMetrics = null;
+      resetDebateIframeModalCloseButtonBadgeAlignment();
+      if (!e.data.open) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
+          });
+        });
       }
     }
   });
@@ -3808,7 +3832,7 @@ function buildIndexCardShareActionsHtml(debate) {
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
-  const mediaHtml = renderIndexInlineSourceCard(d);
+  const mediaHtml = buildIndexSwipeableMediaHtml(d);
   const mediaOutsideLink = !!mediaHtml;
   const contextHtml = buildIndexContextPreviewHtml(d);
   const isNewDebate = isDebateNew(d.created_at);
@@ -4283,6 +4307,284 @@ function renderIndexInlineSourceCard(debate) {
   }
 
   return buildSourcePreviewCardHtml(sourcePreview, sourceUrl, { debateId: safeDebateId });
+}
+
+function getIndexDebateCurrentMediaItem(debate) {
+  if (!debate || typeof debate !== "object") return null;
+
+  const localImageUrl = String(debate.image_url || "").trim();
+  if (localImageUrl) {
+    return { type: "image", url: localImageUrl, isCurrent: true };
+  }
+
+  const localVideoUrl = String(debate.video_url || "").trim();
+  if (localVideoUrl) {
+    return { type: "video", url: localVideoUrl, isCurrent: true };
+  }
+
+  const sourceUrl = String(debate.source_url || "").trim();
+  if (sourceUrl) {
+    return { type: "source", url: sourceUrl, isCurrent: true };
+  }
+
+  return null;
+}
+
+function getIndexDebateMediaItems(debate) {
+  const currentItem = getIndexDebateCurrentMediaItem(debate);
+  const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
+  const allItems = [
+    ...(currentItem ? [currentItem] : []),
+    ...extras
+  ];
+
+  const seen = new Set();
+  return allItems.filter((item) => {
+    if (!item) return false;
+    const type = String(item.type || "").trim();
+    const url = String(item.url || "").trim();
+    if (!type || !url) return false;
+    const key = `${type}::${url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function renderIndexMediaItemHtml(item, debate) {
+  const safeDebateId = String(debate?.id || "").trim();
+  if (!item) return "";
+
+  const itemType = String(item.type || "").trim();
+  const itemUrl = String(item.url || "").trim();
+  if (!itemType || !itemUrl) return "";
+
+  if (itemType === "image") {
+    return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
+  }
+
+  if (itemType === "video") {
+    return buildIndexLocalVideoCardHtml(itemUrl);
+  }
+
+  if (itemType !== "source") return "";
+
+  const currentSourceUrl = String(debate?.source_url || "").trim();
+  const sourcePreview = currentSourceUrl && currentSourceUrl === itemUrl && debate?.source_preview && typeof debate.source_preview === "object"
+    ? debate.source_preview
+    : null;
+
+  if (isDirectImageUrl(itemUrl)) {
+    return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
+  }
+
+  if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
+    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId);
+  }
+
+  if (isXStatusUrl(itemUrl)) {
+    return buildIndexXEmbedHtml(itemUrl, sourcePreview, safeDebateId);
+  }
+
+  if (isInstagramPostUrl(itemUrl)) {
+    return buildIndexInstagramEmbedHtml(itemUrl, sourcePreview, safeDebateId);
+  }
+
+  if (isWeakSourcePreviewData(sourcePreview, itemUrl)) {
+    return "";
+  }
+
+  return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId });
+}
+
+function initIndexMediaSwipeEnhancements(root) {
+  const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+
+  if (!initIndexMediaSwipeEnhancements._bound) {
+    initIndexMediaSwipeEnhancements._bound = true;
+    initIndexMediaSwipeEnhancements._touchState = null;
+
+    const getTrackedTouch = (touchList) => {
+      if (!initIndexMediaSwipeEnhancements._touchState || !touchList) return null;
+      for (const touch of Array.from(touchList)) {
+        if (touch.identifier === initIndexMediaSwipeEnhancements._touchState.identifier) {
+          return touch;
+        }
+      }
+      return null;
+    };
+
+    const resetTouchState = () => {
+      initIndexMediaSwipeEnhancements._touchState = null;
+    };
+
+    const hydrateShell = (shell) => {
+      if (!shell) return null;
+      const mediaItems = JSON.parse(shell.dataset.mediaItems || "[]");
+      if (!Array.isArray(mediaItems) || mediaItems.length < 2) return null;
+      return mediaItems;
+    };
+
+    const renderShellIndex = async (shell, nextIndex) => {
+      const mediaItems = hydrateShell(shell);
+      if (!mediaItems) return false;
+
+      const normalizedIndex = ((nextIndex % mediaItems.length) + mediaItems.length) % mediaItems.length;
+      const debate = {
+        id: shell.dataset.debateId || "",
+        source_url: shell.dataset.currentSourceUrl || "",
+        source_preview: (() => {
+          try {
+            return JSON.parse(shell.dataset.currentSourcePreview || "null");
+          } catch (error) {
+            return null;
+          }
+        })()
+      };
+      const nextItem = mediaItems[normalizedIndex];
+      const inner = shell.querySelector("[data-index-media-swipe-content]");
+      if (!inner) return false;
+
+      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate);
+      shell.dataset.currentIndex = String(normalizedIndex);
+
+      if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(inner);
+      if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(inner);
+      if (typeof initIndexXObserver === "function") initIndexXObserver(inner);
+      if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(inner);
+      if (typeof initIndexCardShareMenus === "function") initIndexCardShareMenus(inner);
+
+      inner.querySelectorAll('[data-index-x-shell]').forEach((mediaShell) => {
+        if (typeof renderIndexXShell === "function") renderIndexXShell(mediaShell);
+      });
+      inner.querySelectorAll('[data-index-instagram-shell]').forEach((mediaShell) => {
+        if (typeof renderIndexInstagramShell === "function") renderIndexInstagramShell(mediaShell);
+      });
+
+      return true;
+    };
+
+    document.addEventListener("touchstart", (event) => {
+      const shell = event.target.closest("[data-index-media-swipe-shell]");
+      if (!shell) return;
+      const mediaItems = hydrateShell(shell);
+      if (!mediaItems) return;
+
+      const touch = event.changedTouches?.[0];
+      if (!touch) return;
+
+      initIndexMediaSwipeEnhancements._touchState = {
+        identifier: touch.identifier,
+        shell,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        horizontalIntent: false
+      };
+    }, { passive: true });
+
+    document.addEventListener("touchmove", (event) => {
+      const state = initIndexMediaSwipeEnhancements._touchState;
+      if (!state) return;
+
+      const trackedTouch = getTrackedTouch(event.changedTouches) || getTrackedTouch(event.touches);
+      if (!trackedTouch) return;
+
+      const deltaX = trackedTouch.clientX - state.startX;
+      const deltaY = trackedTouch.clientY - state.startY;
+      if (Math.abs(deltaX) < 18) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+
+      state.horizontalIntent = true;
+      if (event.cancelable) event.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener("touchend", async (event) => {
+      const state = initIndexMediaSwipeEnhancements._touchState;
+      if (!state) return;
+
+      const trackedTouch = getTrackedTouch(event.changedTouches);
+      if (!trackedTouch) {
+        resetTouchState();
+        return;
+      }
+
+      const deltaX = trackedTouch.clientX - state.startX;
+      const deltaY = trackedTouch.clientY - state.startY;
+      const shouldNavigate = state.horizontalIntent
+        && Math.abs(deltaX) >= 48
+        && Math.abs(deltaX) > Math.abs(deltaY) * 1.15;
+
+      const shell = state.shell;
+      resetTouchState();
+
+      if (!shouldNavigate || !shell) return;
+      if (event.cancelable) event.preventDefault();
+      event.stopPropagation();
+
+      const currentIndex = Number(shell.dataset.currentIndex || "0") || 0;
+      await renderShellIndex(shell, currentIndex + (deltaX < 0 ? 1 : -1));
+    }, { passive: false });
+
+    document.addEventListener("touchcancel", resetTouchState, { passive: true });
+
+    document.addEventListener("click", async (event) => {
+      const hotspot = event.target.closest("[data-index-media-swipe-step]");
+      if (!hotspot) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const shell = hotspot.closest("[data-index-media-swipe-shell]");
+      if (!shell) return;
+
+      const currentIndex = Number(shell.dataset.currentIndex || "0") || 0;
+      const step = hotspot.dataset.indexMediaSwipeStep === "prev" ? -1 : 1;
+      await renderShellIndex(shell, currentIndex + step);
+    });
+  }
+
+  scope.querySelectorAll("[data-index-media-swipe-shell]").forEach((shell) => {
+    if (shell.getAttribute("data-index-media-swipe-ready") === "1") return;
+    shell.setAttribute("data-index-media-swipe-ready", "1");
+  });
+}
+
+function buildIndexSwipeableMediaHtml(debate) {
+  const mediaItems = getIndexDebateMediaItems(debate);
+  const currentItem = mediaItems[0] || null;
+  const baseHtml = currentItem ? renderIndexMediaItemHtml(currentItem, debate) : renderIndexInlineSourceCard(debate);
+  if (!baseHtml) return "";
+
+  if (mediaItems.length < 2) {
+    return baseHtml;
+  }
+
+  const currentSourceUrl = String(debate?.source_url || "").trim();
+  const sourcePreview = currentSourceUrl && debate?.source_preview && typeof debate.source_preview === "object"
+    ? debate.source_preview
+    : null;
+
+  return `
+    <div
+      class="index-media-swipe-shell"
+      data-index-media-swipe-shell
+      data-debate-id="${escapeAttribute(String(debate?.id || "").trim())}"
+      data-media-items="${escapeAttribute(JSON.stringify(mediaItems))}"
+      data-current-index="0"
+      data-current-source-url="${escapeAttribute(currentSourceUrl)}"
+      data-current-source-preview="${escapeAttribute(JSON.stringify(sourcePreview || null))}"
+    >
+      <div class="index-media-swipe-content" data-index-media-swipe-content>
+        ${baseHtml}
+      </div>
+      <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-prev" data-index-media-swipe-step="prev" aria-label="Voir le média précédent">
+        <span aria-hidden="true">‹</span>
+      </button>
+      <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-next" data-index-media-swipe-step="next" aria-label="Voir le média suivant">
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+  `;
 }
 
 function getIndexYouTubeEmbedSrc(baseUrl, options = {}) {
@@ -7974,6 +8276,7 @@ function shareIndexDebateOnReddit(debateId, encodedQuestion, encodedOptionA = ""
 const openCommentsByArgument = {};
 const visibleCommentsByArgument = {};
 const replyToCommentByArgument = {};
+const openRepliesByComment = {};
 /* =========================
    Admin
 ========================= */
@@ -9007,6 +9310,84 @@ async function saveAdminMediaExtras(debateId, btn) {
   }
 }
 
+async function saveAndPublishAdminCard(debateId, btn) {
+  const panel = btn.closest('.debate-card-admin-edit');
+  if (!panel) return;
+
+  const get = (name) => {
+    const el = panel.querySelector(`[data-edit-field="${name}"]`);
+    return el ? el.value.trim() : "";
+  };
+  const body = {
+    question:   get("question"),
+    category:   get("category"),
+    option_a:   get("option_a"),
+    option_b:   get("option_b"),
+    source_url: get("source_url"),
+    content:    get("content"),
+    image_url:  get("image_url"),
+    video_url:  get("video_url")
+  };
+
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> En cours…';
+
+  try {
+    await fetchJSON(API + "/admin/debate/" + debateId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
+      body: JSON.stringify(body)
+    });
+    await fetchJSON(API + "/admin/debate/" + debateId + "/bump", {
+      method: "POST",
+      headers: { "x-admin-token": getAdminToken() }
+    });
+
+    // Met à jour les caches
+    const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
+      .flat().find(d => d && String(d.id) === String(debateId));
+    const updatedDebate = { ...(cached || {}), ...body, id: debateId };
+    updateDebateCachesAfterEdit(updatedDebate);
+
+    // Met à jour le DOM de la carte
+    const card = panel.closest('article.debate-card');
+    if (card) {
+      const h2 = card.querySelector('a.debate-card-link h2');
+      if (h2) h2.textContent = body.question;
+      const posA = card.querySelector('.pos-a');
+      const posB = card.querySelector('.pos-b');
+      if (posA) posA.textContent = body.option_a || "Position A";
+      if (posB) posB.textContent = body.option_b || "Position B";
+      const catEl = card.querySelector('.debate-card-category');
+      if (catEl && body.category) catEl.textContent = body.category;
+    }
+
+    // Recharge le feed
+    clearIndexDebatesSessionCache();
+    const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
+    const safeFresh = Array.isArray(fresh) ? fresh : [];
+    debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
+    indexDebatesApiNextOffset = safeFresh.length;
+    indexDebatesApiHasMore = safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT;
+    saveDebatesToSessionCache(debatesCache, { nextOffset: indexDebatesApiNextOffset, hasMore: indexDebatesApiHasMore });
+    applyIndexFilters();
+
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé et publié !';
+    btn.style.background = '#dcfce7';
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      btn.style.background = '';
+      btn.disabled = false;
+      closeAdminEditPanel(panel);
+    }, 1400);
+  } catch(err) {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+    alert("Erreur : " + (err.message || err));
+  }
+}
+
 async function bumpAdminDebate(debateId, btn) {
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -9205,6 +9586,10 @@ function buildAdminEditPanelHtml(d) {
           <button class="admin-edit-bump" type="button"
             onclick="event.stopPropagation(); bumpAdminDebate('${escapeAttribute(String(d.id || ''))}', this)">
             <i class="fa-solid fa-arrow-up"></i> Republier en haut
+          </button>
+          <button class="admin-edit-bump" type="button"
+            onclick="event.stopPropagation(); saveAndPublishAdminCard('${escapeAttribute(String(d.id || ''))}', this)">
+            <i class="fa-solid fa-floppy-disk"></i><i class="fa-solid fa-arrow-up" style="margin-left:3px;"></i> Sauvegarder et publier
           </button>
         </div>
         ${(() => {
@@ -10172,6 +10557,7 @@ div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
   refreshAdminUI();
   setupIndexInfiniteScroll();
   initIndexCardShareMenus(document);
+  initIndexMediaSwipeEnhancements(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
@@ -10211,6 +10597,7 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   refreshAdminUI();
   setupIndexInfiniteScroll();
   initIndexCardShareMenus(div);
+  initIndexMediaSwipeEnhancements(div);
   initIndexYouTubeObserver(div);
   initIndexLocalVideoObserver(div);
   initIndexXObserver(div);
@@ -13390,18 +13777,258 @@ function updateDeleteDebateButtonVisibility(debate) {
   deleteDebateBtn.style.display = "none";
 }
 
+function getDebateSourceHistoryKey(item = {}) {
+  return `${String(item.type || "").trim()}::${String(item.url || "").trim()}`;
+}
+
+function syncDebateMediaHistoryActiveButton(item = null) {
+  const buttons = document.querySelectorAll("#debate-media-history .debate-media-history-btn");
+  if (!buttons.length) return;
+
+  const expectedKey = getDebateSourceHistoryKey(item || {});
+  const expectedType = String(item?.type || "").trim();
+
+  buttons.forEach((button) => {
+    const buttonType = String(button.dataset.itemType || "").trim();
+    const buttonUrl = String(button.dataset.itemUrl || "").trim();
+    const isActive = buttonType === expectedType
+      && getDebateSourceHistoryKey({ type: buttonType, url: buttonUrl }) === expectedKey;
+    button.classList.toggle("active", isActive);
+  });
+}
+
+function ensureDebateMediaSwipeHotspots(element) {
+  if (!element) return;
+
+  let prevButton = element.querySelector(".debate-media-swipe-hotspot-prev");
+  if (!prevButton) {
+    prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className = "debate-media-swipe-hotspot debate-media-swipe-hotspot-prev";
+    prevButton.setAttribute("aria-label", "Voir le média précédent");
+    prevButton.innerHTML = '<span aria-hidden="true">‹</span>';
+    prevButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await stepDebateSourceHistory(-1);
+    });
+    element.appendChild(prevButton);
+  }
+
+  let nextButton = element.querySelector(".debate-media-swipe-hotspot-next");
+  if (!nextButton) {
+    nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "debate-media-swipe-hotspot debate-media-swipe-hotspot-next";
+    nextButton.setAttribute("aria-label", "Voir le média suivant");
+    nextButton.innerHTML = '<span aria-hidden="true">›</span>';
+    nextButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await stepDebateSourceHistory(1);
+    });
+    element.appendChild(nextButton);
+  }
+}
+
+function syncDebateSourceSwipeAvailability() {
+  const isEnabled = currentDebateSourceHistoryItems.length > 1 && currentDebateSourceHistoryIndex >= 0;
+
+  [
+    document.getElementById("debate-image-wrap"),
+    document.getElementById("debate-video-wrap"),
+    document.getElementById("debate-source-preview-wrap"),
+    document.getElementById("debate-source-fallback")
+  ].forEach((element) => {
+    if (!element) return;
+    ensureDebateMediaSwipeHotspots(element);
+    element.classList.toggle("debate-source-swipe-enabled", isEnabled);
+    element.dataset.sourceSwipeEnabled = isEnabled ? "1" : "0";
+  });
+}
+
+function setDebateSourceHistoryItems(items = [], activeItem = null) {
+  const uniqueItems = [];
+  const seen = new Set();
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (!item) return;
+    const itemType = String(item.type || "").trim();
+    if (!["source", "video", "image"].includes(itemType)) return;
+    const url = String(item.url || "").trim();
+    if (!url) return;
+    const normalizedItem = { ...item, type: itemType, url };
+    const key = getDebateSourceHistoryKey(normalizedItem);
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueItems.push(normalizedItem);
+  });
+
+  currentDebateSourceHistoryItems = uniqueItems;
+
+  if (!uniqueItems.length) {
+    currentDebateSourceHistoryIndex = -1;
+    syncDebateSourceSwipeAvailability();
+    return;
+  }
+
+  const activeKey = getDebateSourceHistoryKey(activeItem || {});
+  const activeIndex = uniqueItems.findIndex((item) => getDebateSourceHistoryKey(item) === activeKey);
+  currentDebateSourceHistoryIndex = activeIndex >= 0 ? activeIndex : 0;
+  syncDebateSourceSwipeAvailability();
+}
+
+function setCurrentDebateSourceHistoryItem(item = null) {
+  const itemType = String(item?.type || "").trim();
+  if (!item || !["source", "video", "image"].includes(itemType)) {
+    currentDebateSourceHistoryIndex = -1;
+    syncDebateSourceSwipeAvailability();
+    return;
+  }
+
+  const itemKey = getDebateSourceHistoryKey({ ...item, type: itemType });
+  const nextIndex = currentDebateSourceHistoryItems.findIndex(
+    (sourceItem) => getDebateSourceHistoryKey(sourceItem) === itemKey
+  );
+
+  currentDebateSourceHistoryIndex = nextIndex >= 0 ? nextIndex : -1;
+  syncDebateSourceSwipeAvailability();
+}
+
+async function stepDebateSourceHistory(direction = 1) {
+  if (currentDebateSourceHistoryItems.length < 2 || currentDebateSourceHistoryIndex < 0) {
+    return false;
+  }
+
+  const total = currentDebateSourceHistoryItems.length;
+  const nextIndex = (currentDebateSourceHistoryIndex + direction + total) % total;
+  const nextItem = currentDebateSourceHistoryItems[nextIndex];
+  if (!nextItem) return false;
+
+  await loadDebateMediaHistoryItem(nextItem);
+  currentDebateSourceHistoryIndex = nextIndex;
+  syncDebateMediaHistoryActiveButton(nextItem);
+  syncDebateSourceSwipeAvailability();
+  return true;
+}
+
+function bindDebateSourceSwipeHandlers() {
+  if (debateSourceSwipeHandlersBound) return;
+
+  const swipeTargets = [
+    document.getElementById("debate-image-wrap"),
+    document.getElementById("debate-video-wrap"),
+    document.getElementById("debate-source-preview-wrap"),
+    document.getElementById("debate-source-fallback")
+  ].filter(Boolean);
+
+  if (!swipeTargets.length) return;
+
+  const getTrackedTouch = (touchList) => {
+    if (!debateSourceSwipeTouchState || !touchList) return null;
+    for (const touch of Array.from(touchList)) {
+      if (touch.identifier === debateSourceSwipeTouchState.identifier) {
+        return touch;
+      }
+    }
+    return null;
+  };
+
+  const resetSwipeTouchState = () => {
+    debateSourceSwipeTouchState = null;
+  };
+
+  const handleTouchStart = (event) => {
+    const target = event.currentTarget;
+    if (!target || target.dataset.sourceSwipeEnabled !== "1") return;
+
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+
+    debateSourceSwipeTouchState = {
+      identifier: touch.identifier,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      hasHorizontalIntent: false
+    };
+  };
+
+  const handleTouchMove = (event) => {
+    const trackedTouch = getTrackedTouch(event.changedTouches) || getTrackedTouch(event.touches);
+    if (!trackedTouch || !debateSourceSwipeTouchState) return;
+
+    const deltaX = trackedTouch.clientX - debateSourceSwipeTouchState.startX;
+    const deltaY = trackedTouch.clientY - debateSourceSwipeTouchState.startY;
+
+    if (Math.abs(deltaX) < 18) return;
+    if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+
+    debateSourceSwipeTouchState.hasHorizontalIntent = true;
+
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = async (event) => {
+    const trackedTouch = getTrackedTouch(event.changedTouches);
+    if (!trackedTouch || !debateSourceSwipeTouchState) {
+      resetSwipeTouchState();
+      return;
+    }
+
+    const deltaX = trackedTouch.clientX - debateSourceSwipeTouchState.startX;
+    const deltaY = trackedTouch.clientY - debateSourceSwipeTouchState.startY;
+    const shouldNavigate = debateSourceSwipeTouchState.hasHorizontalIntent
+      && Math.abs(deltaX) >= 48
+      && Math.abs(deltaX) > Math.abs(deltaY) * 1.15;
+
+    resetSwipeTouchState();
+
+    if (!shouldNavigate) return;
+
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    event.stopPropagation();
+
+    await stepDebateSourceHistory(deltaX < 0 ? 1 : -1);
+  };
+
+  swipeTargets.forEach((target) => {
+    target.addEventListener("touchstart", handleTouchStart, { passive: true });
+    target.addEventListener("touchmove", handleTouchMove, { passive: false });
+    target.addEventListener("touchend", handleTouchEnd, { passive: false });
+    target.addEventListener("touchcancel", resetSwipeTouchState);
+  });
+
+  debateSourceSwipeHandlersBound = true;
+}
+
 function initDebateMediaHistory(debate) {
+  const existingSelector = document.getElementById("debate-media-history");
+  if (existingSelector) {
+    existingSelector.remove();
+  }
+
   const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
-  if (!extras.length) return;
+  if (!extras.length) {
+    setDebateSourceHistoryItems([], null);
+    return;
+  }
 
   const currentType = debate.video_url ? 'video' : debate.image_url ? 'image' : debate.source_url ? 'source' : null;
   const currentUrl = debate.video_url || debate.image_url || debate.source_url || '';
-  if (!currentType) return;
+  if (!currentType) {
+    setDebateSourceHistoryItems([], null);
+    return;
+  }
 
   const allItems = [
     { type: currentType, url: currentUrl, isCurrent: true },
     ...extras
   ];
+  setDebateSourceHistoryItems(allItems, { type: currentType, url: currentUrl });
 
   const iconMap = { video: 'fa-video', image: 'fa-image', source: 'fa-link' };
   const labelMap = { video: 'Vidéo', image: 'Image', source: 'Source' };
@@ -13422,7 +14049,7 @@ function initDebateMediaHistory(debate) {
       tooltipLabel = typeLabel;
     }
     return `
-    <button type="button" class="debate-media-history-btn${item.isCurrent ? ' active' : ''}" data-index="${i}" title="${escapeAttribute(tooltipLabel)}" data-tooltip="${escapeAttribute(tooltipLabel)}">
+    <button type="button" class="debate-media-history-btn${item.isCurrent ? ' active' : ''}" data-index="${i}" data-item-type="${escapeAttribute(item.type || '')}" data-item-url="${escapeAttribute(item.url || '')}" title="${escapeAttribute(tooltipLabel)}" data-tooltip="${escapeAttribute(tooltipLabel)}">
       <i class="fa-solid ${iconMap[item.type] || 'fa-file'}"></i>
       <span>${i + 1}</span>
     </button>
@@ -13476,8 +14103,8 @@ function initDebateMediaHistory(debate) {
     const item = allItems[parseInt(btn.dataset.index, 10)];
     if (!item) return;
     await loadDebateMediaHistoryItem(item);
-    selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    syncDebateMediaHistoryActiveButton(item);
+    setCurrentDebateSourceHistoryItem(item);
   });
 
   const hero = document.querySelector('.debate-hero');
@@ -13524,6 +14151,7 @@ localStorage.removeItem("debate_column_focus");
   currentDebateViewMode = getDebateViewMode();
   updateDebateViewModeUI();
   syncIdeaVoiceDictationAvailability();
+  bindDebateSourceSwipeHandlers();
 
   const formA = document.getElementById("form-a");
   const formB = document.getElementById("form-b");
@@ -13926,6 +14554,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
   `;
   sourceFallback.style.display = "flex";
   debateInstagramIsRendered = true;
+  syncDebateSourceSwipeAvailability();
 
   const instagramShell = document.getElementById("debate-source-instagram-shell");
 
@@ -14044,13 +14673,11 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   sourceFallback.classList.add("debate-source-fallback-x");
   sourceFallback.innerHTML = `
-    <div class="debate-source-x-header">
-      <span class="debate-source-x-badge">𝕏 Source</span>
-    </div>
     <div class="debate-source-x-embed" id="debate-source-x-embed"></div>
     <a class="debate-source-link" href="${escapeAttribute(sourceUrl)}" target="_blank" rel="noopener noreferrer">Voir le post sur X</a>
   `;
   sourceFallback.style.display = "flex";
+  syncDebateSourceSwipeAvailability();
 
   try {
     await loadXWidgetsScript();
@@ -14192,6 +14819,8 @@ function resetDebateSourcePreview() {
     sourceFallback.style.display = "none";
   }
 
+  syncDebateSourceSwipeAvailability();
+
 }
 
 function showDebateSourceFallback(sourceUrl, preview = null) {
@@ -14214,6 +14843,7 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
+  syncDebateSourceSwipeAvailability();
 
 }
 
@@ -14385,6 +15015,7 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   debateSourcePreviewState.currentToken += 1;
   const token = debateSourcePreviewState.currentToken;
   loadDebateSourceIframe(embedUrl, token, 0);
+  syncDebateSourceSwipeAvailability();
 }
 async function loadDebate(id) {
   saveVisitedDebate(id);
@@ -14870,6 +15501,7 @@ comments.sort((c1, c2) => {
 const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
 const visibleComments = comments.slice(0, visibleCommentsCount);
 const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length);
+const repliesByParentId = buildCommentRepliesByParent(comments);
 
 return `
 <article id="argument-${a.id}"
@@ -14979,7 +15611,7 @@ return `
 <div class="comments-block">
   <div class="comments-summary">
     <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-      ${commentsOpen ? "Masquer" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
+      ${commentsOpen ? "Masquer les commentaires" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
     </button>
 
 <div class="comments-summary-details">
@@ -15135,7 +15767,6 @@ ${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}
     : `${c.content ? `<p>${linkifyText(c.content)}</p>` : ""}`
 }
 
-
 <div class="comment-actions">
   <button
     class="comment-like-button ${liked ? "comment-like-button-active comment-vote-disabled" : ""}"
@@ -15185,6 +15816,9 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
     </button>
   ` : ""}
 </div>
+
+${renderCommentReplyJumpMarkup(a.id, c.id, repliesByParentId)}
+${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, commentLikeState)}
 </div>
           `;
         }).join("")}
@@ -15209,7 +15843,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
   }
 </div> <div class="comments-bottom-actions">
   <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-    Masquer
+    Masquer les commentaires
   </button>
 </div>
             </div>
@@ -15309,6 +15943,7 @@ comments.sort((c1, c2) => {
     const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
     const visibleComments = comments.slice(0, visibleCommentsCount);
     const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length);
+    const repliesByParentId = buildCommentRepliesByParent(comments);
 
 const debateIsOpen = document.getElementById("title-b")?.textContent.trim() === "";
 const cardSideClass = debateIsOpen
@@ -15417,7 +16052,7 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
         <div class="comments-block">
           <div class="comments-summary">
             <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-              ${commentsOpen ? "Masquer" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
+              ${commentsOpen ? "Masquer les commentaires" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
             </button>
 
 <div class="comments-summary-details">
@@ -15624,6 +16259,8 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
     Supprimer le commentaire
   </button>
 </div>
+${renderCommentReplyJumpMarkup(a.id, c.id, repliesByParentId)}
+${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, commentLikeState)}
                           </div>
                         `;
                       }).join("")}
@@ -15650,7 +16287,7 @@ onclick="voteComment('${debateId}','${c.id}','${a.id}', -1, this)"
 
               <div class="comments-bottom-actions">
                 <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-                  Masquer
+                  Masquer les commentaires
                 </button>
               </div>
             </div>
@@ -16529,6 +17166,107 @@ function getLocalCommentsForArgument(argumentId) {
   return currentCommentsByArgument?.[String(argumentId)] || [];
 }
 
+function buildCommentRepliesByParent(comments = []) {
+  return (Array.isArray(comments) ? comments : []).reduce((map, comment) => {
+    const parentId = String(comment?.reply_to_comment_id || "").trim();
+    if (!parentId) return map;
+    if (!map[parentId]) {
+      map[parentId] = [];
+    }
+    map[parentId].push(comment);
+    return map;
+  }, {});
+}
+
+function renderCommentReplyJumpMarkup(argumentId, commentId, repliesByParent = {}) {
+  const parentId = String(commentId || "").trim();
+  const replies = Array.isArray(repliesByParent[parentId]) ? repliesByParent[parentId] : [];
+  if (!replies.length) return "";
+
+  const replyCount = replies.length;
+  const replyLabel = replyCount > 1 ? `${replyCount} réponses` : "1 réponse";
+  const isOpen = !!openRepliesByComment[parentId];
+  const buttonLabel = isOpen
+    ? "Masquer les réponses"
+    : (replyCount > 1 ? "Voir les réponses" : "Voir la réponse");
+
+  return `
+    <div class="comment-replies-jump">
+      <span class="comment-replies-jump-label">${replyLabel}</span>
+      <button
+        class="button button-small comment-replies-jump-button"
+        type="button"
+        onclick="toggleCommentRepliesPanel('${String(argumentId)}', '${parentId}')"
+      >
+        ${buttonLabel}
+      </button>
+    </div>
+  `;
+}
+
+function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent = {}, parentCommentId = "", commentLikeState = {}) {
+  const parentId = String(parentCommentId || "").trim();
+  const replies = Array.isArray(repliesByParent[parentId]) ? repliesByParent[parentId] : [];
+  if (!replies.length || !openRepliesByComment[parentId]) return "";
+
+  return `
+    <div class="comment-replies-panel">
+      <div class="comment-replies-list">
+        ${replies.map((reply) => {
+          const replyId = String(reply?.id || "").trim();
+          const currentVoteValue = Number(commentLikeState[replyId] || 0);
+          const likes = Number(reply?.likes || 0);
+          const stanceBadge = reply.stance === "favorable"
+            ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
+            : reply.stance === "defavorable"
+              ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
+              : reply.stance === "amelioration"
+                ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
+                : `<div class="comment-reply-label">Réponse</div>`;
+
+          const contentHtml = reply.stance === "amelioration"
+            ? `
+              ${reply.content ? `<p>${linkifyText(reply.content)}</p>` : ""}
+              <div class="comment-improvement-preview">
+                <div class="comment-improvement-preview-title">${escapeHtml(reply.improvement_title || "Sans titre")}</div>
+                <div class="comment-improvement-preview-body">${linkifyText(reply.improvement_body || "")}</div>
+              </div>
+            `
+            : `${reply.content ? `<p>${linkifyText(reply.content)}</p>` : ""}`;
+
+          return `
+            <div class="comment-reply-card" data-reply-comment-id="${escapeAttribute(replyId)}">
+              ${stanceBadge}
+              ${contentHtml}
+              <div class="comment-reply-actions">
+                <button
+                  class="comment-like-button comment-reply-vote-button ${currentVoteValue === 1 ? "comment-like-button-active comment-vote-disabled" : ""}"
+                  type="button"
+                  onclick="voteComment('${debateId}','${replyId}','${argumentId}', 1, this)"
+                  title="${currentVoteValue === 1 ? "Déjà voté positif" : "Vote positif"}"
+                  ${currentVoteValue === 1 ? "disabled" : ""}
+                >
+                  👍
+                </button>
+                <button
+                  class="comment-dislike-button comment-reply-vote-button ${currentVoteValue === -1 ? "comment-dislike-button-active comment-vote-disabled" : ""}"
+                  type="button"
+                  onclick="voteComment('${debateId}','${replyId}','${argumentId}', -1, this)"
+                  title="${currentVoteValue === -1 ? "Déjà voté négatif" : "Vote négatif"}"
+                  ${currentVoteValue === -1 ? "disabled" : ""}
+                >
+                  👎
+                </button>
+                <span class="comment-reply-like-count">${likes} ${likes > 1 ? "likes" : "like"}</span>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function getLocalCommentById(commentId, argumentId = null) {
   const commentIdString = String(commentId);
 
@@ -16564,12 +17302,15 @@ function updateLocalCommentVoteState(commentId, likes, myVoteValue) {
     });
   }
 
-  const card = getVisibleCommentElement(commentIdString) || document.getElementById(`comment-${commentIdString}`) || document.getElementById(`list-comment-${commentIdString}`);
+  const card = getVisibleCommentElement(commentIdString)
+    || document.getElementById(`comment-${commentIdString}`)
+    || document.getElementById(`list-comment-${commentIdString}`)
+    || document.querySelector(`.comment-reply-card[data-reply-comment-id="${commentIdString}"]`);
   if (!card) return;
 
   const likeButton = card.querySelector('.comment-like-button');
   const dislikeButton = card.querySelector('.comment-dislike-button');
-  const likeCount = card.querySelector('.comment-like-count');
+  const likeCount = card.querySelector('.comment-like-count, .comment-reply-like-count');
 
   if (likeCount) {
     likeCount.textContent = `${numericLikes} ${numericLikes > 1 ? "likes" : "like"}`;
@@ -16589,6 +17330,91 @@ function updateLocalCommentVoteState(commentId, likes, myVoteValue) {
     dislikeButton.title = disliked ? "Déjà voté négatif" : "Vote négatif";
     dislikeButton.classList.toggle('comment-dislike-button-active', disliked);
     dislikeButton.classList.toggle('comment-vote-disabled', disliked);
+  }
+}
+
+function openCommentReplyTarget(argumentId, parentCommentId, replyCommentId) {
+  const debateId = getDebateId();
+  if (!debateId) return;
+
+  const argumentIdString = String(argumentId || "").trim();
+  const replyCommentIdString = String(replyCommentId || "").trim();
+  if (!argumentIdString || !replyCommentIdString) return;
+
+  openCommentsByArgument[argumentIdString] = true;
+  visibleCommentsByArgument[argumentIdString] = Math.max(
+    Number(visibleCommentsByArgument[argumentIdString] || 5),
+    9999
+  );
+
+  const scrollToReply = () => {
+    const element = getVisibleCommentElement(replyCommentIdString);
+    if (!element) return false;
+
+    const topbar = document.querySelector(".topbar");
+    const offset = (topbar ? topbar.offsetHeight : 80) + 110;
+    const y = element.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({
+      top: Math.max(0, y),
+      behavior: "smooth"
+    });
+
+    setTimeout(() => {
+      highlightNotificationTargetElement(element, `comment-${replyCommentIdString}`, 2200);
+    }, 260);
+
+    return true;
+  };
+
+  try {
+    rerenderCurrentDebateArguments(debateId);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!scrollToReply()) {
+          setTimeout(scrollToReply, 220);
+        }
+      });
+    });
+  } catch (uiError) {
+    console.error(uiError);
+    loadDebate(debateId)
+      .then(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToReply();
+          });
+        });
+      })
+      .catch((error) => {
+        alert(error.message);
+      });
+  }
+}
+
+function toggleCommentRepliesPanel(argumentId, parentCommentId) {
+  const debateId = getDebateId();
+  if (!debateId) return;
+
+  const argumentIdString = String(argumentId || "").trim();
+  const parentIdString = String(parentCommentId || "").trim();
+  if (!argumentIdString || !parentIdString) return;
+
+  openCommentsByArgument[argumentIdString] = true;
+  visibleCommentsByArgument[argumentIdString] = Math.max(
+    Number(visibleCommentsByArgument[argumentIdString] || 5),
+    9999
+  );
+
+  openRepliesByComment[parentIdString] = !openRepliesByComment[parentIdString];
+
+  try {
+    rerenderCurrentDebateArguments(debateId);
+  } catch (uiError) {
+    console.error(uiError);
+    loadDebate(debateId).catch((error) => {
+      alert(error.message);
+    });
   }
 }
 
@@ -16655,6 +17481,9 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
     try {
       updateLocalCommentVoteState(commentIdString, Number(result?.likes || 0), nextValue);
+      if (document.querySelector(`.comment-reply-card[data-reply-comment-id="${commentIdString}"]`)) {
+        rerenderCurrentDebateArguments(debateId);
+      }
     } catch (uiError) {
       console.error(uiError);
       await loadDebate(debateId);
@@ -18820,6 +19649,8 @@ window.loadMoreOtherDebates = loadMoreOtherDebates;
 window.loadMoreComments = loadMoreComments;
 window.replyToComment = replyToComment;
 window.cancelReply = cancelReply;
+window.openCommentReplyTarget = openCommentReplyTarget;
+window.toggleCommentRepliesPanel = toggleCommentRepliesPanel;
 window.changeArgumentsSort = changeArgumentsSort;
 window.setTypeFilter = setTypeFilter;
 window.removeIndexActiveFilterTag = removeIndexActiveFilterTag;

@@ -2228,7 +2228,7 @@ app.get("/api/admin/reports", requireAdmin, async (req, res) => {
       return new Date(b.last_report_at) - new Date(a.last_report_at);
     });
 
-    res.json(rowsWithSourcePreview);
+    res.json(rows);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture signalements.");

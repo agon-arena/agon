@@ -20,7 +20,7 @@
 <meta name="twitter:image" content="__META_IMAGE__">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-<link rel="stylesheet" href="/style.css?v=20260428-5" />
+<link rel="stylesheet" href="/style.css?v=20260428-26" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script>
 (function () {
@@ -716,11 +716,22 @@ body.page-debate .argument-form .form-close-btn {
 }
 
 @media (max-width: 768px) {
+  body.page-debate.argument-form-open::after {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(15, 23, 42, 0.42);
+  }
+
   body.page-debate .argument-form,
   body.page-debate .argument-form-list {
     width: calc(100vw - 16px);
-    max-height: calc(100vh - 16px);
+    top: max(12px, calc(env(safe-area-inset-top, 0px) + 12px));
+    transform: translateX(-50%);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
     border-radius: 16px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   body.page-debate .argument-form-list-top {
@@ -915,6 +926,117 @@ body.page-debate .debate-source-preview,
 body.page-debate #debate-source-preview {
   background: transparent;
 }
+body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
+body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
+  touch-action: pan-y;
+}
+body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
+body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
+  position: relative;
+}
+body.page-debate .debate-image-wrap.debate-source-swipe-enabled::after,
+body.page-debate #debate-image-wrap.debate-source-swipe-enabled::after,
+body.page-debate .debate-video-wrap.debate-source-swipe-enabled::after,
+body.page-debate #debate-video-wrap.debate-source-swipe-enabled::after,
+body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled::after,
+body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled::after,
+body.page-debate .debate-source-fallback.debate-source-swipe-enabled::after,
+body.page-debate #debate-source-fallback.debate-source-swipe-enabled::after {
+  content: "⇆ Balayez pour changer";
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.56);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+body.page-debate .debate-media-swipe-hotspot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  min-width: 44px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  opacity: 0.72;
+}
+body.page-debate .debate-media-swipe-hotspot span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.48);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+body.page-debate .debate-media-swipe-hotspot-prev {
+  left: 0;
+}
+body.page-debate .debate-media-swipe-hotspot-next {
+  right: 0;
+}
+body.page-debate .debate-source-fallback .debate-media-swipe-hotspot,
+body.page-debate #debate-source-fallback .debate-media-swipe-hotspot {
+  bottom: 56px;
+}
+body.page-debate .debate-source-fallback.debate-source-swipe-enabled::after,
+body.page-debate #debate-source-fallback.debate-source-swipe-enabled::after {
+  bottom: 66px;
+}
+body.page-debate .debate-media-swipe-hotspot:hover,
+body.page-debate .debate-media-swipe-hotspot:focus-visible {
+  background: linear-gradient(to right, rgba(15, 23, 42, 0.12), transparent);
+  color: #ffffff;
+  opacity: 1;
+}
+body.page-debate .debate-media-swipe-hotspot-next:hover,
+body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
+  background: linear-gradient(to left, rgba(15, 23, 42, 0.12), transparent);
+}
+body.page-debate .debate-source-swipe-enabled:not([data-source-swipe-enabled="1"]) .debate-media-swipe-hotspot,
+body.page-debate .debate-image-wrap:not(.debate-source-swipe-enabled) .debate-media-swipe-hotspot,
+body.page-debate .debate-video-wrap:not(.debate-source-swipe-enabled) .debate-media-swipe-hotspot,
+body.page-debate .debate-source-preview-wrap:not(.debate-source-swipe-enabled) .debate-media-swipe-hotspot,
+body.page-debate .debate-source-fallback:not(.debate-source-swipe-enabled) .debate-media-swipe-hotspot {
+  display: none;
+}
 body.page-debate .debate-source-fallback {
   background: #243038;
   border-color: transparent;
@@ -930,10 +1052,81 @@ body.page-debate .debate-source-link {
   display: block;
   text-align: center;
   margin: 0 auto;
+  position: relative;
+  z-index: 7;
 }
 body.page-debate .debate-source-link:hover {
   background: #2e3d47;
   color: #ffffff !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .debate-source-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 0;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(36, 48, 56, 0.72);
+    color: rgba(255, 255, 255, 0.88) !important;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    box-shadow: none;
+    opacity: 0.88;
+  }
+
+  body.page-debate .debate-source-link:hover,
+  body.page-debate .debate-source-link:focus-visible {
+    background: rgba(36, 48, 56, 0.84);
+    color: #ffffff !important;
+    opacity: 1;
+  }
+
+  body.page-debate .debate-image-wrap.debate-source-swipe-enabled::after,
+  body.page-debate #debate-image-wrap.debate-source-swipe-enabled::after,
+  body.page-debate .debate-video-wrap.debate-source-swipe-enabled::after,
+  body.page-debate #debate-video-wrap.debate-source-swipe-enabled::after,
+  body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled::after,
+  body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled::after,
+  body.page-debate .debate-source-fallback.debate-source-swipe-enabled::after,
+  body.page-debate #debate-source-fallback.debate-source-swipe-enabled::after {
+    bottom: 8px;
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+
+  body.page-debate .debate-source-fallback .debate-media-swipe-hotspot,
+  body.page-debate #debate-source-fallback .debate-media-swipe-hotspot {
+    bottom: 48px;
+  }
+
+  body.page-debate .debate-source-fallback.debate-source-swipe-enabled::after,
+  body.page-debate #debate-source-fallback.debate-source-swipe-enabled::after {
+    bottom: 56px;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot {
+    width: 20%;
+    min-width: 42px;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot span {
+    width: 26px;
+    height: 26px;
+    font-size: 22px;
+  }
+
+  body.page-debate .comment-form button[type="submit"] {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1;
+    width: auto;
+    align-self: flex-start;
+  }
 }
 /* Textes de la carte source — fond blanc, textes sombres natifs */
 body.page-debate .debate-source-card-title {
@@ -2001,7 +2194,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260428-13"></script>
+<script src="/script.js?v=20260428-29"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
