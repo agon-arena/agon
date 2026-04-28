@@ -2432,6 +2432,70 @@ function findIndexDebateCardById(debateId = "") {
   }) || null;
 }
 
+function suspendIndexEmbedsForDebateModal() {
+  if (window.__agonSuspendedIndexEmbeds) return;
+
+  const state = {
+    localVideos: [],
+    iframes: []
+  };
+
+  document.querySelectorAll('[data-index-local-video-player]').forEach((video) => {
+    if (!(video instanceof HTMLVideoElement)) return;
+    const wasPlaying = !video.paused && !video.ended;
+    try {
+      video.pause();
+    } catch (error) {}
+    state.localVideos.push({
+      video,
+      wasPlaying
+    });
+  });
+
+  document.querySelectorAll('[data-index-youtube-shell] iframe, [data-index-x-shell] iframe, [data-index-instagram-shell] iframe').forEach((iframe) => {
+    if (!(iframe instanceof HTMLIFrameElement)) return;
+    const currentSrc = String(iframe.getAttribute('src') || '').trim();
+    if (!currentSrc || currentSrc === 'about:blank') return;
+
+    if (iframe.closest('[data-index-youtube-shell]')) {
+      postMessageToIndexYouTubeIframe(iframe, 'pauseVideo');
+      postMessageToIndexYouTubeIframe(iframe, 'mute');
+    }
+
+    state.iframes.push({
+      iframe,
+      src: currentSrc
+    });
+
+    try {
+      iframe.setAttribute('src', 'about:blank');
+    } catch (error) {}
+  });
+
+  window.__agonSuspendedIndexEmbeds = state;
+}
+
+function resumeIndexEmbedsAfterDebateModal() {
+  const state = window.__agonSuspendedIndexEmbeds;
+  window.__agonSuspendedIndexEmbeds = null;
+  if (!state) return;
+
+  (state.iframes || []).forEach(({ iframe, src }) => {
+    if (!(iframe instanceof HTMLIFrameElement) || !iframe.isConnected) return;
+    if (!String(src || '').trim()) return;
+    try {
+      iframe.setAttribute('src', src);
+    } catch (error) {}
+  });
+
+  (state.localVideos || []).forEach(({ video }) => {
+    if (!(video instanceof HTMLVideoElement) || !video.isConnected) return;
+    try {
+      video.pause();
+    } catch (error) {}
+  });
+}
+
 function openDebateIframeModal(url, options = {}) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
@@ -2461,6 +2525,7 @@ function openDebateIframeModal(url, options = {}) {
   window.__agonIframeCurrentPathname = iframeUrlPathname;
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
+  suspendIndexEmbedsForDebateModal();
   frame.src = url;
   modal.classList.add("open");
 
@@ -2705,6 +2770,7 @@ function closeDebateIframeModal() {
   window.__agonDebateModalOpenedFromNotifications = false;
   window.__agonIframeVoicesBadgeMetrics = null;
   resetDebateIframeModalCloseButtonBadgeAlignment();
+  resumeIndexEmbedsAfterDebateModal();
 
   const restoredScrollY = _debateModalSavedScrollY !== null
     ? Math.max(0, Math.round(_debateModalSavedScrollY))
