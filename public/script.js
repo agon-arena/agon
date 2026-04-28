@@ -8822,7 +8822,7 @@ async function initAdminReports() {
                 : "#");
 
       return `
-<article class="debate-card ${mediaOutsideLink ? '' : 'debate-card-no-media'}">
+<article class="debate-card debate-card-no-media">
           <div class="debate-card-category">${typeLabel}</div>
           <h2>${escapeHtml(targetTitle)}</h2>
           <p><strong>Motif :</strong> ${reasonLabel}</p>
@@ -8834,15 +8834,6 @@ async function initAdminReports() {
               : ""
           }
           <p class="debate-date">${escapeHtml(formatDebateDate(report.last_report_at))}</p>
-
-        </a>
-
-        ${mediaOutsideLink ? mediaHtml : ""}
-
-      </a>
-
-      ${mediaOutsideLink ? mediaHtml : ""}
-
       <div class="debate-card-actions">${
               viewLink !== "#"
                 ? `<a class="button button-small" href="${viewLink}">Voir</a>`
@@ -17867,6 +17858,23 @@ if (error.message === "already_reported") {
   alert(error.message);
 }
 }
+async function deleteAllReports() {
+  if (!confirm("Supprimer tous les signalements ?")) return;
+  try {
+    await fetchJSON(API + "/admin/reports", {
+      method: "DELETE",
+      headers: { "x-admin-token": getAdminToken() }
+    });
+    const container = document.getElementById("reports-list");
+    if (container) container.innerHTML = `<div class="empty-state">Aucun signalement pour le moment.</div>`;
+    const badge = document.getElementById("reports-count");
+    if (badge) badge.style.display = "none";
+    localStorage.setItem("admin_reports_count", "0");
+  } catch(err) {
+    alert("Erreur : " + (err.message || err));
+  }
+}
+
 async function deleteDebate(debateId, redirectAfter) {
   const debate = String(currentDebateCache?.id || "") === String(debateId)
     ? currentDebateCache

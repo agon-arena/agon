@@ -68,10 +68,13 @@
 
 <main class="container home-page">
   <section class="debates-section">
-   <div class="section-header section-header-home">
+   <div class="section-header section-header-home" style="display:flex; align-items:center; justify-content:space-between;">
   <div>
-    <h3>Signalements</h3>
+    <h3 style="color:#ffffff;">Signalements</h3>
   </div>
+  <button class="delete-button" type="button" onclick="deleteAllReports()">
+    <i class="fa-solid fa-trash"></i> Tout supprimer
+  </button>
 </div>
 
 <section id="admin-visits-stats" class="debates-list">

@@ -2296,6 +2296,20 @@ app.delete("/api/admin/reports/:id", requireAdmin, async (req, res) => {
   }
 });
 
+app.delete("/api/admin/reports", requireAdmin, async (req, res) => {
+  try {
+    const { error } = await supabase.from("reports").delete().neq("id", 0);
+    if (error) {
+      console.error(error);
+      return sendServerError(res, "Erreur suppression signalements.");
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression signalements.");
+  }
+});
+
 /* =========================
    NOTIFICATIONS
 ========================= */
