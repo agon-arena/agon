@@ -225,6 +225,13 @@ body.page-debate .voice-dictation-row {
   flex-wrap: wrap;
 }
 
+body.page-debate .voice-dictation-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 body.page-debate .voice-dictation-button {
   display: inline-flex;
   align-items: center;
@@ -254,6 +261,33 @@ body.page-debate .voice-dictation-button.voice-dictation-button-active {
   box-shadow: 0 10px 24px rgba(29, 78, 216, 0.18);
 }
 
+body.page-debate .voice-dictation-button.voice-dictation-button-stop {
+  border-color: rgba(220, 38, 38, 0.14);
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+body.page-debate .voice-dictation-button.voice-dictation-button-stop:hover,
+body.page-debate .voice-dictation-button.voice-dictation-button-stop:focus-visible {
+  background: #fee2e2;
+  color: #b91c1c;
+  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.12);
+}
+
+body.page-debate .voice-dictation-button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+body.page-debate .voice-dictation-button[disabled]:hover,
+body.page-debate .voice-dictation-button[disabled]:focus-visible {
+  background: inherit;
+  color: inherit;
+  box-shadow: none;
+}
+
 body.page-debate .voice-dictation-button.voice-dictation-button-active i {
   animation: voiceDictationPulse 1s ease-in-out infinite;
 }
@@ -273,6 +307,10 @@ body.page-debate .voice-dictation-hint {
   body.page-debate .voice-dictation-row {
     gap: 8px;
     margin-top: 7px;
+  }
+
+  body.page-debate .voice-dictation-actions {
+    gap: 6px;
   }
 
   body.page-debate .voice-dictation-button {
@@ -1626,15 +1664,29 @@ body.voices-panel-open {
       oninput="handleArgumentInput('list'); updateCounter('list-body','count-body-list',600)"
     ></textarea>
     <div class="voice-dictation-row">
-      <button
-        type="button"
-        class="voice-dictation-button"
-        data-speech-target="list-body"
-        onclick="toggleIdeaVoiceDictation(event, 'list-body', this)"
-      >
-        <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-        <span>Dicter</span>
-      </button>
+      <div class="voice-dictation-actions">
+        <button
+          type="button"
+          class="voice-dictation-button voice-dictation-button-start"
+          data-speech-target="list-body"
+          data-dictation-role="start"
+          onclick="startIdeaVoiceDictationFromButton(event, 'list-body', this)"
+        >
+          <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+          <span>Démarrer la dictée</span>
+        </button>
+        <button
+          type="button"
+          class="voice-dictation-button voice-dictation-button-stop"
+          data-speech-target="list-body"
+          data-dictation-role="stop"
+          onclick="stopIdeaVoiceDictationFromButton(event, 'list-body', this)"
+          disabled
+        >
+          <i class="fa-solid fa-stop" aria-hidden="true"></i>
+          <span>Arrêter</span>
+        </button>
+      </div>
       <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
     </div>
     <small id="count-body-list">0 / 600</small>
@@ -1712,15 +1764,29 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         oninput="handleArgumentInput('a'); updateCounter('a-body','count-body-a',600)"
       ></textarea>
       <div class="voice-dictation-row">
-        <button
-          type="button"
-          class="voice-dictation-button"
-          data-speech-target="a-body"
-          onclick="toggleIdeaVoiceDictation(event, 'a-body', this)"
-        >
-          <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-          <span>Dicter</span>
-        </button>
+        <div class="voice-dictation-actions">
+          <button
+            type="button"
+            class="voice-dictation-button voice-dictation-button-start"
+            data-speech-target="a-body"
+            data-dictation-role="start"
+            onclick="startIdeaVoiceDictationFromButton(event, 'a-body', this)"
+          >
+            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+            <span>Démarrer la dictée</span>
+          </button>
+          <button
+            type="button"
+            class="voice-dictation-button voice-dictation-button-stop"
+            data-speech-target="a-body"
+            data-dictation-role="stop"
+            onclick="stopIdeaVoiceDictationFromButton(event, 'a-body', this)"
+            disabled
+          >
+            <i class="fa-solid fa-stop" aria-hidden="true"></i>
+            <span>Arrêter</span>
+          </button>
+        </div>
         <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
       </div>
       <small id="count-body-a">0 / 600</small>
@@ -1755,15 +1821,29 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
         oninput="handleArgumentInput('b'); updateCounter('b-body','count-body-b',600)"
       ></textarea>
       <div class="voice-dictation-row">
-        <button
-          type="button"
-          class="voice-dictation-button"
-          data-speech-target="b-body"
-          onclick="toggleIdeaVoiceDictation(event, 'b-body', this)"
-        >
-          <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-          <span>Dicter</span>
-        </button>
+        <div class="voice-dictation-actions">
+          <button
+            type="button"
+            class="voice-dictation-button voice-dictation-button-start"
+            data-speech-target="b-body"
+            data-dictation-role="start"
+            onclick="startIdeaVoiceDictationFromButton(event, 'b-body', this)"
+          >
+            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+            <span>Démarrer la dictée</span>
+          </button>
+          <button
+            type="button"
+            class="voice-dictation-button voice-dictation-button-stop"
+            data-speech-target="b-body"
+            data-dictation-role="stop"
+            onclick="stopIdeaVoiceDictationFromButton(event, 'b-body', this)"
+            disabled
+          >
+            <i class="fa-solid fa-stop" aria-hidden="true"></i>
+            <span>Arrêter</span>
+          </button>
+        </div>
         <span class="voice-dictation-hint">Parlez : le texte s’écrit en direct.</span>
       </div>
       <small id="count-body-b">0 / 600</small>
@@ -1921,7 +2001,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260428-11"></script>
+<script src="/script.js?v=20260428-12"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

@@ -18144,6 +18144,10 @@ function syncIdeaVoiceDictationAvailability() {
     if (!(row instanceof HTMLElement)) return;
     row.style.display = isSupported ? '' : 'none';
   });
+
+  if (isSupported) {
+    updateIdeaVoiceDictationControls("", false);
+  }
 }
 
 function mergeIdeaVoiceText(baseText = "", transcript = "") {
@@ -18159,10 +18163,43 @@ function updateIdeaVoiceDictationButtonState(button, isActive) {
   if (!(button instanceof HTMLElement)) return;
   button.classList.toggle("voice-dictation-button-active", !!isActive);
   button.setAttribute("aria-pressed", isActive ? "true" : "false");
-  const label = button.querySelector("span");
-  if (label) {
-    label.textContent = isActive ? "Écoute…" : "Dicter";
-  }
+}
+
+function updateIdeaVoiceDictationControls(targetId = "", isActive = false) {
+  const normalizedTargetId = String(targetId || "").trim();
+
+  document.querySelectorAll('.voice-dictation-row').forEach((row) => {
+    if (!(row instanceof HTMLElement)) return;
+
+    const buttons = Array.from(row.querySelectorAll('.voice-dictation-button'));
+    if (!buttons.length) return;
+
+    const rowTargetId = String(
+      row.querySelector('[data-speech-target]')?.getAttribute('data-speech-target') || ""
+    ).trim();
+    const isTargetRow = !!normalizedTargetId && rowTargetId === normalizedTargetId;
+
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      const role = String(button.getAttribute('data-dictation-role') || "").trim();
+      const shouldAppearActive = isTargetRow && isActive && role === "start";
+
+      updateIdeaVoiceDictationButtonState(button, shouldAppearActive);
+
+      if (role === "start") {
+        button.disabled = isTargetRow && isActive;
+      } else if (role === "stop") {
+        button.disabled = !(isTargetRow && isActive);
+      }
+    });
+
+    const hint = row.querySelector('.voice-dictation-hint');
+    if (hint) {
+      hint.textContent = isTargetRow && isActive
+        ? "Dictée en cours : parlez puis appuyez sur Arrêter."
+        : "Parlez : le texte s’écrit en direct.";
+    }
+  });
 }
 
 function applyIdeaVoiceDictationText(target, nextText) {
@@ -18173,10 +18210,10 @@ function applyIdeaVoiceDictationText(target, nextText) {
 
 function stopIdeaVoiceDictation({ keepText = true } = {}) {
   const recognition = ideaVoiceDictationState.recognition;
-  const button = ideaVoiceDictationState.button;
   const target = ideaVoiceDictationState.targetId
     ? document.getElementById(ideaVoiceDictationState.targetId)
     : null;
+  const activeTargetId = ideaVoiceDictationState.targetId;
 
   ideaVoiceDictationState.shouldStayActive = false;
 
@@ -18196,7 +18233,7 @@ function stopIdeaVoiceDictation({ keepText = true } = {}) {
     } catch (error) {}
   }
 
-  updateIdeaVoiceDictationButtonState(button, false);
+  updateIdeaVoiceDictationControls(activeTargetId, false);
 
   ideaVoiceDictationState.recognition = null;
   ideaVoiceDictationState.targetId = "";
@@ -18236,7 +18273,7 @@ function startIdeaVoiceDictation(targetId, button) {
   ideaVoiceDictationState.finalTranscript = "";
   ideaVoiceDictationState.shouldStayActive = true;
 
-  updateIdeaVoiceDictationButtonState(ideaVoiceDictationState.button, true);
+  updateIdeaVoiceDictationControls(ideaVoiceDictationState.targetId, true);
 
   recognition.onresult = (event) => {
     let finalTranscript = ideaVoiceDictationState.finalTranscript;
@@ -18324,6 +18361,38 @@ function toggleIdeaVoiceDictation(event, targetId, button = null) {
   }
 
   startIdeaVoiceDictation(normalizedTargetId, button);
+}
+
+function startIdeaVoiceDictationFromButton(event, targetId, button = null) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const normalizedTargetId = String(targetId || "").trim();
+  if (!normalizedTargetId) return;
+
+  if (
+    ideaVoiceDictationState.recognition &&
+    ideaVoiceDictationState.targetId === normalizedTargetId
+  ) {
+    return;
+  }
+
+  startIdeaVoiceDictation(normalizedTargetId, button);
+}
+
+function stopIdeaVoiceDictationFromButton(event, targetId) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const normalizedTargetId = String(targetId || "").trim();
+  if (
+    !ideaVoiceDictationState.recognition ||
+    ideaVoiceDictationState.targetId !== normalizedTargetId
+  ) {
+    return;
+  }
+
+  stopIdeaVoiceDictation();
 }
 
 function setListArgumentSide(side = "") {
@@ -18700,6 +18769,8 @@ window.closeListArgumentForm = closeListArgumentForm;
 window.openListArgumentForm = openListArgumentForm;
 window.openArgumentFormAndScroll = openArgumentFormAndScroll;
 window.toggleIdeaVoiceDictation = toggleIdeaVoiceDictation;
+window.startIdeaVoiceDictationFromButton = startIdeaVoiceDictationFromButton;
+window.stopIdeaVoiceDictationFromButton = stopIdeaVoiceDictationFromButton;
 window.openArgumentComposer = openArgumentComposer;
 window.vote = vote;
 window.unvote = unvote;
