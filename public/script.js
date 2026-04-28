@@ -8734,6 +8734,8 @@ async function initAdminReports() {
 
   if (!container) return;
 
+  await verifyAdminSession();
+
   if (!isAdmin()) {
     container.innerHTML = `<div class="empty-state">Mode admin requis.</div>`;
     return;
