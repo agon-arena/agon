@@ -18126,6 +18126,7 @@ const ideaVoiceDictationState = {
   button: null,
   baseText: "",
   finalTranscript: "",
+  renderedText: "",
   shouldStayActive: false
 };
 
@@ -18220,7 +18221,7 @@ function stopIdeaVoiceDictation({ keepText = true } = {}) {
   if (keepText && target) {
     applyIdeaVoiceDictationText(
       target,
-      mergeIdeaVoiceText(ideaVoiceDictationState.baseText, ideaVoiceDictationState.finalTranscript)
+      ideaVoiceDictationState.renderedText || mergeIdeaVoiceText(ideaVoiceDictationState.baseText, ideaVoiceDictationState.finalTranscript)
     );
   }
 
@@ -18240,6 +18241,7 @@ function stopIdeaVoiceDictation({ keepText = true } = {}) {
   ideaVoiceDictationState.button = null;
   ideaVoiceDictationState.baseText = "";
   ideaVoiceDictationState.finalTranscript = "";
+  ideaVoiceDictationState.renderedText = "";
 }
 
 function startIdeaVoiceDictation(targetId, button) {
@@ -18271,6 +18273,7 @@ function startIdeaVoiceDictation(targetId, button) {
   ideaVoiceDictationState.button = button instanceof HTMLElement ? button : null;
   ideaVoiceDictationState.baseText = String(target.value || "");
   ideaVoiceDictationState.finalTranscript = "";
+  ideaVoiceDictationState.renderedText = String(target.value || "");
   ideaVoiceDictationState.shouldStayActive = true;
 
   updateIdeaVoiceDictationControls(ideaVoiceDictationState.targetId, true);
@@ -18293,13 +18296,12 @@ function startIdeaVoiceDictation(targetId, button) {
 
     ideaVoiceDictationState.finalTranscript = finalTranscript.trim();
 
-    applyIdeaVoiceDictationText(
-      target,
-      mergeIdeaVoiceText(
-        ideaVoiceDictationState.baseText,
-        `${ideaVoiceDictationState.finalTranscript}${interimTranscript ? ` ${interimTranscript.trim()}` : ""}`.trim()
-      )
+    const nextRenderedText = mergeIdeaVoiceText(
+      ideaVoiceDictationState.baseText,
+      `${ideaVoiceDictationState.finalTranscript}${interimTranscript ? ` ${interimTranscript.trim()}` : ""}`.trim()
     );
+    ideaVoiceDictationState.renderedText = nextRenderedText;
+    applyIdeaVoiceDictationText(target, nextRenderedText);
   };
 
   recognition.onerror = (event) => {
