@@ -3538,13 +3538,19 @@ function buildIndexCardFooterActionsHtml(debate) {
 
 function buildIndexCardShareActionsHtml(debate) {
   const d = debate || {};
+  const encQ = encodeURIComponent(String(d.question || "")).replace(/'/g, "%27");
+  const encA = encodeURIComponent(String(d.option_a || "")).replace(/'/g, "%27");
+  const encB = encodeURIComponent(String(d.option_b || "")).replace(/'/g, "%27");
+  const encType = encodeURIComponent(String(d.type || "debate")).replace(/'/g, "%27");
+  const pA = d.percent_a ?? 50;
+  const pB = d.percent_b ?? 50;
 
   return `
 <div class="debate-card-share-actions">
   <button
     class="share-icon-button copy"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Copier le lien"
   >
     <i class="fa-solid fa-link"></i>
@@ -3553,7 +3559,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button qrcode"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Afficher le QR code"
   >
     <i class="fa-solid fa-qrcode"></i>
@@ -3562,7 +3568,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button x"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur X"
   >
     <i class="fa-brands fa-x-twitter"></i>
@@ -3571,7 +3577,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button instagram"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnInstagram('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnInstagram('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Instagram"
   >
     <i class="fa-brands fa-instagram"></i>
@@ -3580,7 +3586,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button whatsapp"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur WhatsApp"
   >
     <i class="fa-brands fa-whatsapp"></i>
@@ -3589,7 +3595,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button email"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager par email"
   >
     <i class="fa-solid fa-envelope"></i>
@@ -3598,7 +3604,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button linkedin"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur LinkedIn"
   >
     <i class="fa-brands fa-linkedin-in"></i>
@@ -3607,7 +3613,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button mastodon"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Mastodon"
   >
     <i class="fa-brands fa-mastodon"></i>
@@ -3616,7 +3622,7 @@ function buildIndexCardShareActionsHtml(debate) {
   <button
     class="share-icon-button reddit"
     type="button"
-    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${d.id}', '${encodeURIComponent(String(d.question || ""))}', '${encodeURIComponent(String(d.option_a || ""))}', '${encodeURIComponent(String(d.option_b || ""))}', '${d.percent_a ?? 50}', '${d.percent_b ?? 50}', '${encodeURIComponent(String(d.type || "debate"))}')"
+    onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Reddit"
   >
     <i class="fa-brands fa-reddit-alien"></i>
@@ -3828,9 +3834,6 @@ function initIndexCardShareMenus(root = document) {
     if (!btns.length) return;
 
     block.setAttribute('data-share-transformed', '1');
-    btns.forEach((button) => {
-      button.style.display = 'none';
-    });
 
     const inlineRow = document.createElement('div');
     inlineRow.className = 'index-share-inline-row';
@@ -3840,22 +3843,9 @@ function initIndexCardShareMenus(root = document) {
       const hasSupportedClass = supported.some((name) => originalButton.classList.contains(name));
       if (!hasSupportedClass) return;
 
-      const item = originalButton.cloneNode(true);
-      item.style.display = 'inline-flex';
-      item.removeAttribute('onclick');
-      item.setAttribute('title', labels[cls] || originalButton.title || cls);
-
-      item.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        originalButton.dispatchEvent(new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          view: window
-        }));
-      });
-
-      inlineRow.appendChild(item);
+      originalButton.style.display = 'inline-flex';
+      originalButton.setAttribute('title', labels[cls] || originalButton.title || cls);
+      inlineRow.appendChild(originalButton);
     });
 
     block.appendChild(inlineRow);
@@ -6731,6 +6721,19 @@ function shareIdeaOnFacebook(debateId, encodedArgumentJson) {
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
+async function shareIdeaOnInstagram(debateId, encodedArgumentJson) {
+  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
+  const { text, url } = getIdeaShareData(debateId, argument);
+  const message = buildVisibleShareMessage(text, url);
+  try {
+    const copied = await writeTextToClipboard(message);
+    if (!copied) throw new Error("clipboard_copy_failed");
+    showInstagramShareCopySuccessMessage();
+  } catch (error) {
+    showShareCopyManualMessage("Copie manuelle du texte", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous pour Instagram.", "📸");
+  }
+}
+
 function shareIdeaOnWhatsApp(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
   const { text, url } = getIdeaShareData(debateId, argument);
@@ -6961,7 +6964,7 @@ function renderIdeaShareButtons(debateId, argument) {
 style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px; min-width:152px; padding:8px; border:1px solid #e5e7eb; border-radius:12px; background:#ffffff; box-shadow:0 10px 30px rgba(0,0,0,0.12);"
       >
         <button
-          class="share-icon-button"
+          class="share-icon-button copy"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ copyIdeaLink('${debateId}', '${inlineEncodedArgument}'); })"
           title="Copier le lien de l'idée"
@@ -6973,7 +6976,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button qrcode"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ showIdeaQrCode('${debateId}', '${inlineEncodedArgument}'); })"
           title="Afficher le QR code de l'idée"
@@ -6985,7 +6988,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button whatsapp"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnWhatsApp('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur WhatsApp"
@@ -6997,7 +7000,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button x"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnX('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur X"
@@ -7009,7 +7012,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button email"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaByEmail('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée par email"
@@ -7021,19 +7024,19 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button instagram"
           type="button"
-          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnFacebook('${debateId}', '${inlineEncodedArgument}'); })"
-          title="Partager l'idée sur Facebook"
-          aria-label="Partager l'idée sur Facebook"
+          onclick="handleIdeaShareAction(event, function(){ shareIdeaOnInstagram('${debateId}', '${inlineEncodedArgument}'); })"
+          title="Partager l'idée sur Instagram"
+          aria-label="Partager l'idée sur Instagram"
           style="width:100%; justify-content:flex-start; gap:8px; padding:8px 10px; border-radius:10px;"
         >
-          <i class="fa-brands fa-facebook"></i>
-          <span>Facebook</span>
+          <i class="fa-brands fa-instagram"></i>
+          <span>Instagram</span>
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button linkedin"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnLinkedIn('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur LinkedIn"
@@ -7045,7 +7048,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button mastodon"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnMastodon('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur Mastodon"
@@ -7057,7 +7060,7 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
         </button>
 
         <button
-          class="share-icon-button"
+          class="share-icon-button reddit"
           type="button"
           onclick="handleIdeaShareAction(event, function(){ shareIdeaOnReddit('${debateId}', '${inlineEncodedArgument}'); })"
           title="Partager l'idée sur Reddit"
@@ -7450,8 +7453,8 @@ function renderGlobalShareBar() {
           <i class="fa-brands fa-x-twitter"></i>
         </button>
 
-        <button class="share-icon-button facebook" type="button" onclick="shareOnFacebook()" title="Partager sur Facebook">
-          <i class="fa-brands fa-facebook"></i>
+        <button class="share-icon-button instagram" type="button" onclick="shareOnInstagram()" title="Partager sur Instagram">
+          <i class="fa-brands fa-instagram"></i>
         </button>
 
         <button class="share-icon-button whatsapp" type="button" onclick="shareOnWhatsApp()" title="Partager sur WhatsApp">
@@ -18301,7 +18304,8 @@ function positionHomeTopbarMenu() {
 
   if (isMobile && topbar) {
     const topbarRect = topbar.getBoundingClientRect();
-    top = Math.round(topbarRect.bottom + 8);
+    const offset = isDebatePage ? 2 : 8;
+    top = Math.round(topbarRect.bottom + offset);
   } else if (isDebatePage) {
     top = Math.round(rect.bottom + 10);
   } else {

@@ -317,6 +317,33 @@ body {
   font-weight: 700;
 }
 
+.admin-controls-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.page-create .topbar-inner,
+.page-create-mobile .topbar-inner,
+.page-notifications .topbar-inner,
+.page-notifications-mobile .topbar-inner {
+  flex-wrap: wrap;
+}
+
+.page-create .admin-controls-row,
+.page-create-mobile .admin-controls-row,
+.page-notifications .admin-controls-row,
+.page-notifications-mobile .admin-controls-row {
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .back-link {
   text-decoration: none;
   color: #2c3e50;
@@ -440,7 +467,7 @@ main.create-page {
   border: 1px solid #e5e7eb;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
-  overflow: hidden;
+  clip-path: inset(0 round 14px);
 }
 
 .debate-card:hover {
@@ -886,6 +913,8 @@ margin: 6px 0 8px 0;  font-size: 20px;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .debate-card-entry-button {
@@ -6764,16 +6793,6 @@ body.page-debate .topbar::after {
   100% { transform: translateX(0) rotate(0deg); }
 }
 @media (max-width: 768px) {
-  .page-debate .debate-nav-notifications-stack {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 0px !important;
-    width: auto !important;
-  }
-
   .page-debate .mobile-topbar-actions {
     display: flex !important;
     align-items: center !important;
@@ -6808,8 +6827,8 @@ body.page-debate .topbar::after {
   }
 
   .page-debate .admin-controls-row {
-    order: 3 !important;
     width: 100% !important;
+    justify-content: flex-end !important;
   }
 
   .page-debate .notifications-button-large {
@@ -7466,7 +7485,7 @@ padding:4px 14px 12px 14px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
   box-sizing: border-box;
-  contain: layout style;
+  contain: style;
 }
 
 .page-home .debate-card-instagram-shell iframe,
@@ -7886,7 +7905,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-x span {
-  color: #111827;
+  color: #374151;
 }
 
 .home-bottom-share-x i {
@@ -7894,7 +7913,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-instagram span {
-  color: #e1306c;
+  color: #374151;
 }
 
 .home-bottom-share-instagram i {
@@ -7902,7 +7921,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-whatsapp span {
-  color: #25d366;
+  color: #374151;
 }
 
 .home-bottom-share-whatsapp i {
@@ -7910,15 +7929,15 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-email span {
-  color: #1f2937;
+  color: #374151;
 }
 
 .home-bottom-share-email i {
-  color: #1f2937;
+  color: #374151;
 }
 
 .home-bottom-share-linkedin span {
-  color: #0a66c2;
+  color: #374151;
 }
 
 .home-bottom-share-linkedin i {
@@ -7926,7 +7945,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-mastodon span {
-  color: #6364ff;
+  color: #374151;
 }
 
 .home-bottom-share-mastodon i {
@@ -7934,7 +7953,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-share-reddit span {
-  color: #ff4500;
+  color: #374151;
 }
 
 .home-bottom-share-reddit i {
@@ -8584,14 +8603,14 @@ body.home-topbar-menu-is-open .topbar-social {
 }
 @media (max-width: 768px) {
   .page-debate .home-topbar-menu {
-    top: 90px;
-    left: 00px;
+    top: 118px;
+    left: 0px;
     right: auto;
   }
 }
 @media (max-width: 768px) {
   .page-home-mobile .home-topbar-menu{
-    top: 150px;
+    top: 118px;
     left: 8px;
     right: auto;
     width:min(240px, calc(100vw - 24px));
@@ -9136,70 +9155,18 @@ body.index-batch-loading-active {
   background: #f3f4f6;
 }
 
-/* Admin controls on home page — aligned right, horizontal row */
-.page-home-mobile .topbar-actions {
-  justify-content: flex-end;
-}
-
-.page-home-mobile .admin-controls-row,
-.page-home .admin-controls-row {
-  flex-direction: row;
-  align-items: center;
-  width: auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-/* ===== INDEX / HOME — ADMIN CONTROLS RIGHT IN TOPBAR LIKE DEBATE ===== */
-.page-home .debate-nav-notifications-stack,
-.page-home-mobile .debate-nav-notifications-stack {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: auto;
-}
-
+/* Admin controls on home page — direct grid child of topbar-inner, full-width row, right-aligned */
 .page-home .admin-controls-row,
 .page-home-mobile .admin-controls-row {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
-  width: auto;
-  margin-left: auto;
-}
-
-@media (max-width: 768px) {
-  .page-home-mobile .topbar-actions {
-    width: auto !important;
-    margin-left: auto !important;
-    flex: 0 0 auto !important;
-  }
-
-  .page-home-mobile .debate-nav-notifications-stack {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 8px !important;
-    width: auto !important;
-  }
-
-  .page-home-mobile .admin-controls-row {
-    grid-column: auto !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    gap: 8px !important;
-    width: auto !important;
-    margin-left: auto !important;
-  }
+  width: 100%;
+  padding: 2px 0;
 }
 
 .create-category-picker {

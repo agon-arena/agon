@@ -636,7 +636,11 @@ body.page-debate .debate-view-switch-card {
 
 /* Hamburger toujours visible — actions ne se réduisent pas */
 body.page-debate .topbar-inner {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+}
+body.page-debate .admin-controls-row {
+  width: 100%;
+  justify-content: flex-end;
 }
 body.page-debate .home-brand-block {
   min-width: 0;
@@ -1240,23 +1244,22 @@ body.voices-panel-open {
     </button>
   </div>
 </div>
-      <div class="debate-nav-notifications-stack">
-        <div class="admin-controls-row" data-admin style="display:none;">
-          <span id="admin-badge" class="admin-badge">Mode admin activé</span>
-
-          <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
-            Quitter le mode admin
-          </button>
-
-          <a class="button button-secondary admin-reports-button" href="/admin-reports">
-            Signalements
-            <span id="reports-count" class="notifications-count" style="display:none;"></span>
-          </a>
-        </div>
-      </div>
       <a href="/notifications" id="notifications-bell" class="topbar-notification-link" aria-label="Notifications">
         <i class="fa-regular fa-bell"></i>
         <span id="notifications-count-compact" style="display:none;"></span>
+      </a>
+    </div>
+
+    <div class="admin-controls-row" data-admin style="display:none;">
+      <span id="admin-badge" class="admin-badge">Mode admin activé</span>
+
+      <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
+        Quitter le mode admin
+      </button>
+
+      <a class="button button-secondary admin-reports-button" href="/admin-reports">
+        Signalements
+        <span id="reports-count" class="notifications-count" style="display:none;"></span>
       </a>
     </div>
 
@@ -1721,47 +1724,47 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
       onclick="event.stopPropagation()"
       aria-label="Options de partage"
     >
-      <button type="button" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
+      <button type="button" class="home-bottom-share-copy" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
         <i class="fa-solid fa-link"></i>
         <span>Copier le lien</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnX)">
+      <button type="button" class="home-bottom-share-x" onclick="handleHomeBottomShareAction(event, shareOnX)">
         <i class="fa-brands fa-x-twitter"></i>
         <span>X</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnFacebook)">
-        <i class="fa-brands fa-facebook-f"></i>
-        <span>Facebook</span>
+      <button type="button" class="home-bottom-share-instagram" onclick="handleHomeBottomShareAction(event, shareOnInstagram)">
+        <i class="fa-brands fa-instagram"></i>
+        <span>Instagram</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
+      <button type="button" class="home-bottom-share-whatsapp" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
         <i class="fa-brands fa-whatsapp"></i>
         <span>WhatsApp</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareByEmail)">
+      <button type="button" class="home-bottom-share-email" onclick="handleHomeBottomShareAction(event, shareByEmail)">
         <i class="fa-solid fa-envelope"></i>
         <span>Email</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
+      <button type="button" class="home-bottom-share-linkedin" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
         <i class="fa-brands fa-linkedin-in"></i>
         <span>LinkedIn</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
+      <button type="button" class="home-bottom-share-mastodon" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
         <i class="fa-brands fa-mastodon"></i>
         <span>Mastodon</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
+      <button type="button" class="home-bottom-share-reddit" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
         <i class="fa-brands fa-reddit-alien"></i>
         <span>Reddit</span>
       </button>
 
-      <button type="button" onclick="handleHomeBottomShareAction(event, showQRCode)">
+      <button type="button" onclick="handleHomeBottomShareAction(event, showDebateQrCode)">
         <i class="fa-solid fa-qrcode"></i>
         <span>QR Code</span>
       </button>
