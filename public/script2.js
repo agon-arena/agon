@@ -7271,17 +7271,15 @@ function getIdeaShareData(debateId, argument) {
 async function copyIdeaLink(debateId, encodedArgumentJson) {
   try {
     const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
-    const { text, url } = getIdeaShareData(debateId, argument);
-    const message = buildVisibleShareMessage(text, url);
-    const copied = await writeTextToClipboard(message);
+    const { url } = getIdeaShareData(debateId, argument);
+    const copied = await writeTextToClipboard(url);
     if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
     try {
       const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
-      const { text, url } = getIdeaShareData(debateId, argument);
-      const message = buildVisibleShareMessage(text, url);
-      showShareCopyManualMessage("Copie manuelle du lien", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", "🔗");
+      const { url } = getIdeaShareData(debateId, argument);
+      showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
     } catch (innerError) {
       alert("Impossible de copier le lien automatiquement.");
     }
@@ -7656,15 +7654,13 @@ style="display:none; position:fixed; z-index:999; flex-direction:column; gap:6px
   `;
 }
 async function copyDebateLink() {
-  const { text, url } = getGlobalShareData();
-  const message = buildVisibleShareMessage(text, url);
-
+  const { url } = getGlobalShareData();
   try {
-    const copied = await writeTextToClipboard(message);
+    const copied = await writeTextToClipboard(url);
     if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
-    showShareCopyManualMessage("Copie manuelle du lien", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", "🔗");
+    showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
   }
 }
 
@@ -7785,10 +7781,9 @@ function closeQrCodeModal() {
   overlay.remove();
 }
 
-function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvrir le lien.", copyText = "") {
+function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvrir le lien.") {
   const safeTitle = String(title || "QR code").trim() || "QR code";
   const safeUrl = String(url || "").trim();
-  const safeCopyText = String(copyText || "").trim() || safeUrl;
 
   if (!safeUrl) {
     alert("Lien introuvable pour générer le QR code.");
@@ -7876,36 +7871,33 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
   if (copyBtn) {
     copyBtn.onclick = async () => {
       try {
-        const copied = await writeTextToClipboard(safeCopyText);
+        const copied = await writeTextToClipboard(safeUrl);
         if (!copied) throw new Error("clipboard_copy_failed");
         showCopyLinkSuccessMessage();
       } catch (error) {
-        showShareCopyManualMessage("Copie manuelle du lien", safeCopyText, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", "🔗");
+        showShareCopyManualMessage("Copie manuelle du lien", safeUrl, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
       }
     };
   }
 }
 
 function showDebateQrCode() {
-  const { title, text, url } = getGlobalShareData();
-  const message = buildVisibleShareMessage(text, url);
-  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.", message);
+  const { title, url } = getGlobalShareData();
+  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.");
 }
 
 function showIdeaQrCode(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
-  const { title, text, url } = getIdeaShareData(debateId, argument);
-  const message = buildVisibleShareMessage(text, url);
-  showQrCodeModal(title || "QR code de l'idée", url, "Scannez ce QR code pour ouvrir directement cette idée.", message);
+  const { title, url } = getIdeaShareData(debateId, argument);
+  showQrCodeModal(title || "QR code de l'idée", url, "Scannez ce QR code pour ouvrir directement cette idée.");
 }
 
 function showIndexDebateQrCode(debateId, encodedQuestion = "", encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
   const question = decodeURIComponent(encodedQuestion || "");
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
-  const { title, text, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
-  const message = buildVisibleShareMessage(text, url);
-  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.", message);
+  const { title, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  showQrCodeModal(title || "QR code de l'arène", url, "Scannez ce QR code pour ouvrir cette arène.");
 }
 
 if (!window.__qrCodeModalEscapeListenerAttached) {
@@ -8268,7 +8260,7 @@ async function copyIndexDebateLink(
   const optionA = decodeURIComponent(encodedOptionA || "");
   const optionB = decodeURIComponent(encodedOptionB || "");
 
-  const { text, url } = getIndexDebateShareData(
+  const { url } = getIndexDebateShareData(
     debateId,
     question,
     optionA,
@@ -8277,14 +8269,13 @@ async function copyIndexDebateLink(
     percentB,
     type
   );
-  const message = buildVisibleShareMessage(text, url);
 
   try {
-    const copied = await writeTextToClipboard(message);
+    const copied = await writeTextToClipboard(url);
     if (!copied) throw new Error("clipboard_copy_failed");
     showCopyLinkSuccessMessage();
   } catch (error) {
-    showShareCopyManualMessage("Copie manuelle du lien", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", "🔗");
+    showShareCopyManualMessage("Copie manuelle du lien", url, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le lien ci-dessous.", "🔗");
   }
 }
 
