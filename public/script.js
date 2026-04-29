@@ -3836,7 +3836,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const mediaHtml = buildIndexSwipeableMediaHtml(d);
   const mediaOutsideLink = !!mediaHtml;
   const contextHtml = buildIndexContextPreviewHtml(d);
-  const isNewDebate = isDebateNew(d.created_at);
+  const isNewDebate = isDebateNew(d);
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="Agôn" class="debate-card-agon-badge-icon"><span>Généré par Agôn</span></div>` : "";
@@ -6449,6 +6449,7 @@ function setDisplay(element, value) {
 function getNotificationDisplayTitle(notification, fallbackTitle) {
   const detailedTypes = new Set([
     "vote_on_argument",
+    "vote_on_argument_batch",
     "comment_on_argument",
     "argument_in_my_debate",
     "like_on_comment",
@@ -7042,13 +7043,25 @@ function getDebateLastActivityAt(debate) {
   return debate?.last_activity_at || debate?.last_argument_at || debate?.created_at || "";
 }
 
-function isDebateNew(createdAt) {
-  if (!createdAt) return false;
+function isDebateNew(debateOrCreatedAt) {
+  const createdAt = typeof debateOrCreatedAt === "object" && debateOrCreatedAt !== null
+    ? debateOrCreatedAt.created_at
+    : debateOrCreatedAt;
+  const bumpedAt = typeof debateOrCreatedAt === "object" && debateOrCreatedAt !== null
+    ? debateOrCreatedAt.bumped_at
+    : "";
 
-  const createdAtTimestamp = new Date(String(createdAt).replace(" ", "T")).getTime();
-  if (!createdAtTimestamp) return false;
+  const createdAtTimestamp = createdAt
+    ? new Date(String(createdAt).replace(" ", "T")).getTime()
+    : 0;
+  const bumpedAtTimestamp = bumpedAt
+    ? new Date(String(bumpedAt).replace(" ", "T")).getTime()
+    : 0;
+  const referenceTimestamp = Math.max(createdAtTimestamp || 0, bumpedAtTimestamp || 0);
 
-  return (Date.now() - createdAtTimestamp) < 24 * 60 * 60 * 1000;
+  if (!referenceTimestamp) return false;
+
+  return (Date.now() - referenceTimestamp) < 24 * 60 * 60 * 1000;
 }
 
 function formatLastArgumentDate(dateString) {
@@ -8420,8 +8433,68 @@ async function verifyAdminSession(force = false) {
   return adminSessionVerificationPromise;
 }
 
+function showAdminLoginModal() {
+  return new Promise((resolve) => {
+    const existing = document.getElementById("custom-admin-login-modal");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "custom-admin-login-modal";
+    overlay.className = "custom-modal-overlay";
+    overlay.innerHTML = `
+      <div class="custom-modal-box" style="max-width:420px; width:min(92vw,420px);">
+        <div class="custom-modal-title">Mode admin</div>
+        <div class="custom-modal-text">Entrez le mot de passe administrateur.</div>
+        <input
+          id="custom-admin-login-password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Mot de passe"
+          class="admin-edit-input"
+          style="margin-top:12px;"
+        >
+        <div class="custom-modal-actions" style="margin-top:16px;">
+          <button type="button" class="button button-secondary" id="custom-admin-login-cancel">Annuler</button>
+          <button type="button" class="button" id="custom-admin-login-confirm">Entrer</button>
+        </div>
+      </div>
+    `;
+
+    const close = (value = "") => {
+      overlay.remove();
+      resolve(String(value || ""));
+    };
+
+    document.body.appendChild(overlay);
+
+    const passwordInput = document.getElementById("custom-admin-login-password");
+    const cancelBtn = document.getElementById("custom-admin-login-cancel");
+    const confirmBtn = document.getElementById("custom-admin-login-confirm");
+
+    const submit = () => close(passwordInput?.value || "");
+
+    cancelBtn?.addEventListener("click", () => close(""));
+    confirmBtn?.addEventListener("click", submit);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close("");
+    });
+    passwordInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submit();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close("");
+      }
+    });
+
+    setTimeout(() => passwordInput?.focus(), 0);
+  });
+}
+
 async function adminLogin() {
-  const password = window.prompt("Mot de passe admin :");
+  const password = await showAdminLoginModal();
   if (!password) return;
 
   try {
@@ -8618,7 +8691,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=debate`;
 }
 
-    if (notification.type === "vote_on_argument") {
+    if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {
       icon = "👍";
       title = "Votre idée a reçu une voix";
       subtitle = "Ouvrir l'idée";
@@ -10443,6 +10516,7 @@ function sortDebatesForIndex(debates) {
   const RECENT_PUBLICATION_BOOST = 22;
   const RECENT_BUMP_WINDOW_HOURS = 48;
   const RECENT_BUMP_BOOST = 14;
+  const BUMP_PRIORITY_WINDOW_HOURS = 6;
 
   return sorted.sort((a, b) => {
     const createdAtA = new Date(a.created_at || 0).getTime();
@@ -10467,6 +10541,16 @@ function sortDebatesForIndex(debates) {
 
     const bumpHoursA = bumpedAtA ? Math.max(0, (now - bumpedAtA) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
     const bumpHoursB = bumpedAtB ? Math.max(0, (now - bumpedAtB) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
+    const hasPriorityBumpA = bumpHoursA <= BUMP_PRIORITY_WINDOW_HOURS;
+    const hasPriorityBumpB = bumpHoursB <= BUMP_PRIORITY_WINDOW_HOURS;
+
+    if (hasPriorityBumpA !== hasPriorityBumpB) {
+      return hasPriorityBumpB ? 1 : -1;
+    }
+
+    if (hasPriorityBumpA && hasPriorityBumpB && bumpedAtA !== bumpedAtB) {
+      return bumpedAtB - bumpedAtA;
+    }
 
     const contributionsA =
       Number(a.argument_count || 0) +
@@ -18998,7 +19082,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=debate`;
 }
 
-if (notification.type === "vote_on_argument") {
+if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {
   icon = "🗳️";
   title = "Votre idée a reçu une voix";
   subtitle = "Ouvrir l'idée";

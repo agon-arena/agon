@@ -1634,6 +1634,153 @@ async function createNotification({
   });
 }
 
+// Map<argumentId (string), {authorKey, debateId, side, wasMajorityAtPost}>
+const majorityWatchers = new Map();
+
+async function snapshotAndWatchMajority(debateId, argId, side, authorKey) {
+  if (!authorKey) return;
+  const debate = await getDebateById(debateId);
+  if (!debate || String(debate.type || "").trim().toLowerCase() === "open") return;
+
+  const args = await getArgumentsByDebateId(debateId);
+  const existing = args.filter(a => String(a.id) !== String(argId));
+  const { percentA, percentB, votesA, votesB } = computeDebatePercents(existing);
+  const totalVotes = votesA + votesB;
+  const wasMajority = totalVotes === 0 ? false
+    : side === "A" ? percentA > 50 : percentB > 50;
+
+  majorityWatchers.set(String(argId), {
+    authorKey,
+    debateId: String(debateId),
+    side,
+    wasMajorityAtPost: wasMajority
+  });
+}
+
+async function checkMajorityFlips(debateId) {
+  const toCheck = [];
+  for (const [argId, w] of majorityWatchers) {
+    if (w.debateId === String(debateId)) toCheck.push({ argId, w });
+  }
+  if (toCheck.length === 0) return;
+
+  const [args, debate] = await Promise.all([
+    getArgumentsByDebateId(debateId),
+    getDebateById(debateId)
+  ]);
+  const { percentA, percentB, votesA, votesB } = computeDebatePercents(args);
+  const totalVotes = votesA + votesB;
+
+  for (const { argId, w } of toCheck) {
+    const currentHasMajority = totalVotes === 0 ? false
+      : w.side === "A" ? percentA > 50 : percentB > 50;
+
+    let notifType = null;
+    let message = null;
+    const sideName = w.side === "A" ? (debate?.option_a || "Votre camp") : (debate?.option_b || "Votre camp");
+    const questionLabel = quoteNotificationContent(debate?.question || "ce débat");
+
+    if (!w.wasMajorityAtPost && currentHasMajority) {
+      notifType = "majority_gained";
+      message = `Votre camp « ${sideName} » vient de prendre la majorité dans ${questionLabel}.`;
+    } else if (w.wasMajorityAtPost && !currentHasMajority) {
+      notifType = "majority_lost";
+      message = `Votre camp « ${sideName} » vient de perdre la majorité dans ${questionLabel}.`;
+    }
+
+    if (notifType) {
+      majorityWatchers.delete(argId);
+      await createNotification({
+        user_key: w.authorKey,
+        type: notifType,
+        debate_id: Number(debateId),
+        argument_id: Number(argId),
+        message
+      });
+    }
+  }
+}
+
+async function createOrAggregateVoteNotification({
+  user_key,
+  debate_id = null,
+  argument_id = null,
+  message = ""
+}) {
+  if (!user_key) return;
+
+  const windowStartIso = new Date(Date.now() - (5 * 60 * 1000)).toISOString();
+  const { data: recentNotifications, error } = await supabase
+    .from("notifications")
+    .select("id,type,message,created_at,is_read")
+    .eq("user_key", user_key)
+    .in("type", ["vote_on_argument", "vote_on_argument_batch"])
+    .gte("created_at", windowStartIso)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const recent = Array.isArray(recentNotifications) ? recentNotifications : [];
+  const batchNotification = recent.find((item) => String(item.type || "") === "vote_on_argument_batch");
+
+  if (batchNotification) {
+    const matched = String(batchNotification.message || "").match(/(\d+)/);
+    const currentCount = matched ? Number.parseInt(matched[1], 10) : 0;
+    const nextCount = Math.max(2, currentCount + 1);
+
+    const { error: updateError } = await supabase
+      .from("notifications")
+      .update({
+        message: `Vous avez reçu ${nextCount} voix.`,
+        debate_id,
+        argument_id,
+        is_read: 0,
+        created_at: nowIso()
+      })
+      .eq("id", batchNotification.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+    return;
+  }
+
+  const nextCount = recent.length + 1;
+  if (nextCount <= 4) {
+    await createNotification({
+      user_key,
+      type: "vote_on_argument",
+      debate_id,
+      argument_id,
+      message
+    });
+    return;
+  }
+
+  if (recent.length) {
+    const idsToDelete = recent.map((item) => item.id).filter(Boolean);
+    if (idsToDelete.length) {
+      const { error: deleteError } = await supabase
+        .from("notifications")
+        .delete()
+        .in("id", idsToDelete);
+      if (deleteError) {
+        throw deleteError;
+      }
+    }
+  }
+
+  await createNotification({
+    user_key,
+    type: "vote_on_argument_batch",
+    debate_id,
+    argument_id,
+    message: `Vous avez reçu ${nextCount} voix.`
+  });
+}
+
 async function getDebateById(id) {
   const { data, error } = await supabase
     .from("debates")
@@ -3481,6 +3628,8 @@ app.post("/api/arguments", async (req, res) => {
     }
 
     res.json({ success: true, id: data.id });
+
+    snapshotAndWatchMajority(debate_id, data.id, side, authorKey).catch(console.error);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur création argument.");
@@ -3525,15 +3674,18 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
     const argument = await getArgumentById(id);
 
     if (argument.author_key && argument.author_key !== voterKey) {
-      createNotification({
+      createOrAggregateVoteNotification({
         user_key: argument.author_key,
-        type: "vote_on_argument",
         debate_id: argument.debate_id,
         argument_id: id,
         message: `Votre idée ${quoteNotificationContent(argument.title)} a reçu une voix.`
       }).catch((notificationError) => {
         console.error(notificationError);
       });
+    }
+
+    if (argument?.debate_id) {
+      checkMajorityFlips(argument.debate_id).catch(console.error);
     }
   } catch (error) {
     console.error(error);
@@ -3605,6 +3757,10 @@ app.post("/api/arguments/:id/unvote", async (req, res) => {
       remainingVotes: null,
       lastVotedAt: argument.last_voted_at || null
     });
+
+    if (argument?.debate_id) {
+      checkMajorityFlips(argument.debate_id).catch(console.error);
+    }
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture vote.");
