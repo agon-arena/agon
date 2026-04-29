@@ -72,9 +72,14 @@
   <div>
     <h3 style="color:#ffffff;">Signalements</h3>
   </div>
-  <button class="delete-button" type="button" onclick="deleteAllReports()">
-    <i class="fa-solid fa-trash"></i> Tout supprimer
-  </button>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button class="delete-button" type="button" onclick="deleteAllReports()">
+      <i class="fa-solid fa-trash"></i> Supprimer les signalements
+    </button>
+    <button class="delete-button" type="button" onclick="deleteAllReportedTargets()" style="background:#7f1d1d; border-color:#991b1b;">
+      <i class="fa-solid fa-bomb"></i> Supprimer tout le contenu signalé
+    </button>
+  </div>
 </div>
 
 <section id="admin-visits-stats" class="debates-list">

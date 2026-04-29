@@ -40,6 +40,7 @@ let currentCategoryFilters = [];
 let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
 let currentIndexSearchQuery = "";
+const indexSourcePreviewCache = new Map();
 let indexLastUserScrollTs = 0;
 let indexLastEmbedScrollRestoreTs = 0;
 let indexEmbedScrollRestoreRaf = null;
@@ -3836,7 +3837,12 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const mediaOutsideLink = !!mediaHtml;
   const contextHtml = buildIndexContextPreviewHtml(d);
   const isNewDebate = isDebateNew(d.created_at);
+  const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
+  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="Agôn" class="debate-card-agon-badge-icon"><span>Généré par Agôn</span></div>` : "";
+  const topBadgesHtml = (newBadgeHtml || agonBadgeHtml)
+    ? `<div class="debate-card-top-badges">${newBadgeHtml}${agonBadgeHtml}</div>`
+    : "";
   const includeDeleteButton = options.includeDeleteButton === true;
   const categoryList = getDebateCategoryList(d.category);
   const categoryClassName = categoryList.length > 1
@@ -3847,10 +3853,12 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     <article class="debate-card" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
-          <div class="${categoryClassName}">${escapeHtml(getIndexCardCategoryLabel(d.category))}</div>
-          ${newBadgeHtml}
+          <div class="debate-card-top-meta">
+            <div class="${categoryClassName}">${escapeHtml(getIndexCardCategoryLabel(d.category))}</div>
+            <div class="debate-card-type">${debateTypeLabel}</div>
+          </div>
+          ${topBadgesHtml}
         </div>
-        <div class="debate-card-type">${debateTypeLabel}</div>
         <h2>${escapeHtml(d.question)}</h2>
 
         ${mediaOutsideLink ? "" : mediaHtml}
@@ -4351,7 +4359,35 @@ function getIndexDebateMediaItems(debate) {
   });
 }
 
-function renderIndexMediaItemHtml(item, debate) {
+async function getIndexSourcePreviewData(sourceUrl) {
+  const safeUrl = String(sourceUrl || '').trim();
+  if (!safeUrl) return null;
+
+  const cached = indexSourcePreviewCache.get(safeUrl);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  const pending = fetchJSON(API + '/link-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: safeUrl })
+  }).then((response) => {
+    const preview = response?.preview && typeof response.preview === 'object'
+      ? response.preview
+      : null;
+    indexSourcePreviewCache.set(safeUrl, preview);
+    return preview;
+  }).catch(() => {
+    indexSourcePreviewCache.set(safeUrl, null);
+    return null;
+  });
+
+  indexSourcePreviewCache.set(safeUrl, pending);
+  return pending;
+}
+
+function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   const safeDebateId = String(debate?.id || "").trim();
   if (!item) return "";
 
@@ -4370,9 +4406,11 @@ function renderIndexMediaItemHtml(item, debate) {
   if (itemType !== "source") return "";
 
   const currentSourceUrl = String(debate?.source_url || "").trim();
-  const sourcePreview = currentSourceUrl && currentSourceUrl === itemUrl && debate?.source_preview && typeof debate.source_preview === "object"
-    ? debate.source_preview
-    : null;
+  const sourcePreview = explicitSourcePreview && typeof explicitSourcePreview === "object"
+    ? explicitSourcePreview
+    : currentSourceUrl && currentSourceUrl === itemUrl && debate?.source_preview && typeof debate.source_preview === "object"
+      ? debate.source_preview
+      : null;
 
   if (isDirectImageUrl(itemUrl)) {
     return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
@@ -4388,10 +4426,6 @@ function renderIndexMediaItemHtml(item, debate) {
 
   if (isInstagramPostUrl(itemUrl)) {
     return buildIndexInstagramEmbedHtml(itemUrl, sourcePreview, safeDebateId);
-  }
-
-  if (isWeakSourcePreviewData(sourcePreview, itemUrl)) {
-    return "";
   }
 
   return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId });
@@ -4445,7 +4479,16 @@ function initIndexMediaSwipeEnhancements(root) {
       const inner = shell.querySelector("[data-index-media-swipe-content]");
       if (!inner) return false;
 
-      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate);
+      let nextItemPreview = null;
+      if (
+        String(nextItem?.type || '').trim() === 'source'
+        && !isDirectImageUrl(nextItem.url)
+        && !isIndexYouTubeSourceDebate({ source_url: nextItem.url })
+      ) {
+        nextItemPreview = await getIndexSourcePreviewData(nextItem.url);
+      }
+
+      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, nextItemPreview);
       shell.dataset.currentIndex = String(normalizedIndex);
 
       if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(inner);
@@ -6843,6 +6886,11 @@ function canDeleteDebate(debate) {
   return isAdmin() || isDebateOwner(debate);
 }
 
+function isAgonGeneratedDebate(debate) {
+  if (!debate) return false;
+  return String(debate.creator_key || "") === "__AGON_ADMIN__";
+}
+
 function getState(id) {
   const s = localStorage.getItem("votes_" + id);
   if (!s) return {};
@@ -8456,6 +8504,22 @@ async function resetNotifications() {
     alert(error.message);
   }
 }
+
+async function deleteAllNotifications() {
+  try {
+    await fetchJSON(API + "/notifications/delete-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(isAdmin() ? { "x-admin-token": getAdminToken() } : {}) },
+      body: JSON.stringify({ userKey: getKey() })
+    });
+
+    setStoredUnreadNotificationCount(0);
+    await loadNotifications();
+    await loadNotificationsPage();
+  } catch (error) {
+    alert(error.message);
+  }
+}
 function updateNotificationBadgeElement(element, unreadCount) {
   if (!element) return;
 
@@ -9184,7 +9248,7 @@ async function saveAdminCardEdit(debateId, btn) {
     // Met à jour les caches
     const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
       .flat().find(d => d && String(d.id) === String(debateId));
-    const updatedDebate = { ...(cached || {}), ...body, id: debateId };
+    const updatedDebate = { ...(cached || {}), ...body, id: debateId, creator_key: "__AGON_ADMIN__" };
     updateDebateCachesAfterEdit(updatedDebate);
 
     // Met à jour le DOM de la carte directement
@@ -9289,6 +9353,7 @@ async function saveAdminMediaExtras(debateId, btn) {
       .flat().find(d => d && String(d.id) === String(debateId));
     if (cached) {
       cached.media_extras = result.media_extras;
+      cached.creator_key = "__AGON_ADMIN__";
       updateDebateCachesAfterEdit({ ...cached });
     }
     setTimeout(() => {
@@ -9340,7 +9405,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
     // Met à jour les caches
     const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
       .flat().find(d => d && String(d.id) === String(debateId));
-    const updatedDebate = { ...(cached || {}), ...body, id: debateId };
+    const updatedDebate = { ...(cached || {}), ...body, id: debateId, creator_key: "__AGON_ADMIN__" };
     updateDebateCachesAfterEdit(updatedDebate);
 
     // Met à jour le DOM de la carte
@@ -9453,6 +9518,14 @@ async function adminUploadMediaFile(input, mediaType) {
       });
       resultUrl = data.image_url;
 
+      const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
+        .flat().find(d => d && String(d.id) === String(debateId));
+      if (cached) {
+        cached.image_url = resultUrl;
+        cached.creator_key = "__AGON_ADMIN__";
+        updateDebateCachesAfterEdit({ ...cached });
+      }
+
     } else {
       const data = await fetchJSON(API + '/admin/debate/' + debateId + '/video', {
         method: 'POST',
@@ -9465,6 +9538,14 @@ async function adminUploadMediaFile(input, mediaType) {
         body: file
       });
       resultUrl = data.video_url;
+
+      const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
+        .flat().find(d => d && String(d.id) === String(debateId));
+      if (cached) {
+        cached.video_url = resultUrl;
+        cached.creator_key = "__AGON_ADMIN__";
+        updateDebateCachesAfterEdit({ ...cached });
+      }
     }
 
     if (urlInput && resultUrl) {
@@ -10358,18 +10439,34 @@ function sortDebatesForIndex(debates) {
    // "popular" (default) : récence forte au départ, activité continue, profondeur historique
 
   const now = Date.now();
+  const RECENT_PUBLICATION_WINDOW_HOURS = 36;
+  const RECENT_PUBLICATION_BOOST = 22;
+  const RECENT_BUMP_WINDOW_HOURS = 48;
+  const RECENT_BUMP_BOOST = 14;
+
   return sorted.sort((a, b) => {
     const createdAtA = new Date(a.created_at || 0).getTime();
     const createdAtB = new Date(b.created_at || 0).getTime();
+    const bumpedAtA = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
+    const bumpedAtB = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
 
-    const lastActivityA = new Date(getDebateLastActivityAt(a) || a.created_at || 0).getTime();
-    const lastActivityB = new Date(getDebateLastActivityAt(b) || b.created_at || 0).getTime();
+    const lastActivityA = Math.max(
+      new Date(getDebateLastActivityAt(a) || a.created_at || 0).getTime(),
+      bumpedAtA || 0
+    );
+    const lastActivityB = Math.max(
+      new Date(getDebateLastActivityAt(b) || b.created_at || 0).getTime(),
+      bumpedAtB || 0
+    );
 
     const ageHoursA = Math.max(0, (now - createdAtA) / (1000 * 60 * 60));
     const ageHoursB = Math.max(0, (now - createdAtB) / (1000 * 60 * 60));
 
     const activityHoursA = Math.max(0, (now - lastActivityA) / (1000 * 60 * 60));
     const activityHoursB = Math.max(0, (now - lastActivityB) / (1000 * 60 * 60));
+
+    const bumpHoursA = bumpedAtA ? Math.max(0, (now - bumpedAtA) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
+    const bumpHoursB = bumpedAtB ? Math.max(0, (now - bumpedAtB) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
 
     const contributionsA =
       Number(a.argument_count || 0) +
@@ -10381,8 +10478,14 @@ function sortDebatesForIndex(debates) {
       Number(b.comment_count || 0) +
       Number(b.vote_count || 0);
 
-    const recencyBoostA = Math.max(0, 24 * (1 - ageHoursA / 72));
-    const recencyBoostB = Math.max(0, 24 * (1 - ageHoursB / 72));
+    const recencyBoostA = Math.max(0, 24 * (1 - ageHoursA / 96));
+    const recencyBoostB = Math.max(0, 24 * (1 - ageHoursB / 96));
+
+    const publicationBoostA = Math.max(0, RECENT_PUBLICATION_BOOST * (1 - ageHoursA / RECENT_PUBLICATION_WINDOW_HOURS));
+    const publicationBoostB = Math.max(0, RECENT_PUBLICATION_BOOST * (1 - ageHoursB / RECENT_PUBLICATION_WINDOW_HOURS));
+
+    const bumpBoostA = Math.max(0, RECENT_BUMP_BOOST * (1 - bumpHoursA / RECENT_BUMP_WINDOW_HOURS));
+    const bumpBoostB = Math.max(0, RECENT_BUMP_BOOST * (1 - bumpHoursB / RECENT_BUMP_WINDOW_HOURS));
 
     const activityBoostA = Math.max(0, 18 * (1 - activityHoursA / 96));
     const activityBoostB = Math.max(0, 18 * (1 - activityHoursB / 96));
@@ -10396,8 +10499,8 @@ function sortDebatesForIndex(debates) {
     const inactivityPenaltyB =
       ageHoursB > 24 && activityHoursB > 24 ? Math.min(12, (activityHoursB - 24) / 12) : 0;
 
-    const scoreA = recencyBoostA + activityBoostA + contributionBoostA - inactivityPenaltyA;
-    const scoreB = recencyBoostB + activityBoostB + contributionBoostB - inactivityPenaltyB;
+    const scoreA = recencyBoostA + publicationBoostA + bumpBoostA + activityBoostA + contributionBoostA - inactivityPenaltyA;
+    const scoreB = recencyBoostB + publicationBoostB + bumpBoostB + activityBoostB + contributionBoostB - inactivityPenaltyB;
 
     if (scoreB !== scoreA) return scoreB - scoreA;
     return Number(b.id || 0) - Number(a.id || 0);
@@ -12884,7 +12987,7 @@ form.addEventListener("submit", async e => {
 
     const r = await createXhrRequest(API + "/debates", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(isAdmin() ? { "x-admin-token": getAdminToken() } : {}) },
       body: createPayload,
       responseType: "json",
       onUploadProgress: (progress) => {
@@ -17884,6 +17987,27 @@ async function deleteAllReports() {
   }
 }
 
+async function deleteAllReportedTargets() {
+  if (!isAdmin()) {
+    alert("Mode admin requis.");
+    return;
+  }
+  if (!confirm("Supprimer définitivement tout le contenu signalé (arènes, idées, commentaires) ?\n\nCette action est irréversible.")) return;
+  try {
+    await fetchJSON(API + "/admin/reports/delete-all-targets", {
+      method: "DELETE",
+      headers: { "x-admin-token": getAdminToken() }
+    });
+    const container = document.getElementById("reports-list");
+    if (container) container.innerHTML = `<div class="empty-state">Aucun signalement pour le moment.</div>`;
+    const badge = document.getElementById("reports-count");
+    if (badge) badge.style.display = "none";
+    localStorage.setItem("admin_reports_count", "0");
+  } catch(err) {
+    alert("Erreur : " + (err.message || err));
+  }
+}
+
 async function deleteDebate(debateId, redirectAfter) {
   const debate = String(currentDebateCache?.id || "") === String(debateId)
     ? currentDebateCache
@@ -18821,6 +18945,11 @@ if (location.pathname === "/debate") {
   if (resetNotificationsBtn) {
     resetNotificationsBtn.addEventListener("click", resetNotifications);
   }
+
+  const deleteAllNotificationsBtn = document.getElementById("delete-all-notifications-btn");
+  if (deleteAllNotificationsBtn) {
+    deleteAllNotificationsBtn.addEventListener("click", deleteAllNotifications);
+  }
 });
 
 let notificationsPageLoadInFlight = null;
@@ -19667,6 +19796,7 @@ window.closeReportBox = closeReportBox;
 window.submitReport = submitReport;
 window.deleteReport = deleteReport;
 window.deleteReportedTarget = deleteReportedTarget;
+window.deleteAllReportedTargets = deleteAllReportedTargets;
 
 window.toggleNotificationsPanel = toggleNotificationsPanel;
 window.handleNotificationClick = handleNotificationClick;

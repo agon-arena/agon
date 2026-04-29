@@ -29,6 +29,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
+const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
@@ -2239,6 +2240,93 @@ app.get("/api/admin/reports", requireAdmin, async (req, res) => {
   }
 });
 
+app.delete("/api/admin/reports/delete-all-targets", requireAdmin, async (req, res) => {
+  try {
+    const { data: reports, error: reportsErr } = await supabase
+      .from("reports")
+      .select("target_type, target_id");
+
+    if (reportsErr) {
+      console.error(reportsErr);
+      return sendServerError(res, "Erreur lecture signalements.");
+    }
+
+    const rows = reports || [];
+    const debateIds = [...new Set(rows.filter(r => r.target_type === "debate").map(r => r.target_id))];
+    const argumentIds = [...new Set(rows.filter(r => r.target_type === "argument").map(r => r.target_id))];
+    const commentIds = [...new Set(rows.filter(r => r.target_type === "comment").map(r => r.target_id))];
+
+    // Supprime les débats signalés avec cascade complète
+    for (const debateId of debateIds) {
+      const debateRow = await getDebateById(debateId);
+      if (!debateRow) continue;
+
+      const { data: argRows } = await supabase.from("arguments").select("id").eq("debate_id", debateId);
+      const debateArgIds = (argRows || []).map(r => r.id);
+
+      if (debateArgIds.length) {
+        const { data: comRows } = await supabase.from("comments").select("id").in("argument_id", debateArgIds);
+        const debateComIds = (comRows || []).map(r => r.id);
+
+        if (debateComIds.length) {
+          await supabase.from("comment_likes").delete().in("comment_id", debateComIds);
+          await supabase.from("reports").delete().eq("target_type", "comment").in("target_id", debateComIds);
+          await supabase.from("notifications").delete().in("comment_id", debateComIds);
+        }
+
+        await supabase.from("votes").delete().in("argument_id", debateArgIds);
+        await supabase.from("comments").delete().in("argument_id", debateArgIds);
+        await supabase.from("reports").delete().eq("target_type", "argument").in("target_id", debateArgIds);
+        await supabase.from("notifications").delete().in("argument_id", debateArgIds);
+        await supabase.from("arguments").delete().eq("debate_id", debateId);
+      }
+
+      await supabase.from("reports").delete().eq("target_type", "debate").eq("target_id", debateId);
+      await supabase.from("notifications").delete().eq("debate_id", debateId);
+      await supabase.from("debates").delete().eq("id", debateId);
+
+      if (debateRow.image_url) await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
+      if (debateRow.video_url) await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
+      removeDebateAssetsEntry(debateId);
+      removeDebateStoredContent(debateId);
+    }
+
+    // Supprime les arguments signalés restants (pas déjà supprimés via un débat)
+    if (argumentIds.length) {
+      const { data: comRows } = await supabase.from("comments").select("id").in("argument_id", argumentIds);
+      const argComIds = (comRows || []).map(r => r.id);
+
+      if (argComIds.length) {
+        await supabase.from("comment_likes").delete().in("comment_id", argComIds);
+        await supabase.from("reports").delete().eq("target_type", "comment").in("target_id", argComIds);
+        await supabase.from("notifications").delete().in("comment_id", argComIds);
+        await supabase.from("comments").delete().in("argument_id", argumentIds);
+      }
+
+      await supabase.from("votes").delete().in("argument_id", argumentIds);
+      await supabase.from("reports").delete().eq("target_type", "argument").in("target_id", argumentIds);
+      await supabase.from("notifications").delete().in("argument_id", argumentIds);
+      await supabase.from("arguments").delete().in("id", argumentIds);
+    }
+
+    // Supprime les commentaires signalés restants
+    if (commentIds.length) {
+      await supabase.from("comment_likes").delete().in("comment_id", commentIds);
+      await supabase.from("reports").delete().eq("target_type", "comment").in("target_id", commentIds);
+      await supabase.from("notifications").delete().in("comment_id", commentIds);
+      await supabase.from("comments").delete().in("id", commentIds);
+    }
+
+    // Vide la table reports (filet de sécurité)
+    await supabase.from("reports").delete().neq("id", 0);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression des contenus signalés.");
+  }
+});
+
 app.delete("/api/admin/reports/by-target", requireAdmin, async (req, res) => {
   try {
     const { target_type, target_id } = req.body || {};
@@ -2371,6 +2459,31 @@ app.post("/api/notifications/read-all", async (req, res) => {
   }
 });
 
+app.post("/api/notifications/delete-all", async (req, res) => {
+  try {
+    const { userKey } = req.body || {};
+
+    if (!userKey) {
+      return res.status(400).json({ error: "Clé utilisateur manquante." });
+    }
+
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_key", userKey);
+
+    if (error) {
+      console.error(error);
+      return sendServerError(res, "Erreur suppression notifications.");
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression notifications.");
+  }
+});
+
 app.post("/api/notifications/read-one", async (req, res) => {
   try {
     const { userKey, notificationId } = req.body || {};
@@ -2429,7 +2542,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
 
     const { data: currentRow } = await supabase
       .from("debates")
-      .select("image_url, video_url, source_url, media_extras")
+      .select("image_url, video_url, source_url, media_extras, creator_key")
       .eq("id", req.params.id)
       .single();
 
@@ -2469,7 +2582,8 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
       ...(normalizedCategory ? { category: normalizedCategory } : {}),
       ...(imageUrlSent ? { image_url: normalizedImageUrl || "" } : {}),
       ...(videoUrlSent ? { video_url: normalizedVideoUrl || "" } : {}),
-      ...(extrasChanged ? { media_extras: newExtras } : {})
+      ...(extrasChanged ? { media_extras: newExtras } : {}),
+      creator_key: AGON_ADMIN_CREATOR_KEY
     };
 
     const { error } = await supabase.from("debates").update(updateFields).eq("id", req.params.id);
@@ -2513,7 +2627,7 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
         url: String(e.url).trim(),
         ...(e.added_at ? { added_at: e.added_at } : {})
       }));
-    const { error } = await supabase.from("debates").update({ media_extras: sanitized }).eq("id", debateId);
+    const { error } = await supabase.from("debates").update({ media_extras: sanitized, creator_key: AGON_ADMIN_CREATOR_KEY }).eq("id", debateId);
     if (error) {
       console.error(error);
       return res.status(500).json({ error: "Erreur mise à jour sources." });
@@ -2561,7 +2675,7 @@ app.post("/api/admin/debate/:id/image", requireAdmin, express.json({ limit: "20m
     );
 
     await supabase.from("debates")
-      .update({ image_url: publicUrl, media_extras: newExtras })
+      .update({ image_url: publicUrl, media_extras: newExtras, creator_key: AGON_ADMIN_CREATOR_KEY })
       .eq("id", debateId);
 
     return res.json({ success: true, image_url: publicUrl });
@@ -2598,7 +2712,7 @@ app.post("/api/admin/debate/:id/video", requireAdmin, express.raw({
     );
 
     await supabase.from("debates")
-      .update({ video_url: storedVideo.url, media_extras: newExtras })
+      .update({ video_url: storedVideo.url, media_extras: newExtras, creator_key: AGON_ADMIN_CREATOR_KEY })
       .eq("id", debateId);
 
     return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
@@ -2787,10 +2901,14 @@ app.get("/api/debates", async (req, res) => {
       const bRecent = bBump > now - BUMP_WINDOW_MS;
       if (aRecent !== bRecent) return bRecent ? 1 : -1;
       if (aRecent && bRecent && aBump !== bBump) return bBump - aBump;
-      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
+
       const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
       const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
-      if (bDate !== aDate) return new Date(bDate) - new Date(aDate);
+      const aTime = aDate ? new Date(aDate).getTime() : 0;
+      const bTime = bDate ? new Date(bDate).getTime() : 0;
+      if (bTime !== aTime) return bTime - aTime;
+
+      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
       return Number(b.id) - Number(a.id);
     });
 
@@ -2864,7 +2982,7 @@ app.post("/api/debates", async (req, res) => {
         type: type || "debate",
         option_a,
         option_b,
-        creator_key: creatorKey || null,
+        creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
         created_at: nowIso()
       })
       .select("id")
@@ -2882,7 +3000,7 @@ app.post("/api/debates", async (req, res) => {
             type: type || "debate",
             option_a,
             option_b,
-            creator_key: creatorKey || null,
+            creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
             created_at: nowIso()
           })
           .select("id")

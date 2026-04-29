@@ -268,6 +268,16 @@ body {
   background: #f8fafc;
 }
 
+.button-danger {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.button-danger:hover {
+  background: #fff1f2;
+  border-color: #f87171;
+}
+
 .button-small {
   padding: 8px 12px;
   font-size: 14px;
@@ -483,10 +493,18 @@ main.create-page {
 
 .debate-card-top-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 1px;
+}
+
+.debate-card-top-meta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
 }
 
 .debate-card-category {
@@ -502,6 +520,13 @@ main.create-page {
 
 .debate-card-top-row .debate-card-category {
   margin-bottom: 0;
+}
+
+.debate-card-top-badges {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .debate-card-new-badge {
@@ -549,6 +574,30 @@ main.create-page {
   75% {
     transform: translateX(130%);
   }
+}
+
+.debate-card-agon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
+  border: 1px solid rgba(67, 56, 202, 0.18);
+  color: #312e81;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.10);
+}
+
+.debate-card-agon-badge-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .debate-card h2 {
@@ -4118,10 +4167,12 @@ body.page-debate .topbar::after {
 .notifications-reset-wrap{
   display:flex;
   justify-content:center;
+  gap: 8px;
   margin: 8px 0 12px 0;
 }
 
-#reset-notifications-btn{
+#reset-notifications-btn,
+#delete-all-notifications-btn{
   font-size:14px;
   padding:8px 14px;
   border-radius:999px;
@@ -4129,7 +4180,8 @@ body.page-debate .topbar::after {
   transition:all 0.15s ease;
 }
 
-#reset-notifications-btn:hover{
+#reset-notifications-btn:hover,
+#delete-all-notifications-btn:hover{
   opacity:1;
   transform:translateY(-1px);
 }
