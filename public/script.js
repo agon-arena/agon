@@ -10883,6 +10883,14 @@ function shouldShowIndexInfiniteScrollSentinel(visibleCount = 0, totalCount = 0)
 }
 
 async function initIndex() {
+  const openDebateId = new URLSearchParams(location.search).get("openDebate");
+  if (openDebateId) {
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("openDebate");
+    window.history.replaceState({}, "", cleanUrl);
+    openDebateIframeModal(`/debate?id=${encodeURIComponent(openDebateId)}`);
+  }
+
   try {
     initIndexExplorerControls();
 
@@ -10934,13 +10942,14 @@ async function initIndex() {
         if (window.__agonDebateModalOpen) {
           return;
         }
-        const currentScrollY = Math.round(window.scrollY || 0);
 
-        // Evite un rerender silencieux qui recrée tout le DOM et provoque
-        // un saut visuel quand l'utilisateur a déjà commencé à faire défiler la page.
-        if (currentScrollY <= 8) {
-          applyIndexFilters();
-        }
+        const restoreAnchor = captureIndexScrollRestoreAnchor();
+        const fallbackScrollY = Math.max(0, Math.round(window.scrollY || 0));
+        applyIndexFilters();
+
+        requestAnimationFrame(() => {
+          restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
+        });
       }).catch(() => {});
 
     } else {
@@ -18762,6 +18771,14 @@ function ensureProgressSortOption() {
 initPageArrivalLoadingOverlay();
 
 document.addEventListener("DOMContentLoaded", () => {
+  if (location.pathname === "/debate" && window.self === window.top) {
+    const debateId = new URLSearchParams(location.search).get("id");
+    if (debateId) {
+      window.location.replace(`/?openDebate=${encodeURIComponent(debateId)}`);
+      return;
+    }
+  }
+
   initIframePageContextBridge();
   initDebateLinkPrewarm();
 initMobileIndexCardHighlight();

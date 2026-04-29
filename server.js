@@ -1302,6 +1302,10 @@ function setCachedDebatesApiResponse(key, value) {
   });
 }
 
+function clearDebatesApiResponseCache() {
+  debatesApiResponseCache.clear();
+}
+
 function ensureExternalPreviewCacheDir() {
   try {
     if (!fs.existsSync(EXTERNAL_PREVIEW_CACHE_DIR)) {
@@ -2920,6 +2924,7 @@ app.post("/api/debates", async (req, res) => {
       });
     }
 
+    clearDebatesApiResponseCache();
     res.json({ id: data.id });
   } catch (error) {
     console.error(error);
