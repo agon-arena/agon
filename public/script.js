@@ -3337,6 +3337,44 @@ async function waitForDebateSourcePreviewStability(timeoutMs = 2600) {
   }
 }
 
+async function waitForNotificationTargetLayoutStability(element, timeoutMs = 2200) {
+  if (!element || typeof element.getBoundingClientRect !== "function") return;
+
+  const start = Date.now();
+  let previousTop = null;
+  let previousHeight = null;
+  let stableFrames = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    if (!element.isConnected) return;
+
+    const rect = element.getBoundingClientRect();
+    const currentTop = Math.round(rect.top || 0);
+    const currentHeight = Math.round(rect.height || 0);
+    const topDelta = previousTop === null ? 0 : Math.abs(currentTop - previousTop);
+    const heightDelta = previousHeight === null ? 0 : Math.abs(currentHeight - previousHeight);
+
+    if (topDelta <= 1 && heightDelta <= 1) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+      previousTop = currentTop;
+      previousHeight = currentHeight;
+    }
+
+    if (previousTop === null || previousHeight === null) {
+      previousTop = currentTop;
+      previousHeight = currentHeight;
+    }
+
+    if (stableFrames >= 6) {
+      return;
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+}
+
 async function scrollNotificationTargetIntoPlace(element, highlight, options = {}) {
   if (!element) return;
 
@@ -3360,6 +3398,9 @@ async function scrollNotificationTargetIntoPlace(element, highlight, options = {
     await waitForDebateSourcePreviewStability();
     scrollToElement(element, "auto");
   }
+
+  await waitForNotificationTargetLayoutStability(element);
+  scrollToElement(element, "auto");
 
   if (finalizeTransition) {
     finalizeNotificationTransitionAtScrollStart();
@@ -8746,7 +8787,7 @@ title = getNotificationDisplayTitle(notification, title);
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, ‘${notification.id}’, ‘${link}’, this)"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
         <div class="notification-top">
           <span class="notification-icon">${icon}</span>
@@ -10821,21 +10862,36 @@ async function loadMoreOtherDebates() {
       return;
     }
 
+    const previousIds = otherDebatesCache.slice(0, previousVisible).map((d) => String(d.id));
+
     const restoreAnchor = captureIndexScrollRestoreAnchor();
     const fallbackScrollY = Math.max(0, Math.round(window.scrollY || 0));
     const fetchedDebates = await fetchAndMergeNextIndexDebatesPage();
 
+    const newFiltered = getFilteredDebatesForIndex(debatesCache);
+    const orderUnchanged = newFiltered.length >= previousVisible &&
+      newFiltered.slice(0, previousVisible).every((d, i) => String(d.id) === previousIds[i]);
+
     otherDebatesVisible = targetVisible;
     refreshCategoryFilterOptions(debatesCache);
-    applyIndexFilters();
 
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(resolve);
+    if (!fetchedDebates.length) {
+      applyIndexFilters();
+    } else if (orderUnchanged) {
+      otherDebatesCache = newFiltered;
+      updateCategoryFilterVisualState();
+      renderIndexActiveFilterTags();
+      const appendEnd = Math.min(targetVisible, otherDebatesCache.length);
+      queueIndexEmbedPreloadRange(previousVisible, appendEnd);
+      appendDebatesToList(otherDebatesCache, previousVisible, appendEnd);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    } else {
+      applyIndexFilters();
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
       });
-    });
-
-    if (fetchedDebates.length) {
       restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
     }
   } catch (error) {
@@ -19029,12 +19085,12 @@ if (location.pathname === "/debate") {
   setInterval(() => {
     if (!shouldRunBackgroundRefresh()) return;
     loadNotifications();
-  }, 20000);
+  }, 60000);
 
   setInterval(() => {
     if (!shouldRunBackgroundRefresh()) return;
     loadReportsBadge();
-  }, 20000);
+  }, 60000);
   const resetNotificationsBtn = document.getElementById("reset-notifications-btn");
   if (resetNotificationsBtn) {
     resetNotificationsBtn.addEventListener("click", resetNotifications);
@@ -19145,7 +19201,7 @@ if (notification.type === "majority_lost") {
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, ‘${notification.id}’, ‘${link}’, this)"
+  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
           <div class="notification-top">
             <span class="notification-icon">${icon}</span>

@@ -1701,16 +1701,14 @@ async function checkMajorityFlips(debateId) {
   }
 }
 
-const VOTE_NOTIFICATION_FLUSH_INTERVAL_MS = 60 * 1000;
-const pendingVoteNotifications = new Map();
-let voteNotificationFlushTimer = null;
-let isFlushingVoteNotifications = false;
+const VOTE_NOTIFICATION_AGGREGATION_WINDOW_MS = 60 * 1000;
+const voteNotificationMergeQueues = new Map();
 
-function buildPendingVoteNotificationKey(userKey, argumentId) {
+function buildVoteNotificationMergeKey(userKey, argumentId) {
   return `${String(userKey || "").trim()}::${String(argumentId || "").trim()}`;
 }
 
-function enqueueVoteNotification({
+async function createOrMergeVoteNotificationNow({
   user_key,
   debate_id = null,
   argument_id = null,
@@ -1718,74 +1716,65 @@ function enqueueVoteNotification({
 }) {
   if (!user_key || !argument_id) return;
 
-  const key = buildPendingVoteNotificationKey(user_key, argument_id);
-  const existing = pendingVoteNotifications.get(key);
+  const ideaLabel = quoteNotificationContent(argument_title || "cette idée");
+  const windowStartIso = new Date(Date.now() - VOTE_NOTIFICATION_AGGREGATION_WINDOW_MS).toISOString();
+  const { data: recentNotification, error } = await supabase
+    .from("notifications")
+    .select("id,message,created_at")
+    .eq("user_key", user_key)
+    .eq("argument_id", argument_id)
+    .eq("type", "vote_on_argument")
+    .gte("created_at", windowStartIso)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (existing) {
-    existing.count += 1;
-    existing.debate_id = debate_id ?? existing.debate_id ?? null;
-    existing.argument_title = String(argument_title || existing.argument_title || "").trim();
-    existing.updated_at = nowIso();
+  if (error) throw error;
+
+  if (!recentNotification) {
+    await createNotification({
+      user_key,
+      type: "vote_on_argument",
+      debate_id,
+      argument_id,
+      message: `Votre idée ${ideaLabel} a reçu 1 voix.`
+    });
     return;
   }
 
-  pendingVoteNotifications.set(key, {
-    user_key,
-    debate_id,
-    argument_id,
-    argument_title: String(argument_title || "").trim(),
-    count: 1,
-    created_at: nowIso(),
-    updated_at: nowIso()
+  const matched = String(recentNotification.message || "").match(/a reçu\s+(\d+)\s+voix?/i);
+  const currentCount = matched ? Number.parseInt(matched[1], 10) : 1;
+  const nextCount = Math.max(2, currentCount + 1);
+
+  const { error: updateError } = await supabase
+    .from("notifications")
+    .update({
+      debate_id,
+      argument_id,
+      message: `Votre idée ${ideaLabel} a reçu ${nextCount} voix.`,
+      is_read: 0,
+      created_at: nowIso()
+    })
+    .eq("id", recentNotification.id);
+
+  if (updateError) throw updateError;
+}
+
+function createOrMergeVoteNotification(payload) {
+  const mergeKey = buildVoteNotificationMergeKey(payload?.user_key, payload?.argument_id);
+  const previous = voteNotificationMergeQueues.get(mergeKey) || Promise.resolve();
+
+  const next = previous
+    .catch(() => {})
+    .then(() => createOrMergeVoteNotificationNow(payload));
+
+  voteNotificationMergeQueues.set(mergeKey, next);
+
+  return next.finally(() => {
+    if (voteNotificationMergeQueues.get(mergeKey) === next) {
+      voteNotificationMergeQueues.delete(mergeKey);
+    }
   });
-}
-
-async function flushPendingVoteNotifications() {
-  if (isFlushingVoteNotifications || pendingVoteNotifications.size === 0) return;
-
-  isFlushingVoteNotifications = true;
-  const batches = Array.from(pendingVoteNotifications.values());
-  pendingVoteNotifications.clear();
-
-  try {
-    for (const batch of batches) {
-      const voteCount = Math.max(1, Number(batch.count || 0));
-      const ideaLabel = quoteNotificationContent(batch.argument_title || "cette idée");
-      const voiceLabel = voteCount > 1 ? `${voteCount} voix` : "1 voix";
-      await createNotification({
-        user_key: batch.user_key,
-        type: "vote_on_argument",
-        debate_id: batch.debate_id,
-        argument_id: batch.argument_id,
-        message: `Votre idée ${ideaLabel} a reçu ${voiceLabel}.`
-      });
-    }
-  } catch (error) {
-    for (const batch of batches) {
-      const key = buildPendingVoteNotificationKey(batch.user_key, batch.argument_id);
-      const existing = pendingVoteNotifications.get(key);
-      if (existing) {
-        existing.count += Number(batch.count || 0);
-        existing.debate_id = batch.debate_id ?? existing.debate_id ?? null;
-        existing.argument_title = batch.argument_title || existing.argument_title;
-        existing.updated_at = nowIso();
-      } else {
-        pendingVoteNotifications.set(key, { ...batch, updated_at: nowIso() });
-      }
-    }
-    throw error;
-  } finally {
-    isFlushingVoteNotifications = false;
-  }
-}
-
-function startVoteNotificationFlushLoop() {
-  if (voteNotificationFlushTimer) return;
-  voteNotificationFlushTimer = setInterval(() => {
-    flushPendingVoteNotifications().catch((error) => {
-      console.error("Erreur flush notifications de voix.", error);
-    });
-  }, VOTE_NOTIFICATION_FLUSH_INTERVAL_MS);
 }
 
 async function getDebateById(id) {
@@ -1934,8 +1923,6 @@ app.get("/", (req, res) => {
 app.get("/create", (req, res) => {
   res.sendFile(path.join(__dirname, "views/create.html"));
 });
-
-startVoteNotificationFlushLoop();
 
 app.get("/notifications", (req, res) => {
   res.sendFile(path.join(__dirname, "views/notifications.html"));
@@ -3683,11 +3670,13 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
     const argument = await getArgumentById(id);
 
     if (argument.author_key && argument.author_key !== voterKey) {
-      enqueueVoteNotification({
+      createOrMergeVoteNotification({
         user_key: argument.author_key,
         debate_id: argument.debate_id,
         argument_id: id,
         argument_title: argument.title
+      }).catch((notificationError) => {
+        console.error(notificationError);
       });
     }
 
