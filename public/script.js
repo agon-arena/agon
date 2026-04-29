@@ -8730,13 +8730,23 @@ if (notification.type === "reply_to_comment") {
   title = "Quelqu’un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
+if (notification.type === "majority_gained") {
+  icon = "🤼";
+  title = "Votre camp vient de prendre la majorité";
+  subtitle = "Ouvrir le débat";
+}
+if (notification.type === "majority_lost") {
+  icon = "🤼";
+  title = "Votre camp vient de perdre la majorité";
+  subtitle = "Ouvrir le débat";
+}
 
 title = getNotificationDisplayTitle(notification, title);
   return `
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
+  onclick="handleNotificationClick(event, ‘${notification.id}’, ‘${link}’, this)"
 >
         <div class="notification-top">
           <span class="notification-icon">${icon}</span>
@@ -19120,12 +19130,22 @@ if (notification.type === "reply_to_comment") {
   title = "Quelqu’un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
+if (notification.type === "majority_gained") {
+  icon = "🤼";
+  title = "Votre camp vient de prendre la majorité";
+  subtitle = "Ouvrir le débat";
+}
+if (notification.type === "majority_lost") {
+  icon = "🤼";
+  title = "Votre camp vient de perdre la majorité";
+  subtitle = "Ouvrir le débat";
+}
       title = getNotificationDisplayTitle(notification, title);
      return `
  <a
   class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
   href="${link}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
+  onclick="handleNotificationClick(event, ‘${notification.id}’, ‘${link}’, this)"
 >
           <div class="notification-top">
             <span class="notification-icon">${icon}</span>
