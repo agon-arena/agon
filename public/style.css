@@ -475,9 +475,9 @@ main.create-page {
   padding: 22px;
   border-radius: 14px;
   border: 1px solid #e5e7eb;
+  overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
-  clip-path: inset(0 round 14px);
 }
 
 .debate-card:hover {
@@ -544,7 +544,7 @@ main.create-page {
   white-space: nowrap;
   box-shadow: 0 6px 14px rgba(220, 38, 38, 0.22);
   overflow: hidden;
-  animation: debate-card-new-badge-pulse 2.2s ease-in-out infinite;
+  animation: debate-card-new-badge-pulse 2.2s ease-in-out 3;
 }
 
 .debate-card-new-badge::after {
@@ -553,7 +553,7 @@ main.create-page {
   inset: 0;
   background: linear-gradient(120deg, transparent 18%, rgba(255, 255, 255, 0.42) 50%, transparent 82%);
   transform: translateX(-130%);
-  animation: debate-card-new-badge-shine 2.8s ease-in-out infinite;
+  animation: debate-card-new-badge-shine 2.8s ease-in-out 3;
 }
 
 @keyframes debate-card-new-badge-pulse {
@@ -7696,11 +7696,11 @@ padding:4px 14px 12px 14px;
     box-shadow 0.24s ease,
     border-color 0.24s ease,
     background-color 0.24s ease;
-  will-change: transform, box-shadow;
 }
 
 .debate-card:hover,
 .debate-card:focus-within {
+  will-change: transform, box-shadow;
   transform: translateY(-5px);
   box-shadow:
     0 18px 40px rgba(15, 23, 42, 0.14),
@@ -9045,13 +9045,7 @@ body.home-topbar-menu-is-open .topbar-social {
 }
 
 
-html.index-batch-loading-active,
 body.index-batch-loading-active {
-  position: fixed;
-  left: 0;
-  right: 0;
-  width: 100%;
-  overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
 }
@@ -9067,7 +9061,9 @@ body.index-batch-loading-active {
   align-items: flex-end;
   justify-content: center;
   padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
-  background: rgba(243, 244, 246, 0.28);
+  background: rgba(243, 244, 246, 0.18);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;

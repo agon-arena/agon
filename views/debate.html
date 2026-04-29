@@ -20,7 +20,7 @@
 <meta name="twitter:image" content="__META_IMAGE__">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-<link rel="stylesheet" href="/style.css?v=20260428-26" />
+<link rel="stylesheet" href="/style.css?v=20260429-2" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script>
 (function () {
@@ -1212,6 +1212,31 @@ body.page-debate .similar-debates-results .debate-card.index-card-active .score-
   color: #111827 !important;
 }
 
+@media (max-width: 768px) {
+  body.page-debate .voice-dictation-button {
+    transition: background-color 0.16s ease, color 0.16s ease;
+  }
+
+  body.page-debate .voice-dictation-button.voice-dictation-button-active i {
+    animation: voiceDictationPulse 1.6s ease-in-out infinite;
+  }
+
+  body.page-debate .voice-stepper-btn-guided,
+  body.page-debate .my-argument-chip-stepper-btn-guided {
+    animation: voiceStepperPulse 1.8s ease-in-out infinite;
+  }
+
+  body.page-debate .similar-debates-results .debate-card {
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+    will-change: auto;
+  }
+
+  body.page-debate .similar-debates-results .debate-card.index-card-active {
+    transform: none;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08) !important;
+  }
+}
+
 @media (min-width: 769px) {
   body.page-debate .similar-debates-bottom {
     width: min(780px, 100%);
@@ -2166,7 +2191,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260428-29"></script>
+<script src="/script.js?v=20260429-10"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
@@ -2211,8 +2236,20 @@ document.addEventListener('keydown', function(e) {
 (function(){
   if (window.self !== window.top) {
     document.body.classList.add('debate-embedded-frame');
+    document.documentElement.dataset.embeddedDebateFreshNavigation = 'true';
+    try {
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+    } catch (error) {}
+    try {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    } catch (error) {}
   } else {
     document.body.classList.remove('debate-embedded-frame');
+    delete document.documentElement.dataset.embeddedDebateFreshNavigation;
   }
 
   function updateEmbeddedDebateTopOffset(){
@@ -2897,6 +2934,39 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 .scroll-arrows.visible .arr14 { animation: arrowFall 1.6s ease-in-out infinite 1.95s; }
 .scroll-arrows.visible .arr15 { animation: arrowFall 1.6s ease-in-out infinite 2.1s; }
 .scroll-arrows svg { display: block; opacity: 0; }
+
+@media (max-width: 768px) {
+  .scroll-arrows.visible .arr1 { animation: arrowFall 2.1s ease-in-out infinite 0.0s; }
+  .scroll-arrows.visible .arr2 { animation: arrowFall 2.1s ease-in-out infinite 0.2s; }
+  .scroll-arrows.visible .arr3 { animation: arrowFall 2.1s ease-in-out infinite 0.4s; }
+  .scroll-arrows.visible .arr4 { animation: arrowFall 2.1s ease-in-out infinite 0.6s; }
+  .scroll-arrows.visible .arr5 { animation: arrowFall 2.1s ease-in-out infinite 0.8s; }
+  .scroll-arrows.visible .arr6 { animation: arrowFall 2.1s ease-in-out infinite 1.0s; }
+  .scroll-arrows.visible .arr7 { animation: arrowFall 2.1s ease-in-out infinite 1.2s; }
+  .scroll-arrows.visible .arr8 { animation: arrowFall 2.1s ease-in-out infinite 1.4s; }
+  .scroll-arrows.visible .arr9 { animation: arrowFall 2.1s ease-in-out infinite 1.6s; }
+  .scroll-arrows.visible .arr10 { animation: arrowFall 2.1s ease-in-out infinite 1.8s; }
+  .scroll-arrows.visible .arr11 { animation: arrowFall 2.1s ease-in-out infinite 2.0s; }
+  .scroll-arrows.visible .arr12 { animation: arrowFall 2.1s ease-in-out infinite 2.2s; }
+  .scroll-arrows.visible .arr13 { animation: arrowFall 2.1s ease-in-out infinite 2.4s; }
+  .scroll-arrows.visible .arr14 { animation: arrowFall 2.1s ease-in-out infinite 2.6s; }
+  .scroll-arrows.visible .arr15 { animation: arrowFall 2.1s ease-in-out infinite 2.8s; }
+
+  #voices-float-badge {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.18) !important;
+  }
+
+  #voices-panel-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  #voices-panel {
+    box-shadow: 0 12px 30px rgba(0,0,0,0.28) !important;
+  }
+}
 </style>
 
 

@@ -11,6 +11,8 @@ let currentDebateShareData = {
 
 let indexCardHighlightRaf = null;
 let indexCardHighlightBound = false;
+let indexCardHighlightTimeout = null;
+let indexCardHighlightLastRunTs = 0;
 
 let pendingArgumentScrollId = null;
 let pendingCommentScrollId = null;
@@ -43,6 +45,7 @@ let currentIndexSearchQuery = "";
 const indexSourcePreviewCache = new Map();
 let indexLastUserScrollTs = 0;
 let indexLastEmbedScrollRestoreTs = 0;
+let indexLastBatchCompletedAt = 0;
 let indexEmbedScrollRestoreRaf = null;
 let indexPendingEmbedScrollRestoreTop = null;
 let indexUserScrollGuardBound = false;
@@ -1852,6 +1855,16 @@ function lockPageScrollForDebateModal(savedScrollY = 0) {
   const safeScrollY = Math.max(0, Math.round(Number(savedScrollY) || 0));
 
   if (shouldUseMobileDebateModalScrollLock()) {
+    if (_debateModalTouchBlockHandler) {
+      document.removeEventListener("touchmove", _debateModalTouchBlockHandler, { capture: true });
+      _debateModalTouchBlockHandler = null;
+    }
+
+    if (_debateModalWheelBlockHandler) {
+      document.removeEventListener("wheel", _debateModalWheelBlockHandler, { capture: true });
+      _debateModalWheelBlockHandler = null;
+    }
+
     _debateModalScrollLockMode = "mobile";
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
@@ -5312,10 +5325,9 @@ const isMobileHome =
     !document.body.classList.contains('page-home-mobile') &&
     !getDebateId();
 
-  const isMobileOpenDebate =
-    document.body.classList.contains('page-debate') &&
-    !!getDebateId() &&
-    window.innerWidth <= 768;
+  // Allègement prudent : on désactive la surbrillance scroll-driven
+  // dans le bloc "arènes similaires" sur mobile débat.
+  const isMobileOpenDebate = false;
 
   let cards = [];
 
@@ -5372,14 +5384,37 @@ const isMobileHome =
 }
 
 function scheduleMobileIndexCardHighlightUpdate() {
+  const now = Date.now();
+  const elapsed = now - indexCardHighlightLastRunTs;
+  const minDelay = window.innerWidth <= 768 ? 90 : 45;
+
   if (indexCardHighlightRaf) {
     cancelAnimationFrame(indexCardHighlightRaf);
+    indexCardHighlightRaf = null;
   }
 
-  indexCardHighlightRaf = requestAnimationFrame(() => {
-    indexCardHighlightRaf = null;
-    updateMobileIndexCardHighlight();
-  });
+  if (indexCardHighlightTimeout !== null) {
+    clearTimeout(indexCardHighlightTimeout);
+    indexCardHighlightTimeout = null;
+  }
+
+  const runUpdate = () => {
+    indexCardHighlightRaf = requestAnimationFrame(() => {
+      indexCardHighlightRaf = null;
+      indexCardHighlightLastRunTs = Date.now();
+      updateMobileIndexCardHighlight();
+    });
+  };
+
+  if (elapsed >= minDelay) {
+    runUpdate();
+    return;
+  }
+
+  indexCardHighlightTimeout = window.setTimeout(() => {
+    indexCardHighlightTimeout = null;
+    runUpdate();
+  }, minDelay - elapsed);
 }
 function initMobileIndexCardHighlight() {
   if (indexCardHighlightBound) return;
@@ -5612,10 +5647,9 @@ function initIndexLocalVideoObserver(root = document) {
   shells.forEach((shell) => state.observer.observe(shell));
 
   state.resizeHandler = () => scheduleIndexLocalVideoActiveUpdate();
-  state.scrollHandler = () => scheduleIndexLocalVideoActiveUpdate();
+  state.scrollHandler = null;
 
   window.addEventListener('resize', state.resizeHandler);
-  window.addEventListener('scroll', state.scrollHandler, { passive: true });
 
   scheduleIndexLocalVideoActiveUpdate();
 }
@@ -5837,7 +5871,7 @@ function initIndexYouTubeObserver(root = document) {
     scheduleIndexYouTubeActiveUpdate();
   }, {
     threshold: [0, 0.1, 0.35, 0.7],
-    rootMargin: '120px 0px 120px 0px'
+    rootMargin: '300px 0px 300px 0px'
   });
 
   shells.forEach((shell) => {
@@ -5845,10 +5879,9 @@ function initIndexYouTubeObserver(root = document) {
   });
 
   state.resizeHandler = () => scheduleIndexYouTubeActiveUpdate();
-  state.scrollHandler = () => scheduleIndexYouTubeActiveUpdate();
+  state.scrollHandler = null;
 
   window.addEventListener('resize', state.resizeHandler);
-  window.addEventListener('scroll', state.scrollHandler, { passive: true });
 
   scheduleIndexYouTubeActiveUpdate();
 }
@@ -5910,14 +5943,20 @@ function captureIndexEmbedScrollAnchor(shell, type = '') {
   const topbar = document.querySelector('.topbar');
   const topbarHeight = topbar ? topbar.offsetHeight : 0;
   const visibleTopLimit = Math.max(0, topbarHeight - 8);
-  const shouldCompensate = rect.bottom > visibleTopLimit && rect.top < viewportHeight;
+  const isVisibleAtCapture = rect.bottom > visibleTopLimit && rect.top < viewportHeight;
+  const isAboveViewportAtCapture = rect.top < visibleTopLimit;
+  const shouldCompensate = isAboveViewportAtCapture;
 
   if (!shouldCompensate) return null;
 
   return {
     top: rect.top,
     scrollY: window.scrollY,
-    type: String(type || '').trim().toLowerCase()
+    type: String(type || '').trim().toLowerCase(),
+    capturedAt: Date.now(),
+    capturedDuringBatch: !!indexInfiniteScrollLoading,
+    visibleTopLimit,
+    wasVisibleAtCapture: isVisibleAtCapture
   };
 }
 
@@ -5938,15 +5977,24 @@ function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
     if (!anchor) return;
     if (Date.now() - indexLastUserScrollTs < 450) return;
     if (Math.abs(window.scrollY - Number(anchor.scrollY || 0)) > 140) return;
+    if (anchor.wasVisibleAtCapture) return;
+    if (
+      anchor.capturedDuringBatch &&
+      Number(anchor.capturedAt || 0) > 0 &&
+      indexLastBatchCompletedAt > Number(anchor.capturedAt || 0) &&
+      Date.now() - indexLastBatchCompletedAt < 1400
+    ) {
+      return;
+    }
 
     const rect = shell.getBoundingClientRect();
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
     const topbar = document.querySelector('.topbar');
     const topbarHeight = topbar ? topbar.offsetHeight : 0;
     const visibleTopLimit = Math.max(0, topbarHeight - 8);
-    const isStillNearViewport = rect.bottom > visibleTopLimit - 24 && rect.top < viewportHeight + 24;
+    const isStillAboveViewport = rect.top < visibleTopLimit && rect.bottom > visibleTopLimit - 220;
 
-    if (!isStillNearViewport) return;
+    if (!isStillAboveViewport) return;
 
     const delta = rect.top - Number(anchor.top || 0);
 
@@ -6120,6 +6168,65 @@ async function renderIndexXShell(shell) {
   }
 }
 
+function unloadIndexXShell(shell) {
+  if (!shell) return;
+  const embed = shell.querySelector('[data-index-x-embed]');
+  const loading = shell.querySelector('[data-index-x-loading]');
+  if (embed) {
+    embed.innerHTML = '';
+    embed.style.display = 'none';
+    embed.style.visibility = '';
+    embed.style.minHeight = '';
+  }
+  if (loading) loading.style.display = '';
+  shell.dataset.rendered = 'false';
+  shell.dataset.rendering = 'false';
+  // Re-observer avec le load observer pour qu'il recharge au prochain scroll
+  window.indexXEmbedState?.observer?.observe(shell);
+}
+
+function unloadIndexInstagramShell(shell) {
+  if (!shell) return;
+  const embed = shell.querySelector('[data-index-instagram-embed]');
+  const loading = shell.querySelector('[data-index-instagram-loading]');
+  if (embed) {
+    embed.innerHTML = '';
+    embed.style.display = 'none';
+    embed.style.visibility = '';
+    embed.style.minHeight = '';
+  }
+  if (loading) loading.style.display = '';
+  shell.dataset.rendered = 'false';
+  shell.dataset.rendering = 'false';
+  window.indexInstagramEmbedState?.observer?.observe(shell);
+}
+
+function initIndexEmbedUnloadObserver(root = document) {
+  if (!window.__indexEmbedUnloadObserver) {
+    window.__indexEmbedUnloadObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) return;
+        const shell = entry.target;
+        if (shell.dataset.rendered !== 'true') return;
+        if (shell.hasAttribute('data-index-x-shell')) {
+          unloadIndexXShell(shell);
+        } else if (shell.hasAttribute('data-index-instagram-shell')) {
+          unloadIndexInstagramShell(shell);
+        }
+      });
+    }, {
+      rootMargin: '1500px 0px 1500px 0px',
+      threshold: 0
+    });
+  }
+
+  root.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]').forEach((shell) => {
+    if (shell.dataset.unloadObserving === '1') return;
+    shell.dataset.unloadObserving = '1';
+    window.__indexEmbedUnloadObserver.observe(shell);
+  });
+}
+
 function initIndexXObserver(root = document) {
   const shells = Array.from(root.querySelectorAll('[data-index-x-shell]'));
   const previousState = window.indexXEmbedState;
@@ -6191,7 +6298,7 @@ function initIndexXObserver(root = document) {
     });
   }, {
     threshold: [0, 0.1, 0.35, 0.7],
-    rootMargin: '80px 0px 80px 0px'
+    rootMargin: '300px 0px 300px 0px'
   });
 
   shells.forEach((shell) => {
@@ -6388,7 +6495,7 @@ function initIndexInstagramObserver(root = document) {
     });
   }, {
     threshold: [0, 0.1, 0.35, 0.7],
-    rootMargin: '80px 0px 80px 0px'
+    rootMargin: '300px 0px 300px 0px'
   });
 
   shells.forEach((shell) => {
@@ -9075,11 +9182,10 @@ const INDEX_OTHER_DEBATES_BATCH_SIZE = 8;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
-let indexPendingEmbedPreloadRange = null;
-let indexEmbedBatchPreloadPromise = null;
-let indexDeferQueuedPreloadOnce = false;
 let indexBatchScrollLockY = null;
+let indexBatchScrollLockAnchor = null;
 let indexBatchScrollLockHandlers = null;
+let indexBatchLoadingSnapshotActive = false;
 
 function preventIndexBatchScrollWhileLoading(event) {
   if (!document.body.classList.contains('index-batch-loading-active')) return;
@@ -9131,32 +9237,21 @@ function lockIndexBatchScroll() {
   if (document.body.classList.contains('index-batch-loading-active')) return;
 
   indexBatchScrollLockY = window.scrollY || window.pageYOffset || 0;
-  document.documentElement.style.top = `-${indexBatchScrollLockY}px`;
-  document.body.style.top = `-${indexBatchScrollLockY}px`;
   document.documentElement.classList.add('index-batch-loading-active');
   document.body.classList.add('index-batch-loading-active');
   attachIndexBatchScrollLockHandlers();
 }
 
 function unlockIndexBatchScroll() {
-  const wasLocked = document.body.classList.contains('index-batch-loading-active');
-  const savedY = Number(indexBatchScrollLockY || 0);
-
-  if (!wasLocked) {
+  if (!document.body.classList.contains('index-batch-loading-active')) {
     indexBatchScrollLockY = null;
     return;
   }
 
   document.documentElement.classList.remove('index-batch-loading-active');
   document.body.classList.remove('index-batch-loading-active');
-  document.documentElement.style.top = '';
-  document.body.style.top = '';
   detachIndexBatchScrollLockHandlers();
   indexBatchScrollLockY = null;
-
-  if (wasLocked) {
-    window.scrollTo({ top: Math.max(0, savedY), behavior: 'auto' });
-  }
 }
 
 function cleanupIndexInfiniteScrollObserver() {
@@ -9177,6 +9272,86 @@ function updateIndexBatchLoadingOverlayBounds() {
   overlay.style.setProperty('--index-batch-loading-bottom', `${bottom}px`);
 }
 
+function sanitizeIndexBatchLoadingSnapshotClone(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return root;
+
+  if (root.hasAttribute && root.hasAttribute('id')) {
+    root.removeAttribute('id');
+  }
+
+  root.querySelectorAll('*').forEach((node) => {
+    if (node.hasAttribute('id')) node.removeAttribute('id');
+    if (node.hasAttribute('onclick')) node.removeAttribute('onclick');
+    if (node.hasAttribute('onmousedown')) node.removeAttribute('onmousedown');
+    if (node.hasAttribute('onmouseup')) node.removeAttribute('onmouseup');
+    if (node.hasAttribute('onpointerdown')) node.removeAttribute('onpointerdown');
+    if (node.hasAttribute('onpointerup')) node.removeAttribute('onpointerup');
+    if (node.hasAttribute('onkeydown')) node.removeAttribute('onkeydown');
+    if (node.hasAttribute('href')) node.removeAttribute('href');
+    if (node.hasAttribute('tabindex')) node.removeAttribute('tabindex');
+    if (node.matches('iframe')) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'index-batch-loading-media-placeholder';
+      placeholder.style.width = '100%';
+      placeholder.style.minHeight = `${Math.max(160, Math.round(node.getBoundingClientRect().height || 220))}px`;
+      placeholder.style.borderRadius = '18px';
+      placeholder.style.background = 'rgba(15, 23, 42, 0.10)';
+      placeholder.style.boxShadow = 'inset 0 0 0 1px rgba(15, 23, 42, 0.06)';
+      node.replaceWith(placeholder);
+      return;
+    }
+
+    if (node.matches('video, audio')) {
+      node.pause?.();
+      node.removeAttribute('src');
+      node.removeAttribute('autoplay');
+      node.removeAttribute('controls');
+      node.removeAttribute('muted');
+      node.load?.();
+      node.style.pointerEvents = 'none';
+    }
+  });
+
+  return root;
+}
+
+function clearIndexBatchLoadingSnapshot() {
+  const viewport = document.querySelector('#index-batch-loading-overlay .index-batch-loading-snapshot-viewport');
+  if (!viewport) return;
+  viewport.innerHTML = '';
+  indexBatchLoadingSnapshotActive = false;
+}
+
+function captureIndexBatchLoadingSnapshot() {
+  const overlay = ensureIndexBatchLoadingOverlay();
+  const viewport = overlay?.querySelector('.index-batch-loading-snapshot-viewport');
+  if (!overlay || !viewport) return;
+
+  clearIndexBatchLoadingSnapshot();
+
+  const source = document.querySelector('main.home-page');
+  if (!source || !source.isConnected) return;
+
+  const sourceRect = source.getBoundingClientRect();
+  const overlayRect = overlay.getBoundingClientRect();
+  const clone = sanitizeIndexBatchLoadingSnapshotClone(source.cloneNode(true));
+
+  clone.style.position = 'absolute';
+  clone.style.left = `${Math.round(sourceRect.left - overlayRect.left)}px`;
+  clone.style.top = `${Math.round(sourceRect.top - overlayRect.top)}px`;
+  clone.style.width = `${Math.round(sourceRect.width)}px`;
+  clone.style.maxWidth = 'none';
+  clone.style.margin = '0';
+  clone.style.pointerEvents = 'none';
+  clone.style.userSelect = 'none';
+  clone.style.filter = 'blur(2px) saturate(0.96)';
+  clone.style.opacity = '0.96';
+  clone.style.transform = 'translateZ(0)';
+
+  viewport.appendChild(clone);
+  indexBatchLoadingSnapshotActive = true;
+}
+
 function ensureIndexBatchLoadingOverlay() {
   let overlay = document.getElementById('index-batch-loading-overlay');
   if (overlay) {
@@ -9195,12 +9370,15 @@ function ensureIndexBatchLoadingOverlay() {
       <span class="index-batch-loading-text">Chargement…</span>
     </div>
   `;
+
   document.body.appendChild(overlay);
 
   if (!document.documentElement.dataset.indexBatchLoadingOverlayBoundsBound) {
     document.documentElement.dataset.indexBatchLoadingOverlayBoundsBound = 'true';
 
     const refreshBounds = () => {
+      const el = document.getElementById('index-batch-loading-overlay');
+      if (!el?.classList.contains('index-batch-loading-overlay-visible')) return;
       requestAnimationFrame(updateIndexBatchLoadingOverlayBounds);
     };
 
@@ -9219,6 +9397,7 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
   const loading = !!isLoading;
 
   if (loading) {
+    updateIndexBatchLoadingOverlayBounds();
     lockIndexBatchScroll();
   } else {
     unlockIndexBatchScroll();
@@ -9256,122 +9435,18 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
       requestAnimationFrame(() => {
         updateIndexBatchLoadingOverlayBounds();
       });
-      setTimeout(() => {
-        updateIndexBatchLoadingOverlayBounds();
-      }, 120);
     }
   }
 }
 
-function getIndexEmbedShellsInDebateRange(startIndex = 0, endIndex = 0) {
-  const cards = Array.from(document.querySelectorAll('#debates-list .debate-card'));
-  if (!cards.length) return [];
-
-  const start = Math.max(0, Number(startIndex) || 0);
-  const end = Math.max(start, Number(endIndex) || 0);
-
-  return cards
-    .slice(start, end)
-    .flatMap((card) => Array.from(card.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]')));
-}
-
-async function preloadIndexEmbedsForDebateRange(startIndex = 0, endIndex = 0) {
-  const shells = getIndexEmbedShellsInDebateRange(startIndex, endIndex).filter((shell) => {
-    const rendered = String(shell?.dataset?.rendered || '').trim();
-    const rendering = String(shell?.dataset?.rendering || '').trim();
-    return rendering !== 'true' && rendered !== 'true' && rendered !== 'failed';
-  });
-
-  if (!shells.length) return;
-
-  for (const shell of shells) {
-    const isInstagram = shell.hasAttribute('data-index-instagram-shell');
-
-    if (isInstagram) {
-      await renderIndexInstagramShell(shell);
-    } else {
-      await renderIndexXShell(shell);
-    }
-  }
-}
-
-async function waitForIndexEmbedRangeStability(startIndex = 0, endIndex = 0, timeoutMs = 3200) {
-  const shells = getIndexEmbedShellsInDebateRange(startIndex, endIndex);
-  if (!shells.length) return;
-
-  const previousHeights = new Map();
-  let stableFrames = 0;
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    let allStable = true;
-
-    for (const shell of shells) {
-      if (!shell?.isConnected) continue;
-
-      const rendering = String(shell.dataset?.rendering || '').trim();
-      if (rendering === 'true') {
-        allStable = false;
-      }
-
-      const height = Math.round(shell.getBoundingClientRect().height || shell.offsetHeight || 0);
-      const previousHeight = previousHeights.get(shell);
-
-      if (previousHeight === undefined || Math.abs(height - previousHeight) > 1) {
-        allStable = false;
-      }
-
-      previousHeights.set(shell, height);
-    }
-
-    if (allStable) {
-      stableFrames += 1;
-    } else {
-      stableFrames = 0;
-    }
-
-    if (stableFrames >= 6) {
-      return;
-    }
-
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-}
-
-function queueIndexEmbedPreloadRange(startIndex = 0, endIndex = 0) {
-  indexPendingEmbedPreloadRange = {
-    start: Math.max(0, Number(startIndex) || 0),
-    end: Math.max(0, Number(endIndex) || 0)
-  };
-}
-
-function runQueuedIndexEmbedPreloadIfNeeded() {
-  const range = indexPendingEmbedPreloadRange;
-  indexPendingEmbedPreloadRange = null;
-
-  if (!range || range.end <= range.start) {
-    return Promise.resolve();
-  }
-
-  const job = preloadIndexEmbedsForDebateRange(range.start, range.end)
-    .then(() => waitForIndexEmbedRangeStability(range.start, range.end))
-    .catch((error) => {
-      console.warn('Préchargement des embeds index interrompu :', error);
-    }).finally(() => {
-      if (indexEmbedBatchPreloadPromise === job) {
-        indexEmbedBatchPreloadPromise = null;
-      }
-      scheduleMobileIndexCardHighlightUpdate();
-    });
-
-  indexEmbedBatchPreloadPromise = job;
-  return job;
-}
 
 function setupIndexInfiniteScroll() {
+  const sentinel = document.getElementById("index-infinite-scroll-sentinel");
+
+  if (indexInfiniteScrollObserver && sentinel && sentinel.dataset.observing === '1') return;
+
   cleanupIndexInfiniteScrollObserver();
 
-  const sentinel = document.getElementById("index-infinite-scroll-sentinel");
   if (!sentinel) return;
 
   indexInfiniteScrollObserver = new IntersectionObserver((entries) => {
@@ -9386,6 +9461,7 @@ function setupIndexInfiniteScroll() {
     threshold: 0.01
   });
 
+  sentinel.dataset.observing = '1';
   indexInfiniteScrollObserver.observe(sentinel);
 }
 
@@ -10277,6 +10353,7 @@ function getIndexTypeFilterLabel(type) {
   if (type === "debate") return "Arènes à positions";
   if (type === "question") return "Arènes libres";
   if (type === "visited") return "Arènes consultées";
+  if (type === "agon") return "Arènes générées par agôn";
   return "Tous";
 }
 
@@ -10573,6 +10650,10 @@ function getFilteredDebatesForIndex(baseDebates) {
     filteredDebates = filteredDebates.filter((debate) => visitedIds.has(String(debate.id)));
   }
 
+  if (currentTypeFilter === "agon") {
+    filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate));
+  }
+
   const activeCategoryFilters = getCurrentCategoryFilters();
   if (activeCategoryFilters.length) {
     filteredDebates = filteredDebates.filter((debate) => {
@@ -10851,14 +10932,8 @@ div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
   initIndexInstagramObserver(document);
+  initIndexEmbedUnloadObserver(document);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
-  if (!indexDeferQueuedPreloadOnce) {
-    requestAnimationFrame(() => {
-      runQueuedIndexEmbedPreloadIfNeeded();
-    });
-  } else {
-    indexDeferQueuedPreloadOnce = false;
-  }
 }
 
 function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
@@ -10896,9 +10971,37 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   initIndexLocalVideoObserver(div);
   initIndexXObserver(div);
   initIndexInstagramObserver(div);
+  initIndexEmbedUnloadObserver(div);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
 
   return true;
+}
+
+function mergeIndexDebatesPreservingVisibleOrder(previousDebates = [], nextDebates = [], visibleCount = 0) {
+  const safePrevious = Array.isArray(previousDebates) ? previousDebates : [];
+  const safeNext = Array.isArray(nextDebates) ? nextDebates : [];
+  const visibleSlice = safePrevious.slice(0, Math.max(0, Number(visibleCount) || 0));
+  const visibleIds = visibleSlice.map((debate) => String(debate?.id || "")).filter(Boolean);
+  const nextById = new Map();
+
+  safeNext.forEach((debate) => {
+    const debateId = String(debate?.id || "");
+    if (!debateId) return;
+    nextById.set(debateId, debate);
+  });
+
+  const frozenVisible = visibleIds
+    .map((debateId) => nextById.get(debateId))
+    .filter(Boolean);
+
+  if (frozenVisible.length !== visibleIds.length) {
+    return null;
+  }
+
+  const visibleIdSet = new Set(visibleIds);
+  const remaining = safeNext.filter((debate) => !visibleIdSet.has(String(debate?.id || "")));
+
+  return [...frozenVisible, ...remaining];
 }
 
 async function loadMoreOtherDebates() {
@@ -10908,13 +11011,11 @@ async function loadMoreOtherDebates() {
   indexInfiniteScrollLoading = true;
   const previousVisible = otherDebatesVisible;
   setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
-  indexDeferQueuedPreloadOnce = true;
   const targetVisible = previousVisible + INDEX_OTHER_DEBATES_BATCH_SIZE;
 
   try {
     if (previousVisible < otherDebatesCache.length) {
       otherDebatesVisible = Math.min(targetVisible, otherDebatesCache.length);
-      queueIndexEmbedPreloadRange(previousVisible, otherDebatesVisible);
 
       const appended = appendDebatesToList(otherDebatesCache, previousVisible, otherDebatesVisible);
       if (!appended) {
@@ -10927,8 +11028,6 @@ async function loadMoreOtherDebates() {
 
     const previousIds = otherDebatesCache.slice(0, previousVisible).map((d) => String(d.id));
 
-    const restoreAnchor = captureIndexScrollRestoreAnchor();
-    const fallbackScrollY = Math.max(0, Math.round(window.scrollY || 0));
     const fetchedDebates = await fetchAndMergeNextIndexDebatesPage();
 
     const newFiltered = getFilteredDebatesForIndex(debatesCache);
@@ -10945,23 +11044,39 @@ async function loadMoreOtherDebates() {
       updateCategoryFilterVisualState();
       renderIndexActiveFilterTags();
       const appendEnd = Math.min(targetVisible, otherDebatesCache.length);
-      queueIndexEmbedPreloadRange(previousVisible, appendEnd);
       appendDebatesToList(otherDebatesCache, previousVisible, appendEnd);
       await new Promise((resolve) => requestAnimationFrame(resolve));
     } else {
-      applyIndexFilters();
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(resolve);
+      const preservedOrderDebates = mergeIndexDebatesPreservingVisibleOrder(
+        otherDebatesCache,
+        newFiltered,
+        previousVisible
+      );
+
+      if (!preservedOrderDebates) {
+        applyIndexFilters();
+        await new Promise((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+          });
         });
-      });
-      restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
+      } else {
+        otherDebatesCache = preservedOrderDebates;
+        updateCategoryFilterVisualState();
+        renderIndexActiveFilterTags();
+        const appendEnd = Math.min(targetVisible, otherDebatesCache.length);
+        const appended = appendDebatesToList(otherDebatesCache, previousVisible, appendEnd);
+        if (!appended) {
+          renderDebatesList(otherDebatesCache);
+        }
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
     }
   } catch (error) {
     console.warn('Chargement des prochains posts index interrompu :', error);
   } finally {
-    await runQueuedIndexEmbedPreloadIfNeeded();
     indexInfiniteScrollLoading = false;
+    indexLastBatchCompletedAt = Date.now();
     setIndexInfiniteScrollLoadingState(false);
   }
 }
@@ -10984,6 +11099,7 @@ function setTypeFilter(type) {
   document.getElementById("filter-debate")?.classList.remove("active");
   document.getElementById("filter-question")?.classList.remove("active");
   document.getElementById("filter-visited")?.classList.remove("active");
+  document.getElementById("filter-agon")?.classList.remove("active");
 
   if (type === "all") {
     document.getElementById("filter-all")?.classList.add("active");
@@ -11001,10 +11117,22 @@ function setTypeFilter(type) {
     document.getElementById("filter-visited")?.classList.add("active");
   }
 
+  if (type === "agon") {
+    document.getElementById("filter-agon")?.classList.add("active");
+  }
+
   visitedDebatesVisible = 5;
   otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 
   applyIndexFilters();
+}
+
+async function waitForInitialIndexFeedStability() {
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resolve);
+    });
+  });
 }
 
 function updateIndexLists(debates) {
@@ -11033,7 +11161,6 @@ function updateIndexLists(debates) {
     otherHeaderTitle.textContent = "Arènes ouvertes";
   }
 
-  queueIndexEmbedPreloadRange(0, Math.min(otherDebatesVisible, otherDebatesCache.length));
   renderVisitedDebatesList([]);
   renderDebatesList(otherDebatesCache);
 }
@@ -11237,6 +11364,7 @@ async function initIndex() {
       }
       setTypeFilter("all");
 
+      await waitForInitialIndexFeedStability();
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
 
@@ -11288,6 +11416,7 @@ async function initIndex() {
       currentIndexSearchQuery = "";
       refreshCategoryFilterOptions(debatesCache);
       applyIndexFilters();
+      await waitForInitialIndexFeedStability();
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
 
@@ -13800,6 +13929,7 @@ function renderSimilarDebatesLoadingState(container) {
 function renderBottomSimilarDebates(currentDebate, debates) {
   const container = document.getElementById("similar-debates-bottom");
   if (!container) return;
+  const isMobileDebatePage = document.body.classList.contains("page-debate") && window.innerWidth <= 768;
 
   if (similarDebatesLoading) {
     renderSimilarDebatesLoadingState(container);
@@ -13909,6 +14039,10 @@ function renderBottomSimilarDebates(currentDebate, debates) {
   if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(container);
   if (typeof initIndexXObserver === "function") initIndexXObserver(container);
   if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
+
+  if (isMobileDebatePage) {
+    return;
+  }
 
   // Les arènes similaires affichent peu de cartes: on lance aussi un rendu eager
   // des posts X/Instagram pour éviter qu'ils restent bloqués en simple vignette.
@@ -15401,6 +15535,29 @@ requestAnimationFrame(() => {
     syncVoiceGuidanceState(id);
   });
 });
+
+const shouldResetFreshEmbeddedDebateScroll =
+  window.self !== window.top &&
+  document.documentElement.dataset.embeddedDebateFreshNavigation === "true" &&
+  !pendingTopCommentScroll &&
+  !pendingCommentScrollId &&
+  !pendingArgumentScrollId;
+
+if (shouldResetFreshEmbeddedDebateScroll) {
+  document.documentElement.dataset.embeddedDebateFreshNavigation = "false";
+  try {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo(0, 0);
+  } catch (error) {}
+  requestAnimationFrame(() => {
+    try {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    } catch (error) {}
+  });
+}
 
 if (pendingTopCommentScroll) {
   const targetId = pendingTopCommentScroll;
@@ -17740,6 +17897,9 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
   let state = getCommentLikeState(debateId);
   const commentIdString = String(commentId);
   const voterKey = getKey();
+  const previousStateSnapshot = { ...state };
+  let previousLikes = 0;
+  let previousValue = Number(state[commentIdString] || 0);
 
   if (argumentId) {
     openCommentsByArgument[argumentId] = true;
@@ -17751,7 +17911,10 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
   try {
     const targetComment = getLocalCommentById(commentIdString);
+    const currentLikes = Number(targetComment?.likes || 0);
     const currentValue = Number(state[commentIdString] || 0);
+    previousLikes = currentLikes;
+    previousValue = currentValue;
     let nextValue = 0;
 
     if (currentValue === 0) {
@@ -17768,14 +17931,7 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       targetComment.stance === "amelioration" &&
       nextValue === 1;
 
-    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        voterKey,
-        value: nextValue
-      })
-    });
+    const optimisticLikes = currentLikes + (nextValue - currentValue);
 
     if (nextValue === 0) {
       delete state[commentIdString];
@@ -17784,6 +17940,16 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
     }
 
     setCommentLikeState(debateId, state);
+    updateLocalCommentVoteState(commentIdString, optimisticLikes, nextValue);
+
+    const result = await fetchJSON(API + "/comments/" + commentId + "/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voterKey,
+        value: nextValue
+      })
+    });
 
     if (result && result.replaced) {
       pendingArgumentScrollId = result.argumentId ? String(result.argumentId) : null;
@@ -17799,9 +17965,6 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
     try {
       updateLocalCommentVoteState(commentIdString, Number(result?.likes || 0), nextValue);
-      if (document.querySelector(`.comment-reply-card[data-reply-comment-id="${commentIdString}"]`)) {
-        rerenderCurrentDebateArguments(debateId);
-      }
     } catch (uiError) {
       console.error(uiError);
       await loadDebate(debateId);
@@ -17814,6 +17977,10 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
       );
     }
   } catch (error) {
+    setCommentLikeState(debateId, previousStateSnapshot);
+    try {
+      updateLocalCommentVoteState(commentIdString, previousLikes, previousValue);
+    } catch (uiError) {}
     alert(error.message);
   } finally {
     clearButtonLoading(button);
