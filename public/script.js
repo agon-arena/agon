@@ -104,7 +104,7 @@ const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
 const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 20;
+const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 8;
 const INDEX_DEBATES_PAGE_SIZE = INDEX_INITIAL_DEBATES_FETCH_LIMIT;
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
@@ -5923,6 +5923,7 @@ function captureIndexEmbedScrollAnchor(shell, type = '') {
 
 function restoreIndexEmbedScrollAnchor(shell, anchor = null) {
   if (!shell) return;
+  if (indexInfiniteScrollLoading) return;
 
   bindIndexUserScrollGuard();
 
@@ -9061,7 +9062,7 @@ let otherDebatesCache = [];
 let indexDebatesApiNextOffset = 0;
 let indexDebatesApiHasMore = true;
 let visitedDebatesVisible = 5;
-const INDEX_OTHER_DEBATES_BATCH_SIZE = 10;
+const INDEX_OTHER_DEBATES_BATCH_SIZE = 8;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
@@ -9119,7 +9120,6 @@ function detachIndexBatchScrollLockHandlers() {
 
 function lockIndexBatchScroll() {
   if (document.body.classList.contains('index-batch-loading-active')) return;
-  if (window.innerWidth <= 768) return;
 
   indexBatchScrollLockY = window.scrollY || window.pageYOffset || 0;
   document.documentElement.style.top = `-${indexBatchScrollLockY}px`;
@@ -9133,7 +9133,7 @@ function unlockIndexBatchScroll() {
   const wasLocked = document.body.classList.contains('index-batch-loading-active');
   const savedY = Number(indexBatchScrollLockY || 0);
 
-  if (window.innerWidth <= 768 && !wasLocked) {
+  if (!wasLocked) {
     indexBatchScrollLockY = null;
     return;
   }
@@ -9208,6 +9208,12 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
   const sentinel = document.getElementById('index-infinite-scroll-sentinel');
   const overlay = ensureIndexBatchLoadingOverlay();
   const loading = !!isLoading;
+
+  if (loading) {
+    lockIndexBatchScroll();
+  } else {
+    unlockIndexBatchScroll();
+  }
   const safeMessage = String(message || '').trim() || 'Chargement des arènes';
 
   if (sentinel) {
@@ -9280,6 +9286,49 @@ async function preloadIndexEmbedsForDebateRange(startIndex = 0, endIndex = 0) {
   }
 }
 
+async function waitForIndexEmbedRangeStability(startIndex = 0, endIndex = 0, timeoutMs = 3200) {
+  const shells = getIndexEmbedShellsInDebateRange(startIndex, endIndex);
+  if (!shells.length) return;
+
+  const previousHeights = new Map();
+  let stableFrames = 0;
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    let allStable = true;
+
+    for (const shell of shells) {
+      if (!shell?.isConnected) continue;
+
+      const rendering = String(shell.dataset?.rendering || '').trim();
+      if (rendering === 'true') {
+        allStable = false;
+      }
+
+      const height = Math.round(shell.getBoundingClientRect().height || shell.offsetHeight || 0);
+      const previousHeight = previousHeights.get(shell);
+
+      if (previousHeight === undefined || Math.abs(height - previousHeight) > 1) {
+        allStable = false;
+      }
+
+      previousHeights.set(shell, height);
+    }
+
+    if (allStable) {
+      stableFrames += 1;
+    } else {
+      stableFrames = 0;
+    }
+
+    if (stableFrames >= 6) {
+      return;
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+}
+
 function queueIndexEmbedPreloadRange(startIndex = 0, endIndex = 0) {
   indexPendingEmbedPreloadRange = {
     start: Math.max(0, Number(startIndex) || 0),
@@ -9292,11 +9341,11 @@ function runQueuedIndexEmbedPreloadIfNeeded() {
   indexPendingEmbedPreloadRange = null;
 
   if (!range || range.end <= range.start) {
-    setIndexInfiniteScrollLoadingState(false);
     return Promise.resolve();
   }
 
   const job = preloadIndexEmbedsForDebateRange(range.start, range.end)
+    .then(() => waitForIndexEmbedRangeStability(range.start, range.end))
     .catch((error) => {
       console.warn('Préchargement des embeds index interrompu :', error);
     }).finally(() => {
@@ -10815,14 +10864,19 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   if (!nextDebates.length) return true;
 
   const existingSentinel = document.getElementById("index-infinite-scroll-sentinel");
+  const shouldKeepSentinel = shouldShowIndexInfiniteScrollSentinel(end, safeDebates.length);
+  const nextHtml = buildIndexDebatesListHtml(nextDebates);
+
   if (existingSentinel) {
-    existingSentinel.remove();
-  }
-
-  div.insertAdjacentHTML("beforeend", buildIndexDebatesListHtml(nextDebates));
-
-  if (shouldShowIndexInfiniteScrollSentinel(end, safeDebates.length)) {
-    div.insertAdjacentHTML("beforeend", buildIndexInfiniteScrollSentinelHtml());
+    existingSentinel.insertAdjacentHTML("beforebegin", nextHtml);
+    if (!shouldKeepSentinel) {
+      existingSentinel.remove();
+    }
+  } else {
+    div.insertAdjacentHTML("beforeend", nextHtml);
+    if (shouldKeepSentinel) {
+      div.insertAdjacentHTML("beforeend", buildIndexInfiniteScrollSentinelHtml());
+    }
   }
 
   refreshAdminUI();
@@ -10897,9 +10951,9 @@ async function loadMoreOtherDebates() {
   } catch (error) {
     console.warn('Chargement des prochains posts index interrompu :', error);
   } finally {
+    await runQueuedIndexEmbedPreloadIfNeeded();
     indexInfiniteScrollLoading = false;
     setIndexInfiniteScrollLoadingState(false);
-    runQueuedIndexEmbedPreloadIfNeeded();
   }
 }
 function filterDebates() {

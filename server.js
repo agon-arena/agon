@@ -103,11 +103,9 @@ function buildDebateMeta(req, debate) {
   const question = normalizeMetaText(debate?.question || "Débat sur agôn", 110);
   const optionA = normalizeMetaText(debate?.option_a || "", 80);
   const optionB = normalizeMetaText(debate?.option_b || "", 80);
-  const title = isOpen
-    ? `${question} | Arène libre sur agôn`
-    : `${question} | agôn`;
+  const title = `${question} | agôn`;
   const description = isOpen
-    ? "Découvrez les réponses déjà proposées et ajoutez votre idée dans cette arène libre sur agôn."
+    ? "Découvrez les réponses déjà proposées et ajoutez votre idée sur agôn."
     : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur agôn.`;
 
   return {
@@ -2016,18 +2014,14 @@ app.get("/debate/:id", async (req, res) => {
     wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur agôn"), cardWidth / 2, 250, 920, 52);
 
     if (isOpen) {
-      ctx.fillStyle = "#111111";
-      ctx.font = "bold 32px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("Arène libre", cardWidth / 2, 345);
-
       ctx.fillStyle = "#4b5563";
       ctx.font = "28px Arial";
-      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur agôn - l'arène des idées"), cardWidth / 2, 430, 860, 38);
+      ctx.textAlign = "center";
+      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur agôn - l'arène des idées"), cardWidth / 2, 380, 860, 38);
 
       ctx.fillStyle = "#6b7280";
       ctx.font = "24px Arial";
-      ctx.fillText("Participez et ajoutez votre réponse", cardWidth / 2, 560);
+      ctx.fillText("Participez et ajoutez votre réponse", cardWidth / 2, 540);
       ctx.textAlign = "left";
     } else {
       const barX = 140;
