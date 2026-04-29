@@ -579,13 +579,13 @@ main.create-page {
 .debate-card-agon-badge {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
+  gap: 4px;
+  padding: 3px 7px;
   border-radius: 999px;
   background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
   border: 1px solid rgba(67, 56, 202, 0.18);
   color: #312e81;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -593,9 +593,9 @@ main.create-page {
 }
 
 .debate-card-agon-badge-icon {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
   display: block;
   flex-shrink: 0;
 }

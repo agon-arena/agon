@@ -70,20 +70,20 @@ function readViewTemplate(templateName) {
 
 function replaceMetaPlaceholders(template, meta) {
   return String(template || "")
-    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
+    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "agôn"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
-    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"));
+    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "agôn"));
 }
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn – L'arène des idées | Réseau social européen d'intelligence collective",
-    description: "Agôn est un réseau social d'intelligence collective qui stimule l'ouverture d'esprit, la réflexion et l'engagement.",
+    title: "agôn – L'arène des idées | Réseau social européen d'intelligence collective",
+    description: "agôn est un réseau social d'intelligence collective qui stimule l'ouverture d'esprit, la réflexion et l'engagement.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-    imageAlt: "Agôn — l'arène des idées"
+    imageAlt: "agôn — l'arène des idées"
   };
 }
 
@@ -100,15 +100,15 @@ function buildDebateMeta(req, debate) {
     ? buildAbsoluteUrl(req, `/debate/${encodeURIComponent(debateId)}`)
     : buildAbsoluteUrl(req, "/logo2.jpeg");
   const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
-  const question = normalizeMetaText(debate?.question || "Débat sur Agôn", 110);
+  const question = normalizeMetaText(debate?.question || "Débat sur agôn", 110);
   const optionA = normalizeMetaText(debate?.option_a || "", 80);
   const optionB = normalizeMetaText(debate?.option_b || "", 80);
   const title = isOpen
-    ? `${question} | Arène libre sur Agôn`
-    : `${question} | Agôn`;
+    ? `${question} | Arène libre sur agôn`
+    : `${question} | agôn`;
   const description = isOpen
-    ? "Découvrez les réponses déjà proposées et ajoutez votre idée dans cette arène libre sur Agôn."
-    : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur Agôn.`;
+    ? "Découvrez les réponses déjà proposées et ajoutez votre idée dans cette arène libre sur agôn."
+    : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur agôn.`;
 
   return {
     title,
@@ -1542,10 +1542,10 @@ function wrapTextCentered(ctx, text, centerX, y, maxWidth, lineHeight) {
 
 function getDebateShareDescription(debate, percentA, percentB) {
   const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
-  const question = String(debate?.question || "Arène sur Agôn").trim() || "Arène sur Agôn";
+  const question = String(debate?.question || "Arène sur agôn").trim() || "Arène sur agôn";
 
   if (isOpen) {
-    return `${question} | Découvrez les idées partagées sur Agôn - l'arène des idées`;
+    return `${question} | Découvrez les idées partagées sur agôn - l'arène des idées`;
   }
 
   return `${percentA}% — ${debate.option_a} | ${percentB}% — ${debate.option_b} | Comparez les arguments sur agôn - l'arène des idées`;
@@ -1938,11 +1938,11 @@ app.get("/debate", async (req, res) => {
 
   if (!debateId) {
     const html = replaceMetaPlaceholders(template, {
-      title: "Débat | Agôn",
-      description: "Découvrez les débats et les idées qui s'affrontent sur Agôn.",
+      title: "Débat | agôn",
+      description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, "/debate"),
       image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-      imageAlt: "Agôn — l'arène des idées"
+      imageAlt: "agôn — l'arène des idées"
     });
     return res.type("html").send(html);
   }
@@ -1951,11 +1951,11 @@ app.get("/debate", async (req, res) => {
     const debate = await getDebateById(debateId);
     if (!debate) {
       const html = replaceMetaPlaceholders(template, {
-        title: "Débat introuvable | Agôn",
-        description: "Cette arène n'est plus disponible sur Agôn.",
+        title: "Débat introuvable | agôn",
+        description: "Cette arène n'est plus disponible sur agôn.",
         url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
         image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-        imageAlt: "Agôn — l'arène des idées"
+        imageAlt: "agôn — l'arène des idées"
       });
       return res.status(404).type("html").send(html);
     }
@@ -1965,11 +1965,11 @@ app.get("/debate", async (req, res) => {
   } catch (error) {
     console.error(error);
     const html = replaceMetaPlaceholders(template, {
-      title: "Débat | Agôn",
-      description: "Découvrez les débats et les idées qui s'affrontent sur Agôn.",
+      title: "Débat | agôn",
+      description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
       image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-      imageAlt: "Agôn — l'arène des idées"
+      imageAlt: "agôn — l'arène des idées"
     });
     return res.type("html").send(html);
   }
@@ -2017,7 +2017,7 @@ app.get("/debate/:id", async (req, res) => {
 
     ctx.fillStyle = "#111111";
     ctx.font = "bold 42px Arial";
-    wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur Agôn"), cardWidth / 2, 250, 920, 52);
+    wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur agôn"), cardWidth / 2, 250, 920, 52);
 
     if (isOpen) {
       ctx.fillStyle = "#111111";
@@ -2027,7 +2027,7 @@ app.get("/debate/:id", async (req, res) => {
 
       ctx.fillStyle = "#4b5563";
       ctx.font = "28px Arial";
-      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur Agôn - l'arène des idées"), cardWidth / 2, 430, 860, 38);
+      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur agôn - l'arène des idées"), cardWidth / 2, 430, 860, 38);
 
       ctx.fillStyle = "#6b7280";
       ctx.font = "24px Arial";

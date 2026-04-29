@@ -3839,7 +3839,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isNewDebate = isDebateNew(d);
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="Agôn" class="debate-card-agon-badge-icon"><span>Généré par Agôn</span></div>` : "";
+  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>` : "";
   const topBadgesHtml = (newBadgeHtml || agonBadgeHtml)
     ? `<div class="debate-card-top-badges">${newBadgeHtml}${agonBadgeHtml}</div>`
     : "";
@@ -7110,8 +7110,8 @@ function getDebateShareUrl() {
 
 function getDebateShareTitle() {
   const titleEl = document.getElementById("debate-question");
-  const title = titleEl ? titleEl.textContent.trim() : "Arène sur Agôn";
-  return title || "Arène sur Agôn";
+  const title = titleEl ? titleEl.textContent.trim() : "Arène sur agôn";
+  return title || "Arène sur agôn";
 }
 
 
@@ -7144,7 +7144,7 @@ function getDebateShareText() {
 function buildVisibleShareMessage(text, url) {
   const cleanText = String(text || "")
     .trim()
-    .replace(/(?:\n\s*)?(?:→\s*)?Agôn\s*:?\s*\S+\s*$/u, "")
+    .replace(/(?:\n\s*)?(?:→\s*)?agôn\s*:?\s*\S+\s*$/u, "")
     .trim();
   const cleanUrl = String(url || "").trim();
 
@@ -7152,7 +7152,7 @@ function buildVisibleShareMessage(text, url) {
     return cleanText;
   }
 
-  return [cleanText, `→ Agôn ${cleanUrl}`].filter(Boolean).join("\n\n");
+  return [cleanText, `→ agôn ${cleanUrl}`].filter(Boolean).join("\n\n");
 }
 
 async function writeTextToClipboard(text) {
@@ -7949,9 +7949,9 @@ function getGlobalShareData() {
 
   if (path === "/create") {
     return {
-      title: "Ouvrir une arène sur Agôn",
+      title: "Ouvrir une arène sur agôn",
       text: [
-        "Ouvrir une arène sur Agôn.",
+        "Ouvrir une arène sur agôn.",
         "",
         `Qu’est-ce qui vous paraît le plus convaincant ?`
       ].join("\n"),
@@ -7960,9 +7960,9 @@ function getGlobalShareData() {
   }
 
   return {
-    title: "Agôn, la plateforme de confrontation d'idées",
+    title: "agôn, la plateforme de confrontation d'idées",
     text: [
-      "Découvrez Agôn.",
+      "Découvrez agôn.",
       "",
      `Qu’est-ce qui vous paraît le plus convaincant ?`
     ].join("\n"),
@@ -8130,8 +8130,8 @@ function getIndexDebateResolvedShareFields(debateId, question, optionA = "", opt
       || debate?.question
       || debate?.title
       || question
-      || "Arène sur Agôn"
-  ).trim() || "Arène sur Agôn";
+      || "Arène sur agôn"
+  ).trim() || "Arène sur agôn";
 
   const safeOptionA = String(
     domSnapshot?.optionA
@@ -8197,7 +8197,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
   }
 
   lines.push("Qu’est-ce qui vous paraît le plus convaincant ?");
-  lines.push(`→ Agôn ${url}`);
+  lines.push(`→ agôn ${url}`);
 
   return {
     url,
@@ -8731,12 +8731,12 @@ if (notification.type === "reply_to_comment") {
   subtitle = "Ouvrir la réponse";
 }
 if (notification.type === "majority_gained") {
-  icon = "🤼";
+  icon = "💪";
   title = "Votre camp vient de prendre la majorité";
   subtitle = "Ouvrir le débat";
 }
 if (notification.type === "majority_lost") {
-  icon = "🤼";
+  icon = "😬";
   title = "Votre camp vient de perdre la majorité";
   subtitle = "Ouvrir le débat";
 }
@@ -19131,12 +19131,12 @@ if (notification.type === "reply_to_comment") {
   subtitle = "Ouvrir la réponse";
 }
 if (notification.type === "majority_gained") {
-  icon = "🤼";
+  icon = "💪";
   title = "Votre camp vient de prendre la majorité";
   subtitle = "Ouvrir le débat";
 }
 if (notification.type === "majority_lost") {
-  icon = "🤼";
+  icon = "😬";
   title = "Votre camp vient de perdre la majorité";
   subtitle = "Ouvrir le débat";
 }
@@ -20322,7 +20322,7 @@ function showAccountsComingSoonMessage() {
   closeHomeTopbarMenu();
   showReplacementSuccessMessage(
     "Comptes bientôt disponibles",
-    "Super nouvelle : Agôn t’intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n’est pas encore disponible. Mais promis : elle arrive bientôt.",
+    "Super nouvelle : agôn t’intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n’est pas encore disponible. Mais promis : elle arrive bientôt.",
     null,
     "✨"
   );
