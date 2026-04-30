@@ -36,7 +36,8 @@ let currentDebateSourceHistoryItems = [];
 let currentDebateSourceHistoryIndex = -1;
 let debateSourceSwipeTouchState = null;
 let debateSourceSwipeHandlersBound = false;
-let currentTypeFilter = "all";
+const DEFAULT_INDEX_TYPE_FILTER = "agon";
+let currentTypeFilter = DEFAULT_INDEX_TYPE_FILTER;
 let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
 let currentArgumentsSortMode = "score";
@@ -58,6 +59,7 @@ const DEBATE_CATEGORY_OPTIONS = [
   "Sciences humaines",
   "Arts et culture",
   "Santé et bien-être",
+  "Espace jeunes — collégiens / lycéens",
 ];
 
 
@@ -3887,7 +3889,7 @@ function buildIndexCardShareActionsHtml(debate) {
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
-  const mediaHtml = buildIndexSwipeableMediaHtml(d);
+  const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
   const mediaOutsideLink = !!mediaHtml;
   const contextHtml = buildIndexContextPreviewHtml(d);
   const isNewDebate = isDebateNew(d);
@@ -4646,7 +4648,7 @@ function initIndexMediaSwipeEnhancements(root) {
   });
 }
 
-function buildIndexSwipeableMediaHtml(debate) {
+function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const mediaItems = getIndexDebateMediaItems(debate);
   const currentItem = mediaItems[0] || null;
   const baseHtml = currentItem ? renderIndexMediaItemHtml(currentItem, debate) : renderIndexInlineSourceCard(debate);
@@ -4655,6 +4657,8 @@ function buildIndexSwipeableMediaHtml(debate) {
   if (mediaItems.length < 2) {
     return baseHtml;
   }
+
+  const showSwipeHotspots = options.showSwipeHotspots !== false;
 
   const currentSourceUrl = String(debate?.source_url || "").trim();
   const sourcePreview = currentSourceUrl && debate?.source_preview && typeof debate.source_preview === "object"
@@ -4674,12 +4678,14 @@ function buildIndexSwipeableMediaHtml(debate) {
       <div class="index-media-swipe-content" data-index-media-swipe-content>
         ${baseHtml}
       </div>
+      ${showSwipeHotspots ? `
       <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-prev" data-index-media-swipe-step="prev" aria-label="Voir le média précédent">
         <span aria-hidden="true">‹</span>
       </button>
       <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-next" data-index-media-swipe-step="next" aria-label="Voir le média suivant">
         <span aria-hidden="true">›</span>
       </button>
+      ` : ""}
     </div>
   `;
 }
@@ -8548,6 +8554,10 @@ function refreshAdminUI() {
   document.querySelectorAll("[data-admin]").forEach(el => {
     el.style.display = adminMode ? "" : "none";
   });
+
+  if (adminMode) {
+    initAdminEditCategoryPickers(document);
+  }
 }
 
 async function verifyAdminSession(force = false) {
@@ -9440,6 +9450,153 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
 }
 
 
+function getAdminEditFieldValue(panel, name) {
+  const el = panel?.querySelector(`[data-edit-field="${name}"]`);
+  if (!el) return "";
+
+  if (el.tagName === 'SELECT' && el.multiple) {
+    return joinDebateCategories(
+      Array.from(el.selectedOptions || [])
+        .map((option) => String(option.value || '').trim())
+        .filter(Boolean)
+    );
+  }
+
+  return String(el.value || '').trim();
+}
+
+function setAdminEditFieldValue(panel, name, value) {
+  const el = panel?.querySelector(`[data-edit-field="${name}"]`);
+  if (!el) return;
+
+  if (name === 'category' && el.hasAttribute('data-admin-category-hidden')) {
+    syncAdminEditCategoryPickerUI(panel, value);
+    return;
+  }
+
+  if (el.tagName === 'SELECT' && el.multiple) {
+    const selectedValues = new Set(getDebateCategoryList(value));
+    Array.from(el.options || []).forEach((option) => {
+      option.selected = selectedValues.has(String(option.value || '').trim());
+    });
+    return;
+  }
+
+  el.value = value == null ? '' : String(value);
+}
+
+function syncAdminEditCategoryPickerUI(panel, categories) {
+  const picker = panel?.querySelector('[data-admin-category-picker]');
+  const hiddenInput = panel?.querySelector('[data-admin-category-hidden]');
+  const toggleLabel = panel?.querySelector('[data-admin-category-toggle-label]');
+  const selectedContainer = panel?.querySelector('[data-admin-category-selected]');
+  const optionsContainer = panel?.querySelector('[data-admin-category-options]');
+  if (!picker || !hiddenInput || !toggleLabel || !selectedContainer || !optionsContainer) return;
+
+  const normalizedCategories = getDebateCategoryList(categories);
+  hiddenInput.value = joinDebateCategories(normalizedCategories);
+
+  if (!normalizedCategories.length) {
+    toggleLabel.textContent = 'Choisir une ou plusieurs thématiques';
+    selectedContainer.innerHTML = '';
+  } else if (normalizedCategories.length === 1) {
+    toggleLabel.textContent = normalizedCategories[0];
+    selectedContainer.innerHTML = normalizedCategories.map((category) => (`<span class="create-category-chip">${escapeHtml(category)}</span>`)).join('');
+  } else {
+    toggleLabel.textContent = `${normalizedCategories.length} thématiques sélectionnées`;
+    selectedContainer.innerHTML = normalizedCategories.map((category) => (`<span class="create-category-chip">${escapeHtml(category)}</span>`)).join('');
+  }
+
+  optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.checked = normalizedCategories.includes(String(input.value || '').trim());
+  });
+}
+
+function initAdminEditCategoryPicker(panel) {
+  if (!panel || panel.dataset.adminCategoryPickerReady === 'true') return;
+
+  const picker = panel.querySelector('[data-admin-category-picker]');
+  const hiddenInput = panel.querySelector('[data-admin-category-hidden]');
+  const toggleButton = panel.querySelector('[data-admin-category-toggle]');
+  const categoryPanel = panel.querySelector('[data-admin-category-panel]');
+  const optionsContainer = panel.querySelector('[data-admin-category-options]');
+  if (!picker || !hiddenInput || !toggleButton || !categoryPanel || !optionsContainer) return;
+
+  const closePanel = () => {
+    picker.dataset.open = 'false';
+    toggleButton.setAttribute('aria-expanded', 'false');
+    categoryPanel.hidden = true;
+  };
+
+  const openPanel = () => {
+    picker.dataset.open = 'true';
+    toggleButton.setAttribute('aria-expanded', 'true');
+    categoryPanel.hidden = false;
+  };
+
+  const selectedCategories = getDebateCategoryList(hiddenInput.value || '');
+  optionsContainer.innerHTML = DEBATE_CATEGORY_OPTIONS.map((category, index) => {
+    const inputId = `admin-category-option-${String(panel.dataset.debateId || 'debate')}-${index}`;
+    const isChecked = selectedCategories.includes(category) ? ' checked' : '';
+    return `
+      <label class="create-category-option" for="${inputId}">
+        <input type="checkbox" id="${inputId}" value="${escapeAttribute(category)}"${isChecked}>
+        <span>${escapeHtml(category)}</span>
+      </label>
+    `;
+  }).join('');
+
+  const syncFromCheckboxes = () => {
+    const checkedValues = Array.from(optionsContainer.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+    syncAdminEditCategoryPickerUI(panel, checkedValues);
+  };
+
+  optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener('change', syncFromCheckboxes);
+  });
+
+  toggleButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (categoryPanel.hidden) {
+      openPanel();
+      return;
+    }
+    closePanel();
+  });
+
+  categoryPanel.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!picker.contains(event.target)) closePanel();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closePanel();
+  });
+
+  syncAdminEditCategoryPickerUI(panel, selectedCategories);
+  closePanel();
+  panel.dataset.adminCategoryPickerReady = 'true';
+}
+
+function initAdminEditCategoryPickers(scope = document) {
+  (scope?.querySelectorAll ? scope.querySelectorAll('.debate-card-admin-edit') : []).forEach((panel) => {
+    initAdminEditCategoryPicker(panel);
+  });
+}
+
+function syncAdminEditCardCategory(card, categoryValue) {
+  const catEl = card?.querySelector('.debate-card-category');
+  if (!catEl) return;
+
+  const categories = getDebateCategoryList(categoryValue);
+  catEl.textContent = getIndexCardCategoryLabel(categoryValue);
+  catEl.classList.toggle('debate-card-category-multi', categories.length > 1);
+}
+
 function setupIndexInfiniteScroll() {
   const sentinel = document.getElementById("index-infinite-scroll-sentinel");
 
@@ -9470,10 +9627,7 @@ async function saveAdminCardEdit(debateId, btn) {
   const panel = btn.closest('.debate-card-admin-edit');
   if (!panel) return;
 
-  const get = (name) => {
-    const el = panel.querySelector(`[data-edit-field="${name}"]`);
-    return el ? el.value.trim() : "";
-  };
+  const get = (name) => getAdminEditFieldValue(panel, name);
 
   const body = {
     question:   get("question"),
@@ -9520,8 +9674,7 @@ async function saveAdminCardEdit(debateId, btn) {
       if (posA) posA.textContent = body.option_a || "Position A";
       if (posB) posB.textContent = body.option_b || "Position B";
 
-      const catEl = card.querySelector('.debate-card-category');
-      if (catEl && body.category) catEl.textContent = body.category;
+      syncAdminEditCardCategory(card, body.category);
 
       // Met à jour le bloc contexte/contenu
       const contextWrap = card.querySelector('[data-index-context-card]');
@@ -9562,7 +9715,7 @@ async function saveAdminCardEdit(debateId, btn) {
       // Met à jour les champs affichés dans le panel
       panel.querySelectorAll('[data-edit-field]').forEach(el => {
         const field = el.dataset.editField;
-        if (body[field] !== undefined) el.value = body[field];
+        if (body[field] !== undefined) setAdminEditFieldValue(panel, field, body[field]);
       });
     }
 
@@ -9630,10 +9783,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
   const panel = btn.closest('.debate-card-admin-edit');
   if (!panel) return;
 
-  const get = (name) => {
-    const el = panel.querySelector(`[data-edit-field="${name}"]`);
-    return el ? el.value.trim() : "";
-  };
+  const get = (name) => getAdminEditFieldValue(panel, name);
   const body = {
     question:   get("question"),
     category:   get("category"),
@@ -9675,8 +9825,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
       const posB = card.querySelector('.pos-b');
       if (posA) posA.textContent = body.option_a || "Position A";
       if (posB) posB.textContent = body.option_b || "Position B";
-      const catEl = card.querySelector('.debate-card-category');
-      if (catEl && body.category) catEl.textContent = body.category;
+      syncAdminEditCardCategory(card, body.category);
     }
 
     // Recharge le feed
@@ -9834,6 +9983,8 @@ function closeAdminEditPanel(panel) {
 
 function buildAdminEditPanelHtml(d) {
   const isOpen = d.type === 'open' || d.type === 'question';
+  const selectedCategories = getDebateCategoryList(d.category);
+  const initialCategoryValue = joinDebateCategories(selectedCategories);
   const optionsHtml = isOpen ? '' : `
     <div class="admin-edit-field">
       <label class="admin-edit-label">Position A</label>
@@ -9845,7 +9996,7 @@ function buildAdminEditPanelHtml(d) {
     </div>`;
 
   return `
-    <div class="debate-card-admin-edit" data-admin style="display:none;" onclick="event.stopPropagation()" data-open="false">
+    <div class="debate-card-admin-edit" data-admin style="display:none;" onclick="event.stopPropagation()" data-open="false" data-debate-id="${escapeAttribute(String(d.id || ''))}">
       <button class="admin-edit-toggle" type="button"
         onclick="event.preventDefault(); event.stopPropagation();
           const p = this.closest('.debate-card-admin-edit');
@@ -9863,10 +10014,23 @@ function buildAdminEditPanelHtml(d) {
       </button>
       <div class="admin-edit-form" style="display:none;">
         <div class="admin-edit-field">
-          <label class="admin-edit-label">Catégorie</label>
-          <select class="admin-edit-input" data-edit-field="category">
-          ${DEBATE_CATEGORY_OPTIONS.map(cat => `<option value="${escapeAttribute(cat)}" ${escapeAttribute(d.category || '') === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('\n          ')}
-          </select>
+          <label class="admin-edit-label">Thématiques</label>
+          <input type="hidden" data-edit-field="category" data-admin-category-hidden value="${escapeAttribute(initialCategoryValue)}">
+          <div class="create-category-picker" data-admin-category-picker data-open="false">
+            <button
+              type="button"
+              class="create-category-toggle"
+              data-admin-category-toggle
+              aria-expanded="false"
+            >
+              <span data-admin-category-toggle-label>Choisir une ou plusieurs thématiques</span>
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
+            <div class="create-category-panel" data-admin-category-panel hidden aria-label="Choisir une ou plusieurs thématiques">
+              <div class="create-category-options" data-admin-category-options></div>
+            </div>
+            <div class="create-category-selected" data-admin-category-selected aria-live="polite"></div>
+          </div>
         </div>
         <div class="admin-edit-field">
           <label class="admin-edit-label">Question / Titre</label>
@@ -10248,6 +10412,30 @@ function ensureCategoryFilterVisualStyles() {
       border-color: #111827;
     }
 
+    body.page-home-mobile #index-active-filters .index-active-filter-tag,
+    body.page-home-mobile .index-active-filters .index-active-filter-tag,
+    body.page-home #index-active-filters .index-active-filter-tag,
+    body.page-home .index-active-filters .index-active-filter-tag {
+      background: #111827 !important;
+      color: #ffffff !important;
+      border-color: #111827 !important;
+    }
+
+    body.page-home-mobile #index-active-filters .index-active-filter-tag-theme,
+    body.page-home-mobile .index-active-filters .index-active-filter-tag-theme,
+    body.page-home #index-active-filters .index-active-filter-tag-theme,
+    body.page-home .index-active-filters .index-active-filter-tag-theme {
+      background: #111827 !important;
+    }
+
+    body.page-home-mobile #index-active-filters .index-active-filter-tag-close,
+    body.page-home-mobile .index-active-filters .index-active-filter-tag-close,
+    body.page-home #index-active-filters .index-active-filter-tag-close,
+    body.page-home .index-active-filters .index-active-filter-tag-close {
+      background: rgba(255, 255, 255, 0.14) !important;
+      color: #ffffff !important;
+    }
+
     @media (max-width: 768px) {
       .index-theme-filter-wrap {
         width: 100%;
@@ -10288,6 +10476,11 @@ function ensureCategoryFilterVisualStyles() {
         min-width: 22px;
         height: 22px;
         font-size: 10px;
+      }
+
+      body.page-home-mobile #index-active-filters,
+      body.page-home-mobile .index-active-filters {
+        margin-top: 4px !important;
       }
     }
   `;
@@ -11345,7 +11538,7 @@ async function initIndex() {
       restoreIndexDebatesPaginationStateFromCache(debatesCache);
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-      currentTypeFilter = "all";
+      currentTypeFilter = DEFAULT_INDEX_TYPE_FILTER;
       currentCategoryFilter = "all";
       currentCategoryFilters = [];
       currentIndexSearchQuery = "";
@@ -11362,7 +11555,7 @@ async function initIndex() {
           }
         });
       }
-      setTypeFilter("all");
+      setTypeFilter(DEFAULT_INDEX_TYPE_FILTER);
 
       await waitForInitialIndexFeedStability();
       pageArrivalLoadingOverlayReady = true;
@@ -11410,7 +11603,7 @@ async function initIndex() {
       });
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-      currentTypeFilter = "all";
+      currentTypeFilter = DEFAULT_INDEX_TYPE_FILTER;
       currentCategoryFilter = "all";
       currentCategoryFilters = [];
       currentIndexSearchQuery = "";
@@ -11430,7 +11623,7 @@ async function initIndex() {
           }
         });
       }
-      setTypeFilter("all");
+      setTypeFilter(DEFAULT_INDEX_TYPE_FILTER);
     }
 
   } catch (error) {
@@ -14011,7 +14204,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     <div class="similar-debates-results">
       ${matches
         .slice(0, Math.max(SIMILAR_DEBATES_BATCH_SIZE, similarDebatesVisibleCount))
-        .map(({ debate }) => buildIndexLikeDebateCardHtml(debate))
+        .map(({ debate }) => buildIndexLikeDebateCardHtml(debate, { showSwipeHotspots: false }))
         .join("")}
     </div>
 
