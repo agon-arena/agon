@@ -1273,9 +1273,12 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
 }
 
 const externalPreviewCache = new Map();
+const externalPreviewInFlightRequests = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 15 * 1000;
+const debateDetailResponseCache = new Map();
+const DEBATE_DETAIL_CACHE_TTL_MS = 10 * 1000;
 
 function getDebatesApiCacheKey({ limit = null, offset = 0 } = {}) {
   return JSON.stringify({
@@ -1303,6 +1306,47 @@ function setCachedDebatesApiResponse(key, value) {
 
 function clearDebatesApiResponseCache() {
   debatesApiResponseCache.clear();
+}
+
+function getDebateDetailCacheKey(debateId) {
+  return String(debateId || "").trim();
+}
+
+function getCachedDebateDetailResponse(debateId) {
+  const key = getDebateDetailCacheKey(debateId);
+  if (!key) return null;
+
+  const entry = debateDetailResponseCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    debateDetailResponseCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedDebateDetailResponse(debateId, value) {
+  const key = getDebateDetailCacheKey(debateId);
+  if (!key) return;
+
+  debateDetailResponseCache.set(key, {
+    value,
+    expiresAt: Date.now() + DEBATE_DETAIL_CACHE_TTL_MS
+  });
+}
+
+function clearDebateDetailResponseCache(debateId = null) {
+  const key = getDebateDetailCacheKey(debateId);
+  if (!key) {
+    debateDetailResponseCache.clear();
+    return;
+  }
+  debateDetailResponseCache.delete(key);
+}
+
+function invalidateDebateCaches(debateId = null) {
+  clearDebatesApiResponseCache();
+  clearDebateDetailResponseCache(debateId);
 }
 
 function ensureExternalPreviewCacheDir() {
@@ -1425,6 +1469,11 @@ async function getExternalLinkPreview(sourceUrl) {
     return persistedPreview;
   }
 
+  const inFlightRequest = externalPreviewInFlightRequests.get(safeUrl);
+  if (inFlightRequest) {
+    return inFlightRequest;
+  }
+
   const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
   const emptyPreview = {
     url: safeUrl,
@@ -1440,56 +1489,65 @@ async function getExternalLinkPreview(sourceUrl) {
   const previewCandidates = [];
   const strategies = getPreviewFetchStrategies();
 
-  try {
-    for (const strategy of strategies) {
-      let fetched;
-      try {
-        fetched = await fetchPreviewHtml(safeUrl, strategy.timeoutMs, strategy.profile);
-      } catch (error) {
-        continue;
+  const previewPromise = (async () => {
+    try {
+      for (const strategy of strategies) {
+        let fetched;
+        try {
+          fetched = await fetchPreviewHtml(safeUrl, strategy.timeoutMs, strategy.profile);
+        } catch (error) {
+          continue;
+        }
+
+        if (!fetched?.ok || !fetched.html) {
+          continue;
+        }
+
+        const candidate = buildPreviewFromHtml(fetched.html, safeUrl, fetched.finalUrl);
+        if (!candidate || isBlockedPreviewCandidate(candidate, safeUrl)) {
+          continue;
+        }
+
+        previewCandidates.push(candidate);
+
+        if (candidate.image && isMeaningfulPreviewData(candidate, safeUrl)) {
+          break;
+        }
       }
 
-      if (!fetched?.ok || !fetched.html) {
-        continue;
+      const mergedPreview = mergeExternalPreviewCandidates(emptyPreview, previewCandidates);
+
+      if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
+        setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 60 * 24);
+        writePersistentPreview(safeUrl, mergedPreview);
+        return mergedPreview;
       }
 
-      const candidate = buildPreviewFromHtml(fetched.html, safeUrl, fetched.finalUrl);
-      if (!candidate || isBlockedPreviewCandidate(candidate, safeUrl)) {
-        continue;
+      if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+        setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
+        return persistedPreview;
       }
 
-      previewCandidates.push(candidate);
+      setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 5);
 
-      if (candidate.image && isMeaningfulPreviewData(candidate, safeUrl)) {
-        break;
+      if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
+        writePersistentPreview(safeUrl, mergedPreview);
       }
-    }
 
-    const mergedPreview = mergeExternalPreviewCandidates(emptyPreview, previewCandidates);
-
-    if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
-      setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 60 * 24);
-      writePersistentPreview(safeUrl, mergedPreview);
       return mergedPreview;
+    } catch (error) {
+      const fallback = persistedPreview || emptyPreview;
+      setCachedPreview(safeUrl, fallback, 1000 * 60 * 5);
+      return fallback;
+    } finally {
+      if (externalPreviewInFlightRequests.get(safeUrl) === previewPromise) {
+        externalPreviewInFlightRequests.delete(safeUrl);
+      }
     }
+  })();
 
-    if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
-      setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
-      return persistedPreview;
-    }
-
-    setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 5);
-
-    if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
-      writePersistentPreview(safeUrl, mergedPreview);
-    }
-
-    return mergedPreview;
-  } catch (error) {
-    const fallback = persistedPreview || emptyPreview;
-    setCachedPreview(safeUrl, fallback, 1000 * 60 * 5);
-    return fallback;
-  }
+  externalPreviewInFlightRequests.set(safeUrl, previewPromise);
+  return previewPromise;
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -2661,7 +2719,7 @@ function addToMediaExtras(currentExtras, type, url) {
 
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url, content, category, image_url, video_url } = req.body || {};
+    const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedCategory = String(category || "").trim() || null;
@@ -2720,7 +2778,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
       ...(imageUrlSent ? { image_url: normalizedImageUrl || "" } : {}),
       ...(videoUrlSent ? { video_url: normalizedVideoUrl || "" } : {}),
       ...(extrasChanged ? { media_extras: newExtras } : {}),
-      creator_key: AGON_ADMIN_CREATOR_KEY
+      ...(mark_as_agon_generated === true ? { creator_key: AGON_ADMIN_CREATOR_KEY } : {})
     };
 
     const { error } = await supabase.from("debates").update(updateFields).eq("id", req.params.id);
@@ -2743,6 +2801,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
     }
 
     setDebateStoredContent(req.params.id, normalizedContent);
+    invalidateDebateCaches(req.params.id);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2764,12 +2823,12 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
         url: String(e.url).trim(),
         ...(e.added_at ? { added_at: e.added_at } : {})
       }));
-    const { error } = await supabase.from("debates").update({ media_extras: sanitized, creator_key: AGON_ADMIN_CREATOR_KEY }).eq("id", debateId);
+    const { error } = await supabase.from("debates").update({ media_extras: sanitized }).eq("id", debateId);
     if (error) {
       console.error(error);
       return res.status(500).json({ error: "Erreur mise à jour sources." });
     }
-    debatesApiResponseCache.clear();
+    invalidateDebateCaches(debateId);
     res.json({ success: true, media_extras: sanitized });
   } catch (error) {
     console.error(error);
@@ -2782,13 +2841,13 @@ app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
     const debateId = req.params.id;
     const { error } = await supabase
       .from("debates")
-      .update({ bumped_at: new Date().toISOString() })
+      .update({ bumped_at: new Date().toISOString(), creator_key: null })
       .eq("id", debateId);
     if (error) {
       console.error(error);
       return res.status(500).json({ error: "Erreur bump débat." });
     }
-    debatesApiResponseCache.clear();
+    invalidateDebateCaches(debateId);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2812,9 +2871,10 @@ app.post("/api/admin/debate/:id/image", requireAdmin, express.json({ limit: "20m
     );
 
     await supabase.from("debates")
-      .update({ image_url: publicUrl, media_extras: newExtras, creator_key: AGON_ADMIN_CREATOR_KEY })
+      .update({ image_url: publicUrl, media_extras: newExtras })
       .eq("id", debateId);
 
+    invalidateDebateCaches(debateId);
     return res.json({ success: true, image_url: publicUrl });
   } catch (error) {
     console.error(error);
@@ -2849,9 +2909,10 @@ app.post("/api/admin/debate/:id/video", requireAdmin, express.raw({
     );
 
     await supabase.from("debates")
-      .update({ video_url: storedVideo.url, media_extras: newExtras, creator_key: AGON_ADMIN_CREATOR_KEY })
+      .update({ video_url: storedVideo.url, media_extras: newExtras })
       .eq("id", debateId);
 
+    invalidateDebateCaches(debateId);
     return res.json({ success: true, video_url: storedVideo.url, mime_type: storedVideo.mimeType });
   } catch (error) {
     console.error(error);
@@ -3434,6 +3495,10 @@ app.post("/api/debates/:id/video-file", express.raw({
 app.get("/api/debates/:id", async (req, res) => {
   try {
     const id = req.params.id;
+    const cachedResponse = getCachedDebateDetailResponse(id);
+    if (cachedResponse) {
+      return res.json(cachedResponse);
+    }
 
     const [debate, args] = await Promise.all([
       getDebateById(id),
@@ -3450,13 +3515,15 @@ app.get("/api/debates/:id", async (req, res) => {
 
     if (!argumentIds.length) {
       const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
-      return res.json({
+      const payload = {
         debate,
         optionA,
         optionB,
         commentsByArgument: {},
         sourcePreview
-      });
+      };
+      setCachedDebateDetailResponse(id, payload);
+      return res.json(payload);
     }
 
     const [sourcePreview, comments] = await Promise.all([
@@ -3473,13 +3540,16 @@ app.get("/api/debates/:id", async (req, res) => {
       commentsByArgument[comment.argument_id].push(comment);
     }
 
-    res.json({
+    const payload = {
       debate,
       optionA,
       optionB,
       commentsByArgument,
       sourcePreview
-    });
+    };
+
+    setCachedDebateDetailResponse(id, payload);
+    res.json(payload);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture arguments.");
@@ -3567,6 +3637,7 @@ app.delete("/api/debates/:id", async (req, res) => {
     removeDebateAssetsEntry(debateId);
     removeDebateStoredContent(debateId);
 
+    invalidateDebateCaches();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -3600,6 +3671,8 @@ app.post("/api/arguments", async (req, res) => {
       console.error(error);
       return sendServerError(res, "Erreur création argument.");
     }
+
+    invalidateDebateCaches(debate_id);
 
     const debateRow = await getDebateById(debate_id);
 
@@ -3662,6 +3735,7 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
     });
 
     const argument = await getArgumentById(id);
+    invalidateDebateCaches(argument?.debate_id || null);
 
     if (argument.author_key && argument.author_key !== voterKey) {
       createOrMergeVoteNotification({
@@ -3748,6 +3822,8 @@ app.post("/api/arguments/:id/unvote", async (req, res) => {
       lastVotedAt: argument.last_voted_at || null
     });
 
+    invalidateDebateCaches(argument?.debate_id || null);
+
     if (argument?.debate_id) {
       checkMajorityFlips(argument.debate_id).catch(console.error);
     }
@@ -3811,6 +3887,7 @@ app.delete("/api/arguments/:id", async (req, res) => {
       return res.status(500).json({ error: "Erreur suppression argument." });
     }
 
+    invalidateDebateCaches(argumentRow?.debate_id || null);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -3924,6 +4001,7 @@ app.post("/api/comments", async (req, res) => {
       }
     }
 
+    invalidateDebateCaches(argumentRow?.debate_id || null);
     return res.json(row);
   } catch (error) {
     console.error(error);
@@ -4065,6 +4143,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
       await supabase.from("reports").delete().eq("target_type", "comment").eq("target_id", id);
       await supabase.from("notifications").delete().eq("comment_id", id).neq("type", "replacement_accepted");
       await supabase.from("comments").delete().eq("id", id);
+      invalidateDebateCaches(argumentRow?.debate_id || null);
 
       return res.json({
         likes,
@@ -4073,6 +4152,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
       });
     }
 
+    invalidateDebateCaches(argumentRow?.debate_id || null);
     res.json({ likes, replaced: false });
   } catch (error) {
     console.error(error);
@@ -4114,6 +4194,7 @@ app.delete("/api/comments/:id", async (req, res) => {
       return res.status(500).json({ error: "Erreur suppression commentaire." });
     }
 
+    invalidateDebateCaches();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
