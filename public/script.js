@@ -16608,7 +16608,8 @@ const isOwner = isArgumentOwner(a);
   if (currentSortMode === "score" && supportRank > 3) {
     rankLabel = `${supportRank}e`;
   }
-    const comments = [...(commentsByArgument[a.id] || [])];
+    const allComments = [...(commentsByArgument[a.id] || [])];
+    const comments = allComments.filter(c => !c.reply_to_comment_id);
     const commentsOpen = !!openCommentsByArgument[a.id];
 
 const favorableCommentsCount = comments.filter(
@@ -16655,7 +16656,7 @@ comments.sort((c1, c2) => {
 const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
 const visibleComments = comments.slice(0, visibleCommentsCount);
 const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length);
-const repliesByParentId = buildCommentRepliesByParent(comments);
+const repliesByParentId = buildCommentRepliesByParent(allComments);
 
 return `
 <article id="argument-${a.id}"
@@ -17057,7 +17058,8 @@ const isOwner = isArgumentOwner(a);
     rankLabel = `${supportRank}e`;
   }
 
-    const comments = [...(commentsByArgument[a.id] || [])];
+    const allComments = [...(commentsByArgument[a.id] || [])];
+    const comments = allComments.filter(c => !c.reply_to_comment_id);
     const commentsOpen = !!openCommentsByArgument[a.id];
 
 const favorableCommentsCount = comments.filter((comment) => comment.stance === "favorable").length;
@@ -17097,7 +17099,7 @@ comments.sort((c1, c2) => {
     const visibleCommentsCount = visibleCommentsByArgument[a.id] || 5;
     const visibleComments = comments.slice(0, visibleCommentsCount);
     const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length);
-    const repliesByParentId = buildCommentRepliesByParent(comments);
+    const repliesByParentId = buildCommentRepliesByParent(allComments);
 
 const debateIsOpen = document.getElementById("title-b")?.textContent.trim() === "";
 const cardSideClass = debateIsOpen

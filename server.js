@@ -1279,6 +1279,8 @@ const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 15 * 1000;
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 10 * 1000;
+const notificationsApiResponseCache = new Map();
+const NOTIFICATIONS_API_CACHE_TTL_MS = 5 * 1000;
 
 function getDebatesApiCacheKey({ limit = null, offset = 0 } = {}) {
   return JSON.stringify({
@@ -1347,6 +1349,38 @@ function clearDebateDetailResponseCache(debateId = null) {
 function invalidateDebateCaches(debateId = null) {
   clearDebatesApiResponseCache();
   clearDebateDetailResponseCache(debateId);
+}
+
+function getNotificationsApiCacheKey(userKey) {
+  return String(userKey || "").trim();
+}
+
+function getCachedNotificationsApiResponse(userKey) {
+  const key = getNotificationsApiCacheKey(userKey);
+  if (!key) return null;
+
+  const entry = notificationsApiResponseCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    notificationsApiResponseCache.delete(key);
+    return null;
+  }
+
+  return entry.value;
+}
+
+function setCachedNotificationsApiResponse(userKey, value) {
+  const key = getNotificationsApiCacheKey(userKey);
+  if (!key) return;
+
+  notificationsApiResponseCache.set(key, {
+    value,
+    expiresAt: Date.now() + NOTIFICATIONS_API_CACHE_TTL_MS
+  });
+}
+
+function clearNotificationsApiResponseCache() {
+  notificationsApiResponseCache.clear();
 }
 
 function ensureExternalPreviewCacheDir() {
@@ -1688,6 +1722,8 @@ async function createNotification({
     is_read: 0,
     created_at: nowIso()
   });
+
+  clearNotificationsApiResponseCache();
 }
 
 // Map<argumentId (string), {authorKey, debateId, side, wasMajorityAtPost}>
@@ -1814,6 +1850,7 @@ async function createOrMergeVoteNotificationNow({
     .eq("id", recentNotification.id);
 
   if (updateError) throw updateError;
+  clearNotificationsApiResponseCache();
 }
 
 function createOrMergeVoteNotification(payload) {
@@ -2515,6 +2552,7 @@ app.delete("/api/admin/reports/delete-all-targets", requireAdmin, async (req, re
     // Vide la table reports (filet de sécurité)
     await supabase.from("reports").delete().neq("id", 0);
 
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2609,6 +2647,11 @@ app.get("/api/notifications", async (req, res) => {
       return res.status(400).json({ error: "Clé utilisateur manquante." });
     }
 
+    const cachedResponse = getCachedNotificationsApiResponse(userKey);
+    if (cachedResponse) {
+      return res.json(cachedResponse);
+    }
+
     const { data, error } = await supabase
       .from("notifications")
       .select("*")
@@ -2622,7 +2665,9 @@ app.get("/api/notifications", async (req, res) => {
       return sendServerError(res, "Erreur lecture notifications.");
     }
 
-    res.json(data || []);
+    const payload = data || [];
+    setCachedNotificationsApiResponse(userKey, payload);
+    res.json(payload);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture notifications.");
@@ -2647,6 +2692,7 @@ app.post("/api/notifications/read-all", async (req, res) => {
       return sendServerError(res, "Erreur mise à jour notifications.");
     }
 
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2672,6 +2718,7 @@ app.post("/api/notifications/delete-all", async (req, res) => {
       return sendServerError(res, "Erreur suppression notifications.");
     }
 
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2698,6 +2745,7 @@ app.post("/api/notifications/read-one", async (req, res) => {
       return sendServerError(res, "Erreur mise à jour notification.");
     }
 
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -3634,10 +3682,12 @@ app.delete("/api/debates/:id", async (req, res) => {
       await deleteStoredMediaAsset(storedVideoUrl, debateVideosDir);
     }
 
+    clearNotificationsApiResponseCache();
     removeDebateAssetsEntry(debateId);
     removeDebateStoredContent(debateId);
 
     invalidateDebateCaches();
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -3888,6 +3938,7 @@ app.delete("/api/arguments/:id", async (req, res) => {
     }
 
     invalidateDebateCaches(argumentRow?.debate_id || null);
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -3974,6 +4025,7 @@ app.post("/api/comments", async (req, res) => {
         is_read: 0,
         created_at: nowIso()
       });
+      clearNotificationsApiResponseCache();
     }
 
     if (reply_to_comment_id) {
@@ -3998,6 +4050,7 @@ app.post("/api/comments", async (req, res) => {
           is_read: 0,
           created_at: nowIso()
         });
+        clearNotificationsApiResponseCache();
       }
     }
 
@@ -4144,6 +4197,7 @@ app.post("/api/comments/:id/vote", async (req, res) => {
       await supabase.from("notifications").delete().eq("comment_id", id).neq("type", "replacement_accepted");
       await supabase.from("comments").delete().eq("id", id);
       invalidateDebateCaches(argumentRow?.debate_id || null);
+      clearNotificationsApiResponseCache();
 
       return res.json({
         likes,
@@ -4195,6 +4249,7 @@ app.delete("/api/comments/:id", async (req, res) => {
     }
 
     invalidateDebateCaches();
+    clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
