@@ -84,7 +84,7 @@ function getDebateCategoryList(value) {
   return Array.from(
     new Set(
       raw
-        .split(/\s*[·•|;,/]\s*/)
+        .split(/\s*[·•|;,]\s*/)
         .map((item) => String(item || "").trim())
         .filter(Boolean)
     )
@@ -100,6 +100,30 @@ function getIndexCardCategoryLabel(value) {
   if (!categories.length) return "Sans catégorie";
   if (categories.length === 1) return categories[0];
   return categories.join(" · ");
+}
+
+function buildIndexCardCategoryBadgesHtml(value) {
+  const categories = getDebateCategoryList(value);
+  if (!categories.length) {
+    return '<div class="debate-card-category">Sans catégorie</div>';
+  }
+
+  const visibleCategories = categories.filter((category) => category !== YOUTH_CATEGORY_FILTER);
+  if (!visibleCategories.length) {
+    return "";
+  }
+
+  const categoryClassName = visibleCategories.length > 1
+    ? "debate-card-category debate-card-category-multi"
+    : "debate-card-category";
+
+  return `<div class="${categoryClassName}">${escapeHtml(getIndexCardCategoryLabel(joinDebateCategories(visibleCategories)))}</div>`;
+}
+
+function buildIndexYouthBadgeHtml(value) {
+  return debateHasCategory(value, YOUTH_CATEGORY_FILTER)
+    ? '<div class="debate-card-type debate-card-youth-badge">Espace jeunes</div>'
+    : "";
 }
 
 function debateHasCategory(value, category) {
@@ -1249,10 +1273,14 @@ function getVisibleArgumentElement(argumentId) {
 
 function getVisibleCommentElement(commentId) {
   if (currentDebateViewMode === "list") {
-    return document.getElementById(`list-comment-${commentId}`) || document.getElementById(`comment-${commentId}`);
+    return document.getElementById(`list-comment-${commentId}`)
+      || document.getElementById(`comment-${commentId}`)
+      || document.querySelector(`.comment-reply-card[data-reply-comment-id="${CSS.escape(String(commentId || ""))}"]`);
   }
 
-  return document.getElementById(`comment-${commentId}`) || document.getElementById(`list-comment-${commentId}`);
+  return document.getElementById(`comment-${commentId}`)
+    || document.getElementById(`list-comment-${commentId}`)
+    || document.querySelector(`.comment-reply-card[data-reply-comment-id="${CSS.escape(String(commentId || ""))}"]`);
 }
 
 function getArgumentFreshnessBonus(arg) {
@@ -3908,18 +3936,16 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     ? `<div class="debate-card-top-badges">${newBadgeHtml}${agonBadgeHtml}</div>`
     : "";
   const includeDeleteButton = options.includeDeleteButton === true;
-  const categoryList = getDebateCategoryList(d.category);
-  const categoryClassName = categoryList.length > 1
-    ? "debate-card-category debate-card-category-multi"
-    : "debate-card-category";
+  const categoryBadgesHtml = buildIndexCardCategoryBadgesHtml(d.category);
+  const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
 
   return `
     <article class="debate-card" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
           <div class="debate-card-top-meta">
-            <div class="${categoryClassName}">${escapeHtml(getIndexCardCategoryLabel(d.category))}</div>
-            <div class="debate-card-type">${debateTypeLabel}</div>
+            ${categoryBadgesHtml}
+            ${youthBadgeHtml}
           </div>
           ${topBadgesHtml}
         </div>
@@ -4278,7 +4304,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:flex;">
           ${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}
         </div>
-        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:420px; margin:0 auto;"></div>
+        <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:100%; margin:0;"></div>
         <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
       </div>
     </div>
@@ -9961,12 +9987,38 @@ function initAdminEditCategoryPickers(scope = document) {
 }
 
 function syncAdminEditCardCategory(card, categoryValue) {
-  const catEl = card?.querySelector('.debate-card-category');
-  if (!catEl) return;
+  const topMeta = card?.querySelector('.debate-card-top-meta');
+  if (!topMeta) return;
 
-  const categories = getDebateCategoryList(categoryValue);
-  catEl.textContent = getIndexCardCategoryLabel(categoryValue);
-  catEl.classList.toggle('debate-card-category-multi', categories.length > 1);
+  topMeta.querySelectorAll('.debate-card-category, .debate-card-youth-badge').forEach((node) => node.remove());
+  topMeta.insertAdjacentHTML('afterbegin', `${buildIndexCardCategoryBadgesHtml(categoryValue)}${buildIndexYouthBadgeHtml(categoryValue)}`);
+}
+
+function syncAdminEditCardTopBadges(card, debate) {
+  const topRow = card?.querySelector('.debate-card-top-row');
+  if (!topRow) return;
+
+  const isNewDebate = isDebateNew(debate);
+  const isAgonGenerated = isAgonGeneratedDebate(debate);
+  const newBadgeHtml = isNewDebate ? '<div class="debate-card-new-badge">Nouveau</div>' : '';
+  const agonBadgeHtml = isAgonGenerated ? '<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>' : '';
+  const existingWrap = topRow.querySelector('.debate-card-top-badges');
+
+  if (!newBadgeHtml && !agonBadgeHtml) {
+    existingWrap?.remove();
+    return;
+  }
+
+  const badgesHtml = `${newBadgeHtml}${agonBadgeHtml}`;
+  if (existingWrap) {
+    existingWrap.innerHTML = badgesHtml;
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'debate-card-top-badges';
+  wrap.innerHTML = badgesHtml;
+  topRow.appendChild(wrap);
 }
 
 function setupIndexInfiniteScroll() {
@@ -10170,6 +10222,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
   btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> En cours…';
 
   try {
+    const publishTimestamp = new Date().toISOString();
     await fetchJSON(API + "/admin/debate/" + debateId, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
@@ -10177,13 +10230,28 @@ async function saveAndPublishAdminCard(debateId, btn) {
     });
     await fetchJSON(API + "/admin/debate/" + debateId + "/bump", {
       method: "POST",
-      headers: { "x-admin-token": getAdminToken() }
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-token": getAdminToken()
+      },
+      body: JSON.stringify({ preserve_agon_generated: true })
+    });
+    await fetchJSON(API + "/admin/debate/" + debateId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
+      body: JSON.stringify({ ...body, mark_as_agon_generated: true })
     });
 
     // Met à jour les caches
     const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
       .flat().find(d => d && String(d.id) === String(debateId));
-    const updatedDebate = { ...(cached || {}), ...body, id: debateId, creator_key: "__AGON_ADMIN__" };
+    const updatedDebate = {
+      ...(cached || {}),
+      ...body,
+      id: debateId,
+      creator_key: "__AGON_ADMIN__",
+      bumped_at: publishTimestamp
+    };
     updateDebateCachesAfterEdit(updatedDebate);
 
     // Met à jour le DOM de la carte
@@ -10196,18 +10264,10 @@ async function saveAndPublishAdminCard(debateId, btn) {
       if (posA) posA.textContent = body.option_a || "Position A";
       if (posB) posB.textContent = body.option_b || "Position B";
       syncAdminEditCardCategory(card, body.category);
+      syncAdminEditCardTopBadges(card, updatedDebate);
     }
 
-    // Recharge le feed
     clearIndexDebatesSessionCache();
-    const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
-    const safeFresh = Array.isArray(fresh) ? fresh : [];
-    debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
-    indexDebatesApiNextOffset = safeFresh.length;
-    indexDebatesApiHasMore = safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT;
-    saveDebatesToSessionCache(debatesCache, { nextOffset: indexDebatesApiNextOffset, hasMore: indexDebatesApiHasMore });
-    applyIndexFilters();
-    reopenAdminEditPanelForDebate(debateId);
 
     btn.innerHTML = '<i class="fa-solid fa-check"></i> Sauvegardé et publié !';
     btn.style.background = '#dcfce7';
@@ -10230,10 +10290,25 @@ async function bumpAdminDebate(debateId, btn) {
     btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Republication…';
   }
   try {
+    const bumpedAt = new Date().toISOString();
     await fetchJSON(API + "/admin/debate/" + debateId + "/bump", {
       method: "POST",
       headers: { 'x-admin-token': getAdminToken() }
     });
+    const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
+      .flat().find(d => d && String(d.id) === String(debateId));
+    const updatedDebate = {
+      ...(cached || {}),
+      id: debateId,
+      creator_key: null,
+      bumped_at: bumpedAt
+    };
+    updateDebateCachesAfterEdit(updatedDebate);
+    const panel = btn?.closest('.debate-card-admin-edit');
+    const card = panel?.closest('article.debate-card');
+    if (card) {
+      syncAdminEditCardTopBadges(card, updatedDebate);
+    }
     if (btn) {
       btn.innerHTML = '<i class="fa-solid fa-check"></i> Republié !';
       btn.style.background = '#dcfce7';
@@ -10244,14 +10319,6 @@ async function bumpAdminDebate(debateId, btn) {
       }, 1500);
     }
     clearIndexDebatesSessionCache();
-    const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
-    const safeFresh = Array.isArray(fresh) ? fresh : [];
-    debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
-    indexDebatesApiNextOffset = safeFresh.length;
-    indexDebatesApiHasMore = safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT;
-    saveDebatesToSessionCache(debatesCache, { nextOffset: indexDebatesApiNextOffset, hasMore: indexDebatesApiHasMore });
-    applyIndexFilters();
-    reopenAdminEditPanelForDebate(debateId);
   } catch(err) {
     if (btn) {
       btn.innerHTML = origHtml;
@@ -16383,7 +16450,7 @@ if (highlight) {
 if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   argumentsVisible = currentAllArguments.length;
 }
-if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
+  if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   if (highlight.startsWith("comment-")) {
     const commentId = highlight.replace("comment-", "");
 
@@ -16392,6 +16459,7 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
 
       if (comments.some((comment) => String(comment.id) === String(commentId))) {
         openCommentsByArgument[argumentId] = true;
+        openReplyAncestorsForComment(commentId, argumentId);
       }
     }
   }
@@ -16766,7 +16834,7 @@ return `
 <div class="comments-block">
   <div class="comments-summary">
     <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-      ${commentsOpen ? "Masquer les commentaires" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
+      ${commentsOpen ? "Masquer les commentaires" : `${comments.length > 0 ? "Voir " : ""}${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
     </button>
 
 <div class="comments-summary-details">
@@ -17208,7 +17276,7 @@ ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
         <div class="comments-block">
           <div class="comments-summary">
             <button class="button button-small" type="button" onclick="toggleComments('${a.id}', this)">
-              ${commentsOpen ? "Masquer les commentaires" : `${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
+              ${commentsOpen ? "Masquer les commentaires" : `${comments.length > 0 ? "Voir " : ""}${comments.length} commentaire${comments.length > 1 ? "s" : ""}`}
             </button>
 
 <div class="comments-summary-details">
@@ -18361,7 +18429,55 @@ function buildCommentRepliesByParent(comments = []) {
   }, {});
 }
 
-function renderCommentReplyJumpMarkup(argumentId, commentId, repliesByParent = {}) {
+function getCommentReplyDepth(commentId, argumentId = null) {
+  const targetComment = getLocalCommentById(commentId, argumentId);
+  if (!targetComment) return 0;
+
+  let depth = 0;
+  let currentParentId = String(targetComment.reply_to_comment_id || "").trim();
+  const visited = new Set();
+
+  while (currentParentId && !visited.has(currentParentId)) {
+    visited.add(currentParentId);
+    depth += 1;
+    const parentComment = getLocalCommentById(currentParentId, argumentId);
+    currentParentId = String(parentComment?.reply_to_comment_id || "").trim();
+  }
+
+  return depth;
+}
+
+function openReplyAncestorsForComment(commentId, argumentId = null) {
+  const targetComment = getLocalCommentById(commentId, argumentId);
+  if (!targetComment) return;
+
+  const normalizedArgumentId = String(
+    argumentId ?? targetComment.argument_id ?? ""
+  ).trim();
+
+  if (normalizedArgumentId) {
+    openCommentsByArgument[normalizedArgumentId] = true;
+    visibleCommentsByArgument[normalizedArgumentId] = Math.max(
+      Number(visibleCommentsByArgument[normalizedArgumentId] || 5),
+      9999
+    );
+  }
+
+  let currentParentId = String(targetComment.reply_to_comment_id || "").trim();
+  const visited = new Set();
+
+  while (currentParentId && !visited.has(currentParentId)) {
+    visited.add(currentParentId);
+    openRepliesByComment[currentParentId] = true;
+
+    const parentComment = getLocalCommentById(currentParentId, normalizedArgumentId || null);
+    currentParentId = String(parentComment?.reply_to_comment_id || "").trim();
+  }
+}
+
+function renderCommentReplyJumpMarkup(argumentId, commentId, repliesByParent = {}, depth = 1) {
+  if (depth > 2) return "";
+
   const parentId = String(commentId || "").trim();
   const replies = Array.isArray(repliesByParent[parentId]) ? repliesByParent[parentId] : [];
   if (!replies.length) return "";
@@ -18387,7 +18503,7 @@ function renderCommentReplyJumpMarkup(argumentId, commentId, repliesByParent = {
   `;
 }
 
-function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent = {}, parentCommentId = "", commentLikeState = {}) {
+function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent = {}, parentCommentId = "", commentLikeState = {}, depth = 1) {
   const parentId = String(parentCommentId || "").trim();
   const replies = Array.isArray(repliesByParent[parentId]) ? repliesByParent[parentId] : [];
   if (!replies.length || !openRepliesByComment[parentId]) return "";
@@ -18417,6 +18533,21 @@ function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent =
             `
             : `${reply.content ? `<p>${linkifyText(reply.content)}</p>` : ""}`;
 
+          const canReplyToThisReply = depth < 2;
+          const nestedReplyJumpHtml = canReplyToThisReply
+            ? renderCommentReplyJumpMarkup(argumentId, replyId, repliesByParent, depth + 1)
+            : "";
+          const nestedRepliesPanelHtml = canReplyToThisReply
+            ? renderCommentRepliesPanelMarkup(
+            debateId,
+            argumentId,
+            repliesByParent,
+            replyId,
+            commentLikeState,
+            depth + 1
+          )
+            : "";
+
           return `
             <div class="comment-reply-card" data-reply-comment-id="${escapeAttribute(replyId)}">
               ${stanceBadge}
@@ -18441,7 +18572,18 @@ function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent =
                   👎
                 </button>
                 <span class="comment-reply-like-count">${likes} ${likes > 1 ? "likes" : "like"}</span>
+                ${canReplyToThisReply ? `
+                  <button
+                    class="button button-small"
+                    type="button"
+                    onclick="replyToComment('${argumentId}', '${replyId}', this)"
+                  >
+                    Répondre
+                  </button>
+                ` : ""}
               </div>
+              ${nestedReplyJumpHtml}
+              ${nestedRepliesPanelHtml}
             </div>
           `;
         }).join("")}
@@ -18698,6 +18840,12 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 function replyToComment(argumentId, commentId, button = null) {
   const debateId = getDebateId();
   if (!debateId) return;
+
+  const replyDepth = getCommentReplyDepth(commentId, argumentId);
+  if (replyDepth >= 2) {
+    alert("Vous ne pouvez pas répondre au-delà de 2 niveaux de discussion.");
+    return;
+  }
 
   setActionLoading(button);
 
@@ -19398,6 +19546,22 @@ document.addEventListener("click", function(event) {
   clearCommentStanceChoice(commentForm);
 });
 
+document.addEventListener("focusin", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target || !target.closest(".comment-form")) return;
+
+  syncIframeParentInlineComposerState();
+});
+
+document.addEventListener("focusout", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target || !target.closest(".comment-form")) return;
+
+  requestAnimationFrame(() => {
+    syncIframeParentInlineComposerState();
+  });
+});
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", ensureCommentStanceMobileStyles, { once: true });
 } else {
@@ -19983,14 +20147,6 @@ function ensureProgressSortOption() {
 initPageArrivalLoadingOverlay();
 
 document.addEventListener("DOMContentLoaded", () => {
-  if (location.pathname === "/debate" && window.self === window.top) {
-    const debateId = new URLSearchParams(location.search).get("id");
-    if (debateId) {
-      window.location.replace(`/?openDebate=${encodeURIComponent(debateId)}`);
-      return;
-    }
-  }
-
   initIframePageContextBridge();
   initDebateLinkPrewarm();
 initMobileIndexCardHighlight();
@@ -20533,7 +20689,7 @@ function closeListArgumentForm() {
   }
 
   document.body.classList.remove("argument-form-open");
-  syncIframeParentArgumentFormState(false);
+  syncIframeParentInlineComposerState();
 }
 
 function syncIframeParentArgumentFormState(isOpen) {
@@ -20547,6 +20703,17 @@ function syncIframeParentArgumentFormState(isOpen) {
   } catch (error) {}
 }
 
+function hasOpenInlineCommentComposer() {
+  const activeElement = document.activeElement instanceof Element ? document.activeElement : null;
+  return !!activeElement?.closest(".comment-form");
+}
+
+function syncIframeParentInlineComposerState() {
+  const hasOpenArgumentForm = !!(openedArgumentForm && openedArgumentForm.offsetParent);
+  const hasOpenCommentComposer = hasOpenInlineCommentComposer();
+  syncIframeParentArgumentFormState(hasOpenArgumentForm || hasOpenCommentComposer);
+}
+
 function closeArgumentForm() {
   stopIdeaVoiceDictation();
   ["form-a", "form-b", "form-list"].forEach((id) => {
@@ -20558,7 +20725,7 @@ function closeArgumentForm() {
 
   openedArgumentForm = null;
   document.body.classList.remove("argument-form-open");
-  syncIframeParentArgumentFormState(false);
+  syncIframeParentInlineComposerState();
 }
 
 

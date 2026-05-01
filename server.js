@@ -2887,9 +2887,13 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
 app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
   try {
     const debateId = req.params.id;
+    const preserveAgonGenerated = req.body?.preserve_agon_generated === true;
     const { error } = await supabase
       .from("debates")
-      .update({ bumped_at: new Date().toISOString(), creator_key: null })
+      .update({
+        bumped_at: new Date().toISOString(),
+        creator_key: preserveAgonGenerated ? AGON_ADMIN_CREATOR_KEY : null
+      })
       .eq("id", debateId);
     if (error) {
       console.error(error);
