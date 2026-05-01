@@ -1,4 +1,10 @@
 const API = "/api";
+const SABLIER_IMAGE_SRC = "/sablier.png?v=20260501-1";
+
+function getSablierImageSrc() {
+  return SABLIER_IMAGE_SRC;
+}
+
 let argumentsVisible = 6;
 
 let currentDebateShareData = {
@@ -562,14 +568,14 @@ function clearCreatedDebateContext() {
 
 function getPageArrivalLoadingImageSrc() {
   if (isNotificationToDebateLoadingTransition()) {
-    return "/sablier.png";
+    return getSablierImageSrc();
   }
 
   if (isCreateToDebateOverlayContext()) {
-    return "/sablier.png";
+    return getSablierImageSrc();
   }
 
-  return "/sablier.png";
+  return getSablierImageSrc();
 }
 
 function applyPageArrivalLoadingVisuals() {
@@ -589,12 +595,12 @@ function applyPageArrivalLoadingVisuals() {
   if (loadingImage) {
     const desiredSrc = getPageArrivalLoadingImageSrc();
     if (!loadingImage.dataset.defaultSrc) {
-      loadingImage.dataset.defaultSrc = "/sablier.png";
+      loadingImage.dataset.defaultSrc = getSablierImageSrc();
     }
     loadingImage.onerror = () => {
       if (loadingImage.dataset.fallbackApplied === "true") return;
       loadingImage.dataset.fallbackApplied = "true";
-      loadingImage.src = loadingImage.dataset.defaultSrc || "/sablier.png";
+      loadingImage.src = loadingImage.dataset.defaultSrc || getSablierImageSrc();
     };
     loadingImage.dataset.fallbackApplied = "false";
     loadingImage.src = desiredSrc;
@@ -627,7 +633,7 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="${getSablierImageSrc()}" alt=""></div>
         <div class="page-arrival-loading-title" id="page-arrival-loading-title"></div>
       </div>
     `;
@@ -712,7 +718,8 @@ function initPageArrivalLoadingOverlay() {
   document.documentElement.dataset.pageArrivalLoadingInitialized = "true";
   pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/";
 
-  const shouldShowOverlayImmediately = !isIframeDebateLoadingOverlayContext() || hasActiveNotificationTransition();
+  const isIframeNotificationTarget = isIframeDebateLoadingOverlayContext() && hasActiveNotificationTransition();
+  const shouldShowOverlayImmediately = !isIframeDebateLoadingOverlayContext() || (hasActiveNotificationTransition() && !isIframeNotificationTarget);
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
@@ -2048,7 +2055,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function getDebateIframeParentLoadingImageSrc() {
-  return "/sablier.png";
+  return getSablierImageSrc();
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
@@ -2064,7 +2071,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="${getSablierImageSrc()}" alt=""></div>
         <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
       </div>
     `;
@@ -2080,7 +2087,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   if (image) {
     image.onerror = () => {
       image.onerror = null;
-      image.src = "/sablier.png";
+      image.src = getSablierImageSrc();
     };
     image.src = getDebateIframeParentLoadingImageSrc();
   }
@@ -2474,31 +2481,24 @@ function ensureDebateIframeModal() {
       const readyHref = String(e.data.href || "").trim();
       window.__agonIframeCurrentPathname = readyPathname;
 
-      let shouldKeepLoadingUntilNotificationTarget = false;
-
       if (readyHref) {
         try {
           const parsedUrl = new URL(readyHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
             syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
-            shouldKeepLoadingUntilNotificationTarget =
-              window.__agonDebateModalOpenedFromNotifications === true &&
-              parsedUrl.pathname === "/debate" &&
-              parsedUrl.searchParams.has("highlight");
           }
         } catch (error) {}
       }
 
-      if (!shouldKeepLoadingUntilNotificationTarget) {
-        requestAnimationFrame(() => {
-          setDebateIframeModalLoadingState(false);
-        });
-      }
+      requestAnimationFrame(() => {
+        setDebateIframeModalLoadingState(false);
+      });
       return;
     }
 
     if (e.data.type === "agon:notification-target-ready") {
       window.__agonIframeCurrentPathname = String(e.data.pathname || "/debate");
+      window.__agonDebateModalOpenedFromNotifications = false;
       if (debateIframeParentLoadingFallbackTimer) {
         clearTimeout(debateIframeParentLoadingFallbackTimer);
         debateIframeParentLoadingFallbackTimer = null;
@@ -2541,20 +2541,8 @@ function ensureDebateIframeModal() {
       const newHref = String(e.data.href || "").trim();
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(newPathname));
 
-      // Si l'iframe revient sur /debate depuis une autre page (ex: /notifications)
-      // → déclencher le loading overlay pour masquer l'écran blanc
-      const prevPathname = window.__agonIframeCurrentPathname || "";
-      if (newPathname === "/debate" && prevPathname !== "/debate" && prevPathname !== "") {
-        setDebateIframeModalLoadingState(true, "Entrée dans l'arène en cours");
-        if (debateIframeParentLoadingFallbackTimer) {
-          clearTimeout(debateIframeParentLoadingFallbackTimer);
-        }
-        debateIframeParentLoadingFallbackTimer = setTimeout(() => {
-          setDebateIframeModalLoadingState(false);
-        }, 9000);
-      }
-
       window.__agonIframeCurrentPathname = newPathname;
+
       if (newHref) {
         try {
           const parsedUrl = new URL(newHref, window.location.origin);
@@ -2563,6 +2551,7 @@ function ensureDebateIframeModal() {
           }
         } catch (error) {}
       }
+
       if (newPathname === "/debate") {
         window.__agonDebateModalOpenedFromNotifications = false;
       }
@@ -3645,6 +3634,7 @@ async function scrollNotificationTargetIntoPlace(element, highlight, options = {
 
   const behavior = options.behavior || "smooth";
   const shouldWaitForSourcePreview = options.waitForSourcePreview !== false;
+  const shouldWaitForLayoutStability = options.waitForLayoutStability !== false;
   const finalizeTransition = options.finalizeTransition !== false;
 
   const scrollToElement = (targetElement, scrollBehavior) => {
@@ -3664,8 +3654,10 @@ async function scrollNotificationTargetIntoPlace(element, highlight, options = {
     scrollToElement(element, "auto");
   }
 
-  await waitForNotificationTargetLayoutStability(element);
-  scrollToElement(element, "auto");
+  if (shouldWaitForLayoutStability) {
+    await waitForNotificationTargetLayoutStability(element);
+    scrollToElement(element, "auto");
+  }
 
   if (finalizeTransition) {
     finalizeNotificationTransitionAtScrollStart();
@@ -7406,15 +7398,19 @@ function hideNotificationTransitionOverlay() {
   clearNotificationTransitionState();
 }
 
-function beginNotificationTransition(link) {
+function beginNotificationTransition(link, options = {}) {
+  const normalizedLink = String(link || "");
   const state = {
     active: true,
-    link: String(link || ""),
+    link: normalizedLink,
     startedAt: Date.now()
   };
 
   setNotificationTransitionState(state);
-  showNotificationTransitionOverlay();
+
+  if (!options?.skipOverlay) {
+    showNotificationTransitionOverlay();
+  }
 }
 
 function handleNotificationsBackNavigation(event, fallbackHref = "/") {
@@ -9654,7 +9650,7 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   if (shouldOpenNotificationTargetInIframeModal(link)) {
-    beginNotificationTransition(link);
+    beginNotificationTransition(link, { skipOverlay: true });
     openDebateIframeModal(link);
     return;
   }
@@ -16803,26 +16799,18 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
     };
 
 if (element) {
-  let lastY = window.scrollY;
-  let stableFrames = 0;
-  let hasStartedMoving = false;
-  const startTime = Date.now();
-  const pollScroll = () => {
-    const curY = window.scrollY;
-    const delta = Math.abs(curY - lastY);
-    lastY = curY;
-    if (delta > 1) { hasStartedMoving = true; stableFrames = 0; }
-    else if (hasStartedMoving) { stableFrames++; }
-    if (stableFrames >= 4 || (!hasStartedMoving && Date.now() - startTime > 600) || Date.now() - startTime > 3000) {
-      finishNotificationReturnVisuals();
-      return;
-    }
-    requestAnimationFrame(pollScroll);
-  };
-  requestAnimationFrame(pollScroll);
+  scrollNotificationTargetIntoPlace(element, highlight, {
+    behavior: "auto",
+    waitForSourcePreview: false,
+    waitForLayoutStability: false,
+    finalizeTransition: false
+  }).catch(() => {});
 
-  scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false });
-  highlightNotificationTargetElement(element, highlight, 5000);
+  finishNotificationReturnVisuals();
+
+  requestAnimationFrame(() => {
+    highlightNotificationTargetElement(element, highlight, 5000);
+  });
 } else {
   finishNotificationReturnVisuals();
 }
@@ -16830,7 +16818,7 @@ if (element) {
     const url = new URL(window.location.href);
     url.searchParams.delete("highlight");
     window.history.replaceState({}, "", url);
-  }, 300);
+  }, 80);
 }
 
   } catch (error) {
