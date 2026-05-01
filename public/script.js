@@ -2188,13 +2188,14 @@ function syncDebateIframeModalCloseButtonWithFramePage(frame) {
   applyDebateIframeModalCloseButtonBadgeAlignment();
 }
 
-function notifyParentAboutIframePageContext(pathname = location.pathname) {
+function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href) {
   if (window.self === window.top) return;
 
   try {
     window.parent.postMessage({
       type: "agon:iframe-page-context",
-      pathname: String(pathname || location.pathname || "")
+      pathname: String(pathname || location.pathname || ""),
+      href: String(href || location.href || "")
     }, "*");
   } catch (error) {}
 }
@@ -2206,7 +2207,7 @@ function initIframePageContextBridge() {
   document.documentElement.dataset.iframePageContextBridgeInitialized = "true";
 
   const notifyCurrentPath = () => {
-    notifyParentAboutIframePageContext(location.pathname);
+    notifyParentAboutIframePageContext(location.pathname, location.href);
   };
 
   notifyCurrentPath();
@@ -2224,7 +2225,7 @@ function initIframePageContextBridge() {
 
     try {
       const parsedUrl = new URL(href, window.location.origin);
-      notifyParentAboutIframePageContext(parsedUrl.pathname);
+      notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString());
     } catch (error) {}
   }, true);
 }
@@ -2431,6 +2432,7 @@ function ensureDebateIframeModal() {
 
     if (e.data.type === "agon:iframe-page-context") {
       const newPathname = String(e.data.pathname || e.data.page || "");
+      const newHref = String(e.data.href || "").trim();
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(newPathname));
 
       // Si l'iframe revient sur /debate depuis une autre page (ex: /notifications)
@@ -2447,6 +2449,17 @@ function ensureDebateIframeModal() {
       }
 
       window.__agonIframeCurrentPathname = newPathname;
+      if (newHref) {
+        try {
+          const parsedUrl = new URL(newHref, window.location.origin);
+          if (parsedUrl.origin === window.location.origin) {
+            syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+          }
+        } catch (error) {}
+      }
+      if (newPathname === "/debate") {
+        window.__agonDebateModalOpenedFromNotifications = false;
+      }
       return;
     }
 
@@ -2628,6 +2641,24 @@ function scheduleDebateIframeFrameTeardown(frame, modal) {
   });
 }
 
+function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
+  if (window.self !== window.top) return;
+  if (location.pathname !== "/") return;
+
+  const normalizedModalUrl = String(modalUrl || "").trim();
+
+  try {
+    const nextUrl = new URL(window.location.href);
+    if (normalizedModalUrl) {
+      nextUrl.searchParams.set("openModal", normalizedModalUrl);
+    } else {
+      nextUrl.searchParams.delete("openModal");
+      nextUrl.searchParams.delete("openDebate");
+    }
+    window.history.replaceState({}, "", nextUrl);
+  } catch (error) {}
+}
+
 function openDebateIframeModal(url, options = {}) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
@@ -2654,6 +2685,7 @@ function openDebateIframeModal(url, options = {}) {
   let iframeUrlPathname = url;
   try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
   const isDebateUrl = iframeUrlPathname === "/debate";
+  syncIndexUrlWithOpenIframeModal(url);
   window.__agonIframeCurrentPathname = iframeUrlPathname;
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
@@ -2902,6 +2934,7 @@ function closeDebateIframeModal() {
   modal.classList.remove("open");
   modal.classList.remove("argument-form-open-in-child");
   setDebateIframeModalLoadingState(false);
+  syncIndexUrlWithOpenIframeModal("");
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
   window.__agonIframeVoicesBadgeMetrics = null;
@@ -12060,11 +12093,12 @@ function shouldShowIndexInfiniteScrollSentinel(visibleCount = 0, totalCount = 0)
 }
 
 async function initIndex() {
-  const openDebateId = new URLSearchParams(location.search).get("openDebate");
-  if (openDebateId) {
-    const cleanUrl = new URL(window.location.href);
-    cleanUrl.searchParams.delete("openDebate");
-    window.history.replaceState({}, "", cleanUrl);
+  const params = new URLSearchParams(location.search);
+  const openModalUrl = String(params.get("openModal") || "").trim();
+  const openDebateId = String(params.get("openDebate") || "").trim();
+  if (openModalUrl) {
+    openDebateIframeModal(openModalUrl);
+  } else if (openDebateId) {
     openDebateIframeModal(`/debate?id=${encodeURIComponent(openDebateId)}`);
   }
 
