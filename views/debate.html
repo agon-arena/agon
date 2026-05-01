@@ -1335,6 +1335,79 @@ body.page-debate .home-bottom-nav-item:focus-visible {
     border-radius: 0 !important;
   }
 }
+
+/* Correctif mobile : empêcher les réponses/commentaires imbriqués de sortir des cartes en mode colonne */
+@media (max-width: 768px) {
+  body.page-debate .debate-columns,
+  body.page-debate .debate-columns .column,
+  body.page-debate .debate-columns .argument-card,
+  body.page-debate .debate-columns .comments-block,
+  body.page-debate .debate-columns .comments-content,
+  body.page-debate .debate-columns .comments-list,
+  body.page-debate .debate-columns .comment-card,
+  body.page-debate .debate-columns .comment-replies-panel,
+  body.page-debate .debate-columns .comment-replies-list,
+  body.page-debate .debate-columns .comment-reply-card {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  body.page-debate .debate-columns .comment-card,
+  body.page-debate .debate-columns .comment-reply-card,
+  body.page-debate .debate-columns .comment-card p,
+  body.page-debate .debate-columns .comment-reply-card p,
+  body.page-debate .debate-columns .comment-improvement-preview,
+  body.page-debate .debate-columns .comment-improvement-preview-title,
+  body.page-debate .debate-columns .comment-improvement-preview-body,
+  body.page-debate .debate-columns .reply-preview-text,
+  body.page-debate .debate-columns .reply-preview-content {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body.page-debate .debate-columns .comment-replies-panel {
+    width: 100%;
+    margin-left: 0 !important;
+    padding-left: 8px !important;
+    padding-right: 0 !important;
+    overflow: hidden;
+  }
+
+  body.page-debate .debate-columns .comment-replies-list {
+    width: 100%;
+    gap: 8px;
+  }
+
+  body.page-debate .debate-columns .comment-reply-card {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body.page-debate .debate-columns .comment-replies-jump,
+  body.page-debate .debate-columns .comment-reply-actions,
+  body.page-debate .debate-columns .comment-actions {
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  body.page-debate .debate-columns .comment-stance-badge,
+  body.page-debate .debate-columns .comment-reply-label,
+  body.page-debate .debate-columns .comment-replies-jump-label,
+  body.page-debate .debate-columns .comment-reply-like-count {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body.page-debate .debate-columns .comment-replies-jump-button,
+  body.page-debate .debate-columns .comment-reply-vote-button,
+  body.page-debate .debate-columns .comment-reply-actions .button {
+    flex-shrink: 0;
+  }
+}
 </style>
 <style>
 
