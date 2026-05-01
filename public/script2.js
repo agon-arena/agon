@@ -2115,11 +2115,7 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
   const normalizedPath = String(pathname || "").trim().toLowerCase();
-  const normalizedPathWithSlash = normalizedPath.startsWith("/")
-    ? normalizedPath
-    : `/${normalizedPath}`;
-
-  return normalizedPathWithSlash === "/create" || normalizedPathWithSlash === "/notifications";
+  return normalizedPath === "/create";
 }
 
 function resetDebateIframeModalCloseButtonBadgeAlignment() {
@@ -2474,57 +2470,24 @@ function ensureDebateIframeModal() {
       const readyHref = String(e.data.href || "").trim();
       window.__agonIframeCurrentPathname = readyPathname;
 
-      let shouldKeepLoadingUntilNotificationTarget = false;
-
       if (readyHref) {
         try {
           const parsedUrl = new URL(readyHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
             syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
-            shouldKeepLoadingUntilNotificationTarget =
-              window.__agonDebateModalOpenedFromNotifications === true &&
-              parsedUrl.pathname === "/debate" &&
-              parsedUrl.searchParams.has("highlight");
           }
         } catch (error) {}
       }
 
-      if (!shouldKeepLoadingUntilNotificationTarget) {
-        requestAnimationFrame(() => {
-          setDebateIframeModalLoadingState(false);
-        });
-      }
-      return;
-    }
-
-    if (e.data.type === "agon:notification-target-ready") {
-      window.__agonIframeCurrentPathname = String(e.data.pathname || "/debate");
-      if (debateIframeParentLoadingFallbackTimer) {
-        clearTimeout(debateIframeParentLoadingFallbackTimer);
-        debateIframeParentLoadingFallbackTimer = null;
-      }
-      setDebateIframeModalLoadingState(false);
-      syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
+      requestAnimationFrame(() => {
+        setDebateIframeModalLoadingState(false);
+      });
       return;
     }
 
     if (e.data.type === "agon:notification-back-transition-start") {
       window.__agonIframeCurrentPathname = String(e.data.pathname || "/notifications");
       setDebateIframeModalLoadingState(true);
-      setDebateIframeModalCloseButtonVisible(false);
-      if (debateIframeParentLoadingFallbackTimer) {
-        clearTimeout(debateIframeParentLoadingFallbackTimer);
-      }
-      debateIframeParentLoadingFallbackTimer = setTimeout(() => {
-        setDebateIframeModalLoadingState(false);
-        syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
-      }, 9000);
-      return;
-    }
-
-    if (e.data.type === "agon:create-back-transition-start") {
-      window.__agonIframeCurrentPathname = String(e.data.pathname || "/create");
-      setDebateIframeModalLoadingState(true, "Retour au débat en cours");
       setDebateIframeModalCloseButtonVisible(false);
       if (debateIframeParentLoadingFallbackTimer) {
         clearTimeout(debateIframeParentLoadingFallbackTimer);
@@ -7386,23 +7349,8 @@ function showNotificationTransitionOverlay(message = "Chargement en cours") {
   showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
 
-function notifyParentAboutNotificationTargetReady() {
-  if (window.self === window.top) return;
-  if (location.pathname !== "/debate") return;
-
-  try {
-    window.parent.postMessage({
-      type: "agon:notification-target-ready",
-      pathname: location.pathname || "/debate",
-      href: String(location.href || "")
-    }, "*");
-  } catch (error) {}
-}
-
 function hideNotificationTransitionOverlay() {
-  document.documentElement.classList.remove("notification-transition-pending-early");
   hidePageArrivalLoadingOverlay();
-  notifyParentAboutNotificationTargetReady();
   clearNotificationTransitionState();
 }
 
@@ -7422,41 +7370,16 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
     event.preventDefault();
   }
 
-  if (event?.stopPropagation) {
-    event.stopPropagation();
-  }
-
-  const targetHref = getNotificationsBackTarget(fallbackHref);
   const cameFromDebateIframe = window.self !== window.top;
-  const shouldReturnToDebate = (() => {
-    try {
-      const parsedUrl = new URL(String(targetHref || ""), window.location.origin);
-      return parsedUrl.origin === window.location.origin && parsedUrl.pathname === "/debate";
-    } catch (error) {
-      return false;
-    }
-  })();
 
   if (cameFromDebateIframe) {
-    if (shouldReturnToDebate) {
-      beginNotificationTransition(targetHref);
-      notifyParentAboutNotificationBackTransition({
-        source: "notifications-back",
-        targetPathname: "/debate"
-      });
-
-      window.setTimeout(() => {
-        window.location.href = targetHref;
-      }, 40);
-
-      return false;
-    }
-
     try {
       window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
     } catch (error) {}
     return false;
   }
+
+  const targetHref = getNotificationsBackTarget(fallbackHref);
 
   beginNotificationTransition(targetHref);
   notifyParentAboutNotificationBackTransition({ source: "notifications-back" });
@@ -9654,7 +9577,7 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   if (shouldOpenNotificationTargetInIframeModal(link)) {
-    beginNotificationTransition(link);
+    clearNotificationTransitionState();
     openDebateIframeModal(link);
     return;
   }
@@ -13473,18 +13396,9 @@ function applyCreateBackLinks() {
       if (isOpenedInsideDebateIframe) {
         if (isReturnToDebate) {
           try {
-            window.parent.postMessage({
-              type: 'agon:create-back-transition-start',
-              pathname: location.pathname || '/create',
-              targetPathname: '/debate',
-              targetHref: fallbackUrl
-            }, '*');
+            window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*');
+            return;
           } catch (error) {}
-
-          window.setTimeout(() => {
-            window.location.href = fallbackUrl;
-          }, 40);
-          return;
         }
 
         try {
@@ -16791,15 +16705,8 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
       element = document.getElementById(highlight);
     }
 
-    const finishNotificationReturnVisuals = () => {
-      if (location.pathname === "/debate" && isNotificationToDebateLoadingTransition()) {
-        hideNotificationTransitionOverlay();
-        return;
-      }
-
-      if (location.pathname === "/debate") {
-        document.documentElement.classList.remove("notification-transition-pending-early");
-      }
+    const removeEarlyGrey = () => {
+      document.documentElement.classList.remove("notification-transition-pending-early");
     };
 
 if (element) {
@@ -16814,7 +16721,7 @@ if (element) {
     if (delta > 1) { hasStartedMoving = true; stableFrames = 0; }
     else if (hasStartedMoving) { stableFrames++; }
     if (stableFrames >= 4 || (!hasStartedMoving && Date.now() - startTime > 600) || Date.now() - startTime > 3000) {
-      finishNotificationReturnVisuals();
+      removeEarlyGrey();
       return;
     }
     requestAnimationFrame(pollScroll);
@@ -16824,7 +16731,7 @@ if (element) {
   scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false });
   highlightNotificationTargetElement(element, highlight, 5000);
 } else {
-  finishNotificationReturnVisuals();
+  removeEarlyGrey();
 }
 
     const url = new URL(window.location.href);
