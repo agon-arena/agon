@@ -11795,7 +11795,7 @@ function sortDebatesForIndex(debates) {
   const RECENT_BUMP_WINDOW_HOURS = 48;
   const RECENT_BUMP_BOOST = 14;
   const BUMP_PRIORITY_WINDOW_HOURS = 6;
-  const RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS = 8;
+  const RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS = 24;
 
   return sorted.sort((a, b) => {
     const createdAtA = new Date(a.created_at || 0).getTime();

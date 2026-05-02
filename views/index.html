@@ -61,6 +61,45 @@
         border-radius: 0 !important;
       }
     }
+
+    /* Tags de filtres actifs : affichage plus compact quand plusieurs tags sont sélectionnés */
+    .index-active-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 5px !important;
+      margin-top: 6px !important;
+      margin-bottom: 6px !important;
+    }
+    .index-active-filters > * {
+      margin: 0 !important;
+    }
+    .index-active-filters button,
+    .index-active-filters .active-filter-tag,
+    .index-active-filters .filter-tag,
+    .index-active-filters .theme-tag,
+    .index-active-filters [data-filter-tag] {
+      padding: 4px 7px !important;
+      min-height: 0 !important;
+      line-height: 1.15 !important;
+      font-size: 12px !important;
+      gap: 4px !important;
+    }
+
+
+    /* Bouton de tri des idées : version plus compacte (À la une / récentes / anciennes / idées) */
+    .debate-sort-bar .sort-dropdown .sort-button {
+      min-height: 0 !important;
+      height: auto !important;
+      padding: 5px 10px !important;
+      font-size: 12px !important;
+      line-height: 1.15 !important;
+      border-radius: 999px !important;
+    }
+    .debate-sort-bar .sort-dropdown .sort-button #index-sort-button-label {
+      font-size: 12px !important;
+      line-height: 1.15 !important;
+    }
   </style>
 </head>
 
