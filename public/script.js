@@ -60,35 +60,44 @@ let indexXTabletRefreshBound = false;
 let indexFilterFeedWarmupPromise = null;
 
 const DEBATE_CATEGORY_OPTIONS = [
-  "Politique et société",
-  "Économie et travail",
-  "Sciences et technologies",
-  "Sciences humaines",
-  "Arts et culture",
-  "Santé et bien-être",
-  "Espace jeunes — collégiens / lycéens",
+  "Politique, économie et relations internationales",
+  "Société, éducation et justice",
+  "Sciences, technologies et environnement",
+  "Culture, modes et médias",
+  "Santé, corps et bien-être",
+  "Sport, loisirs et passions",
+  "Vie personnelle et modes de vie",
+  "Espace jeunes (collégiens - lycéens)",
 ];
 
 
 const DEBATE_CATEGORY_SEPARATOR = " · ";
-const YOUTH_CATEGORY_FILTER = "Espace jeunes — collégiens / lycéens";
+const YOUTH_CATEGORY_FILTER = "Espace jeunes (collégiens - lycéens)";
 
 function getDebateCategoryList(value) {
+  const normalizeCategoryItems = (items) => Array.from(
+    new Set(
+      items
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+    )
+  );
+
   if (Array.isArray(value)) {
-    return Array.from(new Set(value.map((item) => String(item || "").trim()).filter(Boolean)));
+    return normalizeCategoryItems(value);
   }
 
   const raw = String(value || "").trim();
   if (!raw) return [];
 
-  return Array.from(
-    new Set(
-      raw
-        .split(/\s*[·•|;,]\s*/)
-        .map((item) => String(item || "").trim())
-        .filter(Boolean)
-    )
-  );
+  if (DEBATE_CATEGORY_OPTIONS.includes(raw)) {
+    return [raw];
+  }
+
+  // Les libellés officiels peuvent contenir des virgules.
+  // On ne découpe donc plus sur la virgule : le séparateur fiable entre plusieurs
+  // thématiques est le séparateur officiel " · " utilisé par joinDebateCategories().
+  return normalizeCategoryItems(raw.split(/\s*(?:·|•|\|)\s*/));
 }
 
 function joinDebateCategories(values) {
@@ -9831,6 +9840,7 @@ const INDEX_OTHER_DEBATES_BATCH_SIZE = 8;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
+let indexSortRefreshPromise = null;
 let indexBatchScrollLockY = null;
 let indexBatchScrollLockAnchor = null;
 let indexBatchScrollLockHandlers = null;
@@ -10063,12 +10073,18 @@ function setIndexInfiniteScrollLoadingState(isLoading, message = '') {
 
     const text = loading ? safeMessage : sentinel.dataset.baseMessage;
 
-    sentinel.innerHTML = `
-      <div class="load-more-status">
-        ${loading ? '<span class="load-more-spinner" aria-hidden="true"></span>' : ''}
-        <span class="load-more-text">${escapeHtml(text)}</span>
-      </div>
-    `;
+    sentinel.innerHTML = loading
+      ? `
+        <div class="load-more-status">
+          <span class="load-more-spinner" aria-hidden="true"></span>
+          <span class="load-more-text">${escapeHtml(text)}</span>
+        </div>
+      `
+      : `
+        <button class="button button-small" type="button" onclick="loadMoreOtherDebates()">
+          ${escapeHtml(text)}
+        </button>
+      `;
   }
 
   if (overlay) {
@@ -10276,6 +10292,12 @@ function setupIndexInfiniteScroll() {
     if (!entry?.isIntersecting) return;
     if (indexInfiniteScrollLoading) return;
 
+    // Évite les chargements en cascade : après l'ajout d'un lot,
+    // la sentinelle peut rester dans le viewport et relancer aussitôt
+    // un nouveau lot. On garde donc le chargement automatique, mais
+    // seulement après un vrai nouveau mouvement de scroll ou un clic.
+    if (indexLastBatchCompletedAt && Date.now() - indexLastBatchCompletedAt < 900) return;
+
     loadMoreOtherDebates();
   }, {
     root: null,
@@ -10382,6 +10404,16 @@ async function saveAdminCardEdit(debateId, btn) {
         const field = el.dataset.editField;
         if (body[field] !== undefined) setAdminEditFieldValue(panel, field, body[field]);
       });
+    }
+
+    if (location.pathname === "/debate" && String(currentDebateCache?.id || "") === String(debateId)) {
+      const updatedCurrentDebate = {
+        ...currentDebateCache,
+        ...body,
+        id: debateId
+      };
+      updateDebateCachesAfterEdit(updatedCurrentDebate);
+      applyCurrentDebateHeaderUpdate(updatedCurrentDebate);
     }
 
     // Feedback visuel
@@ -10506,6 +10538,18 @@ async function saveAndPublishAdminCard(debateId, btn) {
       if (posB) posB.textContent = body.option_b || "Position B";
       syncAdminEditCardCategory(card, body.category);
       syncAdminEditCardTopBadges(card, updatedDebate);
+    }
+
+    if (location.pathname === "/debate" && String(currentDebateCache?.id || "") === String(debateId)) {
+      const updatedCurrentDebate = {
+        ...currentDebateCache,
+        ...body,
+        id: debateId,
+        creator_key: "__AGON_ADMIN__",
+        bumped_at: publishTimestamp
+      };
+      updateDebateCachesAfterEdit(updatedCurrentDebate);
+      applyCurrentDebateHeaderUpdate(updatedCurrentDebate);
     }
 
     clearIndexDebatesSessionCache();
@@ -10690,6 +10734,65 @@ function closeAdminEditPanel(panel) {
   panel.dataset.open = 'false';
 }
 
+function renderCurrentDebateAdminEditPanel(debate, shouldOpen = false) {
+  if (location.pathname !== "/debate") return null;
+
+  const slot = document.getElementById("debate-admin-edit-slot");
+  if (!slot || !debate) return null;
+
+  slot.innerHTML = buildAdminEditPanelHtml(debate);
+
+  const panel = slot.querySelector('.debate-card-admin-edit');
+  if (!panel) return null;
+
+  initAdminEditCategoryPicker(panel);
+  refreshAdminUI();
+
+  if (shouldOpen) {
+    openAdminEditPanel(panel);
+  }
+
+  return panel;
+}
+
+async function toggleCurrentDebateAdminEditPanel() {
+  const debateId = getDebateId();
+  if (!debateId) return;
+
+  try {
+    let panel = document.querySelector(`#debate-admin-edit-slot .debate-card-admin-edit[data-debate-id="${CSS.escape(String(debateId))}"]`);
+
+    if (!panel) {
+      const existingDebate = String(currentDebateCache?.id || "") === String(debateId)
+        ? currentDebateCache
+        : null;
+      const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId))?.debate || null;
+
+      if (!debate) {
+        alert("Arène introuvable.");
+        return;
+      }
+
+      currentDebateCache = {
+        ...(currentDebateCache || {}),
+        ...debate
+      };
+
+      renderCurrentDebateAdminEditPanel(currentDebateCache, true);
+      return;
+    }
+
+    if (panel.dataset.open === 'true') {
+      closeAdminEditPanel(panel);
+      return;
+    }
+
+    openAdminEditPanel(panel);
+  } catch (error) {
+    alert(error.message || error);
+  }
+}
+
 function buildAdminEditPanelHtml(d) {
   const isOpen = d.type === 'open' || d.type === 'question';
   const selectedCategories = getDebateCategoryList(d.category);
@@ -10826,8 +10929,49 @@ function buildAdminEditPanelHtml(d) {
     </div>`;
 }
 
+function ensureOwnerDeleteButtonStyles() {
+  if (document.getElementById("owner-delete-button-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "owner-delete-button-style";
+  style.textContent = `
+    .debate-card {
+      position: relative;
+    }
+
+    .debate-card-delete-button,
+    #delete-debate-btn {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      padding: 0;
+      border-radius: 999px;
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 700;
+      z-index: 50;
+      cursor: pointer;
+    }
+
+    .debate-card-delete-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
 function getDebateCardDeleteButtonHtml(debate) {
   if (!canDeleteDebate(debate)) return "";
+
+  if (typeof document !== "undefined") {
+    ensureOwnerDeleteButtonStyles();
+  }
 
   return `
     <button
@@ -11618,17 +11762,19 @@ function sortDebatesForIndex(debates) {
 
   if (currentIndexSortMode === "recent") {
     return sorted.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
-      return dateB - dateA;
+      const dateA = new Date(a.created_at || 0).getTime() || 0;
+      const dateB = new Date(b.created_at || 0).getTime() || 0;
+      if (dateB !== dateA) return dateB - dateA;
+      return Number(b.id || 0) - Number(a.id || 0);
     });
   }
 
   if (currentIndexSortMode === "old") {
     return sorted.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
-      return dateA - dateB;
+      const dateA = new Date(a.created_at || 0).getTime() || 0;
+      const dateB = new Date(b.created_at || 0).getTime() || 0;
+      if (dateA !== dateB) return dateA - dateB;
+      return Number(a.id || 0) - Number(b.id || 0);
     });
   }
 
@@ -11649,6 +11795,7 @@ function sortDebatesForIndex(debates) {
   const RECENT_BUMP_WINDOW_HOURS = 48;
   const RECENT_BUMP_BOOST = 14;
   const BUMP_PRIORITY_WINDOW_HOURS = 6;
+  const RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS = 8;
 
   return sorted.sort((a, b) => {
     const createdAtA = new Date(a.created_at || 0).getTime();
@@ -11673,6 +11820,17 @@ function sortDebatesForIndex(debates) {
 
     const bumpHoursA = bumpedAtA ? Math.max(0, (now - bumpedAtA) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
     const bumpHoursB = bumpedAtB ? Math.max(0, (now - bumpedAtB) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
+    const hasPriorityRecentActivityA = activityHoursA <= RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS;
+    const hasPriorityRecentActivityB = activityHoursB <= RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS;
+
+    if (hasPriorityRecentActivityA !== hasPriorityRecentActivityB) {
+      return hasPriorityRecentActivityB ? 1 : -1;
+    }
+
+    if (hasPriorityRecentActivityA && hasPriorityRecentActivityB && lastActivityA !== lastActivityB) {
+      return lastActivityB - lastActivityA;
+    }
+
     const hasPriorityBumpA = bumpHoursA <= BUMP_PRIORITY_WINDOW_HOURS;
     const hasPriorityBumpB = bumpHoursB <= BUMP_PRIORITY_WINDOW_HOURS;
 
@@ -11725,24 +11883,35 @@ function sortDebatesForIndex(debates) {
 }
 
 const INDEX_SORT_LABELS = {
-  popular: "Plus populaires",
+  popular: "À la une",
   recent: "Plus récentes",
   old: "Plus anciennes",
   ideas: "Plus d'idées",
 };
 
 function setIndexSort(mode) {
-  currentIndexSortMode = mode;
+  const normalizedMode = ["popular", "recent", "old", "ideas"].includes(mode) ? mode : "popular";
+  currentIndexSortMode = normalizedMode;
+
   const btn = document.getElementById("index-sort-button-label");
-  if (btn) btn.textContent = (INDEX_SORT_LABELS[mode] || "Trier") + " ▾";
+  if (btn) btn.textContent = (INDEX_SORT_LABELS[normalizedMode] || "Trier") + " ▾";
+
   const menu = document.getElementById("index-sort-menu");
   if (menu) menu.classList.remove("sort-menu-visible");
+
   document.querySelectorAll("#index-sort-menu button").forEach((b) => {
-    b.classList.toggle("sort-menu-active", b.dataset.mode === mode);
+    b.classList.toggle("sort-menu-active", b.dataset.mode === normalizedMode);
   });
+
   visitedDebatesVisible = 5;
   otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-  applyIndexFilters();
+  clearIndexDebatesSessionCache();
+
+  // Important : ne pas retrier immédiatement les cartes déjà scrollées.
+  // Sinon une carte déjà présente en mémoire peut apparaître en tête puis
+  // redescendre dès que la vraie page serveur revient. Le tri doit repartir
+  // d'une première page serveur propre.
+  refreshIndexFirstDebatesPageForCurrentSort();
 }
 
 function toggleIndexSortMenu() {
@@ -11830,8 +11999,12 @@ function buildIndexInfiniteScrollSentinelHtml() {
       class="load-more-container"
       aria-live="polite"
       aria-busy="false"
-      data-base-message="Fais défiler pour charger la suite"
-    ></div>
+      data-base-message="Découvrir plus d'arènes"
+    >
+      <button class="button button-small" type="button" onclick="loadMoreOtherDebates()">
+        Découvrir plus d'arènes
+      </button>
+    </div>
   `;
 }
 
@@ -11955,9 +12128,13 @@ async function loadMoreOtherDebates() {
   if (otherDebatesVisible >= otherDebatesCache.length && !indexDebatesApiHasMore) return;
 
   indexInfiniteScrollLoading = true;
-  const previousVisible = otherDebatesVisible;
-  setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
+  const previousVisible = Math.min(
+    Math.max(0, Number(otherDebatesVisible) || 0),
+    Array.isArray(otherDebatesCache) ? otherDebatesCache.length : 0
+  );
   const targetVisible = previousVisible + INDEX_OTHER_DEBATES_BATCH_SIZE;
+  const filterSnapshot = getIndexFeedFilterSnapshot();
+  setIndexInfiniteScrollLoadingState(true, 'Chargement des arènes');
 
   try {
     if (previousVisible < otherDebatesCache.length) {
@@ -11972,52 +12149,41 @@ async function loadMoreOtherDebates() {
       return;
     }
 
-    const previousIds = otherDebatesCache.slice(0, previousVisible).map((d) => String(d.id));
+    // Important : l'API renvoie des pages brutes de 8 arènes, puis le front applique
+    // les filtres actifs (type, recherche, thématique). Une page serveur peut donc
+    // contenir 0 arène visible après filtre. Dans ce cas, on continue à charger les
+    // pages suivantes jusqu'à obtenir le prochain lot visible, ou jusqu'à la fin réelle.
+    while (
+      filterSnapshot === getIndexFeedFilterSnapshot() &&
+      indexDebatesApiHasMore &&
+      getFilteredDebatesForIndex(debatesCache).length < targetVisible
+    ) {
+      const fetchedDebates = await fetchAndMergeNextIndexDebatesPage();
+      refreshCategoryFilterOptions(debatesCache);
 
-    const fetchedDebates = await fetchAndMergeNextIndexDebatesPage();
-
-    const newFiltered = getFilteredDebatesForIndex(debatesCache);
-    const orderUnchanged = newFiltered.length >= previousVisible &&
-      newFiltered.slice(0, previousVisible).every((d, i) => String(d.id) === previousIds[i]);
-
-    otherDebatesVisible = targetVisible;
-    refreshCategoryFilterOptions(debatesCache);
-
-    if (!fetchedDebates.length) {
-      applyIndexFilters();
-    } else if (orderUnchanged) {
-      otherDebatesCache = newFiltered;
-      updateCategoryFilterVisualState();
-      renderIndexActiveFilterTags();
-      const appendEnd = Math.min(targetVisible, otherDebatesCache.length);
-      appendDebatesToList(otherDebatesCache, previousVisible, appendEnd);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    } else {
-      const preservedOrderDebates = mergeIndexDebatesPreservingVisibleOrder(
-        otherDebatesCache,
-        newFiltered,
-        previousVisible
-      );
-
-      if (!preservedOrderDebates) {
-        applyIndexFilters();
-        await new Promise((resolve) => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(resolve);
-          });
-        });
-      } else {
-        otherDebatesCache = preservedOrderDebates;
-        updateCategoryFilterVisualState();
-        renderIndexActiveFilterTags();
-        const appendEnd = Math.min(targetVisible, otherDebatesCache.length);
-        const appended = appendDebatesToList(otherDebatesCache, previousVisible, appendEnd);
-        if (!appended) {
-          renderDebatesList(otherDebatesCache);
-        }
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (!Array.isArray(fetchedDebates) || !fetchedDebates.length) {
+        break;
       }
     }
+
+    if (filterSnapshot !== getIndexFeedFilterSnapshot()) {
+      applyIndexFilters();
+      return;
+    }
+
+    const newFiltered = getFilteredDebatesForIndex(debatesCache);
+    otherDebatesVisible = Math.min(targetVisible, newFiltered.length);
+
+    // On re-rend volontairement la liste complète du filtre courant : cela évite
+    // les blocages quand plusieurs pages serveur successives ne contiennent aucune
+    // arène correspondant au filtre actif.
+    refreshCategoryFilterOptions(debatesCache);
+    updateCategoryFilterVisualState();
+    renderIndexActiveFilterTags();
+    otherDebatesCache = newFiltered;
+    renderDebatesList(otherDebatesCache);
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   } catch (error) {
     console.warn('Chargement des prochains posts index interrompu :', error);
   } finally {
@@ -12103,7 +12269,8 @@ function saveDebatesToSessionCache(debates, meta = null) {
     if (meta && typeof meta === "object") {
       sessionStorage.setItem(INDEX_DEBATES_CACHE_META_KEY, JSON.stringify({
         nextOffset: Math.max(0, Number(meta.nextOffset) || 0),
-        hasMore: meta.hasMore !== false
+        hasMore: meta.hasMore !== false,
+        sortMode: String(meta.sortMode || getIndexDebatesSortQueryValue())
       }));
     }
   } catch (e) {}
@@ -12112,7 +12279,8 @@ function saveDebatesToSessionCache(debates, meta = null) {
 function syncIndexDebatesSessionCache() {
   saveDebatesToSessionCache(debatesCache || [], {
     nextOffset: indexDebatesApiNextOffset,
-    hasMore: indexDebatesApiHasMore
+    hasMore: indexDebatesApiHasMore,
+    sortMode: getIndexDebatesSortQueryValue()
   });
 }
 
@@ -12162,6 +12330,14 @@ function getDebatesFromSessionCache() {
   try {
     const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
     if (Date.now() - time > INDEX_DEBATES_CACHE_TTL) return null;
+
+    const rawMeta = sessionStorage.getItem(INDEX_DEBATES_CACHE_META_KEY);
+    if (rawMeta) {
+      const parsedMeta = JSON.parse(rawMeta);
+      const cachedSortMode = String(parsedMeta?.sortMode || "popular");
+      if (cachedSortMode !== getIndexDebatesSortQueryValue()) return null;
+    }
+
     const raw = sessionStorage.getItem(INDEX_DEBATES_CACHE_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
@@ -12179,24 +12355,98 @@ function getIndexDebatesCacheMetaFromSessionCache() {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
+    const cachedSortMode = String(parsed?.sortMode || "popular");
+    if (cachedSortMode !== getIndexDebatesSortQueryValue()) return null;
+
     return {
       nextOffset: Math.max(0, Number(parsed?.nextOffset) || 0),
-      hasMore: parsed?.hasMore !== false
+      hasMore: parsed?.hasMore !== false,
+      sortMode: cachedSortMode
     };
   } catch (e) {
     return null;
   }
 }
 
-function getIndexDebatesApiUrl(limit = INDEX_DEBATES_PAGE_SIZE, offset = 0) {
+function getIndexDebatesSortQueryValue() {
+  if (["recent", "old", "ideas", "popular"].includes(currentIndexSortMode)) {
+    return currentIndexSortMode;
+  }
+
+  return "popular";
+}
+
+function getIndexDebatesApiUrl(limit = INDEX_DEBATES_PAGE_SIZE, offset = 0, options = {}) {
   const safeLimit = Math.max(1, Number(limit) || INDEX_DEBATES_PAGE_SIZE);
   const safeOffset = Math.max(0, Number(offset) || 0);
-  return `${API}/debates?limit=${safeLimit}&offset=${safeOffset}`;
+  const sortMode = encodeURIComponent(getIndexDebatesSortQueryValue());
+  const cacheBust = options?.cacheBust ? `&_=${Date.now()}` : "";
+  return `${API}/debates?limit=${safeLimit}&offset=${safeOffset}&sort=${sortMode}${cacheBust}`;
 }
 
 function resetIndexDebatesPaginationState(count = 0, hasMore = true) {
   indexDebatesApiNextOffset = Math.max(0, Number(count) || 0);
   indexDebatesApiHasMore = hasMore !== false;
+}
+
+async function refreshIndexFirstDebatesPageForCurrentSort() {
+  if (location.pathname !== "/") return [];
+
+  const requestedSortMode = getIndexDebatesSortQueryValue();
+
+  if (indexSortRefreshPromise) {
+    return indexSortRefreshPromise;
+  }
+
+  indexSortRefreshPromise = (async () => {
+    try {
+      resetIndexDebatesPaginationState(0, true);
+      debatesCache = [];
+      visitedDebatesCache = [];
+      otherDebatesCache = [];
+      refreshCategoryFilterOptions(debatesCache);
+      applyIndexFilters();
+
+      const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), {
+        cache: "no-store"
+      });
+      const safeFresh = Array.isArray(fresh) ? fresh : [];
+
+      if (requestedSortMode !== getIndexDebatesSortQueryValue()) {
+        return safeFresh;
+      }
+
+      // Le changement de tri doit remplacer la liste par la première page serveur.
+      // En mode chronologique, on conserve l'ordre exact renvoyé par Supabase :
+      // aucune fusion avec les cartes déjà scrollées, aucun tri local parasite.
+      debatesCache = ["recent", "old"].includes(getIndexDebatesSortQueryValue())
+        ? safeFresh
+        : sortDebatesForIndex(safeFresh);
+      resetIndexDebatesPaginationState(
+        safeFresh.length,
+        safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT
+      );
+
+      saveDebatesToSessionCache(debatesCache, {
+        nextOffset: indexDebatesApiNextOffset,
+        hasMore: indexDebatesApiHasMore,
+        sortMode: getIndexDebatesSortQueryValue()
+      });
+
+      refreshCategoryFilterOptions(debatesCache);
+      applyIndexFilters();
+      indexLastBatchCompletedAt = Date.now();
+
+      return safeFresh;
+    } catch (error) {
+      console.warn("Impossible de rafraîchir les arènes avec le tri serveur", error);
+      return [];
+    } finally {
+      indexSortRefreshPromise = null;
+    }
+  })();
+
+  return indexSortRefreshPromise;
 }
 
 function restoreIndexDebatesPaginationStateFromCache(cachedDebates = []) {
@@ -12242,7 +12492,8 @@ async function fetchAndMergeNextIndexDebatesPage() {
   indexDebatesApiHasMore = safePage.length >= INDEX_DEBATES_PAGE_SIZE;
   saveDebatesToSessionCache(debatesCache, {
     nextOffset: indexDebatesApiNextOffset,
-    hasMore: indexDebatesApiHasMore
+    hasMore: indexDebatesApiHasMore,
+    sortMode: getIndexDebatesSortQueryValue()
   });
 
   return safePage;
@@ -12413,7 +12664,8 @@ async function initIndex() {
       );
       saveDebatesToSessionCache(debatesCache, {
         nextOffset: indexDebatesApiNextOffset,
-        hasMore: indexDebatesApiHasMore
+        hasMore: indexDebatesApiHasMore,
+        sortMode: getIndexDebatesSortQueryValue()
       });
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
@@ -13478,6 +13730,7 @@ function applyCreateBackLinks() {
 
 function ensureCreatedDebateFloatingCloseButton() {
   if (location.pathname !== "/debate") return null;
+  if (window.self !== window.top) return null;
 
   if (!document.getElementById("created-debate-floating-close-style")) {
     const style = document.createElement("style");
@@ -13539,7 +13792,8 @@ function updateCreatedDebateFloatingCloseButtonVisibility() {
 
   const context = getCreatedDebateContext();
   const currentDebateId = String(getDebateId() || "").trim();
-  const isVisible = !!context && !!currentDebateId && context.debateId === currentDebateId;
+  const isOpenedInsideIframe = window.self !== window.top;
+  const isVisible = !isOpenedInsideIframe && !!context && !!currentDebateId && context.debateId === currentDebateId;
 
   button.style.display = isVisible ? "flex" : "none";
   button.setAttribute("aria-hidden", isVisible ? "false" : "true");
@@ -13558,6 +13812,7 @@ function handleCreatedDebateFloatingCloseButtonClick(event) {
 
 function initCreatedDebateFloatingCloseButton() {
   if (location.pathname !== "/debate") return;
+  if (window.self !== window.top) return;
   ensureCreatedDebateFloatingCloseButton();
   updateCreatedDebateFloatingCloseButtonVisibility();
 }
@@ -15176,27 +15431,66 @@ function loadMoreSimilarDebates() {
    Debate
 ========================= */
 
-function styleDebateDeleteButtonAsTopRightCross() {
-  const deleteDebateBtn = document.getElementById("delete-debate-btn");
-  if (!deleteDebateBtn) return;
-
+function getDebateDeleteButtonHost() {
   const debateQuestion = document.getElementById("debate-question");
 
-  const mobileTitleBlock =
+  return (
     debateQuestion?.closest(".debate-head-card") ||
+    debateQuestion?.closest(".debate-header") ||
     debateQuestion?.parentElement ||
-    deleteDebateBtn.closest(".debate-head-card") ||
-    deleteDebateBtn.closest(".debate-card") ||
-    deleteDebateBtn.closest(".debate-header") ||
-    deleteDebateBtn.parentElement;
+    document.querySelector(".debate-head-card") ||
+    document.querySelector(".debate-header") ||
+    document.querySelector(".debate-card") ||
+    document.querySelector("main") ||
+    document.body
+  );
+}
 
-  if (mobileTitleBlock && getComputedStyle(mobileTitleBlock).position === "static") {
-    mobileTitleBlock.style.position = "relative";
+function ensureDebateDeleteButtonElement() {
+  let deleteDebateBtn = document.getElementById("delete-debate-btn");
+
+  if (!deleteDebateBtn) {
+    deleteDebateBtn = document.createElement("button");
+    deleteDebateBtn.id = "delete-debate-btn";
+    deleteDebateBtn.type = "button";
+    deleteDebateBtn.className = "delete-button";
+  }
+
+  const host = getDebateDeleteButtonHost();
+  if (host && deleteDebateBtn.parentElement !== host) {
+    host.appendChild(deleteDebateBtn);
+  }
+
+  if (deleteDebateBtn.dataset.deleteDebateBound !== "true") {
+    deleteDebateBtn.dataset.deleteDebateBound = "true";
+    deleteDebateBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const debateId = getDebateId();
+      if (debateId) {
+        await deleteDebate(debateId, true);
+      }
+    });
+  }
+
+  return deleteDebateBtn;
+}
+
+function styleDebateDeleteButtonAsTopRightCross() {
+  ensureOwnerDeleteButtonStyles();
+
+  const deleteDebateBtn = ensureDebateDeleteButtonElement();
+  if (!deleteDebateBtn) return;
+
+  const host = getDebateDeleteButtonHost();
+
+  if (host && getComputedStyle(host).position === "static") {
+    host.style.position = "relative";
   }
 
   deleteDebateBtn.textContent = "×";
-  deleteDebateBtn.title = "Supprimer ce débat";
-  deleteDebateBtn.setAttribute("aria-label", "Supprimer ce débat");
+  deleteDebateBtn.title = "Supprimer cette arène";
+  deleteDebateBtn.setAttribute("aria-label", "Supprimer cette arène");
   deleteDebateBtn.style.position = "absolute";
   deleteDebateBtn.style.left = "auto";
   deleteDebateBtn.style.bottom = "auto";
@@ -15211,7 +15505,8 @@ function styleDebateDeleteButtonAsTopRightCross() {
   deleteDebateBtn.style.fontSize = "24px";
   deleteDebateBtn.style.lineHeight = "1";
   deleteDebateBtn.style.fontWeight = "700";
-  deleteDebateBtn.style.zIndex = "20";
+  deleteDebateBtn.style.zIndex = "100";
+  deleteDebateBtn.style.pointerEvents = "auto";
 
   if (window.innerWidth <= 768) {
     deleteDebateBtn.style.top = "8px";
@@ -15223,7 +15518,7 @@ function styleDebateDeleteButtonAsTopRightCross() {
 }
 
 function updateDeleteDebateButtonVisibility(debate) {
-  const deleteDebateBtn = document.getElementById("delete-debate-btn");
+  const deleteDebateBtn = ensureDebateDeleteButtonElement();
   if (!deleteDebateBtn) return;
 
   if (canDeleteDebate(debate)) {
@@ -15647,8 +15942,11 @@ if (formList) {
   });
 }
 
-  if (deleteDebateBtn) {
-    deleteDebateBtn.addEventListener("click", async () => {
+  if (deleteDebateBtn && deleteDebateBtn.dataset.deleteDebateBound !== "true") {
+    deleteDebateBtn.dataset.deleteDebateBound = "true";
+    deleteDebateBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       await deleteDebate(id, true);
     });
   }
@@ -16706,6 +17004,7 @@ currentDebateShareData = {
   percentB
 };
 currentDebateCache = data.debate;
+renderCurrentDebateAdminEditPanel(currentDebateCache, false);
 if (Array.isArray(similarDebatesCache)) {
   renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
 } else {
@@ -21312,7 +21611,7 @@ window.vote = vote;
 window.unvote = unvote;
 window.handleHeadingDoubleClick = handleHeadingDoubleClick;
 window.voteComment = voteComment;
-window.editDebate = editDebate;window.editArgument = editArgument;
+window.editDebate = editDebate;window.toggleCurrentDebateAdminEditPanel = toggleCurrentDebateAdminEditPanel;window.editArgument = editArgument;
 window.deleteDebate = deleteDebate;
 window.deleteArgument = deleteArgument;
 window.deleteComment = deleteComment;

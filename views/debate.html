@@ -42,10 +42,19 @@ body.page-debate .similar-debates-section .section-header {
   color: #e8e8e8;
 }
 
+/* Texte de contexte : interlignes resserrés, sauts de ligne conservés */
+body.page-debate .debate-context-text {
+  line-height: 1.38;
+  white-space: pre-line;
+}
+
 /* Sous-textes / méta sur fond sombre */
 body.page-debate .debate-context-text p,
 body.page-debate .debate-context-text span {
   color: #c0c0c0;
+  line-height: 1.38;
+  margin-top: 0;
+  margin-bottom: 0.45em;
 }
 
 /* Cartes d'arguments : fond blanc conservé, texte sombre assuré */
@@ -1233,14 +1242,16 @@ body.page-debate .position-argument-button-b:hover {
   background: #2e3d47 !important;
   color: #ffffff !important;
 }
-/* Cadre des blocs position en mode focus */
+/* Mise en valeur des blocs position en mode focus */
 body.page-debate .column-header.position-focus-a {
-  border: 3px solid #16a34a !important;
-  background: #dcfce7 !important;
+  border: 3px solid #15803d !important;
+  background: #86efac !important;
+  box-shadow: 0 12px 28px rgba(21, 128, 61, 0.24) !important;
 }
 body.page-debate .column-header.position-focus-b {
-  border: 3px solid #dc2626 !important;
-  background: #fee2e2 !important;
+  border: 3px solid #b91c1c !important;
+  background: #fca5a5 !important;
+  box-shadow: 0 12px 28px rgba(185, 28, 28, 0.22) !important;
 }
 
 body.page-debate .load-more-status {
@@ -1676,29 +1687,6 @@ body.voices-panel-open {
       <div id="global-share-bar"></div>
 
 
-      <div class="debate-admin-actions">
-        <button
-          id="edit-debate-btn"
-          class="button button-small"
-          data-admin
-          style="display:none;"
-          type="button"
-          onclick="editDebate()"
-        >
-          Modifier le débat
-        </button>
-
-        <button
-          id="delete-debate-btn"
-          class="delete-button"
-          data-admin
-          style="display:none;"
-          type="button"
-        >
-          Supprimer ce débat
-        </button>
-      </div>
-
       <div class="debate-top-sticky-actions">
         <button
           type="button"
@@ -1734,6 +1722,7 @@ body.voices-panel-open {
 
 </div>
 
+
 <div id="debate-image-lightbox" class="debate-image-lightbox" style="display:none;" aria-hidden="true">
   <button
     type="button"
@@ -1747,6 +1736,22 @@ body.voices-panel-open {
   <img id="debate-image-lightbox-img" class="debate-image-lightbox-img" alt="Image du débat agrandie">
 </div>
 </div><!-- .debate-hero-outer -->
+
+<div class="debate-admin-top-actions">
+  <div class="debate-admin-actions">
+    <button
+      id="delete-debate-btn"
+      class="delete-button"
+      data-admin
+      style="display:none;"
+      type="button"
+    >
+      Supprimer ce débat
+    </button>
+  </div>
+
+  <div id="debate-admin-edit-slot" class="debate-admin-edit-slot" data-admin style="display:none;"></div>
+</div>
 
 <section class="debate-hero">
 

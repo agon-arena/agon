@@ -1282,10 +1282,15 @@ const DEBATE_DETAIL_CACHE_TTL_MS = 10 * 1000;
 const notificationsApiResponseCache = new Map();
 const NOTIFICATIONS_API_CACHE_TTL_MS = 5 * 1000;
 
-function getDebatesApiCacheKey({ limit = null, offset = 0 } = {}) {
+function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular" } = {}) {
+  const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
+    ? String(sort)
+    : "popular";
+
   return JSON.stringify({
     limit: Number.isFinite(limit) && limit > 0 ? limit : null,
-    offset: Number.isFinite(offset) && offset > 0 ? offset : 0
+    offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
+    sort: normalizedSort
   });
 }
 
@@ -3005,21 +3010,32 @@ app.get("/api/debates", async (req, res) => {
     const rawOffset = Number.parseInt(String(req.query.offset || ""), 10);
     const hasPaginationLimit = Number.isFinite(rawLimit) && rawLimit > 0;
     const safeOffset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+    const requestedSort = String(req.query.sort || "popular").trim().toLowerCase();
+    const sortMode = ["popular", "recent", "old", "ideas"].includes(requestedSort)
+      ? requestedSort
+      : "popular";
     const cacheKey = getDebatesApiCacheKey({
       limit: hasPaginationLimit ? rawLimit : null,
-      offset: safeOffset
+      offset: safeOffset,
+      sort: sortMode
     });
     const cachedResponse = getCachedDebatesApiResponse(cacheKey);
 
-    if (cachedResponse) {
+    // Les tris temporels doivent rester strictement frais : après création
+    // d'une arène, un cache de quelques secondes suffit à masquer la dernière
+    // carte en tête de liste.
+    if (cachedResponse && sortMode !== "recent" && sortMode !== "old") {
       return res.json(cachedResponse);
     }
 
+    // Logique volontairement simple et robuste : on récupère la liste complète
+    // des arènes côté serveur, on calcule les compteurs nécessaires, on trie la
+    // liste complète, puis seulement après on applique limit/offset. Ainsi le
+    // tri "Plus récentes" ne porte jamais sur les 8 cartes déjà chargées côté
+    // index, mais sur toute la table Supabase.
     const { data: debates, error } = await supabase
       .from("debates")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .select("*");
 
     if (error) {
       console.error(error);
@@ -3142,25 +3158,66 @@ app.get("/api/debates", async (req, res) => {
       };
     });
 
-    const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    rows.sort((a, b) => {
-      const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
-      const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
-      const aRecent = aBump > now - BUMP_WINDOW_MS;
-      const bRecent = bBump > now - BUMP_WINDOW_MS;
-      if (aRecent !== bRecent) return bRecent ? 1 : -1;
-      if (aRecent && bRecent && aBump !== bBump) return bBump - aBump;
+    const getRowTime = (row, key) => {
+      const rawDate = row?.[key] || "";
+      return rawDate ? new Date(rawDate).getTime() || 0 : 0;
+    };
 
-      const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
-      const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
-      const aTime = aDate ? new Date(aDate).getTime() : 0;
-      const bTime = bDate ? new Date(bDate).getTime() : 0;
-      if (bTime !== aTime) return bTime - aTime;
+    if (sortMode === "recent") {
+      rows.sort((a, b) => {
+        const createdDiff = getRowTime(b, "created_at") - getRowTime(a, "created_at");
+        if (createdDiff !== 0) return createdDiff;
+        return Number(b.id || 0) - Number(a.id || 0);
+      });
+    } else if (sortMode === "old") {
+      rows.sort((a, b) => {
+        const createdDiff = getRowTime(a, "created_at") - getRowTime(b, "created_at");
+        if (createdDiff !== 0) return createdDiff;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+    } else if (sortMode === "ideas") {
+      rows.sort((a, b) => {
+        if (Number(b.argument_count || 0) !== Number(a.argument_count || 0)) {
+          return Number(b.argument_count || 0) - Number(a.argument_count || 0);
+        }
+        if (Number(b.comment_count || 0) !== Number(a.comment_count || 0)) {
+          return Number(b.comment_count || 0) - Number(a.comment_count || 0);
+        }
+        return Number(b.id || 0) - Number(a.id || 0);
+      });
+    } else {
+      // "popular" / "À la une" : l'index fonctionne aussi comme un fil d'actu.
+      // Une arène publiée, commentée, enrichie d'une idée ou votée récemment
+      // doit donc rester prioritaire pendant 8 heures, avant les autres critères.
+      const RECENT_ACTIVITY_PRIORITY_WINDOW_MS = 8 * 60 * 60 * 1000;
+      const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      rows.sort((a, b) => {
+        const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
+        const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
+        const aTime = aDate ? new Date(aDate).getTime() : 0;
+        const bTime = bDate ? new Date(bDate).getTime() : 0;
+        const aActivityRecent = aTime > now - RECENT_ACTIVITY_PRIORITY_WINDOW_MS;
+        const bActivityRecent = bTime > now - RECENT_ACTIVITY_PRIORITY_WINDOW_MS;
 
-      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
-      return Number(b.id) - Number(a.id);
-    });
+        if (aActivityRecent !== bActivityRecent) return bActivityRecent ? 1 : -1;
+        if (aActivityRecent && bActivityRecent && bTime !== aTime) return bTime - aTime;
+
+        const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
+        const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
+        const aRecentBump = aBump > now - BUMP_WINDOW_MS;
+        const bRecentBump = bBump > now - BUMP_WINDOW_MS;
+        if (aRecentBump !== bRecentBump) return bRecentBump ? 1 : -1;
+        if (aRecentBump && bRecentBump && aBump !== bBump) return bBump - aBump;
+
+        if (bTime !== aTime) return bTime - aTime;
+
+        if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
+        if (b.comment_count !== a.comment_count) return b.comment_count - a.comment_count;
+        if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
+        return Number(b.id) - Number(a.id);
+      });
+    }
 
     const pagedRows = hasPaginationLimit || safeOffset > 0
       ? rows.slice(safeOffset, hasPaginationLimit ? safeOffset + rawLimit : undefined)

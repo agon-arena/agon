@@ -207,6 +207,20 @@
       </button>
     </div>
 
+    <div class="debate-sort-bar">
+      <div class="sort-dropdown">
+        <button type="button" class="sort-button" onclick="toggleIndexSortMenu()">
+          <span id="index-sort-button-label">À la une ▾</span>
+        </button>
+        <div id="index-sort-menu" class="sort-menu" onclick="event.stopPropagation()">
+          <button type="button" data-mode="popular" onclick="setIndexSort('popular')">À la une</button>
+          <button type="button" data-mode="recent" onclick="setIndexSort('recent')">Plus récentes</button>
+          <button type="button" data-mode="old" onclick="setIndexSort('old')">Plus anciennes</button>
+          <button type="button" data-mode="ideas" onclick="setIndexSort('ideas')">Plus d'idées</button>
+        </div>
+      </div>
+    </div>
+
 
 
     <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
@@ -229,24 +243,10 @@
         <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
         <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
         <button onclick="setTypeFilter('agon')" id="filter-agon">Arènes générées par agôn</button>
-        <button onclick="toggleIndexYouthCategoryFilter()" id="filter-youth">Espace jeunes (collégiens, lycéens)</button>
+        <button onclick="toggleIndexYouthCategoryFilter()" id="filter-youth">Espace jeunes (collégiens - lycéens)</button>
       </div>
 
       <div id="theme-filter-slot"></div>
-
-      <div class="debate-sort-bar">
-        <div class="sort-dropdown">
-          <button type="button" class="sort-button" onclick="toggleIndexSortMenu()">
-            <span id="index-sort-button-label">Plus populaires ▾</span>
-          </button>
-          <div id="index-sort-menu" class="sort-menu" onclick="event.stopPropagation()">
-            <button type="button" data-mode="popular" onclick="setIndexSort('popular')">Plus populaires</button>
-            <button type="button" data-mode="recent" onclick="setIndexSort('recent')">Plus récentes</button>
-            <button type="button" data-mode="old" onclick="setIndexSort('old')">Plus anciennes</button>
-            <button type="button" data-mode="ideas" onclick="setIndexSort('ideas')">Plus d'idées</button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div id="index-active-filters" class="index-active-filters" style="display:none;"></div>
