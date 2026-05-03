@@ -2236,10 +2236,17 @@ function syncParentIndexUrlFromIframe(pathname = location.pathname, href = locat
 
   try {
     if (window.parent && window.parent !== window && window.parent.location?.origin === window.location.origin) {
-      if (window.parent.location.pathname === "/") {
-        const nextUrl = new URL(window.parent.location.href);
-        nextUrl.searchParams.set("openModal", modalUrl);
-        window.parent.history.replaceState({}, "", nextUrl);
+      const parentPathname = window.parent.location.pathname;
+      const parentOnListPage = parentPathname === "/" || parentPathname === "/debates" || parentPathname.startsWith("/debates/");
+      if (parentOnListPage) {
+        const debateId = getDebateIdFromUrl(modalUrl);
+        if (debateId) {
+          window.parent.history.replaceState({}, "", `/debates/${encodeURIComponent(debateId)}`);
+        } else if (!parentPathname.startsWith("/debates/")) {
+          const nextUrl = new URL(window.parent.location.href);
+          nextUrl.searchParams.set("openModal", modalUrl);
+          window.parent.history.replaceState({}, "", nextUrl);
+        }
       }
 
       try {
@@ -2740,20 +2747,28 @@ function scheduleDebateIframeFrameTeardown(frame, modal) {
 
 function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   if (window.self !== window.top) return;
-  if (location.pathname !== "/") return;
+  const pathname = location.pathname;
+  const isOnListPage = pathname === "/" || pathname === "/debates" || pathname.startsWith("/debates/");
+  if (!isOnListPage) return;
 
   const normalizedModalUrl = String(modalUrl || "").trim();
   rememberLatestIframeModalUrl(normalizedModalUrl);
 
   try {
-    const nextUrl = new URL(window.location.href);
     if (normalizedModalUrl) {
-      nextUrl.searchParams.set("openModal", normalizedModalUrl);
+      const debateId = getDebateIdFromUrl(normalizedModalUrl);
+      if (debateId) {
+        window.history.replaceState({}, "", `/debates/${encodeURIComponent(debateId)}`);
+        return;
+      }
+      if (!pathname.startsWith("/debates/")) {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("openModal", normalizedModalUrl);
+        window.history.replaceState({}, "", nextUrl);
+      }
     } else {
-      nextUrl.searchParams.delete("openModal");
-      nextUrl.searchParams.delete("openDebate");
+      window.history.replaceState({}, "", "/debates");
     }
-    window.history.replaceState({}, "", nextUrl);
   } catch (error) {}
 }
 
@@ -3097,7 +3112,9 @@ function isTopLevelDebatePage() {
 
 function isTopLevelIframeModalPage() {
   if (window.self !== window.top) return false;
-  return location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create" || location.pathname === "/notifications";
+  if (location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create" || location.pathname === "/notifications") return true;
+  if (location.pathname === "/debates" || location.pathname.startsWith("/debates/")) return true;
+  return false;
 }
 
 const NOTIFICATIONS_RETURN_CONTEXT_KEY = "agon_notifications_return_context";
@@ -3189,7 +3206,7 @@ function openNotificationsInDebateIframeModal(event = null) {
     rememberNotificationsReturnContext(`${location.pathname}${location.search}${location.hash}`);
   }
 
-  if (location.pathname === "/") {
+  if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) {
     window.location.href = "/notifications";
     return false;
   }
@@ -11787,96 +11804,45 @@ function sortDebatesForIndex(debates) {
     });
   }
 
-   // "popular" (default) : récence forte au départ, activité continue, profondeur historique
+  // "popular" : miroir exact du tri serveur — groupe A (≤24h) toujours avant groupe B.
+  // Groupe B : activité 8h → bump 7j → last_activity global → counts → id.
 
   const now = Date.now();
-  const RECENT_PUBLICATION_WINDOW_HOURS = 36;
-  const RECENT_PUBLICATION_BOOST = 22;
-  const RECENT_BUMP_WINDOW_HOURS = 48;
-  const RECENT_BUMP_BOOST = 14;
-  const BUMP_PRIORITY_WINDOW_HOURS = 6;
-  const RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS = 24;
+  const NEW_ARENA_PRIORITY_MS = 24 * 60 * 60 * 1000;
+  const RECENT_ACTIVITY_PRIORITY_MS = 8 * 60 * 60 * 1000;
+  const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
   return sorted.sort((a, b) => {
-    const createdAtA = new Date(a.created_at || 0).getTime();
-    const createdAtB = new Date(b.created_at || 0).getTime();
-    const bumpedAtA = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
-    const bumpedAtB = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
+    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+    const aIsNew = aCreated > now - NEW_ARENA_PRIORITY_MS;
+    const bIsNew = bCreated > now - NEW_ARENA_PRIORITY_MS;
 
-    const lastActivityA = Math.max(
-      new Date(getDebateLastActivityAt(a) || a.created_at || 0).getTime(),
-      bumpedAtA || 0
-    );
-    const lastActivityB = Math.max(
-      new Date(getDebateLastActivityAt(b) || b.created_at || 0).getTime(),
-      bumpedAtB || 0
-    );
+    if (aIsNew !== bIsNew) return bIsNew ? 1 : -1;
+    if (aIsNew && bIsNew) return bCreated - aCreated;
 
-    const ageHoursA = Math.max(0, (now - createdAtA) / (1000 * 60 * 60));
-    const ageHoursB = Math.max(0, (now - createdAtB) / (1000 * 60 * 60));
+    const aDate = getDebateLastActivityAt(a) || a.created_at || "";
+    const bDate = getDebateLastActivityAt(b) || b.created_at || "";
+    const aTime = aDate ? new Date(aDate).getTime() : 0;
+    const bTime = bDate ? new Date(bDate).getTime() : 0;
+    const aActivityRecent = aTime > now - RECENT_ACTIVITY_PRIORITY_MS;
+    const bActivityRecent = bTime > now - RECENT_ACTIVITY_PRIORITY_MS;
 
-    const activityHoursA = Math.max(0, (now - lastActivityA) / (1000 * 60 * 60));
-    const activityHoursB = Math.max(0, (now - lastActivityB) / (1000 * 60 * 60));
+    if (aActivityRecent !== bActivityRecent) return bActivityRecent ? 1 : -1;
+    if (aActivityRecent && bActivityRecent && bTime !== aTime) return bTime - aTime;
 
-    const bumpHoursA = bumpedAtA ? Math.max(0, (now - bumpedAtA) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
-    const bumpHoursB = bumpedAtB ? Math.max(0, (now - bumpedAtB) / (1000 * 60 * 60)) : Number.POSITIVE_INFINITY;
-    const hasPriorityRecentActivityA = activityHoursA <= RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS;
-    const hasPriorityRecentActivityB = activityHoursB <= RECENT_ACTIVITY_PRIORITY_WINDOW_HOURS;
+    const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
+    const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
+    const aRecentBump = aBump > now - BUMP_WINDOW_MS;
+    const bRecentBump = bBump > now - BUMP_WINDOW_MS;
+    if (aRecentBump !== bRecentBump) return bRecentBump ? 1 : -1;
+    if (aRecentBump && bRecentBump && aBump !== bBump) return bBump - aBump;
 
-    if (hasPriorityRecentActivityA !== hasPriorityRecentActivityB) {
-      return hasPriorityRecentActivityB ? 1 : -1;
-    }
+    if (bTime !== aTime) return bTime - aTime;
 
-    if (hasPriorityRecentActivityA && hasPriorityRecentActivityB && lastActivityA !== lastActivityB) {
-      return lastActivityB - lastActivityA;
-    }
-
-    const hasPriorityBumpA = bumpHoursA <= BUMP_PRIORITY_WINDOW_HOURS;
-    const hasPriorityBumpB = bumpHoursB <= BUMP_PRIORITY_WINDOW_HOURS;
-
-    if (hasPriorityBumpA !== hasPriorityBumpB) {
-      return hasPriorityBumpB ? 1 : -1;
-    }
-
-    if (hasPriorityBumpA && hasPriorityBumpB && bumpedAtA !== bumpedAtB) {
-      return bumpedAtB - bumpedAtA;
-    }
-
-    const contributionsA =
-      Number(a.argument_count || 0) +
-      Number(a.comment_count || 0) +
-      Number(a.vote_count || 0);
-
-    const contributionsB =
-      Number(b.argument_count || 0) +
-      Number(b.comment_count || 0) +
-      Number(b.vote_count || 0);
-
-    const recencyBoostA = Math.max(0, 24 * (1 - ageHoursA / 96));
-    const recencyBoostB = Math.max(0, 24 * (1 - ageHoursB / 96));
-
-    const publicationBoostA = Math.max(0, RECENT_PUBLICATION_BOOST * (1 - ageHoursA / RECENT_PUBLICATION_WINDOW_HOURS));
-    const publicationBoostB = Math.max(0, RECENT_PUBLICATION_BOOST * (1 - ageHoursB / RECENT_PUBLICATION_WINDOW_HOURS));
-
-    const bumpBoostA = Math.max(0, RECENT_BUMP_BOOST * (1 - bumpHoursA / RECENT_BUMP_WINDOW_HOURS));
-    const bumpBoostB = Math.max(0, RECENT_BUMP_BOOST * (1 - bumpHoursB / RECENT_BUMP_WINDOW_HOURS));
-
-    const activityBoostA = Math.max(0, 18 * (1 - activityHoursA / 96));
-    const activityBoostB = Math.max(0, 18 * (1 - activityHoursB / 96));
-
-    const contributionBoostA = Math.sqrt(contributionsA) * 2;
-    const contributionBoostB = Math.sqrt(contributionsB) * 2;
-
-    const inactivityPenaltyA =
-      ageHoursA > 24 && activityHoursA > 24 ? Math.min(12, (activityHoursA - 24) / 12) : 0;
-
-    const inactivityPenaltyB =
-      ageHoursB > 24 && activityHoursB > 24 ? Math.min(12, (activityHoursB - 24) / 12) : 0;
-
-    const scoreA = recencyBoostA + publicationBoostA + bumpBoostA + activityBoostA + contributionBoostA - inactivityPenaltyA;
-    const scoreB = recencyBoostB + publicationBoostB + bumpBoostB + activityBoostB + contributionBoostB - inactivityPenaltyB;
-
-    if (scoreB !== scoreA) return scoreB - scoreA;
+    if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
+    if (b.comment_count !== a.comment_count) return b.comment_count - a.comment_count;
+    if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count;
     return Number(b.id || 0) - Number(a.id || 0);
   });
 
@@ -12390,7 +12356,8 @@ function resetIndexDebatesPaginationState(count = 0, hasMore = true) {
 }
 
 async function refreshIndexFirstDebatesPageForCurrentSort() {
-  if (location.pathname !== "/") return [];
+  const p = location.pathname;
+  if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return [];
 
   const requestedSortMode = getIndexDebatesSortQueryValue();
 
@@ -12584,12 +12551,20 @@ function resolveInitialOpenModalUrl(openModalUrl = "") {
 
 async function initIndex() {
   const params = new URLSearchParams(location.search);
-  const openModalUrl = resolveInitialOpenModalUrl(params.get("openModal") || "");
-  const openDebateId = String(params.get("openDebate") || "").trim();
-  if (openModalUrl) {
-    openDebateIframeModal(openModalUrl);
-  } else if (openDebateId) {
-    openDebateIframeModal(`/debate?id=${encodeURIComponent(openDebateId)}`);
+
+  const debatesPathMatch = location.pathname.match(/^\/debates\/(.+)$/);
+  const debateIdFromPath = debatesPathMatch ? decodeURIComponent(debatesPathMatch[1]) : "";
+
+  if (debateIdFromPath) {
+    openDebateIframeModal(`/debate?id=${encodeURIComponent(debateIdFromPath)}`);
+  } else {
+    const openModalUrl = resolveInitialOpenModalUrl(params.get("openModal") || "");
+    const openDebateId = String(params.get("openDebate") || "").trim();
+    if (openModalUrl) {
+      openDebateIframeModal(openModalUrl);
+    } else if (openDebateId) {
+      openDebateIframeModal(`/debate?id=${encodeURIComponent(openDebateId)}`);
+    }
   }
 
   try {
@@ -13556,7 +13531,9 @@ function isValidCreateReturnUrl(url) {
   try {
     const parsed = new URL(String(url || ""), window.location.origin);
     if (parsed.origin !== window.location.origin) return false;
-    return parsed.pathname === "/" || parsed.pathname === "/debate";
+    if (parsed.pathname === "/" || parsed.pathname === "/debate") return true;
+    if (parsed.pathname === "/debates" || parsed.pathname.startsWith("/debates/")) return true;
+    return false;
   } catch (error) {
     return false;
   }
@@ -13567,7 +13544,7 @@ function getCreateReturnTargetType(url) {
     const parsed = new URL(String(url || ""), window.location.origin);
     if (parsed.origin !== window.location.origin) return "";
     if (parsed.pathname === "/debate") return "debate";
-    if (parsed.pathname === "/") return "index";
+    if (parsed.pathname === "/" || parsed.pathname === "/debates" || parsed.pathname.startsWith("/debates/")) return "index";
     return "";
   } catch (error) {
     return "";
@@ -13600,7 +13577,7 @@ function resolveCreateReturnUrl() {
 
   try {
     const referrer = document.referrer ? new URL(document.referrer) : null;
-    if (referrer && referrer.origin === window.location.origin && (referrer.pathname === "/debate" || referrer.pathname === "/")) {
+    if (referrer && referrer.origin === window.location.origin && (referrer.pathname === "/debate" || referrer.pathname === "/" || referrer.pathname === "/debates" || referrer.pathname.startsWith("/debates/"))) {
       const referrerUrl = referrer.toString();
       setCreateReturnContext(referrerUrl);
       return referrerUrl;
@@ -19868,7 +19845,7 @@ async function deleteDebate(debateId, redirectAfter) {
           return;
         }
 
-        if (location.pathname === "/") {
+        if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) {
           refreshCategoryFilterOptions(debatesCache || []);
           applyIndexFilters();
           loadReportsBadge();
@@ -20747,7 +20724,7 @@ scheduleMobileIndexCardHighlightUpdate();
   initIndexReturnNavigation();
   applyCreateBackLinks();
 
-  if (location.pathname === "/") initIndex();
+  if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) initIndex();
   if (location.pathname === "/create") initCreate();
 if (location.pathname === "/debate") {
   localStorage.setItem("debate_view_mode", "columns");
@@ -21824,7 +21801,8 @@ function initHomeBottomShareMenu() {
 }
 
 function initHomeTopbarAutoHide() {
-  if (window.location.pathname !== "/") return;
+  const p = window.location.pathname;
+  if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return;
 
   const topbar = document.querySelector(".topbar");
   if (!topbar) return;
@@ -22127,3 +22105,19 @@ if (document.readyState === "loading") {
 } else {
   initBottomNavLoadingState();
 }
+
+// Sur mobile, le navigateur restaure la page depuis le bfcache (back-forward cache)
+// sans ré-exécuter initIndex(). Les données en mémoire sont figées au moment de la
+// mise en cache. On force un re-fetch complet pour que le tri soit à jour.
+window.addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  const p = location.pathname;
+  if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return;
+  clearIndexDebatesSessionCache();
+  if (window.__agonDebateModalOpen) {
+    try { closeDebateIframeModal(); } catch (e) {}
+  }
+  if (typeof refreshIndexFirstDebatesPageForCurrentSort === "function") {
+    refreshIndexFirstDebatesPageForCurrentSort();
+  }
+});

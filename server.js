@@ -2018,6 +2018,30 @@ app.get("/", (req, res) => {
   res.type("html").send(html);
 });
 
+app.get("/debates", (req, res) => {
+  const template = readViewTemplate("index.html");
+  const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
+  res.type("html").send(html);
+});
+
+app.get("/debates/:id", async (req, res) => {
+  const template = readViewTemplate("index.html");
+  const debateId = String(req.params.id || "").trim();
+  try {
+    const debate = debateId ? await getDebateById(debateId) : null;
+    if (debate) {
+      const meta = buildDebateMeta(req, debate);
+      meta.url = buildAbsoluteUrl(req, `/debates/${encodeURIComponent(debateId)}`);
+      const html = replaceMetaPlaceholders(template, meta);
+      return res.type("html").send(html);
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
+  res.type("html").send(html);
+});
+
 app.get("/create", (req, res) => {
   res.sendFile(path.join(__dirname, "views/create.html"));
 });
@@ -3186,13 +3210,19 @@ app.get("/api/debates", async (req, res) => {
         return Number(b.id || 0) - Number(a.id || 0);
       });
     } else {
-      // "popular" / "À la une" : l'index fonctionne aussi comme un fil d'actu.
-      // Une arène publiée, commentée, enrichie d'une idée ou votée récemment
-      // doit donc rester prioritaire pendant 8 heures, avant les autres critères.
+      // "popular" / "À la une" : groupe A = arènes ≤ 24h (created_at), toujours avant groupe B.
+      // À l'intérieur du groupe B : last_activity_at 8h → bump 7j → last_activity_at global → counts.
+      const NEW_ARENA_PRIORITY_MS = 24 * 60 * 60 * 1000;
       const RECENT_ACTIVITY_PRIORITY_WINDOW_MS = 8 * 60 * 60 * 1000;
       const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
       const now = Date.now();
+      const isNew = (row) => row.created_at && (now - new Date(row.created_at).getTime()) < NEW_ARENA_PRIORITY_MS;
       rows.sort((a, b) => {
+        const aNew = isNew(a);
+        const bNew = isNew(b);
+        if (aNew !== bNew) return bNew ? 1 : -1;
+        if (aNew && bNew) return new Date(b.created_at) - new Date(a.created_at);
+
         const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
         const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
         const aTime = aDate ? new Date(aDate).getTime() : 0;
