@@ -2229,59 +2229,32 @@ function rememberLatestIframeModalUrl(modalUrl = "") {
   } catch (error) {}
 }
 
-function syncParentIndexUrlFromIframe(pathname = location.pathname, href = location.href, options = {}) {
+function syncParentIndexUrlFromIframe(pathname = location.pathname, href = location.href) {
   if (window.self === window.top) return;
 
-  const modalUrl = normalizeIframeModalUrl(pathname, href);
-  if (!modalUrl) return;
+  const normalizedModalUrl = normalizeIframeModalUrl(pathname, href);
+  if (!normalizedModalUrl) return;
 
   try {
-    if (window.parent && window.parent !== window && window.parent.location?.origin === window.location.origin) {
-      const incomingId = getDebateIdFromUrl(modalUrl);
-      const expectedId = window.parent.__agonExpectedIframeDebateId;
-      const msSinceOpen = Date.now() - (window.parent.__agonExpectedIframeTs || 0);
-      const isUserInitiatedNavigation = options?.userInitiated === true;
-      const isStaleUpdate = !isUserInitiatedNavigation && incomingId && expectedId && incomingId !== expectedId && msSinceOpen < 10000;
-      if (isStaleUpdate) return;
-
-      if (incomingId) {
-        window.parent.__agonExpectedIframeDebateId = incomingId;
-        window.parent.__agonExpectedIframeTs = Date.now();
-      }
-      const parentPathname = window.parent.location.pathname;
-      const parentOnListPage = parentPathname === "/" || parentPathname === "/debates" || parentPathname.startsWith("/debates/");
-      if (parentOnListPage) {
-        const debateId = getDebateIdFromUrl(modalUrl);
-        if (debateId) {
-          window.parent.history.replaceState({}, "", `/debates/${encodeURIComponent(debateId)}`);
-        } else if (!parentPathname.startsWith("/debates/")) {
-          const nextUrl = new URL(window.parent.location.href);
-          nextUrl.searchParams.set("openModal", modalUrl);
-          window.parent.history.replaceState({}, "", nextUrl);
-        }
-      }
-
-      try {
-        window.parent.sessionStorage.setItem(IFRAME_LATEST_MODAL_URL_KEY, modalUrl);
-      } catch (storageError) {}
+    if (typeof window.parent?.syncIndexUrlWithOpenIframeModal === "function") {
+      window.parent.syncIndexUrlWithOpenIframeModal(normalizedModalUrl);
     }
   } catch (error) {}
 }
 
-function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href, options = {}) {
+function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href) {
   if (window.self === window.top) return;
 
   const safePathname = String(pathname || location.pathname || "");
   const safeHref = String(href || location.href || "");
 
-  syncParentIndexUrlFromIframe(safePathname, safeHref, options);
+  syncParentIndexUrlFromIframe(safePathname, safeHref);
 
   try {
     window.parent.postMessage({
       type: "agon:iframe-page-context",
       pathname: safePathname,
-      href: safeHref,
-      userInitiated: options?.userInitiated === true
+      href: safeHref
     }, "*");
   } catch (error) {}
 }
@@ -2297,7 +2270,9 @@ function initIframePageContextBridge() {
   };
 
   notifyCurrentPath();
-  window.addEventListener("pageshow", notifyCurrentPath);
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) notifyCurrentPath();
+  });
   window.addEventListener("popstate", notifyCurrentPath);
   window.addEventListener("hashchange", notifyCurrentPath);
 
@@ -2311,7 +2286,7 @@ function initIframePageContextBridge() {
 
     try {
       const parsedUrl = new URL(href, window.location.origin);
-      notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString(), { userInitiated: true });
+      notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString());
     } catch (error) {}
   }, true);
 }
@@ -2570,20 +2545,7 @@ function ensureDebateIframeModal() {
         try {
           const parsedUrl = new URL(newHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
-            const incomingId = getDebateIdFromUrl(`${parsedUrl.pathname}${parsedUrl.search}`);
-            const expectedId = window.__agonExpectedIframeDebateId;
-            const msSince = Date.now() - (window.__agonExpectedIframeTs || 0);
-            const isUserInitiatedNavigation = e.data.userInitiated === true;
-            // Ignorer les notifications automatiques d'un ancien débat pendant 10 secondes,
-            // mais laisser passer une vraie navigation cliquée dans l'iframe.
-            const isStale = !isUserInitiatedNavigation && incomingId && expectedId && incomingId !== expectedId && msSince < 10000;
-            if (!isStale) {
-              if (incomingId) {
-                window.__agonExpectedIframeDebateId = incomingId;
-                window.__agonExpectedIframeTs = Date.now();
-              }
-              syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
-            }
+            syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
           }
         } catch (error) {}
       }
@@ -2822,9 +2784,6 @@ function openDebateIframeModal(url, options = {}) {
   // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
   _debateModalSavedScrollY = Math.round(window.scrollY || 0);
   const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
-  window.__agonExpectedIframeDebateId = preferredDebateId;
-  window.__agonExpectedIframeDebateTs = Date.now();
-  window.__agonExpectedIframeTs = Date.now();
   _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
   window.__agonDebateModalOpen = true;
   window.__agonDebateModalPendingDebates = null;
@@ -3142,6 +3101,7 @@ function closeDebateIframeModal() {
     });
   }
 
+  try { history.replaceState({}, "", "/"); } catch (e) {}
 }
 
 function isTopLevelDebatePage() {

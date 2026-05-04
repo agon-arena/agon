@@ -2230,36 +2230,8 @@ function rememberLatestIframeModalUrl(modalUrl = "") {
 }
 
 function syncParentIndexUrlFromIframe(pathname = location.pathname, href = location.href) {
-  if (window.self === window.top) return;
-
-  const modalUrl = normalizeIframeModalUrl(pathname, href);
-  if (!modalUrl) return;
-
-  try {
-    if (window.parent && window.parent !== window && window.parent.location?.origin === window.location.origin) {
-      const incomingId = getDebateIdFromUrl(modalUrl);
-      const expectedId = window.parent.__agonExpectedIframeDebateId;
-      const msSinceOpen = Date.now() - (window.parent.__agonExpectedIframeTs || 0);
-      const isStaleUpdate = incomingId && expectedId && incomingId !== expectedId && msSinceOpen < 10000;
-      if (isStaleUpdate) return;
-      const parentPathname = window.parent.location.pathname;
-      const parentOnListPage = parentPathname === "/" || parentPathname === "/debates" || parentPathname.startsWith("/debates/");
-      if (parentOnListPage) {
-        const debateId = getDebateIdFromUrl(modalUrl);
-        if (debateId) {
-          window.parent.history.replaceState({}, "", `/debates/${encodeURIComponent(debateId)}`);
-        } else if (!parentPathname.startsWith("/debates/")) {
-          const nextUrl = new URL(window.parent.location.href);
-          nextUrl.searchParams.set("openModal", modalUrl);
-          window.parent.history.replaceState({}, "", nextUrl);
-        }
-      }
-
-      try {
-        window.parent.sessionStorage.setItem(IFRAME_LATEST_MODAL_URL_KEY, modalUrl);
-      } catch (storageError) {}
-    }
-  } catch (error) {}
+  // L'iframe n'écrase plus jamais l'URL du parent directement.
+  // Le parent met à jour l'URL via le handler agon:iframe-page-context.
 }
 
 function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href) {
@@ -2498,7 +2470,11 @@ function ensureDebateIframeModal() {
         try {
           const parsedUrl = new URL(readyHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
-            syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            const incomingId = getDebateIdFromUrl(`${parsedUrl.pathname}${parsedUrl.search}`);
+            const expectedId = getCurrentIframeExpectedDebateId();
+            if (!(incomingId && expectedId && incomingId !== expectedId)) {
+              syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            }
             shouldKeepLoadingUntilNotificationTarget =
               window.__agonDebateModalOpenedFromNotifications === true &&
               parsedUrl.pathname === "/debate" &&
@@ -2564,11 +2540,8 @@ function ensureDebateIframeModal() {
           const parsedUrl = new URL(newHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
             const incomingId = getDebateIdFromUrl(`${parsedUrl.pathname}${parsedUrl.search}`);
-            const expectedId = window.__agonExpectedIframeDebateId;
-            const msSince = Date.now() - (window.__agonExpectedIframeTs || 0);
-            // Ignorer les notifications d'un ancien débat pendant 10 secondes
-            const isStale = incomingId && expectedId && incomingId !== expectedId && msSince < 10000;
-            if (!isStale) {
+            const expectedId = getCurrentIframeExpectedDebateId();
+            if (!(incomingId && expectedId && incomingId !== expectedId)) {
               syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
             }
           }
@@ -2641,6 +2614,11 @@ function getDebateIdFromUrl(url) {
   } catch (error) {
     return "";
   }
+}
+
+function getCurrentIframeExpectedDebateId() {
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  return getDebateIdFromUrl(frame?.src || "");
 }
 
 function findIndexDebateCardById(debateId = "") {
@@ -2809,9 +2787,6 @@ function openDebateIframeModal(url, options = {}) {
   // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
   _debateModalSavedScrollY = Math.round(window.scrollY || 0);
   const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
-  window.__agonExpectedIframeDebateId = preferredDebateId;
-  window.__agonExpectedIframeDebateTs = Date.now();
-  window.__agonExpectedIframeTs = Date.now();
   _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
   window.__agonDebateModalOpen = true;
   window.__agonDebateModalPendingDebates = null;
@@ -3129,6 +3104,7 @@ function closeDebateIframeModal() {
     });
   }
 
+  try { history.replaceState({}, "", "/"); } catch (e) {}
 }
 
 function isTopLevelDebatePage() {
