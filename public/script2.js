@@ -2229,7 +2229,7 @@ function rememberLatestIframeModalUrl(modalUrl = "") {
   } catch (error) {}
 }
 
-function syncParentIndexUrlFromIframe(pathname = location.pathname, href = location.href, options = {}) {
+function syncParentIndexUrlFromIframe(pathname = location.pathname, href = location.href) {
   if (window.self === window.top) return;
 
   const modalUrl = normalizeIframeModalUrl(pathname, href);
@@ -2240,14 +2240,8 @@ function syncParentIndexUrlFromIframe(pathname = location.pathname, href = locat
       const incomingId = getDebateIdFromUrl(modalUrl);
       const expectedId = window.parent.__agonExpectedIframeDebateId;
       const msSinceOpen = Date.now() - (window.parent.__agonExpectedIframeTs || 0);
-      const isUserInitiatedNavigation = options?.userInitiated === true;
-      const isStaleUpdate = !isUserInitiatedNavigation && incomingId && expectedId && incomingId !== expectedId && msSinceOpen < 10000;
+      const isStaleUpdate = incomingId && expectedId && incomingId !== expectedId && msSinceOpen < 10000;
       if (isStaleUpdate) return;
-
-      if (incomingId) {
-        window.parent.__agonExpectedIframeDebateId = incomingId;
-        window.parent.__agonExpectedIframeTs = Date.now();
-      }
       const parentPathname = window.parent.location.pathname;
       const parentOnListPage = parentPathname === "/" || parentPathname === "/debates" || parentPathname.startsWith("/debates/");
       if (parentOnListPage) {
@@ -2268,20 +2262,19 @@ function syncParentIndexUrlFromIframe(pathname = location.pathname, href = locat
   } catch (error) {}
 }
 
-function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href, options = {}) {
+function notifyParentAboutIframePageContext(pathname = location.pathname, href = location.href) {
   if (window.self === window.top) return;
 
   const safePathname = String(pathname || location.pathname || "");
   const safeHref = String(href || location.href || "");
 
-  syncParentIndexUrlFromIframe(safePathname, safeHref, options);
+  syncParentIndexUrlFromIframe(safePathname, safeHref);
 
   try {
     window.parent.postMessage({
       type: "agon:iframe-page-context",
       pathname: safePathname,
-      href: safeHref,
-      userInitiated: options?.userInitiated === true
+      href: safeHref
     }, "*");
   } catch (error) {}
 }
@@ -2311,7 +2304,7 @@ function initIframePageContextBridge() {
 
     try {
       const parsedUrl = new URL(href, window.location.origin);
-      notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString(), { userInitiated: true });
+      notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString());
     } catch (error) {}
   }, true);
 }
@@ -2573,15 +2566,9 @@ function ensureDebateIframeModal() {
             const incomingId = getDebateIdFromUrl(`${parsedUrl.pathname}${parsedUrl.search}`);
             const expectedId = window.__agonExpectedIframeDebateId;
             const msSince = Date.now() - (window.__agonExpectedIframeTs || 0);
-            const isUserInitiatedNavigation = e.data.userInitiated === true;
-            // Ignorer les notifications automatiques d'un ancien débat pendant 10 secondes,
-            // mais laisser passer une vraie navigation cliquée dans l'iframe.
-            const isStale = !isUserInitiatedNavigation && incomingId && expectedId && incomingId !== expectedId && msSince < 10000;
+            // Ignorer les notifications d'un ancien débat pendant 10 secondes
+            const isStale = incomingId && expectedId && incomingId !== expectedId && msSince < 10000;
             if (!isStale) {
-              if (incomingId) {
-                window.__agonExpectedIframeDebateId = incomingId;
-                window.__agonExpectedIframeTs = Date.now();
-              }
               syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
             }
           }
