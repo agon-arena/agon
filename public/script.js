@@ -989,6 +989,39 @@ function isColumnFocusScrollContext() {
 
 
 
+function getMobileColumnFocusElementKey(element) {
+  if (!element) return "";
+
+  const elementId = String(element.id || "").trim();
+  if (elementId) return elementId;
+
+  const replyCommentId = String(element.dataset?.replyCommentId || "").trim();
+  if (replyCommentId) return `reply-comment-${replyCommentId}`;
+
+  return "";
+}
+
+function findMobileColumnFocusElement(key) {
+  const normalizedKey = String(key || "").trim();
+  if (!normalizedKey) return null;
+
+  const directElement = document.getElementById(normalizedKey);
+  if (directElement) return directElement;
+
+  if (normalizedKey.startsWith("reply-comment-")) {
+    const replyCommentId = normalizedKey.replace("reply-comment-", "");
+    if (!replyCommentId) return null;
+
+    try {
+      return document.querySelector(`.comment-reply-card[data-reply-comment-id="${CSS.escape(replyCommentId)}"]`);
+    } catch (error) {
+      return document.querySelector(`.comment-reply-card[data-reply-comment-id="${replyCommentId}"]`);
+    }
+  }
+
+  return getVisibleCommentElement(normalizedKey);
+}
+
 function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   if (!isColumnFocusScrollContext()) {
     pendingMobileColumnFocusElementId = null;
@@ -1000,6 +1033,13 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   const topbarHeight = topbar ? topbar.offsetHeight : 0;
   const stickyButtonsOffset = window.innerWidth <= 768 ? 70 : 20;
   const visibleTopLimit = topbarHeight + stickyButtonsOffset;
+
+  const replySelector =
+    targetMode === "a"
+      ? `.debate-columns .column-a .comment-reply-card[data-reply-comment-id]`
+      : targetMode === "b"
+        ? `.debate-columns .column-b .comment-reply-card[data-reply-comment-id]`
+        : `.debate-columns .comment-reply-card[data-reply-comment-id]`;
 
   const commentSelector =
     targetMode === "a"
@@ -1018,16 +1058,22 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
   const getVisibleElements = (selector) => {
     return Array.from(document.querySelectorAll(selector)).filter((element) => {
       if (!element.offsetParent) return false;
+      if (!getMobileColumnFocusElementKey(element)) return false;
 
       const rect = element.getBoundingClientRect();
       return rect.bottom > visibleTopLimit && rect.top < window.innerHeight;
     });
   };
 
+  const visibleReplies = getVisibleElements(replySelector);
   const visibleComments = getVisibleElements(commentSelector);
   const visibleArguments = getVisibleElements(argumentSelector);
 
-  const candidates = visibleComments.length ? visibleComments : visibleArguments;
+  const candidates = visibleReplies.length
+    ? visibleReplies
+    : visibleComments.length
+      ? visibleComments
+      : visibleArguments;
 
   if (!candidates.length) {
     pendingMobileColumnFocusElementId = null;
@@ -1043,7 +1089,7 @@ function captureHighestVisibleElementForMobileColumnFocus(targetMode) {
     return highest;
   });
 
-  pendingMobileColumnFocusElementId = highestVisibleElement.id;
+  pendingMobileColumnFocusElementId = getMobileColumnFocusElementKey(highestVisibleElement);
   pendingMobileColumnFocusElementTop = highestVisibleElement.getBoundingClientRect().top;
 }
 
@@ -1051,7 +1097,7 @@ function restoreMobileColumnFocusScroll() {
   if (!isColumnFocusScrollContext()) return;
   if (!pendingMobileColumnFocusElementId) return;
 
-  const target = document.getElementById(pendingMobileColumnFocusElementId);
+  const target = findMobileColumnFocusElement(pendingMobileColumnFocusElementId);
 
   if (!target || !target.offsetParent) {
     pendingMobileColumnFocusElementId = null;
@@ -1118,10 +1164,14 @@ if (pendingColumnFocusScrollMode === "dblclick") {
 function handleArgumentDoubleClick(event, side, argumentId) {
   pendingColumnFocusScrollMode = "dblclick";
 
+  const clickedReply = event?.target?.closest(".comment-reply-card[data-reply-comment-id]");
   const clickedComment = event?.target?.closest(".comment-card[id]");
   const clickedArgument = event?.target?.closest(".argument-card[id]");
 
-  if (clickedComment) {
+  if (clickedReply) {
+    pendingMobileColumnFocusElementId = getMobileColumnFocusElementKey(clickedReply);
+    pendingMobileColumnFocusElementTop = clickedReply.getBoundingClientRect().top;
+  } else if (clickedComment) {
     pendingMobileColumnFocusElementId = clickedComment.id;
     pendingMobileColumnFocusElementTop = clickedComment.getBoundingClientRect().top;
   } else if (clickedArgument) {
@@ -1566,6 +1616,183 @@ function renderStrongProgressBadge(arg) {
     <div class="argument-trending-badge" title="${votesLast24h} voix reçues sur les dernières 24h">
       <span class="argument-trending-badge-icon" aria-hidden="true">↗</span>
       <span class="argument-trending-badge-text">En forte progression</span>
+    </div>
+  `;
+}
+
+const ARGUMENT_PASTE_BADGE_THRESHOLD = 30;
+const ARGUMENT_PASTE_META_STORAGE_KEY = "agon_argument_paste_meta";
+const argumentPasteDraftStats = {};
+const argumentVoiceDraftStats = {};
+
+function getArgumentPasteFormKeyFromFieldId(fieldId) {
+  const normalizedId = String(fieldId || "").trim();
+  if (normalizedId.startsWith("list-")) return "list";
+  if (normalizedId.startsWith("a-")) return "a";
+  if (normalizedId.startsWith("b-")) return "b";
+  return "";
+}
+
+function getArgumentPasteDraftStats(formKey) {
+  const key = String(formKey || "").trim();
+  if (!key) return { pastedChars: 0 };
+
+  if (!argumentPasteDraftStats[key]) {
+    argumentPasteDraftStats[key] = { pastedChars: 0 };
+  }
+
+  return argumentPasteDraftStats[key];
+}
+
+function resetArgumentPasteDraftStats(formKey) {
+  const key = String(formKey || "").trim();
+  if (!key) return;
+  argumentPasteDraftStats[key] = { pastedChars: 0 };
+}
+
+function getArgumentVoiceDraftStats(formKey) {
+  const key = String(formKey || "").trim();
+  if (!key) return { usedMicrophone: false };
+
+  if (!argumentVoiceDraftStats[key]) {
+    argumentVoiceDraftStats[key] = { usedMicrophone: false };
+  }
+
+  return argumentVoiceDraftStats[key];
+}
+
+function markArgumentVoiceDraftUsed(formKey) {
+  const key = String(formKey || "").trim();
+  if (!key) return;
+  const stats = getArgumentVoiceDraftStats(key);
+  stats.usedMicrophone = true;
+}
+
+function resetArgumentVoiceDraftStats(formKey) {
+  const key = String(formKey || "").trim();
+  if (!key) return;
+  argumentVoiceDraftStats[key] = { usedMicrophone: false };
+}
+
+function getArgumentVoiceFormKeyFromTargetId(targetId) {
+  return getArgumentPasteFormKeyFromFieldId(targetId);
+}
+
+function bindArgumentPasteTrackerToField(fieldId) {
+  const field = document.getElementById(fieldId);
+  if (!field || field.dataset.argumentPasteTrackerBound === "true") return;
+
+  field.dataset.argumentPasteTrackerBound = "true";
+  field.addEventListener("paste", (event) => {
+    const formKey = getArgumentPasteFormKeyFromFieldId(fieldId);
+    if (!formKey) return;
+
+    const clipboardText = event.clipboardData?.getData("text") || "";
+    if (!clipboardText) return;
+
+    const stats = getArgumentPasteDraftStats(formKey);
+    stats.pastedChars = Math.max(0, Number(stats.pastedChars || 0)) + clipboardText.length;
+  });
+}
+
+function bindArgumentPasteTrackers() {
+  [
+    "list-title", "list-body",
+    "a-title", "a-body",
+    "b-title", "b-body"
+  ].forEach(bindArgumentPasteTrackerToField);
+}
+
+function computeArgumentPasteMeta(formKey, title, body) {
+  const totalChars = String(title || "").trim().length + String(body || "").trim().length;
+  const stats = getArgumentPasteDraftStats(formKey);
+  const voiceStats = getArgumentVoiceDraftStats(formKey);
+  const pastedChars = Math.min(totalChars, Math.max(0, Number(stats.pastedChars || 0)));
+  const pasteRatio = totalChars > 0 ? Math.round((pastedChars / totalChars) * 100) : 0;
+  const usedMicrophone = !!voiceStats.usedMicrophone;
+  const manualWritingBadge = totalChars > 0 && pasteRatio < ARGUMENT_PASTE_BADGE_THRESHOLD && !usedMicrophone;
+
+  return {
+    pastedChars,
+    pasteRatio,
+    manualWritingBadge,
+    usedMicrophone
+  };
+}
+
+function readLocalArgumentPasteMetaMap() {
+  try {
+    const raw = localStorage.getItem(ARGUMENT_PASTE_META_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveLocalArgumentPasteMeta(argumentId, meta) {
+  const normalizedId = String(argumentId || "").trim();
+  if (!normalizedId || !meta) return;
+
+  try {
+    const allMeta = readLocalArgumentPasteMetaMap();
+    allMeta[normalizedId] = {
+      pastedChars: Number(meta.pastedChars || 0),
+      pasteRatio: Number(meta.pasteRatio || 0),
+      manualWritingBadge: !!meta.manualWritingBadge,
+      usedMicrophone: !!meta.usedMicrophone,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(ARGUMENT_PASTE_META_STORAGE_KEY, JSON.stringify(allMeta));
+  } catch (error) {}
+}
+
+function getArgumentPasteMeta(arg) {
+  if (!arg) return null;
+
+  const directManualBadge = arg.manualWritingBadge ?? arg.manual_writing_badge ?? arg.manual_writing_certified;
+  const directPasteRatio = arg.pasteRatio ?? arg.paste_ratio ?? arg.copiedPasteRatio ?? arg.copy_paste_ratio;
+  const directPastedChars = arg.pastedChars ?? arg.pasted_chars;
+  const directUsedMicrophone = arg.usedMicrophone ?? arg.used_microphone ?? arg.voiceDictationBadge ?? arg.voice_dictation_badge ?? arg.microphoneBadge ?? arg.microphone_badge;
+
+  if (
+    directManualBadge !== undefined ||
+    directPasteRatio !== undefined ||
+    directPastedChars !== undefined ||
+    directUsedMicrophone !== undefined
+  ) {
+    const usedMicrophone = directUsedMicrophone === true || directUsedMicrophone === "true" || directUsedMicrophone === 1 || directUsedMicrophone === "1";
+    return {
+      pastedChars: Number(directPastedChars || 0),
+      pasteRatio: Number(directPasteRatio || 0),
+      manualWritingBadge: (directManualBadge === true || directManualBadge === "true" || directManualBadge === 1 || directManualBadge === "1") && !usedMicrophone,
+      usedMicrophone
+    };
+  }
+
+  const allMeta = readLocalArgumentPasteMetaMap();
+  return allMeta[String(arg.id || "")] || null;
+}
+
+function renderManualWritingBadge(arg) {
+  const meta = getArgumentPasteMeta(arg);
+  if (!meta) return "";
+
+  if (meta.usedMicrophone) {
+    return `
+      <div class="argument-manual-writing-badge argument-microphone-writing-badge" title="Idée rédigée avec la dictée vocale">
+        <span class="argument-manual-writing-badge-icon" aria-hidden="true">🎙️</span>
+        <span class="argument-manual-writing-badge-text">Rédigée avec le micro</span>
+      </div>
+    `;
+  }
+
+  const ratio = Math.max(0, Math.min(100, Math.round(Number(meta.pasteRatio || 0))));
+
+  return `
+    <div class="argument-manual-writing-badge" title="Part de texte collé détectée : ${ratio}%">
+      <span class="argument-manual-writing-badge-icon" aria-hidden="true">✍️</span>
+      <span class="argument-manual-writing-badge-text">Rédaction majoritairement personnelle · ${ratio}% copié-collé</span>
     </div>
   `;
 }
@@ -2282,10 +2509,22 @@ function initIframePageContextBridge() {
 
     const href = String(link.getAttribute("href") || "").trim();
     if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
-    if (link.target && link.target !== "_self") return;
 
     try {
       const parsedUrl = new URL(href, window.location.origin);
+
+      if (parsedUrl.origin === window.location.origin && parsedUrl.pathname === "/debate" && parsedUrl.searchParams.has("id")) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.parent.postMessage({
+          type: "agon:open-debate-in-parent-modal",
+          url: `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+        }, "*");
+        return;
+      }
+
+      if (link.target && link.target !== "_self") return;
+
       notifyParentAboutIframePageContext(parsedUrl.pathname, parsedUrl.toString());
     } catch (error) {}
   }, true);
@@ -2465,6 +2704,7 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:open-debate-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
+      syncIndexUrlWithOpenIframeModal(nextUrl);
       openDebateIframeModal(nextUrl);
       return;
     }
@@ -2480,7 +2720,10 @@ function ensureDebateIframeModal() {
         try {
           const parsedUrl = new URL(readyHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
-            syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            const modal = document.getElementById("debate-iframe-modal");
+            if (modal?.classList?.contains("open")) {
+              syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            }
             shouldKeepLoadingUntilNotificationTarget =
               window.__agonDebateModalOpenedFromNotifications === true &&
               parsedUrl.pathname === "/debate" &&
@@ -2545,7 +2788,10 @@ function ensureDebateIframeModal() {
         try {
           const parsedUrl = new URL(newHref, window.location.origin);
           if (parsedUrl.origin === window.location.origin) {
-            syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            const modal = document.getElementById("debate-iframe-modal");
+            if (modal?.classList?.contains("open")) {
+              syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+            }
           }
         } catch (error) {}
       }
@@ -2750,7 +2996,12 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
     if (normalizedModalUrl) {
       const debateId = getDebateIdFromUrl(normalizedModalUrl);
       if (debateId) {
-        window.history.replaceState({}, "", `/debates/${encodeURIComponent(debateId)}`);
+        const nextPath = `/debates/${encodeURIComponent(debateId)}`;
+        if (window.location.pathname !== nextPath) {
+          window.history.pushState({}, "", nextPath);
+        } else {
+          window.history.replaceState({}, "", nextPath);
+        }
         return;
       }
       // /notifications est un overlay temporaire : ne pas le graver dans l'URL
@@ -2764,7 +3015,12 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
         window.history.replaceState({}, "", nextUrl);
       }
     } else {
-      window.history.replaceState({}, "", "/debates");
+      const nextPath = "/";
+      if (window.location.pathname !== nextPath || window.location.search || window.location.hash) {
+        window.history.pushState({}, "", nextPath);
+      } else {
+        window.history.replaceState({}, "", nextPath);
+      }
     }
   } catch (error) {}
 }
@@ -2796,6 +3052,9 @@ function openDebateIframeModal(url, options = {}) {
   try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
   const isDebateUrl = iframeUrlPathname === "/debate";
   syncIndexUrlWithOpenIframeModal(url);
+  requestAnimationFrame(() => syncIndexUrlWithOpenIframeModal(url));
+  setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 250);
+  setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 900);
   window.__agonIframeCurrentPathname = iframeUrlPathname;
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
@@ -3101,7 +3360,7 @@ function closeDebateIframeModal() {
     });
   }
 
-  try { history.replaceState({}, "", "/"); } catch (e) {}
+  syncIndexUrlWithOpenIframeModal("");
 }
 
 function isTopLevelDebatePage() {
@@ -3213,7 +3472,7 @@ function openNotificationsInDebateIframeModal(event = null) {
   // On efface d'abord l'ID de débat de l'URL pour qu'un refresh ne rouvre pas
   // le mauvais débat pendant que les notifications sont affichées.
   if (location.pathname === "/debates" || location.pathname.startsWith("/debates/")) {
-    try { window.history.replaceState({}, "", "/debates"); } catch (e) {}
+    try { window.history.replaceState({}, "", "/"); } catch (e) {}
   }
 
   openDebateIframeModal("/notifications");
@@ -12545,17 +12804,22 @@ function isSafeInternalModalUrl(modalUrl = "") {
 
 function resolveInitialOpenModalUrl(openModalUrl = "") {
   const normalizedOpenModalUrl = String(openModalUrl || "").trim();
-  const latestStoredModalUrl = getLatestStoredIframeModalUrl();
 
-  if (isSafeInternalModalUrl(latestStoredModalUrl)) {
-    return latestStoredModalUrl;
+  // Au refresh, on se base uniquement sur l'URL affichée.
+  // On ne rouvre donc plus une ancienne iframe mémorisée en sessionStorage.
+  if (isSafeInternalModalUrl(normalizedOpenModalUrl)) {
+    return normalizedOpenModalUrl;
   }
 
-  return normalizedOpenModalUrl;
+  return "";
 }
 
 async function initIndex() {
   const params = new URLSearchParams(location.search);
+
+  if (location.pathname === "/debates") {
+    try { window.history.replaceState({}, "", "/"); } catch (error) {}
+  }
 
   const debatesPathMatch = location.pathname.match(/^\/debates\/(.+)$/);
   const debateIdFromPath = debatesPathMatch ? decodeURIComponent(debatesPathMatch[1]) : "";
@@ -15891,6 +16155,7 @@ localStorage.removeItem("debate_column_focus");
   currentDebateViewMode = getDebateViewMode();
   updateDebateViewModeUI();
   syncIdeaVoiceDictationAvailability();
+  bindArgumentPasteTrackers();
   bindDebateSourceSwipeHandlers();
 
   const formA = document.getElementById("form-a");
@@ -17322,8 +17587,7 @@ return `
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
   ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
-
-
+  ${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
   <div class="argument-share-top">
@@ -17768,6 +18032,7 @@ return `
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
 ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
   <div class="argument-share-top">
@@ -18100,6 +18365,126 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
 }
 
 
+async function submitArgument(debateId, side) {
+  const normalizedSide = side === "B" || side === "b" ? "b" : "a";
+  const apiSide = normalizedSide === "b" ? "B" : "A";
+  const titleField = document.getElementById(`${normalizedSide}-title`);
+  const bodyField = document.getElementById(`${normalizedSide}-body`);
+  const warning = document.getElementById(`warning-${normalizedSide}`);
+  const form = document.getElementById(`form-${normalizedSide}`);
+  const submitButton = form?.querySelector('button[type="submit"]') || null;
+
+  if (!titleField || !bodyField) return;
+
+  const title = titleField.value.trim();
+  const body = bodyField.value.trim();
+  const pasteMeta = computeArgumentPasteMeta(normalizedSide, title, body);
+
+  if (body.length > 600) {
+    alert("Maximum 600 caractères pour le texte de l'idée.");
+    return;
+  }
+
+  if (!title) {
+    showReplacementSuccessMessage(
+      "Idée manquante",
+      "Tu dois écrire un titre à cette idée avant de la publier.",
+      null,
+      "⚠️"
+    );
+    return;
+  }
+
+  const confirmed = await showIdeaPublishConfirmModal();
+  if (!confirmed) {
+    return;
+  }
+
+  setButtonLoading(submitButton);
+
+  try {
+    stopIdeaVoiceDictation();
+    const r = await fetchJSON(API + "/arguments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        debate_id: debateId,
+        side: apiSide,
+        title,
+        body,
+        authorKey: getKey(),
+        pasteRatio: pasteMeta.pasteRatio,
+        pastedChars: pasteMeta.pastedChars,
+        manualWritingBadge: pasteMeta.manualWritingBadge,
+        usedMicrophone: pasteMeta.usedMicrophone,
+        paste_ratio: pasteMeta.pasteRatio,
+        pasted_chars: pasteMeta.pastedChars,
+        manual_writing_badge: pasteMeta.manualWritingBadge,
+        used_microphone: pasteMeta.usedMicrophone
+      })
+    });
+
+    saveLocalArgumentPasteMeta(r.id, pasteMeta);
+
+    titleField.value = "";
+    bodyField.value = "";
+    resetArgumentPasteDraftStats(normalizedSide);
+    resetArgumentVoiceDraftStats(normalizedSide);
+
+    if (warning) {
+      warning.style.display = "none";
+    }
+
+    if (form) {
+      form.style.display = "none";
+    }
+
+    openedArgumentForm = null;
+    document.body.classList.remove("argument-form-open");
+    syncIframeParentArgumentFormState(false);
+
+    if (typeof updateCounter === "function") {
+      updateCounter(`${normalizedSide}-title`, `count-title-${normalizedSide}`, 100);
+      updateCounter(`${normalizedSide}-body`, `count-body-${normalizedSide}`, 600);
+    }
+
+    pendingArgumentScrollId = String(r.id);
+    pinnedNewArgumentId = String(r.id);
+
+    try {
+      insertLocalArgumentAfterPublish(debateId, {
+        id: r.id,
+        debate_id: debateId,
+        side: apiSide,
+        title,
+        body,
+        author_key: getKey(),
+        pasteRatio: pasteMeta.pasteRatio,
+        pastedChars: pasteMeta.pastedChars,
+        manualWritingBadge: pasteMeta.manualWritingBadge,
+        usedMicrophone: pasteMeta.usedMicrophone,
+        paste_ratio: pasteMeta.pasteRatio,
+        pasted_chars: pasteMeta.pastedChars,
+        manual_writing_badge: pasteMeta.manualWritingBadge,
+        used_microphone: pasteMeta.usedMicrophone
+      });
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToTopOfArgumentCardAndFlash(String(r.id));
+        });
+      });
+    } catch (localRenderError) {
+      console.error(localRenderError);
+      await loadDebate(debateId);
+    }
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    clearButtonLoading(submitButton);
+  }
+}
+
 async function submitListArgument(debateId) {
   const titleField = document.getElementById("list-title");
   const bodyField = document.getElementById("list-body");
@@ -18112,6 +18497,7 @@ async function submitListArgument(debateId) {
 
   const title = titleField.value.trim();
   const body = bodyField.value.trim();
+  const pasteMeta = computeArgumentPasteMeta("list", title, body);
 
   if (body.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
@@ -18159,12 +18545,24 @@ async function submitListArgument(debateId) {
         side,
         title,
         body,
-        authorKey: getKey()
+        authorKey: getKey(),
+        pasteRatio: pasteMeta.pasteRatio,
+        pastedChars: pasteMeta.pastedChars,
+        manualWritingBadge: pasteMeta.manualWritingBadge,
+        usedMicrophone: pasteMeta.usedMicrophone,
+        paste_ratio: pasteMeta.pasteRatio,
+        pasted_chars: pasteMeta.pastedChars,
+        manual_writing_badge: pasteMeta.manualWritingBadge,
+        used_microphone: pasteMeta.usedMicrophone
       })
     });
 
+    saveLocalArgumentPasteMeta(r.id, pasteMeta);
+
     titleField.value = "";
     bodyField.value = "";
+    resetArgumentPasteDraftStats("list");
+    resetArgumentVoiceDraftStats("list");
 
     if (warning) {
       warning.style.display = "none";
@@ -18193,7 +18591,15 @@ async function submitListArgument(debateId) {
         side,
         title,
         body,
-        author_key: getKey()
+        author_key: getKey(),
+        pasteRatio: pasteMeta.pasteRatio,
+        pastedChars: pasteMeta.pastedChars,
+        manualWritingBadge: pasteMeta.manualWritingBadge,
+        usedMicrophone: pasteMeta.usedMicrophone,
+        paste_ratio: pasteMeta.pasteRatio,
+        pasted_chars: pasteMeta.pastedChars,
+        manual_writing_badge: pasteMeta.manualWritingBadge,
+        used_microphone: pasteMeta.usedMicrophone
       });
 
       requestAnimationFrame(() => {
@@ -21139,6 +21545,7 @@ function startIdeaVoiceDictation(targetId, button) {
 
   try {
     recognition.start();
+    markArgumentVoiceDraftUsed(getArgumentVoiceFormKeyFromTargetId(targetId));
     target.focus();
   } catch (error) {
     stopIdeaVoiceDictation({ keepText: false });
@@ -21247,6 +21654,7 @@ function closeListArgumentForm() {
   if (!form) return;
 
   stopIdeaVoiceDictation();
+  resetArgumentVoiceDraftStats("list");
   form.style.display = "none";
 
   if (openedArgumentForm === form) {
@@ -21281,6 +21689,7 @@ function syncIframeParentInlineComposerState() {
 
 function closeArgumentForm() {
   stopIdeaVoiceDictation();
+  ["a", "b", "list"].forEach(resetArgumentVoiceDraftStats);
   ["form-a", "form-b", "form-list"].forEach((id) => {
     const form = document.getElementById(id);
     if (form) {
@@ -21357,6 +21766,7 @@ function openArgumentComposer(side) {
 
   if (formA) formA.style.display = "none";
   if (formB) formB.style.display = "none";
+  bindArgumentPasteTrackers();
 
   let normalizedSide = "";
 
