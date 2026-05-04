@@ -17150,6 +17150,12 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
+
+  // Les aperçus Open Graph de la page débat réutilisent le shell d'image
+  // introduit pour la page index. Il faut donc initialiser ici le chargement
+  // différé, sinon le placeholder peut rester affiché indéfiniment sur /debate.
+  initIndexOpenGraphImageObserver(sourceFallback);
+
   syncDebateSourceSwipeAvailability();
 
 }
