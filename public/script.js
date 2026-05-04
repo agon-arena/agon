@@ -4740,6 +4740,114 @@ function ensureIndexSocialLoadingPlaceholderStyles() {
       to { transform: rotate(360deg); }
     }
 
+    .index-social-loading-placeholder.index-social-loading-placeholder-og {
+      min-height: 100%;
+      height: 100%;
+      padding: 12px;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-box {
+      max-width: min(280px, 92%);
+      gap: 8px;
+    }
+
+    .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-badge {
+      padding: 5px 9px;
+      font-size: 10px;
+    }
+
+    .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-spinner {
+      width: 24px;
+      height: 24px;
+      border-width: 2px;
+    }
+
+    .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-title {
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-subtitle {
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 768px) {
+      .index-social-loading-placeholder {
+        padding: 14px;
+        border-radius: 16px;
+      }
+
+      .index-social-loading-placeholder-box {
+        max-width: 92%;
+        gap: 8px;
+      }
+
+      .index-social-loading-placeholder-badge {
+        padding: 5px 9px;
+        font-size: 10px;
+      }
+
+      .index-social-loading-placeholder-spinner {
+        width: 24px;
+        height: 24px;
+        border-width: 2px;
+      }
+
+      .index-social-loading-placeholder-title {
+        font-size: 13px;
+        line-height: 1.25;
+      }
+
+      .index-social-loading-placeholder-subtitle {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og {
+        padding: 8px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-box {
+        gap: 6px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-spinner {
+        width: 20px;
+        height: 20px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-title {
+        font-size: 12px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-subtitle {
+        display: none;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .index-social-loading-placeholder.index-social-loading-placeholder-og {
+        padding: 6px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-badge {
+        padding: 4px 7px;
+        font-size: 9px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-spinner {
+        width: 18px;
+        height: 18px;
+      }
+
+      .index-social-loading-placeholder.index-social-loading-placeholder-og .index-social-loading-placeholder-title {
+        font-size: 11px;
+      }
+    }
+
     @keyframes indexSocialLoadingSheen {
       0% { transform: translateX(-140%) rotate(12deg); }
       100% { transform: translateX(360%) rotate(12deg); }
@@ -4781,7 +4889,24 @@ function buildIndexSocialLoadingPlaceholderHtml(network = 'social', title = 'Cha
 
 
 function buildIndexOpenGraphImageLoadingHtml() {
-  return buildIndexSocialLoadingPlaceholderHtml('source', 'Chargement de l’image Open Graph…', 'L’aperçu se prépare avant affichage dans la carte.');
+  ensureIndexSocialLoadingPlaceholderStyles();
+
+  return `
+    <div
+      class="index-social-loading-placeholder index-social-loading-placeholder-og"
+      style="--index-social-loading-min-height:100%;"
+    >
+      <div class="index-social-loading-placeholder-box">
+        <div class="index-social-loading-placeholder-badge">
+          <span aria-hidden="true">↗</span>
+          <span>Source</span>
+        </div>
+        <div class="index-social-loading-placeholder-spinner" aria-hidden="true"></div>
+        <div class="index-social-loading-placeholder-title">Chargement de l’image…</div>
+        <div class="index-social-loading-placeholder-subtitle">L’aperçu se prépare.</div>
+      </div>
+    </div>
+  `;
 }
 
 function renderIndexOpenGraphImageShell(shell) {
@@ -4795,14 +4920,30 @@ function renderIndexOpenGraphImageShell(shell) {
   shell.dataset.rendering = 'true';
   if (loading) loading.style.display = '';
 
+  // Important : ne pas laisser l'image en display:none pendant le chargement.
+  // Sur certains navigateurs, une image lazy + display:none peut ne jamais déclencher onload,
+  // ce qui laisse le placeholder Open Graph affiché indéfiniment.
+  img.style.display = 'block';
+  img.style.opacity = '0';
+
+  const clearTimer = () => {
+    if (shell.dataset.ogImageFallbackTimer) {
+      clearTimeout(Number(shell.dataset.ogImageFallbackTimer));
+      delete shell.dataset.ogImageFallbackTimer;
+    }
+  };
+
   const finish = () => {
+    clearTimer();
     img.style.display = 'block';
+    img.style.opacity = '1';
     if (loading) loading.style.display = 'none';
     shell.dataset.rendered = 'true';
     shell.dataset.rendering = 'false';
   };
 
   const fail = () => {
+    clearTimer();
     shell.dataset.rendered = 'failed';
     shell.dataset.rendering = 'false';
     if (loading) loading.style.display = 'none';
@@ -4816,7 +4957,20 @@ function renderIndexOpenGraphImageShell(shell) {
     img.src = imageUrl;
   } else if (img.complete && img.naturalWidth > 0) {
     finish();
+    return;
   }
+
+  // Filet de sécurité : si le navigateur a bien téléchargé l'image mais n'a pas lancé
+  // l'événement attendu, on libère quand même le placeholder. Sinon on supprime le shell.
+  const fallbackTimer = window.setTimeout(() => {
+    if (img.complete && img.naturalWidth > 0) {
+      finish();
+    } else {
+      fail();
+    }
+  }, 6500);
+
+  shell.dataset.ogImageFallbackTimer = String(fallbackTimer);
 }
 
 function unloadIndexOpenGraphImageShell(shell) {
@@ -4825,8 +4979,16 @@ function unloadIndexOpenGraphImageShell(shell) {
   const loading = shell.querySelector('[data-index-og-image-loading]');
 
   if (img) {
+    img.onload = null;
+    img.onerror = null;
     img.removeAttribute('src');
     img.style.display = 'none';
+    img.style.opacity = '0';
+  }
+
+  if (shell.dataset.ogImageFallbackTimer) {
+    clearTimeout(Number(shell.dataset.ogImageFallbackTimer));
+    delete shell.dataset.ogImageFallbackTimer;
   }
 
   if (loading) loading.style.display = '';
@@ -7575,9 +7737,8 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
             class="debate-source-card-image"
             data-index-og-image
             alt="${escapeAttribute(title)}"
-            loading="lazy"
             decoding="async"
-            style="display:none; width:100%; height:100%; object-fit:cover;"
+            style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
           >
         </div>
       ` : ""}
