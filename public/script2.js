@@ -4779,103 +4779,6 @@ function buildIndexSocialLoadingPlaceholderHtml(network = 'social', title = 'Cha
   `;
 }
 
-
-function buildIndexOpenGraphImageLoadingHtml() {
-  return buildIndexSocialLoadingPlaceholderHtml('source', 'Chargement de l’image Open Graph…', 'L’aperçu se prépare avant affichage dans la carte.');
-}
-
-function renderIndexOpenGraphImageShell(shell) {
-  if (!shell || shell.dataset.rendered === 'true' || shell.dataset.rendering === 'true') return;
-
-  const imageUrl = String(shell.dataset.imageSrc || '').trim();
-  const img = shell.querySelector('[data-index-og-image]');
-  const loading = shell.querySelector('[data-index-og-image-loading]');
-  if (!imageUrl || !img) return;
-
-  shell.dataset.rendering = 'true';
-  if (loading) loading.style.display = '';
-
-  const finish = () => {
-    img.style.display = 'block';
-    if (loading) loading.style.display = 'none';
-    shell.dataset.rendered = 'true';
-    shell.dataset.rendering = 'false';
-  };
-
-  const fail = () => {
-    shell.dataset.rendered = 'failed';
-    shell.dataset.rendering = 'false';
-    if (loading) loading.style.display = 'none';
-    shell.remove();
-  };
-
-  img.onload = finish;
-  img.onerror = fail;
-
-  if (img.getAttribute('src') !== imageUrl) {
-    img.src = imageUrl;
-  } else if (img.complete && img.naturalWidth > 0) {
-    finish();
-  }
-}
-
-function unloadIndexOpenGraphImageShell(shell) {
-  if (!shell) return;
-  const img = shell.querySelector('[data-index-og-image]');
-  const loading = shell.querySelector('[data-index-og-image-loading]');
-
-  if (img) {
-    img.removeAttribute('src');
-    img.style.display = 'none';
-  }
-
-  if (loading) loading.style.display = '';
-  shell.dataset.rendered = 'false';
-  shell.dataset.rendering = 'false';
-  window.indexOpenGraphImageState?.observer?.observe(shell);
-}
-
-function initIndexOpenGraphImageObserver(root = document) {
-  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
-  const shells = Array.from(scope.querySelectorAll('[data-index-og-image-shell]'));
-  const previousState = window.indexOpenGraphImageState;
-
-  if (!shells.length && !previousState) return;
-
-  if (typeof IntersectionObserver !== 'function') {
-    shells.forEach((shell) => renderIndexOpenGraphImageShell(shell));
-    return;
-  }
-
-  if (!previousState?.observer) {
-    window.indexOpenGraphImageState = {
-      observer: new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          const shell = entry.target;
-          if (!entry.isIntersecting || entry.intersectionRatio < 0.08) return;
-          renderIndexOpenGraphImageShell(shell);
-        });
-      }, {
-        root: null,
-        rootMargin: '500px 0px 500px 0px',
-        threshold: [0, 0.08, 0.35]
-      }),
-      shells: new Set()
-    };
-  }
-
-  const state = window.indexOpenGraphImageState;
-  shells.forEach((shell) => {
-    if (state.shells.has(shell)) return;
-    state.shells.add(shell);
-    if (!shell.dataset.rendered) shell.dataset.rendered = 'false';
-    state.observer.observe(shell);
-    if (isElementNearViewport(shell, 220)) {
-      requestAnimationFrame(() => renderIndexOpenGraphImageShell(shell));
-    }
-  });
-}
-
 function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const tweetId = getXStatusId(sourceUrl);
   if (!tweetId) {
@@ -5316,7 +5219,6 @@ function initIndexMediaSwipeEnhancements(root) {
       if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(inner);
       if (typeof initIndexXObserver === "function") initIndexXObserver(inner);
       if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(inner);
-      if (typeof initIndexOpenGraphImageObserver === "function") initIndexOpenGraphImageObserver(inner);
       if (typeof initIndexCardShareMenus === "function") initIndexCardShareMenus(inner);
 
       inner.querySelectorAll('[data-index-x-shell]').forEach((mediaShell) => {
@@ -5490,7 +5392,6 @@ function refreshIndexCardMediaEnhancements(card) {
   initIndexLocalVideoObserver(card);
   initIndexXObserver(card);
   initIndexInstagramObserver(card);
-  initIndexOpenGraphImageObserver(card);
   initIndexEmbedUnloadObserver(card);
 }
 
@@ -7133,8 +7034,6 @@ function initIndexEmbedUnloadObserver(root = document) {
           unloadIndexXShell(shell);
         } else if (shell.hasAttribute('data-index-instagram-shell')) {
           unloadIndexInstagramShell(shell);
-        } else if (shell.hasAttribute('data-index-og-image-shell')) {
-          unloadIndexOpenGraphImageShell(shell);
         }
       });
     }, {
@@ -7143,7 +7042,7 @@ function initIndexEmbedUnloadObserver(root = document) {
     });
   }
 
-  root.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell], [data-index-og-image-shell]').forEach((shell) => {
+  root.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]').forEach((shell) => {
     if (shell.dataset.unloadObserving === '1') return;
     shell.dataset.unloadObserving = '1';
     window.__indexEmbedUnloadObserver.observe(shell);
@@ -7562,22 +7461,14 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
       ${cardAttributes}
     >
       ${image ? `
-        <div
-          class="debate-source-card-image-wrap"
-          data-index-og-image-shell
-          data-image-src="${escapeAttribute(image)}"
-          style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
-        >
-          <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
-            ${buildIndexOpenGraphImageLoadingHtml()}
-          </div>
+    <div class="debate-source-card-image-wrap" style="display:block; width:100%; aspect-ratio:16/9; background:transparent; overflow:hidden;">
           <img
             class="debate-source-card-image"
-            data-index-og-image
+            src="${escapeAttribute(image)}"
             alt="${escapeAttribute(title)}"
             loading="lazy"
-            decoding="async"
-            style="display:none; width:100%; height:100%; object-fit:cover;"
+            style="display:block; width:100%; height:100%; object-fit:cover;"
+            onerror="this.closest('.debate-source-card-image-wrap')?.remove();"
           >
         </div>
       ` : ""}
@@ -12331,7 +12222,6 @@ section.style.display = "block";
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
   initIndexInstagramObserver(document);
-  initIndexOpenGraphImageObserver(document);
 }
    
 function loadMoreVisitedDebates() {
@@ -12402,7 +12292,6 @@ div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
   initIndexInstagramObserver(document);
-  initIndexOpenGraphImageObserver(document);
   initIndexEmbedUnloadObserver(document);
   observeIndexCardsMissingSourcePreview(document);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
@@ -12443,7 +12332,6 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   initIndexLocalVideoObserver(div);
   initIndexXObserver(div);
   initIndexInstagramObserver(div);
-  initIndexOpenGraphImageObserver(div);
   initIndexEmbedUnloadObserver(div);
   observeIndexCardsMissingSourcePreview(div);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
@@ -15672,7 +15560,6 @@ function renderBottomSimilarDebates(currentDebate, debates) {
   if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(container);
   if (typeof initIndexXObserver === "function") initIndexXObserver(container);
   if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
-  if (typeof initIndexOpenGraphImageObserver === "function") initIndexOpenGraphImageObserver(container);
 
   if (isMobileDebatePage) {
     return;
