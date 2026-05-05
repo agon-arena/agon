@@ -20,7 +20,7 @@
 <meta name="twitter:image" content="__META_IMAGE__">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-<link rel="stylesheet" href="/style.css?v=20260505-youtube-overlay-click-fix" />
+<link rel="stylesheet" href="/style.css?v=20260505-youtube-sound-inside-video" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 /* ── Fond anthracite ── */
@@ -2349,6 +2349,99 @@ body.page-debate .idea-source-preview-hint {
   }
 }
 
+
+/* Page débat : boutons de swipe placés sous le média, comme sur les cartes de l’index.
+   Objectif : ne plus recouvrir les contrôles YouTube de son et d’agrandissement. */
+body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
+body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
+body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
+  overflow: visible !important;
+  margin-bottom: 46px !important;
+}
+
+body.page-debate .debate-media-swipe-hotspot {
+  top: auto !important;
+  bottom: -38px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 30px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.62) !important;
+  color: #ffffff !important;
+  opacity: 0.94 !important;
+  z-index: 9 !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body.page-debate .debate-media-swipe-hotspot-prev {
+  left: calc(50% - 40px) !important;
+  right: auto !important;
+}
+
+body.page-debate .debate-media-swipe-hotspot-next {
+  left: calc(50% + 6px) !important;
+  right: auto !important;
+}
+
+body.page-debate .debate-media-swipe-hotspot span {
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+  font-size: 22px !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.page-debate .debate-media-swipe-hotspot:hover,
+body.page-debate .debate-media-swipe-hotspot:focus-visible,
+body.page-debate .debate-media-swipe-hotspot-next:hover,
+body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
+  body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
+  body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
+  body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
+  body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
+  body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
+  body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
+  body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
+    margin-bottom: 42px !important;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot {
+    bottom: -34px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    height: 28px !important;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot-prev {
+    left: calc(50% - 38px) !important;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot-next {
+    left: calc(50% + 6px) !important;
+  }
+
+  body.page-debate .debate-media-swipe-hotspot span {
+    font-size: 20px !important;
+  }
+}
+
 </style>
 <style>
 
@@ -2705,9 +2798,7 @@ body.voices-panel-open {
     id="debate-source-preview-poster"
     class="debate-source-preview-poster"
     type="button"
-    aria-label="Démarrer la vidéo YouTube"
-    onpointerdown="window.__forceHideDebateYoutubePoster && window.__forceHideDebateYoutubePoster(event)"
-    onclick="window.__forceHideDebateYoutubePoster && window.__forceHideDebateYoutubePoster(event)"
+    aria-label="Démarrer la vidéo"
     style="display:none; position:absolute; inset:0; z-index:2; align-items:center; justify-content:center; background:#000; border:0; padding:0; cursor:pointer;"
   >
     <img
@@ -3219,7 +3310,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260504-x-mobile-column-direct"></script>
+<script src="/script.js?v=20260505-youtube-sound-inside-video"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
@@ -4918,379 +5009,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 </script>
 
 
-<script>
-// Page débat : overlay YouTube masqué dès que la vidéo est active.
-// Le poster/bouton ▶ est un overlay HTML indépendant de YouTube : on le retire
-// directement au pointerdown/click, avant tout retour de l'API YouTube.
-window.__forceHideDebateYoutubePoster = function(event) {
-  var wrap = document.getElementById('debate-source-preview-wrap');
-  var poster = document.getElementById('debate-source-preview-poster');
-  var iframe = document.getElementById('debate-source-preview');
-
-  if(event) {
-    try { event.preventDefault(); } catch(error) {}
-    try { event.stopPropagation(); } catch(error) {}
-  }
-
-  if(wrap) {
-    wrap.classList.add('debate-youtube-started');
-    wrap.classList.add('debate-youtube-active');
-    wrap.classList.add('debate-youtube-is-playing');
-    wrap.classList.remove('debate-youtube-is-paused');
-  }
-
-  if(poster) {
-    poster.hidden = true;
-    poster.setAttribute('aria-hidden', 'true');
-    poster.classList.add('debate-youtube-poster-hidden');
-    poster.style.setProperty('display', 'none', 'important');
-    poster.style.setProperty('visibility', 'hidden', 'important');
-    poster.style.setProperty('opacity', '0', 'important');
-    poster.style.setProperty('pointer-events', 'none', 'important');
-    poster.style.setProperty('z-index', '-1', 'important');
-  }
-
-  if(iframe) {
-    iframe.style.setProperty('display', 'block', 'important');
-    iframe.style.setProperty('visibility', 'visible', 'important');
-    iframe.style.setProperty('opacity', '1', 'important');
-    iframe.style.setProperty('z-index', '3', 'important');
-    iframe.removeAttribute('aria-hidden');
-
-    try {
-      var url = new URL(iframe.src, window.location.href);
-      if(/(^|\/\/)(www\.)?(youtube\.com|youtube-nocookie\.com)\/embed\//.test(iframe.src)) {
-        url.searchParams.set('autoplay', '1');
-        url.searchParams.set('playsinline', '1');
-        url.searchParams.set('enablejsapi', '1');
-        url.searchParams.set('origin', window.location.origin);
-        iframe.src = url.toString();
-      }
-    } catch(error) {}
-
-    try {
-      iframe.contentWindow.postMessage(JSON.stringify({
-        event: 'command',
-        func: 'playVideo',
-        args: []
-      }), '*');
-    } catch(error) {}
-  }
-
-  // Sécurité contre les styles inline réinjectés juste après le clic.
-  [80, 180, 400, 900, 1600].forEach(function(delay) {
-    setTimeout(function() {
-      var p = document.getElementById('debate-source-preview-poster');
-      var w = document.getElementById('debate-source-preview-wrap');
-      var f = document.getElementById('debate-source-preview');
-      if(w && w.classList.contains('debate-youtube-started')) {
-        w.classList.add('debate-youtube-active', 'debate-youtube-is-playing');
-        w.classList.remove('debate-youtube-is-paused');
-      }
-      if(p && w && w.classList.contains('debate-youtube-started')) {
-        p.hidden = true;
-        p.setAttribute('aria-hidden', 'true');
-        p.classList.add('debate-youtube-poster-hidden');
-        p.style.setProperty('display', 'none', 'important');
-        p.style.setProperty('visibility', 'hidden', 'important');
-        p.style.setProperty('opacity', '0', 'important');
-        p.style.setProperty('pointer-events', 'none', 'important');
-        p.style.setProperty('z-index', '-1', 'important');
-      }
-      if(f && w && w.classList.contains('debate-youtube-started')) {
-        f.style.setProperty('display', 'block', 'important');
-        f.style.setProperty('visibility', 'visible', 'important');
-        f.style.setProperty('opacity', '1', 'important');
-        f.style.setProperty('z-index', '3', 'important');
-      }
-    }, delay);
-  });
-};
-
-(function(){
-  var player = null;
-  var playerReady = false;
-  var lastPlayerSrc = '';
-  var pendingInitTimer = null;
-  var userStartedYouTube = false;
-  var youtubeHasActuallyPlayed = false;
-
-  function getEls(){
-    return {
-      wrap: document.getElementById('debate-source-preview-wrap'),
-      poster: document.getElementById('debate-source-preview-poster'),
-      iframe: document.getElementById('debate-source-preview')
-    };
-  }
-
-  function isYouTubeSrc(src){
-    return /(^|\/\/)(www\.)?(youtube\.com|youtube-nocookie\.com)\/embed\//.test(String(src || ''));
-  }
-
-  function ensureYouTubeApiParams(iframe){
-    if(!iframe || !isYouTubeSrc(iframe.src)) return false;
-
-    try {
-      var url = new URL(iframe.src, window.location.href);
-      var changed = false;
-
-      if(url.searchParams.get('enablejsapi') !== '1') {
-        url.searchParams.set('enablejsapi', '1');
-        changed = true;
-      }
-      if(url.searchParams.get('playsinline') !== '1') {
-        url.searchParams.set('playsinline', '1');
-        changed = true;
-      }
-      if(!url.searchParams.get('origin')) {
-        url.searchParams.set('origin', window.location.origin);
-        changed = true;
-      }
-
-      if(changed) {
-        iframe.src = url.toString();
-        return true;
-      }
-    } catch(error) {}
-
-    return false;
-  }
-
-  function showIframe(){
-    var els = getEls();
-    if(!els.iframe) return;
-    els.iframe.style.display = 'block';
-    els.iframe.style.visibility = 'visible';
-    els.iframe.removeAttribute('aria-hidden');
-  }
-
-  function setVideoActive(active){
-    var els = getEls();
-    if(!els.wrap || !els.poster) return;
-
-    els.wrap.classList.toggle('debate-youtube-active', !!active);
-    els.wrap.classList.toggle('debate-youtube-is-playing', !!active);
-    els.wrap.classList.toggle('debate-youtube-is-paused', !active);
-    if(active) { els.wrap.classList.add('debate-youtube-started'); } else { els.wrap.classList.remove('debate-youtube-started'); }
-    els.poster.classList.toggle('debate-youtube-poster-hidden', !!active);
-
-    if(active) {
-      els.poster.hidden = true;
-      els.poster.setAttribute('aria-hidden', 'true');
-      els.poster.style.setProperty('display', 'none', 'important');
-      els.poster.style.setProperty('visibility', 'hidden', 'important');
-      els.poster.style.setProperty('opacity', '0', 'important');
-      els.poster.style.setProperty('pointer-events', 'none', 'important');
-      showIframe();
-    } else {
-      els.poster.hidden = false;
-      els.poster.setAttribute('aria-hidden', 'false');
-      els.poster.style.setProperty('display', 'flex', 'important');
-      els.poster.style.setProperty('visibility', 'visible', 'important');
-      els.poster.style.setProperty('opacity', '1', 'important');
-      els.poster.style.setProperty('pointer-events', 'auto', 'important');
-      els.poster.style.setProperty('z-index', '2', 'important');
-    }
-  }
-
-  function commandYouTube(func){
-    var els = getEls();
-    if(!els.iframe || !els.iframe.contentWindow) return;
-    try {
-      els.iframe.contentWindow.postMessage(JSON.stringify({
-        event: 'command',
-        func: func,
-        args: []
-      }), '*');
-    } catch(error) {}
-  }
-
-  function playCurrentVideo(){
-    var els = getEls();
-    if(!els.iframe || !isYouTubeSrc(els.iframe.src)) return;
-
-    userStartedYouTube = true;
-    if(window.__forceHideDebateYoutubePoster) window.__forceHideDebateYoutubePoster();
-    showIframe();
-
-    try {
-      var url = new URL(els.iframe.src, window.location.href);
-      url.searchParams.set('autoplay', '1');
-      url.searchParams.set('playsinline', '1');
-      url.searchParams.set('enablejsapi', '1');
-      url.searchParams.set('origin', window.location.origin);
-      els.iframe.src = url.toString();
-    } catch(error) {
-      ensureYouTubeApiParams(els.iframe);
-    }
-
-    // Masquage immédiat et volontaire : on ne dépend pas du retour de l'API YouTube,
-    // qui peut repasser brièvement par CUED/PAUSED pendant le rechargement de l'iframe.
-    setVideoActive(true);
-    loadYouTubeApi();
-    scheduleInitPlayer();
-
-    if(player && playerReady && typeof player.playVideo === 'function') {
-      try { player.playVideo(); return; } catch(error) {}
-    }
-    setTimeout(function(){ commandYouTube('playVideo'); }, 80);
-  }
-
-  function onPlayerStateChange(event){
-    if(!window.YT || !window.YT.PlayerState) return;
-
-    if(event.data === window.YT.PlayerState.PLAYING || event.data === window.YT.PlayerState.BUFFERING) {
-      youtubeHasActuallyPlayed = true;
-      setVideoActive(true);
-      return;
-    }
-
-    if(event.data === window.YT.PlayerState.ENDED) {
-      userStartedYouTube = false;
-      youtubeHasActuallyPlayed = false;
-      setVideoActive(false);
-      return;
-    }
-
-    if(event.data === window.YT.PlayerState.PAUSED) {
-      if(youtubeHasActuallyPlayed) {
-        userStartedYouTube = false;
-        setVideoActive(false);
-      }
-      return;
-    }
-
-    // CUED arrive souvent juste après le clic quand l'iframe est rechargée avec les bons paramètres.
-    // On ne doit donc pas réafficher l'overlay à ce moment-là.
-    if(event.data === window.YT.PlayerState.CUED && !userStartedYouTube) {
-      setVideoActive(false);
-    }
-  }
-
-  function destroyPlayer(){
-    if(player && typeof player.destroy === 'function') {
-      try { player.destroy(); } catch(error) {}
-    }
-    player = null;
-    playerReady = false;
-  }
-
-  function initPlayer(){
-    var els = getEls();
-    if(!els.iframe || !isYouTubeSrc(els.iframe.src)) return;
-
-    ensureYouTubeApiParams(els.iframe);
-    if(!window.YT || !window.YT.Player) return;
-    if(player && lastPlayerSrc === els.iframe.src) return;
-
-    destroyPlayer();
-    lastPlayerSrc = els.iframe.src;
-
-    try {
-      player = new window.YT.Player('debate-source-preview', {
-        events: {
-          onReady: function(){
-            playerReady = true;
-            if(getEls().wrap && getEls().wrap.classList.contains('debate-youtube-active')) {
-              try { player.playVideo(); } catch(error) { commandYouTube('playVideo'); }
-            }
-          },
-          onStateChange: onPlayerStateChange
-        }
-      });
-    } catch(error) {}
-  }
-
-  function scheduleInitPlayer(){
-    clearTimeout(pendingInitTimer);
-    pendingInitTimer = setTimeout(initPlayer, 80);
-  }
-
-  function loadYouTubeApi(){
-    if(window.YT && window.YT.Player) {
-      scheduleInitPlayer();
-      return;
-    }
-
-    var previousCallback = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = function(){
-      if(typeof previousCallback === 'function') {
-        try { previousCallback(); } catch(error) {}
-      }
-      scheduleInitPlayer();
-    };
-
-    if(!document.querySelector('script[data-debate-youtube-api]')) {
-      var tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      tag.async = true;
-      tag.setAttribute('data-debate-youtube-api', '1');
-      document.head.appendChild(tag);
-    }
-  }
-
-  function handlePosterStart(event){
-    var poster = event.target && event.target.closest ? event.target.closest('#debate-source-preview-poster') : null;
-    if(!poster) return;
-
-    var current = getEls();
-    if(!current.iframe || !isYouTubeSrc(current.iframe.src)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    playCurrentVideo();
-  }
-
-  function wirePoster(){
-    var els = getEls();
-    if(!els.poster || els.poster.dataset.playToggleWired === '1') return;
-
-    els.poster.dataset.playToggleWired = '1';
-    els.poster.addEventListener('pointerdown', handlePosterStart, true);
-    els.poster.addEventListener('touchstart', handlePosterStart, true);
-    els.poster.addEventListener('click', handlePosterStart, true);
-  }
-
-  function watchIframeChanges(){
-    var els = getEls();
-    if(!els.iframe || els.iframe.dataset.playToggleObserved === '1') return;
-
-    els.iframe.dataset.playToggleObserved = '1';
-    var observer = new MutationObserver(function(){
-      var current = getEls();
-      if(current.iframe && isYouTubeSrc(current.iframe.src)) {
-        youtubeHasActuallyPlayed = false;
-        if(!userStartedYouTube && current.wrap) {
-          current.wrap.classList.remove('debate-youtube-active', 'debate-youtube-is-playing');
-          current.wrap.classList.add('debate-youtube-is-paused');
-        }
-        loadYouTubeApi();
-        scheduleInitPlayer();
-      }
-    });
-    observer.observe(els.iframe, { attributes: true, attributeFilter: ['src'] });
-  }
-
-  function boot(){
-    wirePoster();
-    watchIframeChanges();
-
-    var els = getEls();
-    if(els.iframe && isYouTubeSrc(els.iframe.src)) {
-      loadYouTubeApi();
-      scheduleInitPlayer();
-    }
-  }
-
-  document.addEventListener('pointerdown', handlePosterStart, true);
-  document.addEventListener('click', handlePosterStart, true);
-  document.addEventListener('DOMContentLoaded', function(){
-    boot();
-    setTimeout(boot, 250);
-    setTimeout(boot, 900);
-  });
-})();
-</script>
 
 </body>
 </html>

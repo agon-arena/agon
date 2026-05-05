@@ -2907,43 +2907,47 @@ function findIndexDebateCardById(debateId = "") {
 }
 
 function suspendIndexEmbedsForDebateModal() {
-  if (window.__agonSuspendedIndexEmbeds) return;
+  // Toujours exécuter même si déjà suspendu : l'ouverture d'iframe doit
+  // éteindre la vidéo index à chaque fois, sans exception.
+  window.__agonSuspendedIndexEmbeds = null;
 
   const state = {
     localVideos: [],
     iframes: []
   };
 
+  // Vidéos locales : pause simple.
   document.querySelectorAll('[data-index-local-video-player]').forEach((video) => {
     if (!(video instanceof HTMLVideoElement)) return;
     const wasPlaying = !video.paused && !video.ended;
-    try {
-      video.pause();
-    } catch (error) {}
-    state.localVideos.push({
-      video,
-      wasPlaying
-    });
+    try { video.pause(); } catch (error) {}
+    state.localVideos.push({ video, wasPlaying });
   });
 
-  document.querySelectorAll('[data-index-youtube-shell] iframe, [data-index-x-shell] iframe, [data-index-instagram-shell] iframe').forEach((iframe) => {
+  // Shells YouTube : déchargement complet via unloadIndexYouTubeShell pour
+  // réinitialiser l'état du shell (active, userStarted, soundEnabled).
+  // Sans ça, l'IntersectionObserver peut recharger la vidéo pendant que
+  // l'iframe débat est ouverte.
+  const ytState = window.indexYouTubePlaybackState;
+  if (ytState) {
+    const shellsToUnload = new Set();
+    if (ytState.activeShell) shellsToUnload.add(ytState.activeShell);
+    ytState.shells.forEach((shell) => {
+      if (shell.dataset.active === 'true' || shell.dataset.userStarted === 'true') {
+        shellsToUnload.add(shell);
+      }
+    });
+    shellsToUnload.forEach((shell) => unloadIndexYouTubeShell(shell));
+    ytState.activeShell = null;
+  }
+
+  // Autres iframes (X, Instagram) : simple blanking.
+  document.querySelectorAll('[data-index-x-shell] iframe, [data-index-instagram-shell] iframe').forEach((iframe) => {
     if (!(iframe instanceof HTMLIFrameElement)) return;
     const currentSrc = String(iframe.getAttribute('src') || '').trim();
     if (!currentSrc || currentSrc === 'about:blank') return;
-
-    if (iframe.closest('[data-index-youtube-shell]')) {
-      postMessageToIndexYouTubeIframe(iframe, 'pauseVideo');
-      postMessageToIndexYouTubeIframe(iframe, 'mute');
-    }
-
-    state.iframes.push({
-      iframe,
-      src: currentSrc
-    });
-
-    try {
-      iframe.setAttribute('src', 'about:blank');
-    } catch (error) {}
+    state.iframes.push({ iframe, src: currentSrc });
+    try { iframe.setAttribute('src', 'about:blank'); } catch (error) {}
   });
 
   window.__agonSuspendedIndexEmbeds = state;
@@ -5334,15 +5338,15 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
 
         <button
           type="button"
-          class="debate-card-youtube-sound-btn"
+          class="debate-card-sound-toggle debate-card-youtube-source-sound-toggle"
           data-index-youtube-sound-btn
           aria-label="Activer le son"
           title="Activer le son"
-          onclick="event.preventDefault(); event.stopPropagation();"
-          style="display:none; position:absolute; right:10px; bottom:10px; z-index:4; width:38px; height:38px; border:0; border-radius:999px; align-items:center; justify-content:center; background:rgba(255,255,255,0.92); color:#111827; box-shadow:0 8px 18px rgba(0,0,0,0.20); cursor:pointer;"
+          style="display:none; position:absolute; right:10px; bottom:10px; top:auto; z-index:30;"
         >
           <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
         </button>
+
       </div>
     </div>
   `;
@@ -5777,12 +5781,31 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
         ${baseHtml}
       </div>
       ${showSwipeHotspots ? `
-      <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-prev" data-index-media-swipe-step="prev" aria-label="Voir le média précédent">
-        <span aria-hidden="true">‹</span>
-      </button>
-      <button type="button" class="index-media-swipe-hotspot index-media-swipe-hotspot-next" data-index-media-swipe-step="next" aria-label="Voir le média suivant">
-        <span aria-hidden="true">›</span>
-      </button>
+      <div
+        class="index-media-swipe-controls"
+        data-index-media-swipe-controls
+        aria-label="Navigation entre les médias associés"
+        style="position:static; z-index:2; display:flex; align-items:center; justify-content:center; gap:12px; margin-top:8px; pointer-events:auto;"
+      >
+        <button
+          type="button"
+          class="index-media-swipe-hotspot index-media-swipe-hotspot-prev"
+          data-index-media-swipe-step="prev"
+          aria-label="Voir le média précédent"
+          style="position:static; inset:auto; transform:none; width:38px; height:32px; min-width:38px; border:0; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(17,24,39,0.82); color:#ffffff; box-shadow:0 8px 18px rgba(0,0,0,0.18); cursor:pointer; pointer-events:auto;"
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
+        <button
+          type="button"
+          class="index-media-swipe-hotspot index-media-swipe-hotspot-next"
+          data-index-media-swipe-step="next"
+          aria-label="Voir le média suivant"
+          style="position:static; inset:auto; transform:none; width:38px; height:32px; min-width:38px; border:0; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(17,24,39,0.82); color:#ffffff; box-shadow:0 8px 18px rgba(0,0,0,0.18); cursor:pointer; pointer-events:auto;"
+        >
+          <span aria-hidden="true">›</span>
+        </button>
+      </div>
       ` : ""}
     </div>
   `;
@@ -5963,6 +5986,19 @@ function postMessageToIndexYouTubeIframe(iframe, command) {
   }
 }
 
+function updateYtSourceSoundButton(button, isSoundEnabled) {
+  if (!button) return;
+
+  const enabled = !!isSoundEnabled;
+  const iconClass = enabled ? 'fa-volume-xmark' : 'fa-volume-high';
+  const label = enabled ? 'Couper le son' : 'Activer le son';
+
+  button.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+  button.dataset.soundEnabled = enabled ? 'true' : 'false';
+}
+
 function ensureIndexYouTubeOverlayLayer(shell) {
   if (!shell) return null;
 
@@ -6084,6 +6120,7 @@ function queueIndexYouTubeSoundActivation(shell, iframe) {
   });
 }
 
+
 function updateIndexYouTubeShellOverlay(shell) {
   if (!shell) return;
 
@@ -6093,6 +6130,7 @@ function updateIndexYouTubeShellOverlay(shell) {
   const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
   const isActive = shell.dataset.active === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
+  const isMobile = window.innerWidth <= 768;
 
   if (!overlay) return;
 
@@ -6112,7 +6150,10 @@ function updateIndexYouTubeShellOverlay(shell) {
     overlay.style.cursor = '';
     overlay.style.zIndex = '2';
     if (label) label.textContent = 'Vidéo YouTube';
-    if (soundButton) soundButton.style.display = 'none';
+    if (soundButton) {
+      soundButton.style.display = isMobile ? 'inline-flex' : 'none';
+      updateYtSourceSoundButton(soundButton, false);
+    }
     return;
   }
 
@@ -6132,13 +6173,9 @@ function updateIndexYouTubeShellOverlay(shell) {
   overlay.style.cursor = '';
   overlay.style.zIndex = '-1';
   if (label) label.textContent = 'Vidéo YouTube';
-
   if (soundButton) {
-    soundButton.style.display = 'inline-flex';
-    const iconClass = isUserActivated ? 'fa-volume-xmark' : 'fa-volume-high';
-    soundButton.innerHTML = `<i class="fa-solid ${iconClass}" aria-hidden="true"></i>`;
-    soundButton.setAttribute('aria-label', isUserActivated ? 'Couper le son' : 'Activer le son');
-    soundButton.setAttribute('title', isUserActivated ? 'Couper le son' : 'Activer le son');
+    soundButton.style.display = isMobile ? 'inline-flex' : 'none';
+    updateYtSourceSoundButton(soundButton, isUserActivated);
   }
 }
 
@@ -6153,13 +6190,14 @@ function unloadIndexYouTubeShell(shell) {
   iframe.src = 'about:blank';
   shell.dataset.active = 'false';
   shell.dataset.userActivated = 'false';
+  shell.dataset.soundEnabled = 'false';
 
   if (poster) poster.style.display = '';
   setAgonEmbedLoading(shell, false);
   updateIndexYouTubeShellOverlay(shell);
 }
 
-function activateIndexYouTubeShell(shell) {
+function activateIndexYouTubeShell(shell, options = {}) {
   if (!shell) return;
   const iframe = shell.querySelector('.debate-card-youtube-iframe');
   const poster = shell.querySelector('[data-index-youtube-poster]');
@@ -6168,12 +6206,15 @@ function activateIndexYouTubeShell(shell) {
 
 const currentSrc = String(iframe.getAttribute('src') || '').trim();
 const isNewLoad = !currentSrc || currentSrc === 'about:blank';
+const shouldEnableSound = options?.enableSound === true || shell.dataset.userActivated === 'true';
+shell.dataset.userActivated = shouldEnableSound ? 'true' : 'false';
+shell.dataset.soundEnabled = shouldEnableSound ? 'true' : 'false';
 
 if (isNewLoad) {
   setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
   iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
-    muted: true
+    muted: !shouldEnableSound
   });
 }
 
@@ -6229,6 +6270,7 @@ function enableSoundOnIndexYouTubeShell(shell) {
   if (!iframe) return;
 
   shell.dataset.userActivated = 'true';
+  shell.dataset.soundEnabled = 'true';
   updateIndexYouTubeShellOverlay(shell);
   queueIndexYouTubeSoundActivation(shell, iframe);
 }
@@ -6240,6 +6282,7 @@ function disableSoundOnIndexYouTubeShell(shell) {
   if (!iframe) return;
 
   shell.dataset.userActivated = 'false';
+  shell.dataset.soundEnabled = 'false';
   updateIndexYouTubeShellOverlay(shell);
   postMessageToIndexYouTubeIframe(iframe, 'mute');
 }
@@ -6262,6 +6305,36 @@ function toggleSoundOnIndexYouTubeShell(shell) {
   }
 
   enableSoundOnIndexYouTubeShell(shell);
+}
+
+function bindIndexYouTubeSoundButton(shell, state) {
+  if (!shell || !state) return;
+
+  const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+  if (!soundButton || soundButton.dataset.indexYoutubeSoundBound === 'true') return;
+
+  soundButton.dataset.indexYoutubeSoundBound = 'true';
+  soundButton.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const shouldEnableSound = shell.dataset.userActivated !== 'true';
+    shell.dataset.userStarted = 'true';
+    shell.dataset.inView = 'true';
+
+    if (state.activeShell && state.activeShell !== shell) {
+      unloadIndexYouTubeShell(state.activeShell);
+    }
+
+    state.activeShell = shell;
+
+    if (shell.dataset.active !== 'true') {
+      activateIndexYouTubeShell(shell, { enableSound: shouldEnableSound });
+      return;
+    }
+
+    setIndexYouTubeSoundEnabled(shell, shouldEnableSound);
+  };
 }
 
 function flushIndexScrollWork() {
@@ -6399,6 +6472,8 @@ function updateIndexLocalVideoShellOverlay(shell) {
   overlay.style.pointerEvents = 'none';
   overlay.style.cursor = '';
   if (label) label.textContent = 'Vidéo importée';
+
+  if (swipeActions) swipeActions.style.display = 'inline-flex';
 
   if (soundButton) {
     soundButton.style.display = 'inline-flex';
@@ -7007,6 +7082,7 @@ function initIndexYouTubeObserver(root = document) {
       shell.dataset.inView = 'true';
       shell.dataset.active = 'true';
       shell.dataset.userActivated = 'true';
+      shell.dataset.soundEnabled = 'true';
       const iframe = shell.querySelector('.debate-card-youtube-iframe');
       if (iframe && !iframe.getAttribute('src')) {
         const base = String(shell.dataset.embedBase || '').trim();
@@ -7019,12 +7095,13 @@ function initIndexYouTubeObserver(root = document) {
       shell.dataset.inView = 'false';
       shell.dataset.active = 'false';
       shell.dataset.userActivated = 'false';
+      shell.dataset.soundEnabled = 'false';
       ensureIndexYouTubeOverlayLayer(shell);
       unloadIndexYouTubeShell(shell);
 
       const poster = shell.querySelector('[data-index-youtube-poster]');
       const overlay = shell.querySelector('[data-index-youtube-overlay]');
-      const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+      bindIndexYouTubeSoundButton(shell, state);
 
       if (poster) {
         poster.onclick = (event) => {
@@ -7051,26 +7128,6 @@ function initIndexYouTubeObserver(root = document) {
           }
           state.activeShell = shell;
           activateIndexYouTubeShell(shell);
-        };
-      }
-
-      if (soundButton) {
-        soundButton.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const currentlyMuted = shell.dataset.soundEnabled !== 'true';
-          if (shell.dataset.active !== 'true') {
-            shell.dataset.userStarted = 'true';
-            shell.dataset.inView = 'true';
-            if (state.activeShell && state.activeShell !== shell) {
-              unloadIndexYouTubeShell(state.activeShell);
-            }
-            state.activeShell = shell;
-            activateIndexYouTubeShell(shell, { enableSound: currentlyMuted });
-            return;
-          }
-
-          setIndexYouTubeSoundEnabled(shell, currentlyMuted);
         };
       }
 
@@ -7107,6 +7164,7 @@ function initIndexYouTubeObserver(root = document) {
       shell.dataset.inView = 'true';
       shell.dataset.active = 'true';
       shell.dataset.userActivated = 'true';
+      shell.dataset.soundEnabled = 'true';
       const iframe = shell.querySelector('.debate-card-youtube-iframe');
       if (iframe && !iframe.getAttribute('src')) {
         const base = String(shell.dataset.embedBase || '').trim();
@@ -7131,12 +7189,13 @@ function initIndexYouTubeObserver(root = document) {
     shell.dataset.inView = 'false';
     shell.dataset.active = 'false';
     shell.dataset.userActivated = 'false';
+    shell.dataset.soundEnabled = 'false';
     ensureIndexYouTubeOverlayLayer(shell);
     unloadIndexYouTubeShell(shell);
 
     const poster = shell.querySelector('[data-index-youtube-poster]');
     const overlay = shell.querySelector('[data-index-youtube-overlay]');
-    const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+    bindIndexYouTubeSoundButton(shell, state);
 
     if (poster) {
       poster.onclick = (event) => {
@@ -7163,26 +7222,6 @@ function initIndexYouTubeObserver(root = document) {
         }
         state.activeShell = shell;
         activateIndexYouTubeShell(shell);
-      };
-    }
-
-    if (soundButton) {
-      soundButton.onclick = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const currentlyMuted = shell.dataset.soundEnabled !== 'true';
-        if (shell.dataset.active !== 'true') {
-          shell.dataset.userStarted = 'true';
-          shell.dataset.inView = 'true';
-          if (state.activeShell && state.activeShell !== shell) {
-            unloadIndexYouTubeShell(state.activeShell);
-          }
-          state.activeShell = shell;
-          activateIndexYouTubeShell(shell, { enableSound: currentlyMuted });
-          return;
-        }
-
-        setIndexYouTubeSoundEnabled(shell, currentlyMuted);
       };
     }
   });
@@ -18069,7 +18108,53 @@ function clearDebateSourcePreviewTimers() {
   debateSourcePreviewState.retryTimers = [];
 }
 
+function initDebateYouTubeShell(container) {
+  if (!container) return;
+  const shell = container.querySelector('[data-index-youtube-shell]');
+  if (!shell) return;
+
+  shell.dataset.inView = 'true';
+  shell.dataset.active = 'false';
+  shell.dataset.userActivated = 'false';
+  shell.dataset.soundEnabled = 'false';
+  ensureIndexYouTubeOverlayLayer(shell);
+  updateIndexYouTubeShellOverlay(shell);
+
+  const poster = shell.querySelector('[data-index-youtube-poster]');
+  const overlay = shell.querySelector('[data-index-youtube-overlay]');
+  bindIndexYouTubeSoundButton(shell, window.indexYouTubePlaybackState || { activeShell: shell });
+
+  const startVideo = () => {
+    shell.dataset.userStarted = 'true';
+    activateIndexYouTubeShell(shell);
+  };
+
+  if (poster) poster.onclick = (e) => { e.preventDefault(); e.stopPropagation(); startVideo(); };
+  if (overlay) overlay.onclick = (e) => { e.preventDefault(); e.stopPropagation(); startVideo(); };
+}
+
+function cleanupDebateYouTubeShells() {
+  const container = document.getElementById('debate-source-yt-container');
+  if (!container) return;
+
+  const shell = container.querySelector('[data-index-youtube-shell]');
+  if (shell) {
+    const iframe = shell.querySelector('.debate-card-youtube-iframe');
+    if (iframe) {
+      iframe.onload = null;
+      iframe.removeAttribute('src');
+      iframe.src = 'about:blank';
+    }
+    shell.dataset.active = 'false';
+    shell.dataset.userActivated = 'false';
+    shell.dataset.soundEnabled = 'false';
+  }
+
+  container.remove();
+}
+
 function resetDebateSourcePreview() {
+  cleanupDebateYouTubeShells();
   clearDebateSourcePreviewTimers();
 
   if (debateInstagramVisibilityObserver) {
@@ -18302,16 +18387,14 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   if (!sourcePreviewWrap) return;
 
-  // Aligner /debate sur l'index : vignette YouTube visible par défaut,
-  // iframe chargée seulement après clic, son activable sans recréer l'iframe,
-  // puis pause/déchargement quand le média n'est plus actif.
-  sourcePreviewWrap.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "");
+  const ytContainer = document.createElement('div');
+  ytContainer.id = 'debate-source-yt-container';
+  ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "");
+  sourcePreviewWrap.appendChild(ytContainer);
   sourcePreviewWrap.style.display = "block";
   updateDebateSourcePreviewVerticalOffset();
 
-  if (typeof initIndexYouTubeObserver === "function") {
-    initIndexYouTubeObserver(sourcePreviewWrap);
-  }
+  initDebateYouTubeShell(ytContainer);
 
   syncDebateSourceSwipeAvailability();
 }
