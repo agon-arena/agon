@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const compression = require("compression");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -7,6 +8,7 @@ const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
+app.use(compression());
 const PORT = process.env.PORT || 3001;
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -32,7 +34,7 @@ const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 
 app.use(express.json({ limit: "100kb" }));
-app.use(express.static("public"));
+app.use(express.static("public", { maxAge: "2m" }));
 app.use("/migration-export", express.static("/var/data"));
 
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
@@ -87,8 +89,12 @@ function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
 
+const _viewTemplateCache = {};
 function readViewTemplate(templateName) {
-  return fs.readFileSync(path.join(__dirname, "views", templateName), "utf8");
+  if (!_viewTemplateCache[templateName]) {
+    _viewTemplateCache[templateName] = fs.readFileSync(path.join(__dirname, "views", templateName), "utf8");
+  }
+  return _viewTemplateCache[templateName];
 }
 
 function replaceMetaPlaceholders(template, meta) {
@@ -407,10 +413,14 @@ function ensureDebateContentStorage() {
   }
 }
 
+let _debateContentMapCache = null;
+
 function readDebateContentMap() {
+  if (_debateContentMapCache) return _debateContentMapCache;
   ensureDebateContentStorage();
   try {
-    return JSON.parse(fs.readFileSync(debateContentMetaPath, "utf8") || "{}");
+    _debateContentMapCache = JSON.parse(fs.readFileSync(debateContentMetaPath, "utf8") || "{}");
+    return _debateContentMapCache;
   } catch (error) {
     return {};
   }
@@ -419,6 +429,7 @@ function readDebateContentMap() {
 function writeDebateContentMap(map) {
   ensureDebateContentStorage();
   fs.writeFileSync(debateContentMetaPath, JSON.stringify(map, null, 2), "utf8");
+  _debateContentMapCache = map;
 }
 
 function normalizeDebateContent(value) {
@@ -460,11 +471,14 @@ function ensureDebateAssetsStorage() {
   }
 }
 
-function readDebateAssetsMap() {
-  ensureDebateAssetsStorage();
+let _debateAssetsMapCache = null;
 
+function readDebateAssetsMap() {
+  if (_debateAssetsMapCache) return _debateAssetsMapCache;
+  ensureDebateAssetsStorage();
   try {
-    return JSON.parse(fs.readFileSync(debateAssetsMetaPath, "utf8") || "{}");
+    _debateAssetsMapCache = JSON.parse(fs.readFileSync(debateAssetsMetaPath, "utf8") || "{}");
+    return _debateAssetsMapCache;
   } catch (error) {
     return {};
   }
@@ -473,6 +487,7 @@ function readDebateAssetsMap() {
 function writeDebateAssetsMap(map) {
   ensureDebateAssetsStorage();
   fs.writeFileSync(debateAssetsMetaPath, JSON.stringify(map, null, 2), "utf8");
+  _debateAssetsMapCache = map;
 }
 
 function getDebateAssetsEntry(debateId) {
@@ -1327,10 +1342,10 @@ function getCachedDebatesApiResponse(key) {
   return entry.value;
 }
 
-function setCachedDebatesApiResponse(key, value) {
+function setCachedDebatesApiResponse(key, value, ttlMs = DEBATES_API_CACHE_TTL_MS) {
   debatesApiResponseCache.set(String(key || ""), {
     value,
-    expiresAt: Date.now() + DEBATES_API_CACHE_TTL_MS
+    expiresAt: Date.now() + ttlMs
   });
 }
 
@@ -1374,9 +1389,16 @@ function clearDebateDetailResponseCache(debateId = null) {
   debateDetailResponseCache.delete(key);
 }
 
+const ogImageCache = new Map();
+
 function invalidateDebateCaches(debateId = null) {
   clearDebatesApiResponseCache();
   clearDebateDetailResponseCache(debateId);
+  if (debateId) {
+    ogImageCache.delete(String(debateId));
+  } else {
+    ogImageCache.clear();
+  }
 }
 
 function getNotificationsApiCacheKey(userKey) {
@@ -1776,9 +1798,17 @@ async function snapshotAndWatchMajority(debateId, argId, side, authorKey) {
     authorKey,
     debateId: String(debateId),
     side,
-    wasMajorityAtPost: wasMajority
+    wasMajorityAtPost: wasMajority,
+    createdAt: Date.now()
   });
 }
+
+setInterval(() => {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const [argId, w] of majorityWatchers) {
+    if (w.createdAt && w.createdAt < cutoff) majorityWatchers.delete(argId);
+  }
+}, 60 * 60 * 1000).unref();
 
 async function checkMajorityFlips(debateId) {
   const toCheck = [];
@@ -2131,6 +2161,12 @@ app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
+    const cached = ogImageCache.get(String(id));
+    if (cached) {
+      res.setHeader("Content-Type", "image/png");
+      return res.send(cached);
+    }
+
     const [debate, args] = await Promise.all([
       getDebateById(id),
       getArgumentsByDebateId(id)
@@ -2225,8 +2261,18 @@ app.get("/debate/:id", async (req, res) => {
       ctx.textAlign = "left";
     }
 
+    const pngBuffer = await new Promise((resolve, reject) => {
+      const chunks = [];
+      const stream = canvas.createPNGStream();
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
+    });
+
+    ogImageCache.set(String(id), pngBuffer);
+
     res.setHeader("Content-Type", "image/png");
-    canvas.createPNGStream().pipe(res);
+    res.send(pngBuffer);
   } catch (error) {
     console.error(error);
     res.status(500).send("Erreur génération image");
@@ -2254,34 +2300,19 @@ app.post("/api/link-preview", rateLimit("preview", 30), async (req, res) => {
    TRACK VISITS
 ========================= */
 
-app.post("/api/track-visit", async (req, res) => {
-  try {
-    const { visitorKey, page } = req.body || {};
+app.post("/api/track-visit", (req, res) => {
+  const { visitorKey, page } = req.body || {};
 
-    if (!visitorKey || !page) {
-      return res.status(400).json({ error: "visitorKey et page requis" });
-    }
-
-    const { data, error } = await supabase
-      .from("page_visits")
-      .insert({
-        visitor_key: String(visitorKey),
-        page: String(page),
-        created_at: nowIso()
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error(error);
-      return sendServerError(res, "Erreur enregistrement visite.");
-    }
-
-    res.json({ success: true, id: data.id });
-  } catch (error) {
-    console.error(error);
-    return sendServerError(res, "Erreur serveur.");
+  if (!visitorKey || !page) {
+    return res.status(400).json({ error: "visitorKey et page requis" });
   }
+
+  res.json({ success: true });
+
+  supabase
+    .from("page_visits")
+    .insert({ visitor_key: String(visitorKey), page: String(page), created_at: nowIso() })
+    .catch((err) => console.error("track-visit:", err));
 });
 
 /* =========================
@@ -3071,10 +3102,7 @@ app.get("/api/debates", async (req, res) => {
     });
     const cachedResponse = getCachedDebatesApiResponse(cacheKey);
 
-    // Les tris temporels doivent rester strictement frais : après création
-    // d'une arène, un cache de quelques secondes suffit à masquer la dernière
-    // carte en tête de liste.
-    if (cachedResponse && sortMode !== "recent" && sortMode !== "old") {
+    if (cachedResponse) {
       return res.json(cachedResponse);
     }
 
@@ -3298,7 +3326,10 @@ app.get("/api/debates", async (req, res) => {
       });
     }
 
-    setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview);
+    const cacheTtlMs = (sortMode === "recent" || sortMode === "old")
+      ? 10 * 1000
+      : DEBATES_API_CACHE_TTL_MS;
+    setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
     res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);
@@ -4377,14 +4408,6 @@ app.delete("/api/comments/:id", async (req, res) => {
     return res.status(500).json({ error: "Erreur suppression commentaire." });
   }
 });
-
-const { execSync } = require("child_process");
-
-try {
-  console.log("FFMPEG CHECK:", execSync("ffmpeg -version", { encoding: "utf8" }).split("\n")[0]);
-} catch (e) {
-  console.error("FFMPEG CHECK FAILED:", e.message);
-}
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);

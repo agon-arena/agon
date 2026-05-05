@@ -10,10 +10,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
     "canvas": "^3.2.1",
-    "cors": "^2.8.5",
+    "compression": "^1.8.1",
     "dotenv": "^17.3.1",
-    "express": "^4.21.2",
-    "sqlite3": "^5.1.7"
+    "express": "^4.21.2"
   },
   "devDependencies": {
     "live-server": "^1.2.2"
