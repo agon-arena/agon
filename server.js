@@ -1391,12 +1391,12 @@ function clearDebateDetailResponseCache(debateId = null) {
 
 const ogImageCache = new Map();
 
-function invalidateDebateCaches(debateId = null) {
-  clearDebatesApiResponseCache();
+function invalidateDebateCaches(debateId = null, { clearList = true } = {}) {
+  if (clearList) clearDebatesApiResponseCache();
   clearDebateDetailResponseCache(debateId);
   if (debateId) {
     ogImageCache.delete(String(debateId));
-  } else {
+  } else if (clearList) {
     ogImageCache.clear();
   }
 }
@@ -3319,9 +3319,9 @@ app.get("/api/debates", async (req, res) => {
     });
 
     if (urlsToWarm.length) {
-      setImmediate(() => {
-        for (const url of urlsToWarm) {
-          getExternalLinkPreview(url).catch(() => {});
+      setImmediate(async () => {
+        for (let i = 0; i < urlsToWarm.length; i += 2) {
+          await Promise.all(urlsToWarm.slice(i, i + 2).map(u => getExternalLinkPreview(u).catch(() => {})));
         }
       });
     }
@@ -3937,7 +3937,7 @@ app.post("/api/arguments/:id/vote", rateLimit("votes", 60), async (req, res) => 
     });
 
     const argument = await getArgumentById(id);
-    invalidateDebateCaches(argument?.debate_id || null);
+    invalidateDebateCaches(argument?.debate_id || null, { clearList: false });
 
     if (argument.author_key && argument.author_key !== voterKey) {
       createOrMergeVoteNotification({
@@ -4024,7 +4024,7 @@ app.post("/api/arguments/:id/unvote", rateLimit("votes", 60), async (req, res) =
       lastVotedAt: argument.last_voted_at || null
     });
 
-    invalidateDebateCaches(argument?.debate_id || null);
+    invalidateDebateCaches(argument?.debate_id || null, { clearList: false });
 
     if (argument?.debate_id) {
       checkMajorityFlips(argument.debate_id).catch(console.error);
@@ -4206,7 +4206,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       }
     }
 
-    invalidateDebateCaches(argumentRow?.debate_id || null);
+    invalidateDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     return res.json(row);
   } catch (error) {
     console.error(error);
@@ -4358,7 +4358,7 @@ app.post("/api/comments/:id/vote", rateLimit("votes", 60), async (req, res) => {
       });
     }
 
-    invalidateDebateCaches(argumentRow?.debate_id || null);
+    invalidateDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     res.json({ likes, replaced: false });
   } catch (error) {
     console.error(error);

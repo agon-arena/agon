@@ -1,0 +1,27 @@
+{
+  "note": "Read-only cleanup baseline. Used by docs:compare to report differences without failing.",
+  "capturedFrom": "npm run docs:cleanup",
+  "runtimeSurfaces": {
+    "inlineScripts": 15,
+    "inlineStyles": 6,
+    "inlineHandlers": 236,
+    "windowAssignments": 171,
+    "eventListeners": 234,
+    "mutationObservers": 9,
+    "intersectionObservers": 13
+  },
+  "duplicateFunctionNames": [
+    "closeAllDropdowns",
+    "escapeHtml",
+    "getCommentFreshnessBonus",
+    "getDebateId",
+    "getXStatusId",
+    "isAdmin",
+    "normalizeText",
+    "positionDropdown",
+    "rerenderCurrentDebateArguments",
+    "scrollToFit",
+    "toggleDropdown",
+    "updateTopbar"
+  ]
+}

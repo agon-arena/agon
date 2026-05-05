@@ -4,7 +4,13 @@
   "description": "Plateforme de débat pour/contre",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "verify:safe": "node tools/verify-safe.js",
+    "audit:scale": "node tools/audit-scale.js",
+    "docs:inventory": "node tools/code-inventory.js",
+    "docs:cleanup": "node tools/cleanup-summary.js",
+    "docs:compare": "node tools/cleanup-compare.js",
+    "docs:youtube": "node tools/youtube-source-audit.js"
   },
   "license": "ISC",
   "dependencies": {

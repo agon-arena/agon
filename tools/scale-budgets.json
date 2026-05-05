@@ -1,0 +1,29 @@
+{
+  "note": "Read-only visibility budgets. audit:scale reports these values but does not fail when they are exceeded.",
+  "files": {
+    "public/script.js": {
+      "maxLines": 24004
+    },
+    "public/style.css": {
+      "maxLines": 10792
+    },
+    "views/debate.html": {
+      "maxLines": 5019
+    },
+    "server.js": {
+      "maxLines": 4415
+    },
+    "views/index.html": {
+      "maxLines": 988
+    }
+  },
+  "api": {
+    "maxRouteCount": 45,
+    "maxSupabaseSelectStarCount": 11
+  },
+  "browserWork": {
+    "maxMutationObserverCount": 9,
+    "maxIntersectionObserverCount": 13,
+    "maxAddEventListenerCount": 236
+  }
+}
