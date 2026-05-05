@@ -6088,7 +6088,6 @@ function updateIndexYouTubeShellOverlay(shell) {
   if (!shell) return;
 
   const overlay = ensureIndexYouTubeOverlayLayer(shell);
-  const poster = shell.querySelector('[data-index-youtube-poster]');
   const label = overlay?.querySelector('.debate-card-youtube-label');
   const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
   const isActive = shell.dataset.active === 'true';
@@ -6097,40 +6096,17 @@ function updateIndexYouTubeShellOverlay(shell) {
   if (!overlay) return;
 
   if (!isActive) {
-    if (poster) {
-      poster.style.display = '';
-      poster.style.visibility = '';
-      poster.style.opacity = '';
-      poster.style.pointerEvents = '';
-      poster.style.zIndex = '1';
-      poster.removeAttribute('aria-hidden');
-    }
     overlay.style.display = '';
-    overlay.style.visibility = '';
-    overlay.style.opacity = '';
     overlay.style.pointerEvents = 'none';
     overlay.style.cursor = '';
-    overlay.style.zIndex = '2';
     if (label) label.textContent = 'Vidéo YouTube';
     if (soundButton) soundButton.style.display = 'none';
     return;
   }
 
-  if (poster) {
-    poster.style.display = 'none';
-    poster.style.visibility = 'hidden';
-    poster.style.opacity = '0';
-    poster.style.pointerEvents = 'none';
-    poster.style.zIndex = '-1';
-    poster.setAttribute('aria-hidden', 'true');
-  }
-
   overlay.style.display = 'none';
-  overlay.style.visibility = 'hidden';
-  overlay.style.opacity = '0';
   overlay.style.pointerEvents = 'none';
   overlay.style.cursor = '';
-  overlay.style.zIndex = '-1';
   if (label) label.textContent = 'Vidéo YouTube';
 
   if (soundButton) {
@@ -6178,27 +6154,13 @@ if (isNewLoad) {
 }
 
   shell.dataset.active = 'true';
-  if (poster) {
-    poster.style.display = 'none';
-    poster.style.visibility = 'hidden';
-    poster.style.opacity = '0';
-    poster.style.pointerEvents = 'none';
-    poster.style.zIndex = '-1';
-    poster.setAttribute('aria-hidden', 'true');
-  }
   updateIndexYouTubeShellOverlay(shell);
 
   if (isNewLoad) {
+    // Garder le poster visible jusqu'au chargement de l'iframe (évite l'écran noir)
     iframe.onload = () => {
       setAgonEmbedLoading(shell, false);
-      if (poster) {
-        poster.style.display = 'none';
-        poster.style.visibility = 'hidden';
-        poster.style.opacity = '0';
-        poster.style.pointerEvents = 'none';
-        poster.style.zIndex = '-1';
-        poster.setAttribute('aria-hidden', 'true');
-      }
+      if (poster) poster.style.display = 'none';
       if (shell.dataset.userActivated === 'true') {
         queueIndexYouTubeSoundActivation(shell, iframe);
       }

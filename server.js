@@ -31,9 +31,32 @@ const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public"));
 app.use("/migration-export", express.static("/var/data"));
+
+// ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
+// ATTENTION : basé sur req.ip. Si l'app est derrière un proxy (Render, Heroku,
+// Nginx…), activer app.set('trust proxy', 1) pour que req.ip soit l'IP réelle
+// et non l'IP du proxy (sinon tous les users partagent la même limite).
+const _rlWindows = new Map();
+const _RL_WINDOW_MS = 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - _RL_WINDOW_MS;
+  for (const [k, v] of _rlWindows) if (v.start < cutoff) _rlWindows.delete(k);
+}, 5 * 60 * 1000).unref();
+function rateLimit(key, max) {
+  return (req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || "?";
+    const mk = `${ip}:${key}`;
+    const now = Date.now();
+    const e = _rlWindows.get(mk);
+    if (!e || now - e.start > _RL_WINDOW_MS) { _rlWindows.set(mk, { start: now, count: 1 }); return next(); }
+    if (++e.count > max) return res.status(429).json({ error: "Trop de requêtes. Réessaie dans quelques instants." });
+    next();
+  };
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 app.use((req, res, next) => {
   res.setHeader(
@@ -1276,11 +1299,11 @@ const externalPreviewCache = new Map();
 const externalPreviewInFlightRequests = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
 const debatesApiResponseCache = new Map();
-const DEBATES_API_CACHE_TTL_MS = 15 * 1000;
+const DEBATES_API_CACHE_TTL_MS = 45 * 1000;
 const debateDetailResponseCache = new Map();
-const DEBATE_DETAIL_CACHE_TTL_MS = 10 * 1000;
+const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
 const notificationsApiResponseCache = new Map();
-const NOTIFICATIONS_API_CACHE_TTL_MS = 5 * 1000;
+const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
 
 function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular" } = {}) {
   const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
@@ -1466,6 +1489,9 @@ function getCachedPreview(url) {
 }
 
 function setCachedPreview(url, value, ttlMs = 1000 * 60 * 30) {
+  if (externalPreviewCache.size >= 300) {
+    externalPreviewCache.delete(externalPreviewCache.keys().next().value);
+  }
   externalPreviewCache.set(url, {
     value,
     expiresAt: Date.now() + ttlMs
@@ -2207,7 +2233,7 @@ app.get("/debate/:id", async (req, res) => {
   }
 });
 
-app.post("/api/link-preview", async (req, res) => {
+app.post("/api/link-preview", rateLimit("preview", 30), async (req, res) => {
   try {
     const { url } = req.body || {};
     const safeUrl = normalizeExternalUrl(url);
@@ -2319,7 +2345,7 @@ app.get("/api/admin/visits/today", requireAdmin, async (req, res) => {
    REPORTS
 ========================= */
 
-app.post("/api/reports", async (req, res) => {
+app.post("/api/reports", rateLimit("reports", 10), async (req, res) => {
   try {
     const { target_type, target_id, reason, voterKey } = req.body || {};
 
@@ -3280,7 +3306,7 @@ app.get("/api/debates", async (req, res) => {
   }
 });
 
-app.post("/api/debates", async (req, res) => {
+app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
     const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
@@ -3727,6 +3753,10 @@ app.delete("/api/debates/:id", async (req, res) => {
 
     const argumentIds = (argumentsRows || []).map((row) => row.id);
 
+    for (const argId of argumentIds) {
+      majorityWatchers.delete(String(argId));
+    }
+
     if (argumentIds.length) {
       const { data: commentRows, error: commentsErr } = await supabase
         .from("comments")
@@ -3790,7 +3820,7 @@ app.delete("/api/debates/:id", async (req, res) => {
    ARGUMENTS
 ========================= */
 
-app.post("/api/arguments", async (req, res) => {
+app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
   try {
     const { debate_id, side, title, body, authorKey } = req.body || {};
 
@@ -3840,7 +3870,7 @@ app.post("/api/arguments", async (req, res) => {
   }
 });
 
-app.post("/api/arguments/:id/vote", async (req, res) => {
+app.post("/api/arguments/:id/vote", rateLimit("votes", 60), async (req, res) => {
   try {
     const id = req.params.id;
     const { voterKey } = req.body || {};
@@ -3898,7 +3928,7 @@ app.post("/api/arguments/:id/vote", async (req, res) => {
   }
 });
 
-app.post("/api/arguments/:id/unvote", async (req, res) => {
+app.post("/api/arguments/:id/unvote", rateLimit("votes", 60), async (req, res) => {
   try {
     const id = req.params.id;
     const { voterKey } = req.body || {};
@@ -4041,7 +4071,7 @@ app.delete("/api/arguments/:id", async (req, res) => {
    COMMENTS
 ========================= */
 
-app.post("/api/comments", async (req, res) => {
+app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
   try {
     const {
       argument_id,
@@ -4153,7 +4183,7 @@ app.post("/api/comments", async (req, res) => {
   }
 });
 
-app.post("/api/comments/:id/vote", async (req, res) => {
+app.post("/api/comments/:id/vote", rateLimit("votes", 60), async (req, res) => {
   try {
     const id = req.params.id;
     const { voterKey, value } = req.body || {};
