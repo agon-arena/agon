@@ -1227,6 +1227,20 @@ function initDesktopColumnFocusClick() {
   bindColumn("column-b", "b");
 }
 
+
+function scheduleRefitIdeaXEmbedsAfterColumnFocus() {
+  if (window.innerWidth > 768) return;
+  if (typeof refitIdeaXEmbedsInMobileColumns !== "function") return;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      refitIdeaXEmbedsInMobileColumns();
+      setTimeout(refitIdeaXEmbedsInMobileColumns, 180);
+      setTimeout(refitIdeaXEmbedsInMobileColumns, 500);
+    });
+  });
+}
+
 function applyDebateColumnFocusUI() {
 
   const focusMode = getDebateColumnFocus();
@@ -1329,6 +1343,8 @@ if (sideFocusRight) {
     sideFocusRight.style.border = "1px solid #fca5a5";
   }
 }
+
+scheduleRefitIdeaXEmbedsAfterColumnFocus();
 }
 function getVisibleArgumentElement(argumentId) {
   if (currentDebateViewMode === "list") {
@@ -4909,6 +4925,118 @@ function buildIndexOpenGraphImageLoadingHtml() {
   `;
 }
 
+function ensureAgonEmbedLoadingStyles() {
+  if (document.getElementById('agon-embed-loading-style')) return;
+
+  const style = document.createElement('style');
+  style.id = 'agon-embed-loading-style';
+  style.textContent = `
+    .agon-embed-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.34);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      pointer-events: none;
+    }
+
+    .agon-embed-loading-overlay.agon-embed-loading-overlay-visible {
+      display: flex;
+    }
+
+    .agon-embed-loading-box {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 112px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(17, 24, 39, 0.74);
+      color: #ffffff;
+      text-align: center;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+    }
+
+    .agon-embed-loading-box img {
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+      animation: agonEmbedLoadingSpin 1s linear infinite;
+      transform-origin: center;
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.24));
+    }
+
+    .agon-embed-loading-text {
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.25;
+      color: #ffffff;
+    }
+
+    @keyframes agonEmbedLoadingSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function buildAgonEmbedLoadingOverlayHtml(label = 'Chargement…') {
+  ensureAgonEmbedLoadingStyles();
+
+  return `
+    <div class="agon-embed-loading-overlay" data-agon-embed-loading aria-hidden="true">
+      <div class="agon-embed-loading-box">
+        <img src="/sablier.png" alt="">
+        <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function setAgonEmbedLoading(shell, isLoading, label = '') {
+  if (!shell) return;
+
+  const loading = shell.querySelector('[data-agon-embed-loading]');
+  if (!loading) return;
+
+  const labelEl = loading.querySelector('.agon-embed-loading-text');
+  if (label && labelEl) {
+    labelEl.textContent = String(label);
+  }
+
+  loading.classList.toggle('agon-embed-loading-overlay-visible', !!isLoading);
+  loading.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+}
+
+function setDebateSourcePreviewLoadingElement(sourceLoading, isVisible, label = 'Chargement…') {
+  if (!sourceLoading) return;
+
+  if (!isVisible) {
+    sourceLoading.style.display = 'none';
+    return;
+  }
+
+  ensureAgonEmbedLoadingStyles();
+  sourceLoading.innerHTML = `
+    <span class="agon-embed-loading-box" style="min-width:0; padding:8px 10px; border-radius:12px; flex-direction:row; gap:8px;">
+      <img src="/sablier.png" alt="" style="width:24px; height:24px;">
+      <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
+    </span>
+  `;
+  sourceLoading.style.display = 'flex';
+  sourceLoading.style.alignItems = 'center';
+  sourceLoading.style.justifyContent = 'center';
+}
+
 function renderIndexOpenGraphImageShell(shell) {
   if (!shell || shell.dataset.rendered === 'true' || shell.dataset.rendering === 'true') return;
 
@@ -5149,8 +5277,9 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
   const embedData = getEmbeddableSourceData(sourceUrl);
   if (!embedData.videoId || !embedData.embedUrl) return "";
 
-  const directEmbedUrl = `${embedData.embedUrl}${embedData.embedUrl.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
+  const safeVideoId = escapeAttribute(String(embedData.videoId || "").trim());
+  const thumbnailUrl = `https://img.youtube.com/vi/${safeVideoId}/hqdefault.jpg`;
 
   return `
     <div
@@ -5158,22 +5287,58 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
       ${safeDebateId ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="cursor:pointer;"` : ""}
     >
       <div
-        class="debate-card-youtube-shell debate-card-youtube-shell-direct"
+        class="debate-card-youtube-shell"
         data-index-youtube-shell
-        data-direct-iframe="true"
         data-embed-base="${escapeAttribute(embedData.embedUrl)}"
-        style="position:relative; overflow:hidden; border-radius:20px; background:#000;"
+        style="position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border-radius:20px; background:#000;"
       >
+        <button
+          type="button"
+          class="debate-card-youtube-poster"
+          data-index-youtube-poster
+          aria-label="Lire la vidéo YouTube"
+          title="Lire la vidéo YouTube"
+          onclick="event.preventDefault(); event.stopPropagation();"
+          style="position:absolute; inset:0; z-index:1; display:block; width:100%; height:100%; border:0; padding:0; cursor:pointer; background-image:linear-gradient(180deg, rgba(15,23,42,0.10), rgba(15,23,42,0.42)), url('${thumbnailUrl}'); background-size:cover; background-position:center; background-repeat:no-repeat;"
+        >
+          <span
+            data-index-youtube-overlay
+            style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:auto;"
+          >
+            <span
+              class="debate-card-youtube-play"
+              aria-hidden="true"
+              style="width:62px; height:62px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.92); color:#111827; box-shadow:0 10px 28px rgba(0,0,0,0.28);"
+            >
+              <i class="fa-solid fa-play" style="margin-left:4px; font-size:24px;"></i>
+            </span>
+            <span class="debate-card-youtube-label" style="position:absolute; left:12px; bottom:10px; padding:6px 10px; border-radius:999px; background:rgba(17,24,39,0.72); color:#fff; font-size:12px; font-weight:700;">Vidéo YouTube</span>
+          </span>
+        </button>
+
+        ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
+
         <iframe
           class="debate-card-youtube-iframe"
           title="Vidéo YouTube"
           referrerpolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
           allowfullscreen
-          src="${escapeAttribute(directEmbedUrl)}"
           onclick="event.stopPropagation()"
-          style="display:block; width:100%; aspect-ratio:16 / 9; border:0;"
+          style="position:absolute; inset:0; z-index:0; display:block; width:100%; height:100%; border:0;"
         ></iframe>
+
+        <button
+          type="button"
+          class="debate-card-youtube-sound-btn"
+          data-index-youtube-sound-btn
+          aria-label="Activer le son"
+          title="Activer le son"
+          onclick="event.preventDefault(); event.stopPropagation();"
+          style="display:none; position:absolute; right:10px; bottom:10px; z-index:4; width:38px; height:38px; border:0; border-radius:999px; align-items:center; justify-content:center; background:rgba(255,255,255,0.92); color:#111827; box-shadow:0 8px 18px rgba(0,0,0,0.20); cursor:pointer;"
+        >
+          <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
   `;
@@ -5233,6 +5398,7 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
             <span class="debate-card-local-video-label debate-card-youtube-label">Cliquer pour lire</span>
           </span>
         </button>
+        ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
         <video
           class="debate-card-youtube-iframe debate-card-local-video-player"
           data-index-local-video-player
@@ -5961,6 +6127,7 @@ function unloadIndexYouTubeShell(shell) {
   shell.dataset.userActivated = 'false';
 
   if (poster) poster.style.display = '';
+  setAgonEmbedLoading(shell, false);
   updateIndexYouTubeShellOverlay(shell);
 }
 
@@ -5975,6 +6142,7 @@ const currentSrc = String(iframe.getAttribute('src') || '').trim();
 const isNewLoad = !currentSrc || currentSrc === 'about:blank';
 
 if (isNewLoad) {
+  setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
   iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
     muted: true
@@ -5987,6 +6155,7 @@ if (isNewLoad) {
   if (isNewLoad) {
     // Garder le poster visible jusqu'au chargement de l'iframe (évite l'écran noir)
     iframe.onload = () => {
+      setAgonEmbedLoading(shell, false);
       if (poster) poster.style.display = 'none';
       if (shell.dataset.userActivated === 'true') {
         queueIndexYouTubeSoundActivation(shell, iframe);
@@ -5997,6 +6166,7 @@ if (isNewLoad) {
       queueIndexYouTubeSoundActivation(shell, iframe);
     }
   } else {
+    setAgonEmbedLoading(shell, false);
     if (poster) poster.style.display = 'none';
     if (shell.dataset.userActivated === 'true') {
       iframe.onload = () => {
@@ -6030,6 +6200,15 @@ function disableSoundOnIndexYouTubeShell(shell) {
   shell.dataset.userActivated = 'false';
   updateIndexYouTubeShellOverlay(shell);
   postMessageToIndexYouTubeIframe(iframe, 'mute');
+}
+
+function setIndexYouTubeSoundEnabled(shell, enabled) {
+  if (enabled) {
+    enableSoundOnIndexYouTubeShell(shell);
+    return;
+  }
+
+  disableSoundOnIndexYouTubeShell(shell);
 }
 
 function toggleSoundOnIndexYouTubeShell(shell) {
@@ -6212,7 +6391,16 @@ function bindIndexLocalVideoPosterLifecycle(shell) {
     syncIndexLocalVideoPosterVisibility(shell);
   };
 
-  ['loadeddata', 'canplay', 'playing', 'pause', 'waiting', 'emptied', 'ended'].forEach((eventName) => {
+  const markVideoReady = () => {
+    setAgonEmbedLoading(shell, false);
+    syncIndexLocalVideoPosterVisibility(shell);
+  };
+
+  ['loadeddata', 'canplay', 'playing'].forEach((eventName) => {
+    video.addEventListener(eventName, markVideoReady);
+  });
+
+  ['pause', 'waiting', 'emptied', 'ended'].forEach((eventName) => {
     video.addEventListener(eventName, updateVisibility);
   });
 }
@@ -6239,6 +6427,7 @@ function unloadIndexLocalVideoShell(shell) {
   shell.dataset.userStarted = 'false';
 
   if (poster) poster.style.display = '';
+  setAgonEmbedLoading(shell, false);
   updateIndexLocalVideoShellOverlay(shell);
 }
 
@@ -6251,13 +6440,18 @@ function activateIndexLocalVideoShell(shell) {
 
   bindIndexLocalVideoPosterLifecycle(shell);
 
-  if (video.getAttribute('src') !== videoSrc) {
+  const isNewLoad = video.getAttribute('src') !== videoSrc;
+  const hasUserStarted = shell.dataset.userStarted === 'true';
+
+  if (isNewLoad) {
     if (poster) poster.style.display = '';
+    if (hasUserStarted) {
+      setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
+    }
     video.src = videoSrc;
     video.load();
   }
 
-  const hasUserStarted = shell.dataset.userStarted === 'true';
   const shouldStartMuted = shell.dataset.userActivated !== 'true';
   video.defaultMuted = shouldStartMuted;
   video.muted = shouldStartMuted;
@@ -6580,6 +6774,7 @@ function initIndexLocalVideoObserver(root = document) {
       if (poster) {
         poster.onclick = (event) => {
           event.preventDefault();
+          event.stopPropagation();
           shell.dataset.userStarted = 'true';
           shell.dataset.inView = 'true';
           if (state.activeShell && state.activeShell !== shell) {
@@ -6670,6 +6865,7 @@ function initIndexLocalVideoObserver(root = document) {
     if (poster) {
       poster.onclick = (event) => {
         event.preventDefault();
+        event.stopPropagation();
         shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
         if (state.activeShell && state.activeShell !== shell) {
@@ -6791,6 +6987,7 @@ function initIndexYouTubeObserver(root = document) {
       if (poster) {
         poster.onclick = (event) => {
           event.preventDefault();
+          event.stopPropagation();
           shell.dataset.userStarted = 'true';
           shell.dataset.inView = 'true';
           if (state.activeShell && state.activeShell !== shell) {
@@ -6902,6 +7099,7 @@ function initIndexYouTubeObserver(root = document) {
     if (poster) {
       poster.onclick = (event) => {
         event.preventDefault();
+        event.stopPropagation();
         shell.dataset.userStarted = 'true';
         shell.dataset.inView = 'true';
         if (state.activeShell && state.activeShell !== shell) {
@@ -7763,6 +7961,536 @@ function linkifyText(str) {
     }
   );
 }
+
+function normalizeIdeaSourceUrl(rawUrl) {
+  let value = String(rawUrl || "").trim();
+  if (!value) return "";
+  if (!/^https?:\/\//i.test(value)) value = "https://" + value;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    return parsed.href;
+  } catch (error) {
+    return "";
+  }
+}
+
+function extractIdeaSourceFromText(text) {
+  const source = { cleanText: String(text || ""), url: "" };
+  const patterns = [
+    /(\n\s*)?↗\s*Source\s*:\s*(https?:\/\/\S+)/i,
+    /(\n\s*)?🔗\s*Lien\s*:\s*(https?:\/\/\S+)/i
+  ];
+
+  patterns.some((pattern) => {
+    const match = source.cleanText.match(pattern);
+    if (!match) return false;
+    const rawUrl = String(match[2] || "").replace(/[),.;]+$/g, "");
+    const normalizedUrl = normalizeIdeaSourceUrl(rawUrl);
+    if (!normalizedUrl) return false;
+    source.url = normalizedUrl;
+    source.cleanText = source.cleanText.replace(match[0], "").trim();
+    return true;
+  });
+
+  return source;
+}
+
+function getIdeaSourceHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch (error) {
+    return url;
+  }
+}
+
+function isIdeaInstagramUrl(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+    return host === "instagram.com" || host === "m.instagram.com";
+  } catch (error) {
+    return false;
+  }
+}
+
+function getIdeaInstagramEmbedUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host !== "instagram.com" && host !== "m.instagram.com") return "";
+
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const type = String(parts[0] || "").toLowerCase();
+    const shortcode = String(parts[1] || "").trim();
+    const supportedTypes = new Set(["p", "reel", "tv"]);
+
+    if (!supportedTypes.has(type) || !shortcode) return "";
+
+    return `https://www.instagram.com/${type}/${encodeURIComponent(shortcode)}/embed`;
+  } catch (error) {
+    return "";
+  }
+}
+
+function isIdeaXUrl(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+    return host === "x.com" || host === "twitter.com" || host === "mobile.twitter.com";
+  } catch (error) {
+    return false;
+  }
+}
+
+function getIdeaXStatusId(url) {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host !== "x.com" && host !== "twitter.com" && host !== "mobile.twitter.com") return "";
+
+    const match = parsed.pathname.match(/\/status(?:es)?\/(\d+)/i);
+    return match ? match[1] : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function getIdeaXEmbedUrl(url) {
+  const statusId = getIdeaXStatusId(url);
+  return statusId ? `https://twitter.com/i/status/${encodeURIComponent(statusId)}` : normalizeIdeaSourceUrl(url);
+}
+
+function getIdeaXDirectEmbedUrl(statusId) {
+  const normalizedStatusId = String(statusId || "").trim();
+  if (!normalizedStatusId) return "";
+
+  const params = new URLSearchParams({
+    dnt: "true",
+    id: normalizedStatusId,
+    lang: "fr",
+    theme: "light"
+  });
+
+  return `https://platform.twitter.com/embed/Tweet.html?${params.toString()}`;
+}
+
+function getIdeaYouTubeId(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "youtu.be") return parsed.pathname.split("/").filter(Boolean)[0] || "";
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      if (parts[0] === "shorts" || parts[0] === "embed" || parts[0] === "live") return parts[1] || "";
+      return parsed.searchParams.get("v") || "";
+    }
+  } catch (error) {}
+  return "";
+}
+
+function renderIdeaSourceCardHtml(url) {
+  const safeUrl = normalizeIdeaSourceUrl(url);
+  if (!safeUrl) return "";
+
+  const youtubeId = getIdeaYouTubeId(safeUrl);
+  if (youtubeId) {
+    return `
+      <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}">
+        <div class="idea-source-card idea-source-card-embed idea-source-card-youtube">
+          <iframe class="idea-source-iframe" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}" title="Vidéo YouTube" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <a class="idea-source-open-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir la vidéo</a>
+        </div>
+      </div>
+    `;
+  }
+
+  if (isIdeaInstagramUrl(safeUrl)) {
+    const instagramEmbedUrl = getIdeaInstagramEmbedUrl(safeUrl);
+    return `
+      <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}">
+        <div class="idea-source-card idea-source-card-social idea-source-card-instagram">
+          <div class="idea-source-social-header"><i class="fa-brands fa-instagram" aria-hidden="true"></i><span>Publication Instagram</span></div>
+          ${instagramEmbedUrl ? `
+            <div class="idea-source-social-embed idea-source-instagram-iframe-wrap">
+              <iframe class="idea-source-iframe idea-source-instagram-iframe" src="${escapeHtml(instagramEmbedUrl)}" title="Publication Instagram" loading="lazy" allowtransparency="true" allowfullscreen></iframe>
+            </div>
+          ` : `
+            <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
+              <span class="idea-source-body">
+                <span class="idea-source-domain">instagram.com</span>
+                <span class="idea-source-title">Publication Instagram</span>
+                <span class="idea-source-description">Ouvrir cette publication sur Instagram.</span>
+              </span>
+            </a>
+          `}
+          <a class="idea-source-open-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir la publication</a>
+        </div>
+      </div>
+    `;
+  }
+
+  if (isIdeaXUrl(safeUrl)) {
+    const xEmbedUrl = getIdeaXEmbedUrl(safeUrl);
+    const xStatusId = getIdeaXStatusId(safeUrl);
+    return `
+      <div class="idea-source-card-wrap idea-source-card-wrap-x" data-idea-source-url="${escapeHtml(safeUrl)}">
+        <div class="idea-source-card idea-source-card-social idea-source-card-x">
+          <div class="idea-source-social-header"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i><span>Publication X</span></div>
+          <div class="idea-source-social-embed idea-source-x-embed-wrap" data-idea-x-embed="1" data-idea-x-url="${escapeHtml(xEmbedUrl)}" data-idea-x-status-id="${escapeHtml(xStatusId)}">
+            <blockquote class="twitter-tweet" data-dnt="true" data-theme="light"><a href="${escapeHtml(xEmbedUrl)}" target="_blank" rel="noopener noreferrer">Publication X</a></blockquote>
+          </div>
+          <a class="idea-source-open-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir la publication</a>
+        </div>
+      </div>
+    `;
+  }
+
+  const host = getIdeaSourceHost(safeUrl);
+  return `
+    <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}" data-idea-og-pending="1">
+      <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
+        <span class="idea-source-body">
+          <span class="idea-source-domain">${escapeHtml(host)}</span>
+          <span class="idea-source-title">Consulter la source</span>
+          <span class="idea-source-description">${escapeHtml(safeUrl)}</span>
+        </span>
+      </a>
+    </div>
+  `;
+}
+
+function renderArgumentBodyAndSourceHtml(bodyValue) {
+  const source = extractIdeaSourceFromText(bodyValue);
+  const cleanHtml = source.cleanText ? `<p class="argument-body">${linkifyText(source.cleanText)}</p>` : "";
+  return cleanHtml + renderIdeaSourceCardHtml(source.url);
+}
+
+function normalizeIdeaOpenGraphPreview(data, url) {
+  if (!data || typeof data !== "object") return null;
+  const src = data.preview || data.metadata || data.data || data;
+  const title = src.title || src.ogTitle || src.name || "";
+  const description = src.description || src.ogDescription || src.summary || "";
+  const image = src.image || src.ogImage || src.imageUrl || src.thumbnail || src.thumbnailUrl || "";
+  const siteName = src.siteName || src.ogSiteName || src.providerName || src.provider_name || getIdeaSourceHost(url);
+  if (!title && !description && !image) return null;
+  return { title, description, image, siteName };
+}
+
+async function fetchIdeaOpenGraphPreview(url) {
+  try {
+    const response = await fetch(API + "/link-preview", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    if (!response.ok) return null;
+    return normalizeIdeaOpenGraphPreview(await response.json(), url);
+  } catch (error) {
+    return null;
+  }
+}
+
+function renderIdeaOpenGraphPreviewHtml(url, preview) {
+  const safeUrl = normalizeIdeaSourceUrl(url);
+  const domain = preview?.siteName || getIdeaSourceHost(safeUrl);
+  const title = preview?.title || "Consulter la source";
+  const description = preview?.description || safeUrl;
+  const image = preview?.image || "";
+  return `
+    <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
+      ${image ? `<span class="idea-source-image-wrap"><img class="idea-source-image" src="${escapeHtml(image)}" alt="" loading="lazy"></span>` : ""}
+      <span class="idea-source-body">
+        <span class="idea-source-domain">${escapeHtml(domain)}</span>
+        <span class="idea-source-title">${escapeHtml(title)}</span>
+        <span class="idea-source-description">${escapeHtml(description)}</span>
+      </span>
+    </a>
+  `;
+}
+
+function isIdeaXMobileColumnEmbed(embed) {
+  return !!(
+    embed
+    && window.innerWidth <= 768
+    && embed.closest('.debate-columns')
+  );
+}
+
+function renderIdeaXDirectMobileColumnEmbed(embed) {
+  if (!isIdeaXMobileColumnEmbed(embed)) return false;
+
+  const statusId = String(embed.dataset.ideaXStatusId || "").trim();
+  const embedUrl = normalizeIdeaSourceUrl(embed.dataset.ideaXUrl || "");
+  const directEmbedUrl = getIdeaXDirectEmbedUrl(statusId);
+  if (!statusId || !directEmbedUrl) return false;
+
+  embed.dataset.ideaXRendered = "1";
+  embed.dataset.ideaXDirectMobile = "1";
+  embed.innerHTML = `
+    <iframe
+      class="idea-source-x-direct-iframe"
+      src="${escapeHtml(directEmbedUrl)}"
+      title="Publication X"
+      loading="lazy"
+      referrerpolicy="no-referrer-when-downgrade"
+      allowfullscreen
+    ></iframe>
+  `;
+
+  const iframe = embed.querySelector('.idea-source-x-direct-iframe');
+  if (iframe) {
+    iframe.addEventListener('load', () => fitIdeaXEmbedInMobileColumn(embed), { once: true });
+  }
+
+  fitIdeaXEmbedInMobileColumn(embed);
+  return true;
+}
+
+function fitIdeaXEmbedInMobileColumn(embed) {
+  if (!isIdeaXMobileColumnEmbed(embed)) return;
+
+  const getAvailableWidth = () => {
+    const card = embed.closest('.argument-card');
+    const cardWidth = card ? Math.floor(card.clientWidth || card.getBoundingClientRect().width || 0) : 0;
+    const embedWidth = Math.floor(embed.clientWidth || embed.getBoundingClientRect().width || 0);
+    const available = Math.min(...[cardWidth, embedWidth].filter((value) => value > 0));
+    return Math.max(0, available || embedWidth || cardWidth || 0);
+  };
+
+  const setImportant = (element, property, value) => {
+    if (!element || !element.style) return;
+    element.style.setProperty(property, value, 'important');
+  };
+
+  const applyFit = () => {
+    const availableWidth = getAvailableWidth();
+    if (!availableWidth) return;
+
+    setImportant(embed, 'width', '100%');
+    setImportant(embed, 'max-width', '100%');
+    setImportant(embed, 'min-width', '0');
+    setImportant(embed, 'overflow', 'hidden');
+    embed.style.boxSizing = 'border-box';
+
+    const fallbackBlockquote = embed.querySelector('blockquote.twitter-tweet');
+    if (fallbackBlockquote) {
+      fallbackBlockquote.setAttribute('data-width', String(availableWidth));
+      setImportant(fallbackBlockquote, 'width', '100%');
+      setImportant(fallbackBlockquote, 'max-width', '100%');
+      setImportant(fallbackBlockquote, 'min-width', '0');
+      fallbackBlockquote.style.marginLeft = '0';
+      fallbackBlockquote.style.marginRight = '0';
+      fallbackBlockquote.style.boxSizing = 'border-box';
+    }
+
+    const directIframe = embed.querySelector('.idea-source-x-direct-iframe');
+    if (directIframe) {
+      const isFocusedMobileColumn = !!embed.closest(
+        '.debate-columns.focus-a .column-a, .debate-columns.focus-b .column-b'
+      );
+
+      // X garde souvent une mise en page interne autour de 550 px dans son iframe.
+      // En mode colonne mobile ouverte, on utilise cette largeur native plutôt qu'une
+      // très grande largeur virtuelle : le post remplit alors la largeur de la colonne,
+      // au lieu d'apparaître trop rétréci au centre de la carte.
+      const intrinsicWidth = isFocusedMobileColumn ? 560 : 680;
+      const intrinsicHeight = isFocusedMobileColumn ? 920 : 920;
+      const scale = Math.max(0.22, Math.min(1, availableWidth / intrinsicWidth));
+      const fittedHeight = Math.ceil(intrinsicHeight * scale);
+
+      setImportant(directIframe, 'width', `${intrinsicWidth}px`);
+      setImportant(directIframe, 'max-width', 'none');
+      setImportant(directIframe, 'min-width', `${intrinsicWidth}px`);
+      setImportant(directIframe, 'height', `${intrinsicHeight}px`);
+      setImportant(directIframe, 'min-height', `${intrinsicHeight}px`);
+      setImportant(directIframe, 'display', 'block');
+      setImportant(directIframe, 'border', '0');
+      setImportant(directIframe, 'margin', '0');
+      directIframe.style.transformOrigin = 'top left';
+      directIframe.style.transform = `scale(${scale})`;
+      directIframe.style.overflow = 'hidden';
+      directIframe.style.boxSizing = 'border-box';
+
+      embed.style.width = '100%';
+      embed.style.maxWidth = '100%';
+      embed.style.overflow = 'hidden';
+      embed.style.height = `${fittedHeight}px`;
+      embed.style.minHeight = `${fittedHeight}px`;
+      return;
+    }
+
+    const widget = embed.querySelector('twitter-widget, iframe');
+    if (!widget) return;
+
+    widget.style.transform = '';
+    widget.style.transformOrigin = '';
+    widget.style.marginLeft = '0';
+    widget.style.marginRight = '0';
+    widget.style.maxWidth = 'none';
+    widget.style.boxSizing = 'border-box';
+
+    const renderedRect = widget.getBoundingClientRect();
+    const renderedWidth = Math.ceil(renderedRect.width || widget.offsetWidth || 0);
+    const renderedHeight = Math.ceil(renderedRect.height || widget.offsetHeight || 0);
+
+    if (!renderedWidth || renderedWidth <= availableWidth) {
+      setImportant(widget, 'width', '100%');
+      setImportant(widget, 'max-width', '100%');
+      setImportant(widget, 'min-width', '0');
+      embed.style.minHeight = '';
+      embed.style.height = '';
+      return;
+    }
+
+    const scale = Math.max(0.22, Math.min(1, availableWidth / renderedWidth));
+    setImportant(widget, 'width', `${renderedWidth}px`);
+    widget.style.maxWidth = 'none';
+    widget.style.transformOrigin = 'top left';
+    widget.style.transform = `scale(${scale})`;
+    widget.style.marginLeft = '0';
+    widget.style.marginRight = '0';
+
+    if (renderedHeight) {
+      const fittedHeight = Math.ceil(renderedHeight * scale);
+      embed.style.height = `${fittedHeight}px`;
+      embed.style.minHeight = `${fittedHeight}px`;
+    }
+  };
+
+  requestAnimationFrame(() => {
+    applyFit();
+    setTimeout(applyFit, 120);
+    setTimeout(applyFit, 400);
+    setTimeout(applyFit, 1200);
+  });
+}
+
+function hydrateIdeaSourceEmbeds(root = document) {
+  if (!root || !root.querySelectorAll) return;
+
+  root.querySelectorAll(".idea-source-card-wrap[data-idea-og-pending='1']").forEach((wrap) => {
+    const url = normalizeIdeaSourceUrl(wrap.dataset.ideaSourceUrl || "");
+    if (!url || wrap.dataset.ideaOgLoading === "1") return;
+    wrap.dataset.ideaOgLoading = "1";
+    fetchIdeaOpenGraphPreview(url).then((preview) => {
+      if (!preview) return;
+      wrap.innerHTML = renderIdeaOpenGraphPreviewHtml(url, preview);
+      wrap.dataset.ideaOgPending = "0";
+    });
+  });
+
+  const xEmbeds = Array.from(root.querySelectorAll("[data-idea-x-embed='1']"));
+  const renderXEmbeds = () => {
+    if (!window.twttr?.widgets) return;
+
+    xEmbeds.forEach((embed) => {
+      if (!embed || embed.dataset.ideaXRendered === "1") return;
+      const statusId = String(embed.dataset.ideaXStatusId || "").trim();
+      const embedUrl = normalizeIdeaSourceUrl(embed.dataset.ideaXUrl || "");
+      const fallbackBlockquote = embed.querySelector("blockquote.twitter-tweet");
+
+      if (renderIdeaXDirectMobileColumnEmbed(embed)) {
+        return;
+      }
+
+      embed.dataset.ideaXRendered = "1";
+
+      if (statusId && typeof window.twttr.widgets.createTweet === "function") {
+        embed.innerHTML = "";
+        const tweetOptions = {
+          dnt: true,
+          theme: "light",
+          align: "center"
+        };
+
+        const isMobileColumnTweet = window.innerWidth <= 768 && !!embed.closest(".debate-columns");
+        const availableWidth = Math.floor(embed.getBoundingClientRect().width || embed.clientWidth || 0);
+        if (isMobileColumnTweet && availableWidth > 0) {
+          tweetOptions.width = Math.max(180, Math.min(550, availableWidth));
+        }
+
+        window.twttr.widgets.createTweet(statusId, embed, tweetOptions).then((node) => {
+          if (!node) {
+            embed.innerHTML = `<a class="idea-source-x-fallback" href="${escapeHtml(embedUrl)}" target="_blank" rel="noopener noreferrer">Voir la publication sur X</a>`;
+            return;
+          }
+          fitIdeaXEmbedInMobileColumn(embed);
+        }).catch(() => {
+          embed.dataset.ideaXRendered = "0";
+          if (fallbackBlockquote) {
+            embed.innerHTML = "";
+            embed.appendChild(fallbackBlockquote);
+            window.twttr.widgets.load(embed);
+            fitIdeaXEmbedInMobileColumn(embed);
+          }
+        });
+        return;
+      }
+
+      if (typeof window.twttr.widgets.load === "function") {
+        window.twttr.widgets.load(embed);
+        fitIdeaXEmbedInMobileColumn(embed);
+      }
+    });
+  };
+
+  if (xEmbeds.length || root.querySelector("blockquote.twitter-tweet")) {
+    if (window.twttr?.widgets) {
+      renderXEmbeds();
+      if (typeof window.twttr.widgets.load === "function") {
+        window.twttr.widgets.load(root);
+      }
+    } else {
+      let script = document.querySelector("script[data-idea-twitter-widgets]");
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://platform.twitter.com/widgets.js";
+        script.async = true;
+        script.charset = "utf-8";
+        script.dataset.ideaTwitterWidgets = "1";
+        script.onload = renderXEmbeds;
+        document.body.appendChild(script);
+      } else {
+        script.addEventListener("load", renderXEmbeds, { once: true });
+      }
+    }
+  }
+
+  if (root.querySelector("blockquote.instagram-media")) {
+    if (window.instgrm?.Embeds?.process) {
+      window.instgrm.Embeds.process();
+    } else if (!document.querySelector("script[data-idea-instagram-embed]")) {
+      const script = document.createElement("script");
+      script.src = "https://www.instagram.com/embed.js";
+      script.async = true;
+      script.dataset.ideaInstagramEmbed = "1";
+      document.body.appendChild(script);
+    }
+  }
+}
+
+function refitIdeaXEmbedsInMobileColumns() {
+  document.querySelectorAll("[data-idea-x-embed='1']").forEach((embed) => {
+    if (isIdeaXMobileColumnEmbed(embed)) {
+      if (embed.dataset.ideaXDirectMobile !== "1") {
+        renderIdeaXDirectMobileColumnEmbed(embed);
+      } else {
+        fitIdeaXEmbedInMobileColumn(embed);
+      }
+    }
+  });
+}
+
+if (!window.__agonIdeaXMobileColumnFitBound) {
+  window.__agonIdeaXMobileColumnFitBound = true;
+  window.addEventListener("resize", () => {
+    window.requestAnimationFrame(refitIdeaXEmbedsInMobileColumns);
+  }, { passive: true });
+  window.addEventListener("orientationchange", () => {
+    setTimeout(refitIdeaXEmbedsInMobileColumns, 250);
+  }, { passive: true });
+}
+
 function setDisplay(element, value) {
   if (element) {
     element.style.display = value;
@@ -13940,28 +14668,33 @@ function ensureDebateVideoSlot() {
 
 function resetDebateVideo() {
   const wrap = document.getElementById("debate-video-wrap");
-  const videoEl = document.getElementById("debate-video");
-
-  if (videoEl) {
-    try {
-      videoEl.pause();
-    } catch (error) {
-      // noop
-    }
-    videoEl.removeAttribute("src");
-    videoEl.load();
-  }
 
   if (wrap) {
+    const localVideoShells = Array.from(wrap.querySelectorAll('[data-index-local-video-shell]'));
+    localVideoShells.forEach((shell) => {
+      if (typeof unloadIndexLocalVideoShell === "function") {
+        unloadIndexLocalVideoShell(shell);
+      }
+    });
+
+    const legacyVideoEl = wrap.querySelector("#debate-video");
+    if (legacyVideoEl) {
+      try {
+        legacyVideoEl.pause();
+      } catch (error) {
+        // noop
+      }
+      legacyVideoEl.removeAttribute("src");
+      legacyVideoEl.load();
+    }
+
     wrap.style.display = "none";
   }
 }
 
 function renderDebateVideo(videoUrl) {
   const wrap = ensureDebateVideoSlot();
-  const videoEl = document.getElementById("debate-video");
-
-  if (!wrap || !videoEl) return;
+  if (!wrap) return;
 
   const normalizedUrl = String(videoUrl || "").trim();
 
@@ -13977,12 +14710,18 @@ function renderDebateVideo(videoUrl) {
   closeDebateImageLightbox();
   resetDebateSourcePreview();
 
-  if (videoEl.getAttribute("src") !== normalizedUrl) {
-    videoEl.src = normalizedUrl;
-    videoEl.load();
+  // Aligner /debate sur l'index : vignette d'abord, lecture au clic,
+  // puis arrêt/déchargement quand le média quitte la zone active.
+  if (wrap.dataset.debateVideoUrl !== normalizedUrl || !wrap.querySelector('[data-index-local-video-shell]')) {
+    wrap.dataset.debateVideoUrl = normalizedUrl;
+    wrap.innerHTML = buildIndexLocalVideoCardHtml(normalizedUrl);
   }
 
   wrap.style.display = "block";
+
+  if (typeof initIndexLocalVideoObserver === "function") {
+    initIndexLocalVideoObserver(wrap);
+  }
 }
 
 function renderDebateImage(imageUrl) {
@@ -16831,8 +17570,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
   }
 
   if (sourceLoading) {
-    sourceLoading.textContent = "Chargement du post Instagram…";
-    sourceLoading.style.display = "block";
+    setDebateSourcePreviewLoadingElement(sourceLoading, true, "Chargement du post Instagram…");
   }
 
   sourceFallback.classList.add("debate-source-fallback-instagram");
@@ -16974,8 +17712,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
   }
 
   if (sourceLoading) {
-    sourceLoading.textContent = "Chargement du post X…";
-    sourceLoading.style.display = "block";
+    setDebateSourcePreviewLoadingElement(sourceLoading, true, "Chargement du post X…");
   }
 
   sourceFallback.classList.add("debate-source-fallback-x");
@@ -17010,7 +17747,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
       if (attempt > 0) {
         if (sourceLoading) {
-          sourceLoading.textContent = "Nouvelle tentative de chargement du post X…";
+          setDebateSourcePreviewLoadingElement(sourceLoading, true, "Nouvelle tentative de chargement du post X…");
         }
         await waitForXEmbedRetry(retryDelays[attempt]);
       }
@@ -17245,8 +17982,11 @@ function loadDebateSourceIframe(embedUrl, token, attempt = 0) {
   }
 
   if (sourceLoading) {
-    sourceLoading.textContent = attempt === 0 ? "Chargement de la vidéo…" : "Nouvelle tentative de chargement…";
-    sourceLoading.style.display = "block";
+    setDebateSourcePreviewLoadingElement(
+      sourceLoading,
+      true,
+      attempt === 0 ? "Chargement de la vidéo…" : "Nouvelle tentative de chargement…"
+    );
   }
 
   requestAnimationFrame(() => {
@@ -17288,46 +18028,26 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   }
 
   const sourcePreviewWrap = document.getElementById("debate-source-preview-wrap");
-  const sourcePoster = document.getElementById("debate-source-preview-poster");
-  const sourcePosterImg = document.getElementById("debate-source-preview-poster-img");
-  const sourceLoading = document.getElementById("debate-source-preview-loading");
+  const embedData = getEmbeddableSourceData(sourceUrl);
 
-  const { embedUrl, forceShowPreview, videoId, posterUrl } = getEmbeddableSourceData(sourceUrl);
-
-  if (!embedUrl || !forceShowPreview || !videoId) {
+  if (!embedData.embedUrl || !embedData.forceShowPreview || !embedData.videoId) {
     showDebateSourceFallback(sourceUrl, sourcePreviewData);
     return;
   }
 
-  bindDebateSourcePreviewHandlers();
+  if (!sourcePreviewWrap) return;
 
-  if (sourcePreviewWrap) {
-    sourcePreviewWrap.style.display = "block";
-    updateDebateSourcePreviewVerticalOffset();
+  // Aligner /debate sur l'index : vignette YouTube visible par défaut,
+  // iframe chargée seulement après clic, son activable sans recréer l'iframe,
+  // puis pause/déchargement quand le média n'est plus actif.
+  sourcePreviewWrap.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "");
+  sourcePreviewWrap.style.display = "block";
+  updateDebateSourcePreviewVerticalOffset();
+
+  if (typeof initIndexYouTubeObserver === "function") {
+    initIndexYouTubeObserver(sourcePreviewWrap);
   }
 
-  if (sourcePoster) {
-    sourcePoster.href = sourceUrl;
-    sourcePoster.style.display = "flex";
-  }
-
-  if (sourcePosterImg) {
-    sourcePosterImg.alt = "Aperçu de la vidéo YouTube";
-    sourcePosterImg.src = posterUrl;
-    sourcePosterImg.onerror = function () {
-      this.onerror = null;
-      this.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
-    };
-  }
-
-  if (sourceLoading) {
-    sourceLoading.textContent = "Chargement de la vidéo…";
-    sourceLoading.style.display = "block";
-  }
-
-  debateSourcePreviewState.currentToken += 1;
-  const token = debateSourcePreviewState.currentToken;
-  loadDebateSourceIframe(embedUrl, token, 0);
   syncDebateSourceSwipeAvailability();
 }
 async function loadDebate(id) {
@@ -17879,7 +18599,7 @@ return `
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
-  ${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+  ${renderArgumentBodyAndSourceHtml(a.body || "")}
   ${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
@@ -18209,6 +18929,12 @@ if (hiddenArgs.length > 0) {
 }
 
   refreshAdminUI();
+  hydrateIdeaSourceEmbeds(div);
+  if (typeof window.scheduleTransformIdeaSources === "function") {
+    window.scheduleTransformIdeaSources();
+  } else if (typeof window.transformIdeaSources === "function") {
+    window.transformIdeaSources();
+  }
 
 }
 function renderUnifiedArgs(container, args, debateId, commentsByArgument) {
@@ -18324,7 +19050,7 @@ return `
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
-${a.body ? `<p class="argument-body">${linkifyText(a.body)}</p>` : ""}
+${renderArgumentBodyAndSourceHtml(a.body || "")}
 ${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
@@ -18655,6 +19381,78 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
   }
 
   refreshAdminUI();
+  hydrateIdeaSourceEmbeds(div);
+  if (typeof window.scheduleTransformIdeaSources === "function") {
+    window.scheduleTransformIdeaSources();
+  } else if (typeof window.transformIdeaSources === "function") {
+    window.transformIdeaSources();
+  }
+}
+
+
+
+function normalizeArgumentSourceUrl(rawUrl) {
+  let value = String(rawUrl || "").trim();
+  if (!value) return "";
+
+  if (!/^https?:\/\//i.test(value)) {
+    value = "https://" + value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    return parsed.href;
+  } catch (error) {
+    return "";
+  }
+}
+
+function extractArgumentSourceFromBody(bodyValue) {
+  const source = { cleanBody: String(bodyValue || ""), url: "" };
+  const patterns = [
+    /(\n\s*)?↗\s*Source\s*:\s*(https?:\/\/\S+)/i,
+    /(\n\s*)?🔗\s*Lien\s*:\s*(https?:\/\/\S+)/i
+  ];
+
+  patterns.some((pattern) => {
+    const match = source.cleanBody.match(pattern);
+    if (!match) return false;
+
+    const rawUrl = String(match[2] || "").replace(/[),.;]+$/g, "");
+    const normalizedUrl = normalizeArgumentSourceUrl(rawUrl);
+    if (!normalizedUrl) return false;
+
+    source.url = normalizedUrl;
+    source.cleanBody = source.cleanBody.replace(match[0], "").trim();
+    return true;
+  });
+
+  return source;
+}
+
+function appendArgumentSourceUrlToBody(bodyValue, sourceUrl) {
+  const existingSource = extractArgumentSourceFromBody(bodyValue);
+  const normalizedUrl = normalizeArgumentSourceUrl(sourceUrl) || existingSource.url;
+  const cleanBody = String(existingSource.cleanBody || "").trimEnd();
+
+  if (!normalizedUrl) return cleanBody.trim();
+  if (!cleanBody) return `↗ Source : ${normalizedUrl}`;
+
+  return `${cleanBody}\n\n↗ Source : ${normalizedUrl}`.trim();
+}
+
+function clearArgumentUrlDraft(normalizedSide) {
+  const urlInput = document.getElementById(`${normalizedSide}-url`);
+  if (urlInput) {
+    urlInput.value = "";
+    const field = urlInput.closest(".argument-url-field");
+    const preview = field ? field.querySelector("[data-idea-url-preview]") : null;
+    if (preview) {
+      preview.innerHTML = "";
+      preview.removeAttribute("data-state");
+    }
+  }
 }
 
 
@@ -18670,8 +19468,17 @@ async function submitArgument(debateId, side) {
   if (!titleField || !bodyField) return;
 
   const title = titleField.value.trim();
-  const body = bodyField.value.trim();
-  const pasteMeta = computeArgumentPasteMeta(normalizedSide, title, body);
+  const rawBody = bodyField.value.trim();
+  const sourceUrlInput = document.getElementById(`${normalizedSide}-url`);
+  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "");
+  let body = appendArgumentSourceUrlToBody(rawBody, sourceUrl);
+  const pasteMeta = computeArgumentPasteMeta(normalizedSide, title, rawBody);
+
+  if (sourceUrlInput && String(sourceUrlInput.value || "").trim() && !sourceUrl) {
+    alert("Le lien URL semble invalide. Utilise un format du type https://exemple.com");
+    sourceUrlInput.focus();
+    return;
+  }
 
   if (body.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
@@ -18723,6 +19530,7 @@ async function submitArgument(debateId, side) {
 
     titleField.value = "";
     bodyField.value = "";
+    clearArgumentUrlDraft(normalizedSide);
     resetArgumentPasteDraftStats(normalizedSide);
     resetArgumentVoiceDraftStats(normalizedSide);
 
@@ -18791,8 +19599,17 @@ async function submitListArgument(debateId) {
   if (!titleField || !bodyField || !sideField) return;
 
   const title = titleField.value.trim();
-  const body = bodyField.value.trim();
-  const pasteMeta = computeArgumentPasteMeta("list", title, body);
+  const rawBody = bodyField.value.trim();
+  const sourceUrlInput = document.getElementById("list-url");
+  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "");
+  let body = appendArgumentSourceUrlToBody(rawBody, sourceUrl);
+  const pasteMeta = computeArgumentPasteMeta("list", title, rawBody);
+
+  if (sourceUrlInput && String(sourceUrlInput.value || "").trim() && !sourceUrl) {
+    alert("Le lien URL semble invalide. Utilise un format du type https://exemple.com");
+    sourceUrlInput.focus();
+    return;
+  }
 
   if (body.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
@@ -18858,6 +19675,7 @@ async function submitListArgument(debateId) {
 
     titleField.value = "";
     bodyField.value = "";
+    clearArgumentUrlDraft("list");
     resetArgumentPasteDraftStats("list");
     resetArgumentVoiceDraftStats("list");
 

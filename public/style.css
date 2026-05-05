@@ -10605,14 +10605,37 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
   }
 
   body.page-debate .argument-card .idea-source-card-instagram .idea-source-social-embed,
-  body.page-debate .argument-card .idea-source-card-x .idea-source-social-embed,
-  body.page-debate .argument-card-unified .idea-source-card-instagram .idea-source-social-embed,
-  body.page-debate .argument-card-unified .idea-source-card-x .idea-source-social-embed {
+  body.page-debate .argument-card-unified .idea-source-card-instagram .idea-source-social-embed {
     transform: scale(0.92);
     transform-origin: top center;
     width: 108.7%;
     margin-left: -4.35%;
     margin-bottom: -10px;
+  }
+
+  body.page-debate .argument-card .idea-source-card-x .idea-source-social-embed,
+  body.page-debate .argument-card-unified .idea-source-card-x .idea-source-social-embed {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 0 6px;
+    transform: none;
+    margin-left: 0;
+    margin-bottom: 0;
+    box-sizing: border-box;
+  }
+
+  body.page-debate .argument-card .idea-source-card-x .idea-source-social-embed twitter-widget,
+  body.page-debate .argument-card .idea-source-card-x .idea-source-social-embed iframe,
+  body.page-debate .argument-card-unified .idea-source-card-x .idea-source-social-embed twitter-widget,
+  body.page-debate .argument-card-unified .idea-source-card-x .idea-source-social-embed iframe {
+    display: block !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   body.page-debate .argument-card .idea-source-open-link,
