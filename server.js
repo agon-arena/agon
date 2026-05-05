@@ -80,7 +80,7 @@ function replaceMetaPlaceholders(template, meta) {
 function buildIndexMeta(req) {
   return {
     title: "agôn – L'arène des idées | Réseau social européen d'intelligence collective",
-    description: "agôn est un réseau social d'intelligence collective qui stimule l'ouverture d'esprit, la réflexion et l'engagement.",
+    description: "agôn est un réseau de confrontation des idées fondé sur l’intelligence collective. Il permet de visualiser les désaccords, de suivre l’évolution des points de vue et de faire émerger les idées les plus convaincantes.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
     imageAlt: "agôn — l'arène des idées"

@@ -10524,6 +10524,7 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
     overflow: hidden;
     margin-top: 9px;
     box-sizing: border-box;
+    position: relative;
   }
 
   body.page-debate .argument-card .idea-source-card,
@@ -10643,5 +10644,21 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
     margin: 6px 8px 10px;
     padding: 7px 10px;
     font-size: 11px;
+  }
+
+  /* Voile sur les embeds : bloque l'interaction en mode split (colonnes fermées) */
+  .idea-embed-veil {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: transparent;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  body.page-debate .debate-columns:not(.focus-a):not(.focus-b) .idea-embed-veil {
+    display: block;
   }
 }

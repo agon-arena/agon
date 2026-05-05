@@ -8093,10 +8093,38 @@ function renderIdeaSourceCardHtml(url) {
 
   const youtubeId = getIdeaYouTubeId(safeUrl);
   if (youtubeId) {
+    const thumbnailUrl = `https://img.youtube.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`;
+    const embedBase = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}`;
     return `
       <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}">
         <div class="idea-source-card idea-source-card-embed idea-source-card-youtube">
-          <iframe class="idea-source-iframe" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}" title="Vidéo YouTube" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <div
+            data-idea-youtube-shell
+            data-embed-base="${escapeAttribute(embedBase)}"
+            style="position:relative; width:100%; aspect-ratio:16/9; overflow:hidden; background:#000;"
+          >
+            <button
+              type="button"
+              aria-label="Lire la vidéo YouTube"
+              title="Lire la vidéo YouTube"
+              onclick="activateIdeaYouTubeShell(this.closest('[data-idea-youtube-shell]')); event.preventDefault(); event.stopPropagation();"
+              style="position:absolute; inset:0; z-index:1; display:block; width:100%; height:100%; border:0; padding:0; cursor:pointer; background-image:linear-gradient(180deg, rgba(15,23,42,0.10), rgba(15,23,42,0.42)), url('${thumbnailUrl}'); background-size:cover; background-position:center; background-repeat:no-repeat;"
+            >
+              <span style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                <span style="width:62px; height:62px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.92); color:#111827; box-shadow:0 10px 28px rgba(0,0,0,0.28);">
+                  <i class="fa-solid fa-play" style="margin-left:4px; font-size:24px;" aria-hidden="true"></i>
+                </span>
+              </span>
+            </button>
+            ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
+            <iframe
+              class="idea-source-iframe"
+              title="Vidéo YouTube"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              style="position:absolute; inset:0; z-index:0; display:block; width:100%; height:100%; border:0;"
+            ></iframe>
+          </div>
           <a class="idea-source-open-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir la vidéo</a>
         </div>
       </div>
@@ -8106,12 +8134,13 @@ function renderIdeaSourceCardHtml(url) {
   if (isIdeaInstagramUrl(safeUrl)) {
     const instagramEmbedUrl = getIdeaInstagramEmbedUrl(safeUrl);
     return `
-      <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}">
-        <div class="idea-source-card idea-source-card-social idea-source-card-instagram">
+      <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}"${instagramEmbedUrl ? ' data-idea-instagram-shell' : ''}>
+        <div class="idea-source-card idea-source-card-social idea-source-card-instagram" style="position:relative;">
+          ${instagramEmbedUrl ? `<div data-idea-instagram-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('instagram', 'Chargement du post Instagram…', 'Le post se prépare avant affichage dans la carte.')}</div>` : ''}
           <div class="idea-source-social-header"><i class="fa-brands fa-instagram" aria-hidden="true"></i><span>Publication Instagram</span></div>
           ${instagramEmbedUrl ? `
             <div class="idea-source-social-embed idea-source-instagram-iframe-wrap">
-              <iframe class="idea-source-iframe idea-source-instagram-iframe" src="${escapeHtml(instagramEmbedUrl)}" title="Publication Instagram" loading="lazy" allowtransparency="true" allowfullscreen></iframe>
+              <iframe class="idea-source-iframe idea-source-instagram-iframe" data-idea-instagram-src="${escapeHtml(instagramEmbedUrl)}" title="Publication Instagram" allowtransparency="true" allowfullscreen></iframe>
             </div>
           ` : `
             <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
@@ -8132,8 +8161,9 @@ function renderIdeaSourceCardHtml(url) {
     const xEmbedUrl = getIdeaXEmbedUrl(safeUrl);
     const xStatusId = getIdeaXStatusId(safeUrl);
     return `
-      <div class="idea-source-card-wrap idea-source-card-wrap-x" data-idea-source-url="${escapeHtml(safeUrl)}">
-        <div class="idea-source-card idea-source-card-social idea-source-card-x">
+      <div class="idea-source-card-wrap idea-source-card-wrap-x" data-idea-source-url="${escapeHtml(safeUrl)}" data-idea-x-shell>
+        <div class="idea-source-card idea-source-card-social idea-source-card-x" style="position:relative;">
+          <div data-idea-x-loading style="display:none; position:absolute; inset:0; z-index:2; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}</div>
           <div class="idea-source-social-header"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i><span>Publication X</span></div>
           <div class="idea-source-social-embed idea-source-x-embed-wrap" data-idea-x-embed="1" data-idea-x-url="${escapeHtml(xEmbedUrl)}" data-idea-x-status-id="${escapeHtml(xStatusId)}">
             <blockquote class="twitter-tweet" data-dnt="true" data-theme="light"><a href="${escapeHtml(xEmbedUrl)}" target="_blank" rel="noopener noreferrer">Publication X</a></blockquote>
@@ -8368,93 +8398,10 @@ function fitIdeaXEmbedInMobileColumn(embed) {
 function hydrateIdeaSourceEmbeds(root = document) {
   if (!root || !root.querySelectorAll) return;
 
-  root.querySelectorAll(".idea-source-card-wrap[data-idea-og-pending='1']").forEach((wrap) => {
-    const url = normalizeIdeaSourceUrl(wrap.dataset.ideaSourceUrl || "");
-    if (!url || wrap.dataset.ideaOgLoading === "1") return;
-    wrap.dataset.ideaOgLoading = "1";
-    fetchIdeaOpenGraphPreview(url).then((preview) => {
-      if (!preview) return;
-      wrap.innerHTML = renderIdeaOpenGraphPreviewHtml(url, preview);
-      wrap.dataset.ideaOgPending = "0";
-    });
-  });
-
-  const xEmbeds = Array.from(root.querySelectorAll("[data-idea-x-embed='1']"));
-  const renderXEmbeds = () => {
-    if (!window.twttr?.widgets) return;
-
-    xEmbeds.forEach((embed) => {
-      if (!embed || embed.dataset.ideaXRendered === "1") return;
-      const statusId = String(embed.dataset.ideaXStatusId || "").trim();
-      const embedUrl = normalizeIdeaSourceUrl(embed.dataset.ideaXUrl || "");
-      const fallbackBlockquote = embed.querySelector("blockquote.twitter-tweet");
-
-      if (renderIdeaXDirectMobileColumnEmbed(embed)) {
-        return;
-      }
-
-      embed.dataset.ideaXRendered = "1";
-
-      if (statusId && typeof window.twttr.widgets.createTweet === "function") {
-        embed.innerHTML = "";
-        const tweetOptions = {
-          dnt: true,
-          theme: "light",
-          align: "center"
-        };
-
-        const isMobileColumnTweet = window.innerWidth <= 768 && !!embed.closest(".debate-columns");
-        const availableWidth = Math.floor(embed.getBoundingClientRect().width || embed.clientWidth || 0);
-        if (isMobileColumnTweet && availableWidth > 0) {
-          tweetOptions.width = Math.max(180, Math.min(550, availableWidth));
-        }
-
-        window.twttr.widgets.createTweet(statusId, embed, tweetOptions).then((node) => {
-          if (!node) {
-            embed.innerHTML = `<a class="idea-source-x-fallback" href="${escapeHtml(embedUrl)}" target="_blank" rel="noopener noreferrer">Voir la publication sur X</a>`;
-            return;
-          }
-          fitIdeaXEmbedInMobileColumn(embed);
-        }).catch(() => {
-          embed.dataset.ideaXRendered = "0";
-          if (fallbackBlockquote) {
-            embed.innerHTML = "";
-            embed.appendChild(fallbackBlockquote);
-            window.twttr.widgets.load(embed);
-            fitIdeaXEmbedInMobileColumn(embed);
-          }
-        });
-        return;
-      }
-
-      if (typeof window.twttr.widgets.load === "function") {
-        window.twttr.widgets.load(embed);
-        fitIdeaXEmbedInMobileColumn(embed);
-      }
-    });
-  };
-
-  if (xEmbeds.length || root.querySelector("blockquote.twitter-tweet")) {
-    if (window.twttr?.widgets) {
-      renderXEmbeds();
-      if (typeof window.twttr.widgets.load === "function") {
-        window.twttr.widgets.load(root);
-      }
-    } else {
-      let script = document.querySelector("script[data-idea-twitter-widgets]");
-      if (!script) {
-        script = document.createElement("script");
-        script.src = "https://platform.twitter.com/widgets.js";
-        script.async = true;
-        script.charset = "utf-8";
-        script.dataset.ideaTwitterWidgets = "1";
-        script.onload = renderXEmbeds;
-        document.body.appendChild(script);
-      } else {
-        script.addEventListener("load", renderXEmbeds, { once: true });
-      }
-    }
-  }
+  initIdeaOgObserver(root);
+  initIdeaXObserver(root);
+  initIdeaInstagramObserver(root);
+  initIdeaEmbedUnloadObserver(root);
 
   if (root.querySelector("blockquote.instagram-media")) {
     if (window.instgrm?.Embeds?.process) {
@@ -8467,6 +8414,274 @@ function hydrateIdeaSourceEmbeds(root = document) {
       document.body.appendChild(script);
     }
   }
+}
+
+function activateIdeaYouTubeShell(shell) {
+  if (!shell) return;
+  const base = String(shell.dataset.embedBase || '').trim();
+  if (!base) return;
+  const iframe = shell.querySelector('.idea-source-iframe');
+  if (!iframe || iframe.src) return;
+  const poster = shell.querySelector('button[aria-label="Lire la vidéo YouTube"]');
+  if (poster) poster.style.display = 'none';
+  setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
+  iframe.addEventListener('load', () => setAgonEmbedLoading(shell, false), { once: true });
+  iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&mute=0`;
+}
+
+function activateIdeaInstagramShell(shell) {
+  if (!shell) return;
+  const iframe = shell.querySelector('.idea-source-instagram-iframe');
+  if (!iframe) return;
+  const src = String(iframe.dataset.ideaInstagramSrc || '').trim();
+  if (!src) return;
+  iframe.src = src;
+  delete iframe.dataset.ideaInstagramSrc;
+  const loadingEl = shell.querySelector('[data-idea-instagram-loading]');
+  if (loadingEl) {
+    iframe.addEventListener('load', () => { loadingEl.style.display = 'none'; }, { once: true });
+  }
+}
+
+function unloadIdeaInstagramShell(shell) {
+  if (!shell) return;
+  const iframe = shell.querySelector('.idea-source-instagram-iframe');
+  if (!iframe || !iframe.src || iframe.src === 'about:blank') return;
+  iframe.dataset.ideaInstagramSrc = iframe.src;
+  iframe.src = 'about:blank';
+  const loadingEl = shell.querySelector('[data-idea-instagram-loading]');
+  if (loadingEl) loadingEl.style.display = 'flex';
+  if (window.__ideaInstagramObserver) {
+    shell.dataset.ideaInstagramObserving = '0';
+    window.__ideaInstagramObserver.observe(shell);
+  }
+}
+
+function initIdeaInstagramObserver(root = document) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const shells = Array.from(scope.querySelectorAll('[data-idea-instagram-shell]'));
+  if (!shells.length) return;
+
+  if (!window.__ideaInstagramObserver) {
+    window.__ideaInstagramObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return;
+        const shell = entry.target;
+        activateIdeaInstagramShell(shell);
+        window.__ideaInstagramObserver.unobserve(shell);
+      });
+    }, {
+      threshold: [0, 0.1, 0.35, 0.7],
+      rootMargin: '300px 0px 300px 0px'
+    });
+  }
+
+  shells.forEach((shell) => {
+    if (shell.dataset.ideaInstagramObserving === '1') return;
+    shell.dataset.ideaInstagramObserving = '1';
+    if (isElementNearViewport(shell, 140)) {
+      requestAnimationFrame(() => activateIdeaInstagramShell(shell));
+    } else {
+      window.__ideaInstagramObserver.observe(shell);
+    }
+  });
+}
+
+async function activateIdeaXEmbed(embed) {
+  if (!embed || embed.dataset.ideaXRendered === '1') return;
+  const statusId = String(embed.dataset.ideaXStatusId || '').trim();
+  const embedUrl = normalizeIdeaSourceUrl(embed.dataset.ideaXUrl || '');
+  const fallbackBlockquote = embed.querySelector('blockquote.twitter-tweet');
+  const loadingEl = embed.closest('.idea-source-card')?.querySelector('[data-idea-x-loading]');
+
+  if (renderIdeaXDirectMobileColumnEmbed(embed)) return;
+
+  embed.dataset.ideaXRendered = '1';
+  if (loadingEl) loadingEl.style.display = 'flex';
+
+  try {
+    await loadXWidgetsScript();
+
+    if (!window.twttr?.widgets) throw new Error('widgets X indisponible');
+
+    if (statusId && typeof window.twttr.widgets.createTweet === 'function') {
+      embed.innerHTML = '';
+      const tweetOptions = { dnt: true, theme: 'light', align: 'center' };
+      const isMobileColumnTweet = window.innerWidth <= 768 && !!embed.closest('.debate-columns');
+      const availableWidth = Math.floor(embed.getBoundingClientRect().width || embed.clientWidth || 0);
+      if (isMobileColumnTweet && availableWidth > 0) {
+        tweetOptions.width = Math.max(180, Math.min(550, availableWidth));
+      }
+      window.twttr.widgets.createTweet(statusId, embed, tweetOptions).then((node) => {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (!node) {
+          embed.innerHTML = `<a class="idea-source-x-fallback" href="${escapeHtml(embedUrl)}" target="_blank" rel="noopener noreferrer">Voir la publication sur X</a>`;
+        } else {
+          fitIdeaXEmbedInMobileColumn(embed);
+        }
+      }).catch(() => {
+        if (loadingEl) loadingEl.style.display = 'none';
+        embed.dataset.ideaXRendered = '0';
+        if (fallbackBlockquote) {
+          embed.innerHTML = '';
+          embed.appendChild(fallbackBlockquote);
+          window.twttr.widgets.load(embed);
+          fitIdeaXEmbedInMobileColumn(embed);
+        }
+      });
+      return;
+    }
+
+    if (typeof window.twttr.widgets.load === 'function') {
+      if (loadingEl) loadingEl.style.display = 'none';
+      window.twttr.widgets.load(embed);
+      fitIdeaXEmbedInMobileColumn(embed);
+    }
+  } catch {
+    if (loadingEl) loadingEl.style.display = 'none';
+    embed.dataset.ideaXRendered = '0';
+  }
+}
+
+function initIdeaXObserver(root = document) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const shells = Array.from(scope.querySelectorAll('[data-idea-x-shell]'));
+  if (!shells.length) return;
+
+  if (!window.__ideaXObserver) {
+    window.__ideaXObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.35) return;
+        const shell = entry.target;
+        const embed = shell.querySelector('[data-idea-x-embed="1"]');
+        if (embed) activateIdeaXEmbed(embed);
+        window.__ideaXObserver.unobserve(shell);
+      });
+    }, {
+      threshold: [0, 0.1, 0.35, 0.7],
+      rootMargin: '300px 0px 300px 0px'
+    });
+  }
+
+  shells.forEach((shell) => {
+    if (shell.dataset.ideaXObserving === '1') return;
+    shell.dataset.ideaXObserving = '1';
+    if (isElementNearViewport(shell, 140)) {
+      requestAnimationFrame(() => {
+        const embed = shell.querySelector('[data-idea-x-embed="1"]');
+        if (embed) activateIdeaXEmbed(embed);
+      });
+    } else {
+      window.__ideaXObserver.observe(shell);
+    }
+  });
+}
+
+function initIdeaOgObserver(root = document) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  const wraps = Array.from(scope.querySelectorAll("[data-idea-og-pending='1']"));
+  if (!wraps.length) return;
+
+  const activate = (wrap) => {
+    const url = normalizeIdeaSourceUrl(wrap.dataset.ideaSourceUrl || '');
+    if (!url || wrap.dataset.ideaOgLoading === '1') return;
+    wrap.dataset.ideaOgLoading = '1';
+    fetchIdeaOpenGraphPreview(url).then((preview) => {
+      if (!preview) return;
+      wrap.innerHTML = renderIdeaOpenGraphPreviewHtml(url, preview);
+      wrap.dataset.ideaOgPending = '0';
+      initIdeaEmbedVeils(wrap.parentElement);
+    });
+  };
+
+  if (typeof IntersectionObserver !== 'function') {
+    wraps.forEach(activate);
+    return;
+  }
+
+  if (!window.__ideaOgObserver) {
+    window.__ideaOgObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        window.__ideaOgObserver.unobserve(entry.target);
+        activate(entry.target);
+      });
+    }, {
+      rootMargin: '500px 0px',
+      threshold: 0.01
+    });
+  }
+
+  wraps.forEach((wrap) => {
+    if (wrap.dataset.ideaOgObserving === '1') return;
+    wrap.dataset.ideaOgObserving = '1';
+    if (isElementNearViewport(wrap, 220)) {
+      requestAnimationFrame(() => activate(wrap));
+    } else {
+      window.__ideaOgObserver.observe(wrap);
+    }
+  });
+}
+
+function initIdeaEmbedUnloadObserver(root = document) {
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+
+  if (!window.__ideaEmbedUnloadObserver) {
+    window.__ideaEmbedUnloadObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) return;
+        const shell = entry.target;
+        if (shell.hasAttribute('data-idea-instagram-shell')) {
+          unloadIdeaInstagramShell(shell);
+        } else if (shell.hasAttribute('data-idea-x-shell')) {
+          const embed = shell.querySelector('[data-idea-x-embed="1"]');
+          if (embed && embed.dataset.ideaXRendered === '1') {
+            embed.innerHTML = '';
+            embed.dataset.ideaXRendered = '0';
+            shell.dataset.ideaXObserving = '0';
+            window.__ideaXObserver?.observe(shell);
+          }
+        }
+      });
+    }, {
+      rootMargin: '1500px 0px 1500px 0px',
+      threshold: 0
+    });
+  }
+
+  scope.querySelectorAll('[data-idea-x-shell], [data-idea-instagram-shell]').forEach((shell) => {
+    if (shell.dataset.ideaUnloadObserving === '1') return;
+    shell.dataset.ideaUnloadObserving = '1';
+    window.__ideaEmbedUnloadObserver.observe(shell);
+  });
+}
+
+function initIdeaEmbedVeils(root = document) {
+  if (window.innerWidth > 768) return;
+  if (!document.body.classList.contains('page-debate')) return;
+
+  const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+
+  scope.querySelectorAll('.idea-source-card-wrap').forEach((wrap) => {
+    if (wrap.querySelector('.idea-embed-veil')) return;
+
+    const card = wrap.closest('.argument-card');
+    if (!card) return;
+
+    const side = wrap.closest('#column-a') ? 'a' : 'b';
+    const argumentId = (card.id || '').replace(/^(?:list-)?argument-/, '');
+    if (!argumentId) return;
+
+    const veil = document.createElement('div');
+    veil.className = 'idea-embed-veil';
+    veil.setAttribute('aria-hidden', 'true');
+    veil.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleArgumentDoubleClick(e, side, argumentId);
+    });
+
+    wrap.appendChild(veil);
+  });
 }
 
 function refitIdeaXEmbedsInMobileColumns() {
@@ -10937,7 +11152,15 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   fireAndForgetMarkOneNotificationAsRead(notificationId);
 
   if (shouldOpenNotificationTargetInIframeModal(link)) {
-    beginNotificationTransition(link);
+    // Le debate-iframe-parent-loading-overlay gère le chargement visuel.
+    // On stocke seulement l'état (utile à la page de débat dans l'iframe)
+    // sans afficher page-arrival-loading-overlay, qui serait visible
+    // par transparence derrière le voile flou.
+    setNotificationTransitionState({
+      active: true,
+      link: String(link || ""),
+      startedAt: Date.now()
+    });
     openDebateIframeModal(link);
     return;
   }
@@ -18930,6 +19153,7 @@ if (hiddenArgs.length > 0) {
 
   refreshAdminUI();
   hydrateIdeaSourceEmbeds(div);
+  initIdeaEmbedVeils(div);
   if (typeof window.scheduleTransformIdeaSources === "function") {
     window.scheduleTransformIdeaSources();
   } else if (typeof window.transformIdeaSources === "function") {
@@ -19382,6 +19606,7 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
 
   refreshAdminUI();
   hydrateIdeaSourceEmbeds(div);
+  initIdeaEmbedVeils(div);
   if (typeof window.scheduleTransformIdeaSources === "function") {
     window.scheduleTransformIdeaSources();
   } else if (typeof window.transformIdeaSources === "function") {
