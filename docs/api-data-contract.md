@@ -25,6 +25,7 @@ Because the service role key is used server-side, browser code must not import o
 
 Known table names in the app:
 
+- `users`
 - `debates`
 - `arguments`
 - `comments`
@@ -41,6 +42,11 @@ Known storage bucket setting:
 Known RPC:
 
 - `cast_argument_vote`
+
+## User Resolve Route
+
+- `POST /api/users/resolve` creates or updates a server-side `users` row from the existing browser legacy key.
+- This route is additive and does not change existing vote, comment, notification, or debate payloads.
 
 ## Critical Read Routes
 

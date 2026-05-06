@@ -8205,7 +8205,7 @@ function renderIdeaSourceCardHtml(url) {
     return `
       <div class="idea-source-card-wrap idea-source-card-wrap-x" data-idea-source-url="${escapeHtml(safeUrl)}" data-idea-x-shell>
         <div class="idea-source-card idea-source-card-social idea-source-card-x" style="position:relative;">
-          <div data-idea-x-loading style="display:none; position:absolute; inset:0; z-index:2; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}</div>
+          <div data-idea-x-loading style="display:flex; position:absolute; inset:0; z-index:2; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}</div>
           <div class="idea-source-social-header"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i><span>Publication X</span></div>
           <div class="idea-source-social-embed idea-source-x-embed-wrap" data-idea-x-embed="1" data-idea-x-url="${escapeHtml(xEmbedUrl)}" data-idea-x-status-id="${escapeHtml(xStatusId)}">
             <blockquote class="twitter-tweet" data-dnt="true" data-theme="light"><a href="${escapeHtml(xEmbedUrl)}" target="_blank" rel="noopener noreferrer">Publication X</a></blockquote>
@@ -8216,16 +8216,9 @@ function renderIdeaSourceCardHtml(url) {
     `;
   }
 
-  const host = getIdeaSourceHost(safeUrl);
   return `
     <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}" data-idea-og-pending="1">
-      <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
-        <span class="idea-source-body">
-          <span class="idea-source-domain">${escapeHtml(host)}</span>
-          <span class="idea-source-title">Consulter la source</span>
-          <span class="idea-source-description">${escapeHtml(safeUrl)}</span>
-        </span>
-      </a>
+      ${buildIndexSocialLoadingPlaceholderHtml('og', 'Chargement de la source…', 'L\'aperçu arrive dès que le lien répond.')}
     </div>
   `;
 }
@@ -8270,7 +8263,7 @@ function renderIdeaOpenGraphPreviewHtml(url, preview) {
   const image = preview?.image || "";
   return `
     <a class="idea-source-card idea-source-card-og" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">
-      ${image ? `<span class="idea-source-image-wrap"><img class="idea-source-image" src="${escapeHtml(image)}" alt="" loading="lazy"></span>` : ""}
+      ${image ? `<span class="idea-source-image-wrap"><img class="idea-source-image" src="${escapeHtml(image)}" alt="" loading="lazy" onerror="this.closest('.idea-source-image-wrap')?.remove();"></span>` : ""}
       <span class="idea-source-body">
         <span class="idea-source-domain">${escapeHtml(domain)}</span>
         <span class="idea-source-title">${escapeHtml(title)}</span>
@@ -8536,7 +8529,10 @@ async function activateIdeaXEmbed(embed) {
   const fallbackBlockquote = embed.querySelector('blockquote.twitter-tweet');
   const loadingEl = embed.closest('.idea-source-card')?.querySelector('[data-idea-x-loading]');
 
-  if (renderIdeaXDirectMobileColumnEmbed(embed)) return;
+  if (renderIdeaXDirectMobileColumnEmbed(embed)) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    return;
+  }
 
   embed.dataset.ideaXRendered = '1';
   if (loadingEl) loadingEl.style.display = 'flex';
@@ -8629,7 +8625,7 @@ function initIdeaOgObserver(root = document) {
     if (!url || wrap.dataset.ideaOgLoading === '1') return;
     wrap.dataset.ideaOgLoading = '1';
     fetchIdeaOpenGraphPreview(url).then((preview) => {
-      if (!preview) return;
+      if (!wrap.isConnected) return;
       wrap.innerHTML = renderIdeaOpenGraphPreviewHtml(url, preview);
       wrap.dataset.ideaOgPending = '0';
       initIdeaEmbedVeils(wrap.parentElement);

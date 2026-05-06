@@ -18,7 +18,7 @@
     }
   },
   "api": {
-    "maxRouteCount": 45,
+    "maxRouteCount": 46,
     "maxSupabaseSelectStarCount": 11
   },
   "browserWork": {

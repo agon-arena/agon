@@ -6,10 +6,12 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const files = [
   "server.js",
+  "lib/users.js",
   "docs/api-data-contract.md"
 ];
 
 const expectedTables = [
+  "users",
   "debates",
   "arguments",
   "comments",
@@ -21,6 +23,7 @@ const expectedTables = [
 ];
 
 const criticalRoutes = [
+  { method: "post", path: "/api/users/resolve" },
   { method: "get", path: "/api/debates" },
   { method: "get", path: "/api/debates/:id" },
   { method: "post", path: "/api/debates" },
@@ -119,8 +122,11 @@ function main() {
   }
 
   const server = readFile("server.js");
-  const tables = collectTables(server);
-  const rpc = collectRpc(server);
+  const dataSourceCode = ["server.js", "lib/users.js"]
+    .map(readFile)
+    .join("\n");
+  const tables = collectTables(dataSourceCode);
+  const rpc = collectRpc(dataSourceCode);
 
   const requiredAnchors = [
     check("supabase createClient import", has(server, /createClient/)),
@@ -143,9 +149,9 @@ function main() {
     requiredAnchors,
     counts: {
       routes: countMatches(server, /app\.(get|post|put|patch|delete)\(/g),
-      supabaseFromCalls: countMatches(server, /\.from\(/g),
-      supabaseSelectStar: countMatches(server, /\.select\(["']\*["']\)/g),
-      supabaseRpcCalls: countMatches(server, /\.rpc\(/g),
+      supabaseFromCalls: countMatches(dataSourceCode, /\.from\(/g),
+      supabaseSelectStar: countMatches(dataSourceCode, /\.select\(["']\*["']\)/g),
+      supabaseRpcCalls: countMatches(dataSourceCode, /\.rpc\(/g),
       cacheMentions: countMatches(server, /Cache|cache/g),
       invalidateDebateCachesCalls: countMatches(server, /invalidateDebateCaches\(/g),
       clearNotificationsCacheCalls: countMatches(server, /clearNotificationsApiResponseCache\(/g)

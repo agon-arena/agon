@@ -6,6 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
+const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -2266,6 +2267,36 @@ app.post("/api/track-visit", (req, res) => {
     .from("page_visits")
     .insert({ visitor_key: String(visitorKey), page: String(page), created_at: nowIso() })
     .catch((err) => console.error("track-visit:", err));
+});
+
+/* =========================
+   USERS
+========================= */
+
+app.post("/api/users/resolve", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { user, created } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    return res.json({
+      success: true,
+      created,
+      user: {
+        id: user.id,
+        legacy_key: user.legacy_key,
+        created_at: user.created_at,
+        last_seen_at: user.last_seen_at
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur resolution utilisateur.");
+  }
 });
 
 /* =========================
