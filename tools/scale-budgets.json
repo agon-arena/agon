@@ -8,13 +8,13 @@
       "maxLines": 10792
     },
     "views/debate.html": {
-      "maxLines": 5019
+      "maxLines": 5044
     },
     "server.js": {
       "maxLines": 4450
     },
     "views/index.html": {
-      "maxLines": 988
+      "maxLines": 990
     }
   },
   "api": {

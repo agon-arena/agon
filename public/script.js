@@ -1,5 +1,15 @@
 const API = "/api";
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+  });
+}
+
+registerServiceWorker();
+
 // Accès localStorage/sessionStorage robustes (private browsing, quota plein, Safari ITP)
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, String(val)); } catch {} }
