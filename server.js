@@ -8,6 +8,7 @@ const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(compression());
 const PORT = process.env.PORT || 3001;
 

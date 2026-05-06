@@ -10,7 +10,9 @@
     "docs:inventory": "node tools/code-inventory.js",
     "docs:cleanup": "node tools/cleanup-summary.js",
     "docs:compare": "node tools/cleanup-compare.js",
-    "docs:youtube": "node tools/youtube-source-audit.js"
+    "docs:youtube": "node tools/youtube-source-audit.js",
+    "docs:iframe": "node tools/iframe-modal-audit.js",
+    "docs:data": "node tools/api-data-audit.js"
   },
   "license": "ISC",
   "dependencies": {
@@ -20,7 +22,5 @@
     "dotenv": "^17.3.1",
     "express": "^4.21.2"
   },
-  "devDependencies": {
-    "live-server": "^1.2.2"
-  }
+  "devDependencies": {}
 }

@@ -6,3 +6,6 @@ public/debate-images/
 public/uploads/debates/
 data/debate-images.json
 data/debate-assets.json
+data/debate-content.json
+database.db
+.env.save
