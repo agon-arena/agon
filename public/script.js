@@ -3,7 +3,6 @@ const API = "/api";
 // Accès localStorage/sessionStorage robustes (private browsing, quota plein, Safari ITP)
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, String(val)); } catch {} }
-function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
 let argumentsVisible = 6;
 
 let currentDebateShareData = {
@@ -1370,21 +1369,6 @@ function getVisibleCommentElement(commentId) {
     || document.querySelector(`.comment-reply-card[data-reply-comment-id="${CSS.escape(String(commentId || ""))}"]`);
 }
 
-function getArgumentFreshnessBonus(arg) {
-  if (!arg.created_at) return 0;
-
-  const created = new Date(String(arg.created_at).replace(" ", "T"));
-  const now = new Date();
-  const ageHours = (now - created) / (1000 * 60 * 60);
-
-  if (ageHours < 24 * 3) return 5;
-  if (ageHours < 24 * 7) return 4;
-  if (ageHours < 24 * 14) return 3;
-  if (ageHours < 24 * 30) return 2;
-  if (ageHours < 24 * 60) return 1;
-
-  return 0;
-}
 function getArgumentsSortMode() {
   return currentArgumentsSortMode || "score";
 }
@@ -4274,22 +4258,6 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
   `;
 }
 
-function buildIndexDebateNavigationOverlay(debateId, label = "Ouvrir le débat") {
-  const safeDebateId = String(debateId || "").trim();
-  if (!safeDebateId) return "";
-
-  return `
-    <button
-      type="button"
-      class="debate-card-index-nav-overlay"
-      data-index-debate-nav
-      onclick="openIndexDebateFromMedia('${escapeAttribute(safeDebateId)}', event)"
-      aria-label="${escapeAttribute(label)}"
-      title="${escapeAttribute(label)}"
-      style="position:absolute; inset:0; z-index:30; display:block; width:100%; height:100%; border:0; padding:0; margin:0; background:transparent; cursor:pointer;"
-    ></button>
-  `;
-}
 
 function buildIndexCardBottomEntryHtml(debate, options = {}) {
   const d = debate || {};
@@ -5350,13 +5318,6 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
       </div>
     </div>
   `;
-}
-
-function isIndexLocalVideoDebate(debate) {
-  return !!String(debate?.video_url || "").trim();
-}
-function isIndexLocalImageDebate(debate) {
-  return !!String(debate?.image_url || "").trim();
 }
 
 function buildIndexLocalImageCardHtml(imageUrl, debateId = "") {
@@ -8866,49 +8827,6 @@ function isNotificationToDebateLoadingTransition(maxAgeMs = 15000) {
   }
 }
 
-function ensureNotificationTransitionOverlayStyles() {
-  if (document.getElementById("notification-transition-overlay-styles")) return;
-
-  const style = document.createElement("style");
-  style.id = "notification-transition-overlay-styles";
-  style.textContent = `
-    .notification-transition-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 180ms ease;
-    }
-
-    .notification-transition-overlay-visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .notification-transition-box {
-      width: min(92vw, 360px);
-      border-radius: 24px;
-      padding: 22px 20px 18px;
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(17, 17, 17, 0.08);
-      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
-      text-align: center;
-    }
-
-
-  `;
-
-  document.head.appendChild(style);
-}
-
 function getNotificationTransitionState() {
   try {
     return JSON.parse(sessionStorage.getItem(NOTIFICATION_TRANSITION_STORAGE_KEY) || "null");
@@ -9081,43 +8999,6 @@ function finalizeNotificationTransitionAtScrollStart() {
   requestAnimationFrame(() => {
     hideNotificationTransitionOverlay();
   });
-}
-
-function waitForNotificationTargetScrollToFinish(onDone, options = {}) {
-  const callback = typeof onDone === "function" ? onDone : () => {};
-  const maxWaitMs = Number(options.maxWaitMs || 650);
-  const stableFramesNeeded = Number(options.stableFramesNeeded || 3);
-  const tolerance = Number(options.tolerance || 3);
-  const startedAt = performance.now();
-  let stableFrames = 0;
-  let previousY = window.scrollY;
-
-  const finish = () => {
-    callback();
-  };
-
-  const step = () => {
-    const currentY = window.scrollY;
-    const delta = Math.abs(currentY - previousY);
-
-    if (delta <= tolerance) {
-      stableFrames += 1;
-    } else {
-      stableFrames = 0;
-    }
-
-    previousY = currentY;
-
-    const elapsed = performance.now() - startedAt;
-    if (stableFrames >= stableFramesNeeded || elapsed >= maxWaitMs) {
-      finish();
-      return;
-    }
-
-    requestAnimationFrame(step);
-  };
-
-  requestAnimationFrame(step);
 }
 
 function waitForNotificationTargetElement(getElement, onReady, onMissing, options = {}) {
@@ -9455,25 +9336,6 @@ function isDebateNew(debateOrCreatedAt) {
   return (Date.now() - referenceTimestamp) < 24 * 60 * 60 * 1000;
 }
 
-function formatLastArgumentDate(dateString) {
-  if (!dateString) return "";
-
-  const normalized = String(dateString).includes("T")
-    ? String(dateString)
-    : String(dateString).replace(" ", "T");
-
-  const d = new Date(normalized);
-
-  if (Number.isNaN(d.getTime())) return "";
-
-  const date = d.toLocaleDateString("fr-FR");
-  const hour = d.toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-
-return `Dernière idée le ${date} à ${hour}`;}
-
 function formatLastActivityDate(dateString) {
   if (!dateString) return "";
 
@@ -9641,13 +9503,6 @@ function shareIdeaOnX(debateId, encodedArgumentJson) {
   const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
   const { text, url } = getIdeaShareData(debateId, argument);
   const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-  window.open(shareUrl, "_blank", "noopener,noreferrer");
-}
-
-function shareIdeaOnFacebook(debateId, encodedArgumentJson) {
-  const argument = JSON.parse(decodeURIComponent(encodedArgumentJson || ""));
-  const { url } = getIdeaShareData(debateId, argument);
-  const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
   window.open(shareUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -11577,36 +11432,6 @@ function clearIndexBatchLoadingSnapshot() {
   indexBatchLoadingSnapshotActive = false;
 }
 
-function captureIndexBatchLoadingSnapshot() {
-  const overlay = ensureIndexBatchLoadingOverlay();
-  const viewport = overlay?.querySelector('.index-batch-loading-snapshot-viewport');
-  if (!overlay || !viewport) return;
-
-  clearIndexBatchLoadingSnapshot();
-
-  const source = document.querySelector('main.home-page');
-  if (!source || !source.isConnected) return;
-
-  const sourceRect = source.getBoundingClientRect();
-  const overlayRect = overlay.getBoundingClientRect();
-  const clone = sanitizeIndexBatchLoadingSnapshotClone(source.cloneNode(true));
-
-  clone.style.position = 'absolute';
-  clone.style.left = `${Math.round(sourceRect.left - overlayRect.left)}px`;
-  clone.style.top = `${Math.round(sourceRect.top - overlayRect.top)}px`;
-  clone.style.width = `${Math.round(sourceRect.width)}px`;
-  clone.style.maxWidth = 'none';
-  clone.style.margin = '0';
-  clone.style.pointerEvents = 'none';
-  clone.style.userSelect = 'none';
-  clone.style.filter = 'blur(2px) saturate(0.96)';
-  clone.style.opacity = '0.96';
-  clone.style.transform = 'translateZ(0)';
-
-  viewport.appendChild(clone);
-  indexBatchLoadingSnapshotActive = true;
-}
-
 function ensureIndexBatchLoadingOverlay() {
   let overlay = document.getElementById('index-batch-loading-overlay');
   if (overlay) {
@@ -12298,26 +12123,6 @@ function openAdminEditPanel(panel) {
   panel.dataset.open = 'true';
 }
 
-function reopenAdminEditPanelForDebate(debateId) {
-  const targetId = String(debateId || '').trim();
-  if (!targetId) return;
-
-  const tryOpen = () => {
-    const panel = document.querySelector(`.debate-card-admin-edit[data-debate-id="${CSS.escape(targetId)}"]`);
-    if (!panel) return false;
-    openAdminEditPanel(panel);
-    return true;
-  };
-
-  if (tryOpen()) return;
-
-  requestAnimationFrame(() => {
-    if (tryOpen()) return;
-    requestAnimationFrame(() => {
-      tryOpen();
-    });
-  });
-}
 
 function closeAdminEditPanel(panel) {
   if (!panel) return;
@@ -12624,51 +12429,6 @@ function buildIndexContextPreviewHtml(debate) {
   `;
 }
 
-function buildSimilarDebatePreviewHtml(debate) {
-  const mediaHtml = renderIndexInlineSourceCard(debate);
-  const fullText = String(debate?.content || '').trim();
-  if (!fullText && !mediaHtml) return "";
-
-  const previewLimit = 170;
-  const shortText = fullText.length > previewLimit
-    ? `${fullText.slice(0, previewLimit).trimEnd()}…`
-    : fullText;
-  const needsToggle = fullText.length > previewLimit;
-  const debateId = escapeAttribute(String(debate?.id || ""));
-
-  return `
-    ${mediaHtml ? `<div class="debate-card-media-wrap">${mediaHtml}</div>` : ""}
-    ${fullText ? `
-    <div
-      class="debate-card-context"
-      data-index-context-card
-      role="link"
-      tabindex="0"
-      onclick="openIndexDebateFromMedia('${debateId}', event)"
-      onkeydown="handleIndexContextTextKeydown(event, '${debateId}')"
-      style="cursor:pointer;"
-    >
-      <p
-        class="debate-card-context-text"
-        data-index-context-text
-        data-full-text="${escapeAttribute(fullText)}"
-        data-short-text="${escapeAttribute(shortText)}"
-        data-expanded="false"
-      >${escapeHtml(shortText)}</p>
-      ${needsToggle ? `
-        <button
-          type="button"
-          class="debate-card-context-toggle"
-          data-index-context-toggle
-          data-debate-id="${debateId}"
-          aria-expanded="false"
-          onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
-        >Voir plus</button>
-      ` : ""}
-    </div>` : ""}
-  `;
-}
-
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
   const textEl = card?.querySelector('[data-index-context-text]');
@@ -12696,27 +12456,6 @@ function handleIndexContextTextKeydown(event, debateId) {
   openIndexDebateFromMedia(debateId, event);
 }
 
-
-function getNormalizedCategoryValue(value) {
-  const categories = getDebateCategoryList(value);
-  return categories.length ? joinDebateCategories(categories) : "Sans catégorie";
-}
-
-function getSortedUniqueDebateCategories(debates) {
-  const categories = [];
-
-  for (const debate of debates || []) {
-    const debateCategories = getDebateCategoryList(debate.category);
-    if (!debateCategories.length) {
-      categories.push("Sans catégorie");
-      continue;
-    }
-
-    categories.push(...debateCategories);
-  }
-
-  return Array.from(new Set(categories)).sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
-}
 
 function ensureCategoryFilterVisualStyles() {
   if (document.getElementById("theme-filter-styles")) return;
@@ -13128,10 +12867,6 @@ function updateCategoryFilterVisualState() {
 
   syncIndexShortcutFilterButtons();
   renderIndexActiveFilterTags();
-}
-
-function isIndexExplorerControlsDesktopMode() {
-  return window.innerWidth > 768;
 }
 
 function syncIndexExplorerControlButtons(isOpen) {
@@ -13644,33 +13379,6 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   return true;
 }
 
-function mergeIndexDebatesPreservingVisibleOrder(previousDebates = [], nextDebates = [], visibleCount = 0) {
-  const safePrevious = Array.isArray(previousDebates) ? previousDebates : [];
-  const safeNext = Array.isArray(nextDebates) ? nextDebates : [];
-  const visibleSlice = safePrevious.slice(0, Math.max(0, Number(visibleCount) || 0));
-  const visibleIds = visibleSlice.map((debate) => String(debate?.id || "")).filter(Boolean);
-  const nextById = new Map();
-
-  safeNext.forEach((debate) => {
-    const debateId = String(debate?.id || "");
-    if (!debateId) return;
-    nextById.set(debateId, debate);
-  });
-
-  const frozenVisible = visibleIds
-    .map((debateId) => nextById.get(debateId))
-    .filter(Boolean);
-
-  if (frozenVisible.length !== visibleIds.length) {
-    return null;
-  }
-
-  const visibleIdSet = new Set(visibleIds);
-  const remaining = safeNext.filter((debate) => !visibleIdSet.has(String(debate?.id || "")));
-
-  return [...frozenVisible, ...remaining];
-}
-
 async function loadMoreOtherDebates() {
   if (indexInfiniteScrollLoading) return;
   if (otherDebatesVisible >= otherDebatesCache.length && !indexDebatesApiHasMore) return;
@@ -14100,14 +13808,6 @@ function shouldShowIndexInfiniteScrollSentinel(visibleCount = 0, totalCount = 0)
   return safeVisible < safeTotal || indexDebatesApiHasMore;
 }
 
-function getLatestStoredIframeModalUrl() {
-  try {
-    return String(sessionStorage.getItem(IFRAME_LATEST_MODAL_URL_KEY) || "").trim();
-  } catch (error) {
-    return "";
-  }
-}
-
 function isSafeInternalModalUrl(modalUrl = "") {
   const rawUrl = String(modalUrl || "").trim();
   if (!rawUrl) return false;
@@ -14385,65 +14085,6 @@ function readFileAsDataUrl(file, options = {}) {
   });
 }
 
-function readFileAsArrayBuffer(file, options = {}) {
-  const { onProgress, signal } = options;
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    const abortRead = () => {
-      try {
-        if (reader.readyState === FileReader.LOADING) {
-          reader.abort();
-        }
-      } catch (error) {
-        // noop
-      }
-      reject(new Error("Publication annulée."));
-    };
-
-    if (signal?.aborted) {
-      abortRead();
-      return;
-    }
-
-    const handleAbort = () => abortRead();
-    if (signal) {
-      signal.addEventListener("abort", handleAbort, { once: true });
-    }
-
-    reader.onload = () => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      if (typeof onProgress === "function") {
-        onProgress(100);
-      }
-      resolve(reader.result);
-    };
-
-    reader.onerror = () => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      reject(new Error("Impossible de lire la vidéo."));
-    };
-
-    reader.onabort = () => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      reject(new Error("Publication annulée."));
-    };
-
-    reader.onprogress = (event) => {
-      if (!event.lengthComputable || typeof onProgress !== "function") return;
-      onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-
-    reader.readAsArrayBuffer(file);
-  });
-}
 
 
 const CLIENT_VIDEO_COMPRESSION_THRESHOLD_BYTES = 12 * 1024 * 1024;
@@ -14484,19 +14125,6 @@ function replaceFileExtension(fileName, nextExtension) {
   const safeName = String(fileName || "video").trim() || "video";
   const baseName = safeName.replace(/\.[^.]+$/, "") || "video";
   return `${baseName}.${nextExtension}`;
-}
-
-function shouldCompressVideoBeforeUpload(file) {
-  if (!(file instanceof File)) return false;
-  if (Number(file.size || 0) <= CLIENT_VIDEO_COMPRESSION_THRESHOLD_BYTES) return false;
-  if (typeof MediaRecorder === "undefined") return false;
-  if (typeof document === "undefined") return false;
-
-  const mimeType = getSupportedClientCompressedVideoMimeType();
-  if (!mimeType) return false;
-
-  const canvas = document.createElement("canvas");
-  return typeof canvas.captureStream === "function";
 }
 
 function loadVideoMetadataFromFile(file, options = {}) {
@@ -16585,67 +16213,6 @@ function getArgumentSimilarityScore(inputText, argument) {
 
 
 
-function renderSimilarArgumentsForForm(formKey) {
-  const isList = formKey === "list";
-
-  const titleInput = document.getElementById(isList ? "list-title" : `${formKey}-title`);
-  const bodyInput = document.getElementById(isList ? "list-body" : `${formKey}-body`);
-  const box = document.getElementById(`similar-arguments-${formKey}`);
-
-  if (!titleInput || !bodyInput || !box) return;
-
-  const text = `${titleInput.value || ""} ${bodyInput.value || ""}`.trim();
-  const normalizedText = normalizeText(text);
-
-  if (normalizedText.length < 4) {
-    box.style.display = "none";
-    box.innerHTML = "";
-    return;
-  }
-
-  const matches = (currentAllArguments || [])
-    .map((argument) => ({
-      argument,
-      score: getArgumentSimilarityScore(text, argument)
-    }))
-.filter((item) => item.score >= 2)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return Number(b.argument.votes || 0) - Number(a.argument.votes || 0);
-    })
-    .slice(0, 5);
-
-  if (!matches.length) {
-    box.style.display = "none";
-    box.innerHTML = "";
-    return;
-  }
-
-  box.style.display = "block";
-  box.innerHTML = `
-<div class="similar-arguments-title">Idées similaires déjà publiées :</div>    <div class="similar-arguments-list">
-      ${matches.map(({ argument, score }) => `
-        <button
-          type="button"
-          class="similar-argument-item"
-          onclick="scrollToArgumentFromSummary('${argument.id}')"
-        >
-          <div class="similar-argument-item-title">${escapeHtml(argument.title || "Idée sans titre")}</div>
-       
-          ${
-            argument.body
-              ? `<div class="similar-argument-item-body">${escapeHtml(
-                  argument.body.length > 140 ? argument.body.slice(0, 140) + "…" : argument.body
-                )}</div>`
-              : ""
-          }
-        </button>
-      `).join("")}
-    </div>
-  `;
-}
-
-
 function ensureSimilarDebatesLoadingStyles() {
   if (document.getElementById("similar-debates-loading-style")) return;
 
@@ -17796,44 +17363,6 @@ function destroyDebateInstagramEmbed() {
   debateInstagramIsRendered = false;
 }
 
-function initDebateInstagramVisibilityObserver(sourceUrl, sourcePreviewData = null) {
-  const target =
-    document.getElementById("debate-source-instagram-shell") ||
-    document.getElementById("debate-source-fallback");
-
-  if (!target) return;
-
-  debateInstagramCurrentUrl = sourceUrl;
-  debateInstagramCurrentPreviewData = sourcePreviewData;
-
-  if (debateInstagramVisibilityObserver) {
-    debateInstagramVisibilityObserver.disconnect();
-  }
-
-  debateInstagramVisibilityObserver = new IntersectionObserver((entries) => {
-    const entry = entries[0];
-    if (!entry) return;
-
-    const isStillVisible = entry.isIntersecting && entry.intersectionRatio > 0.05;
-
-    if (!isStillVisible) {
-      destroyDebateInstagramEmbed();
-      return;
-    }
-
-    if (!debateInstagramIsRendered && debateInstagramCurrentUrl) {
-      renderInstagramSourcePreview(
-        debateInstagramCurrentUrl,
-        debateInstagramCurrentPreviewData
-      );
-    }
-  }, {
-    threshold: [0, 0.01, 0.05, 0.2]
-  });
-
-  debateInstagramVisibilityObserver.observe(target);
-}
-
 async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null) {
   if (debateInstagramIsRendered) {
     return;
@@ -18269,48 +17798,6 @@ async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
   } catch (error) {
     console.error(error);
   }
-}
-
-function bindDebateSourcePreviewHandlers() {
-  if (debateSourcePreviewState.handlersBound) return;
-
-  const sourcePreview = document.getElementById("debate-source-preview");
-  const sourcePoster = document.getElementById("debate-source-preview-poster");
-  const sourceLoading = document.getElementById("debate-source-preview-loading");
-
-  if (!sourcePreview) return;
-
-  sourcePreview.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share");
-  sourcePreview.setAttribute("allowfullscreen", "");
-  sourcePreview.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
-
-  sourcePreview.addEventListener("load", () => {
-    const loadedSrc = sourcePreview.getAttribute("src") || "";
-    if (!loadedSrc || loadedSrc === "about:blank") return;
-
-    sourcePreview.dataset.loaded = "1";
-    sourcePreview.style.visibility = "visible";
-    sourcePreview.style.display = "block";
-
-    if (sourcePoster) {
-      sourcePoster.style.display = "none";
-    }
-
-    if (sourceLoading) {
-      sourceLoading.style.display = "none";
-    }
-
-    clearDebateSourcePreviewTimers();
-  });
-
-  sourcePreview.addEventListener("error", () => {
-    const src = sourcePreview.getAttribute("src");
-    if (src && src !== "about:blank") {
-      showDebateSourceFallback(src);
-    }
-  });
-
-  debateSourcePreviewState.handlersBound = true;
 }
 
 function loadDebateSourceIframe(embedUrl, token, attempt = 0) {
@@ -23792,20 +23279,6 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
     homeBottomNavViewportOffsetTimeout = null;
     updateHomeBottomNavViewportOffset();
   }, 120);
-}
-
-function initHomeBottomNavViewportOffset() {
-  scheduleHomeBottomNavViewportOffsetUpdate();
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', scheduleHomeBottomNavViewportOffsetUpdate);
-    window.visualViewport.addEventListener('scroll', scheduleHomeBottomNavViewportOffsetUpdate);
-  }
-
-  window.addEventListener('resize', scheduleHomeBottomNavViewportOffsetUpdate);
-  window.addEventListener('orientationchange', scheduleHomeBottomNavViewportOffsetUpdate);
-  window.addEventListener('scroll', scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
-  window.addEventListener('pageshow', scheduleHomeBottomNavViewportOffsetUpdate);
 }
 
 function positionHomeTopbarMenu() {

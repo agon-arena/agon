@@ -69,15 +69,6 @@ app.use((req, res, next) => {
   next();
 });
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function escapeMetaContent(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -533,20 +524,8 @@ function getDebateStoredImageUrl(debateId) {
   return String(getDebateAssetsEntry(debateId).image_url || "").trim();
 }
 
-function setDebateStoredImageUrl(debateId, imageUrl) {
-  updateDebateAssetsEntry(debateId, {
-    image_url: String(imageUrl || "").trim()
-  });
-}
-
 function getDebateStoredVideoUrl(debateId) {
   return String(getDebateAssetsEntry(debateId).video_url || "").trim();
-}
-
-function setDebateStoredVideoUrl(debateId, videoUrl) {
-  updateDebateAssetsEntry(debateId, {
-    video_url: String(videoUrl || "").trim()
-  });
 }
 
 function getImageExtensionFromMimeType(mimeType) {
@@ -1120,22 +1099,6 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
   };
 }
 
-function hasMeaningfulPreview(preview) {
-  if (!preview) return false;
-
-  const domain = String(preview.domain || "").trim().toLowerCase();
-  const title = String(preview.title || "").trim().toLowerCase();
-  const description = String(preview.description || "").trim().toLowerCase();
-  const image = String(preview.image || "").trim();
-
-  if (image && title && title !== domain && title !== "source externe") return true;
-  if (image && description && description !== "source externe") return true;
-  if (title && title !== domain && title !== "source externe" && description && description !== "source externe") return true;
-
-  return false;
-}
-
-
 function buildBrowserLikeHeaders(url, profile = "browser") {
   let host = "";
   try {
@@ -1682,17 +1645,6 @@ function wrapTextCentered(ctx, text, centerX, y, maxWidth, lineHeight) {
 
   const lineWidth = ctx.measureText(line).width;
   ctx.fillText(line, centerX - lineWidth / 2, currentY);
-}
-
-function getDebateShareDescription(debate, percentA, percentB) {
-  const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
-  const question = String(debate?.question || "Arène sur agôn").trim() || "Arène sur agôn";
-
-  if (isOpen) {
-    return `${question} | Découvrez les idées partagées sur agôn - l'arène des idées`;
-  }
-
-  return `${percentA}% — ${debate.option_a} | ${percentB}% — ${debate.option_b} | Comparez les arguments sur agôn - l'arène des idées`;
 }
 
 function computeDebatePercents(args) {
