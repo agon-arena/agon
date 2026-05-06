@@ -26,6 +26,7 @@ Because the service role key is used server-side, browser code must not import o
 Known table names in the app:
 
 - `users`
+- `push_subscriptions`
 - `debates`
 - `arguments`
 - `comments`
@@ -47,6 +48,11 @@ Known RPC:
 
 - `POST /api/users/resolve` creates or updates a server-side `users` row from the existing browser legacy key.
 - This route is additive and does not change existing vote, comment, notification, or debate payloads.
+
+## Push Subscription Route
+
+- `POST /api/push-subscriptions` stores or refreshes a browser push subscription for the resolved server-side `users` row.
+- This route only records subscription data. It does not request browser permission and does not send notifications.
 
 ## Critical Read Routes
 

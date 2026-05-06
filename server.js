@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
+const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -2298,6 +2299,48 @@ app.post("/api/users/resolve", rateLimit("users", 30), async (req, res) => {
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur resolution utilisateur.");
+  }
+});
+
+/* =========================
+   PUSH SUBSCRIPTIONS
+========================= */
+
+app.post("/api/push-subscriptions", rateLimit("push-subscriptions", 20), async (req, res) => {
+  try {
+    const keyValidation = validateLegacyKey(req.body?.legacyKey);
+
+    if (keyValidation.error) {
+      return res.status(400).json({ error: keyValidation.error });
+    }
+
+    const subscriptionValidation = validatePushSubscription(req.body?.subscription);
+
+    if (subscriptionValidation.error) {
+      return res.status(400).json({ error: subscriptionValidation.error });
+    }
+
+    const { user } = await resolveLegacyUser(supabase, keyValidation.legacyKey);
+    const subscription = await registerPushSubscription(supabase, {
+      userId: user.id,
+      subscription: subscriptionValidation.subscription,
+      userAgent: req.get("user-agent") || req.body?.userAgent || ""
+    });
+
+    return res.json({
+      success: true,
+      subscription: {
+        id: subscription.id,
+        user_id: subscription.user_id,
+        endpoint: subscription.endpoint,
+        created_at: subscription.created_at,
+        last_seen_at: subscription.last_seen_at,
+        revoked_at: subscription.revoked_at
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur abonnement push.");
   }
 });
 

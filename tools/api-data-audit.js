@@ -7,11 +7,13 @@ const root = path.resolve(__dirname, "..");
 const files = [
   "server.js",
   "lib/users.js",
+  "lib/push-subscriptions.js",
   "docs/api-data-contract.md"
 ];
 
 const expectedTables = [
   "users",
+  "push_subscriptions",
   "debates",
   "arguments",
   "comments",
@@ -24,6 +26,7 @@ const expectedTables = [
 
 const criticalRoutes = [
   { method: "post", path: "/api/users/resolve" },
+  { method: "post", path: "/api/push-subscriptions" },
   { method: "get", path: "/api/debates" },
   { method: "get", path: "/api/debates/:id" },
   { method: "post", path: "/api/debates" },
@@ -122,7 +125,7 @@ function main() {
   }
 
   const server = readFile("server.js");
-  const dataSourceCode = ["server.js", "lib/users.js"]
+  const dataSourceCode = ["server.js", "lib/users.js", "lib/push-subscriptions.js"]
     .map(readFile)
     .join("\n");
   const tables = collectTables(dataSourceCode);
