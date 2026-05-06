@@ -9128,14 +9128,41 @@ function setVoiceRequestPending(debateId, argId, isPending) {
 }
 
 function getKey() {
-  let k = localStorage.getItem("key");
+  let k = lsGet("key");
 
   if (!k) {
     k = Math.random().toString(36);
-    localStorage.setItem("key", k);
+    lsSet("key", k);
   }
 
   return k;
+}
+
+let currentUserResolvePromise = null;
+
+function resolveCurrentUser() {
+  if (currentUserResolvePromise) return currentUserResolvePromise;
+
+  currentUserResolvePromise = fetch(API + "/users/resolve", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ legacyKey: getKey() })
+  })
+    .then((response) => {
+      if (!response.ok) return null;
+      return response.json();
+    })
+    .then((data) => {
+      const user = data?.user;
+      if (user?.id) lsSet("userId", user.id);
+      if (user?.last_seen_at) lsSet("userLastSeenAt", user.last_seen_at);
+      return data;
+    })
+    .catch(() => null);
+
+  return currentUserResolvePromise;
 }
 
 function isArgumentOwner(argument) {
@@ -23012,10 +23039,10 @@ window.setDebateColumnFocus = setDebateColumnFocus;
 window.closeReplacementSuccessMessage = closeReplacementSuccessMessage;
 
 function getVisitorKey() {
-  let key = localStorage.getItem("visitorKey");
+  let key = lsGet("visitorKey");
   if (!key) {
     key = Math.random().toString(36).substring(2);
-    localStorage.setItem("visitorKey", key);
+    lsSet("visitorKey", key);
   }
   return key;
 }
@@ -23033,6 +23060,7 @@ function trackVisit() {
   }).catch(() => {});
 }
 
+resolveCurrentUser();
 trackVisit();
 window.toggleIdeaShareMenu = toggleIdeaShareMenu;
 window.handleIdeaShareAction = handleIdeaShareAction;

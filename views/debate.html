@@ -505,6 +505,22 @@ body.page-debate .my-arguments-row {
 body.page-debate .column-header {
   min-height: auto !important;
 }
+.debate-topbar-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #6b7280;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.debate-topbar-back-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
 @media (max-width: 768px) {
   body.page-debate .debate-title-share-actions {
     width: 100%;
@@ -2575,6 +2591,16 @@ body.voices-panel-open {
       <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
         <i class="fa-solid fa-gear"></i>
       </button>
+
+      <a
+        href="/"
+        class="debate-topbar-back-btn"
+        aria-label="Retour à l'index"
+        title="Explorer les arènes"
+        onclick="if(window.parent!==window){event.preventDefault();window.parent.postMessage({type:'agon:close-debate-modal'},'*');}"
+      >
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
 
 <div class="home-brand-main">
   <img src="/logogloire.jpeg" alt="Logo agôn" class="home-logo">

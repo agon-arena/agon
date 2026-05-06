@@ -2266,7 +2266,9 @@ app.post("/api/track-visit", (req, res) => {
   supabase
     .from("page_visits")
     .insert({ visitor_key: String(visitorKey), page: String(page), created_at: nowIso() })
-    .catch((err) => console.error("track-visit:", err));
+    .then(({ error }) => {
+      if (error) console.error("track-visit:", error);
+    });
 });
 
 /* =========================
