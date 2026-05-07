@@ -59,9 +59,10 @@ function ensurePushInviteStyles() {
   style.textContent = `
     .push-invite-toast {
       position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      top: 50%;
+      width: min( calc(100vw - 24px), 420px );
+      transform: translate(-50%, -50%);
       z-index: 2147483000;
       display: flex;
       align-items: center;
