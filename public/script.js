@@ -13,6 +13,244 @@ registerServiceWorker();
 // Accès localStorage/sessionStorage robustes (private browsing, quota plein, Safari ITP)
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, String(val)); } catch {} }
+
+const PUSH_INVITE_LAST_SHOWN_KEY = "pushInviteLastShownAt";
+const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
+const PUSH_SUBSCRIBED_KEY = "pushSubscribed";
+const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+let pushInviteToastEl = null;
+let pushInviteEnablePending = false;
+
+function isMobilePushInviteSurface() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia("(max-width: 768px)").matches
+    || window.matchMedia("(display-mode: standalone)").matches;
+}
+
+function browserCanUsePushNotifications() {
+  return typeof window !== "undefined"
+    && "Notification" in window
+    && "serviceWorker" in navigator
+    && "PushManager" in window;
+}
+
+function shouldShowPushInvite() {
+  if (!browserCanUsePushNotifications() || !isMobilePushInviteSurface()) return false;
+  if (Notification.permission === "denied") return false;
+  if (lsGet(PUSH_SUBSCRIBED_KEY) === "1") return false;
+  if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
+
+  const lastShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
+  if (lastShownAt && Date.now() - lastShownAt < PUSH_INVITE_COOLDOWN_MS) {
+    return false;
+  }
+
+  return true;
+}
+
+function ensurePushInviteStyles() {
+  if (document.getElementById("push-invite-styles")) return;
+
+  const style = document.createElement("style");
+  style.id = "push-invite-styles";
+  style.textContent = `
+    .push-invite-toast {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      z-index: 2147483000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(23, 31, 38, 0.96);
+      color: #fff;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .push-invite-copy { min-width: 0; }
+    .push-invite-title {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+    .push-invite-text {
+      margin: 3px 0 0;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .push-invite-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .push-invite-btn {
+      min-height: 36px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .push-invite-btn-primary {
+      background: #f4c95d;
+      color: #162027;
+    }
+    .push-invite-btn-secondary {
+      background: rgba(255, 255, 255, 0.10);
+      color: #fff;
+    }
+    @media (min-width: 769px) {
+      .push-invite-toast { display: none; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function hidePushInvite() {
+  if (pushInviteToastEl) {
+    pushInviteToastEl.remove();
+    pushInviteToastEl = null;
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    outputArray[index] = rawData.charCodeAt(index);
+  }
+
+  return outputArray;
+}
+
+async function enablePushNotificationsFromInvite() {
+  if (pushInviteEnablePending || !browserCanUsePushNotifications()) return;
+
+  pushInviteEnablePending = true;
+
+  try {
+    const keyResponse = await fetch(API + "/push/public-key");
+    if (!keyResponse.ok) throw new Error("push-key-unavailable");
+
+    const keyData = await keyResponse.json();
+    const publicKey = keyData?.publicKey;
+    if (!keyData?.available || !publicKey) throw new Error("push-key-unavailable");
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission !== "granted") {
+      if (permission === "denied") lsSet(PUSH_INVITE_DISMISSED_KEY, "1");
+      hidePushInvite();
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    const existingSubscription = await registration.pushManager.getSubscription();
+    const subscription = existingSubscription || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
+
+    const saveResponse = await fetch(API + "/push-subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        legacyKey: getKey(),
+        subscription: typeof subscription.toJSON === "function"
+          ? subscription.toJSON()
+          : subscription
+      })
+    });
+
+    if (!saveResponse.ok) throw new Error("push-subscription-save-failed");
+
+    lsSet(PUSH_SUBSCRIBED_KEY, "1");
+    hidePushInvite();
+  } catch (error) {
+    console.error(error);
+    hidePushInvite();
+  } finally {
+    pushInviteEnablePending = false;
+  }
+}
+
+function showPushInvite(reason = "action") {
+  if (pushInviteToastEl || !shouldShowPushInvite()) return;
+
+  ensurePushInviteStyles();
+  lsSet(PUSH_INVITE_LAST_SHOWN_KEY, String(Date.now()));
+
+  const toast = document.createElement("div");
+  toast.className = "push-invite-toast";
+  toast.setAttribute("role", "dialog");
+  toast.setAttribute("aria-label", "Notifications");
+  toast.dataset.reason = reason;
+
+  const copy = document.createElement("div");
+  copy.className = "push-invite-copy";
+
+  const title = document.createElement("p");
+  title.className = "push-invite-title";
+  title.textContent = "Recevoir les réponses ?";
+
+  const text = document.createElement("p");
+  text.className = "push-invite-text";
+  text.textContent = "Suivez vos idées, réponses et réactions.";
+
+  const actions = document.createElement("div");
+  actions.className = "push-invite-actions";
+
+  const laterButton = document.createElement("button");
+  laterButton.type = "button";
+  laterButton.className = "push-invite-btn push-invite-btn-secondary";
+  laterButton.textContent = "Plus tard";
+  laterButton.addEventListener("click", hidePushInvite);
+
+  const enableButton = document.createElement("button");
+  enableButton.type = "button";
+  enableButton.className = "push-invite-btn push-invite-btn-primary";
+  enableButton.textContent = "Activer";
+  enableButton.addEventListener("click", enablePushNotificationsFromInvite);
+
+  copy.append(title, text);
+  actions.append(laterButton, enableButton);
+  toast.append(copy, actions);
+  document.body.appendChild(toast);
+  pushInviteToastEl = toast;
+}
+
+function showPushInviteAfterAction(reason = "action") {
+  window.setTimeout(() => {
+    try {
+      showPushInvite(reason);
+    } catch (error) {
+      console.error(error);
+    }
+  }, 450);
+}
+
 let argumentsVisible = 6;
 
 let currentDebateShareData = {
@@ -19451,6 +19689,8 @@ async function submitArgument(debateId, side) {
       console.error(localRenderError);
       await loadDebate(debateId);
     }
+
+    showPushInviteAfterAction("argument");
   } catch (error) {
     alert(error.message);
   } finally {
@@ -19596,6 +19836,8 @@ async function submitListArgument(debateId) {
       console.error(localRenderError);
       await loadDebate(debateId);
     }
+
+    showPushInviteAfterAction("argument");
   } catch (error) {
     alert(error.message);
   } finally {
@@ -19625,6 +19867,7 @@ const improvement_body = improvementBodyInput ? improvementBodyInput.value.trim(
 
 const replyData = replyToCommentByArgument[argumentId] || null;
 const replyToCommentId = replyData ? replyData.commentId : null;
+const replyDepth = replyToCommentId ? getCommentReplyDepth(replyToCommentId, argumentId) : 0;
 
 if (stance === "amelioration") {
   if (!improvement_title) {
@@ -19759,6 +20002,10 @@ try {
     console.error(renderError);
     await loadDebate(debateId);
   }
+
+  showPushInviteAfterAction(
+    replyToCommentId ? (replyDepth >= 1 ? "nested_reply" : "reply") : "comment"
+  );
 
   } catch (error) {
     alert(error.message);
@@ -20178,6 +20425,14 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
       console.error(uiError);
       pendingArgumentScrollId = shouldScroll ? String(argId) : null;
       await loadDebate(debateId);
+    }
+
+    const totalVotesAfter = Object.values(state).reduce((sum, value) => {
+      return sum + Number(value || 0);
+    }, 0);
+
+    if (totalVotesAfter >= 3) {
+      showPushInviteAfterAction("three_voices");
     }
   } catch (error) {
     if (optimisticApplied) {
