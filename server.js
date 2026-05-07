@@ -9,7 +9,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { queueCommentNotificationEvents } = require("./lib/notification-events");
-const { sendTestPushToLatestSubscription, processPendingPushEvents } = require("./lib/push-sender");
+const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents } = require("./lib/push-sender");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -4298,6 +4298,18 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       replyToCommentId: reply_to_comment_id || null,
       shortPreview,
       stance: safeStance
+    }).then((createdEvents) => {
+      if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return null;
+
+      return Promise.all((createdEvents || []).map((event) => {
+        return sendNotificationEventPushById(supabase, {
+          publicKey: VAPID_PUBLIC_KEY,
+          privateKey: VAPID_PRIVATE_KEY,
+          subject: VAPID_SUBJECT
+        }, event.id);
+      }));
+    }).catch((pushError) => {
+      console.error(pushError);
     });
     return;
   } catch (error) {
