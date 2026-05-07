@@ -9,6 +9,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { queueCommentNotificationEvents } = require("./lib/notification-events");
+const { sendTestPushToLatestSubscription } = require("./lib/push-sender");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -37,6 +38,8 @@ const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public", { maxAge: "2m" }));
@@ -2380,6 +2383,25 @@ app.post("/api/admin/logout", (req, res) => {
 
 app.get("/api/admin/session", requireAdmin, (req, res) => {
   res.json({ success: true });
+});
+
+app.post("/api/admin/push/test-latest", requireAdmin, async (req, res) => {
+  try {
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(503).json({ error: "Configuration VAPID incomplete." });
+    }
+
+    const result = await sendTestPushToLatestSubscription(supabase, {
+      publicKey: VAPID_PUBLIC_KEY,
+      privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur envoi push test.");
+  }
 });
 
 app.get("/api/admin/visits/today", requireAdmin, async (req, res) => {
