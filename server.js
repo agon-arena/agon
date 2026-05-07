@@ -35,6 +35,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public", { maxAge: "2m" }));
@@ -2305,6 +2306,13 @@ app.post("/api/users/resolve", rateLimit("users", 30), async (req, res) => {
 /* =========================
    PUSH SUBSCRIPTIONS
 ========================= */
+
+app.get("/api/push/public-key", (req, res) => {
+  return res.json({
+    available: !!VAPID_PUBLIC_KEY,
+    publicKey: VAPID_PUBLIC_KEY || null
+  });
+});
 
 app.post("/api/push-subscriptions", rateLimit("push-subscriptions", 20), async (req, res) => {
   try {

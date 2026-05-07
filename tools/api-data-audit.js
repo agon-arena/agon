@@ -26,6 +26,7 @@ const expectedTables = [
 
 const criticalRoutes = [
   { method: "post", path: "/api/users/resolve" },
+  { method: "get", path: "/api/push/public-key" },
   { method: "post", path: "/api/push-subscriptions" },
   { method: "get", path: "/api/debates" },
   { method: "get", path: "/api/debates/:id" },
