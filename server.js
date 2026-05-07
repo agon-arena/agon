@@ -8,6 +8,7 @@ const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
+const { queueCommentNotificationEvents } = require("./lib/notification-events");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -4217,8 +4218,9 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       clearNotificationsApiResponseCache();
     }
 
+    let parentCommentRow = null;
     if (reply_to_comment_id) {
-      const parentCommentRow = await getCommentById(reply_to_comment_id);
+      parentCommentRow = await getCommentById(reply_to_comment_id);
 
       if (
         parentCommentRow &&
@@ -4244,7 +4246,18 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
     }
 
     invalidateDebateCaches(argumentRow?.debate_id || null, { clearList: false });
-    return res.json(row);
+    res.json(row);
+    queueCommentNotificationEvents(supabase, {
+      authorKey,
+      argumentRow,
+      parentCommentRow,
+      argumentId: argument_id,
+      commentId: newCommentId,
+      replyToCommentId: reply_to_comment_id || null,
+      shortPreview,
+      stance: safeStance
+    });
+    return;
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Erreur ajout commentaire." });
