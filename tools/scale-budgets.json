@@ -11,14 +11,14 @@
       "maxLines": 5044
     },
     "server.js": {
-      "maxLines": 4487
+      "maxLines": 4507
     },
     "views/index.html": {
       "maxLines": 990
     }
   },
   "api": {
-    "maxRouteCount": 49,
+    "maxRouteCount": 50,
     "maxSupabaseSelectStarCount": 11
   },
   "browserWork": {

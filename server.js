@@ -9,7 +9,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { queueCommentNotificationEvents } = require("./lib/notification-events");
-const { sendTestPushToLatestSubscription } = require("./lib/push-sender");
+const { sendTestPushToLatestSubscription, processPendingPushEvents } = require("./lib/push-sender");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -2401,6 +2401,26 @@ app.post("/api/admin/push/test-latest", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur envoi push test.");
+  }
+});
+
+app.post("/api/admin/push/process-pending", requireAdmin, async (req, res) => {
+  try {
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(503).json({ error: "Configuration VAPID incomplete." });
+    }
+
+    const limit = Math.min(5, Math.max(1, Number(req.body?.limit || 3)));
+    const result = await processPendingPushEvents(supabase, {
+      publicKey: VAPID_PUBLIC_KEY,
+      privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT
+    }, { limit });
+
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur traitement push.");
   }
 });
 
