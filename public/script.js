@@ -5823,6 +5823,20 @@ function startIndexSourceAutoPlay(root) {
     }, { threshold: 0.3 });
     observer.observe(shell);
 
+    // Pause quand une vidéo est lancée dans ce shell
+    const localVideo = shell.querySelector("[data-index-local-video-player]");
+    if (localVideo) {
+      localVideo.addEventListener("play", function() { paused = true; });
+      localVideo.addEventListener("pause", function() { paused = false; });
+      localVideo.addEventListener("ended", function() { paused = false; });
+    }
+    shell.addEventListener("click", function(e) {
+      const target = e.target;
+      if (target.closest(".debate-card-youtube-play") || target.closest(".debate-card-youtube-iframe") || target.closest("[data-index-local-video-player]")) {
+        paused = true;
+      }
+    });
+
     setInterval(function() {
       if (paused) return;
       const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
@@ -17253,6 +17267,20 @@ function startSourceAutoPlay() {
         _sourceAutoPlayPaused = !entries[0].isIntersecting;
       }, { threshold: 0.3 });
       observer.observe(container);
+    }
+
+    // Pause quand une vidéo est en cours de lecture
+    const debateVideo = document.getElementById("debate-video");
+    if (debateVideo) {
+      debateVideo.addEventListener("play", function() { _sourceAutoPlayPaused = true; });
+      debateVideo.addEventListener("pause", function() { _sourceAutoPlayPaused = false; });
+      debateVideo.addEventListener("ended", function() { _sourceAutoPlayPaused = false; });
+    }
+    const debateVideoWrap = document.getElementById("debate-video-wrap");
+    if (debateVideoWrap) {
+      debateVideoWrap.addEventListener("click", function() {
+        _sourceAutoPlayPaused = true;
+      });
     }
   }
 }

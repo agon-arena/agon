@@ -226,17 +226,8 @@ async function publish(btn) {
     toast('Débat publié ✓');
     const debateId = String(data.debateId || '');
     if (debateId) {
-      item.querySelector('.actions').outerHTML = '<div class="actions" id="actions-' + debateId + '">' +
-        '<button class="btn-save-merge">Sauvegarder</button>' +
-        '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
-        '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (généré par agôn)</button>' +
-        '<button class="btn-delete">Annuler</button>' +
-        '</div>';
-      const actions = document.getElementById('actions-' + debateId);
-      actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, item, false); });
-      actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, item, true); });
-      actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, item); });
-      actions.querySelector('.btn-delete').addEventListener('click', function() { item.remove(); });
+      item.querySelector('.actions').outerHTML = buildAdminActions(debateId, item);
+      wireAdminActions(debateId, item);
     } else {
       item.remove();
     }
@@ -276,17 +267,8 @@ async function merge(btn, item) {
     if (!r.ok) throw new Error('Erreur serveur');
     toast('Fusionné ✓');
     pendingItem.dataset.debateId = debateId;
-    pendingItem.querySelector('.actions').outerHTML = '<div class="actions" id="actions-' + debateId + '">' +
-      '<button class="btn-save-merge">Sauvegarder</button>' +
-      '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
-      '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (généré par agôn)</button>' +
-      '<button class="btn-delete">Annuler</button>' +
-      '</div>';
-    const actions = document.getElementById('actions-' + debateId);
-    actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, false); });
-    actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, true); });
-    actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, pendingItem); });
-    actions.querySelector('.btn-delete').addEventListener('click', function() { pendingItem.remove(); });
+    pendingItem.querySelector('.actions').outerHTML = buildAdminActions(debateId, pendingItem);
+    wireAdminActions(debateId, pendingItem);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Fusionner';
@@ -297,6 +279,29 @@ async function merge(btn, item) {
 function adminHeaders() {
   const token = localStorage.getItem('admin_token');
   return { 'Content-Type': 'application/json', ...(token ? { 'x-admin-token': token } : {}) };
+}
+
+function buildAdminActions(debateId, pendingItem) {
+  const isLogged = !!localStorage.getItem('admin_token');
+  const disabledAttr = isLogged ? '' : ' disabled';
+  const disabledStyle = isLogged ? '' : 'opacity:0.4;cursor:default;';
+  const html = '<div class="actions" id="actions-' + debateId + '" style="flex-wrap:wrap;">' +
+    '<button class="btn-save-merge"' + disabledAttr + ' style="' + disabledStyle + '">Modifier et sauvegarder</button>' +
+    '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;' + disabledStyle + '"' + disabledAttr + '>Republier en haut</button>' +
+    '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;' + disabledStyle + '"' + disabledAttr + '>Sauvegarder et publier (généré par agôn)</button>' +
+    '<button class="btn-delete">Annuler</button>' +
+    (!isLogged ? '<p style="width:100%;margin:8px 0 0;font-size:0.82rem;color:#e67e22;">Connectez-vous en admin (en haut de page) pour utiliser ces boutons.</p>' : '') +
+    '</div>';
+  return html;
+}
+
+function wireAdminActions(debateId, pendingItem) {
+  const actions = document.getElementById('actions-' + debateId);
+  if (!actions) return;
+  actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, false); });
+  actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, true); });
+  actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, pendingItem); });
+  actions.querySelector('.btn-delete').addEventListener('click', function() { pendingItem.remove(); });
 }
 
 async function saveMerge(debateId, pendingItem, agonGenerated) {
@@ -346,7 +351,7 @@ async function republishMerge(debateId, pendingItem) {
 async function remove(btn) {
   const item = btn.closest('.pending-item');
   const id = Number(item.dataset.id);
-  if (!confirm('Supprimer ce sujet ?')) return;
+  if (!confirm('Supprimer cette arène ?')) return;
   try {
     const r = await fetch('/api/admin/veille/' + id, { method: 'DELETE', headers: headers() });
     if (!r.ok) throw new Error();
@@ -365,7 +370,7 @@ function addEmptyForm() {
     return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
   }).join('');
   const html = '<div class="pending-item" data-id="' + tempId + '" data-new="1">' +
-    '<div class="pending-meta">Nouveau sujet (formulaire vide)</div>' +
+    '<div class="pending-meta">Nouvelle arène (formulaire vide)</div>' +
     '<div style="margin-top:10px;font-size:0.82rem;color:#aaa;">Remplissez le formulaire puis publiez ou vérifiez les doublons.</div>' +
     '<label>Question de débat</label>' +
     '<input type="text" class="f-question" placeholder="Votre question…">' +
@@ -376,7 +381,7 @@ function addEmptyForm() {
     '<label>Thématique</label>' +
     '<select class="f-theme">' + catOptions + '</select>' +
     '<label>Résumé (contexte)</label>' +
-    '<textarea class="f-resume" placeholder="Contexte du sujet…"></textarea>' +
+    '<textarea class="f-resume" placeholder="Contexte de l'arène…"></textarea>' +
     '<div class="actions">' +
     '<button class="btn-publish">Publier sur Agôn</button>' +
     '<button class="btn-check-similar" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Vérifier doublons</button>' +
@@ -433,6 +438,12 @@ async function loginAdmin() {
     localStorage.setItem('admin_token', data.token);
     document.getElementById('admin-login').style.display = 'none';
     document.getElementById('admin-bar').style.display = 'flex';
+    document.querySelectorAll('.btn-save-merge, .btn-republish-merge, .btn-publish-agon-merge').forEach(function(btn) {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+    });
+    document.querySelectorAll('.actions p').forEach(function(p) { p.remove(); });
   } catch {
     document.getElementById('admin-login-err').style.display = 'inline';
   }
