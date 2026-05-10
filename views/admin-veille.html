@@ -50,10 +50,10 @@
   </div>
 
   <h1>Veille → Agôn</h1>
-  <p class="intro">Sujets envoyés depuis la veille, en attente de publication.</p>
+  <p class="intro">Arènes envoyées depuis la veille, en attente de publication.</p>
 
   <div id="content"></div>
-  <button id="btn-new" onclick="addEmptyForm()" style="position:fixed;bottom:32px;right:24px;background:#111;color:white;border:none;border-radius:999px;padding:12px 22px;font:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.18);z-index:50;">+ Nouveau sujet</button>
+  <button id="btn-new" onclick="addEmptyForm()" style="position:fixed;bottom:32px;right:24px;background:#111;color:white;border:none;border-radius:999px;padding:12px 22px;font:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.18);z-index:50;">+ Nouvelle arène</button>
   <div class="toast" id="toast"></div>
 
 <script>
@@ -172,7 +172,7 @@ async function loadPending() {
     const items = await r.json();
     const list = document.getElementById('list');
     if (!items.length) {
-      list.innerHTML = '<p class="empty">Aucun sujet en attente.</p>';
+      list.innerHTML = '<p class="empty">Aucune arène en attente.</p>';
       return;
     }
     list.innerHTML = items.map(renderItem).join('');
@@ -222,8 +222,24 @@ async function publish(btn) {
       body: JSON.stringify(body)
     });
     if (!r.ok) throw new Error('Erreur serveur');
+    const data = await r.json();
     toast('Débat publié ✓');
-    item.remove();
+    const debateId = String(data.debateId || '');
+    if (debateId) {
+      item.querySelector('.actions').outerHTML = '<div class="actions" id="actions-' + debateId + '">' +
+        '<button class="btn-save-merge">Sauvegarder</button>' +
+        '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
+        '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (généré par agôn)</button>' +
+        '<button class="btn-delete">Annuler</button>' +
+        '</div>';
+      const actions = document.getElementById('actions-' + debateId);
+      actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, item, false); });
+      actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, item, true); });
+      actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, item); });
+      actions.querySelector('.btn-delete').addEventListener('click', function() { item.remove(); });
+    } else {
+      item.remove();
+    }
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Publier sur Agôn';
@@ -234,7 +250,7 @@ async function publish(btn) {
 async function merge(btn, item) {
   const debateId = btn.dataset.debateId;
   const pendingItem = btn.closest('.pending-item');
-  if (!confirm('Fusionner ce sujet avec le débat existant ?\n\nLa question et les positions seront remplacées. Les nouvelles sources seront ajoutées aux anciennes.')) return;
+  if (!confirm('Fusionner cette arène avec le débat existant ?\n\nLa question et les positions seront remplacées. Les nouvelles sources seront ajoutées aux anciennes.')) return;
   btn.disabled = true;
   btn.textContent = 'Fusion…';
   const links = [...pendingItem.querySelectorAll('.link-row')].filter(function(row) {
@@ -258,11 +274,71 @@ async function merge(btn, item) {
       })
     });
     if (!r.ok) throw new Error('Erreur serveur');
-    pendingItem.remove();
-    window.open('/debate?id=' + encodeURIComponent(debateId), '_blank');
+    toast('Fusionné ✓');
+    pendingItem.dataset.debateId = debateId;
+    pendingItem.querySelector('.actions').outerHTML = '<div class="actions" id="actions-' + debateId + '">' +
+      '<button class="btn-save-merge">Sauvegarder</button>' +
+      '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
+      '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (généré par agôn)</button>' +
+      '<button class="btn-delete">Annuler</button>' +
+      '</div>';
+    const actions = document.getElementById('actions-' + debateId);
+    actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, false); });
+    actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, true); });
+    actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, pendingItem); });
+    actions.querySelector('.btn-delete').addEventListener('click', function() { pendingItem.remove(); });
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Fusionner';
+    toast('Erreur : ' + e.message);
+  }
+}
+
+function adminHeaders() {
+  const token = localStorage.getItem('admin_token');
+  return { 'Content-Type': 'application/json', ...(token ? { 'x-admin-token': token } : {}) };
+}
+
+async function saveMerge(debateId, pendingItem, agonGenerated) {
+  const btn = agonGenerated ? pendingItem.querySelector('.btn-publish-agon-merge') : pendingItem.querySelector('.btn-save-merge');
+  btn.disabled = true;
+  btn.textContent = 'Sauvegarde…';
+  try {
+    const r = await fetch('/api/admin/debate/' + debateId, {
+      method: 'PUT',
+      headers: adminHeaders(),
+      body: JSON.stringify({
+        question: pendingItem.querySelector('.f-question').value.trim(),
+        option_a: pendingItem.querySelector('.f-pos-a').value.trim(),
+        option_b: pendingItem.querySelector('.f-pos-b').value.trim(),
+        category: pendingItem.querySelector('.f-theme').value,
+        content: pendingItem.querySelector('.f-resume').value.trim(),
+        ...(agonGenerated ? { mark_as_agon_generated: true } : {})
+      })
+    });
+    if (!r.ok) throw new Error('Erreur serveur (vérifiez la connexion admin)');
+    if (agonGenerated) await fetch('/api/admin/debate/' + debateId + '/bump', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ preserve_agon_generated: true }) });
+    toast(agonGenerated ? 'Publié (généré par agôn) ✓' : 'Sauvegardé ✓');
+    pendingItem.remove();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = agonGenerated ? 'Sauvegarder et publier (généré par agôn)' : 'Sauvegarder';
+    toast('Erreur : ' + e.message);
+  }
+}
+
+async function republishMerge(debateId, pendingItem) {
+  const btn = pendingItem.querySelector('.btn-republish-merge');
+  btn.disabled = true;
+  btn.textContent = 'Publication…';
+  try {
+    const r = await fetch('/api/admin/debate/' + debateId + '/bump', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({}) });
+    if (!r.ok) throw new Error('Erreur serveur (vérifiez la connexion admin)');
+    toast('Republié en haut ✓');
+    pendingItem.remove();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Republier en haut';
     toast('Erreur : ' + e.message);
   }
 }
