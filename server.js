@@ -4548,6 +4548,37 @@ app.post("/api/veille/receive", (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/admin/veille/check-similar", async (req, res) => {
+  const { question } = req.body || {};
+  if (!question) return res.status(400).json({ similar: [] });
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return res.json({ similar: [], warning: "OPENAI_API_KEY non configuré" });
+  try {
+    const { data: debates } = await supabase
+      .from("debates")
+      .select("id, question")
+      .order("created_at", { ascending: false })
+      .limit(150);
+    if (!debates || !debates.length) return res.json({ similar: [] });
+    const list = debates.map(d => `[${d.id}] ${d.question}`).join("\n");
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: `Nouveau sujet proposé : "${question}"\n\nDébats existants :\n${list}\n\nIdentifie les débats dont le sens est très similaire (même thématique de fond). Réponds uniquement en JSON : {"similar":[{"id":"...","question":"..."}]}. Si aucun, réponds {"similar":[]}.` }],
+        response_format: { type: "json_object" },
+        max_tokens: 400
+      })
+    });
+    const data = await r.json();
+    const parsed = JSON.parse(data.choices[0].message.content);
+    res.json(parsed);
+  } catch (e) {
+    res.json({ similar: [], error: e.message });
+  }
+});
+
 app.get("/admin/veille", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-veille.html"));
 });
