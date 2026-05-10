@@ -4539,6 +4539,15 @@ function saveVeillePending(items) {
   fs.writeFileSync(VEILLE_PENDING_FILE, JSON.stringify(items, null, 2), "utf8");
 }
 
+app.post("/api/veille/receive", (req, res) => {
+  const { question, positionA, positionB, theme, resume, sources, links } = req.body || {};
+  if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
+  const items = loadVeillePending();
+  items.unshift({ id: Date.now(), question, positionA, positionB, theme, resume, sources, links: links || [], addedAt: new Date().toISOString() });
+  saveVeillePending(items);
+  res.json({ ok: true });
+});
+
 app.get("/admin/veille", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-veille.html"));
 });
