@@ -5808,31 +5808,35 @@ function startIndexSourceAutoPlay(root) {
     shell.dataset.autoPlayBound = "1";
 
     let paused = false;
+    let videoPlaying = false;
 
-    // Pause au survol
+    // Pause au survol/touch — ne reprend pas si une vidéo est en cours
     shell.addEventListener("mouseenter", function() { paused = true; }, { passive: true });
-    shell.addEventListener("mouseleave", function() { paused = false; }, { passive: true });
+    shell.addEventListener("mouseleave", function() { if (!videoPlaying) paused = false; }, { passive: true });
     shell.addEventListener("touchstart", function() { paused = true; }, { passive: true });
     shell.addEventListener("touchend", function() {
-      setTimeout(function() { paused = false; }, 2000);
+      setTimeout(function() { if (!videoPlaying) paused = false; }, 2000);
     }, { passive: true });
 
     // Pause quand hors du viewport
     const observer = new IntersectionObserver(function(entries) {
-      paused = !entries[0].isIntersecting;
+      if (!videoPlaying) paused = !entries[0].isIntersecting;
     }, { threshold: 0.3 });
     observer.observe(shell);
 
-    // Pause quand une vidéo est lancée dans ce shell
+    // Pause quand une vidéo est lancée — reprend seulement à pause/fin
     const localVideo = shell.querySelector("[data-index-local-video-player]");
     if (localVideo) {
-      localVideo.addEventListener("play", function() { paused = true; });
-      localVideo.addEventListener("pause", function() { paused = false; });
-      localVideo.addEventListener("ended", function() { paused = false; });
+      localVideo.addEventListener("play", function() { videoPlaying = true; paused = true; });
+      localVideo.addEventListener("pause", function() { videoPlaying = false; paused = false; });
+      localVideo.addEventListener("ended", function() { videoPlaying = false; paused = false; });
     }
+
+    // YouTube : détection via clic sur le bouton play ou l'iframe
     shell.addEventListener("click", function(e) {
-      const target = e.target;
-      if (target.closest(".debate-card-youtube-play") || target.closest(".debate-card-youtube-iframe") || target.closest("[data-index-local-video-player]")) {
+      const t = e.target;
+      if (t.closest(".debate-card-youtube-play") || t.closest(".debate-card-youtube-iframe") || t.closest(".debate-card-youtube-shell")) {
+        videoPlaying = true;
         paused = true;
       }
     });
