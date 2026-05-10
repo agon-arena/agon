@@ -4636,6 +4636,50 @@ app.post("/api/admin/veille/publish", async (req, res) => {
   }
 });
 
+app.post("/api/admin/veille/merge", async (req, res) => {
+  const { id, debateId, question, positionA, positionB, resume, links } = req.body || {};
+  if (!id || !debateId) return res.status(400).json({ ok: false, error: "id et debateId requis" });
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("debates")
+      .select("media_extras")
+      .eq("id", debateId)
+      .single();
+    if (fetchErr) throw new Error(fetchErr.message);
+
+    const oldExtras = Array.isArray(existing.media_extras) ? existing.media_extras : [];
+    const newExtras = Array.isArray(links) ? links.map(l => ({
+      type: "source",
+      url: typeof l === "string" ? l : (l.url || ""),
+      title: typeof l === "object" ? (l.title || "") : "",
+      source: typeof l === "object" ? (l.source || "") : "",
+      date: typeof l === "object" ? (l.date || "") : ""
+    })).filter(e => e.url) : [];
+
+    const mergedExtras = [
+      ...newExtras,
+      ...oldExtras.filter(o => !newExtras.some(n => n.url === o.url))
+    ];
+
+    const updateFields = { question };
+    if (positionA !== undefined) updateFields.option_a = positionA || null;
+    if (positionB !== undefined) updateFields.option_b = positionB || null;
+    if (mergedExtras.length) updateFields.media_extras = mergedExtras;
+    if (mergedExtras[0]) updateFields.source_url = mergedExtras[0].url;
+
+    const { error: updateErr } = await supabase.from("debates").update(updateFields).eq("id", debateId);
+    if (updateErr) throw new Error(updateErr.message);
+
+    if (resume) setDebateStoredContent(debateId, resume);
+
+    const items = loadVeillePending().filter(i => i.id !== Number(id));
+    saveVeillePending(items);
+    res.json({ ok: true, debateId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /* ================================================================= */
 
 app.listen(PORT, "0.0.0.0", () => {

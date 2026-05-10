@@ -29,6 +29,11 @@
     .similar-box { margin-top: 14px; background: #fff8e1; border: 1px solid #f0c040; border-radius: 10px; padding: 12px 16px; font-size: 0.85rem; }
     .similar-box strong { color: #b8860b; }
     .similar-box a { color: #0645ad; }
+    .similar-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+    .similar-row a { flex: 1; }
+    .btn-merge { background: #e67e22; color: white; border: none; border-radius: 999px; padding: 5px 13px; font: inherit; font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .btn-merge:hover { background: #d35400; }
+    .btn-merge:disabled { opacity: 0.5; cursor: default; }
     .similar-checking { margin-top: 14px; font-size: 0.82rem; color: #aaa; }
   </style>
 </head>
@@ -125,11 +130,17 @@ async function checkSimilar(item) {
     if (data.similar && data.similar.length) {
       el.outerHTML = '<div class="similar-box" id="similar-' + item.id + '">' +
         '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
-        '<ul style="margin:8px 0 0;padding-left:18px;">' +
+        '<div style="margin-top:8px;">' +
         data.similar.map(function(s) {
-          return '<li><a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a></li>';
+          return '<div class="similar-row">' +
+            '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a>' +
+            '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
+            '</div>';
         }).join('') +
-        '</ul></div>';
+        '</div></div>';
+      document.querySelectorAll('#similar-' + item.id + ' .btn-merge').forEach(function(btn) {
+        btn.addEventListener('click', function() { merge(btn, item); });
+      });
     } else {
       el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#27ae60;" id="similar-' + item.id + '">Aucun doublon détecté.</div>';
     }
@@ -204,6 +215,42 @@ async function publish(btn) {
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Publier sur Agôn';
+    toast('Erreur : ' + e.message);
+  }
+}
+
+async function merge(btn, item) {
+  const debateId = btn.dataset.debateId;
+  const pendingItem = btn.closest('.pending-item');
+  if (!confirm('Fusionner ce sujet avec le débat existant ?\n\nLa question et les positions seront remplacées. Les nouvelles sources seront ajoutées aux anciennes.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Fusion…';
+  const links = [...pendingItem.querySelectorAll('.link-row')].filter(function(row) {
+    return row.querySelector('.link-check').checked;
+  }).map(function(row) {
+    const a = row.querySelector('.link-url');
+    return { url: a.href, title: a.dataset.title || '', source: a.dataset.source || '', date: a.dataset.date || '', type: a.dataset.type || 'article' };
+  }).filter(function(l) { return l.url; });
+  try {
+    const r = await fetch('/api/admin/veille/merge', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        id: item.id,
+        debateId: debateId,
+        question: pendingItem.querySelector('.f-question').value.trim(),
+        positionA: pendingItem.querySelector('.f-pos-a').value.trim(),
+        positionB: pendingItem.querySelector('.f-pos-b').value.trim(),
+        resume: pendingItem.querySelector('.f-resume').value.trim(),
+        links: links
+      })
+    });
+    if (!r.ok) throw new Error('Erreur serveur');
+    toast('Fusionné ✓');
+    pendingItem.remove();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Fusionner';
     toast('Erreur : ' + e.message);
   }
 }
