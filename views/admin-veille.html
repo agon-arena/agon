@@ -38,6 +38,17 @@
   </style>
 </head>
 <body>
+  <div id="admin-bar" style="display:none;background:#111;color:white;padding:8px 16px;border-radius:10px;margin-bottom:20px;font-size:0.85rem;align-items:center;gap:12px;">
+    <span>Mode admin actif</span>
+    <button onclick="logoutAdmin()" style="background:none;border:1px solid rgba(255,255,255,0.3);color:white;border-radius:999px;padding:3px 12px;font:inherit;font-size:0.8rem;cursor:pointer;">Déconnexion</button>
+  </div>
+  <div id="admin-login" style="background:white;border:1px solid #ddd;border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:0.85rem;color:#555;flex-shrink:0;">Connexion admin (pour mode édition après fusion) :</span>
+    <input id="admin-pwd" type="password" placeholder="Mot de passe admin" style="padding:7px 12px;border:1px solid #ddd;border-radius:8px;font:inherit;font-size:0.85rem;width:200px;">
+    <button onclick="loginAdmin()" style="padding:7px 16px;background:#111;color:white;border:none;border-radius:8px;font:inherit;font-size:0.85rem;cursor:pointer;">Se connecter</button>
+    <span id="admin-login-err" style="color:#c0392b;font-size:0.82rem;display:none;">Mot de passe incorrect.</span>
+  </div>
+
   <h1>Veille → Agôn</h1>
   <p class="intro">Sujets envoyés depuis la veille, en attente de publication.</p>
 
@@ -332,6 +343,44 @@ function addEmptyForm() {
   card.querySelector('.f-question').focus();
 }
 
+async function loginAdmin() {
+  const pwd = document.getElementById('admin-pwd').value;
+  if (!pwd) return;
+  try {
+    const r = await fetch('/api/admin/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    localStorage.setItem('admin_token', data.token);
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('admin-bar').style.display = 'flex';
+  } catch {
+    document.getElementById('admin-login-err').style.display = 'inline';
+  }
+}
+
+function logoutAdmin() {
+  localStorage.removeItem('admin_token');
+  document.getElementById('admin-bar').style.display = 'none';
+  document.getElementById('admin-login').style.display = 'flex';
+}
+
+function initAdminBar() {
+  const token = localStorage.getItem('admin_token');
+  if (token) {
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('admin-bar').style.display = 'flex';
+  }
+}
+
+document.getElementById('admin-pwd').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') loginAdmin();
+});
+
+initAdminBar();
 showContent();
 loadPending();
 </script>
