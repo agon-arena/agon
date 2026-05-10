@@ -42,6 +42,7 @@
   <p class="intro">Sujets envoyés depuis la veille, en attente de publication.</p>
 
   <div id="content"></div>
+  <button id="btn-new" onclick="addEmptyForm()" style="position:fixed;bottom:32px;right:24px;background:#111;color:white;border:none;border-radius:999px;padding:12px 22px;font:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.18);z-index:50;">+ Nouveau sujet</button>
   <div class="toast" id="toast"></div>
 
 <script>
@@ -246,8 +247,8 @@ async function merge(btn, item) {
       })
     });
     if (!r.ok) throw new Error('Erreur serveur');
-    toast('Fusionné ✓');
     pendingItem.remove();
+    window.open('/debate?id=' + encodeURIComponent(debateId), '_blank');
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Fusionner';
@@ -267,6 +268,68 @@ async function remove(btn) {
   } catch {
     toast('Erreur lors de la suppression.');
   }
+}
+
+function addEmptyForm() {
+  const list = document.getElementById('list');
+  if (!list) return;
+  const tempId = Date.now();
+  const catOptions = CATEGORIES.map(function(c) {
+    return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+  }).join('');
+  const html = '<div class="pending-item" data-id="' + tempId + '" data-new="1">' +
+    '<div class="pending-meta">Nouveau sujet (formulaire vide)</div>' +
+    '<div style="margin-top:10px;font-size:0.82rem;color:#aaa;">Remplissez le formulaire puis publiez ou vérifiez les doublons.</div>' +
+    '<label>Question de débat</label>' +
+    '<input type="text" class="f-question" placeholder="Votre question…">' +
+    '<label>Position A</label>' +
+    '<input type="text" class="f-pos-a" placeholder="Position A…">' +
+    '<label>Position B</label>' +
+    '<input type="text" class="f-pos-b" placeholder="Position B…">' +
+    '<label>Thématique</label>' +
+    '<select class="f-theme">' + catOptions + '</select>' +
+    '<label>Résumé (contexte)</label>' +
+    '<textarea class="f-resume" placeholder="Contexte du sujet…"></textarea>' +
+    '<div class="actions">' +
+    '<button class="btn-publish">Publier sur Agôn</button>' +
+    '<button class="btn-check-similar" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Vérifier doublons</button>' +
+    '<button class="btn-delete">Supprimer</button>' +
+    '</div>' +
+    '<div class="similar-zone"></div>' +
+    '</div>';
+  list.insertAdjacentHTML('afterbegin', html);
+  const card = list.querySelector('[data-id="' + tempId + '"]');
+  card.querySelector('.btn-publish').addEventListener('click', function() { publish(this); });
+  card.querySelector('.btn-delete').addEventListener('click', function() { card.remove(); });
+  card.querySelector('.btn-check-similar').addEventListener('click', async function() {
+    const q = card.querySelector('.f-question').value.trim();
+    if (!q) { toast('Saisissez d\'abord une question.'); return; }
+    const zone = card.querySelector('.similar-zone');
+    zone.innerHTML = '<div class="similar-checking">Vérification…</div>';
+    try {
+      const r = await fetch('/api/admin/veille/check-similar', { method: 'POST', headers: headers(), body: JSON.stringify({ question: q }) });
+      const data = await r.json();
+      if (data.similar && data.similar.length) {
+        zone.innerHTML = '<div class="similar-box">' +
+          '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
+          '<div style="margin-top:8px;">' +
+          data.similar.map(function(s) {
+            return '<div class="similar-row">' +
+              '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a>' +
+              '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
+              '</div>';
+          }).join('') + '</div></div>';
+        zone.querySelectorAll('.btn-merge').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            merge(btn, { id: tempId });
+          });
+        });
+      } else {
+        zone.innerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#27ae60;">Aucun doublon détecté.</div>';
+      }
+    } catch(e) { zone.innerHTML = ''; }
+  });
+  card.querySelector('.f-question').focus();
 }
 
 showContent();
