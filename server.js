@@ -3347,18 +3347,28 @@ app.get("/api/debates", async (req, res) => {
         return Number(b.id || 0) - Number(a.id || 0);
       });
     } else {
-      // "popular" / "À la une" : groupe A = arènes ≤ 24h (created_at), toujours avant groupe B.
-      // À l'intérieur du groupe B : last_activity_at 8h → bump 7j → last_activity_at global → counts.
+      // "popular" / "À la une" : groupe A = arènes ≤ 24h, toujours avant groupe B.
+      // À l'intérieur du groupe B : bump récent (8h) → activité récente (8h) → bump (7j) → activité globale → counts.
       const NEW_ARENA_PRIORITY_MS = 24 * 60 * 60 * 1000;
+      const RECENT_BUMP_PRIORITY_MS = 8 * 60 * 60 * 1000;
       const RECENT_ACTIVITY_PRIORITY_WINDOW_MS = 8 * 60 * 60 * 1000;
       const BUMP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
       const now = Date.now();
-      const isNew = (row) => row.created_at && (now - new Date(row.created_at).getTime()) < NEW_ARENA_PRIORITY_MS;
+      const isNew = (row) =>
+        (row.created_at && (now - new Date(row.created_at).getTime()) < NEW_ARENA_PRIORITY_MS) ||
+        (row.bumped_at && (now - new Date(row.bumped_at).getTime()) < NEW_ARENA_PRIORITY_MS);
       rows.sort((a, b) => {
         const aNew = isNew(a);
         const bNew = isNew(b);
         if (aNew !== bNew) return bNew ? 1 : -1;
         if (aNew && bNew) return new Date(b.created_at) - new Date(a.created_at);
+
+        const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
+        const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
+        const aRecentBump = aBump > now - RECENT_BUMP_PRIORITY_MS;
+        const bRecentBump = bBump > now - RECENT_BUMP_PRIORITY_MS;
+        if (aRecentBump !== bRecentBump) return bRecentBump ? 1 : -1;
+        if (aRecentBump && bRecentBump && aBump !== bBump) return bBump - aBump;
 
         const aDate = a.last_activity_at || a.last_argument_at || a.created_at || "";
         const bDate = b.last_activity_at || b.last_argument_at || b.created_at || "";
@@ -3370,12 +3380,10 @@ app.get("/api/debates", async (req, res) => {
         if (aActivityRecent !== bActivityRecent) return bActivityRecent ? 1 : -1;
         if (aActivityRecent && bActivityRecent && bTime !== aTime) return bTime - aTime;
 
-        const aBump = a.bumped_at ? new Date(a.bumped_at).getTime() : 0;
-        const bBump = b.bumped_at ? new Date(b.bumped_at).getTime() : 0;
-        const aRecentBump = aBump > now - BUMP_WINDOW_MS;
-        const bRecentBump = bBump > now - BUMP_WINDOW_MS;
-        if (aRecentBump !== bRecentBump) return bRecentBump ? 1 : -1;
-        if (aRecentBump && bRecentBump && aBump !== bBump) return bBump - aBump;
+        const aOldBump = aBump > now - BUMP_WINDOW_MS;
+        const bOldBump = bBump > now - BUMP_WINDOW_MS;
+        if (aOldBump !== bOldBump) return bOldBump ? 1 : -1;
+        if (aOldBump && bOldBump && aBump !== bBump) return bBump - aBump;
 
         if (bTime !== aTime) return bTime - aTime;
 
@@ -4670,7 +4678,8 @@ app.post("/api/admin/veille/merge", async (req, res) => {
     const { error: updateErr } = await supabase.from("debates").update(updateFields).eq("id", debateId);
     if (updateErr) throw new Error(updateErr.message);
 
-    if (resume) setDebateStoredContent(debateId, resume);
+    const resumeTrimmed = typeof resume === "string" ? resume.trim() : "";
+    if (resumeTrimmed) setDebateStoredContent(debateId, resumeTrimmed);
 
     const items = loadVeillePending().filter(i => i.id !== Number(id));
     saveVeillePending(items);
