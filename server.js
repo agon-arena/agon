@@ -96,13 +96,16 @@ function readViewTemplate(templateName) {
   return _viewTemplateCache[templateName];
 }
 
+const VEILLE_URL = (process.env.VEILLE_URL || "http://localhost:3000/mixte").trim();
+
 function replaceMetaPlaceholders(template, meta) {
   return String(template || "")
     .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "agôn"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
-    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "agôn"));
+    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "agôn"))
+    .replaceAll("__VEILLE_URL__", VEILLE_URL);
 }
 
 function buildIndexMeta(req) {
@@ -4512,6 +4515,88 @@ app.delete("/api/comments/:id", async (req, res) => {
     return res.status(500).json({ error: "Erreur suppression commentaire." });
   }
 });
+
+/* ========================= VEILLE PENDING ========================= */
+
+const VEILLE_PENDING_FILE = path.join(__dirname, "data/veille-pending.json");
+const DEBATE_CATEGORIES = [
+  "Politique, économie et relations internationales",
+  "Société, éducation et justice",
+  "Sciences, technologies et environnement",
+  "Culture, modes et médias",
+  "Santé, corps et bien-être",
+  "Sport, loisirs et passions",
+  "Vie personnelle et modes de vie",
+  "Espace jeunes (collégiens - lycéens)"
+];
+
+function loadVeillePending() {
+  if (!fs.existsSync(VEILLE_PENDING_FILE)) return [];
+  try { return JSON.parse(fs.readFileSync(VEILLE_PENDING_FILE, "utf8")); } catch { return []; }
+}
+
+function saveVeillePending(items) {
+  fs.writeFileSync(VEILLE_PENDING_FILE, JSON.stringify(items, null, 2), "utf8");
+}
+
+app.get("/admin/veille", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/admin-veille.html"));
+});
+
+app.get("/api/admin/veille", (req, res) => {
+  res.json(loadVeillePending());
+});
+
+app.delete("/api/admin/veille/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const items = loadVeillePending().filter(i => i.id !== id);
+  saveVeillePending(items);
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/veille/publish", async (req, res) => {
+  const { id, question, positionA, positionB, theme, resume, links } = req.body || {};
+  try {
+    const linksMeta = Array.isArray(links) ? links : [];
+    const firstLink = linksMeta[0] || null;
+    const sourceUrl = firstLink ? (typeof firstLink === "string" ? firstLink : firstLink.url) : null;
+    const allExtras = linksMeta.map(l => ({
+      type: "source",
+      url: typeof l === "string" ? l : (l.url || ""),
+      title: typeof l === "object" ? (l.title || "") : "",
+      source: typeof l === "object" ? (l.source || "") : "",
+      date: typeof l === "object" ? (l.date || "") : ""
+    })).filter(e => e.url);
+    const extras = allExtras.slice(1);
+
+    const { data, error } = await supabase.from("debates").insert({
+      question,
+      option_a: positionA || null,
+      option_b: positionB || null,
+      category: theme || null,
+      source_url: sourceUrl,
+      type: "debate",
+      creator_key: AGON_ADMIN_CREATOR_KEY,
+      created_at: nowIso()
+    }).select("id").single();
+    if (error) throw new Error(error.message);
+
+    if (allExtras.length) {
+      await supabase.from("debates").update({ media_extras: allExtras }).eq("id", data.id);
+    }
+    if (resume) setDebateStoredContent(data.id, resume);
+    if (sourceUrl) {
+      try { await getExternalLinkPreview(sourceUrl); } catch {}
+    }
+    const items = loadVeillePending().filter(i => i.id !== Number(id));
+    saveVeillePending(items);
+    res.json({ ok: true, debateId: data.id });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ================================================================= */
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);

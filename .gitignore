@@ -9,3 +9,6 @@ data/debate-assets.json
 data/debate-content.json
 database.db
 .env.save
+data/external-preview-cache/
+data/veille-pending.json
+data/debate-source-links.json

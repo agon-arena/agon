@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Veille → Agôn</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 16px; background: #f7f7f7; color: #111; }
+    h1 { margin-bottom: 4px; }
+    .intro { color: #555; margin-bottom: 28px; font-size: 0.9rem; }
+    #login-wall { background: white; border: 1px solid #ddd; border-radius: 14px; padding: 32px; text-align: center; margin-top: 40px; }
+    #login-wall input { padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font: inherit; font-size: 0.95rem; margin-right: 8px; width: 220px; }
+    #login-wall button { padding: 10px 20px; background: #111; color: white; border: none; border-radius: 8px; font: inherit; cursor: pointer; }
+    #content { display: none; }
+    .refresh-btn { float: right; margin-bottom: 16px; padding: 6px 14px; border: 1px solid #ddd; border-radius: 999px; background: white; cursor: pointer; font: inherit; font-size: 0.85rem; }
+    .pending-item { background: white; border: 1px solid #e0e0e0; border-radius: 14px; padding: 20px 24px; margin-bottom: 20px; }
+    .pending-meta { font-size: 0.78rem; color: #aaa; margin-bottom: 14px; }
+    label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 12px; }
+    input[type=text], textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font: inherit; font-size: 0.9rem; }
+    textarea { min-height: 70px; resize: vertical; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid #111; }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    .btn-publish { background: #111; color: white; border: none; border-radius: 999px; padding: 10px 22px; font: inherit; font-weight: 700; cursor: pointer; }
+    .btn-publish:hover { background: #333; }
+    .btn-publish:disabled { opacity: 0.5; cursor: default; }
+    .btn-delete { background: none; border: 1px solid #c0392b; color: #c0392b; border-radius: 999px; padding: 10px 18px; font: inherit; cursor: pointer; }
+    .btn-delete:hover { background: #fdf0ee; }
+    .empty { color: #888; text-align: center; margin-top: 60px; }
+    .error { color: #c0392b; text-align: center; margin-top: 40px; }
+    .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: #111; color: white; padding: 12px 24px; border-radius: 999px; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 99; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <h1>Veille → Agôn</h1>
+  <p class="intro">Sujets envoyés depuis la veille, en attente de publication.</p>
+
+  <div id="content"></div>
+  <div class="toast" id="toast"></div>
+
+<script>
+const CATEGORIES = [
+  "Politique, économie et relations internationales",
+  "Société, éducation et justice",
+  "Sciences, technologies et environnement",
+  "Culture, modes et médias",
+  "Santé, corps et bien-être",
+  "Sport, loisirs et passions",
+  "Vie personnelle et modes de vie",
+  "Espace jeunes (collégiens - lycéens)"
+];
+
+function headers() {
+  return { 'Content-Type': 'application/json' };
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showContent() {
+  document.getElementById('content').style.display = 'block';
+}
+
+function renderItem(item) {
+  const catOptions = CATEGORIES.map(function(c) {
+    return '<option value="' + esc(c) + '"' + (c === item.theme ? ' selected' : '') + '>' + esc(c) + '</option>';
+  }).join('');
+
+  return '<div class="pending-item" data-id="' + item.id + '">' +
+    '<div class="pending-meta">Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</div>' +
+    '<label>Question de débat</label>' +
+    '<input type="text" class="f-question" value="' + esc(item.question) + '">' +
+    '<label>Position A</label>' +
+    '<input type="text" class="f-pos-a" value="' + esc(item.positionA || '') + '">' +
+    '<label>Position B</label>' +
+    '<input type="text" class="f-pos-b" value="' + esc(item.positionB || '') + '">' +
+    '<label>Thématique</label>' +
+    '<select class="f-theme">' + catOptions + '</select>' +
+    '<label>Résumé (contexte)</label>' +
+    '<textarea class="f-resume">' + esc(item.resume || '') + '</textarea>' +
+    '<label>Liens sources</label>' +
+    (item.links && item.links.length
+      ? item.links.map(function(l) {
+          return '<div class="link-row" style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f0f0f0;">' +
+            '<input type="checkbox" class="link-check"' + (l.checked !== false ? ' checked' : '') + ' style="flex-shrink:0;width:16px;height:16px;margin-top:3px;">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="margin-bottom:3px">' +
+                '<strong style="font-size:0.88rem">' + esc(l.source) + '</strong>' +
+                (l.type === 'youtube' ? ' <span style="font-size:0.75rem;background:#c0392b;color:white;border-radius:4px;padding:1px 5px">YouTube</span>' : '') +
+              '</div>' +
+              '<a class="link-url" href="' + esc(l.url) + '" data-title="' + esc(l.title || '') + '" data-source="' + esc(l.source || '') + '" data-date="' + esc(l.date || '') + '" data-type="' + esc(l.type || 'article') + '" target="_blank" rel="noopener noreferrer" style="font-size:0.88rem;color:#0645ad;word-break:break-word;text-decoration:none;">' + esc(l.title || l.url) + '</a>' +
+            '</div>' +
+          '</div>';
+        }).join('')
+      : '<p style="color:#aaa;font-size:0.85rem">Aucun lien (envoyer depuis la veille après Générer IA)</p>'
+    ) +
+    '<label style="color:#aaa;font-weight:400;margin-top:8px">Médias : ' + esc(item.sources || '') + '</label>' +
+    '<div class="actions">' +
+    '<button class="btn-publish">Publier sur Agôn</button>' +
+    '<button class="btn-delete">Supprimer</button>' +
+    '</div>' +
+    '</div>';
+}
+
+async function loadPending() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<button class="refresh-btn" id="refresh-btn">↻ Actualiser</button><div id="list"><p style="color:#aaa;text-align:center;margin-top:40px">Chargement…</p></div>';
+  document.getElementById('refresh-btn').addEventListener('click', loadPending);
+
+  try {
+    const r = await fetch('/api/admin/veille', { headers: headers() });
+    if (r.status === 401 || r.status === 403) { showLogin(); return; }
+    if (!r.ok) throw new Error('Erreur serveur');
+    const items = await r.json();
+    const list = document.getElementById('list');
+    if (!items.length) {
+      list.innerHTML = '<p class="empty">Aucun sujet en attente.</p>';
+      return;
+    }
+    list.innerHTML = items.map(renderItem).join('');
+    list.querySelectorAll('.btn-publish').forEach(function(btn) {
+      btn.addEventListener('click', function() { publish(btn); });
+    });
+    list.querySelectorAll('.btn-delete').forEach(function(btn) {
+      btn.addEventListener('click', function() { remove(btn); });
+    });
+  } catch(e) {
+    document.getElementById('list').innerHTML = '<p class="error">Erreur : ' + e.message + '</p>';
+  }
+}
+
+async function publish(btn) {
+  const item = btn.closest('.pending-item');
+  const id = Number(item.dataset.id);
+  const links = [...item.querySelectorAll('.link-row')].filter(function(row) {
+    return row.querySelector('.link-check').checked;
+  }).map(function(row) {
+    const a = row.querySelector('.link-url');
+    return {
+      url: a.href,
+      title: a.dataset.title || '',
+      source: a.dataset.source || '',
+      date: a.dataset.date || '',
+      type: a.dataset.type || 'article'
+    };
+  }).filter(function(l) { return l.url; });
+
+  const body = {
+    id: id,
+    question: item.querySelector('.f-question').value.trim(),
+    positionA: item.querySelector('.f-pos-a').value.trim(),
+    positionB: item.querySelector('.f-pos-b').value.trim(),
+    theme: item.querySelector('.f-theme').value,
+    resume: item.querySelector('.f-resume').value.trim(),
+    links: links
+  };
+  btn.disabled = true;
+  btn.textContent = 'Publication…';
+  try {
+    const r = await fetch('/api/admin/veille/publish', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('Erreur serveur');
+    toast('Débat publié ✓');
+    item.remove();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Publier sur Agôn';
+    toast('Erreur : ' + e.message);
+  }
+}
+
+async function remove(btn) {
+  const item = btn.closest('.pending-item');
+  const id = Number(item.dataset.id);
+  if (!confirm('Supprimer ce sujet ?')) return;
+  try {
+    const r = await fetch('/api/admin/veille/' + id, { method: 'DELETE', headers: headers() });
+    if (!r.ok) throw new Error();
+    item.remove();
+    toast('Supprimé.');
+  } catch {
+    toast('Erreur lors de la suppression.');
+  }
+}
+
+showContent();
+loadPending();
+</script>
+</body>
+</html>

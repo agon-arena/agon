@@ -5798,6 +5798,39 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId });
 }
 
+function startIndexSourceAutoPlay(root) {
+  const scope = root || document;
+  scope.querySelectorAll("[data-index-media-swipe-shell]").forEach(function(shell) {
+    let mediaItems;
+    try { mediaItems = JSON.parse(shell.dataset.mediaItems || "[]"); } catch { return; }
+    if (mediaItems.length < 2) return;
+    if (shell.dataset.autoPlayBound === "1") return;
+    shell.dataset.autoPlayBound = "1";
+
+    let paused = false;
+
+    // Pause au survol
+    shell.addEventListener("mouseenter", function() { paused = true; }, { passive: true });
+    shell.addEventListener("mouseleave", function() { paused = false; }, { passive: true });
+    shell.addEventListener("touchstart", function() { paused = true; }, { passive: true });
+    shell.addEventListener("touchend", function() {
+      setTimeout(function() { paused = false; }, 2000);
+    }, { passive: true });
+
+    // Pause quand hors du viewport
+    const observer = new IntersectionObserver(function(entries) {
+      paused = !entries[0].isIntersecting;
+    }, { threshold: 0.3 });
+    observer.observe(shell);
+
+    setInterval(function() {
+      if (paused) return;
+      const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
+      if (nextBtn) nextBtn.click();
+    }, 5000);
+  });
+}
+
 function initIndexMediaSwipeEnhancements(root) {
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
 
@@ -12584,11 +12617,15 @@ function buildAdminEditPanelHtml(d) {
           <div class="admin-extras-title">Historique des sources</div>
           ${extras.map((e, i) => {
             const dateStr = e.added_at ? new Date(e.added_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+            const title = e.title || e.source || '';
             return `<div class="admin-extras-item" data-extras-type="${escapeAttribute(e.type || 'source')}" data-extras-added-at="${escapeAttribute(e.added_at || '')}">
-              <i class="fa-solid ${iconMap[e.type] || 'fa-link'}" style="color:#6b7280;font-size:11px;flex-shrink:0;"></i>
-              <input class="admin-extras-url admin-edit-input" type="text" value="${escapeAttribute(e.url || '')}" placeholder="https://…" style="flex:1;min-width:0;">
-              ${dateStr ? `<span class="admin-extras-date">${escapeHtml(dateStr)}</span>` : ''}
-              <button type="button" class="admin-extras-delete" title="Supprimer" onclick="event.stopPropagation(); this.closest('.admin-extras-item').remove()"><i class="fa-solid fa-trash"></i></button>
+              ${title ? `<div style="font-size:0.78rem;font-weight:600;color:#374151;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(title)}</div>` : ''}
+              <div style="display:flex;align-items:center;gap:6px;width:100%;">
+                <i class="fa-solid ${iconMap[e.type] || 'fa-link'}" style="color:#6b7280;font-size:11px;flex-shrink:0;"></i>
+                <input class="admin-extras-url admin-edit-input" type="text" value="${escapeAttribute(e.url || '')}" placeholder="https://…" style="flex:1;min-width:0;">
+                ${dateStr ? `<span class="admin-extras-date">${escapeHtml(dateStr)}</span>` : ''}
+                <button type="button" class="admin-extras-delete" title="Supprimer" onclick="event.stopPropagation(); this.closest('.admin-extras-item').remove()"><i class="fa-solid fa-trash"></i></button>
+              </div>
             </div>`;
           }).join('')}
           <div class="admin-edit-actions" style="margin-top:6px;">
@@ -13598,6 +13635,7 @@ div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
   setupIndexInfiniteScroll();
   initIndexCardShareMenus(document);
   initIndexMediaSwipeEnhancements(document);
+  startIndexSourceAutoPlay(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
@@ -13639,6 +13677,7 @@ function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
   setupIndexInfiniteScroll();
   initIndexCardShareMenus(div);
   initIndexMediaSwipeEnhancements(div);
+  startIndexSourceAutoPlay(div);
   initIndexYouTubeObserver(div);
   initIndexLocalVideoObserver(div);
   initIndexXObserver(div);
@@ -17174,6 +17213,57 @@ function bindDebateSourceSwipeHandlers() {
   debateSourceSwipeHandlersBound = true;
 }
 
+let _sourceAutoPlayTimer = null;
+let _sourceAutoPlayPaused = false;
+let _sourceAutoPlayBound = false;
+const SOURCE_AUTOPLAY_INTERVAL = 5000;
+
+function startSourceAutoPlay() {
+  stopSourceAutoPlay();
+  _sourceAutoPlayPaused = false;
+
+  if (currentDebateSourceHistoryItems.length < 2) {
+    setTimeout(function() {
+      if (currentDebateSourceHistoryItems.length >= 2) startSourceAutoPlay();
+    }, 1000);
+    return;
+  }
+
+  _sourceAutoPlayTimer = setInterval(function() {
+    if (!_sourceAutoPlayPaused) stepDebateSourceHistory(1);
+  }, SOURCE_AUTOPLAY_INTERVAL);
+
+  if (!_sourceAutoPlayBound) {
+    _sourceAutoPlayBound = true;
+
+    const container = document.getElementById("debate-source-preview-wrap") ||
+                      document.getElementById("debate-source-fallback");
+
+    if (container) {
+      // Pause au survol
+      container.addEventListener("mouseenter", function() { _sourceAutoPlayPaused = true; }, { passive: true });
+      container.addEventListener("mouseleave", function() { _sourceAutoPlayPaused = false; }, { passive: true });
+      container.addEventListener("touchstart", function() { _sourceAutoPlayPaused = true; }, { passive: true });
+      container.addEventListener("touchend", function() {
+        setTimeout(function() { _sourceAutoPlayPaused = false; }, 2000);
+      }, { passive: true });
+
+      // Pause quand hors du viewport
+      const observer = new IntersectionObserver(function(entries) {
+        _sourceAutoPlayPaused = !entries[0].isIntersecting;
+      }, { threshold: 0.3 });
+      observer.observe(container);
+    }
+  }
+}
+
+function stopSourceAutoPlay() {
+  if (_sourceAutoPlayTimer) {
+    clearInterval(_sourceAutoPlayTimer);
+    _sourceAutoPlayTimer = null;
+  }
+}
+
 function initDebateMediaHistory(debate) {
   const existingSelector = document.getElementById("debate-media-history");
   if (existingSelector) {
@@ -17193,36 +17283,41 @@ function initDebateMediaHistory(debate) {
     return;
   }
 
-  const allItems = [
-    { type: currentType, url: currentUrl, isCurrent: true },
-    ...extras
-  ];
+  // Construire allItems : si media_extras contient tous les liens (avec dates), les utiliser directement
+  const allSourceExtras = extras.filter(e => e.type === 'source');
+  const hasFirstInExtras = allSourceExtras.length > 0 && allSourceExtras[0].url === currentUrl;
+  const allItems = hasFirstInExtras
+    ? allSourceExtras.map((e, i) => ({ ...e, isCurrent: i === 0 }))
+    : [{ type: currentType, url: currentUrl, isCurrent: true, date: '' }, ...extras];
+
   setDebateSourceHistoryItems(allItems, { type: currentType, url: currentUrl });
 
   const iconMap = { video: 'fa-video', image: 'fa-image', source: 'fa-link' };
-  const labelMap = { video: 'Vidéo', image: 'Image', source: 'Source' };
+
+  // Grouper par date pour les sources, un bouton par jour
+  const dateGroups = [];
+  const seenDates = new Map();
+  allItems.forEach((item, i) => {
+    if (item.type !== 'source') {
+      dateGroups.push({ label: item.type === 'video' ? 'Vidéo' : 'Image', icon: iconMap[item.type] || 'fa-file', firstIndex: i, isCurrent: !!item.isCurrent });
+      return;
+    }
+    const dateKey = item.date || '__nodate__';
+    if (seenDates.has(dateKey)) return;
+    seenDates.set(dateKey, i);
+    const label = item.date ? item.date : 'Source';
+    dateGroups.push({ label, icon: 'fa-link', firstIndex: i, isCurrent: !!item.isCurrent, date: item.date });
+  });
 
   const selector = document.createElement('div');
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
-  selector.innerHTML = allItems.map((item, i) => {
-    const typeLabel = labelMap[item.type] || item.type;
-    let tooltipLabel;
-    if (item.isCurrent) {
-      tooltipLabel = typeLabel + " actuel";
-    } else if (item.added_at) {
-      const d = new Date(item.added_at);
-      const dateStr = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-      tooltipLabel = typeLabel + " · Publié jusqu'au " + dateStr;
-    } else {
-      tooltipLabel = typeLabel;
-    }
-    return `
-    <button type="button" class="debate-media-history-btn${item.isCurrent ? ' active' : ''}" data-index="${i}" data-item-type="${escapeAttribute(item.type || '')}" data-item-url="${escapeAttribute(item.url || '')}" title="${escapeAttribute(tooltipLabel)}" data-tooltip="${escapeAttribute(tooltipLabel)}">
-      <i class="fa-solid ${iconMap[item.type] || 'fa-file'}"></i>
-      <span>${i + 1}</span>
-    </button>
-  `;
+  selector.innerHTML = dateGroups.map(function(group) {
+    const tooltip = group.label;
+    return `<button type="button" class="debate-media-history-btn${group.isCurrent ? ' active' : ''}" data-index="${group.firstIndex}" data-item-type="source" data-item-url="${escapeAttribute(allItems[group.firstIndex]?.url || '')}" title="${escapeAttribute(tooltip)}" data-tooltip="${escapeAttribute(tooltip)}">
+      <i class="fa-solid ${group.icon}"></i>
+      <span>${group.label}</span>
+    </button>`;
   }).join('');
 
   // Tooltip fixe pour éviter le clipping par overflow:hidden des parents
@@ -18181,6 +18276,7 @@ if (debateVideoUrl) {
   hydrateDebateSourcePreviewIfNeeded(sourceUrl, initialSourcePreview);
 }
 initDebateMediaHistory(data.debate);
+startSourceAutoPlay();
 if (isOpenDebate(data.debate)) {
   document.getElementById("title-a").textContent = "Réponses";
   document.getElementById("title-b").textContent = "";
@@ -22021,6 +22117,7 @@ function applyCurrentDebateHeaderUpdate(updatedDebate) {
   }
 
   renderDebateContext(updatedDebate.content || "");
+  renderSourceLinks(updatedDebate.source_links || []);
 
   const debateVideoUrl = String(updatedDebate.video_url || "").trim();
   const debateImageUrl = String(updatedDebate.image_url || "").trim();
