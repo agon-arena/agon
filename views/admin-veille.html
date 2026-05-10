@@ -127,7 +127,7 @@ async function checkSimilar(item) {
         '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
         '<ul style="margin:8px 0 0;padding-left:18px;">' +
         data.similar.map(function(s) {
-          return '<li><a href="/debate/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a></li>';
+          return '<li><a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a></li>';
         }).join('') +
         '</ul></div>';
     } else {
