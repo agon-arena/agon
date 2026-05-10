@@ -17234,6 +17234,7 @@ function bindDebateSourceSwipeHandlers() {
 let _sourceAutoPlayTimer = null;
 let _sourceAutoPlayPaused = false;
 let _sourceAutoPlayBound = false;
+let _sourceAutoPlayVideoPlaying = false;
 const SOURCE_AUTOPLAY_INTERVAL = 5000;
 
 function startSourceAutoPlay() {
@@ -17263,7 +17264,7 @@ function startSourceAutoPlay() {
       container.addEventListener("mouseleave", function() { _sourceAutoPlayPaused = false; }, { passive: true });
       container.addEventListener("touchstart", function() { _sourceAutoPlayPaused = true; }, { passive: true });
       container.addEventListener("touchend", function() {
-        setTimeout(function() { _sourceAutoPlayPaused = false; }, 2000);
+        setTimeout(function() { if (!_sourceAutoPlayVideoPlaying) _sourceAutoPlayPaused = false; }, 2000);
       }, { passive: true });
 
       // Pause quand hors du viewport
@@ -17274,18 +17275,35 @@ function startSourceAutoPlay() {
     }
 
     // Pause quand une vidéo est en cours de lecture
-    const debateVideo = document.getElementById("debate-video");
-    if (debateVideo) {
-      debateVideo.addEventListener("play", function() { _sourceAutoPlayPaused = true; });
-      debateVideo.addEventListener("pause", function() { _sourceAutoPlayPaused = false; });
-      debateVideo.addEventListener("ended", function() { _sourceAutoPlayPaused = false; });
-    }
-    const debateVideoWrap = document.getElementById("debate-video-wrap");
-    if (debateVideoWrap) {
-      debateVideoWrap.addEventListener("click", function() {
+    // Utilise la délégation d'événements sur le document pour capter les vidéos chargées après l'init
+    document.addEventListener("play", function(e) {
+      const el = e.target;
+      if (el && (el.id === "debate-video" || el.closest("#debate-video-wrap"))) {
+        _sourceAutoPlayVideoPlaying = true;
         _sourceAutoPlayPaused = true;
-      });
-    }
+      }
+    }, true);
+    document.addEventListener("pause", function(e) {
+      const el = e.target;
+      if (el && (el.id === "debate-video" || el.closest("#debate-video-wrap"))) {
+        _sourceAutoPlayVideoPlaying = false;
+        _sourceAutoPlayPaused = false;
+      }
+    }, true);
+    document.addEventListener("ended", function(e) {
+      const el = e.target;
+      if (el && (el.id === "debate-video" || el.closest("#debate-video-wrap"))) {
+        _sourceAutoPlayVideoPlaying = false;
+        _sourceAutoPlayPaused = false;
+      }
+    }, true);
+    // Clic sur la zone vidéo (YouTube inclus)
+    document.addEventListener("click", function(e) {
+      if (e.target.closest("#debate-video-wrap")) {
+        _sourceAutoPlayVideoPlaying = true;
+        _sourceAutoPlayPaused = true;
+      }
+    }, true);
   }
 }
 
@@ -17308,15 +17326,21 @@ function initDebateMediaHistory(debate) {
     return;
   }
 
-  const currentType = debate.video_url ? 'video' : debate.image_url ? 'image' : debate.source_url ? 'source' : null;
-  const currentUrl = debate.video_url || debate.image_url || debate.source_url || '';
+  let currentType = debate.video_url ? 'video' : debate.image_url ? 'image' : debate.source_url ? 'source' : null;
+  let currentUrl = debate.video_url || debate.image_url || debate.source_url || '';
+
+  // Fallback : si pas de source_url/video/image mais media_extras contient des sources
+  const allSourceExtras = extras.filter(e => e.type === 'source');
+  if (!currentType && allSourceExtras.length > 0) {
+    currentType = 'source';
+    currentUrl = allSourceExtras[0].url;
+  }
+
   if (!currentType) {
     setDebateSourceHistoryItems([], null);
     return;
   }
 
-  // Construire allItems : si media_extras contient tous les liens (avec dates), les utiliser directement
-  const allSourceExtras = extras.filter(e => e.type === 'source');
   const hasFirstInExtras = allSourceExtras.length > 0 && allSourceExtras[0].url === currentUrl;
   const allItems = hasFirstInExtras
     ? allSourceExtras.map((e, i) => ({ ...e, isCurrent: i === 0 }))
