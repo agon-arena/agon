@@ -4627,12 +4627,14 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
     const sourceUrl = firstLink ? (typeof firstLink === "string" ? firstLink : firstLink.url) : null;
+    const nowIsoExtras = new Date().toISOString();
     const allExtras = linksMeta.map(l => ({
       type: "source",
       url: typeof l === "string" ? l : (l.url || ""),
       title: typeof l === "object" ? (l.title || "") : "",
       source: typeof l === "object" ? (l.source || "") : "",
-      date: typeof l === "object" ? (l.date || "") : ""
+      date: typeof l === "object" ? (l.date || "") : "",
+      added_at: nowIsoExtras
     })).filter(e => e.url);
     const extras = allExtras.slice(1);
 
@@ -4674,13 +4676,15 @@ app.post("/api/admin/veille/merge", async (req, res) => {
     if (fetchErr) throw new Error(fetchErr.message);
 
     const oldExtras = Array.isArray(existing.media_extras) ? existing.media_extras : [];
+    const nowIsoMerge = new Date().toISOString();
     const newExtras = Array.isArray(links) ? links.map(l => ({
       type: "source",
       url: typeof l === "string" ? l : (l.url || ""),
       title: typeof l === "object" ? (l.title || "") : "",
       source: typeof l === "object" ? (l.source || "") : "",
       date: typeof l === "object" ? (l.date || "") : "",
-      is_new: true
+      is_new: true,
+      added_at: nowIsoMerge
     })).filter(e => e.url) : [];
 
     const mergedExtras = [
