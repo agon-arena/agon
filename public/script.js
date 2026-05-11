@@ -17420,34 +17420,6 @@ function initDebateMediaHistory(debate) {
     }, { passive: true });
   });
 
-  // --- Carousel nav ---
-  function updateNav(sources, index) {
-    let nav = document.getElementById('debate-source-session-nav');
-    if (sources.length <= 1) { if (nav) nav.style.display = 'none'; return; }
-    if (!nav) {
-      nav = document.createElement('div');
-      nav.id   = 'debate-source-session-nav';
-      nav.className = 'debate-source-session-nav';
-      nav.innerHTML = `
-        <button type="button" class="debate-session-nav-btn" id="debate-session-prev" aria-label="Source précédente"><i class="fa-solid fa-chevron-left"></i></button>
-        <span class="debate-session-nav-counter" id="debate-session-counter"></span>
-        <button type="button" class="debate-session-nav-btn" id="debate-session-next" aria-label="Source suivante"><i class="fa-solid fa-chevron-right"></i></button>`;
-      nav.querySelector('#debate-session-prev').addEventListener('click', async () => {
-        const ni = currentSessionIdx > 0 ? currentSessionIdx - 1 : currentSessionSources.length - 1;
-        await loadSessionSource(currentSessionSources, ni);
-      });
-      nav.querySelector('#debate-session-next').addEventListener('click', async () => {
-        const ni = currentSessionIdx < currentSessionSources.length - 1 ? currentSessionIdx + 1 : 0;
-        await loadSessionSource(currentSessionSources, ni);
-      });
-      const hero2 = document.querySelector('.debate-hero');
-      const fm2   = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
-      if (hero2 && fm2) hero2.insertBefore(nav, fm2);
-    }
-    nav.style.display = 'flex';
-    nav.querySelector('#debate-session-counter').textContent = `${index + 1} / ${sources.length}`;
-  }
-
   async function loadSessionSource(sources, index) {
     currentSessionSources = sources;
     currentSessionIdx = index;
@@ -17455,7 +17427,6 @@ function initDebateMediaHistory(debate) {
     if (!item) return;
     await loadDebateMediaHistoryItem(item);
     setCurrentDebateSourceHistoryItem(item);
-    updateNav(sources, index);
   }
 
   // --- Click handler ---
@@ -17476,8 +17447,6 @@ function initDebateMediaHistory(debate) {
       mediaBtn.classList.add('active');
       await loadDebateMediaHistoryItem(item);
       setCurrentDebateSourceHistoryItem(item);
-      const nav = document.getElementById('debate-source-session-nav');
-      if (nav) nav.style.display = 'none';
     }
   });
 
@@ -17488,8 +17457,6 @@ function initDebateMediaHistory(debate) {
   // Si source_url est vide, la source n'a pas été rendue au chargement → auto-charger
   if (!currentSourceUrl && currentSessionSources.length > 0) {
     loadSessionSource(currentSessionSources, 0);
-  } else {
-    updateNav(currentSessionSources, 0);
   }
 }
 
