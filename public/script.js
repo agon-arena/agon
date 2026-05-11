@@ -6497,6 +6497,7 @@ function updateIndexYouTubeShellOverlay(shell) {
 
 function unloadIndexYouTubeShell(shell) {
   if (!shell) return;
+  if (Date.now() - Number(shell.dataset.lastUserActivation || 0) < 1500) return;
   const iframe = shell.querySelector('.debate-card-youtube-iframe');
   const poster = shell.querySelector('[data-index-youtube-poster]');
   if (!iframe) return;
@@ -6527,6 +6528,7 @@ shell.dataset.userActivated = shouldEnableSound ? 'true' : 'false';
 shell.dataset.soundEnabled = shouldEnableSound ? 'true' : 'false';
 
 if (isNewLoad) {
+  shell.dataset.lastUserActivation = String(Date.now());
   setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
   iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
@@ -6840,6 +6842,7 @@ function bindIndexLocalVideoPosterLifecycle(shell) {
 
 function unloadIndexLocalVideoShell(shell) {
   if (!shell) return;
+  if (Date.now() - Number(shell.dataset.lastUserActivation || 0) < 1500) return;
   const video = shell.querySelector('[data-index-local-video-player]');
   const poster = shell.querySelector('[data-index-local-video-poster]');
   if (!video) return;
@@ -6877,6 +6880,7 @@ function activateIndexLocalVideoShell(shell) {
   const hasUserStarted = shell.dataset.userStarted === 'true';
 
   if (isNewLoad) {
+    shell.dataset.lastUserActivation = String(Date.now());
     if (poster) poster.style.display = '';
     if (hasUserStarted) {
       setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
