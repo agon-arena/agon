@@ -2925,12 +2925,14 @@ app.post("/api/notifications/read-one", async (req, res) => {
 /* =========================
    ADMIN EDIT
 ========================= */
-function addToMediaExtras(currentExtras, type, url) {
+function addToMediaExtras(currentExtras, type, url, publishedAt) {
   const arr = Array.isArray(currentExtras) ? [...currentExtras] : [];
   const normalized = String(url || "").trim();
   if (!normalized) return arr;
   if (arr.some(e => e.url === normalized)) return arr;
-  arr.push({ type, url: normalized, added_at: new Date().toISOString() });
+  const entry = { type, url: normalized, added_at: new Date().toISOString() };
+  if (publishedAt) entry.published_at = publishedAt;
+  arr.push(entry);
   return arr;
 }
 
@@ -2954,7 +2956,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
 
     const { data: currentRow } = await supabase
       .from("debates")
-      .select("image_url, video_url, source_url, media_extras, creator_key")
+      .select("image_url, video_url, source_url, source_published_at, media_extras, creator_key")
       .eq("id", req.params.id)
       .single();
 
@@ -2977,15 +2979,16 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
           await deleteStoredMediaAsset(currentRow.video_url, debateVideosDir);
         }
       }
-      // source_url : si remplacée → historique
+      // source_url : si remplacée → historique (avec published_at original)
       if (sourceUrlSent && normalizedSourceUrl !== currentRow.source_url && currentRow.source_url) {
         if (normalizedSourceUrl) {
-          newExtras = addToMediaExtras(newExtras, 'source', currentRow.source_url);
+          newExtras = addToMediaExtras(newExtras, 'source', currentRow.source_url, currentRow.source_published_at);
         }
       }
     }
 
     const extrasChanged = JSON.stringify(newExtras) !== JSON.stringify(currentRow?.media_extras || []);
+    const sourceChanged = sourceUrlSent && normalizedSourceUrl && normalizedSourceUrl !== currentRow?.source_url;
 
     const updateFields = {
       question, option_a, option_b,
@@ -2995,6 +2998,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
       ...(imageUrlSent ? { image_url: normalizedImageUrl || "" } : {}),
       ...(videoUrlSent ? { video_url: normalizedVideoUrl || "" } : {}),
       ...(extrasChanged ? { media_extras: newExtras } : {}),
+      ...(sourceChanged ? { source_published_at: new Date().toISOString() } : {}),
       ...(mark_as_agon_generated === true ? { creator_key: AGON_ADMIN_CREATOR_KEY } : {})
     };
 

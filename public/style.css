@@ -7662,6 +7662,58 @@ padding:4px 14px 12px 14px;
   color: #ffffff;
 }
 
+.debate-session-count {
+  background: #6b7280;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 3px;
+  line-height: 1.4;
+}
+
+.debate-media-history-btn.active .debate-session-count {
+  background: rgba(255,255,255,0.25);
+}
+
+.debate-source-session-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 6px 0 2px;
+}
+
+.debate-session-nav-btn {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #374151;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.debate-session-nav-btn:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.debate-session-nav-counter {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  min-width: 36px;
+  text-align: center;
+}
+
 #debate-media-tooltip {
   position: fixed;
   background: #1f2937;

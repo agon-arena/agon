@@ -17315,68 +17315,76 @@ function stopSourceAutoPlay() {
 }
 
 function initDebateMediaHistory(debate) {
-  const existingSelector = document.getElementById("debate-media-history");
-  if (existingSelector) {
-    existingSelector.remove();
-  }
+  document.getElementById("debate-media-history")?.remove();
+  document.getElementById("debate-source-session-nav")?.remove();
 
   const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
-  if (!extras.length) {
+  const sourceExtras = extras.filter(e => e.type === 'source');
+  const mediaExtras  = extras.filter(e => e.type === 'image' || e.type === 'video');
+  const currentSourceUrl = String(debate.source_url || '').trim();
+
+  if (!currentSourceUrl && !sourceExtras.length && !mediaExtras.length) {
     setDebateSourceHistoryItems([], null);
     return;
   }
 
-  let currentType = debate.video_url ? 'video' : debate.image_url ? 'image' : debate.source_url ? 'source' : null;
-  let currentUrl = debate.video_url || debate.image_url || debate.source_url || '';
-
-  // Fallback : si pas de source_url/video/image mais media_extras contient des sources
-  const allSourceExtras = extras.filter(e => e.type === 'source');
-  if (!currentType && allSourceExtras.length > 0) {
-    currentType = 'source';
-    currentUrl = allSourceExtras[0].url;
+  // --- Build full ordered source list ---
+  const allSources = [];
+  if (currentSourceUrl) {
+    allSources.push({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
   }
-
-  if (!currentType) {
-    setDebateSourceHistoryItems([], null);
-    return;
+  for (const e of sourceExtras) {
+    if (e.url) allSources.push({ type: 'source', url: e.url, published_at: e.published_at || e.added_at || '', isCurrent: false });
   }
+  setDebateSourceHistoryItems(allSources, allSources[0] || null);
 
-  const hasFirstInExtras = allSourceExtras.length > 0 && allSourceExtras[0].url === currentUrl;
-  const allItems = hasFirstInExtras
-    ? allSourceExtras.map((e, i) => ({ ...e, isCurrent: i === 0 }))
-    : [{ type: currentType, url: currentUrl, isCurrent: true, date: '' }, ...extras];
-
-  setDebateSourceHistoryItems(allItems, { type: currentType, url: currentUrl });
-
-  const iconMap = { video: 'fa-video', image: 'fa-image', source: 'fa-link' };
-
-  // Grouper par date pour les sources, un bouton par jour
-  const dateGroups = [];
-  const seenDates = new Map();
-  allItems.forEach((item, i) => {
-    if (item.type !== 'source') {
-      dateGroups.push({ label: item.type === 'video' ? 'Vidéo' : 'Image', icon: iconMap[item.type] || 'fa-file', firstIndex: i, isCurrent: !!item.isCurrent });
-      return;
-    }
-    const dateKey = item.date || '__nodate__';
-    if (seenDates.has(dateKey)) return;
-    seenDates.set(dateKey, i);
-    const label = item.date ? item.date : 'Source';
-    dateGroups.push({ label, icon: 'fa-link', firstIndex: i, isCurrent: !!item.isCurrent, date: item.date });
+  // --- Group sources by publication day (YYYY-MM-DD) ---
+  const dayMap = new Map();
+  for (const src of allSources) {
+    const key = (src.published_at || '').slice(0, 10) || '__nodate__';
+    if (!dayMap.has(key)) dayMap.set(key, []);
+    dayMap.get(key).push(src);
+  }
+  const sortedGroups = [...dayMap.entries()].sort((a, b) => {
+    if (a[0] === '__nodate__') return 1;
+    if (b[0] === '__nodate__') return -1;
+    return b[0].localeCompare(a[0]);
   });
 
+  function formatDate(d) {
+    if (!d || d === '__nodate__') return 'Sources';
+    try { return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    catch { return d; }
+  }
+
+  // --- Session state ---
+  let currentSessionSources = sortedGroups.length ? sortedGroups[0][1] : [];
+  let currentSessionIdx = 0;
+
+  // --- Build selector HTML ---
   const selector = document.createElement('div');
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
-  selector.innerHTML = dateGroups.map(function(group) {
-    const tooltip = group.label;
-    return `<button type="button" class="debate-media-history-btn${group.isCurrent ? ' active' : ''}" data-index="${group.firstIndex}" data-item-type="source" data-item-url="${escapeAttribute(allItems[group.firstIndex]?.url || '')}" title="${escapeAttribute(tooltip)}" data-tooltip="${escapeAttribute(tooltip)}">
-      <i class="fa-solid ${group.icon}"></i>
-      <span>${group.label}</span>
+
+  const sessionHtml = sortedGroups.map(([key, srcs], i) => {
+    const label = formatDate(key);
+    const badge = srcs.length > 1 ? `<span class="debate-session-count">${srcs.length}</span>` : '';
+    return `<button type="button" class="debate-media-history-btn${i === 0 ? ' active' : ''}" data-session="${i}" data-tooltip="${label}" title="${label}">
+      <i class="fa-solid fa-link"></i><span>${label}</span>${badge}
     </button>`;
   }).join('');
 
-  // Tooltip fixe pour éviter le clipping par overflow:hidden des parents
+  const mediaHtml = mediaExtras.map((e) => {
+    const label = e.type === 'video' ? 'Vidéo' : 'Image';
+    const icon  = e.type === 'video' ? 'fa-video' : 'fa-image';
+    return `<button type="button" class="debate-media-history-btn debate-media-history-btn--media" data-media-type="${e.type}" data-media-url="${escapeAttribute(e.url)}" title="${label}">
+      <i class="fa-solid ${icon}"></i><span>${label}</span>
+    </button>`;
+  }).join('');
+
+  selector.innerHTML = sessionHtml + mediaHtml;
+
+  // --- Tooltip ---
   let mediaTooltipEl = document.getElementById('debate-media-tooltip');
   if (!mediaTooltipEl) {
     mediaTooltipEl = document.createElement('div');
@@ -17384,7 +17392,6 @@ function initDebateMediaHistory(debate) {
     document.body.appendChild(mediaTooltipEl);
   }
   let mediaTooltipHideTimer = null;
-
   function showMediaTooltip(btn) {
     const text = btn.dataset.tooltip;
     if (!text) return;
@@ -17396,18 +17403,14 @@ function initDebateMediaHistory(debate) {
     let left = rect.left + rect.width / 2 - tipW / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
     mediaTooltipEl.style.left = left + 'px';
-    mediaTooltipEl.style.top = (rect.bottom + 7) + 'px';
+    mediaTooltipEl.style.top  = (rect.bottom + 7) + 'px';
     mediaTooltipEl.style.opacity = '1';
   }
-
-  function hideMediaTooltip() {
-    mediaTooltipEl.style.opacity = '0';
-  }
-
-  selector.querySelectorAll('.debate-media-history-btn[data-tooltip]').forEach(btn => {
+  function hideMediaTooltip() { mediaTooltipEl.style.opacity = '0'; }
+  selector.querySelectorAll('[data-tooltip]').forEach(btn => {
     btn.addEventListener('mouseenter', () => showMediaTooltip(btn));
     btn.addEventListener('mouseleave', hideMediaTooltip);
-    btn.addEventListener('focus', () => showMediaTooltip(btn));
+    btn.addEventListener('focus',      () => showMediaTooltip(btn));
     btn.addEventListener('blur', hideMediaTooltip);
     btn.addEventListener('touchstart', (e) => {
       e.stopPropagation();
@@ -17417,19 +17420,73 @@ function initDebateMediaHistory(debate) {
     }, { passive: true });
   });
 
-  selector.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.debate-media-history-btn');
-    if (!btn) return;
-    const item = allItems[parseInt(btn.dataset.index, 10)];
+  // --- Carousel nav ---
+  function updateNav(sources, index) {
+    let nav = document.getElementById('debate-source-session-nav');
+    if (sources.length <= 1) { if (nav) nav.style.display = 'none'; return; }
+    if (!nav) {
+      nav = document.createElement('div');
+      nav.id   = 'debate-source-session-nav';
+      nav.className = 'debate-source-session-nav';
+      nav.innerHTML = `
+        <button type="button" class="debate-session-nav-btn" id="debate-session-prev" aria-label="Source précédente"><i class="fa-solid fa-chevron-left"></i></button>
+        <span class="debate-session-nav-counter" id="debate-session-counter"></span>
+        <button type="button" class="debate-session-nav-btn" id="debate-session-next" aria-label="Source suivante"><i class="fa-solid fa-chevron-right"></i></button>`;
+      nav.querySelector('#debate-session-prev').addEventListener('click', async () => {
+        const ni = currentSessionIdx > 0 ? currentSessionIdx - 1 : currentSessionSources.length - 1;
+        await loadSessionSource(currentSessionSources, ni);
+      });
+      nav.querySelector('#debate-session-next').addEventListener('click', async () => {
+        const ni = currentSessionIdx < currentSessionSources.length - 1 ? currentSessionIdx + 1 : 0;
+        await loadSessionSource(currentSessionSources, ni);
+      });
+      const hero2 = document.querySelector('.debate-hero');
+      const fm2   = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
+      if (hero2 && fm2) hero2.insertBefore(nav, fm2);
+    }
+    nav.style.display = 'flex';
+    nav.querySelector('#debate-session-counter').textContent = `${index + 1} / ${sources.length}`;
+  }
+
+  async function loadSessionSource(sources, index) {
+    currentSessionSources = sources;
+    currentSessionIdx = index;
+    const item = sources[index];
     if (!item) return;
     await loadDebateMediaHistoryItem(item);
-    syncDebateMediaHistoryActiveButton(item);
     setCurrentDebateSourceHistoryItem(item);
+    updateNav(sources, index);
+  }
+
+  // --- Click handler ---
+  selector.addEventListener('click', async (e) => {
+    const sessionBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
+    if (sessionBtn) {
+      const si = parseInt(sessionBtn.dataset.session, 10);
+      const [, srcs] = sortedGroups[si];
+      selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
+      sessionBtn.classList.add('active');
+      await loadSessionSource(srcs, 0);
+      return;
+    }
+    const mediaBtn = e.target.closest('.debate-media-history-btn--media');
+    if (mediaBtn) {
+      const item = { type: mediaBtn.dataset.mediaType, url: mediaBtn.dataset.mediaUrl };
+      selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
+      mediaBtn.classList.add('active');
+      await loadDebateMediaHistoryItem(item);
+      setCurrentDebateSourceHistoryItem(item);
+      const nav = document.getElementById('debate-source-session-nav');
+      if (nav) nav.style.display = 'none';
+    }
   });
 
   const hero = document.querySelector('.debate-hero');
   const firstMedia = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
   if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
+
+  // Init nav for the most recent session (source already displayed on page load)
+  updateNav(currentSessionSources, 0);
 }
 
 async function loadDebateMediaHistoryItem(item) {
