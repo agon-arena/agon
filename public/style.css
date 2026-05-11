@@ -7464,6 +7464,10 @@ padding:4px 14px 12px 14px;
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .debate-source-card-title {
