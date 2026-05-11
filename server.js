@@ -1097,6 +1097,12 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
     160
   );
 
+  const author = cleanPreviewText(
+    pickStructuredValue(jsonLdObjects, ["author", "creator", "contributor"]) ||
+    extractJsonLikeValueFromScripts(html, ["author", "channelName", "channel"], 160),
+    160
+  );
+
   return {
     url: requestedUrl,
     finalUrl: canonicalUrl || finalUrl || requestedUrl,
@@ -1105,7 +1111,8 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
     title: title || domain,
     description,
     image,
-    siteName: siteName || domain
+    siteName: siteName || domain,
+    ...(author ? { author } : {})
   };
 }
 

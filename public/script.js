@@ -5665,7 +5665,8 @@ function renderIndexInlineSourceCard(debate) {
     : null;
 
   if (isIndexYouTubeSourceDebate(debate)) {
-    const ytLabel = normalizeSourcePreviewData(sourcePreview, sourceUrl).domain;
+    const norm = normalizeSourcePreviewData(sourcePreview, sourceUrl);
+    const ytLabel = sourcePreview?.author || norm.domain;
     return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId, ytLabel);
   }
   const debateId = String(debate?.id || "").trim();
@@ -5817,7 +5818,8 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   }
 
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
-    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, String(item.source || '').trim());
+    const ytLabel = String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
+    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel);
   }
 
   if (isXStatusUrl(itemUrl)) {
