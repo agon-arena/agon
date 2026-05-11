@@ -6062,8 +6062,10 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
       data-current-source-url="${escapeAttribute(currentSourceUrl)}"
       data-current-source-preview="${escapeAttribute(JSON.stringify(sourcePreview || null))}"
     >
-      <div class="index-media-swipe-content" data-index-media-swipe-content>
-        ${baseHtml}
+      <div class="index-media-swipe-media">
+        <div class="index-media-swipe-content" data-index-media-swipe-content>
+          ${baseHtml}
+        </div>
       </div>
       ${showSwipeHotspots ? `
       <div

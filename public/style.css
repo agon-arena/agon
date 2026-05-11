@@ -454,6 +454,7 @@ main.create-page {
   display: grid;
   gap: 16px;
   margin-top: 8px;
+  overflow-anchor: none;
 }
 .page-home .debates-list {
   width: min(400px, 100%);
@@ -478,6 +479,7 @@ main.create-page {
   overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
+  overflow-anchor: none;
 }
 
 .debate-card:hover {
@@ -7980,6 +7982,13 @@ padding:4px 14px 12px 14px;
 .index-media-swipe-shell {
   position: relative;
   contain: layout;
+  overflow-anchor: none;
+}
+
+.index-media-swipe-media {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  position: relative;
 }
 
 .index-media-swipe-hotspot {
