@@ -8759,7 +8759,7 @@ body.is-standalone .topbar-refresh-btn {
     object-fit: cover;
     border-radius: 20px;
     margin: 0 auto 0 0;
-    transform: translateY(20px);
+    transform: translate(-60px, 20px);
   }
 }
 
