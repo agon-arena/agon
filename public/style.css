@@ -8725,6 +8725,24 @@ body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
+.topbar-app-icon {
+  display: none;
+}
+
+.page-home-mobile .topbar-app-icon {
+  display: block;
+  grid-area: spacer;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: auto;
+}
+
+body.is-standalone .topbar-app-icon {
+  display: none;
+}
+
 .home-topbar-menu-toggle{
   width:40px;
   height:40px;
