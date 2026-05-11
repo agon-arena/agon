@@ -8765,6 +8765,11 @@ body.is-standalone .topbar-refresh-btn {
   body.is-standalone .topbar-app-icon--desktop {
     display: none;
   }
+
+  body.is-standalone .topbar-refresh-btn {
+    grid-area: spacer;
+    margin: auto;
+  }
 }
 
 /* ===== MODAL INSTALLATION PWA ===== */
