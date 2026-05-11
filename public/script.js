@@ -5708,9 +5708,25 @@ function getIndexDebateCurrentMediaItem(debate) {
 function getIndexDebateMediaItems(debate) {
   const currentItem = getIndexDebateCurrentMediaItem(debate);
   const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
+
+  // Session courante identifiée par la date de source_published_at (YYYY-MM-DD)
+  const sessionDate = String(debate?.source_published_at || '').slice(0, 10);
+
+  // Pour les sources : ne garder que celles de la session courante.
+  // Pour les images/vidéos : toujours incluses (pas de notion de session).
+  // Fallback : si pas de source_published_at (anciens débats), tout inclure.
+  const filteredExtras = extras.filter((item) => {
+    if (!item) return false;
+    const type = String(item.type || '').trim();
+    if (type !== 'source') return true;
+    if (!sessionDate) return true;
+    const itemDate = String(item.published_at || item.added_at || '').slice(0, 10);
+    return itemDate === sessionDate;
+  });
+
   const allItems = [
     ...(currentItem ? [currentItem] : []),
-    ...extras
+    ...filteredExtras
   ];
 
   const seen = new Set();
