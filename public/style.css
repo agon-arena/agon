@@ -8758,7 +8758,8 @@ body.is-standalone .topbar-refresh-btn {
     height: 160px;
     object-fit: cover;
     border-radius: 20px;
-    margin: -20px 0 -100px auto;
+    margin: 0 0 0 auto;
+    transform: translateY(40px);
   }
 }
 
