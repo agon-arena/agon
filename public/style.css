@@ -8648,11 +8648,17 @@ body.page-home.page-home-mobile {
     margin-left: 0;
   }
 
+  .page-debate .debate-topbar-back-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
   .page-debate .home-brand-main {
     width: 100%;
     justify-content: center;
   }
-
 
   .page-debate .home-logo {
     width: 212px;
@@ -8681,6 +8687,13 @@ body.page-home.page-home-mobile {
   .page-debate #admin-login-btn {
     position: absolute;
     left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .page-debate .debate-topbar-back-btn {
+    position: absolute;
+    left: 32px;
     top: 50%;
     transform: translateY(-50%);
   }
