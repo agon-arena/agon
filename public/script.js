@@ -17420,9 +17420,17 @@ function initDebateMediaHistory(debate) {
   function batchLabelShort(index) {
     return index === 0 ? 'Publication initiale' : `Mise à jour ${index + 1}`;
   }
-  function batchLabelFull(index, count) {
+  function formatBatchDate(key) {
+    if (!key || key === '__nodate__') return '';
+    try { return new Date(key).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); }
+    catch { return ''; }
+  }
+
+  function batchLabelFull(index, count, key) {
     const s = count > 1 ? 'Sources' : 'Source';
-    return index === 0 ? `${s} de la publication initiale` : `${s} de la mise à jour ${index + 1}`;
+    const base = index === 0 ? `${s} de la publication initiale` : `${s} de la mise à jour ${index + 1}`;
+    const date = formatBatchDate(key);
+    return date ? `${base} — ${date}` : base;
   }
 
   // Batch actif au chargement = celui qui contient source_url
@@ -17440,10 +17448,10 @@ function initDebateMediaHistory(debate) {
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
 
-  const sessionHtml = sortedBatches.map(([, srcs], i) => {
+  const sessionHtml = sortedBatches.map(([key, srcs], i) => {
     const count = srcs.length;
     const labelShort = batchLabelShort(i);
-    const labelFull  = batchLabelFull(i, count);
+    const labelFull  = batchLabelFull(i, count, key);
     const badge = count > 1 ? `<span class="debate-session-count">${count}</span>` : '';
     return `<button type="button" class="debate-media-history-btn${i === initialActiveIndex ? ' active' : ''}" data-session="${i}" data-tooltip="${labelFull}" title="${labelFull}">
       <i class="fa-solid fa-link"></i><span>${labelShort}</span>${badge}
