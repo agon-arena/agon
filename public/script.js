@@ -5897,6 +5897,11 @@ function initIndexMediaSwipeEnhancements(root) {
       const inner = shell.querySelector("[data-index-media-swipe-content]");
       if (!inner) return false;
 
+      // Verrou hauteur : empêche le shell de changer de taille pendant le swap
+      // pour éviter que le haut de la carte saute visuellement
+      const lockedHeight = shell.offsetHeight;
+      shell.style.minHeight = lockedHeight + 'px';
+
       let nextItemPreview = null;
       if (
         String(nextItem?.type || '').trim() === 'source'
@@ -5907,6 +5912,9 @@ function initIndexMediaSwipeEnhancements(root) {
       }
 
       inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, nextItemPreview);
+
+      // Relâche le verrou après le rendu pour permettre l'ajustement naturel
+      requestAnimationFrame(() => { shell.style.minHeight = ''; });
       shell.dataset.currentIndex = String(normalizedIndex);
 
       if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(inner);
