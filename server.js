@@ -3061,11 +3061,13 @@ app.post("/api/admin/debate/:id/bump", async (req, res) => {
   try {
     const debateId = req.params.id;
     const preserveAgonGenerated = req.body?.preserve_agon_generated === true;
+    const now = new Date().toISOString();
     const { error } = await supabase
       .from("debates")
       .update({
-        bumped_at: new Date().toISOString(),
-        creator_key: preserveAgonGenerated ? AGON_ADMIN_CREATOR_KEY : null
+        bumped_at: now,
+        creator_key: preserveAgonGenerated ? AGON_ADMIN_CREATOR_KEY : null,
+        ...(preserveAgonGenerated ? { created_at: now, source_published_at: now } : {})
       })
       .eq("id", debateId);
     if (error) {
