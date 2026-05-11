@@ -8021,6 +8021,12 @@ padding:4px 14px 12px 14px;
   position: relative;
 }
 
+.index-media-swipe-media:has(.debate-card-x-shell),
+.index-media-swipe-media:has(.debate-card-source-x) {
+  aspect-ratio: unset;
+  overflow: visible;
+}
+
 .index-media-swipe-hotspot {
   position: absolute;
   top: 0;
