@@ -17336,7 +17336,8 @@ function initDebateMediaHistory(debate) {
   for (const e of sourceExtras) {
     if (e.url) allSources.push({ type: 'source', url: e.url, published_at: e.published_at || e.added_at || '', isCurrent: false });
   }
-  setDebateSourceHistoryItems(allSources, allSources[0] || null);
+  // Le swipe ne concerne que la session la plus récente au chargement
+  // (mis à jour lors du clic sur une autre session)
 
   // --- Group sources by publication day (YYYY-MM-DD) ---
   const dayMap = new Map();
@@ -17360,6 +17361,9 @@ function initDebateMediaHistory(debate) {
   // --- Session state ---
   let currentSessionSources = sortedGroups.length ? sortedGroups[0][1] : [];
   let currentSessionIdx = 0;
+
+  // Initialise le swipe sur la session la plus récente uniquement
+  setDebateSourceHistoryItems(currentSessionSources, currentSessionSources[0] || null);
 
   // --- Build selector HTML ---
   const selector = document.createElement('div');
@@ -17426,7 +17430,8 @@ function initDebateMediaHistory(debate) {
     const item = sources[index];
     if (!item) return;
     await loadDebateMediaHistoryItem(item);
-    setCurrentDebateSourceHistoryItem(item);
+    // Restreint le swipe aux sources de cette session uniquement
+    setDebateSourceHistoryItems(sources, item);
   }
 
   // --- Click handler ---
