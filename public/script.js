@@ -5835,6 +5835,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
 }
 
 function startIndexSourceAutoPlay(root) {
+  return; // défilement automatique désactivé
   const scope = root || document;
   scope.querySelectorAll("[data-index-media-swipe-shell]").forEach(function(shell) {
     let mediaItems;
@@ -17305,6 +17306,7 @@ let _sourceAutoPlayVideoPlaying = false;
 const SOURCE_AUTOPLAY_INTERVAL = 5000;
 
 function startSourceAutoPlay() {
+  return; // défilement automatique désactivé
   stopSourceAutoPlay();
   _sourceAutoPlayPaused = false;
 
