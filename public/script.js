@@ -5498,7 +5498,7 @@ function isIndexYouTubeSourceDebate(debate) {
   return !!String(embedData.videoId || "").trim();
 }
 
-function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
+function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
   const embedData = getEmbeddableSourceData(sourceUrl);
   if (!embedData.videoId || !embedData.embedUrl) return "";
 
@@ -5537,7 +5537,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "") {
             >
               <i class="fa-solid fa-play" style="margin-left:4px; font-size:24px;"></i>
             </span>
-            <span class="debate-card-youtube-label" style="position:absolute; left:12px; bottom:10px; padding:6px 10px; border-radius:999px; background:rgba(17,24,39,0.72); color:#fff; font-size:12px; font-weight:700;">Vidéo YouTube</span>
+            <span class="debate-card-youtube-label" style="position:absolute; left:12px; bottom:10px; padding:6px 10px; border-radius:999px; background:rgba(17,24,39,0.72); color:#fff; font-size:12px; font-weight:700;">${escapeHtml(mediaLabel || 'YouTube')}</span>
           </span>
         </button>
 
@@ -5660,13 +5660,14 @@ function renderIndexInlineSourceCard(debate) {
     return buildIndexLocalImageCardHtml(sourceUrl, safeDebateId);
   }
 
-  if (isIndexYouTubeSourceDebate(debate)) {
-    return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId);
-  }
-
   const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
     ? debate.source_preview
     : null;
+
+  if (isIndexYouTubeSourceDebate(debate)) {
+    const ytLabel = normalizeSourcePreviewData(sourcePreview, sourceUrl).domain;
+    return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId, ytLabel);
+  }
   const debateId = String(debate?.id || "").trim();
 
   if (isXStatusUrl(sourceUrl)) {
@@ -5816,7 +5817,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   }
 
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
-    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId);
+    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, String(item.source || '').trim());
   }
 
   if (isXStatusUrl(itemUrl)) {
