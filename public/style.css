@@ -8749,12 +8749,12 @@ body.is-standalone .topbar-refresh-btn {
 @media (min-width: 769px) {
   .topbar-app-icon--desktop {
     display: block;
-    width: 100px;
-    height: 100px;
+    width: 160px;
+    height: 160px;
     object-fit: cover;
-    border-radius: 16px;
+    border-radius: 20px;
     flex-shrink: 0;
-    margin: -30px 0;
+    margin: -60px 0;
   }
 }
 
