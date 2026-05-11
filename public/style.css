@@ -8731,7 +8731,7 @@ body.is-standalone .topbar-refresh-btn {
 }
 
 @media (max-width: 768px) {
-  .page-home-mobile .topbar-app-icon {
+  .page-home-mobile .topbar-app-icon--mobile {
     display: block;
     grid-area: spacer;
     width: 130px;
@@ -8741,13 +8741,13 @@ body.is-standalone .topbar-refresh-btn {
     margin: -35px 0 -45px -58px;
   }
 
-  body.is-standalone .topbar-app-icon {
+  body.is-standalone .topbar-app-icon--mobile {
     display: none;
   }
 }
 
 @media (min-width: 769px) {
-  .topbar-app-icon {
+  .topbar-app-icon--desktop {
     display: block;
     width: 34px;
     height: 34px;
