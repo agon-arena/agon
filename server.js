@@ -4530,35 +4530,44 @@ app.delete("/api/comments/:id", async (req, res) => {
 
 /* ========================= VEILLE PENDING ========================= */
 
-const VEILLE_PENDING_FILE = path.join(__dirname, "data/veille-pending.json");
-const DEBATE_CATEGORIES = [
-  "Politique, économie et relations internationales",
-  "Société, éducation et justice",
-  "Sciences, technologies et environnement",
-  "Culture, modes et médias",
-  "Santé, corps et bien-être",
-  "Sport, loisirs et passions",
-  "Vie personnelle et modes de vie",
-  "Espace jeunes (collégiens - lycéens)"
-];
-
-function loadVeillePending() {
-  if (!fs.existsSync(VEILLE_PENDING_FILE)) return [];
-  try { return JSON.parse(fs.readFileSync(VEILLE_PENDING_FILE, "utf8")); } catch { return []; }
+async function loadVeillePending() {
+  const { data, error } = await supabase
+    .from("veille_pending")
+    .select("*")
+    .order("added_at", { ascending: false });
+  if (error) { console.error("loadVeillePending:", error.message); return []; }
+  return (data || []).map(r => ({
+    id: r.id,
+    question: r.question,
+    positionA: r.position_a,
+    positionB: r.position_b,
+    theme: r.theme,
+    resume: r.resume,
+    sources: r.sources,
+    links: r.links || [],
+    addedAt: r.added_at
+  }));
 }
 
-function saveVeillePending(items) {
-  const dir = path.dirname(VEILLE_PENDING_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(VEILLE_PENDING_FILE, JSON.stringify(items, null, 2), "utf8");
+async function deleteVeillePending(id) {
+  const { error } = await supabase.from("veille_pending").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
-app.post("/api/veille/receive", (req, res) => {
+app.post("/api/veille/receive", async (req, res) => {
   const { question, positionA, positionB, theme, resume, sources, links } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
-  const items = loadVeillePending();
-  items.unshift({ id: Date.now(), question, positionA, positionB, theme, resume, sources, links: links || [], addedAt: new Date().toISOString() });
-  saveVeillePending(items);
+  const { error } = await supabase.from("veille_pending").insert({
+    id: Date.now(),
+    question,
+    position_a: positionA || null,
+    position_b: positionB || null,
+    theme: theme || null,
+    resume: resume || null,
+    sources: sources || null,
+    links: links || []
+  });
+  if (error) { console.error("veille receive:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
   res.json({ ok: true });
 });
 
@@ -4597,15 +4606,17 @@ app.get("/admin/veille", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-veille.html"));
 });
 
-app.get("/api/admin/veille", (req, res) => {
-  res.json(loadVeillePending());
+app.get("/api/admin/veille", async (req, res) => {
+  res.json(await loadVeillePending());
 });
 
-app.delete("/api/admin/veille/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const items = loadVeillePending().filter(i => i.id !== id);
-  saveVeillePending(items);
-  res.json({ ok: true });
+app.delete("/api/admin/veille/:id", async (req, res) => {
+  try {
+    await deleteVeillePending(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.post("/api/admin/veille/publish", async (req, res) => {
@@ -4642,8 +4653,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     if (sourceUrl) {
       try { await getExternalLinkPreview(sourceUrl); } catch {}
     }
-    const items = loadVeillePending().filter(i => i.id !== Number(id));
-    saveVeillePending(items);
+    if (id) await deleteVeillePending(Number(id));
     res.json({ ok: true, debateId: data.id });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4687,8 +4697,7 @@ app.post("/api/admin/veille/merge", async (req, res) => {
     const resumeTrimmed = typeof resume === "string" ? resume.trim() : "";
     if (resumeTrimmed) setDebateStoredContent(debateId, resumeTrimmed);
 
-    const items = loadVeillePending().filter(i => i.id !== Number(id));
-    saveVeillePending(items);
+    if (id) await deleteVeillePending(Number(id));
     res.json({ ok: true, debateId });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
