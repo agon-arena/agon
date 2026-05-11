@@ -5709,24 +5709,35 @@ function getIndexDebateMediaItems(debate) {
   const currentItem = getIndexDebateCurrentMediaItem(debate);
   const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
 
-  // Session courante identifiée par la date de source_published_at (YYYY-MM-DD)
-  const sessionDate = String(debate?.source_published_at || '').slice(0, 10);
-
-  // Pour les sources : ne garder que celles de la session courante.
-  // Pour les images/vidéos : toujours incluses (pas de notion de session).
-  // Fallback : si pas de source_published_at OU si aucune source ne correspond, tout inclure.
-  const sourceExtrasAll = extras.filter(e => e && String(e.type || '').trim() === 'source');
+  const currentSourceUrl = String(debate?.source_url || '').trim();
+  const sourceExtrasAll = extras.filter(e => e && String(e.type || '').trim() === 'source' && e.url);
   const nonSourceExtras = extras.filter(e => e && String(e.type || '').trim() !== 'source');
+
+  // Trouve le batch de la dernière publication (celui qui contient source_url)
+  // Même logique que initDebateMediaHistory : clé = added_at > is_new > __nodate__
   let matchingSourceExtras;
-  if (!sessionDate) {
-    matchingSourceExtras = sourceExtrasAll;
+  if (!sourceExtrasAll.length) {
+    matchingSourceExtras = [];
   } else {
-    const filtered = sourceExtrasAll.filter(e => {
-      const itemDate = String(e.published_at || e.added_at || '').slice(0, 10);
-      return itemDate === sessionDate;
-    });
-    matchingSourceExtras = filtered.length ? filtered : sourceExtrasAll;
+    const batchKey = (e) => e.added_at || (e.is_new ? '__isnew__' : '__nodate__');
+    const activeBatchKey = (() => {
+      const found = sourceExtrasAll.find(e => e.url === currentSourceUrl);
+      if (found) return batchKey(found);
+      // Fallback : batch le plus récent (tri desc added_at, __isnew__ avant __nodate__)
+      const sorted = [...sourceExtrasAll].sort((a, b) => {
+        const ka = batchKey(a), kb = batchKey(b);
+        if (ka === kb) return 0;
+        if (ka === '__nodate__') return 1;
+        if (kb === '__nodate__') return -1;
+        if (ka === '__isnew__') return -1;
+        if (kb === '__isnew__') return 1;
+        return kb.localeCompare(ka); // desc
+      });
+      return batchKey(sorted[0]);
+    })();
+    matchingSourceExtras = sourceExtrasAll.filter(e => batchKey(e) === activeBatchKey);
   }
+
   const filteredExtras = [...nonSourceExtras, ...matchingSourceExtras];
 
   const allItems = [
