@@ -2936,7 +2936,7 @@ function addToMediaExtras(currentExtras, type, url, publishedAt) {
   return arr;
 }
 
-app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
+app.put("/api/admin/debate/:id", async (req, res) => {
   try {
     const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
@@ -3057,7 +3057,7 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
   }
 });
 
-app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
+app.post("/api/admin/debate/:id/bump", async (req, res) => {
   try {
     const debateId = req.params.id;
     const preserveAgonGenerated = req.body?.preserve_agon_generated === true;
