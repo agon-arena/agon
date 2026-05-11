@@ -128,7 +128,9 @@ async function checkSimilar(item) {
       body: JSON.stringify({ question: item.question })
     });
     const data = await r.json();
-    if (data.similar && data.similar.length) {
+    if (data.warning) {
+      el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#e67e22;" id="similar-' + item.id + '">⚠ ' + esc(data.warning) + '</div>';
+    } else if (data.similar && data.similar.length) {
       el.outerHTML = '<div class="similar-box" id="similar-' + item.id + '">' +
         '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
         '<div style="margin-top:8px;">' +
