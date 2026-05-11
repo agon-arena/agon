@@ -17383,12 +17383,14 @@ function initDebateMediaHistory(debate) {
     return { type: 'source', url, published_at: e.date || e.published_at || e.added_at || '', isCurrent: url === currentSourceUrl };
   }
 
-  // --- Groupe les sourceExtras par batch de publication (added_at exact) ---
-  // Toutes les sources d'un même publish/merge ont le même added_at → 1 batch par opération.
-  // Sans added_at → batch '__nodate__' (mis en dernier, traité comme le plus récent si source_url seule).
+  // --- Groupe les sourceExtras par batch de publication ---
+  // Clé de batch (priorité) :
+  //   1. added_at exact (toutes les sources d'un même publish/merge ont le même)
+  //   2. is_new:true sans added_at → '__isnew__' (merge avant le fix added_at)
+  //   3. sinon → '__nodate__' (publication initiale / legacy)
   const batchMap = new Map();
   for (const e of sourceExtras) {
-    const key = e.added_at || '__nodate__';
+    const key = e.added_at || (e.is_new ? '__isnew__' : '__nodate__');
     if (!batchMap.has(key)) batchMap.set(key, []);
     batchMap.get(key).push(e);
   }
@@ -17400,11 +17402,14 @@ function initDebateMediaHistory(debate) {
     batchMap.get(key).unshift({ type: 'source', url: currentSourceUrl });
   }
 
-  // Tri ascendant par added_at (plus ancien = "publication initiale"), __nodate__ en dernier
+  // Tri ascendant : __nodate__ en premier (initial), dated ensuite, __isnew__ en dernier
   const sortedBatches = [...batchMap.entries()]
     .sort((a, b) => {
-      if (a[0] === '__nodate__') return 1;
-      if (b[0] === '__nodate__') return -1;
+      if (a[0] === '__nodate__' && b[0] === '__nodate__') return 0;
+      if (a[0] === '__nodate__') return -1;
+      if (b[0] === '__nodate__') return 1;
+      if (a[0] === '__isnew__') return 1;
+      if (b[0] === '__isnew__') return -1;
       return a[0].localeCompare(b[0]);
     })
     .map(([key, rawExtras]) => {
