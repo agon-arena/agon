@@ -7639,24 +7639,48 @@ padding:4px 14px 12px 14px;
 .debate-media-history-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 0;
+  padding: 6px 8px;
   border-radius: 20px;
   border: 1px solid #d1d5db;
   background: #ffffff;
-  color: #374151;
+  color: #9ca3af;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, gap 0.18s, padding 0.18s;
+  overflow: hidden;
+  max-width: 28px;
 }
 
-.debate-media-history-btn:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+.debate-media-history-btn span {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 0.2s ease, opacity 0.18s ease, margin 0.18s ease;
+  margin-left: 0;
 }
 
+.debate-media-history-btn:hover,
 .debate-media-history-btn.active {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+  gap: 5px;
+  padding: 6px 10px;
+  max-width: 200px;
+}
+
+.debate-media-history-btn:hover span,
+.debate-media-history-btn.active span {
+  max-width: 160px;
+  opacity: 1;
+  margin-left: 0;
+}
+
+.debate-media-history-btn--media:hover,
+.debate-media-history-btn--media.active {
   background: #111827;
   border-color: #111827;
   color: #ffffff;
