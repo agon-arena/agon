@@ -5857,10 +5857,10 @@ function startIndexSourceAutoPlay(root) {
       }
     });
 
-    // Swap manuel → considère la vidéo comme arrêtée, reprend l'auto-play
+    // Swap → considère la vidéo comme arrêtée
+    // (paused reste géré par le timer touchend 2s pour éviter de relancer trop tôt)
     shell.addEventListener("indexMediaSwapped", function() {
       videoPlaying = false;
-      paused = false;
     });
 
     setInterval(function() {
@@ -17309,9 +17309,9 @@ function startSourceAutoPlay() {
         setTimeout(function() { if (!_sourceAutoPlayVideoPlaying) _sourceAutoPlayPaused = false; }, 2000);
       }, { passive: true });
 
-      // Pause quand hors du viewport
+      // Pause quand hors du viewport (ne pas réactiver si vidéo en cours)
       const observer = new IntersectionObserver(function(entries) {
-        _sourceAutoPlayPaused = !entries[0].isIntersecting;
+        if (!_sourceAutoPlayVideoPlaying) _sourceAutoPlayPaused = !entries[0].isIntersecting;
       }, { threshold: 0.3 });
       observer.observe(container);
     }
@@ -17339,9 +17339,11 @@ function startSourceAutoPlay() {
         _sourceAutoPlayPaused = false;
       }
     }, true);
-    // Clic sur la zone vidéo (YouTube inclus)
+    // Clic sur la zone vidéo ou source preview (YouTube inclus)
     document.addEventListener("click", function(e) {
-      if (e.target.closest("#debate-video-wrap")) {
+      if (e.target.closest("#debate-video-wrap") ||
+          e.target.closest("#debate-source-preview-wrap") ||
+          e.target.closest(".debate-source-preview-poster")) {
         _sourceAutoPlayVideoPlaying = true;
         _sourceAutoPlayPaused = true;
       }
