@@ -5714,15 +5714,20 @@ function getIndexDebateMediaItems(debate) {
 
   // Pour les sources : ne garder que celles de la session courante.
   // Pour les images/vidéos : toujours incluses (pas de notion de session).
-  // Fallback : si pas de source_published_at (anciens débats), tout inclure.
-  const filteredExtras = extras.filter((item) => {
-    if (!item) return false;
-    const type = String(item.type || '').trim();
-    if (type !== 'source') return true;
-    if (!sessionDate) return true;
-    const itemDate = String(item.published_at || item.added_at || '').slice(0, 10);
-    return itemDate === sessionDate;
-  });
+  // Fallback : si pas de source_published_at OU si aucune source ne correspond, tout inclure.
+  const sourceExtrasAll = extras.filter(e => e && String(e.type || '').trim() === 'source');
+  const nonSourceExtras = extras.filter(e => e && String(e.type || '').trim() !== 'source');
+  let matchingSourceExtras;
+  if (!sessionDate) {
+    matchingSourceExtras = sourceExtrasAll;
+  } else {
+    const filtered = sourceExtrasAll.filter(e => {
+      const itemDate = String(e.published_at || e.added_at || '').slice(0, 10);
+      return itemDate === sessionDate;
+    });
+    matchingSourceExtras = filtered.length ? filtered : sourceExtrasAll;
+  }
+  const filteredExtras = [...nonSourceExtras, ...matchingSourceExtras];
 
   const allItems = [
     ...(currentItem ? [currentItem] : []),
