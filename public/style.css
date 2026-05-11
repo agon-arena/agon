@@ -8732,11 +8732,11 @@ body.is-standalone .topbar-refresh-btn {
 .page-home-mobile .topbar-app-icon {
   display: block;
   grid-area: spacer;
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-  border-radius: 8px;
-  margin: auto;
+  align-self: stretch;
+  width: 44px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin: 0;
 }
 
 body.is-standalone .topbar-app-icon {
