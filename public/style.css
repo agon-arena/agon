@@ -8701,6 +8701,24 @@ body.page-home.page-home-mobile {
   z-index: 10;
 }
 
+.topbar-refresh-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px 10px;
+  align-items: center;
+  opacity: 0.85;
+}
+
+@media (display-mode: standalone) {
+  .topbar-refresh-btn {
+    display: flex;
+  }
+}
+
 .home-topbar-menu-toggle{
   width:40px;
   height:40px;
