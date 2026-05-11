@@ -17485,8 +17485,12 @@ function initDebateMediaHistory(debate) {
   const firstMedia = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
   if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
 
-  // Init nav for the most recent session (source already displayed on page load)
-  updateNav(currentSessionSources, 0);
+  // Si source_url est vide, la source n'a pas été rendue au chargement → auto-charger
+  if (!currentSourceUrl && currentSessionSources.length > 0) {
+    loadSessionSource(currentSessionSources, 0);
+  } else {
+    updateNav(currentSessionSources, 0);
+  }
 }
 
 async function loadDebateMediaHistoryItem(item) {
