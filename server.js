@@ -4548,6 +4548,8 @@ function loadVeillePending() {
 }
 
 function saveVeillePending(items) {
+  const dir = path.dirname(VEILLE_PENDING_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(VEILLE_PENDING_FILE, JSON.stringify(items, null, 2), "utf8");
 }
 
