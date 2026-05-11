@@ -8729,22 +8729,21 @@ body.is-standalone .topbar-refresh-btn {
   display: none;
 }
 
-.page-home-mobile .topbar-app-icon {
-  display: block;
-  grid-area: spacer;
-  width: 130px;
-  height: 130px;
-  object-fit: cover;
-  border-radius: 18px;
-  margin: -35px 0 -45px -58px;
-}
+@media (max-width: 768px) {
+  .page-home-mobile .topbar-app-icon {
+    display: block;
+    grid-area: spacer;
+    width: 130px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 18px;
+    margin: -35px 0 -45px -58px;
+    cursor: pointer;
+  }
 
-body.is-standalone .topbar-app-icon {
-  display: none;
-}
-
-.page-home-mobile .topbar-app-icon {
-  cursor: pointer;
+  body.is-standalone .topbar-app-icon {
+    display: none;
+  }
 }
 
 /* ===== MODAL INSTALLATION PWA ===== */
