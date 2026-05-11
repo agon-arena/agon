@@ -8727,6 +8727,7 @@ body.is-standalone .topbar-refresh-btn {
 
 .topbar-app-icon {
   display: none;
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {
@@ -8738,11 +8739,21 @@ body.is-standalone .topbar-refresh-btn {
     object-fit: cover;
     border-radius: 18px;
     margin: -35px 0 -45px -58px;
-    cursor: pointer;
   }
 
   body.is-standalone .topbar-app-icon {
     display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .topbar-app-icon {
+    display: block;
+    width: 34px;
+    height: 34px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
   }
 }
 
