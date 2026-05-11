@@ -7641,19 +7641,7 @@ padding:4px 14px 12px 14px;
   padding: 8px 0 4px;
 }
 
-.debate-media-history-label {
-  flex-basis: 100%;
-  text-align: center;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  padding: 6px 0 2px;
-}
-.debate-media-history-label:first-child {
-  padding-top: 0;
-}
+
 
 .debate-media-history-btn {
   display: inline-flex;
@@ -7688,12 +7676,12 @@ padding:4px 14px 12px 14px;
   color: #ffffff;
   gap: 5px;
   padding: 6px 10px;
-  max-width: 200px;
+  max-width: 240px;
 }
 
 .debate-media-history-btn:hover span,
 .debate-media-history-btn.active span {
-  max-width: 160px;
+  max-width: 200px;
   opacity: 1;
   margin-left: 0;
 }

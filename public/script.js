@@ -17368,8 +17368,8 @@ function initDebateMediaHistory(debate) {
   document.getElementById("debate-source-session-nav")?.remove();
 
   const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
-  const sourceExtras = extras.filter(e => e.type === 'source');
-  const mediaExtras  = extras.filter(e => e.type === 'image' || e.type === 'video');
+  const sourceExtras = extras.filter(e => e && e.type === 'source' && e.url);
+  const mediaExtras  = extras.filter(e => e && (e.type === 'image' || e.type === 'video'));
   const currentSourceUrl = String(debate.source_url || '').trim();
 
   if (!currentSourceUrl && !sourceExtras.length && !mediaExtras.length) {
@@ -17377,59 +17377,61 @@ function initDebateMediaHistory(debate) {
     return;
   }
 
-  const hasNewSources = sourceExtras.some(e => e.is_new);
-
-  // --- Build source lists (new vs old) ---
-  function toSourceItem(e, isCurrent) {
-    return { type: 'source', url: e.url, published_at: e.date || e.published_at || e.added_at || '', isCurrent };
+  // --- Convertit un extra en item de navigation ---
+  function toSourceItem(e) {
+    const url = String(e.url || '').trim();
+    return { type: 'source', url, published_at: e.date || e.published_at || e.added_at || '', isCurrent: url === currentSourceUrl };
   }
 
-  let newSources = [];
-  let oldSources = [];
-
-  if (hasNewSources) {
-    newSources = sourceExtras.filter(e => e.is_new && e.url).map(e => toSourceItem(e, e.url === currentSourceUrl));
-    oldSources = sourceExtras.filter(e => !e.is_new && e.url).map(e => toSourceItem(e, false));
-    // Si source_url n'est dans aucun extra, l'ajouter aux nouvelles sources
-    if (currentSourceUrl && !newSources.some(s => s.url === currentSourceUrl) && !oldSources.some(s => s.url === currentSourceUrl)) {
-      newSources.unshift({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
-    }
-  } else {
-    if (currentSourceUrl) {
-      oldSources.push({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
-    }
-    for (const e of sourceExtras) {
-      if (e.url) oldSources.push(toSourceItem(e, false));
-    }
+  // --- Groupe les sourceExtras par batch de publication (added_at exact) ---
+  // Toutes les sources d'un même publish/merge ont le même added_at → 1 batch par opération.
+  // Sans added_at → batch '__nodate__' (mis en dernier, traité comme le plus récent si source_url seule).
+  const batchMap = new Map();
+  for (const e of sourceExtras) {
+    const key = e.added_at || '__nodate__';
+    if (!batchMap.has(key)) batchMap.set(key, []);
+    batchMap.get(key).push(e);
   }
 
-  // --- Group sources by publication day (YYYY-MM-DD) ---
-  function groupByDay(sources) {
-    const dayMap = new Map();
-    for (const src of sources) {
-      const key = (src.published_at || '').slice(0, 10) || '__nodate__';
-      if (!dayMap.has(key)) dayMap.set(key, []);
-      dayMap.get(key).push(src);
-    }
-    return [...dayMap.entries()].sort((a, b) => {
+  // Si source_url n'est dans aucun extra (vieux débats sans extras), l'ajouter en batch solo
+  if (currentSourceUrl && !sourceExtras.some(e => e.url === currentSourceUrl)) {
+    const key = '__nodate__';
+    if (!batchMap.has(key)) batchMap.set(key, []);
+    batchMap.get(key).unshift({ type: 'source', url: currentSourceUrl });
+  }
+
+  // Tri ascendant par added_at (plus ancien = "publication initiale"), __nodate__ en dernier
+  const sortedBatches = [...batchMap.entries()]
+    .sort((a, b) => {
       if (a[0] === '__nodate__') return 1;
       if (b[0] === '__nodate__') return -1;
-      return b[0].localeCompare(a[0]);
-    });
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([key, rawExtras]) => {
+      const seen = new Set();
+      const sources = rawExtras
+        .map(toSourceItem)
+        .filter(s => s.url && !seen.has(s.url) && seen.add(s.url));
+      return [key, sources];
+    })
+    .filter(([, sources]) => sources.length > 0);
+
+  // --- Labels par publication ---
+  function batchLabelShort(index) {
+    return index === 0 ? 'Publication initiale' : `Mise à jour ${index + 1}`;
+  }
+  function batchLabelFull(index, count) {
+    const s = count > 1 ? 'Sources' : 'Source';
+    return index === 0 ? `${s} de la publication initiale` : `${s} de la mise à jour ${index + 1}`;
   }
 
-  const newGroups = hasNewSources ? groupByDay(newSources) : [];
-  const oldGroups = groupByDay(oldSources);
-  const allGroups = [...newGroups, ...oldGroups];
-
-  function formatDate(d) {
-    if (!d || d === '__nodate__') return 'Sources';
-    try { return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }); }
-    catch { return d; }
-  }
+  // Batch actif au chargement = celui qui contient source_url
+  const initialActiveIndex = Math.max(0,
+    sortedBatches.findIndex(([, srcs]) => srcs.some(s => s.url === currentSourceUrl))
+  );
 
   // --- Session state ---
-  let currentSessionSources = allGroups.length ? allGroups[0][1] : [];
+  let currentSessionSources = sortedBatches.length ? sortedBatches[initialActiveIndex][1] : [];
   let currentSessionIdx = 0;
   setDebateSourceHistoryItems(currentSessionSources, currentSessionSources[0] || null);
 
@@ -17438,32 +17440,17 @@ function initDebateMediaHistory(debate) {
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
 
-  function buildGroupButtons(groups, startIndex) {
-    return groups.map(([key, srcs], i) => {
-      const globalIdx = startIndex + i;
-      const label = formatDate(key);
-      const badge = srcs.length > 1 ? `<span class="debate-session-count">${srcs.length}</span>` : '';
-      return `<button type="button" class="debate-media-history-btn${globalIdx === 0 ? ' active' : ''}" data-session="${globalIdx}" data-tooltip="${label}" title="${label}">
-        <i class="fa-solid fa-link"></i><span>${label}</span>${badge}
-      </button>`;
-    }).join('');
-  }
+  const sessionHtml = sortedBatches.map(([, srcs], i) => {
+    const count = srcs.length;
+    const labelShort = batchLabelShort(i);
+    const labelFull  = batchLabelFull(i, count);
+    const badge = count > 1 ? `<span class="debate-session-count">${count}</span>` : '';
+    return `<button type="button" class="debate-media-history-btn${i === initialActiveIndex ? ' active' : ''}" data-session="${i}" data-tooltip="${labelFull}" title="${labelFull}">
+      <i class="fa-solid fa-link"></i><span>${labelShort}</span>${badge}
+    </button>`;
+  }).join('');
 
-  let html = '';
-  if (hasNewSources) {
-    if (newGroups.length > 0) {
-      html += `<span class="debate-media-history-label">Nouvelles sources</span>`;
-      html += buildGroupButtons(newGroups, 0);
-    }
-    if (oldGroups.length > 0) {
-      html += `<span class="debate-media-history-label">Anciennes sources</span>`;
-      html += buildGroupButtons(oldGroups, newGroups.length);
-    }
-  } else {
-    html += buildGroupButtons(oldGroups, 0);
-  }
-
-  html += mediaExtras.map((e) => {
+  const mediaHtml = mediaExtras.map((e) => {
     const label = e.type === 'video' ? 'Vidéo' : 'Image';
     const icon  = e.type === 'video' ? 'fa-video' : 'fa-image';
     return `<button type="button" class="debate-media-history-btn debate-media-history-btn--media" data-media-type="${e.type}" data-media-url="${escapeAttribute(e.url)}" title="${label}">
@@ -17471,7 +17458,7 @@ function initDebateMediaHistory(debate) {
     </button>`;
   }).join('');
 
-  selector.innerHTML = html;
+  selector.innerHTML = sessionHtml + mediaHtml;
 
   // --- Tooltip ---
   let mediaTooltipEl = document.getElementById('debate-media-tooltip');
@@ -17523,7 +17510,7 @@ function initDebateMediaHistory(debate) {
     const sessionBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
     if (sessionBtn) {
       const si = parseInt(sessionBtn.dataset.session, 10);
-      const [, srcs] = allGroups[si];
+      const [, srcs] = sortedBatches[si];
       selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
       sessionBtn.classList.add('active');
       await loadSessionSource(srcs, 0);
