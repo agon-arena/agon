@@ -5515,6 +5515,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
         class="debate-card-youtube-shell"
         data-index-youtube-shell
         data-embed-base="${escapeAttribute(embedData.embedUrl)}"
+        data-media-label="${escapeAttribute(mediaLabel || '')}"
         style="position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border-radius:20px; background:#000;"
       >
         <button
@@ -6464,7 +6465,7 @@ function updateIndexYouTubeShellOverlay(shell) {
     overlay.style.pointerEvents = 'none';
     overlay.style.cursor = '';
     overlay.style.zIndex = '2';
-    if (label) label.textContent = 'Vidéo YouTube';
+    if (label) label.textContent = shell.dataset.mediaLabel || 'YouTube';
     if (soundButton) {
       soundButton.style.display = isMobile ? 'inline-flex' : 'none';
       updateYtSourceSoundButton(soundButton, false);
@@ -6487,7 +6488,7 @@ function updateIndexYouTubeShellOverlay(shell) {
   overlay.style.pointerEvents = 'none';
   overlay.style.cursor = '';
   overlay.style.zIndex = '-1';
-  if (label) label.textContent = 'Vidéo YouTube';
+  if (label) label.textContent = shell.dataset.mediaLabel || 'YouTube';
   if (soundButton) {
     soundButton.style.display = isMobile ? 'inline-flex' : 'none';
     updateYtSourceSoundButton(soundButton, isUserActivated);
@@ -18430,7 +18431,8 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   const ytContainer = document.createElement('div');
   ytContainer.id = 'debate-source-yt-container';
-  ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "");
+  const ytMediaLabel = sourcePreviewData?.author || normalizeSourcePreviewData(sourcePreviewData, sourceUrl).domain;
+  ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "", ytMediaLabel);
   sourcePreviewWrap.appendChild(ytContainer);
   sourcePreviewWrap.style.display = "block";
   updateDebateSourcePreviewVerticalOffset();
