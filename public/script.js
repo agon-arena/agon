@@ -8331,6 +8331,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
             decoding="async"
             style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
           >
+          <span class="debate-source-card-image-domain-badge">${escapeHtml(domain)}</span>
         </div>
       ` : ""}
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
