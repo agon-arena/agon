@@ -215,6 +215,7 @@ body {
     grid-area: actions;
     width: auto;
     margin-left: 0;
+    margin-top: 0;
     flex-shrink: 0;
   }
 
@@ -8713,10 +8714,8 @@ body.page-home.page-home-mobile {
   opacity: 0.85;
 }
 
-@media (display-mode: standalone) {
-  .topbar-refresh-btn {
-    display: flex;
-  }
+body.is-standalone .topbar-refresh-btn {
+  display: flex;
 }
 
 .home-topbar-menu-toggle{

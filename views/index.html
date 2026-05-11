@@ -32,7 +32,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
   <meta name="theme-color" content="#243038">
 
-  <link rel="stylesheet" href="/style.css?v=20260511-pwa-refresh-btn">
+  <link rel="stylesheet" href="/style.css?v=20260511-pwa-standalone-js">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -111,7 +111,7 @@
 </head>
 
 <body class="page-home page-home-mobile">
-
+<script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
 
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
