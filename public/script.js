@@ -5857,6 +5857,12 @@ function startIndexSourceAutoPlay(root) {
       }
     });
 
+    // Swap manuel → considère la vidéo comme arrêtée, reprend l'auto-play
+    shell.addEventListener("indexMediaSwapped", function() {
+      videoPlaying = false;
+      paused = false;
+    });
+
     setInterval(function() {
       if (paused) return;
       const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
@@ -5928,6 +5934,9 @@ function initIndexMediaSwipeEnhancements(root) {
       }
 
       inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, nextItemPreview);
+
+      // Signale un swap manuel → startIndexSourceAutoPlay remet videoPlaying=false
+      shell.dispatchEvent(new CustomEvent('indexMediaSwapped', { bubbles: false }));
 
       // Relâche le verrou après le rendu pour permettre l'ajustement naturel
       requestAnimationFrame(() => { shell.style.minHeight = ''; });
@@ -17062,7 +17071,7 @@ function ensureDebateMediaSwipeHotspots(element) {
     prevButton.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      await stepDebateSourceHistory(-1);
+      await stepDebateSourceHistory(-1, true);
     });
     element.appendChild(prevButton);
   }
@@ -17077,7 +17086,7 @@ function ensureDebateMediaSwipeHotspots(element) {
     nextButton.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      await stepDebateSourceHistory(1);
+      await stepDebateSourceHistory(1, true);
     });
     element.appendChild(nextButton);
   }
@@ -17147,7 +17156,7 @@ function setCurrentDebateSourceHistoryItem(item = null) {
   syncDebateSourceSwipeAvailability();
 }
 
-async function stepDebateSourceHistory(direction = 1) {
+async function stepDebateSourceHistory(direction = 1, isManual = false) {
   if (currentDebateSourceHistoryItems.length < 2 || currentDebateSourceHistoryIndex < 0) {
     return false;
   }
@@ -17161,6 +17170,13 @@ async function stepDebateSourceHistory(direction = 1) {
   currentDebateSourceHistoryIndex = nextIndex;
   syncDebateMediaHistoryActiveButton(nextItem);
   syncDebateSourceSwipeAvailability();
+
+  // Swap manuel → arrête le mode "vidéo en cours", reprend l'auto-play
+  if (isManual) {
+    _sourceAutoPlayVideoPlaying = false;
+    _sourceAutoPlayPaused = false;
+  }
+
   return true;
 }
 
@@ -17244,7 +17260,7 @@ function bindDebateSourceSwipeHandlers() {
     }
     event.stopPropagation();
 
-    await stepDebateSourceHistory(deltaX < 0 ? 1 : -1);
+    await stepDebateSourceHistory(deltaX < 0 ? 1 : -1, true);
   };
 
   swipeTargets.forEach((target) => {
