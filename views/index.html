@@ -32,7 +32,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
   <meta name="theme-color" content="#243038">
 
-  <link rel="stylesheet" href="/style.css?v=20260511-appagon-pos3">
+  <link rel="stylesheet" href="/style.css?v=20260511-install-modal">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -214,7 +214,7 @@
       <i class="fa-solid fa-rotate-right"></i>
     </button>
 
-    <img src="/appagon.png" alt="agôn app" class="topbar-app-icon">
+    <img src="/appagon.png" alt="agôn app" class="topbar-app-icon" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
 
@@ -995,6 +995,75 @@
   }
   document.addEventListener('agon:index-meta-updated', scheduleScanCards);
   new MutationObserver(scheduleScanCards).observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+
+
+<div id="install-modal-overlay" class="install-modal-overlay" style="display:none;" onclick="closeInstallModal()">
+  <div class="install-modal" onclick="event.stopPropagation()">
+    <button class="install-modal-close" onclick="closeInstallModal()" type="button" aria-label="Fermer">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <h3 class="install-modal-title">Installer l'icône mobile</h3>
+
+    <div class="install-modal-section">
+      <h4 class="install-modal-platform"><i class="fa-brands fa-android"></i> Sur Android</h4>
+      <p class="install-modal-text">Clique simplement sur le bouton :</p>
+      <button class="install-modal-android-btn" id="install-pwa-btn" type="button" onclick="triggerAndroidInstall()">
+        <i class="fa-solid fa-download"></i> Installer l'icône mobile
+      </button>
+      <p class="install-modal-text install-modal-hint">Le lien d'installation sera disponible directement depuis la page.</p>
+    </div>
+
+    <div class="install-modal-divider"></div>
+
+    <div class="install-modal-section">
+      <h4 class="install-modal-platform"><i class="fa-brands fa-apple"></i> Sur iPhone</h4>
+      <p class="install-modal-text">L'installation se fait depuis Safari :</p>
+      <ol class="install-modal-steps">
+        <li>ouvre le site avec <strong>Safari</strong> ;</li>
+        <li>appuie sur le bouton <strong>Partager</strong> <i class="fa-solid fa-arrow-up-from-bracket"></i> ;</li>
+        <li>choisis <strong>Sur l'écran d'accueil</strong> ;</li>
+        <li>appuie sur <strong>Ajouter</strong>.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    var btn = document.getElementById('install-pwa-btn');
+    if (btn) btn.style.display = 'flex';
+  });
+
+  window.openInstallModal = function() {
+    document.getElementById('install-modal-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  };
+
+  window.closeInstallModal = function() {
+    document.getElementById('install-modal-overlay').style.display = 'none';
+    document.body.style.overflow = '';
+  };
+
+  window.triggerAndroidInstall = function() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function() {
+      deferredInstallPrompt = null;
+      closeInstallModal();
+    });
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeInstallModal();
+  });
 })();
 </script>
 

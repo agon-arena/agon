@@ -8743,6 +8743,125 @@ body.is-standalone .topbar-app-icon {
   display: none;
 }
 
+.page-home-mobile .topbar-app-icon {
+  cursor: pointer;
+}
+
+/* ===== MODAL INSTALLATION PWA ===== */
+
+.install-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.install-modal {
+  position: relative;
+  width: min(100%, 400px);
+  background: rgba(23, 31, 38, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  box-sizing: border-box;
+}
+
+.install-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: rgba(255,255,255,0.7);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.install-modal-title {
+  margin: 0 0 18px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  padding-right: 30px;
+}
+
+.install-modal-section {
+  margin-bottom: 4px;
+}
+
+.install-modal-platform {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #f4c95d;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.install-modal-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.45;
+}
+
+.install-modal-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+}
+
+.install-modal-android-btn {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: #f4c95d;
+  color: #162027;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.install-modal-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 16px 0;
+}
+
+.install-modal-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: rgba(255,255,255,0.75);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.install-modal-steps strong {
+  color: #fff;
+}
+
 .home-topbar-menu-toggle{
   width:40px;
   height:40px;
