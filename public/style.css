@@ -8747,14 +8747,18 @@ body.is-standalone .topbar-refresh-btn {
 }
 
 @media (min-width: 769px) {
+  .page-home-mobile .topbar-inner.topbar-home {
+    grid-template-columns: 44px minmax(0, 1fr) 180px;
+  }
+
   .topbar-app-icon--desktop {
     display: block;
+    grid-area: spacer;
     width: 160px;
     height: 160px;
     object-fit: cover;
     border-radius: 20px;
-    flex-shrink: 0;
-    margin: -60px 0;
+    margin: -60px 0 -60px auto;
   }
 }
 
