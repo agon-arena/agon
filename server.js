@@ -4679,7 +4679,8 @@ app.post("/api/admin/veille/merge", async (req, res) => {
       url: typeof l === "string" ? l : (l.url || ""),
       title: typeof l === "object" ? (l.title || "") : "",
       source: typeof l === "object" ? (l.source || "") : "",
-      date: typeof l === "object" ? (l.date || "") : ""
+      date: typeof l === "object" ? (l.date || "") : "",
+      is_new: true
     })).filter(e => e.url) : [];
 
     const mergedExtras = [

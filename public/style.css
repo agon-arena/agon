@@ -7641,6 +7641,20 @@ padding:4px 14px 12px 14px;
   padding: 8px 0 4px;
 }
 
+.debate-media-history-label {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 6px 0 2px;
+}
+.debate-media-history-label:first-child {
+  padding-top: 0;
+}
+
 .debate-media-history-btn {
   display: inline-flex;
   align-items: center;

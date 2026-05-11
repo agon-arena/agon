@@ -17372,29 +17372,50 @@ function initDebateMediaHistory(debate) {
     return;
   }
 
-  // --- Build full ordered source list ---
-  const allSources = [];
-  if (currentSourceUrl) {
-    allSources.push({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
+  const hasNewSources = sourceExtras.some(e => e.is_new);
+
+  // --- Build source lists (new vs old) ---
+  function toSourceItem(e, isCurrent) {
+    return { type: 'source', url: e.url, published_at: e.date || e.published_at || e.added_at || '', isCurrent };
   }
-  for (const e of sourceExtras) {
-    if (e.url) allSources.push({ type: 'source', url: e.url, published_at: e.published_at || e.added_at || '', isCurrent: false });
+
+  let newSources = [];
+  let oldSources = [];
+
+  if (hasNewSources) {
+    newSources = sourceExtras.filter(e => e.is_new && e.url).map(e => toSourceItem(e, e.url === currentSourceUrl));
+    oldSources = sourceExtras.filter(e => !e.is_new && e.url).map(e => toSourceItem(e, false));
+    // Si source_url n'est dans aucun extra, l'ajouter aux nouvelles sources
+    if (currentSourceUrl && !newSources.some(s => s.url === currentSourceUrl) && !oldSources.some(s => s.url === currentSourceUrl)) {
+      newSources.unshift({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
+    }
+  } else {
+    if (currentSourceUrl) {
+      oldSources.push({ type: 'source', url: currentSourceUrl, published_at: debate.source_published_at || '', isCurrent: true });
+    }
+    for (const e of sourceExtras) {
+      if (e.url) oldSources.push(toSourceItem(e, false));
+    }
   }
-  // Le swipe ne concerne que la session la plus récente au chargement
-  // (mis à jour lors du clic sur une autre session)
 
   // --- Group sources by publication day (YYYY-MM-DD) ---
-  const dayMap = new Map();
-  for (const src of allSources) {
-    const key = (src.published_at || '').slice(0, 10) || '__nodate__';
-    if (!dayMap.has(key)) dayMap.set(key, []);
-    dayMap.get(key).push(src);
+  function groupByDay(sources) {
+    const dayMap = new Map();
+    for (const src of sources) {
+      const key = (src.published_at || '').slice(0, 10) || '__nodate__';
+      if (!dayMap.has(key)) dayMap.set(key, []);
+      dayMap.get(key).push(src);
+    }
+    return [...dayMap.entries()].sort((a, b) => {
+      if (a[0] === '__nodate__') return 1;
+      if (b[0] === '__nodate__') return -1;
+      return b[0].localeCompare(a[0]);
+    });
   }
-  const sortedGroups = [...dayMap.entries()].sort((a, b) => {
-    if (a[0] === '__nodate__') return 1;
-    if (b[0] === '__nodate__') return -1;
-    return b[0].localeCompare(a[0]);
-  });
+
+  const newGroups = hasNewSources ? groupByDay(newSources) : [];
+  const oldGroups = groupByDay(oldSources);
+  const allGroups = [...newGroups, ...oldGroups];
 
   function formatDate(d) {
     if (!d || d === '__nodate__') return 'Sources';
@@ -17403,10 +17424,8 @@ function initDebateMediaHistory(debate) {
   }
 
   // --- Session state ---
-  let currentSessionSources = sortedGroups.length ? sortedGroups[0][1] : [];
+  let currentSessionSources = allGroups.length ? allGroups[0][1] : [];
   let currentSessionIdx = 0;
-
-  // Initialise le swipe sur la session la plus récente uniquement
   setDebateSourceHistoryItems(currentSessionSources, currentSessionSources[0] || null);
 
   // --- Build selector HTML ---
@@ -17414,15 +17433,32 @@ function initDebateMediaHistory(debate) {
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
 
-  const sessionHtml = sortedGroups.map(([key, srcs], i) => {
-    const label = formatDate(key);
-    const badge = srcs.length > 1 ? `<span class="debate-session-count">${srcs.length}</span>` : '';
-    return `<button type="button" class="debate-media-history-btn${i === 0 ? ' active' : ''}" data-session="${i}" data-tooltip="${label}" title="${label}">
-      <i class="fa-solid fa-link"></i><span>${label}</span>${badge}
-    </button>`;
-  }).join('');
+  function buildGroupButtons(groups, startIndex) {
+    return groups.map(([key, srcs], i) => {
+      const globalIdx = startIndex + i;
+      const label = formatDate(key);
+      const badge = srcs.length > 1 ? `<span class="debate-session-count">${srcs.length}</span>` : '';
+      return `<button type="button" class="debate-media-history-btn${globalIdx === 0 ? ' active' : ''}" data-session="${globalIdx}" data-tooltip="${label}" title="${label}">
+        <i class="fa-solid fa-link"></i><span>${label}</span>${badge}
+      </button>`;
+    }).join('');
+  }
 
-  const mediaHtml = mediaExtras.map((e) => {
+  let html = '';
+  if (hasNewSources) {
+    if (newGroups.length > 0) {
+      html += `<span class="debate-media-history-label">Nouvelles sources</span>`;
+      html += buildGroupButtons(newGroups, 0);
+    }
+    if (oldGroups.length > 0) {
+      html += `<span class="debate-media-history-label">Anciennes sources</span>`;
+      html += buildGroupButtons(oldGroups, newGroups.length);
+    }
+  } else {
+    html += buildGroupButtons(oldGroups, 0);
+  }
+
+  html += mediaExtras.map((e) => {
     const label = e.type === 'video' ? 'Vidéo' : 'Image';
     const icon  = e.type === 'video' ? 'fa-video' : 'fa-image';
     return `<button type="button" class="debate-media-history-btn debate-media-history-btn--media" data-media-type="${e.type}" data-media-url="${escapeAttribute(e.url)}" title="${label}">
@@ -17430,7 +17466,7 @@ function initDebateMediaHistory(debate) {
     </button>`;
   }).join('');
 
-  selector.innerHTML = sessionHtml + mediaHtml;
+  selector.innerHTML = html;
 
   // --- Tooltip ---
   let mediaTooltipEl = document.getElementById('debate-media-tooltip');
@@ -17474,7 +17510,6 @@ function initDebateMediaHistory(debate) {
     const item = sources[index];
     if (!item) return;
     await loadDebateMediaHistoryItem(item);
-    // Restreint le swipe aux sources de cette session uniquement
     setDebateSourceHistoryItems(sources, item);
   }
 
@@ -17483,7 +17518,7 @@ function initDebateMediaHistory(debate) {
     const sessionBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
     if (sessionBtn) {
       const si = parseInt(sessionBtn.dataset.session, 10);
-      const [, srcs] = sortedGroups[si];
+      const [, srcs] = allGroups[si];
       selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
       sessionBtn.classList.add('active');
       await loadSessionSource(srcs, 0);
@@ -17503,7 +17538,6 @@ function initDebateMediaHistory(debate) {
   const firstMedia = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
   if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
 
-  // Si source_url est vide, la source n'a pas été rendue au chargement → auto-charger
   if (!currentSourceUrl && currentSessionSources.length > 0) {
     loadSessionSource(currentSessionSources, 0);
   }
