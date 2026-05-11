@@ -8721,8 +8721,7 @@ body.page-home.page-home-mobile {
   grid-area: spacer;
 }
 
-body.is-standalone .topbar-refresh-btn,
-.page-home-mobile .topbar-refresh-btn {
+body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
