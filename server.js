@@ -4720,6 +4720,8 @@ app.post("/api/admin/veille/merge", async (req, res) => {
 
 /* ================================================================= */
 
+app.get("/ping", (req, res) => res.json({ ok: true }));
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });

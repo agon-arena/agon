@@ -5034,5 +5034,49 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 
 
+<script>
+(function() {
+  var POLL_INTERVAL = 5000;
+  var _timer = null;
+  var _toast = null;
+
+  function showToast() {
+    if (_toast) return;
+    _toast = document.createElement('div');
+    _toast.textContent = 'Reconnexion en cours…';
+    _toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;';
+    document.body.appendChild(_toast);
+  }
+
+  function hideToast() {
+    if (_toast) { _toast.remove(); _toast = null; }
+  }
+
+  function startPolling() {
+    if (_timer) return;
+    showToast();
+    _timer = setInterval(function() {
+      fetch('/ping', { cache: 'no-store' })
+        .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
+        .catch(function() {});
+    }, POLL_INTERVAL);
+  }
+
+  /* Cas 1 : page chargée en erreur (contenu vide) */
+  window.addEventListener('load', function() {
+    var hasContent = document.getElementById('debate-question') || document.querySelector('.debate-card') || document.querySelector('h1');
+    if (!hasContent) startPolling();
+  });
+
+  /* Cas 2 : retour en ligne après coupure réseau */
+  window.addEventListener('online', function() { startPolling(); });
+
+  /* Cas 3 : erreur globale (script non chargé) */
+  window.addEventListener('error', function(e) {
+    if (e && e.target && e.target !== window) return;
+    startPolling();
+  }, true);
+})();
+</script>
 </body>
 </html>
