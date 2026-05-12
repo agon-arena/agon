@@ -64,6 +64,33 @@ body.page-debate .debate-context-text span {
   margin-bottom: 0.45em;
 }
 
+body.page-debate .debate-episode-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+body.page-debate .debate-episode-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  color: #f2f4f7;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+body.page-debate .debate-episode-link:hover {
+  background: rgba(255,255,255,0.14);
+}
+
 /* Cartes d'arguments : fond blanc conservé, texte sombre assuré */
 body.page-debate .argument-card {
   color: revert;
@@ -2856,6 +2883,7 @@ body.voices-panel-open {
 
 <div id="debate-context-wrap" class="debate-context-wrap" style="display:none;">
   <div id="debate-context-text" class="debate-context-text"></div>
+  <div id="debate-episode-nav" class="debate-episode-nav" style="display:none;"></div>
 </div>
 
 

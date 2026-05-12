@@ -5761,6 +5761,72 @@ function getIndexDebateMediaItems(debate) {
   });
 }
 
+function getResolvedIndexSourcePreview(url, debate = null) {
+  const safeUrl = String(url || "").trim();
+  if (!safeUrl) return null;
+
+  if (debate && typeof debate === "object") {
+    const currentSourceUrl = String(debate.source_url || "").trim();
+    if (currentSourceUrl && currentSourceUrl === safeUrl && debate.source_preview && typeof debate.source_preview === "object") {
+      return debate.source_preview;
+    }
+
+    const previewMap = debate.index_source_previews;
+    if (previewMap && typeof previewMap === "object" && previewMap[safeUrl] && typeof previewMap[safeUrl] === "object") {
+      return previewMap[safeUrl];
+    }
+  }
+
+  const cached = indexSourcePreviewCache.get(safeUrl);
+  if (cached && typeof cached === "object" && typeof cached.then !== "function") {
+    return cached;
+  }
+
+  return null;
+}
+
+function scoreIndexMediaItem(item, debate = null) {
+  if (!item) return -1;
+
+  const itemType = String(item.type || "").trim();
+  const itemUrl = String(item.url || "").trim();
+  if (!itemType || !itemUrl) return -1;
+
+  if (itemType === "image") return 1000;
+  if (itemType === "video") return 950;
+
+  if (itemType === "source") {
+    if (isDirectImageUrl(itemUrl)) return 900;
+    if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) return 850;
+    if (isXStatusUrl(itemUrl) || isInstagramPostUrl(itemUrl)) return 800;
+
+    const preview = getResolvedIndexSourcePreview(itemUrl, debate);
+    const normalizedPreview = normalizeSourcePreviewData(preview, itemUrl);
+    if (String(normalizedPreview.image || "").trim()) return 700;
+    if (!isWeakSourcePreviewData(preview, itemUrl)) return 500;
+    return 100;
+  }
+
+  return 0;
+}
+
+function getPreferredIndexMediaStartIndex(mediaItems, debate = null) {
+  if (!Array.isArray(mediaItems) || !mediaItems.length) return 0;
+
+  let bestIndex = 0;
+  let bestScore = -1;
+
+  mediaItems.forEach((item, index) => {
+    const score = scoreIndexMediaItem(item, debate);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
 async function getIndexSourcePreviewData(sourceUrl) {
   const safeUrl = String(sourceUrl || '').trim();
   if (!safeUrl) return null;
@@ -5810,9 +5876,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   const currentSourceUrl = String(debate?.source_url || "").trim();
   const sourcePreview = explicitSourcePreview && typeof explicitSourcePreview === "object"
     ? explicitSourcePreview
-    : currentSourceUrl && currentSourceUrl === itemUrl && debate?.source_preview && typeof debate.source_preview === "object"
-      ? debate.source_preview
-      : null;
+    : getResolvedIndexSourcePreview(itemUrl, debate);
 
   if (isDirectImageUrl(itemUrl)) {
     return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
@@ -5934,6 +5998,12 @@ function initIndexMediaSwipeEnhancements(root) {
           } catch (error) {
             return null;
           }
+        })(),
+        index_source_previews: (() => {
+          const debateData = getIndexDebateById(shell.dataset.debateId || "");
+          return debateData?.index_source_previews && typeof debateData.index_source_previews === "object"
+            ? debateData.index_source_previews
+            : {};
         })()
       };
       const nextItem = mediaItems[normalizedIndex];
@@ -5962,6 +6032,10 @@ function initIndexMediaSwipeEnhancements(root) {
       // Relâche le verrou après le rendu pour permettre l'ajustement naturel
       requestAnimationFrame(() => { shell.style.minHeight = ''; });
       shell.dataset.currentIndex = String(normalizedIndex);
+      shell.dataset.currentSourceUrl = String(nextItem?.type || "").trim() === "source"
+        ? String(nextItem.url || "").trim()
+        : "";
+      shell.dataset.currentSourcePreview = JSON.stringify(nextItemPreview || null);
 
       if (typeof initIndexYouTubeObserver === "function") initIndexYouTubeObserver(inner);
       if (typeof initIndexLocalVideoObserver === "function") initIndexLocalVideoObserver(inner);
@@ -6067,8 +6141,14 @@ function initIndexMediaSwipeEnhancements(root) {
 
 function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const mediaItems = getIndexDebateMediaItems(debate);
-  const currentItem = mediaItems[0] || null;
-  const baseHtml = currentItem ? renderIndexMediaItemHtml(currentItem, debate) : renderIndexInlineSourceCard(debate);
+  const initialIndex = getPreferredIndexMediaStartIndex(mediaItems, debate);
+  const currentItem = mediaItems[initialIndex] || null;
+  const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
+    ? getResolvedIndexSourcePreview(String(currentItem.url || "").trim(), debate)
+    : null;
+  const baseHtml = currentItem
+    ? renderIndexMediaItemHtml(currentItem, debate, currentSourcePreview)
+    : renderIndexInlineSourceCard(debate);
   if (!baseHtml) return "";
 
   if (mediaItems.length < 2) {
@@ -6077,9 +6157,11 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
 
   const showSwipeHotspots = options.showSwipeHotspots !== false;
 
-  const currentSourceUrl = String(debate?.source_url || "").trim();
-  const sourcePreview = currentSourceUrl && debate?.source_preview && typeof debate.source_preview === "object"
-    ? debate.source_preview
+  const currentSourceUrl = currentItem && String(currentItem.type || "").trim() === "source"
+    ? String(currentItem.url || "").trim()
+    : "";
+  const sourcePreview = currentSourcePreview && typeof currentSourcePreview === "object"
+    ? currentSourcePreview
     : null;
 
   return `
@@ -6088,7 +6170,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
       data-index-media-swipe-shell
       data-debate-id="${escapeAttribute(String(debate?.id || "").trim())}"
       data-media-items="${escapeAttribute(JSON.stringify(mediaItems))}"
-      data-current-index="0"
+      data-current-index="${escapeAttribute(String(initialIndex))}"
       data-current-source-url="${escapeAttribute(currentSourceUrl)}"
       data-current-source-preview="${escapeAttribute(JSON.stringify(sourcePreview || null))}"
     >
@@ -6202,13 +6284,37 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
 
   pendingIndexSourcePreviewHydrations.add(targetId);
 
-  getIndexSourcePreviewData(debate.source_url).then((preview) => {
-    if (!preview || isWeakSourcePreviewData(preview, debate.source_url)) return;
+  const mediaItems = getIndexDebateMediaItems(debate).filter((item) => String(item?.type || '').trim() === 'source');
+  const candidateUrls = [...new Set(mediaItems
+    .map((item) => String(item?.url || '').trim())
+    .filter((url) => url && !isDirectImageUrl(url) && !isIndexYouTubeSourceDebate({ source_url: url }))
+  )];
 
+  Promise.all(candidateUrls.map((url) =>
+    getIndexSourcePreviewData(url)
+      .then((preview) => ({ url, preview }))
+      .catch(() => ({ url, preview: null }))
+  )).then((results) => {
     const refreshedDebate = getIndexDebateById(targetId);
     if (!refreshedDebate) return;
 
-    refreshedDebate.source_preview = preview;
+    let changed = false;
+    const previewMap = refreshedDebate.index_source_previews && typeof refreshedDebate.index_source_previews === 'object'
+      ? { ...refreshedDebate.index_source_previews }
+      : {};
+
+    results.forEach(({ url, preview }) => {
+      if (!preview || isWeakSourcePreviewData(preview, url)) return;
+      previewMap[url] = preview;
+      if (String(refreshedDebate.source_url || '').trim() === url) {
+        refreshedDebate.source_preview = preview;
+      }
+      changed = true;
+    });
+
+    if (!changed) return;
+
+    refreshedDebate.index_source_previews = previewMap;
     rerenderIndexCardMedia(targetId);
   }).catch(() => {}).finally(() => {
     pendingIndexSourcePreviewHydrations.delete(targetId);
@@ -14405,6 +14511,39 @@ function renderDebateContext(content) {
   wrap.style.display = "block";
 }
 
+function renderDebateEpisodeNavigation(debate) {
+  const nav = document.getElementById("debate-episode-nav");
+  if (!nav) return;
+
+  const previousUrl = String(debate?.previous_episode_url || "").trim();
+  const nextUrl = String(debate?.next_episode_url || "").trim();
+
+  if (!previousUrl && !nextUrl) {
+    nav.style.display = "none";
+    nav.innerHTML = "";
+    return;
+  }
+
+  const buttons = [];
+
+  if (previousUrl) {
+    const previousTitle = String(debate?.previous_episode_title || "Épisode précédent").trim();
+    buttons.push(
+      `<a class="debate-episode-link" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
+    );
+  }
+
+  if (nextUrl) {
+    const nextTitle = String(debate?.next_episode_title || "Épisode suivant").trim();
+    buttons.push(
+      `<a class="debate-episode-link" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l’épisode suivant</a>`
+    );
+  }
+
+  nav.innerHTML = buttons.join("");
+  nav.style.display = "flex";
+}
+
 function updateCreateResourceModeUI() {
   const mode = getSelectedCreateResourceMode();
   const sourceGroup = document.getElementById("source-url-group");
@@ -18455,6 +18594,7 @@ async function loadDebate(id) {
 
   document.getElementById("debate-question").textContent = data.debate.question;
   renderDebateContext(data.debate.content || "");
+  renderDebateEpisodeNavigation(data.debate || {});
 const debateVideoUrl = String(data.debate.video_url || "").trim();
 const debateImageUrl = String(data.debate.image_url || "").trim();
 const sourceUrl = String(data.debate.source_url || "").trim();
@@ -22312,6 +22452,7 @@ function applyCurrentDebateHeaderUpdate(updatedDebate) {
   }
 
   renderDebateContext(updatedDebate.content || "");
+  renderDebateEpisodeNavigation(updatedDebate || {});
   renderSourceLinks(updatedDebate.source_links || []);
 
   const debateVideoUrl = String(updatedDebate.video_url || "").trim();

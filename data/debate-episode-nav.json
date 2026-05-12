@@ -1,0 +1,26 @@
+{
+  "374": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 375,
+    "next_episode_title": "Hantavirus en France sous contrôle selon Macron : vigilance ou gestion suffisante ?",
+    "next_episode_url": "/debate?id=375"
+  },
+  "375": {
+    "previous_episode_id": 374,
+    "previous_episode_title": "Hantavirus en France : Macron rassure, faut-il renforcer la vigilance sanitaire ?",
+    "previous_episode_url": "/debate?id=374",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "376": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  }
+}

@@ -402,6 +402,12 @@ function safeJsonParse(value) {
 const debateImagesDir = path.join(__dirname, "public", "debate-images");
 const debateVideosDir = path.join(__dirname, "public", "debate-videos");
 const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
+const sharedDebateLinksMetaPath = path.join(__dirname, "data", "debate-shared-links.json");
+const veillePendingLinksMetaPath = path.join(__dirname, "data", "veille-pending-links.json");
+const storiesMetaPath = path.join(__dirname, "data", "stories.json");
+const debateStoryLinksMetaPath = path.join(__dirname, "data", "debate-story-links.json");
+const veillePendingStoriesMetaPath = path.join(__dirname, "data", "veille-pending-stories.json");
+const debateEpisodeNavMetaPath = path.join(__dirname, "data", "debate-episode-nav.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
 
@@ -460,6 +466,471 @@ function removeDebateStoredContent(debateId) {
   const map = readDebateContentMap();
   delete map[String(debateId)];
   writeDebateContentMap(map);
+}
+
+function ensureJsonMetaStorage(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, "{}", "utf8");
+  }
+}
+
+let _sharedDebateLinksMapCache = null;
+
+function readSharedDebateLinksMap() {
+  if (_sharedDebateLinksMapCache) return _sharedDebateLinksMapCache;
+  ensureJsonMetaStorage(sharedDebateLinksMetaPath);
+  try {
+    _sharedDebateLinksMapCache = JSON.parse(fs.readFileSync(sharedDebateLinksMetaPath, "utf8") || "{}");
+    return _sharedDebateLinksMapCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeSharedDebateLinksMap(map) {
+  ensureJsonMetaStorage(sharedDebateLinksMetaPath);
+  fs.writeFileSync(sharedDebateLinksMetaPath, JSON.stringify(map, null, 2), "utf8");
+  _sharedDebateLinksMapCache = map;
+}
+
+function resolveSharedDebateId(debateId) {
+  const initialId = String(debateId || "").trim();
+  if (!initialId) return "";
+
+  const map = readSharedDebateLinksMap();
+  let currentId = initialId;
+  const visited = new Set([currentId]);
+
+  while (map[currentId]) {
+    const nextId = String(map[currentId] || "").trim();
+    if (!nextId || visited.has(nextId)) break;
+    visited.add(nextId);
+    currentId = nextId;
+  }
+
+  return currentId;
+}
+
+function getDebateIdsInSharedSpace(debateId) {
+  const canonicalId = resolveSharedDebateId(debateId);
+  if (!canonicalId) return [];
+
+  const map = readSharedDebateLinksMap();
+  const ids = new Set([canonicalId]);
+
+  for (const candidateId of Object.keys(map)) {
+    if (resolveSharedDebateId(candidateId) === canonicalId) {
+      ids.add(String(candidateId));
+    }
+  }
+
+  return [...ids];
+}
+
+function linkDebateToSharedSpace(sourceDebateId, targetDebateId) {
+  const sourceId = String(sourceDebateId || "").trim();
+  const canonicalTargetId = resolveSharedDebateId(targetDebateId);
+  if (!sourceId || !canonicalTargetId || sourceId === canonicalTargetId) {
+    removeDebateSharedLink(sourceId);
+    return canonicalTargetId;
+  }
+
+  const map = readSharedDebateLinksMap();
+  map[sourceId] = canonicalTargetId;
+  writeSharedDebateLinksMap(map);
+  return canonicalTargetId;
+}
+
+function removeDebateSharedLink(debateId) {
+  const debateKey = String(debateId || "").trim();
+  if (!debateKey) return;
+
+  const map = readSharedDebateLinksMap();
+  let changed = false;
+
+  if (map[debateKey]) {
+    delete map[debateKey];
+    changed = true;
+  }
+
+  for (const [aliasId, targetId] of Object.entries(map)) {
+    if (String(targetId || "").trim() === debateKey) {
+      delete map[aliasId];
+      changed = true;
+    }
+  }
+
+  if (changed) writeSharedDebateLinksMap(map);
+}
+
+let _veillePendingLinksMapCache = null;
+
+function readVeillePendingLinksMap() {
+  if (_veillePendingLinksMapCache) return _veillePendingLinksMapCache;
+  ensureJsonMetaStorage(veillePendingLinksMetaPath);
+  try {
+    _veillePendingLinksMapCache = JSON.parse(fs.readFileSync(veillePendingLinksMetaPath, "utf8") || "{}");
+    return _veillePendingLinksMapCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeVeillePendingLinksMap(map) {
+  ensureJsonMetaStorage(veillePendingLinksMetaPath);
+  fs.writeFileSync(veillePendingLinksMetaPath, JSON.stringify(map, null, 2), "utf8");
+  _veillePendingLinksMapCache = map;
+}
+
+function getVeillePendingLinkedDebate(id) {
+  const map = readVeillePendingLinksMap();
+  return String(map?.[String(id)] || "").trim();
+}
+
+function setVeillePendingLinkedDebate(id, debateId) {
+  const pendingId = String(id || "").trim();
+  if (!pendingId) return;
+
+  const map = readVeillePendingLinksMap();
+  const canonicalDebateId = resolveSharedDebateId(debateId);
+
+  if (!canonicalDebateId) {
+    delete map[pendingId];
+  } else {
+    map[pendingId] = canonicalDebateId;
+  }
+
+  writeVeillePendingLinksMap(map);
+}
+
+function clearVeillePendingLinkedDebate(id) {
+  const pendingId = String(id || "").trim();
+  if (!pendingId) return;
+
+  const map = readVeillePendingLinksMap();
+  if (!map[pendingId]) return;
+  delete map[pendingId];
+  writeVeillePendingLinksMap(map);
+}
+
+let _storiesCache = null;
+
+function readStories() {
+  if (_storiesCache) return _storiesCache;
+  ensureJsonMetaStorage(storiesMetaPath);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(storiesMetaPath, "utf8") || "[]");
+    _storiesCache = Array.isArray(parsed) ? parsed : [];
+    return _storiesCache;
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeStories(stories) {
+  ensureJsonMetaStorage(storiesMetaPath);
+  fs.writeFileSync(storiesMetaPath, JSON.stringify(Array.isArray(stories) ? stories : [], null, 2), "utf8");
+  _storiesCache = Array.isArray(stories) ? stories : [];
+}
+
+function slugifyStoryTitle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "story";
+}
+
+function createStoryId(title) {
+  return `${slugifyStoryTitle(title)}-${Date.now().toString(36)}`;
+}
+
+let _debateStoryLinksCache = null;
+
+function readDebateStoryLinks() {
+  if (_debateStoryLinksCache) return _debateStoryLinksCache;
+  ensureJsonMetaStorage(debateStoryLinksMetaPath);
+  try {
+    _debateStoryLinksCache = JSON.parse(fs.readFileSync(debateStoryLinksMetaPath, "utf8") || "{}");
+    return _debateStoryLinksCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeDebateStoryLinks(map) {
+  ensureJsonMetaStorage(debateStoryLinksMetaPath);
+  fs.writeFileSync(debateStoryLinksMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+  _debateStoryLinksCache = map || {};
+}
+
+function getDebateStoryId(debateId) {
+  const map = readDebateStoryLinks();
+  return String(map?.[String(debateId)] || "").trim();
+}
+
+function setDebateStoryId(debateId, storyId) {
+  const map = readDebateStoryLinks();
+  const debateKey = String(debateId || "").trim();
+  if (!debateKey) return;
+  if (!storyId) {
+    delete map[debateKey];
+  } else {
+    map[debateKey] = String(storyId).trim();
+  }
+  writeDebateStoryLinks(map);
+}
+
+function removeDebateStoryId(debateId) {
+  setDebateStoryId(debateId, "");
+}
+
+let _debateEpisodeNavCache = null;
+
+function readDebateEpisodeNavMap() {
+  if (_debateEpisodeNavCache) return _debateEpisodeNavCache;
+  ensureJsonMetaStorage(debateEpisodeNavMetaPath);
+  try {
+    _debateEpisodeNavCache = JSON.parse(fs.readFileSync(debateEpisodeNavMetaPath, "utf8") || "{}");
+    return _debateEpisodeNavCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeDebateEpisodeNavMap(map) {
+  ensureJsonMetaStorage(debateEpisodeNavMetaPath);
+  fs.writeFileSync(debateEpisodeNavMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+  _debateEpisodeNavCache = map || {};
+}
+
+function getDebateEpisodeNav(debateId) {
+  const map = readDebateEpisodeNavMap();
+  const entry = map?.[String(debateId)];
+  return entry && typeof entry === "object" ? entry : {};
+}
+
+function setDebateEpisodeNav(debateId, nav) {
+  const debateKey = String(debateId || "").trim();
+  if (!debateKey) return;
+  const map = readDebateEpisodeNavMap();
+  if (!nav || typeof nav !== "object") {
+    delete map[debateKey];
+  } else {
+    map[debateKey] = nav;
+  }
+  writeDebateEpisodeNavMap(map);
+}
+
+function removeDebateEpisodeNav(debateId) {
+  setDebateEpisodeNav(debateId, null);
+}
+
+function parseStoryEpisodeDate(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return null;
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [day, month, year] = value.split("/");
+    const parsed = new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
+function resolveDebateEpisodeSortDate(debate) {
+  const publishedAt = parseStoryEpisodeDate(debate?.source_published_at);
+  if (publishedAt) return publishedAt;
+
+  const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
+  for (const item of extras) {
+    if (String(item?.type || "").trim() !== "source") continue;
+    const extraDate = parseStoryEpisodeDate(item?.date || item?.published_at);
+    if (extraDate) return extraDate;
+  }
+
+  const createdAt = parseStoryEpisodeDate(debate?.created_at);
+  if (createdAt) return createdAt;
+
+  return null;
+}
+
+async function recalculateStoryEpisodeNavigation(storyId) {
+  const targetStoryId = String(storyId || "").trim();
+  if (!targetStoryId) return;
+
+  const debateStoryMap = readDebateStoryLinks();
+  const debateIds = Object.entries(debateStoryMap)
+    .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === targetStoryId)
+    .map(([debateId]) => debateId);
+
+  const navMap = readDebateEpisodeNavMap();
+
+  if (!debateIds.length) {
+    writeDebateEpisodeNavMap(navMap);
+    return;
+  }
+
+  const { data: debates, error } = await supabase
+    .from("debates")
+    .select("id,question,created_at,source_published_at,media_extras")
+    .in("id", debateIds);
+
+  if (error) throw new Error(error.message);
+
+  const orderedDebates = (debates || [])
+    .map((debate) => ({
+      ...debate,
+      _episodeSortDate: resolveDebateEpisodeSortDate(debate),
+      _episodeInsertionOrder: Number(debate.id || 0)
+    }))
+    .sort((a, b) => {
+      const aDate = a._episodeSortDate ? new Date(a._episodeSortDate).getTime() : 0;
+      const bDate = b._episodeSortDate ? new Date(b._episodeSortDate).getTime() : 0;
+      if (aDate !== bDate) return aDate - bDate;
+      return a._episodeInsertionOrder - b._episodeInsertionOrder;
+    });
+
+  for (let index = 0; index < orderedDebates.length; index += 1) {
+    const debate = orderedDebates[index];
+    const previous = orderedDebates[index - 1] || null;
+    const next = orderedDebates[index + 1] || null;
+
+    navMap[String(debate.id)] = {
+      previous_episode_id: previous ? previous.id : null,
+      previous_episode_title: previous ? previous.question || "" : null,
+      previous_episode_url: previous ? `/debate?id=${encodeURIComponent(previous.id)}` : null,
+      next_episode_id: next ? next.id : null,
+      next_episode_title: next ? next.question || "" : null,
+      next_episode_url: next ? `/debate?id=${encodeURIComponent(next.id)}` : null
+    };
+  }
+
+  writeDebateEpisodeNavMap(navMap);
+}
+
+let _veillePendingStoriesCache = null;
+
+function readVeillePendingStoriesMap() {
+  if (_veillePendingStoriesCache) return _veillePendingStoriesCache;
+  ensureJsonMetaStorage(veillePendingStoriesMetaPath);
+  try {
+    _veillePendingStoriesCache = JSON.parse(fs.readFileSync(veillePendingStoriesMetaPath, "utf8") || "{}");
+    return _veillePendingStoriesCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeVeillePendingStoriesMap(map) {
+  ensureJsonMetaStorage(veillePendingStoriesMetaPath);
+  fs.writeFileSync(veillePendingStoriesMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+  _veillePendingStoriesCache = map || {};
+}
+
+function getVeillePendingStorySelection(id) {
+  const map = readVeillePendingStoriesMap();
+  return map?.[String(id)] || null;
+}
+
+function setVeillePendingStorySelection(id, value) {
+  const pendingId = String(id || "").trim();
+  if (!pendingId) return;
+  const map = readVeillePendingStoriesMap();
+  if (!value) {
+    delete map[pendingId];
+  } else {
+    map[pendingId] = value;
+  }
+  writeVeillePendingStoriesMap(map);
+}
+
+function clearVeillePendingStorySelection(id) {
+  setVeillePendingStorySelection(id, null);
+}
+
+function normalizeStorySelection(value) {
+  if (!value || typeof value !== "object") return null;
+  const selectionMode = String(value.selectionMode || "").trim();
+  const storyDecision = String(value.storyDecision || "").trim();
+  if (!selectionMode || !storyDecision) return null;
+
+  const normalized = {
+    selectionMode,
+    storyDecision,
+    matchedStoryId: String(value.matchedStoryId || "").trim() || null,
+    matchedStoryTitle: String(value.matchedStoryTitle || "").trim() || null,
+    confidence: Number.isFinite(Number(value.confidence)) ? Number(value.confidence) : 0,
+    reason: String(value.reason || "").trim(),
+    criteria: value.criteria && typeof value.criteria === "object" ? value.criteria : {}
+  };
+
+  if (selectionMode === "new" && value.newStory && typeof value.newStory === "object") {
+    normalized.newStory = {
+      story_title: String(value.newStory.story_title || "").trim(),
+      story_summary: String(value.newStory.story_summary || "").trim(),
+      main_actors: Array.isArray(value.newStory.main_actors) ? value.newStory.main_actors.map((item) => String(item || "").trim()).filter(Boolean) : [],
+      central_tension: String(value.newStory.central_tension || "").trim(),
+      keywords: Array.isArray(value.newStory.keywords) ? value.newStory.keywords.map((item) => String(item || "").trim()).filter(Boolean) : [],
+      status: "active"
+    };
+  }
+
+  return normalized;
+}
+
+function saveStoryForDebateSelection(selection, debatePayload) {
+  const normalized = normalizeStorySelection(selection);
+  if (!normalized) return null;
+
+  const stories = readStories();
+  const now = nowIso();
+  const debateId = String(debatePayload?.debateId || "").trim() || null;
+  const latestTitle = String(debatePayload?.question || "").trim();
+  const latestSummary = String(debatePayload?.resume || "").trim();
+
+  if (normalized.selectionMode === "existing" && normalized.matchedStoryId) {
+    const story = stories.find((item) => String(item.story_id) === normalized.matchedStoryId);
+    if (!story) {
+      throw new Error("Histoire existante introuvable au moment de la publication.");
+    }
+
+    story.updated_at = now;
+    if (debateId && !story.first_episode_id) story.first_episode_id = debateId;
+    if (debateId) story.latest_episode_id = debateId;
+    if (latestTitle) story.latest_episode_title = latestTitle;
+    if (latestSummary) story.latest_episode_summary = latestSummary;
+    writeStories(stories);
+    return story;
+  }
+
+  if (normalized.selectionMode === "new" && normalized.newStory) {
+    const story = {
+      story_id: createStoryId(normalized.newStory.story_title || latestTitle || "story"),
+      story_title: normalized.newStory.story_title,
+      story_summary: normalized.newStory.story_summary,
+      main_actors: normalized.newStory.main_actors || [],
+      central_tension: normalized.newStory.central_tension || "",
+      keywords: normalized.newStory.keywords || [],
+      status: "active",
+      created_at: now,
+      updated_at: now,
+      first_episode_id: debateId,
+      latest_episode_id: debateId,
+      latest_episode_title: latestTitle,
+      latest_episode_summary: latestSummary
+    };
+    stories.unshift(story);
+    writeStories(stories);
+    return story;
+  }
+
+  return null;
 }
 
 function ensureDebateAssetsStorage() {
@@ -828,12 +1299,21 @@ function enrichDebateWithStoredImage(debate) {
   const resolvedContent = normalizedStoredContent.length > normalizedDbContent.length
     ? normalizedStoredContent
     : normalizedDbContent;
+  const storyId = getDebateStoryId(debate?.id);
+  const episodeNav = getDebateEpisodeNav(debate?.id);
 
   return {
     ...debate,
     image_url: getResolvedDebateImageUrl(debate),
     video_url: getResolvedDebateVideoUrl(debate),
-    content: resolvedContent
+    content: resolvedContent,
+    story_id: storyId || null,
+    previous_episode_id: episodeNav.previous_episode_id || null,
+    previous_episode_title: episodeNav.previous_episode_title || null,
+    previous_episode_url: episodeNav.previous_episode_url || null,
+    next_episode_id: episodeNav.next_episode_id || null,
+    next_episode_title: episodeNav.next_episode_title || null,
+    next_episode_url: episodeNav.next_episode_url || null
   };
 }
 
@@ -1378,6 +1858,20 @@ function invalidateDebateCaches(debateId = null, { clearList = true } = {}) {
     ogImageCache.delete(String(debateId));
   } else if (clearList) {
     ogImageCache.clear();
+  }
+}
+
+function invalidateSharedDebateCaches(debateId = null, { clearList = true } = {}) {
+  const ids = debateId ? getDebateIdsInSharedSpace(debateId) : [];
+  if (!ids.length) {
+    invalidateDebateCaches(debateId, { clearList });
+    return;
+  }
+
+  if (clearList) clearDebatesApiResponseCache();
+  for (const id of ids) {
+    clearDebateDetailResponseCache(id);
+    ogImageCache.delete(String(id));
   }
 }
 
@@ -2200,10 +2694,11 @@ async function getCommentById(id) {
 }
 
 async function getArgumentsByDebateId(debateId) {
+  const sharedDebateId = resolveSharedDebateId(debateId);
   const { data, error } = await supabase
     .from("arguments")
     .select("*")
-    .eq("debate_id", debateId)
+    .eq("debate_id", sharedDebateId || debateId)
     .order("id", { ascending: true });
 
   if (error) throw error;
@@ -3487,11 +3982,12 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const debateIds = debateRows.map((d) => d.id);
+    const sharedDebateIds = [...new Set(debateIds.map((id) => resolveSharedDebateId(id) || String(id)))];
 
     const { data: args, error: argsErr } = await supabase
       .from("arguments")
       .select("id,debate_id,side,votes,created_at")
-      .in("debate_id", debateIds);
+      .in("debate_id", sharedDebateIds);
 
     if (argsErr) {
       console.error(argsErr);
@@ -3551,9 +4047,10 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const rows = debateRows.map((d) => {
-      const debateArgs = argsByDebate.get(d.id) || [];
+      const sharedDebateId = resolveSharedDebateId(d.id) || String(d.id);
+      const debateArgs = argsByDebate.get(sharedDebateId) || [];
       const argument_count = debateArgs.length;
-      const comment_count = Number(commentCountByDebate.get(d.id) || 0);
+      const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
       const last_argument_at = debateArgs.length
         ? debateArgs
             .map((a) => a.created_at)
@@ -3561,8 +4058,8 @@ app.get("/api/debates", async (req, res) => {
             .sort()
             .slice(-1)[0]
         : null;
-      const last_comment_at = lastCommentAtByDebate.get(d.id) || null;
-      const last_vote_at = lastVoteAtByDebate.get(d.id) || null;
+      const last_comment_at = lastCommentAtByDebate.get(sharedDebateId) || null;
+      const last_vote_at = lastVoteAtByDebate.get(sharedDebateId) || null;
       const last_activity_at = [last_argument_at, last_comment_at, last_vote_at, d.created_at]
         .filter(Boolean)
         .sort()
@@ -4187,6 +4684,7 @@ app.delete("/api/debates/:id", async (req, res) => {
     await supabase.from("notifications").delete().eq("debate_id", debateId);
     const storedImageUrl = debateRow.image_url;
     const storedVideoUrl = debateRow.video_url;
+    const linkedStoryId = getDebateStoryId(debateId);
 
     const { error: deleteErr } = await supabase.from("debates").delete().eq("id", debateId);
 
@@ -4204,10 +4702,16 @@ app.delete("/api/debates/:id", async (req, res) => {
     }
 
     clearNotificationsApiResponseCache();
+    removeDebateSharedLink(debateId);
+    removeDebateStoryId(debateId);
+    removeDebateEpisodeNav(debateId);
     removeDebateAssetsEntry(debateId);
     removeDebateStoredContent(debateId);
 
-    invalidateDebateCaches();
+    invalidateSharedDebateCaches(debateId);
+    if (linkedStoryId) {
+      await recalculateStoryEpisodeNavigation(linkedStoryId);
+    }
     clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
@@ -4223,11 +4727,13 @@ app.delete("/api/debates/:id", async (req, res) => {
 app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
   try {
     const { debate_id, side, title, body, authorKey } = req.body || {};
+    const requestedDebateId = debate_id;
+    const sharedDebateId = resolveSharedDebateId(debate_id) || debate_id;
 
     const { data, error } = await supabase
       .from("arguments")
       .insert({
-        debate_id,
+        debate_id: sharedDebateId,
         side,
         title,
         body,
@@ -4243,9 +4749,9 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
       return sendServerError(res, "Erreur création argument.");
     }
 
-    invalidateDebateCaches(debate_id);
+    invalidateSharedDebateCaches(requestedDebateId);
 
-    const debateRow = await getDebateById(debate_id);
+    const debateRow = await getDebateById(requestedDebateId);
 
     if (
       debateRow &&
@@ -4255,7 +4761,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
       await createNotification({
         user_key: debateRow.creator_key,
         type: "argument_in_my_debate",
-        debate_id,
+        debate_id: sharedDebateId,
         argument_id: data.id,
         message: `Votre débat ${quoteNotificationContent(debateRow.question)} a reçu une nouvelle idée : ${quoteNotificationContent(title)}.`
       });
@@ -4263,7 +4769,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
 
     res.json({ success: true, id: data.id });
 
-    snapshotAndWatchMajority(debate_id, data.id, side, authorKey).catch(console.error);
+    snapshotAndWatchMajority(sharedDebateId, data.id, side, authorKey).catch(console.error);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur création argument.");
@@ -4306,7 +4812,7 @@ app.post("/api/arguments/:id/vote", rateLimit("votes", 60), async (req, res) => 
     });
 
     const argument = await getArgumentById(id);
-    invalidateDebateCaches(argument?.debate_id || null, { clearList: false });
+    invalidateSharedDebateCaches(argument?.debate_id || null, { clearList: false });
 
     if (argument.author_key && argument.author_key !== voterKey) {
       createOrMergeVoteNotification({
@@ -4393,7 +4899,7 @@ app.post("/api/arguments/:id/unvote", rateLimit("votes", 60), async (req, res) =
       lastVotedAt: argument.last_voted_at || null
     });
 
-    invalidateDebateCaches(argument?.debate_id || null, { clearList: false });
+    invalidateSharedDebateCaches(argument?.debate_id || null, { clearList: false });
 
     if (argument?.debate_id) {
       checkMajorityFlips(argument.debate_id).catch(console.error);
@@ -4458,7 +4964,7 @@ app.delete("/api/arguments/:id", async (req, res) => {
       return res.status(500).json({ error: "Erreur suppression argument." });
     }
 
-    invalidateDebateCaches(argumentRow?.debate_id || null);
+    invalidateSharedDebateCaches(argumentRow?.debate_id || null);
     clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
@@ -4576,7 +5082,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       }
     }
 
-    invalidateDebateCaches(argumentRow?.debate_id || null, { clearList: false });
+    invalidateSharedDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     res.json(row);
     queueCommentNotificationEvents(supabase, {
       authorKey,
@@ -4741,7 +5247,7 @@ app.post("/api/comments/:id/vote", rateLimit("votes", 60), async (req, res) => {
       await supabase.from("reports").delete().eq("target_type", "comment").eq("target_id", id);
       await supabase.from("notifications").delete().eq("comment_id", id).neq("type", "replacement_accepted");
       await supabase.from("comments").delete().eq("id", id);
-      invalidateDebateCaches(argumentRow?.debate_id || null);
+      invalidateSharedDebateCaches(argumentRow?.debate_id || null);
       clearNotificationsApiResponseCache();
 
       return res.json({
@@ -4751,7 +5257,7 @@ app.post("/api/comments/:id/vote", rateLimit("votes", 60), async (req, res) => {
       });
     }
 
-    invalidateDebateCaches(argumentRow?.debate_id || null, { clearList: false });
+    invalidateSharedDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     res.json({ likes, replaced: false });
   } catch (error) {
     console.error(error);
@@ -4819,20 +5325,25 @@ async function loadVeillePending() {
     resume: r.resume,
     sources: r.sources,
     links: r.links || [],
-    addedAt: r.added_at
+    addedAt: r.added_at,
+    linkedDebateId: getVeillePendingLinkedDebate(r.id),
+    storySelection: getVeillePendingStorySelection(r.id)
   }));
 }
 
 async function deleteVeillePending(id) {
   const { error } = await supabase.from("veille_pending").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  clearVeillePendingLinkedDebate(id);
+  clearVeillePendingStorySelection(id);
 }
 
 app.post("/api/veille/receive", async (req, res) => {
-  const { question, positionA, positionB, theme, resume, sources, links } = req.body || {};
+  const { question, positionA, positionB, theme, resume, sources, links, storySelection } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
+  const pendingId = Date.now();
   const { error } = await supabase.from("veille_pending").insert({
-    id: Date.now(),
+    id: pendingId,
     question,
     position_a: positionA || null,
     position_b: positionB || null,
@@ -4842,7 +5353,22 @@ app.post("/api/veille/receive", async (req, res) => {
     links: links || []
   });
   if (error) { console.error("veille receive:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
+  const normalizedStorySelection = normalizeStorySelection(storySelection);
+  if (normalizedStorySelection) {
+    setVeillePendingStorySelection(pendingId, normalizedStorySelection);
+  }
   res.json({ ok: true });
+});
+
+app.get("/api/veille/stories", async (req, res) => {
+  try {
+    const stories = readStories()
+      .filter((story) => String(story.status || "active").trim().toLowerCase() !== "archived")
+      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+    res.json({ stories });
+  } catch (error) {
+    res.status(500).json({ stories: [], error: error.message });
+  }
 });
 
 app.post("/api/admin/veille/check-similar", async (req, res) => {
@@ -4906,7 +5432,7 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
 });
 
 app.post("/api/admin/veille/publish", async (req, res) => {
-  const { id, question, positionA, positionB, theme, resume, links } = req.body || {};
+  const { id, question, positionA, positionB, theme, resume, links, linkedDebateId } = req.body || {};
   try {
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
@@ -4923,6 +5449,40 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const normalizedPositionA = String(positionA || "").trim();
     const normalizedPositionB = String(positionB || "").trim();
     const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
+    const requestedLinkedDebateId = String(linkedDebateId || getVeillePendingLinkedDebate(id) || "").trim();
+    const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
+    const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || getVeillePendingStorySelection(id));
+
+    if (canonicalLinkedDebateId) {
+      const { data: existingLinkedDebate, error: linkedError } = await supabase
+        .from("debates")
+        .select("id, question, option_a, option_b, type")
+        .eq("id", canonicalLinkedDebateId)
+        .maybeSingle();
+
+      if (linkedError) throw new Error(linkedError.message);
+      if (!existingLinkedDebate) {
+        return res.status(404).json({ ok: false, error: "Arène partagée introuvable." });
+      }
+
+      const existingType = inferVeilleDebateType(existingLinkedDebate.option_a, existingLinkedDebate.option_b);
+      if (existingType !== debateType) {
+        return res.status(400).json({
+          ok: false,
+          error: existingType === "open"
+            ? "Fusion impossible : tu ne peux pas rattacher une arène à positions à une arène libre."
+            : "Fusion impossible : tu ne peux pas rattacher une arène libre à une arène à positions."
+        });
+      }
+
+      const alignment = await evaluateVeilleMergeAlignment(existingLinkedDebate, {
+        positionA: normalizedPositionA,
+        positionB: normalizedPositionB
+      });
+      if (!alignment.ok) {
+        return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
+      }
+    }
 
     const { data, error } = await supabase.from("debates").insert({
       question,
@@ -4939,11 +5499,28 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     if (allExtras.length) {
       await supabase.from("debates").update({ media_extras: allExtras }).eq("id", data.id);
     }
+    if (canonicalLinkedDebateId) {
+      linkDebateToSharedSpace(data.id, canonicalLinkedDebateId);
+    } else {
+      removeDebateSharedLink(data.id);
+    }
+    if (pendingStorySelection) {
+      const finalStory = saveStoryForDebateSelection(pendingStorySelection, {
+        debateId: data.id,
+        question,
+        resume
+      });
+      if (finalStory?.story_id) {
+        setDebateStoryId(data.id, finalStory.story_id);
+        await recalculateStoryEpisodeNavigation(finalStory.story_id);
+      }
+    }
     if (resume) setDebateStoredContent(data.id, resume);
     if (sourceUrl) {
       try { await getExternalLinkPreview(sourceUrl); } catch {}
     }
     if (id) await deleteVeillePending(Number(id));
+    invalidateSharedDebateCaches(canonicalLinkedDebateId || data.id);
     res.json({ ok: true, debateId: data.id });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4956,27 +5533,10 @@ app.post("/api/admin/veille/merge", async (req, res) => {
   try {
     const { data: existing, error: fetchErr } = await supabase
       .from("debates")
-      .select("media_extras,type,option_a,option_b")
+      .select("id,question,type,option_a,option_b")
       .eq("id", debateId)
       .single();
     if (fetchErr) throw new Error(fetchErr.message);
-
-    const oldExtras = Array.isArray(existing.media_extras) ? existing.media_extras : [];
-    const nowIsoMerge = new Date().toISOString();
-    const newExtras = Array.isArray(links) ? links.map(l => ({
-      type: "source",
-      url: typeof l === "string" ? l : (l.url || ""),
-      title: typeof l === "object" ? (l.title || "") : "",
-      source: typeof l === "object" ? (l.source || "") : "",
-      date: typeof l === "object" ? (l.date || "") : "",
-      is_new: true,
-      added_at: nowIsoMerge
-    })).filter(e => e.url) : [];
-
-    const mergedExtras = [
-      ...newExtras,
-      ...oldExtras.filter(o => !newExtras.some(n => n.url === o.url))
-    ];
 
     const normalizedPositionA = positionA === undefined ? undefined : String(positionA || "").trim();
     const normalizedPositionB = positionB === undefined ? undefined : String(positionB || "").trim();
@@ -5000,20 +5560,12 @@ app.post("/api/admin/veille/merge", async (req, res) => {
       return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
     }
 
-    const updateFields = { question, type: inferredType };
-    if (positionA !== undefined) updateFields.option_a = inferredType === "open" ? "" : normalizedPositionA;
-    if (positionB !== undefined) updateFields.option_b = inferredType === "open" ? "" : normalizedPositionB;
-    if (mergedExtras.length) updateFields.media_extras = mergedExtras;
-    if (mergedExtras[0]) updateFields.source_url = mergedExtras[0].url;
-
-    const { error: updateErr } = await supabase.from("debates").update(updateFields).eq("id", debateId);
-    if (updateErr) throw new Error(updateErr.message);
-
-    const resumeTrimmed = typeof resume === "string" ? resume.trim() : "";
-    if (resumeTrimmed) setDebateStoredContent(debateId, resumeTrimmed);
-
-    if (id) await deleteVeillePending(Number(id));
-    res.json({ ok: true, debateId });
+    setVeillePendingLinkedDebate(id, debateId);
+    res.json({
+      ok: true,
+      debateId: resolveSharedDebateId(debateId) || String(debateId),
+      message: "Le debat partage est selectionne. Les cartes resteront separees jusqu'a la publication."
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

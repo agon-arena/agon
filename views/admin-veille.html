@@ -157,14 +157,61 @@ async function checkMergePositions(debateId, pendingItem) {
   return data;
 }
 
+function renderLinkedDebateNotice(item) {
+  if (!item || !item.linkedDebateId) return '';
+  return '<div class="similar-box shared-debate-notice" style="margin-top:12px;background:#eef6ff;border-color:#9dc3f7;color:#234;">' +
+    '<strong style="color:#1f5fa8;">Débat partagé sélectionné</strong>' +
+    '<div style="margin-top:6px;font-size:0.82rem;">Cette carte restera distincte et publiera dans le même espace de débat.' +
+    ' <a href="/debates/' + esc(String(item.linkedDebateId)) + '" target="_blank">Ouvrir l’arène liée</a></div>' +
+    '</div>';
+}
+
+function renderStorySelectionNotice(item) {
+  const selection = item && item.storySelection;
+  if (!selection || typeof selection !== 'object') return '';
+
+  const matchedTitle = esc(selection.matchedStoryTitle || '');
+  const newStoryTitle = esc(selection.newStory && selection.newStory.story_title || '');
+  const newStorySummary = esc(selection.newStory && selection.newStory.story_summary || '');
+  const reason = esc(selection.reason || '');
+
+  if (selection.selectionMode === 'existing' && matchedTitle) {
+    return '<div class="similar-box" style="margin-top:12px;background:#eef9f1;border-color:#9fd4b5;color:#1f3b2d;">' +
+      '<strong style="color:#26734d;">Histoire liée</strong>' +
+      '<div style="margin-top:6px;font-size:0.88rem;"><strong>' + matchedTitle + '</strong></div>' +
+      (reason ? '<div style="margin-top:4px;font-size:0.8rem;color:#496756;">' + reason + '</div>' : '') +
+      '</div>';
+  }
+
+  if (selection.selectionMode === 'new' && newStoryTitle) {
+    return '<div class="similar-box" style="margin-top:12px;background:#fff8e8;border-color:#efc96d;color:#523d12;">' +
+      '<strong style="color:#a06a00;">Nouvelle histoire proposée</strong>' +
+      '<div style="margin-top:6px;font-size:0.88rem;"><strong>' + newStoryTitle + '</strong></div>' +
+      (newStorySummary ? '<div style="margin-top:4px;font-size:0.8rem;color:#6a5832;">' + newStorySummary + '</div>' : '') +
+      '</div>';
+  }
+
+  if (selection.storyDecision === 'uncertain') {
+    return '<div class="similar-box" style="margin-top:12px;background:#fff4f0;border-color:#f0b49b;color:#5a2c1f;">' +
+      '<strong style="color:#b5532f;">Histoire à confirmer</strong>' +
+      (matchedTitle ? '<div style="margin-top:6px;font-size:0.88rem;">Proposition : <strong>' + matchedTitle + '</strong></div>' : '') +
+      (reason ? '<div style="margin-top:4px;font-size:0.8rem;color:#7a4a3b;">' + reason + '</div>' : '') +
+      '</div>';
+  }
+
+  return '';
+}
+
 function renderItem(item) {
   const catOptions = CATEGORIES.map(function(c) {
     return '<option value="' + esc(c) + '"' + (c === item.theme ? ' selected' : '') + '>' + esc(c) + '</option>';
   }).join('');
 
-  return '<div class="pending-item" data-id="' + item.id + '">' +
+  return '<div class="pending-item" data-id="' + item.id + '" data-linked-debate-id="' + esc(item.linkedDebateId || '') + '">' +
     '<div class="pending-meta">Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</div>' +
     '<div class="similar-checking" id="similar-' + item.id + '">Vérification des doublons…</div>' +
+    renderLinkedDebateNotice(item) +
+    renderStorySelectionNotice(item) +
     '<label>Question de débat</label>' +
     '<input type="text" class="f-question" value="' + esc(item.question) + '">' +
     '<label>Position A</label>' +
@@ -275,7 +322,8 @@ async function publish(btn) {
     positionB: item.querySelector('.f-pos-b').value.trim(),
     theme: item.querySelector('.f-theme').value,
     resume: item.querySelector('.f-resume').value.trim(),
-    links: links
+    links: links,
+    linkedDebateId: item.dataset.linkedDebateId || ''
   };
   btn.disabled = true;
   btn.textContent = 'Publication…';
@@ -305,7 +353,7 @@ async function merge(btn, item) {
     toast('Attention : ' + error.message);
     return;
   }
-  if (!confirm('Fusionner cette arène avec le débat existant ?\n\nLa question et les positions seront remplacées. Les nouvelles sources seront ajoutées aux anciennes.')) return;
+  if (!confirm('Fusionner cette arène avec le débat existant ?\n\nLes deux cartes resteront séparées. La fusion partagera seulement le même espace de débat au moment de la publication.')) return;
   btn.disabled = true;
   btn.textContent = 'Fusion…';
   const links = [...pendingItem.querySelectorAll('.link-row')].filter(function(row) {
@@ -329,10 +377,28 @@ async function merge(btn, item) {
       })
     });
     if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
-    toast('Fusionné ✓');
-    pendingItem.dataset.debateId = debateId;
-    pendingItem.querySelector('.actions').outerHTML = buildAdminActions(debateId, pendingItem);
-    wireAdminActions(debateId, pendingItem);
+    const data = await r.json();
+    pendingItem.dataset.linkedDebateId = String(data.debateId || debateId);
+    const previousNotice = pendingItem.querySelector('.shared-debate-notice');
+    if (previousNotice) previousNotice.remove();
+    const notice = document.createElement('div');
+    notice.className = 'similar-box shared-debate-notice';
+    notice.style.marginTop = '12px';
+    notice.style.background = '#eef6ff';
+    notice.style.borderColor = '#9dc3f7';
+    notice.style.color = '#234';
+    notice.innerHTML = '<strong style="color:#1f5fa8;">Débat partagé sélectionné</strong>' +
+      '<div style="margin-top:6px;font-size:0.82rem;">Cette carte restera distincte et publiera dans le même espace de débat. ' +
+      '<a href="/debates/' + esc(String(data.debateId || debateId)) + '" target="_blank">Ouvrir l’arène liée</a></div>';
+    const similarBox = pendingItem.querySelector('.similar-box, .similar-checking, [id^="similar-"]');
+    if (similarBox && similarBox.nextSibling) {
+      pendingItem.insertBefore(notice, similarBox.nextSibling);
+    } else {
+      pendingItem.insertBefore(notice, pendingItem.querySelector('label'));
+    }
+    btn.disabled = false;
+    btn.textContent = 'Fusionner';
+    toast('Débat partagé sélectionné ✓');
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Fusionner';
