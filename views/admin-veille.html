@@ -72,8 +72,89 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+async function readApiError(response, fallbackMessage) {
+  try {
+    const data = await response.json();
+    return data && data.error ? data.error : fallbackMessage;
+  } catch (error) {
+    return fallbackMessage;
+  }
+}
+
 function showContent() {
   document.getElementById('content').style.display = 'block';
+}
+
+function removePendingItem(item) {
+  if (!item) return;
+  item.remove();
+  const list = document.getElementById('list');
+  if (!list) return;
+  if (!list.querySelector('.pending-item')) {
+    list.innerHTML = '<p class="empty">Aucune arène en attente.</p>';
+  }
+}
+
+function getPendingItemPayload(item) {
+  if (!item) return { question: '', positionA: '', positionB: '', resume: '' };
+  return {
+    question: item.querySelector('.f-question')?.value.trim() || '',
+    positionA: item.querySelector('.f-pos-a')?.value.trim() || '',
+    positionB: item.querySelector('.f-pos-b')?.value.trim() || '',
+    resume: item.querySelector('.f-resume')?.value.trim() || ''
+  };
+}
+
+function renderSimilarResults(data, containerId, mergeContext) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (data.warning) {
+    el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#e67e22;" id="' + containerId + '">⚠ ' + esc(data.warning) + '</div>';
+    return;
+  }
+
+  if (data.similar && data.similar.length) {
+    el.outerHTML = '<div class="similar-box" id="' + containerId + '">' +
+      '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
+      '<div style="margin-top:8px;">' +
+      data.similar.map(function(s) {
+        const scoreLabel = typeof s.score === 'number' ? ' <span style="color:#8a6d1d;font-size:0.78rem;">(' + Math.round(s.score * 100) + '%)</span>' : '';
+        const typeLabel = s.type === 'open' ? 'Arène libre' : 'Arène à positions';
+        return '<div class="similar-row">' +
+          '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + scoreLabel + '<div style="font-size:0.75rem;color:#8a6d1d;margin-top:2px;">' + typeLabel + '</div></a>' +
+          '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
+          '</div>';
+      }).join('') +
+      '</div></div>';
+
+    document.querySelectorAll('#' + containerId + ' .btn-merge').forEach(function(btn) {
+      btn.addEventListener('click', function() { merge(btn, mergeContext); });
+    });
+    return;
+  }
+
+  el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#27ae60;" id="' + containerId + '">Aucun doublon détecté.</div>';
+}
+
+
+async function checkMergePositions(debateId, pendingItem) {
+  const response = await fetch('/api/admin/veille/check-merge-positions', {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      debateId: debateId,
+      positionA: pendingItem.querySelector('.f-pos-a')?.value.trim() || '',
+      positionB: pendingItem.querySelector('.f-pos-b')?.value.trim() || ''
+    })
+  });
+
+  const data = await response.json().catch(function() { return { ok: false, error: 'Erreur serveur' }; });
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || data.message || 'Fusion impossible. Vérifie les positions.');
+  }
+
+  return data;
 }
 
 function renderItem(item) {
@@ -125,28 +206,15 @@ async function checkSimilar(item) {
     const r = await fetch('/api/admin/veille/check-similar', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ question: item.question })
+      body: JSON.stringify({
+        question: item.question,
+        positionA: item.positionA || '',
+        positionB: item.positionB || '',
+        resume: item.resume || ''
+      })
     });
     const data = await r.json();
-    if (data.warning) {
-      el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#e67e22;" id="similar-' + item.id + '">⚠ ' + esc(data.warning) + '</div>';
-    } else if (data.similar && data.similar.length) {
-      el.outerHTML = '<div class="similar-box" id="similar-' + item.id + '">' +
-        '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
-        '<div style="margin-top:8px;">' +
-        data.similar.map(function(s) {
-          return '<div class="similar-row">' +
-            '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a>' +
-            '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
-            '</div>';
-        }).join('') +
-        '</div></div>';
-      document.querySelectorAll('#similar-' + item.id + ' .btn-merge').forEach(function(btn) {
-        btn.addEventListener('click', function() { merge(btn, item); });
-      });
-    } else {
-      el.outerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#27ae60;" id="similar-' + item.id + '">Aucun doublon détecté.</div>';
-    }
+    renderSimilarResults(data, 'similar-' + item.id, item);
   } catch(e) {
     el.textContent = '';
   }
@@ -159,7 +227,7 @@ async function loadPending() {
 
   try {
     const r = await fetch('/api/admin/veille', { headers: headers() });
-    if (!r.ok) throw new Error('Erreur serveur');
+    if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
     const items = await r.json();
     const list = document.getElementById('list');
     if (!items.length) {
@@ -195,6 +263,11 @@ async function publish(btn) {
     };
   }).filter(function(l) { return l.url; });
 
+  if (!links.length) {
+    toast('Attention : sélectionne au moins une source avant de publier sur Agôn.');
+    return;
+  }
+
   const body = {
     id: id,
     question: item.querySelector('.f-question').value.trim(),
@@ -212,16 +285,10 @@ async function publish(btn) {
       headers: headers(),
       body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error('Erreur serveur');
+    if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
     const data = await r.json();
     toast('Débat publié ✓');
-    const debateId = String(data.debateId || '');
-    if (debateId) {
-      item.querySelector('.actions').outerHTML = buildAdminActions(debateId, item);
-      wireAdminActions(debateId, item);
-    } else {
-      item.remove();
-    }
+    removePendingItem(item);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Publier sur Agôn';
@@ -232,6 +299,12 @@ async function publish(btn) {
 async function merge(btn, item) {
   const debateId = btn.dataset.debateId;
   const pendingItem = btn.closest('.pending-item');
+  try {
+    await checkMergePositions(debateId, pendingItem);
+  } catch (error) {
+    toast('Attention : ' + error.message);
+    return;
+  }
   if (!confirm('Fusionner cette arène avec le débat existant ?\n\nLa question et les positions seront remplacées. Les nouvelles sources seront ajoutées aux anciennes.')) return;
   btn.disabled = true;
   btn.textContent = 'Fusion…';
@@ -255,7 +328,7 @@ async function merge(btn, item) {
         links: links
       })
     });
-    if (!r.ok) throw new Error('Erreur serveur');
+    if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
     toast('Fusionné ✓');
     pendingItem.dataset.debateId = debateId;
     pendingItem.querySelector('.actions').outerHTML = buildAdminActions(debateId, pendingItem);
@@ -385,26 +458,11 @@ function addEmptyForm() {
     const zone = card.querySelector('.similar-zone');
     zone.innerHTML = '<div class="similar-checking">Vérification…</div>';
     try {
-      const r = await fetch('/api/admin/veille/check-similar', { method: 'POST', headers: headers(), body: JSON.stringify({ question: q }) });
+      const payload = getPendingItemPayload(card);
+      const r = await fetch('/api/admin/veille/check-similar', { method: 'POST', headers: headers(), body: JSON.stringify(payload) });
       const data = await r.json();
-      if (data.similar && data.similar.length) {
-        zone.innerHTML = '<div class="similar-box">' +
-          '<strong>⚠ Débat(s) similaire(s) déjà existant(s) :</strong>' +
-          '<div style="margin-top:8px;">' +
-          data.similar.map(function(s) {
-            return '<div class="similar-row">' +
-              '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + '</a>' +
-              '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
-              '</div>';
-          }).join('') + '</div></div>';
-        zone.querySelectorAll('.btn-merge').forEach(function(btn) {
-          btn.addEventListener('click', function() {
-            merge(btn, { id: tempId });
-          });
-        });
-      } else {
-        zone.innerHTML = '<div style="margin-top:10px;font-size:0.82rem;color:#27ae60;">Aucun doublon détecté.</div>';
-      }
+      zone.innerHTML = '<div id="similar-temp-' + tempId + '"></div>';
+      renderSimilarResults(data, 'similar-temp-' + tempId, { id: tempId });
     } catch(e) { zone.innerHTML = ''; }
   });
   card.querySelector('.f-question').focus();

@@ -1713,6 +1713,272 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function inferVeilleDebateType(positionA, positionB) {
+  const hasPositionA = String(positionA || "").trim().length > 0;
+  const hasPositionB = String(positionB || "").trim().length > 0;
+  return hasPositionA || hasPositionB ? "debate" : "open";
+}
+
+function normalizeSimilarityText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/['’]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getSimilarityTokens(value) {
+  const stopWords = new Set([
+    "alors", "apres", "avec", "avoir", "cette", "comme", "dans", "depuis", "doit", "doivent", "donc",
+    "elle", "elles", "encore", "entre", "etre", "faire", "faut", "leurs", "mais", "meme", "moins",
+    "pour", "pourquoi", "plus", "quel", "quelle", "quelles", "quels", "sans", "sera", "sont", "sous",
+    "tres", "tout", "tous", "toute", "toutes", "vers", "vous", "nous", "leur", "leurs", "contre",
+    "debat", "debats", "arene", "arenes", "position", "positions", "question", "resume", "sujet",
+    "fautil", "doiton", "estce", "peuton", "encore", "trop", "vrai", "scandale", "mesure"
+  ]);
+
+  return normalizeSimilarityText(value)
+    .split(" ")
+    .filter(Boolean)
+    .filter(token => token.length >= 4)
+    .filter(token => !stopWords.has(token));
+}
+
+function buildSimilarityText(question, resume) {
+  return [String(question || "").trim(), String(resume || "").trim()].filter(Boolean).join(" ");
+}
+
+function computeTokenOverlapScore(tokensA, tokensB) {
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  if (!setA.size || !setB.size) return 0;
+
+  let intersection = 0;
+  for (const token of setA) {
+    if (setB.has(token)) intersection++;
+  }
+
+  const union = new Set([...setA, ...setB]).size;
+  if (!union) return 0;
+
+  const jaccard = intersection / union;
+  const coverage = intersection / Math.min(setA.size, setB.size);
+  return Math.max(jaccard, coverage * 0.92);
+}
+
+function hasStrongSubstringMatch(textA, textB) {
+  if (!textA || !textB) return false;
+  return textA.includes(textB) || textB.includes(textA);
+}
+
+function getVeilleSimilarityCandidates(input, debates) {
+  const question = String(input?.question || "").trim();
+  const resume = String(input?.resume || "").trim();
+  const type = inferVeilleDebateType(input?.positionA, input?.positionB);
+  const combined = buildSimilarityText(question, resume);
+  const normalizedCombined = normalizeSimilarityText(combined);
+  const normalizedQuestion = normalizeSimilarityText(question);
+  const baseTokens = getSimilarityTokens(combined);
+
+  if (!normalizedQuestion || !baseTokens.length) return [];
+
+  return (debates || [])
+    .map((debate) => {
+      const debateType = inferVeilleDebateType(debate.option_a, debate.option_b);
+      if (debateType !== type) return null;
+
+      const debateCombined = buildSimilarityText(debate.question, debate.content || "");
+      const debateNormalized = normalizeSimilarityText(debateCombined);
+      const debateQuestionNormalized = normalizeSimilarityText(debate.question || "");
+      const debateTokens = getSimilarityTokens(debateCombined);
+      if (!debateTokens.length) return null;
+
+      const overlapScore = computeTokenOverlapScore(baseTokens, debateTokens);
+      const exactQuestion = normalizedQuestion && normalizedQuestion === debateQuestionNormalized;
+      const strongSubstring = hasStrongSubstringMatch(normalizedQuestion, debateQuestionNormalized)
+        || hasStrongSubstringMatch(normalizedCombined, debateNormalized);
+      const debateTokenSet = new Set(debateTokens);
+      const baseTokenSet = [...new Set(baseTokens)];
+      const sharedCount = baseTokenSet.filter(token => debateTokenSet.has(token)).length;
+      const longSharedCount = baseTokenSet.filter(token => token.length >= 7 && debateTokenSet.has(token)).length;
+
+      let score = overlapScore;
+      if (exactQuestion) score = Math.max(score, 1);
+      if (strongSubstring) score = Math.max(score, 0.78);
+      if (sharedCount >= 4) score = Math.max(score, 0.72);
+      if (longSharedCount >= 2 && overlapScore >= 0.45) score = Math.max(score, 0.69);
+
+      const keep = exactQuestion
+        || score >= 0.72
+        || (score >= 0.64 && sharedCount >= 4)
+        || (score >= 0.6 && longSharedCount >= 2 && strongSubstring);
+      if (!keep) return null;
+
+      return {
+        id: debate.id,
+        question: debate.question,
+        type: debateType,
+        score: Number(score.toFixed(3))
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+}
+
+
+function computePositionLabelSimilarity(labelA, labelB) {
+  const textA = normalizeSimilarityText(labelA);
+  const textB = normalizeSimilarityText(labelB);
+  if (!textA || !textB) return 0;
+  if (textA === textB) return 1;
+  if (hasStrongSubstringMatch(textA, textB)) return 0.9;
+
+  const tokensA = getSimilarityTokens(labelA);
+  const tokensB = getSimilarityTokens(labelB);
+  if (!tokensA.length || !tokensB.length) return 0;
+
+  const overlap = computeTokenOverlapScore(tokensA, tokensB);
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  const sharedLong = [...setA].filter(token => token.length >= 7 && setB.has(token)).length;
+  if (sharedLong >= 2 && overlap >= 0.35) return Math.max(overlap, 0.72);
+  if (sharedLong >= 1 && overlap >= 0.5) return Math.max(overlap, 0.68);
+  return overlap;
+}
+
+function getPositionAlignmentHeuristic(existingA, existingB, newA, newB) {
+  const directA = computePositionLabelSimilarity(existingA, newA);
+  const directB = computePositionLabelSimilarity(existingB, newB);
+  const swappedA = computePositionLabelSimilarity(existingA, newB);
+  const swappedB = computePositionLabelSimilarity(existingB, newA);
+  const directScore = (directA + directB) / 2;
+  const swappedScore = (swappedA + swappedB) / 2;
+
+  let verdict = 'ambiguous';
+  const confidence = Math.abs(directScore - swappedScore);
+
+  if (swappedScore >= 0.58 && swappedScore - directScore >= 0.12) {
+    verdict = 'inverted';
+  } else if (directScore >= 0.58 && directScore - swappedScore >= 0.08) {
+    verdict = 'coherent';
+  }
+
+  return {
+    verdict,
+    directScore: Number(directScore.toFixed(3)),
+    swappedScore: Number(swappedScore.toFixed(3)),
+    confidence: Number(confidence.toFixed(3))
+  };
+}
+
+async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const prompt = [
+      "Tu vérifies la cohérence d'une fusion entre deux arènes à positions.",
+      "Dis si la nouvelle position A correspond plutôt à l'ancienne position A, à l'ancienne position B, ou si c'est ambigu.",
+      'Réponds uniquement en JSON: {"verdict":"coherent|inverted|ambiguous","reason":"..."}',
+      '',
+      'Arène existante :',
+      'A: ' + String(existingDebate.option_a || '').trim(),
+      'B: ' + String(existingDebate.option_b || '').trim(),
+      '',
+      'Nouvelle arène :',
+      'A: ' + String(incomingPositions.positionA || '').trim(),
+      'B: ' + String(incomingPositions.positionB || '').trim()
+    ].join("\n");
+
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 180,
+        temperature: 0
+      })
+    });
+
+    if (!r.ok) return null;
+    const data = await r.json();
+    const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
+    if (!content) return null;
+    const parsed = JSON.parse(content);
+    const verdict = ['coherent', 'inverted', 'ambiguous'].includes(parsed && parsed.verdict) ? parsed.verdict : 'ambiguous';
+    return {
+      verdict,
+      reason: String((parsed && parsed.reason) || '').trim()
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+async function evaluateVeilleMergeAlignment(existingDebate, incomingPositions) {
+  const type = inferVeilleDebateType(incomingPositions && incomingPositions.positionA, incomingPositions && incomingPositions.positionB);
+  if (type !== 'debate') {
+    return { ok: true, verdict: 'not_applicable', message: '' };
+  }
+
+  const existingType = inferVeilleDebateType(existingDebate && existingDebate.option_a, existingDebate && existingDebate.option_b);
+  if (existingType !== 'debate') {
+    return {
+      ok: false,
+      verdict: 'type_mismatch',
+      message: 'Fusion impossible : tu ne peux pas fusionner une arène à positions avec une arène libre.'
+    };
+  }
+
+  const heuristic = getPositionAlignmentHeuristic(
+    existingDebate.option_a,
+    existingDebate.option_b,
+    incomingPositions.positionA,
+    incomingPositions.positionB
+  );
+
+  let finalVerdict = heuristic.verdict;
+  let aiReason = '';
+  if (heuristic.verdict === 'ambiguous' || heuristic.confidence < 0.12) {
+    const aiResult = await evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions);
+    if (aiResult && aiResult.verdict) {
+      finalVerdict = aiResult.verdict;
+      aiReason = aiResult.reason || '';
+    }
+  }
+
+  if (finalVerdict === 'coherent') {
+    return { ok: true, verdict: 'coherent', message: '', directScore: heuristic.directScore, swappedScore: heuristic.swappedScore };
+  }
+
+  if (finalVerdict === 'inverted') {
+    return {
+      ok: false,
+      verdict: 'inverted',
+      message: aiReason || "La nouvelle position A semble correspondre à l'ancienne position B. Vérifie ou inverse les positions avant la fusion.",
+      directScore: heuristic.directScore,
+      swappedScore: heuristic.swappedScore
+    };
+  }
+
+  return {
+    ok: false,
+    verdict: 'ambiguous',
+    message: aiReason || "La correspondance entre les anciennes et nouvelles positions est ambiguë. Vérifie les positions avant la fusion.",
+    directScore: heuristic.directScore,
+    swappedScore: heuristic.swappedScore
+  };
+}
+
 function getNotificationContentLabel(value, maxLength = 90) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return "";
@@ -4580,31 +4846,21 @@ app.post("/api/veille/receive", async (req, res) => {
 });
 
 app.post("/api/admin/veille/check-similar", async (req, res) => {
-  const { question } = req.body || {};
-  if (!question) return res.status(400).json({ similar: [] });
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.json({ similar: [], warning: "OPENAI_API_KEY non configuré" });
+  const { question, positionA, positionB, resume } = req.body || {};
+  if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
+
   try {
-    const { data: debates } = await supabase
+    const { data: debates, error } = await supabase
       .from("debates")
-      .select("id, question")
+      .select("id, question, option_a, option_b, type, content, created_at")
       .order("created_at", { ascending: false })
-      .limit(150);
+      .limit(300);
+
+    if (error) throw new Error(error.message);
     if (!debates || !debates.length) return res.json({ similar: [] });
-    const list = debates.map(d => `[${d.id}] ${d.question}`).join("\n");
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: `Nouveau sujet proposé : "${question}"\n\nDébats existants :\n${list}\n\nIdentifie les débats dont le sens est très similaire (même thématique de fond). Réponds uniquement en JSON : {"similar":[{"id":"...","question":"..."}]}. Si aucun, réponds {"similar":[]}.` }],
-        response_format: { type: "json_object" },
-        max_tokens: 400
-      })
-    });
-    const data = await r.json();
-    const parsed = JSON.parse(data.choices[0].message.content);
-    res.json(parsed);
+
+    const similar = getVeilleSimilarityCandidates({ question, positionA, positionB, resume }, debates);
+    res.json({ similar });
   } catch (e) {
     res.json({ similar: [], error: e.message });
   }
@@ -4616,6 +4872,28 @@ app.get("/admin/veille", (req, res) => {
 
 app.get("/api/admin/veille", async (req, res) => {
   res.json(await loadVeillePending());
+});
+
+app.post("/api/admin/veille/check-merge-positions", async (req, res) => {
+  const { debateId, positionA, positionB } = req.body || {};
+  if (!debateId) return res.status(400).json({ ok: false, error: 'debateId requis' });
+
+  try {
+    const { data: existing, error } = await supabase
+      .from("debates")
+      .select("id, question, option_a, option_b, type")
+      .eq("id", debateId)
+      .single();
+
+    if (error || !existing) {
+      return res.status(404).json({ ok: false, error: 'Arène cible introuvable.' });
+    }
+
+    const result = await evaluateVeilleMergeAlignment(existing, { positionA, positionB });
+    return res.status(result.ok ? 200 : 400).json({ ok: result.ok, ...result, existing });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.delete("/api/admin/veille/:id", async (req, res) => {
@@ -4642,15 +4920,17 @@ app.post("/api/admin/veille/publish", async (req, res) => {
       date: typeof l === "object" ? (l.date || "") : "",
       added_at: nowIsoExtras
     })).filter(e => e.url);
-    const extras = allExtras.slice(1);
+    const normalizedPositionA = String(positionA || "").trim();
+    const normalizedPositionB = String(positionB || "").trim();
+    const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
 
     const { data, error } = await supabase.from("debates").insert({
       question,
-      option_a: positionA || null,
-      option_b: positionB || null,
+      option_a: debateType === "open" ? "" : normalizedPositionA,
+      option_b: debateType === "open" ? "" : normalizedPositionB,
       category: theme || null,
       source_url: sourceUrl,
-      type: "debate",
+      type: debateType,
       creator_key: AGON_ADMIN_CREATOR_KEY,
       created_at: nowIso()
     }).select("id").single();
@@ -4676,7 +4956,7 @@ app.post("/api/admin/veille/merge", async (req, res) => {
   try {
     const { data: existing, error: fetchErr } = await supabase
       .from("debates")
-      .select("media_extras")
+      .select("media_extras,type,option_a,option_b")
       .eq("id", debateId)
       .single();
     if (fetchErr) throw new Error(fetchErr.message);
@@ -4698,9 +4978,31 @@ app.post("/api/admin/veille/merge", async (req, res) => {
       ...oldExtras.filter(o => !newExtras.some(n => n.url === o.url))
     ];
 
-    const updateFields = { question };
-    if (positionA !== undefined) updateFields.option_a = positionA || null;
-    if (positionB !== undefined) updateFields.option_b = positionB || null;
+    const normalizedPositionA = positionA === undefined ? undefined : String(positionA || "").trim();
+    const normalizedPositionB = positionB === undefined ? undefined : String(positionB || "").trim();
+    const inferredType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
+    const existingType = inferVeilleDebateType(existing.option_a, existing.option_b);
+
+    if (existingType !== inferredType) {
+      return res.status(400).json({
+        ok: false,
+        error: existingType === "open"
+          ? "Fusion impossible : tu ne peux pas fusionner une arène à positions avec une arène libre."
+          : "Fusion impossible : tu ne peux pas fusionner une arène libre avec une arène à positions."
+      });
+    }
+
+    const alignment = await evaluateVeilleMergeAlignment(existing, {
+      positionA: normalizedPositionA,
+      positionB: normalizedPositionB
+    });
+    if (!alignment.ok) {
+      return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
+    }
+
+    const updateFields = { question, type: inferredType };
+    if (positionA !== undefined) updateFields.option_a = inferredType === "open" ? "" : normalizedPositionA;
+    if (positionB !== undefined) updateFields.option_b = inferredType === "open" ? "" : normalizedPositionB;
     if (mergedExtras.length) updateFields.media_extras = mergedExtras;
     if (mergedExtras[0]) updateFields.source_url = mergedExtras[0].url;
 
