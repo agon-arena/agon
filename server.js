@@ -100,21 +100,20 @@ const VEILLE_URL = (process.env.VEILLE_URL || "http://localhost:3000/mixte").tri
 
 function replaceMetaPlaceholders(template, meta) {
   return String(template || "")
-    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "agôn"))
+    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
-    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "agôn"))
+    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"))
     .replaceAll("__VEILLE_URL__", VEILLE_URL);
 }
 
 function buildIndexMeta(req) {
   return {
-    title: "agôn – L'arène des idées | Réseau d'intelligence collective",
-    description: "agôn est un réseau de confrontation des idées fondé sur l’intelligence collective. Il permet de visualiser les désaccords, de suivre l’évolution des points de vue et de faire émerger les idées les plus convaincantes.",
+    title: "Agôn est un réseau d’intelligence collective qui aide à comprendre les sujets qui font réagir, en confrontant les points de vue. Il structure les échanges pour faire émerger les idées les plus convaincantes.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-    imageAlt: "agôn — l'arène des idées"
+    imageAlt: "Agôn — l'arène des idées"
   };
 }
 
@@ -2086,7 +2085,7 @@ app.get("/debate", async (req, res) => {
       description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, "/debate"),
       image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-      imageAlt: "agôn — l'arène des idées"
+      imageAlt: "Agôn — l'arène des idées"
     });
     return res.type("html").send(html);
   }
@@ -2099,7 +2098,7 @@ app.get("/debate", async (req, res) => {
         description: "Cette arène n'est plus disponible sur agôn.",
         url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
         image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-        imageAlt: "agôn — l'arène des idées"
+        imageAlt: "Agôn — l'arène des idées"
       });
       return res.status(404).type("html").send(html);
     }
@@ -2113,7 +2112,7 @@ app.get("/debate", async (req, res) => {
       description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
       image: buildAbsoluteUrl(req, "/logo2.jpeg"),
-      imageAlt: "agôn — l'arène des idées"
+      imageAlt: "Agôn — l'arène des idées"
     });
     return res.type("html").send(html);
   }
