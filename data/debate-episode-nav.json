@@ -43,6 +43,38 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": 415,
+    "next_episode_title": "Guerre au Soudan : \"La population ne comprend pas le silence des Européens\"",
+    "next_episode_url": "/debate?id=415"
+  },
+  "391": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "392": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "409": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "415": {
+    "previous_episode_id": 383,
+    "previous_episode_title": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
+    "previous_episode_url": "/debate?id=383",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

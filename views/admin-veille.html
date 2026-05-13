@@ -138,7 +138,8 @@ function renderSimilarResults(data, containerId, mergeContext) {
 }
 
 
-async function checkMergePositions(debateId, pendingItem) {
+async function checkMergePositions(debateId, pendingItem, options) {
+  const opts = options || {};
   const response = await fetch('/api/admin/veille/check-merge-positions', {
     method: 'POST',
     headers: headers(),
@@ -152,6 +153,10 @@ async function checkMergePositions(debateId, pendingItem) {
   const data = await response.json().catch(function() { return { ok: false, error: 'Erreur serveur' }; });
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || data.message || 'Fusion impossible. Vérifie les positions.');
+  }
+
+  if (!opts.silentWarning && data.verdict === 'ambiguous' && data.message) {
+    toast('Attention : ' + data.message);
   }
 
   return data;
@@ -175,7 +180,7 @@ function renderStoryManualPicker(selection) {
       '<option value="">Conserver le rattachement proposé</option>' +
     '</select>' +
     '<div class="story-manual-summary" style="margin-top:10px;' + (selectedId ? '' : 'display:none;') + '">' +
-      '<label>Résumé de l’histoire choisie</label>' +
+      '<label>Résumé de l’histoire choisie depuis le début</label>' +
       '<textarea class="story-manual-summary-input" rows="3" style="width:100%;margin-top:6px;">' + summary + '</textarea>' +
       '<div class="story-manual-meta" style="margin-top:6px;font-size:0.8rem;color:#666;"></div>' +
     '</div>' +
@@ -198,7 +203,7 @@ function renderStorySelectionNotice(item) {
       '<strong style="color:#26734d;">Histoire liée</strong>' +
       '<div style="margin-top:6px;font-size:0.88rem;"><strong>' + matchedTitle + '</strong></div>' +
       (reason ? '<div style="margin-top:4px;font-size:0.8rem;color:#496756;">' + reason + '</div>' : '') +
-      '<label style="margin-top:8px;">Résumé de l’histoire</label>' +
+      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
       '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + existingSummary + '</textarea>' +
       manualPicker +
       '</div>';
@@ -209,7 +214,7 @@ function renderStorySelectionNotice(item) {
       '<strong style="color:#a06a00;">Nouvelle histoire proposée</strong>' +
       '<label style="margin-top:8px;">Titre de l’histoire</label>' +
       '<input type="text" class="story-title-input" style="width:100%;margin-top:6px;" value="' + newStoryTitle + '">' +
-      '<label style="margin-top:8px;">Résumé de l’histoire</label>' +
+      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
       '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + newStorySummary + '</textarea>' +
       manualPicker +
       '</div>';
@@ -226,11 +231,11 @@ function renderStorySelectionNotice(item) {
       '<div class="story-new-fields" style="margin-top:10px;' + (selection.selectionMode === 'new' ? '' : 'display:none;') + '">' +
       '<label>Titre de l’histoire</label>' +
       '<input type="text" class="story-title-input" style="width:100%;margin-top:6px;" value="' + newStoryTitle + '">' +
-      '<label style="margin-top:8px;">Résumé de l’histoire</label>' +
+      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
       '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + uncertainSummary + '</textarea>' +
       '</div>' +
       '<div class="story-existing-fields" style="margin-top:10px;' + (selection.selectionMode === 'existing' ? '' : 'display:none;') + '">' +
-      '<label>Résumé de l’histoire</label>' +
+      '<label>Résumé de l’histoire depuis le début</label>' +
       '<textarea class="story-existing-summary-input" rows="3" style="width:100%;margin-top:6px;">' + existingSummary + '</textarea>' +
       '</div>' +
       manualPicker +
@@ -250,6 +255,36 @@ function renderPreviousEpisodeButton(item) {
     '</div>';
 }
 
+function normalizeKeywordList(values, max) {
+  const seen = new Set();
+  const list = [];
+  (Array.isArray(values) ? values : []).forEach(function(value) {
+    const keyword = String(value || '').replace(/^[-–—•\s]+/, '').replace(/[?!.;,:\s]+$/g, '').trim();
+    if (!keyword || keyword.length < 2 || keyword.length > 40) return;
+    const lower = keyword.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    list.push(keyword);
+  });
+  return list.slice(0, max || 10);
+}
+
+function renderKeywordEditor(item) {
+  const keywords = normalizeKeywordList(item && item.keywords || [], 10);
+  return '<div class="keyword-editor" style="margin-top:12px;">' +
+    '<div style="font-size:0.82rem;font-weight:700;color:#555;margin-bottom:6px;">Mots-clés relevés</div>' +
+    '<div class="keyword-list" style="display:flex;flex-wrap:wrap;gap:8px;">' +
+      keywords.map(function(keyword) {
+        return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+      }).join('') +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:8px;">' +
+      '<input type="text" class="keyword-input" style="flex:1;min-width:0;" placeholder="Ajouter un mot-clé">' +
+      '<button type="button" class="keyword-add-btn">Ajouter</button>' +
+    '</div>' +
+  '</div>';
+}
+
 function renderItem(item) {
   const catOptions = CATEGORIES.map(function(c) {
     return '<option value="' + esc(c) + '"' + (c === item.theme ? ' selected' : '') + '>' + esc(c) + '</option>';
@@ -261,7 +296,8 @@ function renderItem(item) {
     renderLinkedDebateNotice(item) +
     renderStorySelectionNotice(item) +
     '<label>Question de débat</label>' +
-    '<input type="text" class="f-question" value="' + esc(item.question) + '">' +
+    '<input type="text" class="f-question" maxlength="100" value="' + esc(item.question) + '">' +
+    '<div class="field-counter question-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 100</div>' +
     '<label>Position A</label>' +
     '<input type="text" class="f-pos-a" value="' + esc(item.positionA || '') + '">' +
     '<label>Position B</label>' +
@@ -270,6 +306,12 @@ function renderItem(item) {
     '<select class="f-theme">' + catOptions + '</select>' +
     '<label>Résumé (contexte)</label>' +
     '<textarea class="f-resume">' + esc(item.resume || '') + '</textarea>' +
+    '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
+      '<button type="button" class="context-save-btn">Enregistrer les modifications</button>' +
+      '<span class="context-save-feedback" style="display:none;color:#496756;font-size:0.82rem;font-weight:600;">Modifications enregistrées</span>' +
+    '</div>' +
+    renderKeywordEditor(item) +
     renderPreviousEpisodeButton(item) +
     '<label>Liens sources</label>' +
     (item.links && item.links.length
@@ -293,6 +335,26 @@ function renderItem(item) {
     '<button class="btn-delete">Supprimer</button>' +
     '</div>' +
     '</div>';
+}
+
+function updateFieldCounter(item, selector, counterSelector, maxLength) {
+  if (!item) return;
+  const field = item.querySelector(selector);
+  const counter = item.querySelector(counterSelector);
+  if (!field || !counter) return;
+  const rawValue = field.value || '';
+  const safeValue = rawValue.slice(0, maxLength);
+  if (rawValue !== safeValue) {
+    field.value = safeValue;
+  }
+  counter.textContent = safeValue.length + ' / ' + maxLength;
+  counter.style.color = safeValue.length >= maxLength ? '#b42318' : '#6b7280';
+}
+
+function updateItemCounters(item) {
+  if (!item) return;
+  updateFieldCounter(item, '.f-question', '.question-counter', 100);
+  updateFieldCounter(item, '.f-resume', '.resume-counter', 1800);
 }
 
 async function checkSimilar(item) {
@@ -404,11 +466,31 @@ async function loadPending() {
         }
       }
     });
+    list.querySelectorAll('.pending-item').forEach(function(item) {
+      updateItemCounters(item);
+    });
     list.querySelectorAll('.btn-publish').forEach(function(btn) {
       btn.addEventListener('click', function() { publish(btn); });
     });
     list.querySelectorAll('.btn-delete').forEach(function(btn) {
       btn.addEventListener('click', function() { remove(btn); });
+    });
+    list.querySelectorAll('.context-save-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        saveContextEdits(btn.closest('.pending-item'));
+      });
+    });
+    list.querySelectorAll('.f-question, .f-resume').forEach(function(field) {
+      field.addEventListener('input', function() {
+        updateItemCounters(field.closest('.pending-item'));
+      });
+    });
+    list.querySelectorAll('.keyword-add-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const item = btn.closest('.pending-item');
+        const input = item && item.querySelector('.keyword-input');
+        addKeywordToEditor(item, input && input.value || '');
+      });
     });
     items.forEach(function(item) { checkSimilar(item); });
   } catch(e) {
@@ -482,9 +564,49 @@ function collectStorySelection(item) {
   return selection;
 }
 
+function getKeywordsFromEditor(item) {
+  return normalizeKeywordList([].slice.call(item.querySelectorAll('.keyword-chip[data-keyword]')).map(function(el) {
+    return el.dataset.keyword || '';
+  }), 10);
+}
+
+function addKeywordToEditor(item, value) {
+  if (!item) return;
+  const list = item.querySelector('.keyword-list');
+  const input = item.querySelector('.keyword-input');
+  if (!list) return;
+  const keywords = normalizeKeywordList(getKeywordsFromEditor(item).concat([value]), 10);
+  list.innerHTML = keywords.map(function(keyword) {
+    return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+  }).join('');
+  if (input) input.value = '';
+}
+
+function saveContextEdits(item) {
+  if (!item) return;
+  updateItemCounters(item);
+  const question = item.querySelector('.f-question');
+  const resume = item.querySelector('.f-resume');
+  const feedback = item.querySelector('.context-save-feedback');
+  if (question) {
+    question.dataset.savedValue = question.value.trim();
+  }
+  if (resume) {
+    resume.dataset.savedValue = resume.value.trim();
+  }
+  if (feedback) {
+    feedback.style.display = '';
+    clearTimeout(feedback._timer);
+    feedback._timer = setTimeout(function() {
+      feedback.style.display = 'none';
+    }, 1800);
+  }
+}
+
 async function publish(btn) {
   const item = btn.closest('.pending-item');
   const id = Number(item.dataset.id);
+  const keywords = getKeywordsFromEditor(item);
   const links = [...item.querySelectorAll('.link-row')].filter(function(row) {
     return row.querySelector('.link-check').checked;
   }).map(function(row) {
@@ -505,15 +627,40 @@ async function publish(btn) {
 
   const body = {
     id: id,
-    question: item.querySelector('.f-question').value.trim(),
+    question: item.querySelector('.f-question').value.trim().slice(0, 100),
     positionA: item.querySelector('.f-pos-a').value.trim(),
     positionB: item.querySelector('.f-pos-b').value.trim(),
     theme: item.querySelector('.f-theme').value,
-    resume: item.querySelector('.f-resume').value.trim(),
+    resume: item.querySelector('.f-resume').value.trim().slice(0, 1800),
+    keywords: keywords,
     links: links,
     linkedDebateId: item.dataset.linkedDebateId || '',
     storySelection: collectStorySelection(item)
   };
+
+  if (body.linkedDebateId) {
+    try {
+      const alignment = await checkMergePositions(body.linkedDebateId, item, { silentWarning: true });
+      if ((alignment.verdict === 'ambiguous' || alignment.verdict === 'inverted') && alignment.message) {
+        const shouldContinue = confirm(
+          'Attention : ' + alignment.message + '\n\nVeux-tu continuer quand même la publication ?'
+        );
+        if (!shouldContinue) {
+          return;
+        }
+        body.forcePublishOnAlignmentWarning = true;
+      }
+    } catch (error) {
+      const shouldContinue = confirm(
+        'Attention : ' + error.message + '\n\nVeux-tu continuer quand même la publication ?'
+      );
+      if (!shouldContinue) {
+        return;
+      }
+      body.forcePublishOnAlignmentWarning = true;
+    }
+  }
+
   btn.disabled = true;
   btn.textContent = 'Publication…';
   try {
@@ -558,10 +705,10 @@ async function merge(btn, item) {
       body: JSON.stringify({
         id: item.id,
         debateId: debateId,
-        question: pendingItem.querySelector('.f-question').value.trim(),
+        question: pendingItem.querySelector('.f-question').value.trim().slice(0, 100),
         positionA: pendingItem.querySelector('.f-pos-a').value.trim(),
         positionB: pendingItem.querySelector('.f-pos-b').value.trim(),
-        resume: pendingItem.querySelector('.f-resume').value.trim(),
+        resume: pendingItem.querySelector('.f-resume').value.trim().slice(0, 1800),
         links: links
       })
     });
@@ -594,6 +741,20 @@ async function merge(btn, item) {
     toast('Erreur : ' + e.message);
   }
 }
+
+document.addEventListener('click', function(e) {
+  const removeBtn = e.target.closest('.keyword-remove-btn');
+  if (!removeBtn) return;
+  const chip = removeBtn.closest('.keyword-chip');
+  if (chip) chip.remove();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (!e.target.classList.contains('keyword-input')) return;
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  addKeywordToEditor(e.target.closest('.pending-item'), e.target.value || '');
+});
 
 function adminHeaders() {
   return { 'Content-Type': 'application/json' };

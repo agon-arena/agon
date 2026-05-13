@@ -1,20 +1,20 @@
 {
-  "1778649867356": {
+  "1778665857881": {
     "selectionMode": "existing",
     "storyDecision": "existing_story",
-    "matchedStoryId": "guerre-au-soudan-mp3m5oja",
-    "matchedStoryTitle": "Guerre au Soudan",
-    "previousEpisodeTitle": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
-    "previousEpisodeUrl": "http://localhost:3001/debate?id=383",
+    "matchedStoryId": "en-direct-hantavirus-la-situation-en-france-est--mp31nrle",
+    "matchedStoryTitle": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle»,… ?",
+    "previousEpisodeTitle": "Hantavirus menace sanitaire réelle ou panique exagérée face à une nouvelle crise ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=382",
     "confidence": 1,
-    "reason": "Les mots-clés forts et la tension centrale recoupent nettement une histoire active.",
+    "reason": "Histoire choisie manuellement.",
     "criteria": {
-      "main_actors_match": true,
-      "central_tension_match": true,
-      "temporal_continuity": true,
-      "editorial_theme_match": true,
-      "strong_keywords_match": true
+      "main_actors_match": false,
+      "central_tension_match": false,
+      "temporal_continuity": false,
+      "editorial_theme_match": false,
+      "strong_keywords_match": false
     },
-    "storySummary": "Le conflit au Soudan fait rage."
+    "storySummary": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron"
   }
 }

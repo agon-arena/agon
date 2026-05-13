@@ -407,6 +407,8 @@ const veillePendingLinksMetaPath = path.join(__dirname, "data", "veille-pending-
 const storiesMetaPath = path.join(__dirname, "data", "stories.json");
 const debateStoryLinksMetaPath = path.join(__dirname, "data", "debate-story-links.json");
 const veillePendingStoriesMetaPath = path.join(__dirname, "data", "veille-pending-stories.json");
+const veillePendingKeywordsMetaPath = path.join(__dirname, "data", "veille-pending-keywords.json");
+const debateKeywordsMetaPath = path.join(__dirname, "data", "debate-keywords.json");
 const debateEpisodeNavMetaPath = path.join(__dirname, "data", "debate-episode-nav.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
@@ -473,6 +475,24 @@ function ensureJsonMetaStorage(filePath) {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, "{}", "utf8");
   }
+}
+
+function normalizeKeywordList(values, max = 10) {
+  const seen = new Set();
+  const list = [];
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const keyword = String(value || "")
+      .replace(/^[-–—•\s]+/, "")
+      .replace(/[?!.;,:\s]+$/g, "")
+      .trim();
+    if (!keyword) return;
+    if (keyword.length < 2 || keyword.length > 40) return;
+    const lower = keyword.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    list.push(keyword);
+  });
+  return list.slice(0, max);
 }
 
 let _sharedDebateLinksMapCache = null;
@@ -852,6 +872,84 @@ function setVeillePendingStorySelection(id, value) {
 
 function clearVeillePendingStorySelection(id) {
   setVeillePendingStorySelection(id, null);
+}
+
+let _veillePendingKeywordsCache = null;
+
+function readVeillePendingKeywordsMap() {
+  if (_veillePendingKeywordsCache) return _veillePendingKeywordsCache;
+  ensureJsonMetaStorage(veillePendingKeywordsMetaPath);
+  try {
+    _veillePendingKeywordsCache = JSON.parse(fs.readFileSync(veillePendingKeywordsMetaPath, "utf8") || "{}");
+    return _veillePendingKeywordsCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeVeillePendingKeywordsMap(map) {
+  ensureJsonMetaStorage(veillePendingKeywordsMetaPath);
+  fs.writeFileSync(veillePendingKeywordsMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+  _veillePendingKeywordsCache = map || {};
+}
+
+function getVeillePendingKeywords(id) {
+  const map = readVeillePendingKeywordsMap();
+  return normalizeKeywordList(map?.[String(id)] || []);
+}
+
+function setVeillePendingKeywords(id, keywords) {
+  const pendingId = String(id || "").trim();
+  if (!pendingId) return;
+  const map = readVeillePendingKeywordsMap();
+  const normalized = normalizeKeywordList(keywords);
+  if (!normalized.length) {
+    delete map[pendingId];
+  } else {
+    map[pendingId] = normalized;
+  }
+  writeVeillePendingKeywordsMap(map);
+}
+
+function clearVeillePendingKeywords(id) {
+  setVeillePendingKeywords(id, []);
+}
+
+let _debateKeywordsCache = null;
+
+function readDebateKeywordsMap() {
+  if (_debateKeywordsCache) return _debateKeywordsCache;
+  ensureJsonMetaStorage(debateKeywordsMetaPath);
+  try {
+    _debateKeywordsCache = JSON.parse(fs.readFileSync(debateKeywordsMetaPath, "utf8") || "{}");
+    return _debateKeywordsCache;
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeDebateKeywordsMap(map) {
+  ensureJsonMetaStorage(debateKeywordsMetaPath);
+  fs.writeFileSync(debateKeywordsMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+  _debateKeywordsCache = map || {};
+}
+
+function getDebateKeywords(debateId) {
+  const map = readDebateKeywordsMap();
+  return normalizeKeywordList(map?.[String(debateId)] || []);
+}
+
+function setDebateKeywords(debateId, keywords) {
+  const debateKey = String(debateId || "").trim();
+  if (!debateKey) return;
+  const map = readDebateKeywordsMap();
+  const normalized = normalizeKeywordList(keywords);
+  if (!normalized.length) {
+    delete map[debateKey];
+  } else {
+    map[debateKey] = normalized;
+  }
+  writeDebateKeywordsMap(map);
 }
 
 function normalizeStorySelection(value) {
@@ -1313,6 +1411,7 @@ function enrichDebateWithStoredImage(debate) {
     image_url: getResolvedDebateImageUrl(debate),
     video_url: getResolvedDebateVideoUrl(debate),
     content: resolvedContent,
+    keywords: getDebateKeywords(debate?.id),
     story_id: storyId || null,
     previous_episode_id: episodeNav.previous_episode_id || null,
     previous_episode_title: episodeNav.previous_episode_title || null,
@@ -2471,9 +2570,9 @@ async function evaluateVeilleMergeAlignment(existingDebate, incomingPositions) {
   }
 
   return {
-    ok: false,
+    ok: true,
     verdict: 'ambiguous',
-    message: aiReason || "La correspondance entre les anciennes et nouvelles positions est ambiguë. Vérifie les positions avant la fusion.",
+    message: aiReason || "La correspondance entre les anciennes et nouvelles positions n'est pas totalement certaine. Vérifie-les si besoin, mais la fusion peut continuer.",
     directScore: heuristic.directScore,
     swappedScore: heuristic.swappedScore
   };
@@ -5331,6 +5430,7 @@ async function loadVeillePending() {
     resume: r.resume,
     sources: r.sources,
     links: r.links || [],
+    keywords: getVeillePendingKeywords(r.id),
     addedAt: r.added_at,
     linkedDebateId: getVeillePendingLinkedDebate(r.id),
     storySelection: getVeillePendingStorySelection(r.id)
@@ -5342,10 +5442,11 @@ async function deleteVeillePending(id) {
   if (error) throw new Error(error.message);
   clearVeillePendingLinkedDebate(id);
   clearVeillePendingStorySelection(id);
+  clearVeillePendingKeywords(id);
 }
 
 app.post("/api/veille/receive", async (req, res) => {
-  const { question, positionA, positionB, theme, resume, sources, links, storySelection } = req.body || {};
+  const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
   const pendingId = Date.now();
   const { error } = await supabase.from("veille_pending").insert({
@@ -5363,6 +5464,7 @@ app.post("/api/veille/receive", async (req, res) => {
   if (normalizedStorySelection) {
     setVeillePendingStorySelection(pendingId, normalizedStorySelection);
   }
+  setVeillePendingKeywords(pendingId, keywords);
   res.json({ ok: true });
 });
 
@@ -5438,7 +5540,7 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
 });
 
 app.post("/api/admin/veille/publish", async (req, res) => {
-  const { id, question, positionA, positionB, theme, resume, links, linkedDebateId } = req.body || {};
+  const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
     let pendingResume = "";
     if (id) {
@@ -5469,7 +5571,17 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const requestedLinkedDebateId = String(linkedDebateId || getVeillePendingLinkedDebate(id) || "").trim();
     const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
     const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || getVeillePendingStorySelection(id));
-    const resolvedContent = String(resume || "").trim() || pendingResume || String(question || "").trim();
+    const resolvedContent = normalizeDebateContent(String(resume || "").trim() || pendingResume || String(question || "").trim());
+    const resolvedKeywords = normalizeKeywordList(Array.isArray(keywords) ? keywords : getVeillePendingKeywords(id));
+
+    console.warn("[veille publish] debug lengths", {
+      pendingId: id ? Number(id) : null,
+      linkedDebateId: canonicalLinkedDebateId || null,
+      questionLength: String(question || "").trim().length,
+      resumeLength: String(resume || "").trim().length,
+      pendingResumeLength: pendingResume.length,
+      resolvedContentLength: resolvedContent.length
+    });
 
     if (!String(resume || "").trim() && pendingResume) {
       console.warn(`[veille publish] resume manquant dans la requete, fallback sur veille_pending pour ${id}.`);
@@ -5504,7 +5616,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
         positionA: normalizedPositionA,
         positionB: normalizedPositionB
       });
-      if (!alignment.ok) {
+      if (!alignment.ok && !(forcePublishOnAlignmentWarning && ["ambiguous", "inverted"].includes(String(alignment.verdict || "").trim()))) {
         return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
       }
     }
@@ -5520,11 +5632,22 @@ app.post("/api/admin/veille/publish", async (req, res) => {
       creator_key: AGON_ADMIN_CREATOR_KEY,
       created_at: nowIso()
     }).select("id").single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[veille publish] insert error", {
+        pendingId: id ? Number(id) : null,
+        linkedDebateId: canonicalLinkedDebateId || null,
+        resolvedContentLength: resolvedContent.length,
+        errorMessage: error.message,
+        errorDetails: error.details || "",
+        errorHint: error.hint || ""
+      });
+      throw new Error(error.message);
+    }
 
     if (allExtras.length) {
       await supabase.from("debates").update({ media_extras: allExtras }).eq("id", data.id);
     }
+    setDebateKeywords(data.id, resolvedKeywords);
     if (canonicalLinkedDebateId) {
       linkDebateToSharedSpace(data.id, canonicalLinkedDebateId);
     } else {

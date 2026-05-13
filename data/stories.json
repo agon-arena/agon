@@ -1,8 +1,86 @@
 [
   {
+    "story_id": "glucksmann-mp3xmcee",
+    "story_title": "Glucksmann",
+    "story_summary": "Raphaël Glucksmann  est en route vers la présidentielle.",
+    "main_actors": [
+      "presidentielle",
+      "2027",
+      "eviter"
+    ],
+    "central_tension": "Note conseille d’éviter jeunes, pauvres, banlieues : stratégie électorale ou trahison ?",
+    "keywords": [
+      "presidentielle",
+      "2027",
+      "eviter",
+      "jeunes",
+      "banlieues",
+      "fuite"
+    ],
+    "status": "active",
+    "created_at": "2026-05-13T10:43:56.870Z",
+    "updated_at": "2026-05-13T10:43:56.870Z",
+    "first_episode_id": "409",
+    "latest_episode_id": "409",
+    "latest_episode_title": "Note conseille d’éviter jeunes, pauvres, banlieues : stratégie électorale ou trahison ?",
+    "latest_episode_summary": "L’histoire jusqu’ici : Une note confidentielle de l’équipe de Raphaël Glucksmann recommande d’éviter les CSP-, les jeunes et les banlieues."
+  },
+  {
+    "story_id": "tribunal-militaire-israel-peine-de-mort-mp3woezy",
+    "story_title": "Tribunal militaire Israël / peine de mort",
+    "story_summary": "Israël a instauré un tribunal militaire spécial pouvant prononcer la peine de mort contre des Palestiniens accusés d'avoir participé aux attaques du 7 octobre. Cette mesure intervient dans un contexte de forte tension et de violences entre Israël et la Palestine.",
+    "main_actors": [
+      "israel",
+      "instaure",
+      "tribunal"
+    ],
+    "central_tension": "Israël instaure un tribunal militaire spécial pouvant prononcer la peine de mort contre des Palesti…",
+    "keywords": [
+      "israel",
+      "instaure",
+      "tribunal",
+      "militaire",
+      "special",
+      "pouvant"
+    ],
+    "status": "active",
+    "created_at": "2026-05-13T10:17:33.934Z",
+    "updated_at": "2026-05-13T10:17:33.934Z",
+    "first_episode_id": "392",
+    "latest_episode_id": "392",
+    "latest_episode_title": "Israël instaure un tribunal militaire spécial pouvant prononcer la peine de mort contre des Palestiniens accusés d'avoir participé aux attaques du 7-Octobre",
+    "latest_episode_summary": "Israël instaure un tribunal militaire spécial pouvant prononcer la peine de mort contre des Palestiniens accusés d'avoir participé aux attaques du 7-Octobre\nLa suite se jouera maintenant sur la capacite des acteurs a reprendre la main dans israël instaure un tribunal militaire spé…."
+  },
+  {
+    "story_id": "presidentielle-2027-mp3wjfg7",
+    "story_title": "Présidentielle 2027",
+    "story_summary": "Une note confidentielle de l’équipe de Raphaël Glucksmann recommande d’éviter les CSP-, les jeunes et les banlieues. Cette fuite embarrasse le candidat à la présidentielle 2027 et soulève un débat sur l’inclusion sociale en politique.",
+    "main_actors": [
+      "presidentielle",
+      "2027",
+      "eviter"
+    ],
+    "central_tension": "Note interne conseille d’éviter jeunes et banlieues : discrimination ou stratégie politique ?",
+    "keywords": [
+      "presidentielle",
+      "2027",
+      "eviter",
+      "jeunes",
+      "banlieues",
+      "fuite"
+    ],
+    "status": "active",
+    "created_at": "2026-05-13T10:13:41.238Z",
+    "updated_at": "2026-05-13T10:13:41.238Z",
+    "first_episode_id": "391",
+    "latest_episode_id": "391",
+    "latest_episode_title": "La fuite d’une note confidentielle embarrasse Raphaël Glucksmann : discrimination ou stratégie politique ?",
+    "latest_episode_summary": "Présidentielle 2027 : « Éviter les CSP -, les jeunes, les banlieues » : la fuite d’une note confidentielle embarrasse Raphaël Glucksmann\nLa suite se jouera maintenant sur la capacite des acteurs a reprendre la main dans présidentielle 2027."
+  },
+  {
     "story_id": "guerre-au-soudan-mp3m5oja",
     "story_title": "Guerre au Soudan",
-    "story_summary": "Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.",
+    "story_summary": "Le conflit au Soudan fait rage.",
     "main_actors": [
       "guerre",
       "soudan",
@@ -19,11 +97,11 @@
     ],
     "status": "active",
     "created_at": "2026-05-13T05:23:03.669Z",
-    "updated_at": "2026-05-13T05:23:03.669Z",
+    "updated_at": "2026-05-13T10:55:01.886Z",
     "first_episode_id": "383",
-    "latest_episode_id": "383",
-    "latest_episode_title": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
-    "latest_episode_summary": "L’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nJusqu'ici, aucun épisode clairement établi n'était encore rattaché à cette histoire.\nLe conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nAucune continuité narrative nette n'a été détectée avec les histoires existantes."
+    "latest_episode_id": "415",
+    "latest_episode_title": "Guerre au Soudan : \"La population ne comprend pas le silence des Européens\"",
+    "latest_episode_summary": "L’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nL’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La L’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nL’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La"
   },
   {
     "story_id": "guerre-au-moyen-orient-mp3lkhsc",
