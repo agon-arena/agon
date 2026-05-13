@@ -19,11 +19,27 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": 382,
+    "next_episode_title": "Hantavirus menace sanitaire réelle ou panique exagérée face à une nouvelle crise ?",
+    "next_episode_url": "/debate?id=382"
+  },
+  "381": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
   },
-  "381": {
+  "382": {
+    "previous_episode_id": 376,
+    "previous_episode_title": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron",
+    "previous_episode_url": "/debate?id=376",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "383": {
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,

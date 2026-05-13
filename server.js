@@ -5440,6 +5440,17 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
 app.post("/api/admin/veille/publish", async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId } = req.body || {};
   try {
+    let pendingResume = "";
+    if (id) {
+      const { data: pendingRow, error: pendingError } = await supabase
+        .from("veille_pending")
+        .select("resume")
+        .eq("id", Number(id))
+        .maybeSingle();
+      if (pendingError) throw new Error(pendingError.message);
+      pendingResume = String(pendingRow?.resume || "").trim();
+    }
+
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
     const sourceUrl = firstLink ? (typeof firstLink === "string" ? firstLink : firstLink.url) : null;
@@ -5458,6 +5469,14 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const requestedLinkedDebateId = String(linkedDebateId || getVeillePendingLinkedDebate(id) || "").trim();
     const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
     const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || getVeillePendingStorySelection(id));
+    const resolvedContent = String(resume || "").trim() || pendingResume || String(question || "").trim();
+
+    if (!String(resume || "").trim() && pendingResume) {
+      console.warn(`[veille publish] resume manquant dans la requete, fallback sur veille_pending pour ${id}.`);
+    }
+    if (!String(resume || "").trim() && !pendingResume) {
+      console.warn(`[veille publish] aucun resume trouve pour ${id}, fallback sur la question.`);
+    }
 
     if (canonicalLinkedDebateId) {
       const { data: existingLinkedDebate, error: linkedError } = await supabase
@@ -5495,6 +5514,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
       option_a: debateType === "open" ? "" : normalizedPositionA,
       option_b: debateType === "open" ? "" : normalizedPositionB,
       category: theme || null,
+      content: resolvedContent,
       source_url: sourceUrl,
       type: debateType,
       creator_key: AGON_ADMIN_CREATOR_KEY,

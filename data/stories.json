@@ -1,5 +1,31 @@
 [
   {
+    "story_id": "guerre-au-soudan-mp3m5oja",
+    "story_title": "Guerre au Soudan",
+    "story_summary": "Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.",
+    "main_actors": [
+      "guerre",
+      "soudan",
+      "population"
+    ],
+    "central_tension": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
+    "keywords": [
+      "guerre",
+      "soudan",
+      "population",
+      "comprend",
+      "silence",
+      "europeens"
+    ],
+    "status": "active",
+    "created_at": "2026-05-13T05:23:03.669Z",
+    "updated_at": "2026-05-13T05:23:03.669Z",
+    "first_episode_id": "383",
+    "latest_episode_id": "383",
+    "latest_episode_title": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
+    "latest_episode_summary": "L’histoire jusqu’ici : Le conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nJusqu'ici, aucun épisode clairement établi n'était encore rattaché à cette histoire.\nLe conflit au Soudan provoque incompréhension face au silence des pays européens. La population locale dénonce ce manque de réaction alors que la guerre fait rage.\nAucune continuité narrative nette n'a été détectée avec les histoires existantes."
+  },
+  {
     "story_id": "guerre-au-moyen-orient-mp3lkhsc",
     "story_title": "Guerre au Moyen-Orient",
     "story_summary": "L'Iran a écarté tout compromis après le rejet de sa proposition par Donald Trump. La guerre au Moyen-Orient s'intensifie avec des frappes au Liban et des appels à la médiation internationale.",
@@ -45,11 +71,11 @@
     ],
     "status": "active",
     "created_at": "2026-05-12T19:49:15.506Z",
-    "updated_at": "2026-05-12T19:49:15.506Z",
+    "updated_at": "2026-05-13T05:20:21.156Z",
     "first_episode_id": "376",
-    "latest_episode_id": "376",
-    "latest_episode_title": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron",
-    "latest_episode_summary": "L’histoire jusqu’ici : EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron\nÉpisode précédent : aucun épisode clairement établi n'était encore rattaché à cette histoire.\nNouvel épisode : EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron\nOuverture : Aucune histoire existante n'est disponible pour ce sujet."
+    "latest_episode_id": "382",
+    "latest_episode_title": "Hantavirus menace sanitaire réelle ou panique exagérée face à une nouvelle crise ?",
+    "latest_episode_summary": "L’histoire jusqu’ici : Le hantavirus suscite une hausse des commandes de masques. Des questions se posent sur le risque d'une crise sanitaire majeure.\nJusqu'ici, aucun épisode clairement établi n'était encore rattaché à cette histoire.\nLe hantavirus suscite une hausse des commandes de masques. Des questions se posent sur le risque d'une crise sanitaire majeure.\nAucune continuité narrative nette n'a été détectée avec les histoires existantes."
   },
   {
     "story_id": "quel-tournant-se-joue-autour-de-en-direct-hantav-mp31m9l2",

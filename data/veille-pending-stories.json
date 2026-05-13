@@ -1,1 +1,20 @@
-{}
+{
+  "1778649867356": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "guerre-au-soudan-mp3m5oja",
+    "matchedStoryTitle": "Guerre au Soudan",
+    "previousEpisodeTitle": "Guerre au Soudan et silence européen : complicité ou prudence justifiée ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=383",
+    "confidence": 1,
+    "reason": "Les mots-clés forts et la tension centrale recoupent nettement une histoire active.",
+    "criteria": {
+      "main_actors_match": true,
+      "central_tension_match": true,
+      "temporal_continuity": true,
+      "editorial_theme_match": true,
+      "strong_keywords_match": true
+    },
+    "storySummary": "Le conflit au Soudan fait rage."
+  }
+}
