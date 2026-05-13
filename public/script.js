@@ -4719,8 +4719,8 @@ ${
 
       ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       ${mediaOutsideLink ? mediaHtml : ""}
-      ${contextHtml}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
+      ${contextHtml}
 
       <div class="debate-card-actions">
         ${buildIndexCardShareActionsHtml(d)}
@@ -14509,6 +14509,30 @@ function renderDebateContext(content) {
 
   text.textContent = safeContent;
   wrap.style.display = "block";
+  positionDebateContextBelowSources();
+}
+
+function positionDebateContextBelowSources() {
+  const wrap = document.getElementById("debate-context-wrap");
+  const hero = document.querySelector(".debate-hero");
+  if (!wrap || !hero) return;
+
+  const candidates = [
+    document.getElementById("debate-source-fallback"),
+    document.getElementById("debate-source-preview-wrap"),
+    document.getElementById("debate-video-wrap"),
+    document.getElementById("debate-image-wrap"),
+    document.getElementById("debate-media-history")
+  ].filter((element) => {
+    if (!element || element.parentElement !== hero) return false;
+    const display = window.getComputedStyle(element).display;
+    return display !== "none";
+  });
+
+  const anchor = candidates[0] || candidates[candidates.length - 1];
+  if (anchor && anchor.nextElementSibling !== wrap) {
+    anchor.insertAdjacentElement("afterend", wrap);
+  }
 }
 
 function renderDebateEpisodeNavigation(debate) {
@@ -15179,6 +15203,7 @@ function renderDebateVideo(videoUrl) {
   }
 
   wrap.style.display = "block";
+  positionDebateContextBelowSources();
 
   if (typeof initIndexLocalVideoObserver === "function") {
     initIndexLocalVideoObserver(wrap);
@@ -15202,6 +15227,7 @@ return;
 resetDebateVideo();
 imageEl.src = normalizedUrl;
 wrap.style.display = "block";
+positionDebateContextBelowSources();
 initDebateImageLightbox();
 }
 function openDebateImageLightbox() {
@@ -17703,6 +17729,7 @@ function initDebateMediaHistory(debate) {
   const hero = document.querySelector('.debate-hero');
   const firstMedia = document.getElementById('debate-image-wrap') || document.getElementById('debate-video-wrap') || document.getElementById('debate-source-preview-wrap');
   if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
+  positionDebateContextBelowSources();
 
   if (!currentSourceUrl && currentSessionSources.length > 0) {
     loadSessionSource(currentSessionSources, 0);
@@ -18473,6 +18500,7 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
   initIndexOpenGraphImageObserver(sourceFallback);
 
   syncDebateSourceSwipeAvailability();
+  positionDebateContextBelowSources();
 
 }
 
@@ -18585,6 +18613,7 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   initDebateYouTubeShell(ytContainer);
 
   syncDebateSourceSwipeAvailability();
+  positionDebateContextBelowSources();
 }
 async function loadDebate(id) {
   saveVisitedDebate(id);
