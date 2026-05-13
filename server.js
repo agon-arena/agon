@@ -865,9 +865,12 @@ function normalizeStorySelection(value) {
     storyDecision,
     matchedStoryId: String(value.matchedStoryId || "").trim() || null,
     matchedStoryTitle: String(value.matchedStoryTitle || "").trim() || null,
+    previousEpisodeTitle: String(value.previousEpisodeTitle || "").trim() || null,
+    previousEpisodeUrl: String(value.previousEpisodeUrl || "").trim() || null,
     confidence: Number.isFinite(Number(value.confidence)) ? Number(value.confidence) : 0,
     reason: String(value.reason || "").trim(),
-    criteria: value.criteria && typeof value.criteria === "object" ? value.criteria : {}
+    criteria: value.criteria && typeof value.criteria === "object" ? value.criteria : {},
+    storySummary: String(value.storySummary || "").trim()
   };
 
   if (selectionMode === "new" && value.newStory && typeof value.newStory === "object") {
@@ -900,6 +903,9 @@ function saveStoryForDebateSelection(selection, debatePayload) {
       throw new Error("Histoire existante introuvable au moment de la publication.");
     }
 
+    if (normalized.storySummary) {
+      story.story_summary = normalized.storySummary;
+    }
     story.updated_at = now;
     if (debateId && !story.first_episode_id) story.first_episode_id = debateId;
     if (debateId) story.latest_episode_id = debateId;
