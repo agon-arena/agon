@@ -15,6 +15,7 @@
     label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 12px; }
     input[type=text], textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font: inherit; font-size: 0.9rem; }
     textarea { min-height: 70px; resize: vertical; }
+    .f-resume { min-height: 260px; }
     input:focus, textarea:focus, select:focus { outline: 2px solid #111; }
     .actions { display: flex; gap: 10px; margin-top: 16px; }
     .btn-publish { background: #111; color: white; border: none; border-radius: 999px; padding: 10px 22px; font: inherit; font-weight: 700; cursor: pointer; }
@@ -35,6 +36,25 @@
     .btn-merge:hover { background: #d35400; }
     .btn-merge:disabled { opacity: 0.5; cursor: default; }
     .similar-checking { margin-top: 14px; font-size: 0.82rem; color: #aaa; }
+    .generated-title-label { margin: 14px 0 6px; font-size: 0.8rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.02em; }
+    .field-counter { margin-top: 4px; font-size: 0.78rem; color: #6b7280; text-align: right; }
+    .story-selection-box, .story-manual-picker { margin-top: 12px; }
+    .story-selection-box { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
+    .story-selection-title { font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 8px; }
+    .story-selection-current { font-size: 0.94rem; font-weight: 700; color: #111; margin-bottom: 6px; }
+    .story-selection-reason { font-size: 0.8rem; color: #666; margin-bottom: 10px; }
+    .story-fields { display: grid; gap: 10px; }
+    .story-save-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    .story-save-btn, .context-save-btn, .keyword-add-btn, .btn-proofread { border: 1px solid #d0d5dd; background: white; color: #111; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 0.84rem; font-weight: 700; cursor: pointer; }
+    .story-save-feedback, .context-save-feedback { display: none; color: #496756; font-size: 0.82rem; font-weight: 600; }
+    .story-manual-picker select { margin-top: 6px; }
+    .story-manual-meta { margin-top: 6px; font-size: 0.8rem; color: #666; }
+    .story-manual-summary { margin-top: 10px; }
+    .keyword-editor { margin-top: 12px; }
+    .keyword-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .keyword-chip { display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border-radius: 999px; background: #f3f4f7; border: 1px solid #e2e4ea; color: #2b2e38; font-size: 0.82rem; font-weight: 600; line-height: 1.2; }
+    .keyword-remove-btn { margin-left: 8px; border: none; background: transparent; color: #666; cursor: pointer; font: inherit; font-size: 0.9rem; line-height: 1; padding: 0; }
+    .keyword-add-row { display: flex; gap: 8px; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -121,8 +141,14 @@ function renderSimilarResults(data, containerId, mergeContext) {
       data.similar.map(function(s) {
         const scoreLabel = typeof s.score === 'number' ? ' <span style="color:#8a6d1d;font-size:0.78rem;">(' + Math.round(s.score * 100) + '%)</span>' : '';
         const typeLabel = s.type === 'open' ? 'Arène libre' : 'Arène à positions';
+        const positionsHtml = s.type === 'open' ? '' : (
+          '<div style="font-size:0.76rem;color:#555;margin-top:6px;line-height:1.45;">' +
+            (s.optionA ? '<div><strong>A —</strong> ' + esc(s.optionA) + '</div>' : '') +
+            (s.optionB ? '<div><strong>B —</strong> ' + esc(s.optionB) + '</div>' : '') +
+          '</div>'
+        );
         return '<div class="similar-row">' +
-          '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + scoreLabel + '<div style="font-size:0.75rem;color:#8a6d1d;margin-top:2px;">' + typeLabel + '</div></a>' +
+          '<a href="/debates/' + esc(String(s.id)) + '" target="_blank">' + esc(s.question) + scoreLabel + '<div style="font-size:0.75rem;color:#8a6d1d;margin-top:2px;">' + typeLabel + '</div>' + positionsHtml + '</a>' +
           '<button class="btn-merge" data-debate-id="' + esc(String(s.id)) + '">Fusionner</button>' +
           '</div>';
       }).join('') +
@@ -172,77 +198,21 @@ function renderLinkedDebateNotice(item) {
 }
 
 function renderStoryManualPicker(selection) {
-  const selectedId = esc(selection && selection.manualStoryId || '');
-  const summary = esc(selection && selection.manualStorySummary || '');
-  return '<div class="story-manual-picker" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);">' +
-    '<label style="display:block;margin-top:0;">Choisir manuellement une autre histoire existante</label>' +
-    '<select class="story-manual-select" style="width:100%;margin-top:6px;">' +
-      '<option value="">Conserver le rattachement proposé</option>' +
+  const currentId = selection && (
+    selection.manualStoryId ||
+    (selection.selectionMode === 'existing' ? selection.matchedStoryId : '') ||
+    ''
+  );
+  return '<div class="story-manual-picker">' +
+    '<label style="margin-top:0;">Histoire associée</label>' +
+    '<select class="story-manual-select" data-current-id="' + esc(currentId) + '">' +
+      '<option value="">Sans histoire associée</option>' +
     '</select>' +
-    '<div class="story-manual-summary" style="margin-top:10px;' + (selectedId ? '' : 'display:none;') + '">' +
-      '<label>Résumé de l’histoire choisie depuis le début</label>' +
-      '<textarea class="story-manual-summary-input" rows="3" style="width:100%;margin-top:6px;">' + summary + '</textarea>' +
-      '<div class="story-manual-meta" style="margin-top:6px;font-size:0.8rem;color:#666;"></div>' +
-    '</div>' +
   '</div>';
 }
 
 function renderStorySelectionNotice(item) {
-  const selection = item && item.storySelection;
-  if (!selection || typeof selection !== 'object') return '';
-
-  const matchedTitle = esc(selection.matchedStoryTitle || '');
-  const existingSummary = esc(selection.storySummary || '');
-  const newStoryTitle = esc(selection.newStory && selection.newStory.story_title || '');
-  const newStorySummary = esc(selection.newStory && selection.newStory.story_summary || '');
-  const reason = esc(selection.reason || '');
-  const manualPicker = renderStoryManualPicker(selection);
-
-  if (selection.selectionMode === 'existing' && matchedTitle) {
-    return '<div class="similar-box story-selection-box" data-story-selection-mode="existing" style="margin-top:12px;background:#eef9f1;border-color:#9fd4b5;color:#1f3b2d;">' +
-      '<strong style="color:#26734d;">Histoire liée</strong>' +
-      '<div style="margin-top:6px;font-size:0.88rem;"><strong>' + matchedTitle + '</strong></div>' +
-      (reason ? '<div style="margin-top:4px;font-size:0.8rem;color:#496756;">' + reason + '</div>' : '') +
-      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
-      '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + existingSummary + '</textarea>' +
-      manualPicker +
-      '</div>';
-  }
-
-  if (selection.selectionMode === 'new' && newStoryTitle) {
-    return '<div class="similar-box story-selection-box" data-story-selection-mode="new" style="margin-top:12px;background:#fff8e8;border-color:#efc96d;color:#523d12;">' +
-      '<strong style="color:#a06a00;">Nouvelle histoire proposée</strong>' +
-      '<label style="margin-top:8px;">Titre de l’histoire</label>' +
-      '<input type="text" class="story-title-input" style="width:100%;margin-top:6px;" value="' + newStoryTitle + '">' +
-      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
-      '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + newStorySummary + '</textarea>' +
-      manualPicker +
-      '</div>';
-  }
-
-  if (selection.storyDecision === 'uncertain') {
-    const uncertainSummary = esc(selection.storySummary || selection.newStory && selection.newStory.story_summary || '');
-    return '<div class="similar-box story-selection-box" data-story-selection-mode="uncertain" style="margin-top:12px;background:#fff4f0;border-color:#f0b49b;color:#5a2c1f;">' +
-      '<strong style="color:#b5532f;">Histoire à confirmer</strong>' +
-      (matchedTitle ? '<div style="margin-top:6px;font-size:0.88rem;">Proposition : <strong>' + matchedTitle + '</strong></div>' : '') +
-      (reason ? '<div style="margin-top:4px;font-size:0.8rem;color:#7a4a3b;">' + reason + '</div>' : '') +
-      '<label style="display:block;margin-top:10px;"><input type="radio" class="story-choice-input" name="story-choice-' + item.id + '" value="existing"' + (selection.selectionMode === 'existing' ? ' checked' : '') + '> Rattacher à cette histoire existante</label>' +
-      '<label style="display:block;margin-top:6px;"><input type="radio" class="story-choice-input" name="story-choice-' + item.id + '" value="new"' + (selection.selectionMode === 'new' ? ' checked' : '') + '> Créer une nouvelle histoire</label>' +
-      '<div class="story-new-fields" style="margin-top:10px;' + (selection.selectionMode === 'new' ? '' : 'display:none;') + '">' +
-      '<label>Titre de l’histoire</label>' +
-      '<input type="text" class="story-title-input" style="width:100%;margin-top:6px;" value="' + newStoryTitle + '">' +
-      '<label style="margin-top:8px;">Résumé de l’histoire depuis le début</label>' +
-      '<textarea class="story-summary-input" rows="3" style="width:100%;margin-top:6px;">' + uncertainSummary + '</textarea>' +
-      '</div>' +
-      '<div class="story-existing-fields" style="margin-top:10px;' + (selection.selectionMode === 'existing' ? '' : 'display:none;') + '">' +
-      '<label>Résumé de l’histoire depuis le début</label>' +
-      '<textarea class="story-existing-summary-input" rows="3" style="width:100%;margin-top:6px;">' + existingSummary + '</textarea>' +
-      '</div>' +
-      manualPicker +
-      '</div>';
-  }
-
-  return '';
+  return renderStoryManualPicker(item && item.storySelection || null);
 }
 
 function renderPreviousEpisodeButton(item) {
@@ -294,16 +264,13 @@ function renderItem(item) {
     '<div class="pending-meta">Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</div>' +
     '<div class="similar-checking" id="similar-' + item.id + '">Vérification des doublons…</div>' +
     renderLinkedDebateNotice(item) +
-    renderStorySelectionNotice(item) +
-    '<label>Question de débat</label>' +
+    '<div class="generated-title-label">Titre généré par IA</div>' +
     '<input type="text" class="f-question" maxlength="100" value="' + esc(item.question) + '">' +
     '<div class="field-counter question-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 100</div>' +
     '<label>Position A</label>' +
     '<input type="text" class="f-pos-a" value="' + esc(item.positionA || '') + '">' +
     '<label>Position B</label>' +
     '<input type="text" class="f-pos-b" value="' + esc(item.positionB || '') + '">' +
-    '<label>Thématique</label>' +
-    '<select class="f-theme">' + catOptions + '</select>' +
     '<label>Résumé (contexte)</label>' +
     '<textarea class="f-resume">' + esc(item.resume || '') + '</textarea>' +
     '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
@@ -312,7 +279,9 @@ function renderItem(item) {
       '<span class="context-save-feedback" style="display:none;color:#496756;font-size:0.82rem;font-weight:600;">Modifications enregistrées</span>' +
     '</div>' +
     renderKeywordEditor(item) +
-    renderPreviousEpisodeButton(item) +
+    '<label>Thématique</label>' +
+    '<select class="f-theme">' + catOptions + '</select>' +
+    renderStorySelectionNotice(item) +
     '<label>Liens sources</label>' +
     (item.links && item.links.length
       ? item.links.map(function(l) {
@@ -330,6 +299,9 @@ function renderItem(item) {
       : '<p style="color:#aaa;font-size:0.85rem">Aucun lien (envoyer depuis la veille après Générer IA)</p>'
     ) +
     '<label style="color:#aaa;font-weight:400;margin-top:8px">Médias : ' + esc(item.sources || '') + '</label>' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;">' +
+      '<button type="button" class="btn-proofread">Corriger les fautes</button>' +
+    '</div>' +
     '<div class="actions">' +
     '<button class="btn-publish">Publier sur Agôn</button>' +
     '<button class="btn-delete">Supprimer</button>' +
@@ -391,34 +363,20 @@ async function loadStories() {
 
 function updateManualStorySelectionUi(itemEl) {
   const select = itemEl.querySelector('.story-manual-select');
-  const wrap = itemEl.querySelector('.story-manual-summary');
-  const input = itemEl.querySelector('.story-manual-summary-input');
-  const meta = itemEl.querySelector('.story-manual-meta');
-  if (!select || !wrap || !input || !meta) return;
-  const option = select.options[select.selectedIndex];
-  const hasValue = Boolean(select.value);
-  wrap.style.display = hasValue ? '' : 'none';
-  if (!hasValue) {
-    meta.textContent = '';
-    return;
-  }
-  input.value = option?.dataset.summary || input.value || '';
-  meta.textContent = option?.dataset.latest ? 'Dernier épisode : ' + option.dataset.latest : '';
+  if (!select) return;
+  select.dataset.selectedValue = select.value || '';
 }
 
 async function populateManualStoryPicker(itemEl, selection) {
   const select = itemEl.querySelector('.story-manual-select');
   if (!select || select.dataset.loaded === 'true') return;
   const stories = await loadStories();
-  const currentId = String(selection && (selection.manualStoryId || '') || '');
-  const options = ['<option value="">Conserver le rattachement proposé</option>'];
+  const currentId = String(select.dataset.currentId || '');
+  const options = ['<option value="">Sans histoire associée</option>'];
   stories.forEach(function(story) {
     const storyId = esc(story.story_id || '');
     const title = esc(story.story_title || 'Histoire sans titre');
-    const summary = esc(story.story_summary || '');
-    const latest = esc(story.latest_episode_title || '');
-    const url = esc(story.latest_episode_url || '');
-    options.push('<option value="' + storyId + '" data-title="' + title + '" data-summary="' + summary + '" data-latest="' + latest + '" data-url="' + url + '"' + (currentId && currentId === String(story.story_id || '') ? ' selected' : '') + '>' + title + (latest ? ' - ' + latest : '') + '</option>');
+    options.push('<option value="' + storyId + '"' + (currentId && currentId === String(story.story_id || '') ? ' selected' : '') + '>' + title + '</option>');
   });
   select.innerHTML = options.join('');
   select.dataset.loaded = 'true';
@@ -444,17 +402,6 @@ async function loadPending() {
       const el = list.querySelector('.pending-item[data-id="' + item.id + '"]');
       if (el) {
         el.storySelectionData = item.storySelection || null;
-        el.querySelectorAll('.story-choice-input').forEach(function(input) {
-          input.addEventListener('change', function() {
-            const box = el.querySelector('.story-selection-box');
-            if (!box || box.dataset.storySelectionMode !== 'uncertain') return;
-            const mode = box.querySelector('.story-choice-input:checked')?.value || '';
-            const newFields = box.querySelector('.story-new-fields');
-            const existingFields = box.querySelector('.story-existing-fields');
-            if (newFields) newFields.style.display = mode === 'new' ? '' : 'none';
-            if (existingFields) existingFields.style.display = mode === 'existing' ? '' : 'none';
-          });
-        });
         const manualSelect = el.querySelector('.story-manual-select');
         if (manualSelect) {
           void populateManualStoryPicker(el, item.storySelection || null).catch(function(error) {
@@ -474,6 +421,9 @@ async function loadPending() {
     });
     list.querySelectorAll('.btn-delete').forEach(function(btn) {
       btn.addEventListener('click', function() { remove(btn); });
+    });
+    list.querySelectorAll('.btn-proofread').forEach(function(btn) {
+      btn.addEventListener('click', function() { proofread(btn); });
     });
     list.querySelectorAll('.context-save-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -499,68 +449,33 @@ async function loadPending() {
 }
 
 function collectStorySelection(item) {
-  const box = item.querySelector('.story-selection-box');
   const raw = item.storySelectionData;
-  if (!box || !raw) return null;
+  const select = item.querySelector('.story-manual-select');
+  if (!raw && !select) return null;
+  const selection = raw ? JSON.parse(JSON.stringify(raw)) : {};
+  const selectedId = String(select?.value || '').trim();
+  const selectedOption = select?.options[select.selectedIndex] || null;
 
-  const selection = JSON.parse(JSON.stringify(raw));
-  const mode = box.dataset.storySelectionMode === 'uncertain'
-    ? (box.querySelector('.story-choice-input:checked')?.value || '')
-    : box.dataset.storySelectionMode;
-  const manualSelect = box.querySelector('.story-manual-select');
-  const manualOption = manualSelect?.options[manualSelect.selectedIndex] || null;
-
-  if (manualSelect && manualSelect.value) {
-    const manualSummary = box.querySelector('.story-manual-summary-input')?.value.trim() || '';
-    selection.storyDecision = 'existing_story';
-    selection.selectionMode = 'existing';
-    selection.matchedStoryId = manualSelect.value;
-    selection.matchedStoryTitle = manualOption?.dataset.title || '';
-    selection.storySummary = manualSummary;
-    selection.previousEpisodeTitle = manualOption?.dataset.latest || '';
-    selection.previousEpisodeUrl = manualOption?.dataset.url || '';
-    selection.reason = 'Histoire choisie manuellement.';
-    selection.manualStoryId = manualSelect.value;
-    selection.manualStorySummary = manualSummary;
-    return selection;
-  }
-
-  if (box.dataset.storySelectionMode === 'existing') {
-    selection.selectionMode = 'existing';
-    selection.storySummary = box.querySelector('.story-summary-input')?.value.trim() || '';
+  if (!selectedId) {
     selection.manualStoryId = '';
     selection.manualStorySummary = '';
+    if (selection.selectionMode === 'existing' || selection.storyDecision === 'existing_story') {
+      selection.selectionMode = 'none';
+      selection.storyDecision = 'none';
+      selection.matchedStoryId = '';
+      selection.matchedStoryTitle = '';
+      selection.storySummary = '';
+    }
     return selection;
   }
 
-  if (box.dataset.storySelectionMode === 'new') {
-    selection.selectionMode = 'new';
-    selection.newStory = selection.newStory || {};
-    selection.newStory.story_title = box.querySelector('.story-title-input')?.value.trim() || '';
-    selection.newStory.story_summary = box.querySelector('.story-summary-input')?.value.trim() || '';
-    selection.manualStoryId = '';
-    selection.manualStorySummary = '';
-    return selection;
-  }
-
-  if (box.dataset.storySelectionMode === 'uncertain') {
-    selection.selectionMode = mode;
-    if (mode === 'existing') {
-      selection.storySummary = box.querySelector('.story-existing-summary-input')?.value.trim() || '';
-      selection.manualStoryId = '';
-      selection.manualStorySummary = '';
-      return selection;
-    }
-    if (mode === 'new') {
-      selection.newStory = selection.newStory || {};
-      selection.newStory.story_title = box.querySelector('.story-title-input')?.value.trim() || '';
-      selection.newStory.story_summary = box.querySelector('.story-summary-input')?.value.trim() || '';
-      selection.manualStoryId = '';
-      selection.manualStorySummary = '';
-      return selection;
-    }
-  }
-
+  selection.storyDecision = 'existing_story';
+  selection.selectionMode = 'existing';
+  selection.matchedStoryId = selectedId;
+  selection.matchedStoryTitle = selectedOption ? selectedOption.textContent.trim() : '';
+  selection.reason = 'Histoire choisie manuellement.';
+  selection.manualStoryId = selectedId;
+  selection.manualStorySummary = '';
   return selection;
 }
 
@@ -582,24 +497,62 @@ function addKeywordToEditor(item, value) {
   if (input) input.value = '';
 }
 
+function flashInlineFeedback(feedback) {
+  if (!feedback) return;
+  feedback.style.display = '';
+  clearTimeout(feedback._timer);
+  feedback._timer = setTimeout(function() {
+    feedback.style.display = 'none';
+  }, 1800);
+}
+
 function saveContextEdits(item) {
   if (!item) return;
   updateItemCounters(item);
   const question = item.querySelector('.f-question');
   const resume = item.querySelector('.f-resume');
   const feedback = item.querySelector('.context-save-feedback');
-  if (question) {
-    question.dataset.savedValue = question.value.trim();
-  }
-  if (resume) {
-    resume.dataset.savedValue = resume.value.trim();
-  }
-  if (feedback) {
-    feedback.style.display = '';
-    clearTimeout(feedback._timer);
-    feedback._timer = setTimeout(function() {
-      feedback.style.display = 'none';
-    }, 1800);
+  if (question) question.dataset.savedValue = question.value.trim();
+  if (resume) resume.dataset.savedValue = resume.value.trim();
+  flashInlineFeedback(feedback);
+}
+
+
+async function proofread(btn) {
+  const item = btn.closest('.pending-item');
+  if (!item) return;
+  const questionField = item.querySelector('.f-question');
+  const positionAField = item.querySelector('.f-pos-a');
+  const positionBField = item.querySelector('.f-pos-b');
+  const resumeField = item.querySelector('.f-resume');
+
+  btn.disabled = true;
+  const previousLabel = btn.textContent;
+  btn.textContent = 'Correction…';
+  try {
+    const r = await fetch('/api/admin/veille/proofread', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        question: questionField?.value.trim() || '',
+        positionA: positionAField?.value.trim() || '',
+        positionB: positionBField?.value.trim() || '',
+        resume: resumeField?.value.trim() || ''
+      })
+    });
+    if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
+    const data = await r.json();
+    if (questionField) questionField.value = String(data.question || '').slice(0, 100);
+    if (positionAField) positionAField.value = String(data.positionA || '');
+    if (positionBField) positionBField.value = String(data.positionB || '');
+    if (resumeField) resumeField.value = String(data.resume || '').slice(0, 1800);
+    updateItemCounters(item);
+    toast('Fautes corrigées ✓');
+  } catch (error) {
+    toast('Erreur : ' + error.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = previousLabel;
   }
 }
 

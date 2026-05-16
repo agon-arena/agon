@@ -1,5 +1,12 @@
 const API = "/api";
 
+const COLOR_A          = '#516776';
+const COLOR_A_BG       = '#a0c6d4';
+const COLOR_A_BORDER   = '#516776';
+const COLOR_B          = '#AEC0CC';
+const COLOR_B_BG       = '#e8f3f7';
+const COLOR_B_BORDER   = '#AEC0CC';
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
@@ -1574,9 +1581,9 @@ if (sideFocusLeft) {
     sideFocusLeft.style.color = "#ffffff";
     sideFocusLeft.style.border = "1px solid #111111";
   } else {
-    sideFocusLeft.style.background = "#dcfce7";
-    sideFocusLeft.style.color = "#166534";
-    sideFocusLeft.style.border = "1px solid #86efac";
+    sideFocusLeft.style.background = COLOR_A_BG;
+    sideFocusLeft.style.color = "#111827";
+    sideFocusLeft.style.border = `1px solid ${COLOR_A_BORDER}`;
   }
 }
 
@@ -1590,9 +1597,9 @@ if (sideFocusRight) {
     sideFocusRight.style.color = "#ffffff";
     sideFocusRight.style.border = "1px solid #111111";
   } else {
-    sideFocusRight.style.background = "#fee2e2";
-    sideFocusRight.style.color = "#dc2626";
-    sideFocusRight.style.border = "1px solid #fca5a5";
+    sideFocusRight.style.background = COLOR_B_BG;
+    sideFocusRight.style.color = "#111827";
+    sideFocusRight.style.border = `1px solid ${COLOR_B_BORDER}`;
   }
 }
 
@@ -4508,32 +4515,32 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
 }
 
 
-function buildIndexCardBottomEntryHtml(debate, options = {}) {
+function buildIndexCardMetaHtml(debate, options = {}) {
   const d = debate || {};
   const mediaOutsideLink = !!options.mediaOutsideLink;
   const voteCount = d.vote_count || (Number(d.votes_a || 0) + Number(d.votes_b || 0));
-  const safeDebateId = escapeAttribute(String(d.id || ""));
-
+  const ideaCount = d.argument_count || 0;
+  const commentCount = d.comment_count || 0;
+  const hasIdeas = ideaCount >= 1;
+  const hasComments = commentCount >= 1;
+  const countsHtml = (hasIdeas || hasComments) ? `
+    <div class="debate-card-counts-row">
+      ${hasIdeas ? `<p class="debate-card-ideas-count">${ideaCount} idée${ideaCount >= 2 ? 's' : ''}</p>` : ''}
+      ${hasComments ? `<p class="debate-card-comments-count"${!hasIdeas ? ' style="margin-left:0;"' : ''}>${commentCount} commentaire${commentCount > 1 ? 's' : ''}</p>` : ''}
+      ${voteCount > 0 ? `<p class="debate-card-votes-count">${voteCount} voix</p>` : ''}
+    </div>
+  ` : '';
   return `
-    <div
-      class="debate-card-bottom-entry"
-      role="link"
-      tabindex="0"
-      onclick="openIndexDebateFromMedia('${safeDebateId}', event)"
-      onkeydown="handleIndexContextTextKeydown(event, '${safeDebateId}')"
-      style="cursor:pointer;"
-    >
-      <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
-        <div class="debate-card-counts-row">
-          <p class="debate-card-ideas-count">${d.argument_count || 0} idée(s)</p>
-          <p class="debate-card-comments-count">${d.comment_count || 0} commentaire${(d.comment_count || 0) > 1 ? "s" : ""}</p>
-          <p class="debate-card-votes-count"${!(voteCount > 0) ? ' style="display:none;"' : ''}>${voteCount} voix</p>
-        </div>
-        <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
-        ${getDebateLastActivityAt(d) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(d)))}</p>` : ""}
-      </div>
+    <div class="debate-card-meta-below-media ${mediaOutsideLink ? '' : 'debate-card-meta-no-media'}">
+      ${countsHtml}
+      <p class="debate-date">${escapeHtml(formatDebateDate(d.created_at))}</p>
+      ${getDebateLastActivityAt(d) ? `<p class="debate-last-argument">${escapeHtml(formatLastActivityDate(getDebateLastActivityAt(d)))}</p>` : ""}
     </div>
   `;
+}
+
+function buildIndexCardBottomEntryHtml(debate, options = {}) {
+  return "";
 }
 
 function buildIndexCardEnterButtonHtml(debate) {
@@ -4552,20 +4559,51 @@ function buildIndexCardEnterButtonHtml(debate) {
 
 function buildIndexCardFooterActionsHtml(debate) {
   const d = debate || {};
+  const safeId = escapeAttribute(String(d.id || ''));
 
   return `
     <div class="debate-card-footer-actions">
-      <button
-        class="report-button debate-card-footer-report"
-        type="button"
-        onclick="openReportBox('debate', '${d.id}')"
-      >
-        Signaler
-      </button>
+      <div class="debate-card-footer-left">
+        <div class="debate-card-options-wrap">
+          <button
+            class="debate-card-options-btn"
+            type="button"
+            aria-label="Options"
+            aria-expanded="false"
+            onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
+          >···</button>
+          <div class="debate-card-options-menu" role="menu">
+            <button
+              class="debate-card-options-item report-button"
+              type="button"
+              role="menuitem"
+              onclick="event.stopPropagation(); closeAllCardOptionsMenus(); openReportBox('debate', '${safeId}')"
+            >Signaler</button>
+          </div>
+        </div>
+      </div>
       ${buildIndexCardEnterButtonHtml(d)}
     </div>
   `;
 }
+
+function closeAllCardOptionsMenus() {
+  document.querySelectorAll('.debate-card-options-btn[aria-expanded="true"]').forEach(btn => {
+    btn.setAttribute('aria-expanded', 'false');
+    btn.closest('.debate-card-options-wrap')?.querySelector('.debate-card-options-menu')?.classList.remove('is-open');
+  });
+}
+
+function toggleCardOptionsMenu(btn) {
+  const isOpen = btn.getAttribute('aria-expanded') === 'true';
+  closeAllCardOptionsMenus();
+  if (!isOpen) {
+    btn.setAttribute('aria-expanded', 'true');
+    btn.closest('.debate-card-options-wrap')?.querySelector('.debate-card-options-menu')?.classList.add('is-open');
+  }
+}
+
+document.addEventListener('click', () => closeAllCardOptionsMenus());
 
 function buildIndexCardShareActionsHtml(debate) {
   const d = debate || {};
@@ -4667,7 +4705,25 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
   const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
   const mediaOutsideLink = !!mediaHtml;
-  const contextHtml = buildIndexContextPreviewHtml(d);
+  const scoresHtml = !isOpenDebate(d) ? `
+    <div class="debate-card-positions">
+      <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
+      <span class="pos-b">${escapeHtml(d.option_b || "Position B")}</span>
+    </div>
+    <div class="debate-card-score">
+      <div class="score-bar">
+        <div class="score-a" style="width:${d.percent_a ?? 50}%"></div>
+        <div class="score-b" style="width:${d.percent_b ?? 50}%"></div>
+      </div>
+      <div class="score-labels">
+        <span>${d.percent_a ?? 50}%</span>
+        <span>${d.percent_b ?? 50}%</span>
+      </div>
+    </div>
+  ` : "";
+  const metaHtml = buildIndexCardMetaHtml(d, { mediaOutsideLink });
+  const shareHtml = buildIndexCardShareActionsHtml(d);
+  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml);
   const isNewDebate = isDebateNew(d);
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
@@ -4680,7 +4736,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
 
   return `
-    <article class="debate-card" data-debate-id="${d.id}">
+    <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
           <div class="debate-card-top-meta">
@@ -4692,39 +4748,19 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
         <h2>${escapeHtml(d.question)}</h2>
 
         ${mediaOutsideLink ? "" : mediaHtml}
-
-${
-  isOpenDebate(d)
-    ? ""
-    : `
-      <div class="debate-card-positions">
-        <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
-        <span class="pos-b">${escapeHtml(d.option_b || "Position B")}</span>
-      </div>
-
-      <div class="debate-card-score">
-        <div class="score-bar">
-          <div class="score-a" style="width:${d.percent_a ?? 50}%"></div>
-          <div class="score-b" style="width:${d.percent_b ?? 50}%"></div>
-        </div>
-
-        <div class="score-labels">
-          <span>${d.percent_a ?? 50}%</span>
-          <span>${d.percent_b ?? 50}%</span>
-        </div>
-      </div>
-    `
-}
       </a>
 
       ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
-      ${mediaOutsideLink ? mediaHtml : ""}
+      ${mediaOutsideLink ? `
+        <div class="index-card-media-with-title">
+          <div class="index-card-title-banner" aria-hidden="true">
+            <p class="index-card-title-banner-text">${escapeHtml(d.question)}</p>
+          </div>
+          ${mediaHtml}
+        </div>
+      ` : ""}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
       ${contextHtml}
-
-      <div class="debate-card-actions">
-        ${buildIndexCardShareActionsHtml(d)}
-      </div>
       ${buildIndexCardFooterActionsHtml(d)}
     </article>
   `;
@@ -6184,14 +6220,12 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
         class="index-media-swipe-controls"
         data-index-media-swipe-controls
         aria-label="Navigation entre les médias associés"
-        style="position:static; z-index:2; display:flex; align-items:center; justify-content:center; gap:12px; margin-top:8px; pointer-events:auto;"
       >
         <button
           type="button"
           class="index-media-swipe-hotspot index-media-swipe-hotspot-prev"
           data-index-media-swipe-step="prev"
           aria-label="Voir le média précédent"
-          style="position:static; inset:auto; transform:none; width:38px; height:32px; min-width:38px; border:0; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(17,24,39,0.82); color:#ffffff; box-shadow:0 8px 18px rgba(0,0,0,0.18); cursor:pointer; pointer-events:auto;"
         >
           <span aria-hidden="true">‹</span>
         </button>
@@ -6200,7 +6234,6 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
           class="index-media-swipe-hotspot index-media-swipe-hotspot-next"
           data-index-media-swipe-step="next"
           aria-label="Voir le média suivant"
-          style="position:static; inset:auto; transform:none; width:38px; height:32px; min-width:38px; border:0; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:rgba(17,24,39,0.82); color:#ffffff; box-shadow:0 8px 18px rgba(0,0,0,0.18); cursor:pointer; pointer-events:auto;"
         >
           <span aria-hidden="true">›</span>
         </button>
@@ -12881,15 +12914,17 @@ function getDebateCardDeleteButtonHtml(debate) {
   `;
 }
 
-function buildIndexContextPreviewHtml(debate) {
+function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "") {
   const fullText = String(debate?.content || '').trim();
-  if (!fullText) return "";
+  const hasExtra = !!(scoresHtml || metaHtml || shareHtml);
+  if (!fullText && !hasExtra) return "";
 
   const previewLimit = 170;
   const shortText = fullText.length > previewLimit
     ? `${fullText.slice(0, previewLimit).trimEnd()}…`
     : fullText;
-  const needsToggle = fullText.length > previewLimit;
+  const needsToggle = fullText.length > previewLimit || hasExtra;
+
   const debateId = escapeAttribute(String(debate?.id || ""));
 
   return `
@@ -12902,13 +12937,13 @@ function buildIndexContextPreviewHtml(debate) {
       onkeydown="handleIndexContextTextKeydown(event, '${debateId}')"
       style="cursor:pointer;"
     >
-      <p
+      ${fullText ? `<p
         class="debate-card-context-text"
         data-index-context-text
         data-full-text="${escapeAttribute(fullText)}"
         data-short-text="${escapeAttribute(shortText)}"
         data-expanded="false"
-      >${escapeHtml(shortText)}</p>
+      >${escapeHtml(shortText)}</p>` : ""}
       ${needsToggle ? `
         <button
           type="button"
@@ -12917,7 +12952,12 @@ function buildIndexContextPreviewHtml(debate) {
           data-debate-id="${debateId}"
           aria-expanded="false"
           onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
-        >Voir plus</button>
+        >Voir plus ···</button>
+        <div class="debate-card-context-extra">
+          ${scoresHtml}
+          ${metaHtml}
+          ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
+        </div>
       ` : ""}
     </div>
   `;
@@ -12926,18 +12966,34 @@ function buildIndexContextPreviewHtml(debate) {
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
   const textEl = card?.querySelector('[data-index-context-text]');
-  if (!button || !textEl) return;
+  const metaEl = card?.querySelector('.debate-card-context-extra');
+  if (!button || (!textEl && !metaEl)) return;
 
-  const expanded = textEl.getAttribute('data-expanded') === 'true';
-  const nextExpanded = !expanded;
-  const nextText = nextExpanded
-    ? String(textEl.getAttribute('data-full-text') || '')
-    : String(textEl.getAttribute('data-short-text') || '');
+  const nextExpanded = button.getAttribute('aria-expanded') !== 'true';
 
-  textEl.textContent = nextText;
-  textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
-  button.textContent = nextExpanded ? 'Voir moins' : 'Voir plus';
+  if (textEl) {
+    const nextText = nextExpanded
+      ? String(textEl.getAttribute('data-full-text') || '')
+      : String(textEl.getAttribute('data-short-text') || '');
+    textEl.textContent = nextText;
+    textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
+  }
+
+  if (metaEl) {
+    metaEl.classList.toggle('is-open', nextExpanded);
+  }
+
+  button.textContent = nextExpanded ? 'Voir moins' : 'Voir plus ···';
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+
+  if (!nextExpanded) {
+    const article = button.closest('article.debate-card');
+    if (article) {
+      requestAnimationFrame(() => {
+        article.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }
 }
 
 function handleIndexContextTextKeydown(event, debateId) {
@@ -14498,12 +14554,14 @@ function getCreateContextText() {
 function renderDebateContext(content) {
   const wrap = document.getElementById("debate-context-wrap");
   const text = document.getElementById("debate-context-text");
+  const nav = document.getElementById("debate-episode-nav");
   if (!wrap || !text) return;
 
   const safeContent = String(content || "").trim();
   if (!safeContent) {
-    wrap.style.display = "none";
     text.textContent = "";
+    const hasEpisodeNav = !!(nav && nav.innerHTML.trim() && window.getComputedStyle(nav).display !== "none");
+    wrap.style.display = hasEpisodeNav ? "block" : "none";
     return;
   }
 
@@ -14537,6 +14595,7 @@ function positionDebateContextBelowSources() {
 
 function renderDebateEpisodeNavigation(debate) {
   const nav = document.getElementById("debate-episode-nav");
+  const wrap = document.getElementById("debate-context-wrap");
   if (!nav) return;
 
   const previousUrl = String(debate?.previous_episode_url || "").trim();
@@ -14545,6 +14604,11 @@ function renderDebateEpisodeNavigation(debate) {
   if (!previousUrl && !nextUrl) {
     nav.style.display = "none";
     nav.innerHTML = "";
+    if (wrap) {
+      const contextText = document.getElementById("debate-context-text");
+      const hasContext = !!String(contextText?.textContent || "").trim();
+      wrap.style.display = hasContext ? "block" : "none";
+    }
     return;
   }
 
@@ -14553,19 +14617,23 @@ function renderDebateEpisodeNavigation(debate) {
   if (previousUrl) {
     const previousTitle = String(debate?.previous_episode_title || "Épisode précédent").trim();
     buttons.push(
-      `<a class="debate-episode-link" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
+      `<a class="debate-episode-link debate-episode-link-previous" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
     );
   }
 
   if (nextUrl) {
     const nextTitle = String(debate?.next_episode_title || "Épisode suivant").trim();
     buttons.push(
-      `<a class="debate-episode-link" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l’épisode suivant</a>`
+      `<a class="debate-episode-link debate-episode-link-next" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l’épisode suivant</a>`
     );
   }
 
   nav.innerHTML = buttons.join("");
   nav.style.display = "flex";
+  if (wrap) {
+    wrap.style.display = "block";
+    positionDebateContextBelowSources();
+  }
 }
 
 function updateCreateResourceModeUI() {
@@ -16107,7 +16175,7 @@ const matches = debatesForSimilarity
     <a class="similar-debate-item" href="/debate?id=${debate.id}" target="_blank" rel="noopener noreferrer">
       <div class="similar-debate-question">${escapeHtml(debate.question)}</div>
       <div class="similar-debate-meta">
-        ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée(s)
+        ${escapeHtml(debate.category || "Sans catégorie")} · ${debate.argument_count || 0} idée${(debate.argument_count || 0) >= 2 ? 's' : ''}
       </div>
     </a>
   `).join("");

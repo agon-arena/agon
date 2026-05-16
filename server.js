@@ -764,6 +764,12 @@ function parseStoryEpisodeDate(rawValue) {
 }
 
 function resolveDebateEpisodeSortDate(debate) {
+  // Pour la navigation entre épisodes, on suit d'abord la chronologie
+  // de publication sur Agôn. Les dates des sources externes peuvent être
+  // plus anciennes et fausser l'ordre narratif si on les privilégie.
+  const createdAt = parseStoryEpisodeDate(debate?.created_at);
+  if (createdAt) return createdAt;
+
   const publishedAt = parseStoryEpisodeDate(debate?.source_published_at);
   if (publishedAt) return publishedAt;
 
@@ -773,9 +779,6 @@ function resolveDebateEpisodeSortDate(debate) {
     const extraDate = parseStoryEpisodeDate(item?.date || item?.published_at);
     if (extraDate) return extraDate;
   }
-
-  const createdAt = parseStoryEpisodeDate(debate?.created_at);
-  if (createdAt) return createdAt;
 
   return null;
 }
@@ -2420,6 +2423,8 @@ function getVeilleSimilarityCandidates(input, debates) {
         id: debate.id,
         question: debate.question,
         type: debateType,
+        optionA: String(debate.option_a || '').trim(),
+        optionB: String(debate.option_b || '').trim(),
         score: Number(score.toFixed(3))
       };
     })
@@ -2428,6 +2433,66 @@ function getVeilleSimilarityCandidates(input, debates) {
     .slice(0, 6);
 }
 
+async function analyzeVeilleSimilarityWithAI(input, candidates) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !candidates.length) return null;
+
+  const candidateLines = candidates.map((c, i) => {
+    const lines = [`Candidat ${i + 1} (id: ${c.id})`, `Question : ${c.question}`];
+    if (c.optionA) lines.push(`Position A : ${c.optionA}`);
+    if (c.optionB) lines.push(`Position B : ${c.optionB}`);
+    return lines.join('\n');
+  }).join('\n\n');
+
+  const newDebateLines = [
+    'Question : ' + String(input.question || '').trim(),
+    input.positionA ? 'Position A : ' + String(input.positionA).trim() : '',
+    input.positionB ? 'Position B : ' + String(input.positionB).trim() : '',
+    input.resume ? 'Résumé : ' + String(input.resume).trim().slice(0, 600) : ''
+  ].filter(Boolean).join('\n');
+
+  const prompt = [
+    'Tu détectes les doublons parmi des débats d\'opinion.',
+    'Pour chaque candidat, évalue si c\'est un doublon du nouveau débat.',
+    '',
+    'Échelle de score :',
+    '- 1.0 = même sujet et même angle exact',
+    '- 0.7-0.9 = très proche, probable doublon',
+    '- 0.4-0.6 = thème commun mais angle différent',
+    '- 0.0-0.3 = sujet différent',
+    'confirmed = true si score >= 0.65',
+    '',
+    'Réponds UNIQUEMENT en JSON : {"results":[{"id":"...","score":0.0,"confirmed":true}]}',
+    '',
+    'Nouveau débat :',
+    newDebateLines,
+    '',
+    'Candidats :',
+    candidateLines
+  ].join('\n');
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 200,
+        temperature: 0
+      })
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) return null;
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed?.results) ? parsed.results : null;
+  } catch {
+    return null;
+  }
+}
 
 function computePositionLabelSimilarity(labelA, labelB) {
   const textA = normalizeSimilarityText(labelA);
@@ -5479,6 +5544,149 @@ app.get("/api/veille/stories", async (req, res) => {
   }
 });
 
+app.get("/api/veille/stories/:storyId/debates", async (req, res) => {
+  const storyId = String(req.params.storyId || "").trim();
+  if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
+
+  try {
+    const story = readStories().find((item) => String(item.story_id || "").trim() === storyId);
+    if (!story) {
+      return res.status(404).json({ ok: false, error: "Histoire introuvable." });
+    }
+
+    const linkedDebateIds = Object.entries(readDebateStoryLinks())
+      .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === storyId)
+      .map(([debateId]) => Number(debateId))
+      .filter(Number.isFinite);
+
+    if (!linkedDebateIds.length) {
+      return res.json({ ok: true, story, debates: [] });
+    }
+
+    const { data, error } = await supabase
+      .from("debates")
+      .select("id, question, content, created_at")
+      .in("id", linkedDebateIds);
+
+    if (error) throw new Error(error.message);
+
+    const debates = (Array.isArray(data) ? data : [])
+      .map((debate) => enrichDebateWithStoredImage(debate))
+      .sort((a, b) => {
+        const left = new Date(a.created_at || 0).getTime();
+        const right = new Date(b.created_at || 0).getTime();
+        return right - left;
+      })
+      .map((debate) => ({
+        id: debate.id,
+        question: String(debate.question || "").trim(),
+        content: String(debate.content || "").trim(),
+        created_at: debate.created_at || null,
+        url: `/debate?id=${debate.id}`
+      }));
+
+    res.json({ ok: true, story, debates });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message, debates: [] });
+  }
+});
+
+app.post("/api/veille/stories", async (req, res) => {
+  try {
+    const title = String(req.body?.story_title || "").trim();
+    const summary = String(req.body?.story_summary || "").trim();
+    if (!title) {
+      return res.status(400).json({ ok: false, error: "Titre d’histoire requis." });
+    }
+
+    const stories = readStories();
+    const duplicate = stories.find((item) => String(item.story_title || "").trim().toLowerCase() === title.toLowerCase());
+    if (duplicate) {
+      return res.json({ ok: true, story: duplicate, created: false, duplicate: true });
+    }
+
+    const story = {
+      story_id: createStoryId(title),
+      story_title: title,
+      story_summary: summary,
+      main_actors: [],
+      central_tension: "",
+      keywords: [],
+      status: "active",
+      created_at: nowIso(),
+      updated_at: nowIso(),
+      first_episode_id: null,
+      latest_episode_id: null,
+      latest_episode_title: "",
+      latest_episode_summary: ""
+    };
+
+    stories.unshift(story);
+    writeStories(stories);
+    res.json({ ok: true, story, created: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Erreur création histoire" });
+  }
+});
+
+app.put("/api/veille/stories/:storyId", async (req, res) => {
+  const storyId = String(req.params.storyId || "").trim();
+  if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
+
+  try {
+    const stories = readStories();
+    const story = stories.find((item) => String(item.story_id || "").trim() === storyId);
+    if (!story) {
+      return res.status(404).json({ ok: false, error: "Histoire introuvable." });
+    }
+
+    const nextTitle = String(req.body?.story_title || "").trim();
+    const nextSummary = String(req.body?.story_summary || "").trim();
+
+    if (nextTitle) story.story_title = nextTitle;
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, "story_summary")) {
+      story.story_summary = nextSummary;
+    }
+    story.updated_at = nowIso();
+
+    writeStories(stories);
+    res.json({ ok: true, story });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.delete("/api/veille/stories/:storyId", async (req, res) => {
+  const storyId = String(req.params.storyId || "").trim();
+  if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
+
+  try {
+    const stories = readStories();
+    const nextStories = stories.filter((item) => String(item.story_id || "").trim() !== storyId);
+    writeStories(nextStories);
+
+    const storyLinks = readDebateStoryLinks();
+    const affectedDebateIds = Object.entries(storyLinks)
+      .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === storyId)
+      .map(([debateId]) => String(debateId));
+
+    affectedDebateIds.forEach((debateId) => {
+      delete storyLinks[debateId];
+    });
+    writeDebateStoryLinks(storyLinks);
+
+    const navMap = readDebateEpisodeNavMap();
+    affectedDebateIds.forEach((debateId) => {
+      delete navMap[debateId];
+    });
+    writeDebateEpisodeNavMap(navMap);
+
+    res.json({ ok: true, removed_story_id: storyId, affectedDebateIds });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/admin/veille/check-similar", async (req, res) => {
   const { question, positionA, positionB, resume } = req.body || {};
   if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
@@ -5493,7 +5701,28 @@ app.post("/api/admin/veille/check-similar", async (req, res) => {
     if (error) throw new Error(error.message);
     if (!debates || !debates.length) return res.json({ similar: [] });
 
-    const similar = getVeilleSimilarityCandidates({ question, positionA, positionB, resume }, debates);
+    const candidates = getVeilleSimilarityCandidates({ question, positionA, positionB, resume }, debates);
+    if (!candidates.length) return res.json({ similar: [] });
+
+    const top3 = candidates.slice(0, 3);
+    const aiResults = await analyzeVeilleSimilarityWithAI({ question, positionA, positionB, resume }, top3).catch(() => null);
+
+    let similar;
+    if (aiResults && aiResults.length) {
+      const aiMap = {};
+      for (const r of aiResults) aiMap[String(r.id)] = r;
+      similar = top3
+        .map(c => {
+          const ai = aiMap[String(c.id)];
+          if (!ai) return c;
+          return { ...c, score: typeof ai.score === 'number' ? Number(ai.score.toFixed(3)) : c.score, confirmed: ai.confirmed === true };
+        })
+        .filter(c => c.confirmed !== false)
+        .sort((a, b) => b.score - a.score);
+    } else {
+      similar = top3;
+    }
+
     res.json({ similar });
   } catch (e) {
     res.json({ similar: [], error: e.message });
@@ -5506,6 +5735,73 @@ app.get("/admin/veille", (req, res) => {
 
 app.get("/api/admin/veille", async (req, res) => {
   res.json(await loadVeillePending());
+});
+
+app.post("/api/admin/veille/proofread", async (req, res) => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  }
+
+  const question = String(req.body?.question || "").trim().slice(0, 100);
+  const positionA = String(req.body?.positionA || "").trim();
+  const positionB = String(req.body?.positionB || "").trim();
+  const resume = String(req.body?.resume || "").trim().slice(0, 1800);
+
+  if (!question && !positionA && !positionB && !resume) {
+    return res.status(400).json({ error: "Aucun texte à corriger." });
+  }
+
+  const prompt = [
+    "Tu corriges uniquement les fautes d'orthographe, de grammaire, de conjugaison, d'accord, de typographie et de ponctuation.",
+    "Interdiction absolue de changer le sens, l'angle, la position politique, le niveau de nuance ou le contenu factuel.",
+    "Tu peux reformuler très légèrement seulement si c'est indispensable pour corriger une faute ou rendre une phrase grammaticalement correcte.",
+    'Réponds uniquement en JSON sous la forme {"question":"...","positionA":"...","positionB":"...","resume":"..."}.',
+    '',
+    'Question : ' + question,
+    'Position A : ' + positionA,
+    'Position B : ' + positionB,
+    'Résumé : ' + resume
+  ].join("\n");
+
+  try {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 700,
+        temperature: 0
+      })
+    });
+
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      return res.status(502).json({ error: body || 'Erreur OpenAI.' });
+    }
+
+    const data = await r.json();
+    const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
+    if (!content) {
+      return res.status(502).json({ error: 'Réponse vide du correcteur.' });
+    }
+
+    const parsed = JSON.parse(content);
+    return res.json({
+      ok: true,
+      question: String(parsed?.question || question).trim().slice(0, 100),
+      positionA: String(parsed?.positionA || positionA).trim(),
+      positionB: String(parsed?.positionB || positionB).trim(),
+      resume: String(parsed?.resume || resume).trim().slice(0, 1800)
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Erreur correction.' });
+  }
 });
 
 app.post("/api/admin/veille/check-merge-positions", async (req, res) => {
