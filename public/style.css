@@ -714,6 +714,10 @@ main.create-page {
   text-align: center;
   cursor: pointer;
   width: fit-content;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
 }
 
 .debate-card-context-toggle:hover {
@@ -13987,4 +13991,10 @@ body.voices-panel-open {
     line-height: 1.1 !important;
     font-size: 17px !important;
   }
+}
+
+.debate-card-context-toggle-dots {
+  font-size: 11px;
+  letter-spacing: 2px;
+  opacity: 0.6;
 }

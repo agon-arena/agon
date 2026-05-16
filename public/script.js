@@ -12952,7 +12952,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
           data-debate-id="${debateId}"
           aria-expanded="false"
           onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
-        >Voir plus ···</button>
+        ><span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span></button>
         <div class="debate-card-context-extra">
           ${scoresHtml}
           ${metaHtml}
@@ -12983,7 +12983,9 @@ function toggleIndexContextPreview(button) {
     metaEl.classList.toggle('is-open', nextExpanded);
   }
 
-  button.textContent = nextExpanded ? 'Voir moins' : 'Voir plus ···';
+  button.innerHTML = nextExpanded
+    ? 'Voir moins'
+    : '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
 
   if (!nextExpanded) {
