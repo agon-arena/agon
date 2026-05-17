@@ -3875,7 +3875,7 @@ function addToMediaExtras(currentExtras, type, url, publishedAt) {
 
 app.put("/api/admin/debate/:id", async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated } = req.body || {};
+    const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated, story_id } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedCategory = String(category || "").trim() || null;
@@ -3959,6 +3959,9 @@ app.put("/api/admin/debate/:id", async (req, res) => {
     }
 
     setDebateStoredContent(req.params.id, normalizedContent);
+    if ('story_id' in (req.body || {})) {
+      setDebateStoryId(req.params.id, story_id || "");
+    }
     invalidateDebateCaches(req.params.id);
     res.json({ success: true });
   } catch (error) {

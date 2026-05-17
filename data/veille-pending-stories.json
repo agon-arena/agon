@@ -16,41 +16,5 @@
       "strong_keywords_match": false
     },
     "storySummary": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron"
-  },
-  "1778690655188": {
-    "selectionMode": "existing",
-    "storyDecision": "uncertain",
-    "matchedStoryId": "guerre-au-moyen-orient-mp3lkhsc",
-    "matchedStoryTitle": "Guerre au Moyen-Orient",
-    "previousEpisodeTitle": "Guerre au Moyen-Orient : Iran refuse compromis, Trump rejette proposition, faut-il durcir le conflit ?",
-    "previousEpisodeUrl": "http://localhost:3001/debate?id=381",
-    "confidence": 0.67,
-    "reason": "Histoire choisie manuellement.",
-    "criteria": {
-      "main_actors_match": true,
-      "central_tension_match": true,
-      "temporal_continuity": false,
-      "editorial_theme_match": true,
-      "strong_keywords_match": true
-    },
-    "storySummary": ""
-  },
-  "1778739358985": {
-    "selectionMode": "existing",
-    "storyDecision": "uncertain",
-    "matchedStoryId": "41-la-transition-energetique-souleve-des-tensions-entre-climat-prix-de-l-energie-so",
-    "matchedStoryTitle": "La transition énergétique soulève des tensions entre climat, prix de l’énergie, souveraineté et acceptabilité sociale",
-    "previousEpisodeTitle": null,
-    "previousEpisodeUrl": null,
-    "confidence": 0.64,
-    "reason": "Histoire choisie manuellement.",
-    "criteria": {
-      "main_actors_match": true,
-      "central_tension_match": true,
-      "temporal_continuity": true,
-      "editorial_theme_match": true,
-      "strong_keywords_match": true
-    },
-    "storySummary": ""
   }
 }

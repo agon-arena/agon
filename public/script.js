@@ -2915,7 +2915,7 @@ function ensureDebateIframeModal() {
       #debate-iframe-modal-close {
         bottom: calc(5vh + 32px + env(safe-area-inset-bottom, 0px));
         left: auto;
-        right: 264px;
+        right: 322px;
         width: 42px;
         height: 42px;
         padding: 0;
@@ -4739,7 +4739,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>` : "";
   const shortDate = formatShortDate(d.created_at);
-  const dateBadgeHtml = shortDate ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
+  const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
   const topBadgesHtml = topBadgesInnerHtml
     ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
@@ -6002,7 +6002,7 @@ function startIndexSourceAutoPlay(root) {
       if (paused) return;
       const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
       if (nextBtn) nextBtn.click();
-    }, 5000);
+    }, 2000);
   });
 }
 
@@ -6192,7 +6192,7 @@ function initIndexMediaSwipeEnhancements(root) {
 }
 
 function initMediaSwipeAutoScroll(scope = document) {
-  const DELAY = 3500;
+  const DELAY = 2000;
   const RESUME_AFTER = 7000;
 
   scope.querySelectorAll("[data-index-media-swipe-shell]").forEach((shell) => {
@@ -7369,35 +7369,7 @@ function initMobileIndexCardHighlight() {
   if (!document.getElementById('index-card-active-desktop-style')) {
     const s = document.createElement('style');
     s.id = 'index-card-active-desktop-style';
-    s.textContent = `
-      @media (min-width: 769px) {
-        .page-home .debate-card.index-card-active,
-        .page-debate .similar-debates-results .debate-card.index-card-active {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 22px rgba(15, 23, 42, 0.11);
-          border-color: #c7d0db;
-          background: #ffffff;
-        }
-        .page-home .debate-card.index-card-active h2,
-        .page-debate .similar-debates-results .debate-card.index-card-active h2 {
-          color: #111111;
-        }
-        .page-home .debate-card.index-card-active .debate-card-source,
-        .page-home .debate-card.index-card-active .debate-card-youtube-shell,
-        .page-home .debate-card.index-card-active .debate-card-instagram-shell,
-        .page-home .debate-card.index-card-active .debate-card-local-image-shell,
-        .page-home .debate-card.index-card-active .debate-card-local-video-shell,
-        .page-home .debate-card.index-card-active .debate-card-x-shell,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-source,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-youtube-shell,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-instagram-shell,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-local-image-shell,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-local-video-shell,
-        .page-debate .similar-debates-results .debate-card.index-card-active .debate-card-x-shell {
-          box-shadow: none;
-        }
-      }
-    `;
+    s.textContent = ``;
     document.head.appendChild(s);
   }
 
@@ -12361,11 +12333,79 @@ function setupIndexInfiniteScroll() {
 }
 
 
+function adminInitDragPanel(panel) {
+  const handle = panel.querySelector('[data-admin-drag-handle]');
+  if (!handle) return;
+  if (handle.dataset.dragBound) return;
+  handle.dataset.dragBound = '1';
+  let startX, startY, startLeft, startTop;
+
+  const anchorPanel = () => {
+    const rect = panel.getBoundingClientRect();
+    panel.style.transform = 'none';
+    panel.style.left = rect.left + 'px';
+    panel.style.top = rect.top + 'px';
+    return rect;
+  };
+
+  const onMove = (e) => {
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    panel.style.left = Math.max(0, startLeft + cx - startX) + 'px';
+    panel.style.top = Math.max(0, startTop + cy - startY) + 'px';
+  };
+
+  const onUp = () => {
+    panel.classList.remove('is-dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+  };
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const rect = anchorPanel();
+    startX = e.clientX; startY = e.clientY;
+    startLeft = rect.left; startTop = rect.top;
+    panel.classList.add('is-dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  handle.addEventListener('touchstart', (e) => {
+    const rect = anchorPanel();
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    startLeft = rect.left; startTop = rect.top;
+    panel.classList.add('is-dragging');
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onUp);
+  }, { passive: true });
+}
+
+async function adminLoadStorySelect(panel) {
+  adminInitDragPanel(panel);
+  const select = panel.querySelector('[data-edit-field="story_id"]');
+  if (!select || select.dataset.loaded) return;
+  const debateId = select.dataset.debateId;
+  try {
+    const data = await fetchJSON(API + "/veille/stories");
+    const stories = Array.isArray(data.stories) ? data.stories : [];
+    const currentStoryId = select.getAttribute('data-current') || '';
+    select.innerHTML = '<option value="">— Aucune histoire —</option>' +
+      stories.map(s => `<option value="${escapeAttribute(String(s.story_id || ''))}"${String(s.story_id || '') === currentStoryId ? ' selected' : ''}>${escapeHtml(s.story_title || s.story_id)}</option>`).join('');
+    select.dataset.loaded = '1';
+  } catch(e) {
+    console.warn('Erreur chargement histoires:', e);
+  }
+}
+
 async function saveAdminCardEdit(debateId, btn) {
   const panel = btn.closest('.debate-card-admin-edit');
   if (!panel) return;
 
   const get = (name) => getAdminEditFieldValue(panel, name);
+  const storySelect = panel.querySelector('[data-edit-field="story_id"]');
 
   const body = {
     question:   get("question"),
@@ -12375,7 +12415,8 @@ async function saveAdminCardEdit(debateId, btn) {
     source_url: get("source_url"),
     content:    get("content"),
     image_url:  get("image_url"),
-    video_url:  get("video_url")
+    video_url:  get("video_url"),
+    ...(storySelect ? { story_id: storySelect.value } : {})
   };
 
   const saveBtn = panel.querySelector('.admin-edit-save');
@@ -12840,6 +12881,9 @@ function buildAdminEditPanelHtml(d) {
 
   return `
     <div class="debate-card-admin-edit" data-admin style="display:none;" onclick="event.stopPropagation()" data-open="false" data-debate-id="${escapeAttribute(String(d.id || ''))}">
+      <div class="admin-edit-drag-handle" data-admin-drag-handle>
+        <i class="fa-solid fa-grip-lines"></i> Déplacer
+      </div>
       <button class="admin-edit-toggle" type="button"
         onclick="event.preventDefault(); event.stopPropagation();
           const p = this.closest('.debate-card-admin-edit');
@@ -12850,7 +12894,10 @@ function buildAdminEditPanelHtml(d) {
           f.style.display = isNowOpen ? 'block' : 'none';
           lbl.textContent = isNowOpen ? 'Fermer' : 'Modifier';
           chv.style.transform = isNowOpen ? 'rotate(180deg)' : '';
-          p.dataset.open = isNowOpen ? 'true' : 'false';">
+          p.dataset.open = isNowOpen ? 'true' : 'false';
+          p.classList.toggle('is-open', isNowOpen);
+          document.body.classList.toggle('admin-edit-open', isNowOpen);
+          if (isNowOpen) { adminLoadStorySelect(p); adminInitDragPanel(p); }">
         <i class="fa-solid fa-pen-to-square"></i>
         <span class="admin-edit-toggle-label">Modifier</span>
         <i class="fa-solid fa-chevron-down admin-edit-chevron" style="font-size:11px; transition:transform 0.2s;"></i>
@@ -12910,6 +12957,12 @@ function buildAdminEditPanelHtml(d) {
             <button type="button" class="admin-edit-clear-media" onclick="event.stopPropagation(); this.closest('.admin-edit-media-row').querySelector('[data-edit-field=video_url]').value='';" title="Supprimer la vidéo"><i class="fa-solid fa-trash"></i></button>
             <input type="file" class="admin-edit-file-input" accept="video/mp4,video/webm,video/quicktime,video/x-m4v" style="display:none" onchange="event.stopPropagation(); adminUploadMediaFile(this, 'video')">
           </div>
+        </div>
+        <div class="admin-edit-field">
+          <label class="admin-edit-label">Histoire associée</label>
+          <select class="admin-edit-input" data-edit-field="story_id" data-debate-id="${escapeAttribute(String(d.id || ''))}" data-current="${escapeAttribute(String(d.story_id || ''))}">
+            <option value="">— Aucune histoire —</option>
+          </select>
         </div>
         <div class="admin-edit-actions">
           <button class="admin-edit-save" type="button"
@@ -13951,6 +14004,37 @@ function buildIndexDebatesListHtml(debates = []) {
   }).join("");
 }
 
+function ensureCarouselHints(row) {
+  const section = row.closest('.theme-row-section');
+  if (!section) return { next: null, prev: null };
+  const title = section.querySelector('.theme-row-title');
+  const titleH = title ? title.offsetHeight : 0;
+  const rowH = row.offsetHeight;
+  const chevronCount = 4;
+
+  let next = section.querySelector('.theme-carousel-next-hint');
+  if (!next) {
+    next = document.createElement('div');
+    next.className = 'theme-carousel-next-hint';
+    next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>'.repeat(chevronCount);
+    section.appendChild(next);
+  }
+  next.style.top = titleH + 'px';
+  next.style.height = rowH + 'px';
+
+  let prev = section.querySelector('.theme-carousel-prev-hint');
+  if (!prev) {
+    prev = document.createElement('div');
+    prev.className = 'theme-carousel-prev-hint';
+    prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>'.repeat(chevronCount);
+    section.appendChild(prev);
+  }
+  prev.style.top = titleH + 'px';
+  prev.style.height = rowH + 'px';
+
+  return { next, prev };
+}
+
 function updateCarouselCardHighlight(row) {
   const cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
   if (!cards.length) return;
@@ -13969,7 +14053,21 @@ function updateCarouselCardHighlight(row) {
     const dist = Math.abs((card.offsetLeft + card.offsetWidth / 2) - center);
     if (dist < bestDist) { bestDist = dist; best = card; }
   });
+  const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
   cards.forEach((card) => card.classList.toggle("index-card-active", card === best));
+
+  if (best) {
+    const vertPadding = 10; // 4px top + 6px bottom padding on row
+    row.style.height = (best.offsetHeight + vertPadding) + 'px';
+  }
+
+  const { next, prev } = ensureCarouselHints(row);
+  if (next && prev) {
+    const isAtEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 8;
+    const isAtStart = row.scrollLeft <= 8;
+    next.classList.toggle('is-hidden', isAtEnd || cards.length <= 1);
+    prev.classList.toggle('is-hidden', isAtStart || cards.length <= 1);
+  }
 }
 
 function updateAllCarouselHighlights() {
@@ -14155,38 +14253,93 @@ function initThematicRowDragScroll() {
       row.dataset.dragOffset = String(row.scrollLeft || 0);
     }, { passive: true });
 
+    let touchIsHorizontal = false;
+    let currentCardIndex = 0;
+
+    const getCards = () => Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+
+    const scrollToCard = (index) => {
+      const cards = getCards();
+      if (!cards.length) return;
+      index = Math.max(0, Math.min(cards.length - 1, index));
+      currentCardIndex = index;
+      const card = cards[index];
+      const targetLeft = card.offsetLeft - (row.clientWidth - card.offsetWidth) / 2;
+      row.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    };
+
+    const getCurrentCardIndex = () => {
+      const cards = getCards();
+      if (!cards.length) return 0;
+      const center = row.scrollLeft + row.clientWidth / 2;
+      let best = 0, bestDist = Infinity;
+      cards.forEach((card, i) => {
+        const dist = Math.abs((card.offsetLeft + card.offsetWidth / 2) - center);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      });
+      return best;
+    };
+
     row.addEventListener("touchstart", (e) => {
       if (!e.touches || e.touches.length !== 1) return;
-      const target = e.target;
-      if (shouldIgnoreDragTarget(target)) return;
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
       touchStartScrollLeft = getRowOffset();
       touchMoved = 0;
       isTouchDragging = true;
+      touchIsHorizontal = false;
+      currentCardIndex = getCurrentCardIndex();
       row.classList.add("is-dragging");
     }, { passive: true, capture: true });
+
+    let lastTouchX = 0;
+    let lastTouchTime = 0;
 
     row.addEventListener("touchmove", (e) => {
       if (!isTouchDragging || !e.touches || e.touches.length !== 1) return;
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartX;
       const dy = touch.clientY - touchStartY;
+      if (!touchIsHorizontal && Math.abs(dy) > Math.abs(dx) + 4) {
+        isTouchDragging = false;
+        row.classList.remove("is-dragging");
+        return;
+      }
+      if (Math.abs(dx) > 4) touchIsHorizontal = true;
+      if (!touchIsHorizontal) return;
+      e.preventDefault();
       touchMoved = Math.abs(dx);
       moved = touchMoved;
-      if (Math.abs(dy) > Math.abs(dx)) {
-        row.classList.remove("is-dragging");
-      }
-    }, { passive: true, capture: true });
+      lastTouchX = touch.clientX;
+      lastTouchTime = Date.now();
+      row.scrollLeft = touchStartScrollLeft - dx * 0.6;
+    }, { passive: false, capture: true });
 
-    const endTouchDrag = () => {
+    const endTouchDrag = (e) => {
+      if (!isTouchDragging) return;
       isTouchDragging = false;
+      touchIsHorizontal = false;
       row.classList.remove("is-dragging");
+      const endX = (e && e.changedTouches && e.changedTouches[0])
+        ? e.changedTouches[0].clientX : lastTouchX;
+      const dx = endX - touchStartX;
+      const dt = Date.now() - lastTouchTime;
+      const velocity = dt > 0 ? Math.abs(dx) / dt : 0;
+      if (Math.abs(dx) > 8 || velocity > 0.15) {
+        scrollToCard(dx < 0 ? currentCardIndex + 1 : currentCardIndex - 1);
+      } else {
+        scrollToCard(currentCardIndex);
+      }
     };
 
     row.addEventListener("touchend", endTouchDrag, { passive: true, capture: true });
-    row.addEventListener("touchcancel", endTouchDrag, { passive: true, capture: true });
+    row.addEventListener("touchcancel", () => {
+      isTouchDragging = false;
+      touchIsHorizontal = false;
+      row.classList.remove("is-dragging");
+      scrollToCard(currentCardIndex);
+    }, { passive: true, capture: true });
   });
 }
 
@@ -18080,15 +18233,6 @@ function initDebateMediaHistory(debate) {
     return date ? `${base} — ${date}` : base;
   }
 
-  // Batch actif au chargement = celui qui contient source_url
-  const initialActiveIndex = Math.max(0,
-    sortedBatches.findIndex(([, srcs]) => srcs.some(s => s.url === currentSourceUrl))
-  );
-
-  // --- Session state ---
-  const initialSource = allFlatSources[initialActiveSourceIdx] || null;
-  setDebateSourceHistoryItems(allFlatSources, initialSource);
-
   // --- Nom du média depuis l'URL ou les previews ---
   function getMediaName(url) {
     const previews = debate.index_source_previews || {};
@@ -18104,6 +18248,10 @@ function initDebateMediaHistory(debate) {
   // Aplatir toutes les sources de tous les batches en une liste unique
   const allFlatSources = sortedBatches.flatMap(([, srcs]) => srcs);
   const initialActiveSourceIdx = Math.max(0, allFlatSources.findIndex(s => s.url === currentSourceUrl));
+
+  // --- Session state ---
+  const initialSource = allFlatSources[initialActiveSourceIdx] || null;
+  setDebateSourceHistoryItems(allFlatSources, initialSource);
 
   // --- Build selector HTML ---
   const selector = document.createElement('div');

@@ -1,6 +1,6 @@
 {
-  "name": "agôn",
-  "short_name": "agôn",
+  "name": "Agôn",
+  "short_name": "Agôn",
   "description": "L'arene des idees",
   "start_url": "/",
   "scope": "/",
@@ -20,7 +20,7 @@
       "type": "image/png"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
