@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=99999">
+  <link rel="stylesheet" href="/style.css?v=20260517-floating-refresh-v10">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -213,10 +213,6 @@
       </div>
     </div>
 
-    <button type="button" class="topbar-refresh-btn" onclick="window.location.reload()" title="Actualiser">
-      <i class="fa-solid fa-rotate-right"></i>
-    </button>
-
     <img src="/appagon.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
     <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
@@ -340,6 +336,15 @@
 
 </main>
 
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn"
+  onclick="window.location.reload()"
+  title="Actualiser"
+  aria-label="Actualiser la page"
+>
+  <i class="fa-solid fa-rotate-right"></i>
+</button>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <button
@@ -623,7 +628,7 @@
 })();
 </script>
 
-  <script src="/script.js?v=99999" defer></script>
+  <script src="/script.js?v=20260517-iframe-close-v10" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->

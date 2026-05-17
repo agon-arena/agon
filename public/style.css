@@ -498,7 +498,7 @@ main.create-page {
   display: grid;
   gap: 8px;
   background: #ededeb;
-  padding: 16px;
+  padding: 16px 16px 8px;
   border-radius: 14px;
   border: 1px solid #e5e7eb;
   overflow: hidden;
@@ -593,6 +593,10 @@ main.create-page {
 }
 
 .debate-card-top-badges {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-end;
@@ -666,6 +670,16 @@ main.create-page {
   box-shadow: 0 6px 14px rgba(79, 70, 229, 0.10);
 }
 
+.debate-card-date-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: #9ca3af;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  align-self: flex-end;
+}
+
 .debate-card-agon-badge-icon {
   width: 11px;
   height: 11px;
@@ -691,10 +705,15 @@ main.create-page {
 
 .debate-card-context {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin-top: 0;
   margin-bottom: 0;
-  justify-items: center;
+  justify-items: start;
+  border: 1.5px solid #f3f4f6;
+  border-radius: 10px;
+  padding: 10px 12px 2px;
+  background: rgba(36, 55, 70, 0.03);
 }
 
 .debate-card-context-text {
@@ -702,14 +721,27 @@ main.create-page {
   color: #000000 !important;
   line-height: 1.25;
   font-size: 18px !important;
-  text-align: center;
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
+  text-indent: 1.1em;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.debate-card-context-text::first-letter,
+.debate-card-context-text > p:first-child::first-letter {
+  font-size: 1.3em;
+  font-weight: 800;
+  line-height: 1;
+  color: #111827;
 }
 
 .debate-card-context-text p {
   font-size: 15px;
-  text-align: center;
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -721,13 +753,14 @@ main.create-page {
   color: #6b7280;
   font-size: 13px;
   font-weight: 700;
-  text-align: center;
   cursor: pointer;
   width: fit-content;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
+  justify-self: center;
+  margin: 2px 0 10px;
 }
 
 .debate-card-context-toggle:hover {
@@ -736,6 +769,7 @@ main.create-page {
 
 .debate-card-context-toggle[aria-expanded="true"] {
   color: #000000;
+  margin: 14px 0 18px;
 }
 
 .debate-card-source{
@@ -5749,7 +5783,7 @@ body.page-debate .topbar::after {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 16px;
+    padding: 16px 16px 8px;
     gap: 12px;
     border-radius: 14px;
     overflow: hidden;
@@ -5952,7 +5986,7 @@ body.page-debate .topbar::after {
   }
 
   .page-home-mobile .debate-card {
-    padding: 14px;
+    padding: 14px 14px 8px;
   }
 
   .page-home-mobile .debate-card h2 {
@@ -7887,6 +7921,9 @@ padding:4px 14px 12px 14px;
   gap: 12px;
   width: 100%;
   flex-wrap: wrap;
+  margin-top: -15px;
+  position: relative;
+  z-index: 1;
 }
 
 .debate-card-footer-left {
@@ -7908,7 +7945,7 @@ padding:4px 14px 12px 14px;
   height: 30px;
   border-radius: 50%;
   border: 1.5px solid rgba(36, 48, 56, 0.3);
-  background: transparent;
+  background: #ededeb;
   color: #6b7280;
   font-size: 14px;
   font-weight: 700;
@@ -7936,12 +7973,35 @@ padding:4px 14px 12px 14px;
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.10);
   padding: 4px;
-  min-width: 130px;
+  min-width: 200px;
   z-index: 50;
 }
 
 .debate-card-options-menu.is-open {
   display: block;
+}
+
+.debate-card-options-share-row {
+  padding: 6px 4px 4px;
+}
+
+.debate-card-options-share-row .debate-card-share-actions {
+  justify-content: center;
+  gap: 6px;
+  overflow: visible;
+}
+
+.debate-card-options-share-row .share-icon-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+}
+
+.debate-card-options-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
 }
 
 .debate-card-options-item {
@@ -7985,6 +8045,11 @@ padding:4px 14px 12px 14px;
     gap: 5px;
   }
 }
+/* En page index : OG = image uniquement, pas de texte (domain/titre/description) */
+.page-home .debate-source-card-body {
+  display: none !important;
+}
+
 .debate-card-media-local-image{
   margin:2px -8px 4px -8px;
   border:1px solid #e5e7eb;
@@ -8940,6 +9005,42 @@ body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
+.app-floating-refresh-btn {
+  position: fixed;
+  left: 50%;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 90;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(26, 39, 47, 0.84);
+  color: #e5edf3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.app-floating-refresh-btn:hover,
+.app-floating-refresh-btn:focus-visible {
+  background: rgba(17, 24, 39, 0.92);
+  color: #ffffff;
+  outline: none;
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.app-floating-refresh-btn i {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .topbar-app-icon {
   display: none;
   cursor: pointer;
@@ -8984,6 +9085,21 @@ body.is-standalone .topbar-refresh-btn {
   body.is-standalone .topbar-refresh-btn {
     grid-area: spacer;
     margin: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-floating-refresh-btn {
+    bottom: calc(58px + min(env(safe-area-inset-bottom, 0px), 10px));
+    width: 44px;
+    height: 44px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  }
+
+  body.page-debate .app-floating-refresh-btn {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -10623,10 +10739,14 @@ body.index-batch-loading-active {
 
 /* Bouton fermer iframe — suppression de l'offset de l'ancienne bottom nav mobile */
 @media (max-width: 768px) {
-  body.page-debate #debate-iframe-modal-close {
+  #debate-iframe-modal-close {
     bottom: 5vh !important;
     left: auto !important;
-    right: 16px !important;
+    right: 264px !important;
+    width: 42px !important;
+    height: 42px !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
   }
 }
 
@@ -11232,7 +11352,14 @@ body.page-debate .similar-debates-section .section-header {
 body.page-debate .debate-context-text {
   line-height: 1.25;
   white-space: pre-line;
-  text-align: center;
+  text-align: left;
+  text-indent: 1.1em;
+}
+
+body.page-debate .debate-context-text::first-letter {
+  font-size: 1.3em;
+  font-weight: 800;
+  line-height: 1;
 }
 
 /* Sous-textes / méta sur fond sombre */
@@ -13849,15 +13976,33 @@ body.voices-panel-open {
 /* Section cachée du "Voir plus" */
 .debate-card-context-extra {
   display: none !important;
+  width: 100%;
+  justify-self: stretch;
 }
 .debate-card-context-extra.is-open {
   display: block !important;
+  width: 100%;
 }
 .debate-card-context-extra .debate-card-actions {
-  margin-top: 14px;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+/* Icônes partage dans le contexte étendu : centrées + overflow visible */
+.debate-card-context-extra .debate-card-share-actions {
+  overflow: visible;
+  justify-content: center;
+  width: 100%;
+}
+.debate-card-context-extra .debate-card-actions {
+  justify-content: center;
+  display: flex;
 }
 .debate-card-context-extra .debate-card-meta-below-media {
   margin-top: 10px;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
 }
 .debate-card-context-extra .debate-card-ideas-count,
 .debate-card-context-extra .debate-card-comments-count,
@@ -13867,11 +14012,19 @@ body.voices-panel-open {
 }
 .debate-card-context-extra .debate-card-counts-row {
   gap: 4px;
+  justify-content: center;
 }
 .debate-card-context-extra .debate-date,
 .debate-card-context-extra .debate-last-argument {
   font-size: 11px;
   line-height: 1.3;
+  text-align: center;
+}
+.debate-card-context-extra .debate-card-positions {
+  text-align: center;
+}
+.debate-card-context-extra .debate-card-score {
+  justify-content: center;
 }
 
 /* Wrapper : colle le bandeau sous le média sans espace */
@@ -13879,7 +14032,9 @@ body.voices-panel-open {
   display: flex;
   flex-direction: column;
   gap: 0;
-  width: 100%;
+  width: calc(100% + 44px);
+  margin-left: -22px;
+  margin-right: -22px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -14027,7 +14182,8 @@ body.thematic-sections-active #debates-list {
   margin-right: 0 !important;
 }
 
-/* Relâche overflow sur les ancêtres pour permettre le bandeau pleine largeur */
+/* Relâche overflow sur les ancêtres pour que le ::before du bandeau
+   puisse déborder visuellement au-delà du container centré */
 html.thematic-scroll main,
 html.thematic-scroll .debates-section,
 html.thematic-scroll #debates-list,
@@ -14035,29 +14191,29 @@ html.thematic-scroll .theme-row-section {
   overflow-x: visible !important;
 }
 
-/* Fige le grid track à 1fr pour éviter que le bandeau (width:calc(100%+2000px))
-   n'inflate le track et décale la barre de tri et les autres grid items */
-html.thematic-scroll .debates-section {
-  grid-template-columns: 1fr !important;
-}
-
 .theme-row-section {
-  margin-bottom: 8px;
-  width: min(100%, calc(100vw - 40px));
-  max-width: calc(100vw - 40px);
+  margin-bottom: 2px;
+  width: 100%;
   box-sizing: border-box;
 }
 
+/*
+ * Le bandeau pleine-largeur utilise un ::before absolutement positionné.
+ * L'élément lui-même reste à width:100% (= largeur du container) → zéro
+ * inflation de grid track → la barre de tri reste bien centrée.
+ * Le ::before s'étend de calc(50% - 50vw) de chaque côté, ce qui correspond
+ * exactement à la distance entre le bord gauche/droit du container centré
+ * et le bord du viewport.
+ */
 .theme-row-title {
+  position: relative;
+  z-index: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 0;
-  padding: 8px 20px 12px;
-  background:
-    linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 5px no-repeat,
-    linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
-    #ffffff;
+  padding: 6px 20px 8px;
+  background: none;
   color: #243038;
   font-family: 'Oswald', Arial, sans-serif;
   font-size: clamp(22px, 4.5vw, 60px);
@@ -14065,30 +14221,37 @@ html.thematic-scroll .debates-section {
   letter-spacing: 0.04em;
   line-height: 1.1;
   text-align: center;
-  /* Mobile : le texte peut passer sur plusieurs lignes */
   white-space: normal;
   word-break: break-word;
   overflow: visible;
   box-sizing: border-box;
   border-radius: 0;
-  width: 100vw;
-  margin-left: calc(-50vw + 50%);
+  width: 100%;
+  margin-left: 0;
   margin-right: 0;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   margin-top: 0;
 }
 
-/* Desktop : une seule ligne + full-bleed (brute-force, clippé par body overflow-x:clip) */
+.theme-row-title::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  background:
+    linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 5px no-repeat,
+    linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
+    #ffffff;
+  z-index: -1;
+}
+
+/* Desktop : une seule ligne, taille intermédiaire */
 @media (min-width: 769px) {
   .theme-row-title {
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     font-size: clamp(30px, 3.2vw, 52px);
-    width: calc(100% + 2000px);
-    margin-left: -1000px;
-    padding-left: 1000px;
-    padding-right: 1000px;
   }
 }
 
@@ -14099,9 +14262,10 @@ html.thematic-scroll .debates-section {
  * grandit librement à l'intérieur — pas d'overflow imbriqués qui
  * casseraient le calcul de hauteur dans certains navigateurs.
  */
+
 .theme-horizontal-row {
   position: relative;
-  padding: 8px 0 12px 0; /* padding-top pour que translateY(-3px) des cartes ne soit pas rogné */
+  padding: 4px 0 6px 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -14113,8 +14277,8 @@ html.thematic-scroll .debates-section {
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   touch-action: pan-x pan-y;
-  width: min(100%, calc(100vw - 40px));
-  max-width: calc(100vw - 40px);
+  width: min(100%, min(1200px, 92vw));
+  max-width: min(1200px, 92vw);
   box-sizing: border-box;
 }
 
@@ -14154,9 +14318,9 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 /* Cartes : 1 carte visible + peek (~60px) de la suivante
    Utilise vw pour éviter la dépendance circulaire avec width:max-content */
 .theme-horizontal-inner > .debate-card {
-  flex: 0 0 calc(100vw - 80px);
-  width: calc(100vw - 80px);
-  max-width: calc(100vw - 80px);
+  flex: 0 0 calc(100vw - 56px);
+  width: calc(100vw - 56px);
+  max-width: calc(100vw - 56px);
   min-width: 200px;
   box-sizing: border-box;
   scroll-snap-align: start;
@@ -14168,11 +14332,41 @@ html.thematic-scroll body.page-home-mobile #debates-list {
   transform: none !important;
 }
 
-/* ── Desktop : ~560px par carte (2 visibles + peek sur grand écran) ─── */
+/* Carousel Instagram & X : coupe le bas du post pour éviter les cartes
+   excessivement hautes. Le cap est sur le wrapper (.debate-card-media-*)
+   ET sur le shell pour neutraliser le min-height inline imposé par Instagram. */
+.theme-horizontal-inner .debate-card-instagram-shell,
+.theme-horizontal-inner .debate-card-x-shell {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.theme-horizontal-inner .debate-card-media-instagram,
+.theme-horizontal-inner .debate-card-media-x {
+  max-height: 200px;
+  overflow: hidden;
+}
+
 @media (min-width: 769px) {
-  .theme-horizontal-inner > .debate-card {
-    flex: 0 0 min(560px, calc(100vw - 200px));
-    width: min(560px, calc(100vw - 200px));
-    max-width: min(560px, calc(100vw - 200px));
+  .theme-horizontal-inner .debate-card-media-instagram,
+  .theme-horizontal-inner .debate-card-media-x {
+    max-height: 320px;
   }
 }
+
+/* ── Desktop : colonne étroite centrée, 1 carte + peek ─── */
+@media (min-width: 769px) {
+  .theme-horizontal-row {
+    width: min(480px, 100%);
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .theme-horizontal-inner > .debate-card {
+    flex: 0 0 458px;
+    width: 458px;
+    max-width: 458px;
+  }
+}
+

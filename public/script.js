@@ -406,12 +406,12 @@ let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
 
-const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache";
-const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time";
-const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta";
+const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache_all_v1";
+const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time_all_v1";
+const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta_all_v1";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 8;
-const INDEX_DEBATES_PAGE_SIZE = INDEX_INITIAL_DEBATES_FETCH_LIMIT;
+const INDEX_INITIAL_DEBATES_FETCH_LIMIT = null;
+const INDEX_DEBATES_PAGE_SIZE = null;
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
 const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
@@ -2914,6 +2914,12 @@ function ensureDebateIframeModal() {
       }
       #debate-iframe-modal-close {
         bottom: calc(5vh + 32px + env(safe-area-inset-bottom, 0px));
+        left: auto;
+        right: 264px;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        border-radius: 999px;
       }
     }
     @media (min-width: 769px) {
@@ -4573,6 +4579,10 @@ function buildIndexCardFooterActionsHtml(debate) {
             onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
           >···</button>
           <div class="debate-card-options-menu" role="menu">
+            <div class="debate-card-options-share-row" onclick="event.stopPropagation()">
+              ${buildIndexCardShareActionsHtml(d)}
+            </div>
+            <div class="debate-card-options-divider"></div>
             <button
               class="debate-card-options-item report-button"
               type="button"
@@ -4728,8 +4738,11 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>` : "";
-  const topBadgesHtml = (newBadgeHtml || agonBadgeHtml)
-    ? `<div class="debate-card-top-badges">${newBadgeHtml}${agonBadgeHtml}</div>`
+  const shortDate = formatShortDate(d.created_at);
+  const dateBadgeHtml = shortDate ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
+  const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
+  const topBadgesHtml = topBadgesInnerHtml
+    ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
     : "";
   const includeDeleteButton = options.includeDeleteButton === true;
   const categoryBadgesHtml = buildIndexCardCategoryBadgesHtml(d.category);
@@ -4737,6 +4750,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
 
   return `
     <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+      ${agonBadgeHtml}
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
           <div class="debate-card-top-meta">
@@ -4753,7 +4767,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
       ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       ${mediaOutsideLink ? `
         <div class="index-card-media-with-title">
-          <div class="index-card-title-banner" aria-hidden="true">
+          <div class="index-card-title-banner" role="button" tabindex="0" style="cursor:pointer;" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
             <p class="index-card-title-banner-text">${escapeHtml(d.question)}</p>
           </div>
           ${mediaHtml}
@@ -6174,6 +6188,74 @@ function initIndexMediaSwipeEnhancements(root) {
     if (shell.getAttribute("data-index-media-swipe-ready") === "1") return;
     shell.setAttribute("data-index-media-swipe-ready", "1");
   });
+  initMediaSwipeAutoScroll(scope);
+}
+
+function initMediaSwipeAutoScroll(scope = document) {
+  const DELAY = 3500;
+  const RESUME_AFTER = 7000;
+
+  scope.querySelectorAll("[data-index-media-swipe-shell]").forEach((shell) => {
+    let mediaItems;
+    try { mediaItems = JSON.parse(shell.dataset.mediaItems || "[]"); } catch (e) { return; }
+    if (!Array.isArray(mediaItems) || mediaItems.length < 2) return;
+    if (shell.dataset.mediaAutoScrollBound) return;
+    shell.dataset.mediaAutoScrollBound = "1";
+
+    let timer = null;
+    let resumeTimer = null;
+    let paused = false;
+
+    const advance = () => {
+      if (paused) return;
+      const nextBtn = shell.querySelector("[data-index-media-swipe-step='next']");
+      if (nextBtn) nextBtn.click();
+    };
+
+    const start = () => { if (!timer) timer = setInterval(advance, DELAY); };
+
+    const pause = () => {
+      paused = true;
+      clearInterval(timer); timer = null;
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => { paused = false; start(); }, RESUME_AFTER);
+    };
+
+    const stopPermanently = () => {
+      paused = true;
+      clearInterval(timer); timer = null;
+      clearTimeout(resumeTimer);
+    };
+
+    shell.addEventListener("pointerdown", (e) => {
+      if (e.target.closest('video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell')) {
+        stopPermanently();
+      } else {
+        pause();
+      }
+    }, { passive: true });
+
+    shell.addEventListener("touchstart", (e) => {
+      if (e.target.closest('video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell')) {
+        stopPermanently();
+      } else {
+        pause();
+      }
+    }, { passive: true });
+
+    // Arrêt permanent si une vidéo HTML5 locale démarre
+    shell.addEventListener("play", (e) => {
+      if (e.target instanceof HTMLVideoElement) stopPermanently();
+    }, { passive: true, capture: true });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) start();
+        else { clearInterval(timer); timer = null; }
+      });
+    }, { threshold: 0.3 });
+    observer.observe(shell);
+  });
 }
 
 function buildIndexSwipeableMediaHtml(debate, options = {}) {
@@ -7323,6 +7405,7 @@ function initMobileIndexCardHighlight() {
   window.addEventListener('scroll', updateAllCarouselHighlights, { passive: true });
   window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
   window.addEventListener('resize', updateAllCarouselHighlights);
+  window.addEventListener('resize', applyThematicTitleTwoLines);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
@@ -8473,13 +8556,12 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     <${cardTag}
       ${cardAttributes}
     >
-      ${image ? `
-        <div
-          class="debate-source-card-image-wrap"
-          data-index-og-image-shell
-          data-image-src="${escapeAttribute(image)}"
-          style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
-        >
+      <div
+        class="debate-source-card-image-wrap"
+        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"` : ''}
+        style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
+      >
+        ${image ? `
           <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
             ${buildIndexOpenGraphImageLoadingHtml()}
           </div>
@@ -8490,9 +8572,13 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
             decoding="async"
             style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
           >
-          <span class="debate-source-card-image-domain-badge">${escapeHtml(domain)}</span>
-        </div>
-      ` : ""}
+        ` : `
+          <div style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
+            ${buildIndexOpenGraphImageLoadingHtml()}
+          </div>
+        `}
+        <span class="debate-source-card-image-domain-badge">${escapeHtml(domain)}</span>
+      </div>
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
         <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; white-space:normal; overflow-wrap:break-word; word-break:break-word; min-width:0;">${escapeHtml(domain)}</div>
         <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
@@ -9823,6 +9909,16 @@ function saveVisitedDebate(debateId) {
   visited.unshift(id);
 
   localStorage.setItem("visited_debates", JSON.stringify(visited));
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(String(dateStr).replace(' ', 'T'));
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}/${mm}/${yy}`;
 }
 
 function formatDebateDate(dateString) {
@@ -11819,9 +11915,9 @@ let debatesCache = [];
 let visitedDebatesCache = [];
 let otherDebatesCache = [];
 let indexDebatesApiNextOffset = 0;
-let indexDebatesApiHasMore = true;
+let indexDebatesApiHasMore = false;
 let visitedDebatesVisible = 5;
-const INDEX_OTHER_DEBATES_BATCH_SIZE = 8;
+const INDEX_OTHER_DEBATES_BATCH_SIZE = Number.MAX_SAFE_INTEGER;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
@@ -12942,10 +13038,10 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
     <div
       class="debate-card-context"
       data-index-context-card
-      role="link"
+      role="button"
       tabindex="0"
-      onclick="openIndexDebateFromMedia('${debateId}', event)"
-      onkeydown="handleIndexContextTextKeydown(event, '${debateId}')"
+      onclick="(function(e){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
+      onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
       ${fullText ? `<p
@@ -12956,6 +13052,11 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
         data-expanded="false"
       >${escapeHtml(shortText)}</p>` : ""}
       ${needsToggle ? `
+        <div class="debate-card-context-extra">
+          ${scoresHtml}
+          ${metaHtml}
+          ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
+        </div>
         <button
           type="button"
           class="debate-card-context-toggle"
@@ -12964,14 +13065,28 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
           aria-expanded="false"
           onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
         ><span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span></button>
-        <div class="debate-card-context-extra">
-          ${scoresHtml}
-          ${metaHtml}
-          ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
-        </div>
       ` : ""}
     </div>
   `;
+}
+
+function closeIndexContextPreview(button) {
+  if (!button || button.getAttribute('aria-expanded') !== 'true') return;
+  const card = button.closest('[data-index-context-card]');
+  const textEl = card?.querySelector('[data-index-context-text]');
+  const metaEl = card?.querySelector('.debate-card-context-extra');
+  const shortText = textEl?.getAttribute('data-short-text') || '';
+  if (textEl) { textEl.textContent = shortText; textEl.setAttribute('data-expanded', 'false'); }
+  if (metaEl) metaEl.classList.remove('is-open');
+  button.innerHTML = '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function closeAllOpenContextPreviews(exceptCard) {
+  document.querySelectorAll('[data-index-context-toggle][aria-expanded="true"]').forEach((btn) => {
+    const card = btn.closest('.debate-card');
+    if (card && card !== exceptCard) closeIndexContextPreview(btn);
+  });
 }
 
 function toggleIndexContextPreview(button) {
@@ -13861,11 +13976,50 @@ function updateAllCarouselHighlights() {
   document.querySelectorAll(".theme-horizontal-row[data-drag-bound]").forEach(updateCarouselCardHighlight);
 }
 
+
+function applyThematicTitleTwoLines() {
+  document.querySelectorAll('.theme-row-title').forEach(el => {
+    const text = (el.dataset.originalTitle !== undefined ? el.dataset.originalTitle : el.textContent).trim();
+    if (el.dataset.originalTitle === undefined) el.dataset.originalTitle = text;
+
+    if (window.innerWidth >= 769) {
+      el.textContent = text;
+      return;
+    }
+
+    const mid = text.length / 2;
+    let best = -1, bestDiff = Infinity;
+    for (let i = 1; i < text.length - 1; i++) {
+      if (text[i] === ' ') {
+        const diff = Math.abs(i - mid);
+        if (diff < bestDiff) { bestDiff = diff; best = i; }
+      }
+    }
+    if (best === -1) { el.textContent = text; return; }
+    el.innerHTML = escapeHtml(text.slice(0, best)) + '<br>' + escapeHtml(text.slice(best + 1));
+  });
+}
+
 function initThematicRowDragScroll() {
   document.querySelectorAll(".theme-horizontal-row:not([data-drag-bound])").forEach((row) => {
     row.dataset.dragBound = "1";
 
-    row.addEventListener("scroll", () => updateCarouselCardHighlight(row), { passive: true });
+    row.addEventListener("scroll", () => {
+      const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
+      updateCarouselCardHighlight(row);
+      const newActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
+      if (newActive && newActive !== prevActive) {
+        const hadOpen = !!document.querySelector('[data-index-context-toggle][aria-expanded="true"]');
+        closeAllOpenContextPreviews(newActive);
+        if (hadOpen) {
+          const section = row.closest('.theme-row-section') || row;
+          setTimeout(() => {
+            const top = section.getBoundingClientRect().top + window.scrollY - 8;
+            window.scrollTo({ top, behavior: 'smooth' });
+          }, 250);
+        }
+      }
+    }, { passive: true });
     updateCarouselCardHighlight(row);
 
     let isDragging = false;
@@ -13880,7 +14034,7 @@ function initThematicRowDragScroll() {
     let touchMoved = 0;
 
     const shouldIgnoreDragTarget = (target) => {
-      return !!(target && target.closest && target.closest('button, input, select, textarea, [contenteditable="true"], .debate-card-options-menu, .index-share-dropdown'));
+      return !!(target && target.closest && target.closest('button, input, select, textarea, [contenteditable="true"], .debate-card-options-menu, .index-share-dropdown, .debate-source-card, .index-card-title-banner, .debate-card-context'));
     };
 
     const getRowInner = () => row.querySelector(".theme-horizontal-inner");
@@ -13942,7 +14096,12 @@ function initThematicRowDragScroll() {
       if (e.button !== 0) return;
 
       // Ignore uniquement les contrôles qui ont leur propre comportement de drag (pas les liens — le clic est géré après)
-      if (shouldIgnoreDragTarget(e.target)) return;
+      if (shouldIgnoreDragTarget(e.target)) {
+        // Remet moved à 0 : sinon un drag précédent bloquerait le clic sur ce bouton
+        moved = 0;
+        touchMoved = 0;
+        return;
+      }
 
       startMouseDrag(e.clientX, e, e.pointerType);
       try { row.setPointerCapture(e.pointerId); } catch (_) {}
@@ -13958,7 +14117,11 @@ function initThematicRowDragScroll() {
 
     row.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      if (shouldIgnoreDragTarget(e.target)) return;
+      if (shouldIgnoreDragTarget(e.target)) {
+        moved = 0;
+        touchMoved = 0;
+        return;
+      }
       startMouseDrag(e.clientX, e, "mouse-fallback");
     }, { capture: true });
 
@@ -14127,7 +14290,10 @@ function renderDebatesList(debates) {
   document.documentElement.classList.toggle("thematic-scroll", hasRows);
   document.body.classList.toggle("thematic-sections-active", hasRows);
 
-  if (hasRows) initThematicRowDragScroll();
+  if (hasRows) {
+    initThematicRowDragScroll();
+    applyThematicTitleTwoLines();
+  }
 
   refreshAdminUI();
   initIndexCardShareMenus(document);
@@ -14404,14 +14570,20 @@ function getIndexDebatesSortQueryValue() {
 }
 
 function getIndexDebatesApiUrl(limit = INDEX_DEBATES_PAGE_SIZE, offset = 0, options = {}) {
-  const safeLimit = Math.max(1, Number(limit) || INDEX_DEBATES_PAGE_SIZE);
   const safeOffset = Math.max(0, Number(offset) || 0);
   const sortMode = encodeURIComponent(getIndexDebatesSortQueryValue());
   const cacheBust = options?.cacheBust ? `&_=${Date.now()}` : "";
-  return `${API}/debates?limit=${safeLimit}&offset=${safeOffset}&sort=${sortMode}${cacheBust}`;
+  const params = new URLSearchParams();
+  if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+    params.set("limit", String(Math.max(1, Number(limit))));
+    params.set("offset", String(safeOffset));
+  }
+  params.set("sort", sortMode);
+  const query = params.toString();
+  return `${API}/debates?${query}${cacheBust}`;
 }
 
-function resetIndexDebatesPaginationState(count = 0, hasMore = true) {
+function resetIndexDebatesPaginationState(count = 0, hasMore = false) {
   indexDebatesApiNextOffset = Math.max(0, Number(count) || 0);
   indexDebatesApiHasMore = hasMore !== false;
 }
@@ -14428,7 +14600,7 @@ async function refreshIndexFirstDebatesPageForCurrentSort() {
 
   indexSortRefreshPromise = (async () => {
     try {
-      resetIndexDebatesPaginationState(0, true);
+      resetIndexDebatesPaginationState(0, false);
       debatesCache = [];
       visitedDebatesCache = [];
       otherDebatesCache = [];
@@ -14452,7 +14624,7 @@ async function refreshIndexFirstDebatesPageForCurrentSort() {
         : sortDebatesForIndex(safeFresh);
       resetIndexDebatesPaginationState(
         safeFresh.length,
-        safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT
+        Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT)
       );
 
       saveDebatesToSessionCache(debatesCache, {
@@ -14487,7 +14659,7 @@ function restoreIndexDebatesPaginationStateFromCache(cachedDebates = []) {
   }
 
   const count = safeDebates.length;
-  resetIndexDebatesPaginationState(count, count >= INDEX_DEBATES_PAGE_SIZE);
+  resetIndexDebatesPaginationState(count, Boolean(INDEX_DEBATES_PAGE_SIZE && count >= INDEX_DEBATES_PAGE_SIZE));
 }
 
 function mergeIndexDebatesPageIntoCache(pageDebates = [], offset = 0) {
@@ -14517,7 +14689,7 @@ async function fetchAndMergeNextIndexDebatesPage() {
 
   debatesCache = mergeIndexDebatesPageIntoCache(safePage, requestOffset);
   indexDebatesApiNextOffset = requestOffset + safePage.length;
-  indexDebatesApiHasMore = safePage.length >= INDEX_DEBATES_PAGE_SIZE;
+  indexDebatesApiHasMore = Boolean(INDEX_DEBATES_PAGE_SIZE && safePage.length >= INDEX_DEBATES_PAGE_SIZE);
   saveDebatesToSessionCache(debatesCache, {
     nextOffset: indexDebatesApiNextOffset,
     hasMore: indexDebatesApiHasMore,
@@ -14663,11 +14835,7 @@ async function initIndex() {
       fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0)).then((fresh) => {
         const safeFresh = Array.isArray(fresh) ? fresh : [];
         debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
-        if (safeFresh.length < INDEX_INITIAL_DEBATES_FETCH_LIMIT) {
-          indexDebatesApiHasMore = false;
-        } else if (debatesCache.length >= safeFresh.length) {
-          indexDebatesApiHasMore = true;
-        }
+        indexDebatesApiHasMore = Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT);
         indexDebatesApiNextOffset = Math.max(indexDebatesApiNextOffset, safeFresh.length);
         saveDebatesToSessionCache(debatesCache, {
           nextOffset: indexDebatesApiNextOffset,
@@ -14693,7 +14861,7 @@ async function initIndex() {
       debatesCache = Array.isArray(debates) ? debates : [];
       resetIndexDebatesPaginationState(
         debatesCache.length,
-        debatesCache.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT
+        Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && debatesCache.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT)
       );
       saveDebatesToSessionCache(debatesCache, {
         nextOffset: indexDebatesApiNextOffset,
@@ -17918,22 +18086,35 @@ function initDebateMediaHistory(debate) {
   );
 
   // --- Session state ---
-  let currentSessionSources = sortedBatches.length ? sortedBatches[initialActiveIndex][1] : [];
-  let currentSessionIdx = 0;
-  setDebateSourceHistoryItems(currentSessionSources, currentSessionSources[0] || null);
+  const initialSource = allFlatSources[initialActiveSourceIdx] || null;
+  setDebateSourceHistoryItems(allFlatSources, initialSource);
+
+  // --- Nom du média depuis l'URL ou les previews ---
+  function getMediaName(url) {
+    const previews = debate.index_source_previews || {};
+    const preview = previews[url];
+    if (preview?.domain) return preview.domain;
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./, '');
+      const parts = hostname.split('.');
+      return parts.length >= 2 ? parts[parts.length - 2] : hostname;
+    } catch { return 'Source'; }
+  }
+
+  // Aplatir toutes les sources de tous les batches en une liste unique
+  const allFlatSources = sortedBatches.flatMap(([, srcs]) => srcs);
+  const initialActiveSourceIdx = Math.max(0, allFlatSources.findIndex(s => s.url === currentSourceUrl));
 
   // --- Build selector HTML ---
   const selector = document.createElement('div');
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
 
-  const sessionHtml = sortedBatches.map(([key, srcs], i) => {
-    const count = srcs.length;
-    const labelShort = batchLabelShort(i);
-    const labelFull  = batchLabelFull(i, count, key);
-    const badge = count > 1 ? `<span class="debate-session-count">${count}</span>` : '';
-    return `<button type="button" class="debate-media-history-btn${i === initialActiveIndex ? ' active' : ''}" data-session="${i}" data-tooltip="${labelFull}" title="${labelFull}">
-      <i class="fa-solid fa-link"></i><span>${labelShort}</span>${badge}
+  const sessionHtml = allFlatSources.map((src, i) => {
+    const name = getMediaName(src.url);
+    const isActive = i === initialActiveSourceIdx;
+    return `<button type="button" class="debate-media-history-btn${isActive ? ' active' : ''}" data-source-url="${escapeAttribute(src.url)}" title="${escapeAttribute(src.url)}">
+      <i class="fa-solid fa-link"></i><span>${escapeHtml(name)}</span>
     </button>`;
   }).join('');
 
@@ -17983,24 +18164,16 @@ function initDebateMediaHistory(debate) {
     }, { passive: true });
   });
 
-  async function loadSessionSource(sources, index) {
-    currentSessionSources = sources;
-    currentSessionIdx = index;
-    const item = sources[index];
-    if (!item) return;
-    await loadDebateMediaHistoryItem(item);
-    setDebateSourceHistoryItems(sources, item);
-  }
-
   // --- Click handler ---
   selector.addEventListener('click', async (e) => {
-    const sessionBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
-    if (sessionBtn) {
-      const si = parseInt(sessionBtn.dataset.session, 10);
-      const [, srcs] = sortedBatches[si];
+    const sourceBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
+    if (sourceBtn && sourceBtn.dataset.sourceUrl) {
+      const url = sourceBtn.dataset.sourceUrl;
+      const item = { type: 'source', url };
       selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
-      sessionBtn.classList.add('active');
-      await loadSessionSource(srcs, 0);
+      sourceBtn.classList.add('active');
+      await loadDebateMediaHistoryItem(item);
+      setCurrentDebateSourceHistoryItem(item);
       return;
     }
     const mediaBtn = e.target.closest('.debate-media-history-btn--media');
