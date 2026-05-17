@@ -42,7 +42,7 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
 
 app.use(express.json({ limit: "100kb" }));
-app.use(express.static("public", { maxAge: "2m" }));
+app.use(express.static("public", { maxAge: 0, setHeaders: (res) => res.setHeader("Cache-Control", "no-store") }));
 app.use("/migration-export", express.static("/var/data"));
 
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
@@ -2971,13 +2971,13 @@ async function getVoteRow(argumentId, voterKey) {
 app.get("/", (req, res) => {
   const template = readViewTemplate("index.html");
   const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
-  res.type("html").send(html);
+  res.set("Cache-Control", "no-store").type("html").send(html);
 });
 
 app.get("/debates", (req, res) => {
   const template = readViewTemplate("index.html");
   const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
-  res.type("html").send(html);
+  res.set("Cache-Control", "no-store").type("html").send(html);
 });
 
 app.get("/debates/:id", async (req, res) => {

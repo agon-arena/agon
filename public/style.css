@@ -9,7 +9,7 @@
 }
 
 html {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -18,7 +18,17 @@ body {
   color: #1f2937;
   background: #f3f4f6;
   overflow-anchor: none;
-  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+/*
+ * Quand les sections thématiques sont actives, on passe html/body de
+ * overflow-x:hidden → clip. La différence : clip ne crée pas de scroll
+ * container, donc iOS Safari laisse les enfants scroller horizontalement.
+ */
+html.thematic-scroll,
+html.thematic-scroll body {
+  overflow-x: clip !important;
 }
 
 .container {
@@ -13997,4 +14007,172 @@ body.voices-panel-open {
   font-size: 11px;
   letter-spacing: 2px;
   opacity: 0.6;
+}
+
+/* ─── Rubriques thématiques — page d'accueil ─────────────────────── */
+
+/*
+ * En mode thématique, #debates-list (qui est par défaut .debates-list
+ * avec display:grid) doit redevenir un bloc simple — sinon les <section>
+ * thématiques deviennent des grid items mal dimensionnés et les cartes
+ * "clignotent" puis disparaissent à l'écran (largeur 0, hauteur 0).
+ */
+html.thematic-scroll #debates-list,
+body.thematic-sections-active #debates-list {
+  display: block !important;
+  grid-template-columns: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Relâche overflow sur les ancêtres pour permettre le bandeau pleine largeur */
+html.thematic-scroll main,
+html.thematic-scroll .debates-section,
+html.thematic-scroll #debates-list,
+html.thematic-scroll .theme-row-section {
+  overflow-x: visible !important;
+}
+
+/* Fige le grid track à 1fr pour éviter que le bandeau (width:calc(100%+2000px))
+   n'inflate le track et décale la barre de tri et les autres grid items */
+html.thematic-scroll .debates-section {
+  grid-template-columns: 1fr !important;
+}
+
+.theme-row-section {
+  margin-bottom: 8px;
+  width: min(100%, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+.theme-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px 20px 12px;
+  background:
+    linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 5px no-repeat,
+    linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
+    #ffffff;
+  color: #243038;
+  font-family: 'Oswald', Arial, sans-serif;
+  font-size: clamp(22px, 4.5vw, 60px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-align: center;
+  /* Mobile : le texte peut passer sur plusieurs lignes */
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+  box-sizing: border-box;
+  border-radius: 0;
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: 0;
+  margin-bottom: 6px;
+  margin-top: 0;
+}
+
+/* Desktop : une seule ligne + full-bleed (brute-force, clippé par body overflow-x:clip) */
+@media (min-width: 769px) {
+  .theme-row-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: clamp(30px, 3.2vw, 52px);
+    width: calc(100% + 2000px);
+    margin-left: -1000px;
+    padding-left: 1000px;
+    padding-right: 1000px;
+  }
+}
+
+/* ── Carousel horizontal ─── */
+/*
+ * IMPORTANT : c'est .theme-horizontal-row qui porte overflow-x:auto
+ * et reçoit le drag scroll. La piste flex .theme-horizontal-inner
+ * grandit librement à l'intérieur — pas d'overflow imbriqués qui
+ * casseraient le calcul de hauteur dans certains navigateurs.
+ */
+.theme-horizontal-row {
+  position: relative;
+  padding: 8px 0 12px 0; /* padding-top pour que translateY(-3px) des cartes ne soit pas rogné */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  touch-action: pan-x pan-y;
+  width: min(100%, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+.theme-horizontal-row .debate-card,
+.theme-horizontal-row .debate-card-link,
+.theme-horizontal-row .index-media-swipe-shell,
+.theme-horizontal-row .index-media-swipe-media {
+  touch-action: pan-x pan-y;
+}
+
+.theme-horizontal-row::-webkit-scrollbar {
+  display: none;
+}
+
+.theme-horizontal-row.is-dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+}
+
+/* Piste flex */
+.theme-horizontal-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  width: max-content;
+  min-width: 100%;
+}
+
+html.thematic-scroll body.page-home-mobile main,
+html.thematic-scroll body.page-home-mobile .home-page,
+html.thematic-scroll body.page-home-mobile .debates-section,
+html.thematic-scroll body.page-home-mobile #debates-list {
+  overflow-x: visible !important;
+}
+
+/* Cartes : 1 carte visible + peek (~60px) de la suivante
+   Utilise vw pour éviter la dépendance circulaire avec width:max-content */
+.theme-horizontal-inner > .debate-card {
+  flex: 0 0 calc(100vw - 80px);
+  width: calc(100vw - 80px);
+  max-width: calc(100vw - 80px);
+  min-width: 200px;
+  box-sizing: border-box;
+  scroll-snap-align: start;
+}
+
+/* Dans le carousel, index-card-active ne fait pas de translateY
+   (évite le clipping et l'asymétrie visuelle entre rangées) */
+.theme-horizontal-inner > .debate-card.index-card-active {
+  transform: none !important;
+}
+
+/* ── Desktop : ~560px par carte (2 visibles + peek sur grand écran) ─── */
+@media (min-width: 769px) {
+  .theme-horizontal-inner > .debate-card {
+    flex: 0 0 min(560px, calc(100vw - 200px));
+    width: min(560px, calc(100vw - 200px));
+    max-width: min(560px, calc(100vw - 200px));
+  }
 }

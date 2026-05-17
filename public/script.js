@@ -6093,6 +6093,7 @@ function initIndexMediaSwipeEnhancements(root) {
     document.addEventListener("touchstart", (event) => {
       const shell = event.target.closest("[data-index-media-swipe-shell]");
       if (!shell) return;
+      if (shell.closest(".theme-horizontal-row")) return;
       const mediaItems = hydrateShell(shell);
       if (!mediaItems) return;
 
@@ -6289,19 +6290,27 @@ function rerenderIndexCardMedia(debateId) {
   if (!card) return false;
 
   const mediaHtml = buildIndexSwipeableMediaHtml(debate);
-  const existingMediaNodes = card.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source');
-  existingMediaNodes.forEach((node) => node.remove());
+
+  const existingWrapper = card.querySelector(':scope > .index-card-media-with-title');
+  if (existingWrapper) {
+    existingWrapper.querySelectorAll('.index-media-swipe-shell, .debate-card-media, .debate-source-card, .debate-card-source').forEach((node) => node.remove());
+  }
+  card.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source').forEach((node) => node.remove());
 
   if (!mediaHtml) {
     refreshIndexCardMediaEnhancements(card);
     return true;
   }
 
-  const anchor = card.querySelector(':scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
-  if (anchor) {
-    anchor.insertAdjacentHTML('beforebegin', mediaHtml);
+  if (existingWrapper) {
+    existingWrapper.insertAdjacentHTML('beforeend', mediaHtml);
   } else {
-    card.insertAdjacentHTML('beforeend', mediaHtml);
+    const anchor = card.querySelector(':scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
+    if (anchor) {
+      anchor.insertAdjacentHTML('beforebegin', mediaHtml);
+    } else {
+      card.insertAdjacentHTML('beforeend', mediaHtml);
+    }
   }
 
   refreshIndexCardMediaEnhancements(card);
@@ -7196,11 +7205,11 @@ const isMobileHome =
   if (isMobileHome) {
     cards = Array.from(
       document.querySelectorAll('.page-home-mobile .debates-list .debate-card')
-    ).filter((card) => card.offsetParent !== null);
+    ).filter((card) => card.offsetParent !== null && !card.closest('.theme-horizontal-inner'));
   } else if (isDesktopHome) {
     cards = Array.from(
       document.querySelectorAll('.page-home .debates-list .debate-card')
-    ).filter((card) => card.offsetParent !== null);
+    ).filter((card) => card.offsetParent !== null && !card.closest('.theme-horizontal-inner'));
   } else if (isMobileOpenDebate) {
     cards = Array.from(
       document.querySelectorAll('.page-debate .similar-debates-results .debate-card')
@@ -7311,7 +7320,9 @@ function initMobileIndexCardHighlight() {
   }
 
   window.addEventListener('scroll', scheduleMobileIndexCardHighlightUpdate, { passive: true });
+  window.addEventListener('scroll', updateAllCarouselHighlights, { passive: true });
   window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
+  window.addEventListener('resize', updateAllCarouselHighlights);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
@@ -13825,6 +13836,246 @@ function buildIndexDebatesListHtml(debates = []) {
   }).join("");
 }
 
+function updateCarouselCardHighlight(row) {
+  const cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+  if (!cards.length) return;
+
+  const rowRect = row.getBoundingClientRect();
+  const isRowVisible = rowRect.bottom > 60 && rowRect.top < window.innerHeight - 60;
+
+  if (!isRowVisible) {
+    cards.forEach((c) => c.classList.remove("index-card-active"));
+    return;
+  }
+
+  const center = row.scrollLeft + row.clientWidth / 2;
+  let best = null, bestDist = Infinity;
+  cards.forEach((card) => {
+    const dist = Math.abs((card.offsetLeft + card.offsetWidth / 2) - center);
+    if (dist < bestDist) { bestDist = dist; best = card; }
+  });
+  cards.forEach((card) => card.classList.toggle("index-card-active", card === best));
+}
+
+function updateAllCarouselHighlights() {
+  document.querySelectorAll(".theme-horizontal-row[data-drag-bound]").forEach(updateCarouselCardHighlight);
+}
+
+function initThematicRowDragScroll() {
+  document.querySelectorAll(".theme-horizontal-row:not([data-drag-bound])").forEach((row) => {
+    row.dataset.dragBound = "1";
+
+    row.addEventListener("scroll", () => updateCarouselCardHighlight(row), { passive: true });
+    updateCarouselCardHighlight(row);
+
+    let isDragging = false;
+    let pointerType = "";
+    let startX = 0;
+    let startScrollLeft = 0;
+    let moved = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartScrollLeft = 0;
+    let isTouchDragging = false;
+    let touchMoved = 0;
+
+    const shouldIgnoreDragTarget = (target) => {
+      return !!(target && target.closest && target.closest('button, input, select, textarea, [contenteditable="true"], .debate-card-options-menu, .index-share-dropdown'));
+    };
+
+    const getRowInner = () => row.querySelector(".theme-horizontal-inner");
+    const refreshRowMetrics = () => {
+      const inner = getRowInner();
+      row.dataset.dragClientWidth = String(row.clientWidth || 0);
+      row.dataset.dragScrollWidth = String(row.scrollWidth || 0);
+      row.dataset.dragInnerWidth = String(inner ? (inner.scrollWidth || inner.offsetWidth || 0) : 0);
+    };
+    const getRowOffset = () => row.scrollLeft;
+    const getMaxRowOffset = () => {
+      return Math.max(0, row.scrollWidth - row.clientWidth);
+    };
+    const setRowOffset = (value) => {
+      const inner = getRowInner();
+      const maxOffset = getMaxRowOffset();
+      const next = Math.min(maxOffset, Math.max(0, Number(value) || 0));
+      refreshRowMetrics();
+      row.dataset.dragOffset = String(next);
+      row.scrollLeft = next;
+      if (inner) {
+        inner.style.transform = "";
+      }
+      return next;
+    };
+
+    refreshRowMetrics();
+    window.addEventListener("resize", refreshRowMetrics, { passive: true });
+
+    const startMouseDrag = (clientX, event, source = "mouse") => {
+      if (isDragging) return;
+      isDragging = true;
+      pointerType = source;
+      startX = clientX;
+      startScrollLeft = getRowOffset();
+      moved = 0;
+      if (event && event.preventDefault) event.preventDefault();
+      row.classList.add("is-dragging");
+    };
+
+    const updateMouseDrag = (clientX, event) => {
+      if (!isDragging) return;
+      const dx = clientX - startX;
+      moved = Math.abs(dx);
+      setRowOffset(startScrollLeft + dx);
+      if (moved > 3 && event && event.preventDefault) event.preventDefault();
+    };
+
+    const stopMouseDrag = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      row.classList.remove("is-dragging");
+      try { if (e && e.pointerId !== undefined) row.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+
+    row.addEventListener("pointerdown", (e) => {
+      // Sur mobile (touch / pen), on laisse le scroll natif gérer — pas de drag JS.
+      if (e.pointerType !== "mouse") return;
+      if (e.button !== 0) return;
+
+      // Ignore uniquement les contrôles qui ont leur propre comportement de drag (pas les liens — le clic est géré après)
+      if (shouldIgnoreDragTarget(e.target)) return;
+
+      startMouseDrag(e.clientX, e, e.pointerType);
+      try { row.setPointerCapture(e.pointerId); } catch (_) {}
+    }, { capture: true });
+
+    row.addEventListener("pointermove", (e) => {
+      updateMouseDrag(e.clientX, e);
+    }, { capture: true });
+
+    row.addEventListener("pointerup", stopMouseDrag, { capture: true });
+    row.addEventListener("pointercancel", stopMouseDrag, { capture: true });
+    row.addEventListener("pointerleave", stopMouseDrag, { capture: true });
+
+    row.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      if (shouldIgnoreDragTarget(e.target)) return;
+      startMouseDrag(e.clientX, e, "mouse-fallback");
+    }, { capture: true });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging || pointerType !== "mouse-fallback") return;
+      updateMouseDrag(e.clientX, e);
+    }, { capture: true });
+
+    document.addEventListener("mouseup", (e) => {
+      if (pointerType !== "mouse-fallback") return;
+      stopMouseDrag(e);
+    }, { capture: true });
+
+    // Empêche le clic accidentel sur une carte après un drag (>8px)
+    row.addEventListener("click", (e) => {
+      if (moved > 8 || touchMoved > 8) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, { capture: true });
+
+    row.addEventListener("scroll", () => {
+      refreshRowMetrics();
+      row.dataset.dragOffset = String(row.scrollLeft || 0);
+    }, { passive: true });
+
+    // Laisse la molette/trackpad gérer naturellement les deux axes :
+    // deltaX fait défiler le rail, deltaY fait défiler la page.
+    row.addEventListener("wheel", (e) => {
+      refreshRowMetrics();
+      row.dataset.dragOffset = String(row.scrollLeft || 0);
+    }, { passive: true });
+
+    row.addEventListener("touchstart", (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      const target = e.target;
+      if (shouldIgnoreDragTarget(target)) return;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartScrollLeft = getRowOffset();
+      touchMoved = 0;
+      isTouchDragging = true;
+      row.classList.add("is-dragging");
+    }, { passive: true, capture: true });
+
+    row.addEventListener("touchmove", (e) => {
+      if (!isTouchDragging || !e.touches || e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      touchMoved = Math.abs(dx);
+      moved = touchMoved;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        row.classList.remove("is-dragging");
+      }
+    }, { passive: true, capture: true });
+
+    const endTouchDrag = () => {
+      isTouchDragging = false;
+      row.classList.remove("is-dragging");
+    };
+
+    row.addEventListener("touchend", endTouchDrag, { passive: true, capture: true });
+    row.addEventListener("touchcancel", endTouchDrag, { passive: true, capture: true });
+  });
+}
+
+function buildIndexThematicSectionsHtml(debates) {
+  try {
+    const allDebates = Array.isArray(debates) ? debates : [];
+    const sections = [];
+
+    const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
+
+    DEBATE_CATEGORY_OPTIONS.forEach((theme) => {
+      const themeDebates = allDebates.filter((d) => debateHasCategory(d.category, theme)).sort(byDate);
+      if (!themeDebates.length) return;
+
+      const cardsHtml = themeDebates.map((d) => {
+        try {
+          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
+        } catch (cardErr) {
+          console.warn("Erreur rendu carte", d && d.id, cardErr);
+          return "";
+        }
+      }).join("");
+
+      if (!cardsHtml) return;
+      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title">${escapeHtml(theme)}</h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+    });
+
+    const uncategorized = allDebates
+      .filter((d) => !DEBATE_CATEGORY_OPTIONS.some((theme) => debateHasCategory(d.category, theme)))
+      .sort(byDate);
+
+    if (uncategorized.length) {
+      const cardsHtml = uncategorized.map((d) => {
+        try {
+          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
+        } catch (cardErr) {
+          console.warn("Erreur rendu carte sans catégorie", d && d.id, cardErr);
+          return "";
+        }
+      }).join("");
+      if (cardsHtml) {
+        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title">Sans thématique</h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+      }
+    }
+
+    return sections.join("");
+  } catch (err) {
+    console.error("buildIndexThematicSectionsHtml error:", err);
+    return "";
+  }
+}
+
 function buildIndexInfiniteScrollSentinelHtml() {
   return `
     <div
@@ -13850,32 +14101,35 @@ function renderDebatesList(debates) {
   }
   cleanupIndexInfiniteScrollObserver();
 
-  const debatesToShow = debates.slice(0, otherDebatesVisible);
+  const safeDebates = Array.isArray(debates) ? debates : [];
   const div = document.getElementById("debates-list");
   const header = document.getElementById("other-section-header");
   if (!div) return;
 
-if (!debates.length) {
+  otherDebatesVisible = safeDebates.length;
+
+  if (!safeDebates.length) {
+    if (header) header.style.display = "none";
+    div.innerHTML = "";
+    document.documentElement.classList.remove("thematic-scroll");
+    document.body.classList.remove("thematic-sections-active");
+    refreshAdminUI();
+    setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
+    return;
+  }
+
   if (header) header.style.display = "none";
-  div.innerHTML = shouldShowIndexInfiniteScrollSentinel(0, 0)
-    ? buildIndexInfiniteScrollSentinelHtml()
-    : "";
-  refreshAdminUI();
-  setupIndexInfiniteScroll();
-  setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
-  return;
-}
 
-if (header) header.style.display = "none";
+  div.innerHTML = buildIndexThematicSectionsHtml(safeDebates);
 
-div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
+  // Active/désactive le mode thématique : classes sur <html> et <body>
+  const hasRows = !!div.querySelector(".theme-horizontal-row");
+  document.documentElement.classList.toggle("thematic-scroll", hasRows);
+  document.body.classList.toggle("thematic-sections-active", hasRows);
 
- if (shouldShowIndexInfiniteScrollSentinel(debatesToShow.length, debates.length)) {
-  div.innerHTML += buildIndexInfiniteScrollSentinelHtml();
-}
+  if (hasRows) initThematicRowDragScroll();
 
   refreshAdminUI();
-  setupIndexInfiniteScroll();
   initIndexCardShareMenus(document);
   initIndexMediaSwipeEnhancements(document);
   startIndexSourceAutoPlay(document);
@@ -13889,47 +14143,10 @@ div.innerHTML = buildIndexDebatesListHtml(debatesToShow);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
 }
 
-function appendDebatesToList(debates, startIndex = 0, endIndex = 0) {
-  const div = document.getElementById("debates-list");
-  if (!div) return false;
-
-  const safeDebates = Array.isArray(debates) ? debates : [];
-  const start = Math.max(0, Number(startIndex) || 0);
-  const end = Math.max(start, Number(endIndex) || 0);
-  const nextDebates = safeDebates.slice(start, end);
-
-  if (!nextDebates.length) return true;
-
-  const existingSentinel = document.getElementById("index-infinite-scroll-sentinel");
-  const shouldKeepSentinel = shouldShowIndexInfiniteScrollSentinel(end, safeDebates.length);
-  const nextHtml = buildIndexDebatesListHtml(nextDebates);
-
-  if (existingSentinel) {
-    existingSentinel.insertAdjacentHTML("beforebegin", nextHtml);
-    if (!shouldKeepSentinel) {
-      existingSentinel.remove();
-    }
-  } else {
-    div.insertAdjacentHTML("beforeend", nextHtml);
-    if (shouldKeepSentinel) {
-      div.insertAdjacentHTML("beforeend", buildIndexInfiniteScrollSentinelHtml());
-    }
-  }
-
-  refreshAdminUI();
-  setupIndexInfiniteScroll();
-  initIndexCardShareMenus(div);
-  initIndexMediaSwipeEnhancements(div);
-  startIndexSourceAutoPlay(div);
-  initIndexYouTubeObserver(div);
-  initIndexLocalVideoObserver(div);
-  initIndexXObserver(div);
-  initIndexInstagramObserver(div);
-  initIndexOpenGraphImageObserver(div);
-  initIndexEmbedUnloadObserver(div);
-  observeIndexCardsMissingSourcePreview(div);
-  setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
-
+function appendDebatesToList(debates) {
+  // Avec les rubriques thématiques, les nouvelles arènes peuvent aller dans n'importe
+  // quelle rubrique — on fait toujours un re-render complet plutôt que du DOM surgery.
+  renderDebatesList(Array.isArray(debates) ? debates : []);
   return true;
 }
 
