@@ -67,14 +67,19 @@
 
 <script>
 const CATEGORIES = [
-  "Politique, économie et relations internationales",
-  "Société, éducation et justice",
-  "Sciences, technologies et environnement",
-  "Culture, modes et médias",
-  "Santé, corps et bien-être",
-  "Sport, loisirs et passions",
-  "Vie personnelle et modes de vie",
-  "Espace jeunes (collégiens - lycéens)"
+  "Politique",
+  "International",
+  "Économie - emploi",
+  "Société - éducation",
+  "Sciences - technologie",
+  "Climat - environnement",
+  "Justice - faits divers",
+  "Culture - modes",
+  "Médias - divertissements",
+  "Sports - loisirs",
+  "Santé - bien-être",
+  "Vie personnelle - modes de vie",
+  "Espace jeunes"
 ];
 
 function headers() {
@@ -717,7 +722,7 @@ function buildAdminActions(debateId, pendingItem) {
   const html = '<div class="actions" id="actions-' + debateId + '" style="flex-wrap:wrap;">' +
     '<button class="btn-save-merge">Modifier et sauvegarder</button>' +
     '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
-    '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (généré par agôn)</button>' +
+    '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (publié par agôn)</button>' +
     '<button class="btn-delete">Annuler</button>' +
     '</div>';
   return html;
@@ -751,11 +756,11 @@ async function saveMerge(debateId, pendingItem, agonGenerated) {
     });
     if (!r.ok) throw new Error('Erreur serveur (vérifiez la connexion admin)');
     if (agonGenerated) await fetch('/api/admin/debate/' + debateId + '/bump', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ preserve_agon_generated: true }) });
-    toast(agonGenerated ? 'Publié (généré par agôn) ✓' : 'Sauvegardé ✓');
+    toast(agonGenerated ? 'Publié (publié par agôn) ✓' : 'Sauvegardé ✓');
     pendingItem.remove();
   } catch(e) {
     btn.disabled = false;
-    btn.textContent = agonGenerated ? 'Sauvegarder et publier (généré par agôn)' : 'Sauvegarder';
+    btn.textContent = agonGenerated ? 'Sauvegarder et publier (publié par agôn)' : 'Sauvegarder';
     toast('Erreur : ' + e.message);
   }
 }

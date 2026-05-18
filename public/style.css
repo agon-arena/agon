@@ -28,7 +28,7 @@ body {
  */
 html.thematic-scroll,
 html.thematic-scroll body {
-  overflow-x: clip !important;
+  overflow-x: hidden !important;
 }
 
 .container {
@@ -498,6 +498,7 @@ main.create-page {
   display: grid;
   gap: 8px;
   background: #ededeb;
+  font-family: "Libre Baskerville", Georgia, serif;
   padding: 16px 16px 8px;
   border-radius: 14px;
   border: 1px solid #e5e7eb;
@@ -750,7 +751,7 @@ main.create-page {
 
 .debate-card-context-text {
   margin: 0;
-  color: #000000 !important;
+  color: #1f2937 !important;
   line-height: 1.25;
   font-size: 18px !important;
   text-align: left;
@@ -5540,6 +5541,10 @@ body.page-debate .topbar::after {
   justify-content: center;
 }
 
+.index-type-filter-mobile {
+  display: none;
+}
+
 .index-explorer-topbar {
   display: flex;
   justify-content: center;
@@ -5758,21 +5763,14 @@ body.page-debate .topbar::after {
   }
 
   .page-home-mobile .debate-type-filter {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    width: 100%;
-    overflow: visible;
-    padding-bottom: 0;
+    display: none;
   }
 
-  .page-home-mobile .debate-type-filter button {
+  .page-home-mobile .index-type-filter-mobile {
+    display: flex;
     width: 100%;
-    white-space: normal;
-    min-height: 42px;
-    padding: 10px 12px;
-    font-size: 13px;
-    text-align: left;
+    margin-top: 0;
+    order: 98;
   }
 
 
@@ -8492,7 +8490,7 @@ body.page-home.page-home-mobile {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 80;
+  z-index: 92;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -8637,7 +8635,7 @@ body.page-home.page-home-mobile {
   left: 50%;
   bottom: calc(100% + 12px);
   transform: translateX(-50%);
-  z-index: 81;
+  z-index: 95;
   display: none;
   flex-direction: column;
   gap: 6px;
@@ -8678,6 +8676,38 @@ body.page-home.page-home-mobile {
   width: 18px;
   text-align: center;
   font-size: 15px;
+}
+
+#index-explorer-menu {
+  overflow-y: visible;
+  left: 0;
+  transform: none;
+  width: min(260px, calc(100vw - 24px));
+  padding: 6px;
+}
+
+#index-explorer-menu button {
+  padding: 7px 10px !important;
+  font-size: 13px !important;
+}
+
+#index-explorer-menu button i {
+  font-size: 13px !important;
+}
+
+.index-explorer-menu-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 2px 0;
+}
+
+.index-explorer-menu-label {
+  padding: 4px 10px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .home-bottom-share-copy span {
@@ -14053,6 +14083,29 @@ body.voices-panel-open {
   line-height: 1.3;
   text-align: center;
 }
+
+@media (max-width: 768px) {
+  .debate-card-context-extra .debate-card-meta-below-media {
+    gap: 0 !important;
+    margin-top: 5px !important;
+  }
+  .debate-card-context-extra .debate-card-counts-row {
+    line-height: 1.1 !important;
+    margin-bottom: 1px !important;
+  }
+  .debate-card-context-extra .debate-card-ideas-count,
+  .debate-card-context-extra .debate-card-comments-count,
+  .debate-card-context-extra .debate-card-votes-count {
+    font-size: 9px !important;
+  }
+  .debate-card-context-extra .debate-date,
+  .debate-card-context-extra .debate-last-argument {
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
 .debate-card-context-extra .debate-card-positions {
   text-align: center;
 }
@@ -14225,8 +14278,8 @@ html.thematic-scroll .theme-row-section {
 }
 
 .theme-row-section {
-  margin-bottom: 2px;
-  padding-top: 24px;
+  margin-bottom: 0;
+  padding-top: 10px;
   width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -14247,6 +14300,18 @@ html.thematic-scroll .theme-row-section {
 
 .theme-carousel-next-hint { right: 0px; }
 .theme-carousel-prev-hint { left: 0px; }
+
+@media (min-width: 769px) {
+  /* Boutons aux bords de l'écran */
+  .theme-carousel-next-hint {
+    right: auto;
+    left: calc(50% + 50vw - 52px);
+  }
+  .theme-carousel-prev-hint {
+    left: auto;
+    right: calc(50% + 50vw - 52px);
+  }
+}
 
 .theme-carousel-next-hint.is-hidden,
 .theme-carousel-prev-hint.is-hidden {
@@ -14296,7 +14361,36 @@ html.thematic-scroll .theme-row-section {
 @media (min-width: 769px) {
   .theme-carousel-next-hint,
   .theme-carousel-prev-hint {
-    display: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 32px;
+    height: 48px !important;
+    top: 50% !important;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 8px;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: background 0.18s ease, opacity 0.18s ease;
+  }
+
+  .theme-carousel-next-hint:hover,
+  .theme-carousel-prev-hint:hover {
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .theme-carousel-next-hint i,
+  .theme-carousel-prev-hint i {
+    color: #374151;
+    font-size: 12px;
+    opacity: 0.7;
+    animation: none;
+    filter: none;
+    text-shadow: none;
   }
 }
 
@@ -14315,24 +14409,24 @@ html.thematic-scroll .theme-row-section {
   align-items: center;
   justify-content: center;
   min-height: 0;
-  padding: 6px 20px 8px;
+  padding: 12px 12px 14px;
   background: none;
   color: #243038;
   font-family: 'Oswald', Arial, sans-serif;
-  font-size: clamp(22px, 4.5vw, 60px);
+  font-size: clamp(22px, 5.2vw, 64px);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.1;
   text-align: center;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
+  word-break: normal;
   overflow: visible;
   box-sizing: border-box;
   border-radius: 0;
   width: 100%;
   margin-left: 0;
   margin-right: 0;
-  margin-bottom: 2px;
+  margin-bottom: 12px;
   margin-top: 0;
 }
 
@@ -14354,9 +14448,17 @@ html.thematic-scroll .theme-row-section {
 @media (min-width: 769px) {
   .theme-row-title {
     white-space: nowrap;
-    font-size: clamp(30px, 3.2vw, 52px);
+    padding-top: 12px;
+    padding-bottom: 14px;
+    font-size: clamp(36px, 3.6vw, 58px);
+  }
+
+  /* Plus d'espace au-dessus des bandeaux 2, 3, 4... */
+  .theme-row-section + .theme-row-section {
+    padding-top: 40px;
   }
 }
+
 
 /* ── Carousel horizontal ─── */
 /*
@@ -14368,7 +14470,7 @@ html.thematic-scroll .theme-row-section {
 
 .theme-horizontal-row {
   position: relative;
-  padding: 4px 0 6px 0;
+  padding: 1px 0 3px 0;
   overflow-x: auto;
   overflow-y: hidden;
   transition: height 0.25s ease;
@@ -14432,11 +14534,13 @@ html.thematic-scroll body.page-home-mobile #debates-list {
   scroll-snap-align: start;
 }
 
-/* Dans le carousel, index-card-active ne fait pas de translateY
-   (évite le clipping et l'asymétrie visuelle entre rangées) */
-.theme-horizontal-inner > .debate-card.index-card-active {
-  transform: none !important;
+/* Mobile : index-card-active ne fait pas de translateY */
+@media (max-width: 768px) {
+  .theme-horizontal-inner > .debate-card.index-card-active {
+    transform: none !important;
+  }
 }
+
 
 /* Carousel Instagram & X : coupe le bas du post pour éviter les cartes
    excessivement hautes. Le cap est sur le wrapper (.debate-card-media-*)
@@ -14460,18 +14564,307 @@ html.thematic-scroll body.page-home-mobile #debates-list {
   }
 }
 
-/* ── Desktop : colonne étroite centrée, 1 carte + peek ─── */
+/* ── Desktop : 3 cartes visibles par rubrique, scroll si +3 ─── */
 @media (min-width: 769px) {
   .theme-horizontal-row {
-    width: min(480px, 100%);
-    max-width: 480px;
-    margin-left: auto;
-    margin-right: auto;
+    width: 100vw;
+    overflow-x: auto;
+    position: relative;
+    left: calc(50% - 50vw);
+    z-index: 1;
+    padding-top: 8px;
+    margin-top: -8px;
+  }
+
+  .theme-horizontal-inner {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: auto;
+    grid-auto-columns: calc((100vw - 72px) / 4);
+    gap: 20px;
+    width: max-content;
+    min-width: 100%;
+    padding-left: 4px;
+    padding-right: 4px;
   }
 
   .theme-horizontal-inner > .debate-card {
-    flex: 0 0 458px;
-    width: 458px;
-    max-width: 458px;
+    flex: unset;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    padding: 8px 10px 6px;
+    gap: 4px;
+    transition: filter 0.2s ease, transform 0.18s ease;
+    transform-origin: center center;
+  }
+
+  /* Masquer uniquement le footer */
+  .theme-horizontal-inner > .debate-card .debate-card-footer-actions {
+    display: none !important;
+  }
+
+  /* Images : limitées en hauteur pour rester compact */
+  .theme-horizontal-inner > .debate-card .debate-card-media img,
+  .theme-horizontal-inner > .debate-card .debate-card-media video {
+    max-height: 160px;
+    width: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  /* Titre condensé */
+  .theme-horizontal-inner > .debate-card h2 {
+    font-size: 14px;
+    line-height: 1.25;
+    margin: 2px 0 0;
+  }
+
+  .theme-horizontal-inner > .debate-card .debate-card-top-row {
+    margin-bottom: 0;
+  }
+
+  /* Contexte compact */
+  .theme-horizontal-inner > .debate-card .debate-card-context {
+    padding: 6px 8px 2px;
+    gap: 2px;
+  }
+
+  .theme-horizontal-inner > .debate-card .debate-card-context p,
+  .theme-horizontal-inner > .debate-card .debate-card-context .debate-card-positions,
+  .theme-horizontal-inner > .debate-card .debate-card-context .debate-date {
+    font-size: 8px;
+    line-height: 1.3;
+  }
+
+  body.page-home .theme-horizontal-inner > .debate-card .debate-card-positions {
+    font-size: 12px !important;
+    gap: 5px !important;
+  }
+
+  /* Cards avec bannière titre : bandeau compact + image */
+  .theme-horizontal-inner > .debate-card.has-title-banner .debate-card-link {
+    display: none;
+  }
+
+  .theme-horizontal-inner > .debate-card.has-title-banner .index-card-media-with-title {
+    margin-top: 0;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .theme-horizontal-inner .index-card-title-banner {
+    padding: 5px 10px 6px;
+  }
+
+  .theme-horizontal-inner .index-card-title-banner .index-card-title-banner-text {
+    font-size: 22px !important;
+    line-height: 1.0 !important;
+  }
+}
+
+body.page-home #index-active-filters,
+body.page-home .index-active-filters {
+  margin-top: 2px !important;
+}
+
+body.page-home-mobile #index-active-filters,
+body.page-home-mobile .index-active-filters {
+  margin-top: -14px !important;
+}
+
+body.page-home-mobile .debate-card-context-text {
+  font-size: 15px !important;
+  line-height: 1.3;
+}
+
+body.page-home #index-active-filters,
+body.page-home .index-active-filters,
+body.page-home-mobile #index-active-filters,
+body.page-home-mobile .index-active-filters {
+  gap: 2px 3px !important;
+}
+
+body.page-home #index-active-filters > *,
+body.page-home .index-active-filters > *,
+body.page-home-mobile #index-active-filters > *,
+body.page-home-mobile .index-active-filters > * {
+  margin: 0 !important;
+}
+
+body.page-home .debates-list,
+body.page-home-mobile .debates-list {
+  gap: 6px !important;
+  margin-top: 2px !important;
+}
+
+body.page-home .debate-card,
+body.page-home-mobile .debate-card {
+  padding-top: 8px !important;
+  padding-bottom: 2px !important;
+  gap: 6px !important;
+}
+
+body.page-home .debate-card-entry-button,
+body.page-home-mobile .debate-card-entry-button {
+  position: relative !important;
+  top: -9px !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  padding: 4px 8px !important;
+  font-size: 10px !important;
+  line-height: 1.05 !important;
+  white-space: normal !important;
+  min-width: 0 !important;
+  margin-right: -8px !important;
+}
+
+body.page-home .debate-card-footer-left,
+body.page-home-mobile .debate-card-footer-left {
+  position: relative !important;
+  top: -9px !important;
+}
+
+body.page-home .debate-card-footer-actions,
+body.page-home-mobile .debate-card-footer-actions {
+  margin-left: -5px !important;
+  margin-right: -5px !important;
+}
+
+body.page-home .debate-card h2,
+body.page-home-mobile .debate-card h2 {
+  margin-top: 1px !important;
+  margin-bottom: 2px !important;
+}
+
+body.page-home .debate-card-context,
+body.page-home-mobile .debate-card-context {
+  padding-top: 7px !important;
+  padding-bottom: 1px !important;
+  gap: 2px !important;
+}
+
+body.page-home .debate-card-context-text,
+body.page-home .debate-card-context-text p,
+body.page-home-mobile .debate-card-context-text,
+body.page-home-mobile .debate-card-context-text p {
+  color: #111827 !important;
+}
+
+body.page-home .debate-card-date-badge,
+body.page-home-mobile .debate-card-date-badge {
+  color: #000000 !important;
+  margin-top: 0 !important;
+  transform: translateY(3px);
+}
+
+body.page-home .debate-card-top-badges,
+body.page-home-mobile .debate-card-top-badges {
+  top: 0 !important;
+}
+
+body.page-home .debate-card-agon-badge,
+body.page-home-mobile .debate-card-agon-badge {
+  top: 3px;
+}
+
+@media (min-width: 769px) {
+  body.page-home #debates-list {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin-left: calc(50% - 50vw) !important;
+    margin-right: calc(50% - 50vw) !important;
+  }
+
+  body.page-home .theme-row-section {
+    width: 100vw !important;
+  }
+
+  body.page-home .theme-row-section + .theme-row-section {
+    padding-top: 0 !important;
+    margin-top: -9px !important;
+  }
+
+  body.page-home .theme-row-section {
+    isolation: isolate;
+  }
+
+
+  body.page-home .debate-card-top-badges {
+    top: 8px !important;
+    right: 8px !important;
+  }
+
+  body.page-home .theme-row-title {
+    margin-bottom: 0 !important;
+  }
+
+  body.page-home .theme-horizontal-row {
+    padding-top: 26px !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.page-home .debate-card {
+    padding-top: 11px !important;
+    padding-bottom: 1px !important;
+  }
+
+  body.page-home .debate-card-agon-badge {
+    top: 0 !important;
+    gap: 3px !important;
+    padding: 0 5px !important;
+    font-size: 8px !important;
+    line-height: 0.95 !important;
+    min-height: 11px !important;
+    box-shadow: 0 3px 8px rgba(79, 70, 229, 0.08) !important;
+  }
+
+  body.page-home .debate-card-agon-badge-icon {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 2px !important;
+  }
+
+  body.page-home .debate-card-date-badge {
+    display: none !important;
+  }
+
+  body.page-home .debate-card-context-text,
+  body.page-home .debate-card-context-text p {
+    font-size: 13px !important;
+    line-height: 1.22 !important;
+  }
+
+  body.page-home .theme-horizontal-inner > .debate-card .debate-card-footer-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+
+  body.page-home .theme-horizontal-row {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.page-home .theme-horizontal-inner {
+    grid-auto-columns: calc((100vw - 60px) / 4) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  body.page-home-mobile .theme-row-section + .theme-row-section {
+    padding-top: 0 !important;
+    margin-top: -17px !important;
   }
 }

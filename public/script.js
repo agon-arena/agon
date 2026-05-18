@@ -320,25 +320,40 @@ let indexXTabletRefreshBound = false;
 let indexFilterFeedWarmupPromise = null;
 
 const DEBATE_CATEGORY_OPTIONS = [
-  "Politique, économie et relations internationales",
-  "Société, éducation et justice",
-  "Sciences, technologies et environnement",
-  "Culture, modes et médias",
-  "Santé, corps et bien-être",
-  "Sport, loisirs et passions",
-  "Vie personnelle et modes de vie",
-  "Espace jeunes (collégiens - lycéens)",
+  "Politique",
+  "International",
+  "Économie - emploi",
+  "Société - éducation",
+  "Sciences - technologie",
+  "Climat - environnement",
+  "Justice - faits divers",
+  "Culture - modes",
+  "Médias - divertissements",
+  "Sports - loisirs",
+  "Santé - bien-être",
+  "Vie personnelle - modes de vie",
+  "Espace jeunes",
 ];
 
 
 const DEBATE_CATEGORY_SEPARATOR = " · ";
-const YOUTH_CATEGORY_FILTER = "Espace jeunes (collégiens - lycéens)";
+const YOUTH_CATEGORY_FILTER = "Espace jeunes";
+const LEGACY_DEBATE_CATEGORY_ALIASES = {
+  "Politique, économie et relations internationales": "Politique",
+  "Société, éducation et justice": "Société - éducation",
+  "Sciences, technologies et environnement": "Sciences - technologie",
+  "Culture, modes et médias": "Culture - modes",
+  "Santé, corps et bien-être": "Santé - bien-être",
+  "Sport, loisirs et passions": "Sports - loisirs",
+  "Espace jeunes (collégiens - lycéens)": YOUTH_CATEGORY_FILTER,
+};
 
 function getDebateCategoryList(value) {
   const normalizeCategoryItems = (items) => Array.from(
     new Set(
       items
         .map((item) => String(item || "").trim())
+        .map((item) => LEGACY_DEBATE_CATEGORY_ALIASES[item] || item)
         .filter(Boolean)
     )
   );
@@ -4558,7 +4573,8 @@ function buildIndexCardEnterButtonHtml(debate) {
       class="debate-card-entry-button"
       onclick="openIndexDebateFromMedia('${debateId}', event)"
     >
-      Entrer dans l'arène →
+      <span>Entrer dans</span>
+      <span>l'arène →</span>
     </button>
   `;
 }
@@ -4578,7 +4594,7 @@ function buildIndexCardFooterActionsHtml(debate) {
             aria-expanded="false"
             onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
           >···</button>
-          <div class="debate-card-options-menu" role="menu">
+          <div class="debate-card-options-menu" role="menu" onclick="event.stopPropagation()">
             <div class="debate-card-options-share-row" onclick="event.stopPropagation()">
               ${buildIndexCardShareActionsHtml(d)}
             </div>
@@ -4613,7 +4629,11 @@ function toggleCardOptionsMenu(btn) {
   }
 }
 
-document.addEventListener('click', () => closeAllCardOptionsMenus());
+document.addEventListener('click', (e) => {
+  if (!e.isTrusted) return;
+  if (e.target && e.target.closest && e.target.closest('.debate-card-options-wrap')) return;
+  closeAllCardOptionsMenus();
+});
 
 function buildIndexCardShareActionsHtml(debate) {
   const d = debate || {};
@@ -4737,9 +4757,9 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isNewDebate = isDebateNew(d);
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>` : "";
+  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Publié par agôn</span></div>` : "";
   const shortDate = formatShortDate(d.created_at);
-  const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
+  const dateBadgeHtml = shortDate ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
   const topBadgesHtml = topBadgesInnerHtml
     ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
@@ -4751,13 +4771,13 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   return `
     <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
+      ${topBadgesHtml}
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
           <div class="debate-card-top-meta">
             ${categoryBadgesHtml}
             ${youthBadgeHtml}
           </div>
-          ${topBadgesHtml}
         </div>
         <h2>${escapeHtml(d.question)}</h2>
 
@@ -12281,7 +12301,7 @@ function syncAdminEditCardTopBadges(card, debate) {
   const isNewDebate = isDebateNew(debate);
   const isAgonGenerated = isAgonGeneratedDebate(debate);
   const newBadgeHtml = isNewDebate ? '<div class="debate-card-new-badge">Nouveau</div>' : '';
-  const agonBadgeHtml = isAgonGenerated ? '<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Généré par agôn</span></div>' : '';
+  const agonBadgeHtml = isAgonGenerated ? '<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Publié par agôn</span></div>' : '';
   const existingWrap = topRow.querySelector('.debate-card-top-badges');
 
   if (!newBadgeHtml && !agonBadgeHtml) {
@@ -12981,7 +13001,7 @@ function buildAdminEditPanelHtml(d) {
           </button>
           <button class="admin-edit-bump" type="button"
             onclick="event.stopPropagation(); saveAndPublishAdminCard('${escapeAttribute(String(d.id || ''))}', this)">
-            <i class="fa-solid fa-floppy-disk"></i><i class="fa-solid fa-arrow-up" style="margin-left:3px;"></i> Sauvegarder et publier (généré par agôn)
+            <i class="fa-solid fa-floppy-disk"></i><i class="fa-solid fa-arrow-up" style="margin-left:3px;"></i> Sauvegarder et publier (publié par agôn)
           </button>
         </div>
         ${(() => {
@@ -13142,6 +13162,39 @@ function closeAllOpenContextPreviews(exceptCard) {
   });
 }
 
+function syncIndexContextPreviewLayout(button, shouldReveal) {
+  const article = button?.closest('article.debate-card');
+  if (!article) return;
+
+  const row = article.closest('.theme-horizontal-row');
+  if (row) {
+    updateCarouselCardHighlight(row);
+    const neededHeight = Math.ceil((article.offsetHeight || article.getBoundingClientRect().height || 0) + 10);
+    const currentHeight = parseFloat(row.style.height || '0') || 0;
+    if (neededHeight > currentHeight) {
+      row.style.height = `${neededHeight}px`;
+    }
+  }
+
+  if (!shouldReveal) {
+    article.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const bottomOffset = Math.max(0, getStableBottomBarOffset?.() || 0);
+  const visibleBottom = viewportHeight - bottomOffset - 16;
+  const rect = article.getBoundingClientRect();
+  const overflowBottom = rect.bottom - visibleBottom;
+
+  if (overflowBottom > 2) {
+    window.scrollBy({
+      top: overflowBottom,
+      behavior: 'smooth'
+    });
+  }
+}
+
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
   const textEl = card?.querySelector('[data-index-context-text]');
@@ -13167,14 +13220,11 @@ function toggleIndexContextPreview(button) {
     : '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
 
-  if (!nextExpanded) {
-    const article = button.closest('article.debate-card');
-    if (article) {
-      requestAnimationFrame(() => {
-        article.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      syncIndexContextPreviewLayout(button, nextExpanded);
+    });
+  });
 }
 
 function handleIndexContextTextKeydown(event, debateId) {
@@ -13210,6 +13260,11 @@ function ensureCategoryFilterVisualStyles() {
       box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
       max-width: 100%;
       box-sizing: border-box;
+    }
+
+    .index-theme-filter-wrap.index-type-filter-mobile {
+      display: none;
+      order: 98;
     }
 
     .index-theme-filter-label {
@@ -13356,6 +13411,10 @@ function ensureCategoryFilterVisualStyles() {
     }
 
     @media (max-width: 768px) {
+      .index-theme-filter-wrap.index-type-filter-mobile {
+        display: flex;
+      }
+
       .index-theme-filter-wrap {
         width: 100%;
         flex: 0 0 100%;
@@ -13399,7 +13458,7 @@ function ensureCategoryFilterVisualStyles() {
 
       body.page-home-mobile #index-active-filters,
       body.page-home-mobile .index-active-filters {
-        margin-top: 4px !important;
+        margin-top: -14px !important;
       }
     }
   `;
@@ -13469,7 +13528,7 @@ function getIndexTypeFilterLabel(type) {
   if (type === "debate") return "Arènes à positions";
   if (type === "question") return "Arènes libres";
   if (type === "visited") return "Arènes consultées";
-  if (type === "agon") return "Arènes générées par agôn";
+  if (type === "agon") return "Arènes publiées par agôn";
   return "Tous";
 }
 
@@ -13479,6 +13538,14 @@ function syncIndexTypeFilterButtons() {
   document.getElementById("filter-question")?.classList.toggle("active", currentTypeFilter === "question");
   document.getElementById("filter-visited")?.classList.toggle("active", currentTypeFilter === "visited");
   document.getElementById("filter-agon")?.classList.toggle("active", currentTypeFilter === "agon");
+
+  const mobileSelect = document.getElementById("index-type-mobile-select");
+  const mobileWrap = document.querySelector(".index-type-filter-mobile");
+  if (mobileSelect) {
+    const hasYouthFilter = getCurrentCategoryFilters().includes(YOUTH_CATEGORY_FILTER);
+    mobileSelect.value = hasYouthFilter ? "youth" : (currentTypeFilter || "all");
+    mobileWrap?.setAttribute("data-active", mobileSelect.value !== "all" ? "true" : "false");
+  }
 }
 
 function syncIndexShortcutFilterButtons() {
@@ -13486,6 +13553,38 @@ function syncIndexShortcutFilterButtons() {
   if (youthButton) {
     youthButton.classList.toggle("active", getCurrentCategoryFilters().includes(YOUTH_CATEGORY_FILTER));
   }
+
+  const mobileSelect = document.getElementById("index-type-mobile-select");
+  const mobileWrap = document.querySelector(".index-type-filter-mobile");
+  if (mobileSelect) {
+    const hasYouthFilter = getCurrentCategoryFilters().includes(YOUTH_CATEGORY_FILTER);
+    mobileSelect.value = hasYouthFilter ? "youth" : (currentTypeFilter || "all");
+    mobileWrap?.setAttribute("data-active", mobileSelect.value !== "all" ? "true" : "false");
+  }
+}
+
+function setIndexMobileTypeFilter(value) {
+  const normalized = ["all", "debate", "question", "visited", "agon", "youth"].includes(value)
+    ? value
+    : "all";
+
+  if (normalized === "youth") {
+    const previousTypeFilter = String(currentTypeFilter || "");
+    currentTypeFilter = "all";
+    setCurrentCategoryFilters([YOUTH_CATEGORY_FILTER]);
+    syncIndexTypeFilterButtons();
+    syncIndexShortcutFilterButtons();
+    visitedDebatesVisible = 5;
+    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+    applyIndexFilters();
+    if (previousTypeFilter === "agon") warmIndexFeedAfterLeavingAgonFilter();
+    return;
+  }
+
+  if (getCurrentCategoryFilters().includes(YOUTH_CATEGORY_FILTER)) {
+    setCurrentCategoryFilters(getCurrentCategoryFilters().filter((item) => item !== YOUTH_CATEGORY_FILTER));
+  }
+  setTypeFilter(normalized);
 }
 
 function toggleIndexYouthCategoryFilter() {
@@ -13624,6 +13723,12 @@ function setIndexExplorerControlsOpen(forceOpen) {
 
   const shouldOpen = !!forceOpen;
   controls.style.display = shouldOpen ? "grid" : "none";
+
+  if (!shouldOpen) {
+    const menu = document.getElementById("index-sort-menu");
+    if (menu) menu.classList.remove("sort-menu-visible");
+  }
+
   syncIndexExplorerControlButtons(shouldOpen);
 }
 
@@ -13675,6 +13780,7 @@ document.addEventListener("click", function(event) {
   if (!controls || !topToggle) return;
   if (controls.style.display === "none") return;
   if (topToggle.contains(event.target) || controls.contains(event.target)) return;
+  if (event.target && event.target.closest && event.target.closest("#debates-list, #visited-debates-list, .theme-row-section, .theme-horizontal-row, .debate-card")) return;
 
   setIndexExplorerControlsOpen(false);
 });
@@ -14010,13 +14116,18 @@ function ensureCarouselHints(row) {
   const title = section.querySelector('.theme-row-title');
   const titleH = title ? title.offsetHeight : 0;
   const rowH = row.offsetHeight;
-  const chevronCount = 4;
+
+  const scrollBy = () => {
+    const cards = row.querySelectorAll('.theme-horizontal-inner > .debate-card');
+    return cards[0] ? cards[0].offsetWidth + 12 : row.clientWidth / 4;
+  };
 
   let next = section.querySelector('.theme-carousel-next-hint');
   if (!next) {
     next = document.createElement('div');
     next.className = 'theme-carousel-next-hint';
-    next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>'.repeat(chevronCount);
+    next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+    next.addEventListener('click', () => row.scrollBy({ left: scrollBy(), behavior: 'smooth' }));
     section.appendChild(next);
   }
   next.style.top = titleH + 'px';
@@ -14026,7 +14137,8 @@ function ensureCarouselHints(row) {
   if (!prev) {
     prev = document.createElement('div');
     prev.className = 'theme-carousel-prev-hint';
-    prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>'.repeat(chevronCount);
+    prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+    prev.addEventListener('click', () => row.scrollBy({ left: -scrollBy(), behavior: 'smooth' }));
     section.appendChild(prev);
   }
   prev.style.top = titleH + 'px';
@@ -14057,8 +14169,32 @@ function updateCarouselCardHighlight(row) {
   cards.forEach((card) => card.classList.toggle("index-card-active", card === best));
 
   if (best) {
-    const vertPadding = 10; // 4px top + 6px bottom padding on row
-    row.style.height = (best.offsetHeight + vertPadding) + 'px';
+    const rowStyle = getComputedStyle(row);
+    const vertPadding = (parseInt(rowStyle.paddingTop) || 0) + (parseInt(rowStyle.paddingBottom) || 0);
+    const scrollLeft = row.scrollLeft;
+    const viewRight = scrollLeft + row.clientWidth;
+    // Cartes entièrement visibles (pas les moitiés coupées aux extrémités)
+    const fullyVisible = cards.filter(c => {
+      return c.offsetLeft >= scrollLeft - 2 && (c.offsetLeft + c.offsetWidth) <= viewRight + 2;
+    });
+    const targetCards = fullyVisible.length > 0 ? fullyVisible : [best];
+    const maxHeight = Math.max(...targetCards.map(c => c.offsetHeight));
+    // Compenser le scale max (1.07) pour que la carte agrandie ne soit pas coupée
+    row.style.height = (Math.ceil(maxHeight * 1.07) + vertPadding) + 'px';
+  }
+
+  // Flou proportionnel à la partie invisible de chaque carte
+  if (window.innerWidth >= 769) {
+    const sl = row.scrollLeft;
+    const vr = sl + row.clientWidth;
+    cards.forEach(card => {
+      const cl = card.offsetLeft;
+      const cr = cl + card.offsetWidth;
+      const visibleW = Math.max(0, Math.min(cr, vr) - Math.max(cl, sl));
+      const ratio = visibleW / card.offsetWidth; // 0 = invisible, 1 = pleine vue
+      const blur = ratio >= 0.98 ? 0 : (1 - ratio) * 4;
+      card.style.filter = blur > 0.2 ? `blur(${blur.toFixed(1)}px)` : '';
+    });
   }
 
   const { next, prev } = ensureCarouselHints(row);
@@ -14079,22 +14215,23 @@ function applyThematicTitleTwoLines() {
   document.querySelectorAll('.theme-row-title').forEach(el => {
     const text = (el.dataset.originalTitle !== undefined ? el.dataset.originalTitle : el.textContent).trim();
     if (el.dataset.originalTitle === undefined) el.dataset.originalTitle = text;
+    el.textContent = text;
+  });
+}
 
-    if (window.innerWidth >= 769) {
-      el.textContent = text;
-      return;
-    }
-
-    const mid = text.length / 2;
-    let best = -1, bestDiff = Infinity;
-    for (let i = 1; i < text.length - 1; i++) {
-      if (text[i] === ' ') {
-        const diff = Math.abs(i - mid);
-        if (diff < bestDiff) { bestDiff = diff; best = i; }
-      }
-    }
-    if (best === -1) { el.textContent = text; return; }
-    el.innerHTML = escapeHtml(text.slice(0, best)) + '<br>' + escapeHtml(text.slice(best + 1));
+function applyCarouselScaleEffects(row) {
+  if (window.innerWidth < 769) return;
+  const inner = row.querySelector('.theme-horizontal-inner');
+  if (!inner) return;
+  const cards = Array.from(inner.querySelectorAll(':scope > .debate-card'));
+  const rowCenter = row.scrollLeft + row.clientWidth / 2;
+  const halfView = row.clientWidth / 2;
+  cards.forEach(card => {
+    const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+    const dist = Math.abs(cardCenter - rowCenter);
+    const normalized = Math.max(0, 1 - dist / halfView);
+    const scale = 1 + normalized * 0.07;
+    card.style.transform = scale > 1.002 ? `scale(${scale.toFixed(3)})` : '';
   });
 }
 
@@ -14105,6 +14242,8 @@ function initThematicRowDragScroll() {
     row.addEventListener("scroll", () => {
       const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
       updateCarouselCardHighlight(row);
+      applyCarouselScaleEffects(row);
+
       const newActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
       if (newActive && newActive !== prevActive) {
         const hadOpen = !!document.querySelector('[data-index-context-toggle][aria-expanded="true"]');
@@ -14119,6 +14258,7 @@ function initThematicRowDragScroll() {
       }
     }, { passive: true });
     updateCarouselCardHighlight(row);
+    applyCarouselScaleEffects(row);
 
     let isDragging = false;
     let pointerType = "";
@@ -14446,6 +14586,12 @@ function renderDebatesList(debates) {
   if (hasRows) {
     initThematicRowDragScroll();
     applyThematicTitleTwoLines();
+    if (!window._carouselResizeBound) {
+      window._carouselResizeBound = true;
+      window.addEventListener('resize', () => {
+        document.querySelectorAll('.theme-horizontal-row').forEach(applyCarouselScaleEffects);
+      }, { passive: true });
+    }
   }
 
   refreshAdminUI();
@@ -24361,6 +24507,7 @@ window.openCommentReplyTarget = openCommentReplyTarget;
 window.toggleCommentRepliesPanel = toggleCommentRepliesPanel;
 window.changeArgumentsSort = changeArgumentsSort;
 window.setTypeFilter = setTypeFilter;
+window.setIndexMobileTypeFilter = setIndexMobileTypeFilter;
 window.removeIndexActiveFilterTag = removeIndexActiveFilterTag;
 window.applyIndexSearch = applyIndexSearch;
 window.toggleSortMenu = toggleSortMenu;
@@ -24582,6 +24729,47 @@ function initHomeTopbarAutoHide() {
 window.toggleHomeBottomShareMenu = toggleHomeBottomShareMenu;
 window.handleHomeBottomShareAction = handleHomeBottomShareAction;
 window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
+
+function closeIndexExplorerMenu() {
+  const menu = document.getElementById('index-explorer-menu');
+  const btn = document.getElementById('index-explorer-toggle');
+  if (menu) menu.classList.remove('home-bottom-share-menu-open');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleIndexExplorerMenu(event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  closeHomeBottomShareMenu?.();
+  const menu = document.getElementById('index-explorer-menu');
+  const btn = document.getElementById('index-explorer-toggle');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('home-bottom-share-menu-open');
+  if (isOpen) {
+    closeIndexExplorerMenu();
+  } else {
+    menu.classList.add('home-bottom-share-menu-open');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function scrollToTheme(theme) {
+  closeIndexExplorerMenu();
+  const section = document.querySelector(`.theme-row-section[data-theme="${CSS.escape(theme)}"]`);
+  if (!section) return;
+  const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
+  const top = section.getBoundingClientRect().top + window.scrollY - topbarH - 8;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.isTrusted) return;
+  if (e.target && e.target.closest && e.target.closest('#index-explorer-menu, #index-explorer-toggle')) return;
+  closeIndexExplorerMenu();
+});
+
+window.toggleIndexExplorerMenu = toggleIndexExplorerMenu;
+window.closeIndexExplorerMenu = closeIndexExplorerMenu;
+window.scrollToTheme = scrollToTheme;
 
 let homeBottomNavViewportOffsetRaf = null;
 let homeBottomNavViewportOffsetTimeout = null;

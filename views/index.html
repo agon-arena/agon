@@ -34,8 +34,8 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260517-floating-refresh-v17">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+  <link rel="stylesheet" href="/style.css?v=20260519-explorer-compact-v148">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -78,7 +78,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 4px 5px !important;
-      margin-top: 6px !important;
+      margin-top: 2px !important;
       margin-bottom: 6px !important;
     }
     .index-active-filters > * {
@@ -266,23 +266,21 @@
       </button>
     </div>
 
-    <div class="debate-sort-bar">
-      <div class="sort-dropdown">
-        <button type="button" class="sort-button" onclick="toggleIndexSortMenu()">
-          <span id="index-sort-button-label">À la une ▾</span>
-        </button>
-        <div id="index-sort-menu" class="sort-menu" onclick="event.stopPropagation()">
-          <button type="button" data-mode="popular" onclick="setIndexSort('popular')">À la une</button>
-          <button type="button" data-mode="recent" onclick="setIndexSort('recent')">Plus récentes</button>
-          <button type="button" data-mode="old" onclick="setIndexSort('old')">Plus anciennes</button>
-          <button type="button" data-mode="ideas" onclick="setIndexSort('ideas')">Plus d'idées</button>
+    <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
+      <div class="debate-sort-bar">
+        <div class="sort-dropdown">
+          <button type="button" class="sort-button" onclick="toggleIndexSortMenu()">
+            <span id="index-sort-button-label">À la une ▾</span>
+          </button>
+          <div id="index-sort-menu" class="sort-menu" onclick="event.stopPropagation()">
+            <button type="button" data-mode="popular" onclick="setIndexSort('popular')">À la une</button>
+            <button type="button" data-mode="recent" onclick="setIndexSort('recent')">Plus récentes</button>
+            <button type="button" data-mode="old" onclick="setIndexSort('old')">Plus anciennes</button>
+            <button type="button" data-mode="ideas" onclick="setIndexSort('ideas')">Plus d'idées</button>
+          </div>
         </div>
       </div>
-    </div>
 
-
-
-    <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
       <div class="search-box">
         <input
           id="debate-search"
@@ -301,8 +299,25 @@
         <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
         <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
         <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
-        <button onclick="setTypeFilter('agon')" id="filter-agon">Arènes générées par agôn</button>
-        <button onclick="toggleIndexYouthCategoryFilter()" id="filter-youth">Espace jeunes (collégiens - lycéens)</button>
+        <button onclick="setTypeFilter('agon')" id="filter-agon">Arènes publiées par agôn</button>
+        <button onclick="toggleIndexYouthCategoryFilter()" id="filter-youth">Espace jeunes</button>
+      </div>
+
+      <div class="index-theme-filter-wrap index-type-filter-mobile" data-active="false">
+        <label class="index-theme-filter-label" for="index-type-mobile-select">
+          <span class="index-theme-filter-label-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span>
+          <span>Arènes</span>
+        </label>
+        <div class="index-theme-filter-field">
+          <select id="index-type-mobile-select" class="index-theme-filter-select" onchange="setIndexMobileTypeFilter(this.value)">
+            <option value="all">Tous</option>
+            <option value="debate">Arènes à positions</option>
+            <option value="question">Arènes libres</option>
+            <option value="visited">Arènes consultées</option>
+            <option value="agon">Arènes publiées par agôn</option>
+            <option value="youth">Espace jeunes</option>
+          </select>
+        </div>
       </div>
 
       <div id="theme-filter-slot"></div>
@@ -347,18 +362,41 @@
 </button>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
-  <button
-    type="button"
-    id="index-explorer-toggle"
-    class="home-bottom-nav-item"
-    aria-label="Explorer"
-    aria-controls="index-explorer-controls"
-    aria-expanded="false"
-    onclick="toggleIndexExplorerControls(event)"
-  >
-    <i class="fa-regular fa-compass"></i>
-    <span>Explorer</span>
-  </button>
+  <div class="home-bottom-nav-item-wrap">
+    <button
+      type="button"
+      id="index-explorer-toggle"
+      class="home-bottom-nav-item"
+      aria-label="Explorer"
+      aria-haspopup="true"
+      aria-expanded="false"
+      onclick="toggleIndexExplorerMenu(event)"
+    >
+      <i class="fa-regular fa-compass"></i>
+      <span>Explorer</span>
+    </button>
+    <div id="index-explorer-menu" class="home-bottom-share-menu" onclick="event.stopPropagation()">
+      <button type="button" onclick="closeIndexExplorerMenu(); toggleIndexExplorerControls(event)">
+        <i class="fa-solid fa-sliders"></i>
+        <span>Tout explorer</span>
+      </button>
+      <div class="index-explorer-menu-divider"></div>
+      <div class="index-explorer-menu-label">Thématiques</div>
+      <button type="button" onclick="scrollToTheme('Politique')"><i class="fa-solid fa-landmark"></i><span>Politique</span></button>
+      <button type="button" onclick="scrollToTheme('International')"><i class="fa-solid fa-globe"></i><span>International</span></button>
+      <button type="button" onclick="scrollToTheme('Économie - emploi')"><i class="fa-solid fa-briefcase"></i><span>Économie - emploi</span></button>
+      <button type="button" onclick="scrollToTheme('Société - éducation')"><i class="fa-solid fa-users"></i><span>Société - éducation</span></button>
+      <button type="button" onclick="scrollToTheme('Sciences - technologie')"><i class="fa-solid fa-flask"></i><span>Sciences - technologie</span></button>
+      <button type="button" onclick="scrollToTheme('Climat - environnement')"><i class="fa-solid fa-leaf"></i><span>Climat - environnement</span></button>
+      <button type="button" onclick="scrollToTheme('Justice - faits divers')"><i class="fa-solid fa-scale-balanced"></i><span>Justice - faits divers</span></button>
+      <button type="button" onclick="scrollToTheme('Culture - modes')"><i class="fa-solid fa-palette"></i><span>Culture - modes</span></button>
+      <button type="button" onclick="scrollToTheme('Médias - divertissements')"><i class="fa-solid fa-tv"></i><span>Médias - divertissements</span></button>
+      <button type="button" onclick="scrollToTheme('Sports - loisirs')"><i class="fa-solid fa-futbol"></i><span>Sports - loisirs</span></button>
+      <button type="button" onclick="scrollToTheme('Santé - bien-être')"><i class="fa-solid fa-heart-pulse"></i><span>Santé - bien-être</span></button>
+      <button type="button" onclick="scrollToTheme('Vie personnelle - modes de vie')"><i class="fa-solid fa-house"></i><span>Vie personnelle - modes de vie</span></button>
+      <button type="button" onclick="scrollToTheme('Espace jeunes')"><i class="fa-solid fa-star"></i><span>Espace jeunes</span></button>
+    </div>
+  </div>
 
   <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
     <i class="fa-solid fa-plus"></i>
@@ -628,7 +666,7 @@
 })();
 </script>
 
-  <script src="/script.js?v=20260517-iframe-close-v18" defer></script>
+  <script src="/script.js?v=20260519-categories-clean-v66" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
