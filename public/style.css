@@ -36,6 +36,88 @@ html.thematic-scroll body {
   margin: 0 auto;
 }
 
+/* ===== Startup loader Agôn ===== */
+
+.agon-startup-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, #243038 0%, #101820 55%, #05070a 100%);
+  color: #fff;
+  opacity: 1;
+  transition: opacity 0.45s ease, visibility 0.45s ease;
+}
+
+.agon-startup-loader.is-hiding {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.agon-startup-loader-inner {
+  text-align: center;
+  padding: 32px 24px;
+  max-width: 360px;
+}
+
+.agon-startup-brand {
+  margin-bottom: 36px;
+}
+
+.agon-startup-logo {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.agon-startup-subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.agon-startup-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.agon-startup-line {
+  margin: 9px 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.88);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.agon-startup-line.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agon-startup-line {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+  .agon-startup-loader {
+    transition: opacity 0.15s ease;
+  }
+}
+
+/* ===== END Startup loader Agôn ===== */
+
 /* Topbar */
 
 .topbar {
@@ -497,7 +579,7 @@ main.create-page {
 .debate-card {
   display: grid;
   gap: 8px;
-  background: #ededeb;
+  background: #c9c9c7;
   font-family: "Libre Baskerville", Georgia, serif;
   padding: 16px 16px 8px;
   border-radius: 14px;
@@ -762,6 +844,23 @@ main.create-page {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.context-text-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.context-first-letter {
+  font-size: 1.3em;
+  font-weight: 800;
+  line-height: 1;
+  color: #111827;
 }
 
 .debate-card-context-text::first-letter,
@@ -10095,13 +10194,18 @@ body.index-batch-loading-active {
 
 /* ===== PANNEAU ÉDITION ADMIN CARTE INDEX ===== */
 .debate-card-admin-edit {
-  margin: -10px 0 0 0;
+  margin: 0;
   border-radius: 12px;
   border: 1.5px solid #fbbf24;
   background: #fffbeb;
   overflow: hidden;
   position: relative;
   z-index: 32;
+}
+.theme-horizontal-inner .debate-card-admin-edit {
+  position: relative;
+  top: -10px;
+  z-index: 33;
 }
 
 .debate-card-admin-edit.is-open {
@@ -10111,12 +10215,14 @@ body.index-batch-loading-active {
   transform: translateX(-50%);
   width: min(860px, calc(100vw - 24px));
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: auto;
   z-index: 9500;
   margin: 0;
   box-shadow: 0 16px 48px rgba(0,0,0,0.28);
   border-radius: 16px;
   cursor: default;
+  min-width: 280px;
+  min-height: 120px;
 }
 
 .debate-card-admin-edit.is-open.is-dragging {
@@ -10146,6 +10252,22 @@ body.index-batch-loading-active {
   z-index: 2;
   touch-action: none;
 }
+
+.admin-edit-resize-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  z-index: 10;
+  background: #fbbf24;
+  border: 2px solid #92400e;
+  border-radius: 4px;
+  opacity: 0.85;
+}
+.admin-edit-resize-handle:hover { opacity: 1; transform: scale(1.15); }
+.admin-edit-resize-handle[data-corner="nw"] { top: -6px; left: -6px; cursor: nw-resize; }
+.admin-edit-resize-handle[data-corner="ne"] { top: -6px; right: -6px; cursor: ne-resize; }
+.admin-edit-resize-handle[data-corner="sw"] { bottom: -6px; left: -6px; cursor: sw-resize; }
+.admin-edit-resize-handle[data-corner="se"] { bottom: -6px; right: -6px; cursor: se-resize; }
 
 body.admin-edit-open::after {
   content: '';
@@ -11467,6 +11589,34 @@ body.page-debate .debate-episode-link-next {
 
 body.page-debate .debate-episode-link:hover {
   background: rgba(255,255,255,0.14);
+}
+
+.index-card-episode-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.index-card-episode-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #374151;
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.index-card-episode-btn:hover {
+  background: #e5e7eb;
 }
 
 @media (max-width: 768px) {
@@ -14132,7 +14282,20 @@ body.voices-panel-open {
 
 /* Bandeau sombre */
 .index-card-title-banner {
-  background: linear-gradient(180deg, #243746 0%, #1B2A35 45%, #17232C 100%);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0.05) 20%,
+      rgba(255, 255, 255, 0) 45%
+    ),
+    linear-gradient(
+      145deg,
+      #243038 0%,
+      #28353e 35%,
+      #243038 70%,
+      #202a31 100%
+    );
   padding: 12px 16px 12px;
   border-radius: 10px 10px 0 0;
   width: 100%;
@@ -14294,7 +14457,7 @@ html.thematic-scroll .theme-row-section {
   align-items: center;
   gap: 6px;
   pointer-events: none;
-  z-index: 5;
+  z-index: 200;
   transition: opacity 0.3s ease;
 }
 
@@ -14412,10 +14575,11 @@ html.thematic-scroll .theme-row-section {
   padding: 12px 12px 14px;
   background: none;
   color: #243038;
-  font-family: 'Oswald', Arial, sans-serif;
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: clamp(22px, 5.2vw, 64px);
   font-weight: 700;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
   line-height: 1.1;
   text-align: center;
   white-space: nowrap;
@@ -14428,6 +14592,11 @@ html.thematic-scroll .theme-row-section {
   margin-right: 0;
   margin-bottom: 12px;
   margin-top: 0;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000;
 }
 
 .theme-row-title::before {
@@ -14506,10 +14675,13 @@ html.thematic-scroll .theme-row-section {
 
 /* Piste flex */
 .theme-horizontal-inner {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto;
+  grid-auto-columns: calc(100vw - 44px);
   align-items: flex-start;
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 0;
   width: max-content;
   min-width: 100%;
   padding-left: 4px;
@@ -14532,6 +14704,15 @@ html.thematic-scroll body.page-home-mobile #debates-list {
   min-width: 200px;
   box-sizing: border-box;
   scroll-snap-align: start;
+}
+
+/* Carte centrale devient blanche (desktop + mobile) */
+.theme-horizontal-inner > .debate-card.index-card-active,
+.theme-horizontal-inner > .debate-card:has([data-index-context-toggle][aria-expanded="true"]) {
+  background: #ffffff;
+}
+.theme-horizontal-inner > .debate-card {
+  transition: background-color 0.3s ease, transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
 }
 
 /* Mobile : index-card-active ne fait pas de translateY */
@@ -14595,8 +14776,13 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     min-width: 0;
     padding: 8px 10px 6px;
     gap: 4px;
-    transition: filter 0.2s ease, transform 0.18s ease;
+    transition: filter 0.2s ease, transform 0.18s ease, background-color 0.3s ease;
     transform-origin: center center;
+    filter: blur(1.5px);
+  }
+  .theme-horizontal-inner > .debate-card.index-card-active,
+  .theme-horizontal-inner > .debate-card:has(.debate-card-admin-edit.is-open) {
+    filter: none;
   }
 
   /* Masquer uniquement le footer */
@@ -14782,8 +14968,8 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   body.page-home .theme-row-section + .theme-row-section {
-    padding-top: 0 !important;
-    margin-top: -9px !important;
+    padding-top: 2px !important;
+    margin-top: 0 !important;
   }
 
   body.page-home .theme-row-section {
@@ -14792,7 +14978,7 @@ body.page-home-mobile .debate-card-agon-badge {
 
 
   body.page-home .debate-card-top-badges {
-    top: 8px !important;
+    top: 0 !important;
     right: 8px !important;
   }
 
@@ -14811,9 +14997,10 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   body.page-home .debate-card-agon-badge {
-    top: 0 !important;
+    top: -1px !important;
     gap: 3px !important;
     padding: 0 5px !important;
+    color: #000000 !important;
     font-size: 8px !important;
     line-height: 0.95 !important;
     min-height: 11px !important;
@@ -14827,7 +15014,18 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   body.page-home .debate-card-date-badge {
-    display: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1px 5px !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    border: 1px solid rgba(67, 56, 202, 0.18) !important;
+    box-shadow: 0 3px 8px rgba(79, 70, 229, 0.08) !important;
+    font-size: 8px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    transform: none !important;
   }
 
   body.page-home .debate-card-context-text,
@@ -14844,6 +15042,111 @@ body.page-home-mobile .debate-card-agon-badge {
     gap: 10px !important;
   }
 
+  body.page-home .theme-row-swipe-button {
+    position: absolute;
+    top: 50%;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 56px;
+    padding: 0;
+    border: 1px solid rgba(17, 24, 39, 0.22);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    color: #111827;
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.24);
+    cursor: pointer;
+    font-size: 30px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    line-height: 1;
+    transform: translateY(-50%);
+    pointer-events: auto;
+  }
+
+  body.page-home .theme-row-swipe-button-prev {
+    left: 10px;
+  }
+
+  body.page-home .theme-row-swipe-button-next {
+    right: 10px;
+  }
+
+  body.page-home .theme-row-swipe-button:hover,
+  body.page-home .theme-row-swipe-button:focus-visible {
+    background: #ffffff;
+  }
+
+  body.page-home .theme-row-swipe-button.is-hidden {
+    display: none !important;
+  }
+
+  body.page-home .theme-carousel-next-hint,
+  body.page-home .theme-carousel-prev-hint {
+    position: absolute !important;
+    top: 52% !important;
+    transform: translateY(-50%) !important;
+    display: flex !important;
+    width: 38px !important;
+    height: 54px !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.92) !important;
+    border: 1px solid rgba(17, 24, 39, 0.22) !important;
+    box-shadow: 0 10px 26px rgba(17, 24, 39, 0.22) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    z-index: 999 !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+
+  body.page-home .theme-carousel-next-hint {
+    left: auto !important;
+    right: 10px !important;
+  }
+
+  body.page-home .theme-carousel-prev-hint {
+    right: auto !important;
+    left: 10px !important;
+  }
+
+  body.page-home .theme-carousel-next-hint::before,
+  body.page-home .theme-carousel-prev-hint::before {
+    display: block;
+    color: #111827;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    opacity: 0.86;
+  }
+
+  body.page-home .theme-carousel-next-hint::before {
+    content: "›";
+  }
+
+  body.page-home .theme-carousel-prev-hint::before {
+    content: "‹";
+  }
+
+  body.page-home .theme-carousel-next-hint.is-hidden,
+  body.page-home .theme-carousel-prev-hint.is-hidden {
+    display: none !important;
+  }
+
+  body.page-home .theme-carousel-next-hint:hover,
+  body.page-home .theme-carousel-prev-hint:hover {
+    background: rgba(255, 255, 255, 0.92) !important;
+    opacity: 0.95 !important;
+  }
+
+  body.page-home .theme-carousel-next-hint i,
+  body.page-home .theme-carousel-prev-hint i {
+    display: none !important;
+  }
+
   body.page-home .theme-horizontal-row {
     width: 100% !important;
     max-width: 100% !important;
@@ -14853,10 +15156,12 @@ body.page-home-mobile .debate-card-agon-badge {
     padding-left: 0 !important;
     padding-right: 0 !important;
     padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
   }
 
   body.page-home .theme-horizontal-inner {
     grid-auto-columns: calc((100vw - 60px) / 4) !important;
+    grid-template-rows: auto !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
@@ -14866,5 +15171,172 @@ body.page-home-mobile .debate-card-agon-badge {
   body.page-home-mobile .theme-row-section + .theme-row-section {
     padding-top: 0 !important;
     margin-top: -17px !important;
+  }
+}
+
+/* Tag trends cloud — temporary V1 */
+.agon-tag-trends-section {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 4px 0 24px;
+  overflow-x: clip;
+  box-sizing: border-box;
+}
+
+.agon-tag-trends-legend {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  opacity: 0.8;
+}
+
+.agon-tag-trends-cloud {
+  position: relative;
+  width: 100%;
+  max-width: 390px;
+  height: 430px;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.agon-tag-bubble {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #05070a;
+  color: #05070a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+  padding: 8px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.agon-tag-bubble-large {
+  width: 156px;
+  height: 156px;
+}
+
+.agon-tag-bubble-medium {
+  width: 112px;
+  height: 112px;
+}
+
+.agon-tag-bubble-small {
+  width: 82px;
+  height: 82px;
+}
+
+.agon-tag-label {
+  font-family: Oswald, Impact, "Arial Narrow", sans-serif;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: #05070a;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.agon-tag-bubble-large .agon-tag-label {
+  font-size: 34px;
+}
+
+.agon-tag-bubble-medium .agon-tag-label {
+  font-size: 25px;
+}
+
+.agon-tag-bubble-small .agon-tag-label {
+  font-size: 17px;
+}
+
+.agon-tag-trend {
+  position: absolute;
+  top: 12px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.agon-tag-bubble-small .agon-tag-trend {
+  top: 8px;
+  font-size: 10px;
+}
+
+.agon-tag-trend-up {
+  color: #137333;
+}
+
+.agon-tag-trend-down {
+  color: #c5221f;
+}
+
+.agon-tag-trend-neutral {
+  color: #374151;
+}
+
+/* Positions nuage — ~10px overlap entre bulles adjacentes */
+.agon-tag-pos-0  { left:  44px; top:  84px; z-index: 3; } /* grosse gauche     */
+.agon-tag-pos-1  { left: 190px; top:  84px; z-index: 3; } /* grosse droite     */
+.agon-tag-pos-2  { left: 117px; top: 208px; z-index: 3; } /* grosse bas centre */
+.agon-tag-pos-3  { left: 139px; top:   0px; z-index: 2; } /* moyenne haut      */
+.agon-tag-pos-4  { left:  20px; top: 214px; z-index: 2; } /* moyenne bas gauche*/
+.agon-tag-pos-5  { left: 254px; top: 214px; z-index: 2; } /* moyenne bas droite*/
+.agon-tag-pos-6  { left:   0px; top:  37px; z-index: 1; } /* petite gauche ext.*/
+.agon-tag-pos-7  { left:  64px; top:   3px; z-index: 1; } /* petite haut gauche*/
+.agon-tag-pos-8  { left: 243px; top:   3px; z-index: 1; } /* petite haut droite*/
+.agon-tag-pos-9  { right:  0px; top:  37px; z-index: 1; } /* petite droite ext.*/
+.agon-tag-pos-10 { left:  62px; top: 311px; z-index: 1; } /* petite bas gauche */
+.agon-tag-pos-11 { right: 62px; top: 311px; z-index: 1; } /* petite bas droite */
+
+@media (max-width: 390px) {
+  .agon-tag-trends-section {
+    max-width: 100%;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .agon-tag-trends-cloud {
+    max-width: 360px;
+  }
+
+  .agon-tag-bubble-large {
+    width: 138px;
+    height: 138px;
+  }
+
+  .agon-tag-bubble-medium {
+    width: 104px;
+    height: 104px;
+  }
+
+  .agon-tag-bubble-small {
+    width: 72px;
+    height: 72px;
+  }
+
+  .agon-tag-bubble-large .agon-tag-label {
+    font-size: 30px;
+  }
+
+  .agon-tag-bubble-medium .agon-tag-label {
+    font-size: 22px;
+  }
+
+  .agon-tag-bubble-small .agon-tag-label {
+    font-size: 15px;
   }
 }

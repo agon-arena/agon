@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260519-explorer-compact-v148">
+  <link rel="stylesheet" href="/style.css?v=20260519-tag-cloud-v163">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -115,6 +115,20 @@
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
+
+<div id="agon-startup-loader" class="agon-startup-loader">
+  <div class="agon-startup-loader-inner">
+    <div class="agon-startup-brand">
+      <div class="agon-startup-logo">Agôn</div>
+      <div class="agon-startup-subtitle">l'arène des idées</div>
+    </div>
+    <div class="agon-startup-lines">
+      <p class="agon-startup-line agon-startup-line-1">Sors de ta bulle.</p>
+      <p class="agon-startup-line agon-startup-line-2">Stimule ton esprit.</p>
+      <p class="agon-startup-line agon-startup-line-3">Renforce ton engagement.</p>
+    </div>
+  </div>
+</div>
 
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
@@ -344,6 +358,10 @@
     <h3>Autres arènes ouvertes</h3>
   </div>
 </div>
+
+<section id="agon-tag-trends-section" class="agon-tag-trends-section">
+  <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
+</section>
 
 <section id="debates-list" class="debates-list"></section>
 
@@ -666,7 +684,7 @@
 })();
 </script>
 
-  <script src="/script.js?v=20260519-categories-clean-v66" defer></script>
+<script src="/script.js?v=20260519-tag-cloud-v72" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
