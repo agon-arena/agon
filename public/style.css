@@ -5649,7 +5649,7 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   width: min(920px, 100%);
-  margin: 0 auto;
+  margin: -10px auto 0;
 }
 
 .index-sort-toggle {
@@ -14574,7 +14574,7 @@ html.thematic-scroll .theme-row-section {
   min-height: 0;
   padding: 12px 12px 14px;
   background: none;
-  color: #243038;
+  color: #2a2a2a;
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: clamp(22px, 5.2vw, 64px);
   font-weight: 700;
@@ -14593,10 +14593,10 @@ html.thematic-scroll .theme-row-section {
   margin-bottom: 12px;
   margin-top: 0;
   text-shadow:
-    -1px -1px 0 #000,
-     1px -1px 0 #000,
-    -1px  1px 0 #000,
-     1px  1px 0 #000;
+    -1px -1px 0 #2a2a2a,
+     1px -1px 0 #2a2a2a,
+    -1px  1px 0 #2a2a2a,
+     1px  1px 0 #2a2a2a;
 }
 
 .theme-row-title::before {
@@ -14619,7 +14619,7 @@ html.thematic-scroll .theme-row-section {
     white-space: nowrap;
     padding-top: 12px;
     padding-bottom: 14px;
-    font-size: clamp(36px, 3.6vw, 58px);
+    font-size: clamp(30px, 3vw, 48px);
   }
 
   /* Plus d'espace au-dessus des bandeaux 2, 3, 4... */
@@ -15168,6 +15168,18 @@ body.page-home-mobile .debate-card-agon-badge {
 }
 
 @media (max-width: 768px) {
+  body.page-home-mobile .theme-row-title {
+    text-shadow: none !important;
+    font-weight: 900;
+    -webkit-text-stroke: 1px #2a2a2a;
+  }
+
+  body.page-home-mobile .theme-row-swipe-button,
+  body.page-home-mobile .theme-carousel-next-hint,
+  body.page-home-mobile .theme-carousel-prev-hint {
+    display: none !important;
+  }
+
   body.page-home-mobile .theme-row-section + .theme-row-section {
     padding-top: 0 !important;
     margin-top: -17px !important;
@@ -15178,8 +15190,8 @@ body.page-home-mobile .debate-card-agon-badge {
 .agon-tag-trends-section {
   width: 100%;
   max-width: 430px;
-  margin: 0 auto;
-  padding: 4px 0 24px;
+  margin: -140px auto 0;
+  padding: 0 0 24px;
   overflow-x: clip;
   box-sizing: border-box;
 }
@@ -15197,9 +15209,10 @@ body.page-home-mobile .debate-card-agon-badge {
   position: relative;
   width: 100%;
   max-width: 390px;
-  height: 430px;
+  height: 548px;
   margin: 0 auto;
   overflow: visible;
+  transform: translateX(calc(50% - 195px));
 }
 
 .agon-tag-bubble {
@@ -15222,18 +15235,18 @@ body.page-home-mobile .debate-card-agon-badge {
 }
 
 .agon-tag-bubble-large {
-  width: 156px;
-  height: 156px;
+  width: 150px;
+  height: 150px;
 }
 
 .agon-tag-bubble-medium {
-  width: 112px;
-  height: 112px;
+  width: 108px;
+  height: 108px;
 }
 
 .agon-tag-bubble-small {
-  width: 82px;
-  height: 82px;
+  width: 78px;
+  height: 78px;
 }
 
 .agon-tag-label {
@@ -15243,7 +15256,13 @@ body.page-home-mobile .debate-card-agon-badge {
   letter-spacing: -0.03em;
   color: #05070a;
   text-transform: uppercase;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.agon-tag-word {
+  display: block;
+  white-space: nowrap;
 }
 
 .agon-tag-bubble-large .agon-tag-label {
@@ -15288,29 +15307,25 @@ body.page-home-mobile .debate-card-agon-badge {
   color: #374151;
 }
 
-/* Positions nuage — ~10px overlap entre bulles adjacentes */
-.agon-tag-pos-0  { left:  44px; top:  84px; z-index: 3; } /* grosse gauche     */
-.agon-tag-pos-1  { left: 190px; top:  84px; z-index: 3; } /* grosse droite     */
-.agon-tag-pos-2  { left: 117px; top: 208px; z-index: 3; } /* grosse bas centre */
-.agon-tag-pos-3  { left: 139px; top:   0px; z-index: 2; } /* moyenne haut      */
-.agon-tag-pos-4  { left:  20px; top: 214px; z-index: 2; } /* moyenne bas gauche*/
-.agon-tag-pos-5  { left: 254px; top: 214px; z-index: 2; } /* moyenne bas droite*/
-.agon-tag-pos-6  { left:   0px; top:  37px; z-index: 1; } /* petite gauche ext.*/
-.agon-tag-pos-7  { left:  64px; top:   3px; z-index: 1; } /* petite haut gauche*/
-.agon-tag-pos-8  { left: 243px; top:   3px; z-index: 1; } /* petite haut droite*/
-.agon-tag-pos-9  { right:  0px; top:  37px; z-index: 1; } /* petite droite ext.*/
-.agon-tag-pos-10 { left:  62px; top: 311px; z-index: 1; } /* petite bas gauche */
-.agon-tag-pos-11 { right: 62px; top: 311px; z-index: 1; } /* petite bas droite */
+/* Positions nuage — disposition type maquette, bulles quasi tangentes */
+.agon-tag-pos-0  { left:  53px; top: 208px; z-index: 2; } /* grosse centre-gauche */
+.agon-tag-pos-1  { left: 187px; top: 208px; z-index: 2; } /* grosse centre-droite */
+.agon-tag-pos-2  { left: 120px; top: 328px; z-index: 2; } /* grosse bas-centre */
+.agon-tag-pos-3  { left: 141px; top: 124px; z-index: 1; } /* moyenne haut-centre */
+.agon-tag-pos-4  { left:  16px; top: 340px; z-index: 1; } /* moyenne bas-gauche */
+.agon-tag-pos-5  { left: 266px; top: 340px; z-index: 1; } /* moyenne bas-droite */
+.agon-tag-pos-6  { left:  18px; top: 284px; z-index: 4; } /* petite jonction gauche */
+.agon-tag-pos-7  { left:  58px; top: 144px; z-index: 4; } /* petite jonction haut-gauche */
+.agon-tag-pos-8  { left: 242px; top: 144px; z-index: 0; } /* petite jonction haut-droite */
+.agon-tag-pos-9  { right: 18px; top: 284px; z-index: 4; } /* petite jonction droite */
+.agon-tag-pos-10 { left: 104px; top: 438px; z-index: 4; } /* petite jonction bas-gauche */
+.agon-tag-pos-11 { right: 104px; top: 438px; z-index: 4; } /* petite jonction bas-droite */
 
 @media (max-width: 390px) {
   .agon-tag-trends-section {
     max-width: 100%;
     padding-left: 4px;
     padding-right: 4px;
-  }
-
-  .agon-tag-trends-cloud {
-    max-width: 360px;
   }
 
   .agon-tag-bubble-large {

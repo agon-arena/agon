@@ -14788,7 +14788,7 @@ function updateIndexTagTrends(items) {
       }
 
       if (!indexTagTrendCloudModulePromise) {
-        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260519-step7");
+        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260519-3-3-6-bubbles-v10");
       }
 
       indexTagTrendCloudModulePromise
@@ -25288,5 +25288,3 @@ window.addEventListener('pageshow', (event) => {
     refreshIndexFirstDebatesPageForCurrentSort();
   }
 });
-
-

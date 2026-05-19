@@ -1,6 +1,6 @@
 function getBubbleSizeClass(index) {
   if (index <= 2) return "agon-tag-bubble-large";
-  if (index <= 6) return "agon-tag-bubble-medium";
+  if (index <= 5) return "agon-tag-bubble-medium";
   return "agon-tag-bubble-small";
 }
 
