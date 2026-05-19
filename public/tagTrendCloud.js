@@ -6,9 +6,9 @@ function getBubbleSizeClass(index) {
 
 function getTrendMeta(trend) {
   const value = Number.isFinite(Number(trend)) ? Math.round(Number(trend)) : 0;
-  if (value > 0) return { className: "agon-tag-trend-up",     label: `+${value}% ↗` };
-  if (value < 0) return { className: "agon-tag-trend-down",   label: `${value}% ↘` };
-  return              { className: "agon-tag-trend-neutral", label: "0%" };
+  if (value > 0) return { className: "agon-tag-trend-up",     label: `▲ +${value}%` };
+  if (value < 0) return { className: "agon-tag-trend-down",   label: `▼ ${value}%` };
+  return              { className: "agon-tag-trend-neutral", label: "— 0%" };
 }
 
 function getWordLengthClass(word) {
@@ -34,9 +34,10 @@ function fitLabelInBubble(bubble) {
 
   // Padding-top dynamique : juste 1px de dégagement sous le badge
   label.style.paddingTop = trendH + "px";
+  label.style.paddingBottom = trendH + "px";
 
   const availW = bubble.clientWidth * 0.82;
-  const availH = bubble.clientHeight - trendH - 6;
+  const availH = bubble.clientHeight - trendH * 2 - 6;
 
   // Ajuster la taille de base pour que le label tienne dans la bulle
   let size = 52;
@@ -93,8 +94,35 @@ function renderTagTrendCloud(container, trends) {
     container.appendChild(bubble);
   });
 
+  const centerBtn = document.createElement("button");
+  centerBtn.type = "button";
+  centerBtn.className = "agon-tag-center-btn";
+  centerBtn.innerHTML = `<span>TOUT</span><span>VOIR</span>`;
+  centerBtn.addEventListener("click", () => {
+    const firstBand = document.querySelector(".theme-row-section");
+    if (firstBand) {
+      firstBand.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+  container.appendChild(centerBtn);
+
   requestAnimationFrame(() => {
     container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
+
+    const containerRect = container.getBoundingClientRect();
+    container.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
+      const trend = bubble.querySelector(".agon-tag-trend");
+      if (!trend) return;
+      const bubbleRect = bubble.getBoundingClientRect();
+      const trendRect = trend.getBoundingClientRect();
+      const left = bubbleRect.right - containerRect.left - trendRect.width + 4;
+      const top  = bubbleRect.top  - containerRect.top  - trendRect.height / 2 + 10;
+      trend.style.position = "absolute";
+      trend.style.left = left + "px";
+      trend.style.top  = top  + "px";
+      trend.style.right = "auto";
+      container.appendChild(trend);
+    });
   });
 }
 

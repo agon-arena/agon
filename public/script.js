@@ -26,14 +26,6 @@ registerServiceWorker();
   const startTime = Date.now();
   let hidden = false;
 
-  const line1 = loader.querySelector(".agon-startup-line-1");
-  const line2 = loader.querySelector(".agon-startup-line-2");
-  const line3 = loader.querySelector(".agon-startup-line-3");
-
-  setTimeout(() => { if (line1) line1.classList.add("is-visible"); }, 1000);
-  setTimeout(() => { if (line2) line2.classList.add("is-visible"); }, 2000);
-  setTimeout(() => { if (line3) line3.classList.add("is-visible"); }, 3000);
-
   function hideLoader() {
     if (hidden) return;
     hidden = true;
@@ -4782,8 +4774,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
     <div class="index-card-episode-nav">
-      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}">← Épisode précédent</a>` : '<span></span>'}
-      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}">Épisode suivant →</a>` : '<span></span>'}
+      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">← Épisode précédent</a>` : '<span></span>'}
+      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">Épisode suivant →</a>` : '<span></span>'}
     </div>
   ` : "";
   const scoresHtml = !isOpenDebate(d) ? `
@@ -14788,7 +14780,7 @@ function updateIndexTagTrends(items) {
       }
 
       if (!indexTagTrendCloudModulePromise) {
-        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260519-3-3-6-bubbles-v10");
+        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260519-3-3-6-bubbles-v17");
       }
 
       indexTagTrendCloudModulePromise
@@ -25153,6 +25145,34 @@ function syncHomeTopbarMenuOpenState(isOpen) {
   }
 
   document.body.classList.toggle("home-topbar-menu-is-open", !!isOpen);
+}
+
+function toggleDebateTitleShareMenu(event) {
+  event.stopPropagation();
+  const btn = event.currentTarget;
+  const wrap = btn.closest(".debate-title-share-wrap");
+  const menu = wrap ? wrap.querySelector(".debate-title-share-menu") : null;
+  if (!menu) return;
+  closeDebateTitleShareMenu(menu);
+  const isOpen = menu.classList.toggle("is-open");
+  btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  if (isOpen) {
+    const close = (e) => {
+      if (!menu.contains(e.target) && e.target !== btn) {
+        menu.classList.remove("is-open");
+        btn.setAttribute("aria-expanded", "false");
+        document.removeEventListener("click", close);
+      }
+    };
+    document.addEventListener("click", close);
+  }
+}
+
+function closeDebateTitleShareMenu(except) {
+  document.querySelectorAll(".debate-title-share-menu").forEach(m => {
+    if (m !== except) m.classList.remove("is-open");
+  });
+  document.querySelectorAll(".debate-title-share-btn").forEach(b => b.setAttribute("aria-expanded", "false"));
 }
 
 function closeHomeTopbarMenu() {

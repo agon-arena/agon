@@ -172,11 +172,44 @@
 <div class="debate-hero-top">
 
     <div>
-      <div class="debate-title-row">
-        <h1 id="debate-question">Chargement...</h1>
+      <div class="debate-title-block">
+        <div class="debate-title-share-wrap">
+          <button type="button" class="debate-title-share-btn" onclick="toggleDebateTitleShareMenu(event)" title="Partager" aria-expanded="false">
+            <i class="fa-solid fa-share-nodes"></i>
+          </button>
+          <div class="debate-title-share-menu" id="debate-title-share-menu">
+            <button class="share-icon-button copy"      type="button" onclick="copyDebateLink();closeDebateTitleShareMenu()"   title="Copier le lien"><i class="fa-solid fa-link"></i></button>
+            <button class="share-icon-button qrcode"   type="button" onclick="showDebateQrCode();closeDebateTitleShareMenu()"  title="QR Code"><i class="fa-solid fa-qrcode"></i></button>
+            <button class="share-icon-button x"         type="button" onclick="shareOnX();closeDebateTitleShareMenu()"         title="X / Twitter"><i class="fa-brands fa-x-twitter"></i></button>
+            <button class="share-icon-button whatsapp"  type="button" onclick="shareOnWhatsApp();closeDebateTitleShareMenu()"  title="WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
+            <button class="share-icon-button instagram" type="button" onclick="shareOnInstagram();closeDebateTitleShareMenu()" title="Instagram"><i class="fa-brands fa-instagram"></i></button>
+            <button class="share-icon-button linkedin"  type="button" onclick="shareOnLinkedIn();closeDebateTitleShareMenu()"  title="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></button>
+            <button class="share-icon-button email"     type="button" onclick="shareByEmail();closeDebateTitleShareMenu()"     title="Email"><i class="fa-solid fa-envelope"></i></button>
+            <button class="share-icon-button reddit"    type="button" onclick="shareOnReddit();closeDebateTitleShareMenu()"    title="Reddit"><i class="fa-brands fa-reddit-alien"></i></button>
+            <button class="share-icon-button mastodon"  type="button" onclick="shareOnMastodon();closeDebateTitleShareMenu()"  title="Mastodon"><i class="fa-brands fa-mastodon"></i></button>
+          </div>
+        </div>
+        <div class="debate-title-row">
+          <h1 id="debate-question">Chargement...</h1>
+        </div>
+        <div class="debate-title-share-wrap" style="left:auto;right:0">
+          <button type="button" class="debate-title-share-btn" onclick="toggleDebateTitleShareMenu(event)" title="Partager" aria-expanded="false">
+            <i class="fa-solid fa-share-nodes"></i>
+          </button>
+          <div class="debate-title-share-menu" id="debate-title-share-menu-right" style="left:auto;right:0">
+            <button class="share-icon-button copy"      type="button" onclick="copyDebateLink();closeDebateTitleShareMenu()"   title="Copier le lien"><i class="fa-solid fa-link"></i></button>
+            <button class="share-icon-button qrcode"   type="button" onclick="showDebateQrCode();closeDebateTitleShareMenu()"  title="QR Code"><i class="fa-solid fa-qrcode"></i></button>
+            <button class="share-icon-button x"         type="button" onclick="shareOnX();closeDebateTitleShareMenu()"         title="X / Twitter"><i class="fa-brands fa-x-twitter"></i></button>
+            <button class="share-icon-button whatsapp"  type="button" onclick="shareOnWhatsApp();closeDebateTitleShareMenu()"  title="WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
+            <button class="share-icon-button instagram" type="button" onclick="shareOnInstagram();closeDebateTitleShareMenu()" title="Instagram"><i class="fa-brands fa-instagram"></i></button>
+            <button class="share-icon-button linkedin"  type="button" onclick="shareOnLinkedIn();closeDebateTitleShareMenu()"  title="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></button>
+            <button class="share-icon-button email"     type="button" onclick="shareByEmail();closeDebateTitleShareMenu()"     title="Email"><i class="fa-solid fa-envelope"></i></button>
+            <button class="share-icon-button reddit"    type="button" onclick="shareOnReddit();closeDebateTitleShareMenu()"    title="Reddit"><i class="fa-brands fa-reddit-alien"></i></button>
+            <button class="share-icon-button mastodon"  type="button" onclick="shareOnMastodon();closeDebateTitleShareMenu()"  title="Mastodon"><i class="fa-brands fa-mastodon"></i></button>
+          </div>
+        </div>
       </div>
 
-      <div id="global-share-bar"></div>
 
 
       <div class="debate-top-sticky-actions">
