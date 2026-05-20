@@ -9227,10 +9227,6 @@ body.is-standalone .topbar-refresh-btn {
 }
 
 /* Standalone : bulles centrées à l'écran, débats sous le fold */
-body.is-standalone .index-explorer-topbar {
-  display: none;
-}
-
 body.is-standalone .agon-tag-trends-section {
   margin-top: 0 !important;
   min-height: calc(100dvh - 110px - 73px - env(safe-area-inset-bottom, 0px));
@@ -9238,6 +9234,7 @@ body.is-standalone .agon-tag-trends-section {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding-bottom: 70px; /* compense la zone vide en haut du cloud (bulles démarrent à ~116px) */
 }
 
 body.is-standalone .page-home-mobile .agon-tag-trends-caption {
