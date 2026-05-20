@@ -176,7 +176,10 @@
 
     <div>
       <div class="debate-title-block">
-        <div class="debate-title-share-wrap">
+        <div class="debate-title-row">
+          <h1 id="debate-question">Chargement...</h1>
+        </div>
+        <div class="debate-title-share-wrap debate-title-share-wrap--left" style="position:absolute;top:0;left:0;right:auto;display:flex;z-index:500;">
           <button type="button" class="debate-title-share-btn" onclick="toggleDebateTitleShareMenu(event)" title="Partager" aria-expanded="false">
             <i class="fa-solid fa-share-nodes"></i>
           </button>
@@ -192,14 +195,11 @@
             <button class="share-icon-button mastodon"  type="button" onclick="shareOnMastodon();closeDebateTitleShareMenu()"  title="Mastodon"><i class="fa-brands fa-mastodon"></i></button>
           </div>
         </div>
-        <div class="debate-title-row">
-          <h1 id="debate-question">Chargement...</h1>
-        </div>
-        <div class="debate-title-share-wrap" style="left:auto;right:0">
+        <div class="debate-title-share-wrap debate-title-share-wrap--right" style="position:absolute;top:0;left:auto;right:0;display:flex;z-index:500;">
           <button type="button" class="debate-title-share-btn" onclick="toggleDebateTitleShareMenu(event)" title="Partager" aria-expanded="false">
             <i class="fa-solid fa-share-nodes"></i>
           </button>
-          <div class="debate-title-share-menu" id="debate-title-share-menu-right" style="left:auto;right:0">
+          <div class="debate-title-share-menu debate-title-share-menu--right" id="debate-title-share-menu-right">
             <button class="share-icon-button copy"      type="button" onclick="copyDebateLink();closeDebateTitleShareMenu()"   title="Copier le lien"><i class="fa-solid fa-link"></i></button>
             <button class="share-icon-button qrcode"   type="button" onclick="showDebateQrCode();closeDebateTitleShareMenu()"  title="QR Code"><i class="fa-solid fa-qrcode"></i></button>
             <button class="share-icon-button x"         type="button" onclick="shareOnX();closeDebateTitleShareMenu()"         title="X / Twitter"><i class="fa-brands fa-x-twitter"></i></button>

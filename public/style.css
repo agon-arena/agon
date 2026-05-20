@@ -2110,13 +2110,22 @@ body.debate-topbar-hidden .debate-hero-top{
 
 .debate-title-block {
   position: relative;
-  padding-bottom: 36px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0 42px;
 }
 .debate-title-share-wrap {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
   z-index: 10;
+  display: flex !important;
+}
+
+.debate-title-share-wrap.debate-title-share-wrap--left {
+  left: 0 !important;
+  right: auto !important;
 }
 .debate-title-share-wrap.debate-title-share-wrap--right {
   left: auto;
@@ -2173,6 +2182,10 @@ body.debate-topbar-hidden .debate-hero-top{
 }
 
 @media (max-width: 768px) {
+  .debate-title-block {
+    padding: 0 36px;
+  }
+
   .debate-title-row {
     min-height: 0;
     gap: 8px;
@@ -9462,12 +9475,12 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   .topbar-app-icon--desktop {
     display: block;
     grid-area: spacer;
-    width: 160px;
-    height: 160px;
+    width: 145px;
+    height: 145px;
     object-fit: cover;
     border-radius: 20px;
     margin: 0 auto 0 0;
-    transform: translate(-60px, 20px);
+    transform: translate(-45px, 16px);
   }
 
   body.is-standalone .topbar-app-icon--desktop {
@@ -9924,7 +9937,7 @@ body.home-topbar-menu-is-open .topbar-social {
     display: flex !important;
     justify-content: center;
     align-items: center;
-    transform: translateY(-6px) !important;
+    transform: translateY(-24px) !important;
     margin-top: 0 !important;
   }
 }
@@ -15715,6 +15728,7 @@ body.page-home-mobile .debate-card-agon-badge {
   border-radius: 18px;
   z-index: -1;
   pointer-events: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 768px) {
@@ -16163,24 +16177,24 @@ body.page-debate .comment-card p {
 
 /* Bandeau blanc compact — index desktop */
 body.page-home .topbar-inner.topbar-home {
-  row-gap: 2px !important;
+  row-gap: 0 !important;
 }
 body.page-home .topbar-inner.topbar-home,
 body.page-home .topbar-inner {
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
 }
 body.page-home .home-logo {
-  width: 160px !important;
+  width: 270px !important;
 }
 body.page-home .topbar-social .share-icon-button {
-  width: 28px !important;
-  height: 28px !important;
-  font-size: 12px !important;
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 11px !important;
 }
 body.page-home .topbar-social {
-  margin-top: 2px !important;
-  gap: 6px !important;
+  margin-top: 1px !important;
+  gap: 5px !important;
 }
 
 /* Bandeau blanc compact — index mobile */
@@ -16192,7 +16206,7 @@ body.page-home-mobile .topbar-inner {
   padding-bottom: 2px !important;
 }
 body.page-home-mobile .home-logo {
-  width: 100px !important;
+  width: 135px !important;
 }
 body.page-home-mobile .topbar-social .share-icon-button {
   width: 30px !important;
@@ -16200,7 +16214,7 @@ body.page-home-mobile .topbar-social .share-icon-button {
   font-size: 12px !important;
 }
 body.page-home-mobile .topbar-social {
-  margin-top: 2px !important;
+  margin-top: -4px !important;
   gap: 6px !important;
 }
 
@@ -16227,5 +16241,41 @@ body.page-home-mobile .topbar-social {
   body.page-home .debate-card-context-text,
   body.page-home-mobile .debate-card-context-text {
     font-size: 22px !important;
+  }
+}
+
+
+/* Force les deux boutons partage dans les coins du bloc titre débat */
+body.page-debate .debate-title-block {
+  position: relative !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 42px !important;
+  padding-right: 42px !important;
+}
+body.page-debate .debate-title-share-wrap.debate-title-share-wrap--left {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: auto !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 500 !important;
+}
+body.page-debate .debate-title-share-wrap.debate-title-share-wrap--right {
+  position: absolute !important;
+  top: 0 !important;
+  left: auto !important;
+  right: 0 !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 500 !important;
+}
+@media (max-width: 768px) {
+  body.page-debate .debate-title-block {
+    padding-left: 36px !important;
+    padding-right: 36px !important;
   }
 }
