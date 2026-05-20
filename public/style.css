@@ -845,7 +845,7 @@ main.create-page {
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin-top: 0;
-  margin-bottom: 0;
+  margin-bottom: 10px;
   justify-items: start;
   border: 0.5px solid #243038;
   border-radius: 10px;
@@ -16159,6 +16159,68 @@ body.page-debate .comment-card p {
   body.page-debate .argument-title { font-size: 24px; }
   body.page-debate .argument-body  { font-size: 19px; }
   body.page-debate .comment-card p { font-size: 18px; }
+}
+
+/* Bandeau blanc compact — index desktop */
+body.page-home .topbar-inner.topbar-home {
+  row-gap: 2px !important;
+}
+body.page-home .topbar-inner.topbar-home,
+body.page-home .topbar-inner {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+body.page-home .home-logo {
+  width: 160px !important;
+}
+body.page-home .topbar-social .share-icon-button {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 12px !important;
+}
+body.page-home .topbar-social {
+  margin-top: 2px !important;
+  gap: 6px !important;
+}
+
+/* Bandeau blanc compact — index mobile */
+body.page-home-mobile .topbar-inner.topbar-home {
+  row-gap: 0 !important;
+}
+body.page-home-mobile .topbar-inner {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+body.page-home-mobile .home-logo {
+  width: 100px !important;
+}
+body.page-home-mobile .topbar-social .share-icon-button {
+  width: 30px !important;
+  height: 30px !important;
+  font-size: 12px !important;
+}
+body.page-home-mobile .topbar-social {
+  margin-top: 2px !important;
+  gap: 6px !important;
+}
+
+@media (max-width: 768px) {
+  body.page-home-mobile .debate-card-context-text {
+    font-size: 20px !important;
+  }
+
+  body.page-debate .debate-context-text {
+    font-size: 21px;
+  }
+  body.page-debate .argument-title {
+    font-size: 23px;
+  }
+  body.page-debate .argument-body {
+    font-size: 19px !important;
+  }
+  body.page-debate .comment-card p {
+    font-size: 18px;
+  }
 }
 
 @media (min-width: 769px) {

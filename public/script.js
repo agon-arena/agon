@@ -13390,20 +13390,6 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
 
   if (!shouldReveal) {
     article.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    return;
-  }
-
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const bottomOffset = Math.max(0, getStableBottomBarOffset?.() || 0);
-  const visibleBottom = viewportHeight - bottomOffset - 16;
-  const rect = article.getBoundingClientRect();
-  const overflowBottom = rect.bottom - visibleBottom;
-
-  if (overflowBottom > 2) {
-    window.scrollBy({
-      top: overflowBottom,
-      behavior: 'smooth'
-    });
   }
 }
 
