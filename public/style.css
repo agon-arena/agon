@@ -11852,7 +11852,7 @@ body.page-debate .debate-context-text {
   white-space: pre-line;
   text-align: left;
   text-indent: 1.1em;
-  font-weight: 300 !important;
+  font-weight: 200 !important;
   font-size: 19px;
 }
 
@@ -11866,7 +11866,7 @@ body.page-debate .debate-context-text {
 body.page-debate .debate-context-text p,
 body.page-debate .debate-context-text span,
 body.page-debate .debate-context-text div {
-  font-weight: 300 !important;
+  font-weight: 200 !important;
 }
 
 body.page-debate .debate-context-text::first-letter {
@@ -15321,7 +15321,7 @@ body.page-home .debate-card-context-text,
 body.page-home .context-text-clamp,
 body.page-home-mobile .debate-card-context-text,
 body.page-home-mobile .context-text-clamp {
-  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
+  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif !important;
 }
 
 body.page-home .debate-card-date-badge,
@@ -15648,6 +15648,10 @@ body.page-home-mobile .debate-card-agon-badge {
   body.page-home-mobile .theme-row-section + .theme-row-section {
     padding-top: 0 !important;
     margin-top: 0 !important;
+  }
+
+  body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
+    margin-top: -80px;
   }
 }
 
