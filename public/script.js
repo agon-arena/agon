@@ -14241,6 +14241,7 @@ function updateIndexThemeRowSwipeButtons(row) {
 
   const prev = section.querySelector(".theme-row-swipe-button-prev");
   const next = section.querySelector(".theme-row-swipe-button-next");
+  const jumpStart = section.querySelector(".theme-row-jump-start");
   if (!prev && !next) return;
 
   const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
@@ -14250,6 +14251,15 @@ function updateIndexThemeRowSwipeButtons(row) {
 
   if (prev) prev.classList.toggle("is-hidden", !canScroll || isAtStart);
   if (next) next.classList.toggle("is-hidden", !canScroll || isAtEnd);
+  if (jumpStart) jumpStart.classList.toggle("is-hidden", !canScroll || isAtStart);
+}
+
+function jumpToStartOfCarousel(button) {
+  const section = button?.closest?.(".theme-row-section");
+  const row = section?.querySelector?.(".theme-horizontal-row");
+  if (!row) return;
+  row.scrollTo({ left: 0, behavior: 'smooth' });
+  window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 400);
 }
 
 function ensureCarouselHints(row) {
@@ -14402,9 +14412,10 @@ function updateAllCarouselHighlights() {
 
 function applyThematicTitleTwoLines() {
   document.querySelectorAll('.theme-row-title').forEach(el => {
-    const text = (el.dataset.originalTitle !== undefined ? el.dataset.originalTitle : el.textContent).trim();
-    if (el.dataset.originalTitle === undefined) el.dataset.originalTitle = text;
-    el.textContent = text;
+    const textEl = el.querySelector('.theme-row-title-text') || el;
+    const text = (textEl.dataset.originalTitle !== undefined ? textEl.dataset.originalTitle : textEl.textContent).trim();
+    if (textEl.dataset.originalTitle === undefined) textEl.dataset.originalTitle = text;
+    textEl.textContent = text;
   });
 }
 
@@ -14462,6 +14473,7 @@ function initThematicRowDragScroll() {
     applyCarouselScaleEffects(row);
     syncIndexThemeRowHeight(row);
     updateIndexThemeRowSwipeButtons(row);
+    requestAnimationFrame(() => updateIndexThemeRowSwipeButtons(row));
 
     let isDragging = false;
     let pointerType = "";
@@ -14707,7 +14719,7 @@ function buildIndexThematicSectionsHtml(debates) {
       }).join("");
 
       if (!cardsHtml) return;
-      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title">${escapeHtml(theme)}</h2><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${escapeHtml(theme)}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
     });
 
     const uncategorized = allDebates
@@ -14724,7 +14736,7 @@ function buildIndexThematicSectionsHtml(debates) {
         }
       }).join("");
       if (cardsHtml) {
-        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title">Sans thématique</h2><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
       }
     }
 
@@ -24789,6 +24801,7 @@ window.toggleSortMenu = toggleSortMenu;
 window.setIndexSort = setIndexSort;
 window.toggleIndexSortMenu = toggleIndexSortMenu;
 window.scrollIndexThemeRowFromButton = scrollIndexThemeRowFromButton;
+window.jumpToStartOfCarousel = jumpToStartOfCarousel;
 window.loadMoreArguments = loadMoreArguments;
 window.setDebateViewMode = setDebateViewMode;
 window.toggleSimilarDebates = toggleSimilarDebates;
