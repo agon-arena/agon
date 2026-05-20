@@ -51,9 +51,9 @@
     "previous_episode_id": 443,
     "previous_episode_title": "Peut-on réellement garantir la sécurité des centrales nucléaires en zones de conflit ?",
     "previous_episode_url": "/debate?id=443",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 452,
+    "next_episode_title": "L’Iran doit-il saisir cette opportunité de négociation américaine ?",
+    "next_episode_url": "/debate?id=452"
   },
   "445": {
     "previous_episode_id": 442,
@@ -75,6 +75,14 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "452": {
+    "previous_episode_id": 444,
+    "previous_episode_title": "Israël est-il proche de son objectif de tuer tous les responsables du 7-Octobre ?",
+    "previous_episode_url": "/debate?id=444",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

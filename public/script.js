@@ -4437,6 +4437,10 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeHtmlNl(str) {
+  return escapeHtml(str).replace(/\n/g, "<br>");
+}
+
 function escapeAttribute(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -13327,7 +13331,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
         data-full-text="${escapeAttribute(fullText)}"
         data-short-text="${escapeAttribute(shortText)}"
         data-expanded="false"
-      ><span class="context-text-clamp">${shortText ? `<b class="context-first-letter">${escapeHtml(shortText[0])}</b>${escapeHtml(shortText.slice(1))}` : ''}</span></p>` : ""}
+      ><span class="context-text-clamp">${shortText ? `<b class="context-first-letter">${escapeHtml(shortText[0])}</b>${escapeHtmlNl(shortText.slice(1))}` : ''}</span></p>` : ""}
       ${needsToggle ? `
         <div class="debate-card-context-extra">
           ${scoresHtml}
@@ -13353,7 +13357,11 @@ function closeIndexContextPreview(button) {
   const textEl = card?.querySelector('[data-index-context-text]');
   const metaEl = card?.querySelector('.debate-card-context-extra');
   const shortText = textEl?.getAttribute('data-short-text') || '';
-  if (textEl) { textEl.textContent = shortText; textEl.setAttribute('data-expanded', 'false'); }
+  if (textEl) {
+    const clamp = textEl.querySelector('.context-text-clamp');
+    if (clamp) clamp.innerHTML = shortText ? `<b class="context-first-letter">${escapeHtml(shortText[0])}</b>${escapeHtmlNl(shortText.slice(1))}` : '';
+    textEl.setAttribute('data-expanded', 'false');
+  }
   if (metaEl) metaEl.classList.remove('is-open');
   button.innerHTML = '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', 'false');
@@ -13413,7 +13421,7 @@ function toggleIndexContextPreview(button) {
       : String(textEl.getAttribute('data-short-text') || '');
     const clampSpan = textEl.querySelector('.context-text-clamp');
     if (clampSpan) {
-      clampSpan.innerHTML = nextText ? `<b class="context-first-letter">${escapeHtml(nextText[0])}</b>${escapeHtml(nextText.slice(1))}` : '';
+      clampSpan.innerHTML = nextText ? `<b class="context-first-letter">${escapeHtml(nextText[0])}</b>${escapeHtmlNl(nextText.slice(1))}` : '';
     } else {
       textEl.textContent = nextText;
     }
@@ -25598,3 +25606,20 @@ window.addEventListener('pageshow', (event) => {
     refreshIndexFirstDebatesPageForCurrentSort();
   }
 });
+
+// Auto-refresh après 3 min d'inactivité sur l'app
+(function() {
+  const THRESHOLD = 3 * 60 * 1000;
+  const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+  if (!isStandalone) return;
+  let hiddenAt = null;
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else if (hiddenAt && Date.now() - hiddenAt > THRESHOLD) {
+      window.location.reload();
+    } else {
+      hiddenAt = null;
+    }
+  });
+})();
