@@ -1,10 +1,36 @@
-export const TAG_GROUPS = {
+const BASE_TAG_GROUPS = {
   Trump: ["trump", "donald trump", "president trump", "trumpisme", "maga"],
   IA: ["ia", "intelligence artificielle", "chatgpt", "openai", "algorithmes", "midjourney"],
   "Violences sexuelles": ["violences sexuelles", "agression sexuelle", "agressions sexuelles", "harcelement sexuel", "violences sexistes", "metoo"],
   "Présidentielle 2027": ["presidentielle 2027", "election presidentielle", "elections 2027", "presidentielle"],
-  "Moyen-Orient": ["moyen orient", "gaza", "israel", "iran", "palestine", "hamas", "hezbollah", "liban"]
+  "Moyen-Orient": ["moyen orient", "gaza", "israel", "iran", "palestine", "hamas", "hezbollah", "liban"],
+  "Sécurité nucléaire": ["securite nucleaire", "nucleaire", "centrale nucleaire", "centrales nucleaires", "accident nucleaire", "tchernobyl", "fukushima", "bombe atomique", "arme nucleaire", "armes nucleaires", "dissuasion nucleaire", "proliferation nucleaire", "reacteur nucleaire"]
 };
+
+async function loadTagGroups() {
+  try {
+    const response = await fetch("/tag-groups.json?v=20260520-admin-edit", { cache: "no-store" });
+    if (!response.ok) return BASE_TAG_GROUPS;
+    const groups = await response.json();
+    return groups && typeof groups === "object" ? groups : BASE_TAG_GROUPS;
+  } catch (error) {
+    return BASE_TAG_GROUPS;
+  }
+}
+
+async function loadExcludedTags() {
+  try {
+    const response = await fetch("/tag-exclusions.json?v=20260520-admin-edit", { cache: "no-store" });
+    if (!response.ok) return [];
+    const tags = await response.json();
+    return Array.isArray(tags) ? tags.map(normalizeTag).filter(Boolean) : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+export const TAG_GROUPS = await loadTagGroups();
+export const EXCLUDED_TAGS = new Set(await loadExcludedTags());
 
 function parseMaybeJsonTags(value) {
   if (typeof value !== "string") return value;
@@ -74,7 +100,7 @@ export function extractRawTagsFromItem(item) {
 
 export function getCanonicalTag(rawTag) {
   const normalized = normalizeTag(rawTag);
-  if (!normalized) return "";
+  if (!normalized || EXCLUDED_TAGS.has(normalized)) return "";
 
   for (const [canonicalTag, variants] of Object.entries(TAG_GROUPS)) {
     if (variants.map(normalizeTag).includes(normalized)) return canonicalTag;
@@ -92,7 +118,7 @@ export function getCanonicalTagsFromItem(item) {
     if (!canonicalTag) return;
 
     const key = normalizeTag(canonicalTag);
-    if (seen.has(key)) return;
+    if (!key || EXCLUDED_TAGS.has(key) || seen.has(key)) return;
     seen.add(key);
     tags.push(canonicalTag);
   });

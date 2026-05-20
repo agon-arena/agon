@@ -17,6 +17,45 @@ function registerServiceWorker() {
 
 registerServiceWorker();
 
+(function initStartupLogoFont() {
+  const show = () => {
+    const logo = document.querySelector('.agon-startup-logo');
+    if (logo) logo.classList.add('font-ready');
+  };
+  const fallback = setTimeout(show, 800);
+  document.fonts.load('700 44px Oswald').then(() => {
+    clearTimeout(fallback);
+    show();
+  }).catch(show);
+})();
+
+(function initOffscreenAnimationPause() {
+  const PAUSE_CLASS = 'agon-anim-paused';
+  const SELECTORS = ['#agon-tag-trends-section', '.scroll-arrows', '.ranking-gain-box'];
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => e.target.classList.toggle(PAUSE_CLASS, !e.isIntersecting));
+  }, { rootMargin: '150px 0px' });
+
+  const observe = (root) => {
+    SELECTORS.forEach(sel => root.querySelectorAll(sel).forEach(el => observer.observe(el)));
+  };
+
+  observe(document);
+
+  new MutationObserver((mutations) => {
+    mutations.forEach(({ addedNodes }) => {
+      addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        SELECTORS.forEach(sel => {
+          if (node.matches?.(sel)) observer.observe(node);
+          node.querySelectorAll?.(sel).forEach(el => observer.observe(el));
+        });
+      });
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+})();
+
 (function initAgonStartupLoader() {
   const loader = document.getElementById("agon-startup-loader");
   if (!loader) return;
@@ -344,6 +383,7 @@ let currentCategoryFilters = [];
 let currentArgumentsSortMode = "score";
 let currentIndexSortMode = "popular";
 let currentIndexSearchQuery = "";
+let currentBubbleTag = null;
 const indexSourcePreviewCache = new Map();
 let indexLastUserScrollTs = 0;
 let indexLastEmbedScrollRestoreTs = 0;
@@ -4803,7 +4843,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Publié par agôn</span></div>` : "";
   const shortDate = formatShortDate(d.created_at);
-  const dateBadgeHtml = shortDate ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
+  const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
   const topBadgesHtml = topBadgesInnerHtml
     ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
@@ -5508,6 +5548,16 @@ function initIndexOpenGraphImageObserver(root = document) {
   });
 }
 
+function buildIndexEmbedLoadingContent(preview, type) {
+  const img = normalizeSourcePreviewData(preview, '').image;
+  if (img) {
+    return `<img src="${escapeHtml(img)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" loading="lazy">`;
+  }
+  const titles = { x: 'Chargement du post X…', instagram: 'Chargement du post Instagram…' };
+  const subs = { x: 'Le post arrive dès que X termine de répondre.', instagram: 'Le post se prépare avant affichage dans la carte.' };
+  return buildIndexSocialLoadingPlaceholderHtml(type, titles[type] || 'Chargement…', subs[type] || '');
+}
+
 function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
   const tweetId = getXStatusId(sourceUrl);
   if (!tweetId) {
@@ -5529,11 +5579,16 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         data-tweet-id="${escapeAttribute(tweetId)}"
         style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:20px;"
       >
-        <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:flex;">
-          ${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}
+        <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">
+          <img src="/sablier.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.9; animation:indexCarouselSablierBounce 1.4s ease-in-out infinite;">
         </div>
         <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:100%; margin:0;"></div>
-        <div data-index-x-fallback style="display:none;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
+        <div data-index-x-fallback style="display:block;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
+        <div class="index-social-click-veil" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"></div>
+        <button type="button" class="index-social-open-debate-btn" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)" aria-label="Ouvrir le débat">
+          <span class="index-social-open-debate-btn-icon">𝕏</span>
+          <span>Voir le débat</span>
+        </button>
       </div>
     </div>
   `;
@@ -5597,11 +5652,14 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
         data-instagram-permalink="${escapeAttribute(embedPermalink)}"
         style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:20px; background:${loadingShellBackground};"
       >
-        <div data-index-instagram-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%; background:${loadingShellBackground};">
-          ${buildIndexSocialLoadingPlaceholderHtml('instagram', 'Chargement du post Instagram…', 'Le post se prépare avant affichage dans la carte.')}
-        </div>
+        <div data-index-instagram-loading style="position:absolute; inset:0; z-index:2; display:none;"></div>
         <div data-index-instagram-embed onclick="event.stopPropagation()" style="display:none; justify-content:center;"></div>
-        <div data-index-instagram-fallback style="display:none;">${buildIndexInstagramFallbackHtml(sourceUrl, preview, debateId)}</div>
+        <div data-index-instagram-fallback style="display:block;">${buildIndexInstagramFallbackHtml(sourceUrl, preview, debateId)}</div>
+        <div class="index-social-click-veil" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"></div>
+        <button type="button" class="index-social-open-debate-btn" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)" aria-label="Ouvrir le débat">
+          <span class="index-social-open-debate-btn-icon">◉</span>
+          <span>Voir le débat</span>
+        </button>
       </div>
     </div>
   `;
@@ -6128,20 +6186,32 @@ function initIndexMediaSwipeEnhancements(root) {
       if (!inner) return false;
 
       // Verrou hauteur : empêche le shell de changer de taille pendant le swap
-      // pour éviter que le haut de la carte saute visuellement
       const lockedHeight = shell.offsetHeight;
       shell.style.minHeight = lockedHeight + 'px';
 
-      let nextItemPreview = null;
-      if (
-        String(nextItem?.type || '').trim() === 'source'
+      const isSource = String(nextItem?.type || '').trim() === 'source'
         && !isDirectImageUrl(nextItem.url)
-        && !isIndexYouTubeSourceDebate({ source_url: nextItem.url })
-      ) {
-        nextItemPreview = await getIndexSourcePreviewData(nextItem.url);
+        && !isIndexYouTubeSourceDebate({ source_url: nextItem.url });
+
+      // Rendu immédiat avec la preview en cache (ou null) — pas d'attente réseau
+      const cachedPreview = isSource ? getResolvedIndexSourcePreview(nextItem.url, debate) : null;
+      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, cachedPreview);
+
+      // Fetch asynchrone de la preview : met à jour uniquement si la carte est toujours visible
+      if (isSource && !cachedPreview) {
+        const indexAtRender = normalizedIndex;
+        getIndexSourcePreviewData(nextItem.url).then(freshPreview => {
+          if (!freshPreview) return;
+          if (Number(shell.dataset.currentIndex) !== indexAtRender) return;
+          inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, freshPreview);
+          if (typeof initIndexXObserver === "function") initIndexXObserver(inner);
+          if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(inner);
+          if (typeof initIndexOpenGraphImageObserver === "function") initIndexOpenGraphImageObserver(inner);
+          if (typeof initIndexCardShareMenus === "function") initIndexCardShareMenus(inner);
+        }).catch(() => {});
       }
 
-      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, nextItemPreview);
+      const nextItemPreview = cachedPreview;
 
       // Signale un swap manuel → startIndexSourceAutoPlay remet videoPlaying=false
       shell.dispatchEvent(new CustomEvent('indexMediaSwapped', { bubbles: false }));
@@ -8108,6 +8178,20 @@ async function renderIndexXShell(shell) {
     embed.style.maxWidth = window.innerWidth <= 768 ? '320px' : '400px';
     embed.style.margin = '0 auto';
     if (loading) loading.style.display = 'none';
+    const fallback = shell.querySelector('[data-index-x-fallback]');
+    if (fallback) fallback.style.display = 'none';
+
+    // Cap la hauteur dans le carousel
+    if (shell.closest('.theme-horizontal-inner')) {
+      const isMulti = !!shell.closest('.index-media-swipe-shell');
+      if (window.innerWidth >= 769 || isMulti) {
+        shell.style.maxHeight = '169px';
+        shell.style.minHeight = '0';
+        shell.style.overflow = 'hidden';
+        const wrapper = shell.closest('.debate-card-media-x');
+        if (wrapper) { wrapper.style.maxHeight = '169px'; wrapper.style.overflow = 'hidden'; }
+      }
+    }
   } catch (error) {
     shell.dataset.rendered = 'failed';
     embed.innerHTML = '';
@@ -8374,6 +8458,20 @@ function revealIndexInstagramEmbed(shell, embed, loading) {
   embed.style.minHeight = '';
   applyIndexInstagramDesktopSizing(shell);
   if (loading) loading.style.display = 'none';
+  const igFallback = shell.querySelector('[data-index-instagram-fallback]');
+  if (igFallback) igFallback.style.display = 'none';
+
+  // Cap la hauteur dans le carousel
+  if (shell.closest('.theme-horizontal-inner')) {
+    const isMulti = !!shell.closest('.index-media-swipe-shell');
+    if (window.innerWidth >= 769 || isMulti) {
+      shell.style.maxHeight = '169px';
+      shell.style.minHeight = '0';
+      shell.style.overflow = 'hidden';
+      const wrapper = shell.closest('.debate-card-media-instagram');
+      if (wrapper) { wrapper.style.maxHeight = '169px'; wrapper.style.overflow = 'hidden'; }
+    }
+  }
 }
 
 async function renderIndexInstagramShell(shell) {
@@ -13501,16 +13599,16 @@ function ensureCategoryFilterVisualStyles() {
     body.page-home-mobile .index-active-filters .index-active-filter-tag,
     body.page-home #index-active-filters .index-active-filter-tag,
     body.page-home .index-active-filters .index-active-filter-tag {
-      background: #111827 !important;
+      background: #1A1F24 !important;
       color: #ffffff !important;
-      border-color: #111827 !important;
+      border-color: #1A1F24 !important;
     }
 
     body.page-home-mobile #index-active-filters .index-active-filter-tag-theme,
     body.page-home-mobile .index-active-filters .index-active-filter-tag-theme,
     body.page-home #index-active-filters .index-active-filter-tag-theme,
     body.page-home .index-active-filters .index-active-filter-tag-theme {
-      background: #111827 !important;
+      background: #1A1F24 !important;
     }
 
     body.page-home-mobile #index-active-filters .index-active-filter-tag-close,
@@ -13760,8 +13858,77 @@ function renderIndexActiveFilterTags() {
   container.style.display = tags.length ? "flex" : "none";
 }
 
+function clearActiveBubbles() {
+  currentBubbleTag = null;
+  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
+    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
+}
+
+function handleBubbleTagClick(bubble) {
+  const label = bubble.querySelector('.agon-tag-label');
+  if (!label) return;
+  const words = label.querySelectorAll('.agon-tag-word');
+  const tag = words.length
+    ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
+    : label.textContent.trim();
+  if (!tag) return;
+
+  const isActive = bubble.classList.contains('agon-tag-bubble-active');
+  clearActiveBubbles();
+
+  const input = document.getElementById('debate-search');
+  if (isActive) {
+    currentBubbleTag = null;
+    currentIndexSearchQuery = '';
+    if (input) input.value = '';
+    filterDebates();
+  } else {
+    currentBubbleTag = tag;
+    bubble.classList.add('agon-tag-bubble-active');
+    if (input) input.value = tag;
+    currentIndexSearchQuery = tag;
+    filterDebates();
+  }
+}
+
+function showAgonOnlyFromTagCloud() {
+  clearActiveBubbles();
+  currentIndexSearchQuery = "";
+  setCurrentCategoryFilters([]);
+
+  const input = document.getElementById("debate-search");
+  if (input) input.value = "";
+
+  const select = document.getElementById("filter-theme");
+  if (select) select.value = "all";
+
+  const previousTypeFilter = String(currentTypeFilter || "");
+  currentTypeFilter = "agon";
+  visitedDebatesVisible = 5;
+  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+  applyIndexFilters();
+
+  if (previousTypeFilter === "agon") {
+    syncIndexTypeFilterButtons();
+    syncIndexShortcutFilterButtons();
+  }
+
+  const firstBand = document.querySelector(".theme-row-section");
+  if (firstBand) {
+    firstBand.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+window.addEventListener("agon:tag-trends-show-agon", showAgonOnlyFromTagCloud);
+
+document.addEventListener('click', (e) => {
+  const bubble = e.target.closest('.agon-tag-bubble');
+  if (bubble) { handleBubbleTagClick(bubble); return; }
+});
+
 function removeIndexActiveFilterTag(kind, value = "") {
   if (kind === "search") {
+    clearActiveBubbles();
     const searchInput = document.getElementById("debate-search");
     if (searchInput) {
       searchInput.value = "";
@@ -13986,7 +14153,18 @@ function getFilteredDebatesForIndex(baseDebates) {
   let filteredDebates = Array.isArray(baseDebates) ? [...baseDebates] : [];
   const query = getCurrentIndexSearchQuery().toLowerCase();
 
-  if (query) {
+  if (currentBubbleTag && window._tagTrendsModule) {
+    const { getCanonicalTagsFromItem, normalizeTag } = window._tagTrendsModule;
+    const normalizedBubble = normalizeTag(currentBubbleTag);
+    filteredDebates = filteredDebates.filter((debate) => {
+      const canonicalTags = getCanonicalTagsFromItem(debate).map(normalizeTag);
+      if (canonicalTags.includes(normalizedBubble)) return true;
+      // fallback : recherche textuelle aussi
+      const text = [debate.question, debate.category, debate.option_a, debate.option_b]
+        .join(' ').toLowerCase();
+      return text.includes(query);
+    });
+  } else if (query) {
     filteredDebates = filteredDebates.filter((debate) => {
       const question = String(debate.question || "").toLowerCase();
       const category = String(debate.category || "").toLowerCase();
@@ -14226,10 +14404,29 @@ function scrollIndexThemeRowFromButton(button, direction) {
   const row = section?.querySelector?.(".theme-horizontal-row");
   if (!row) return;
 
-  const firstCard = row.querySelector(".theme-horizontal-inner > .debate-card");
-  const distance = firstCard ? firstCard.offsetWidth + 20 : row.clientWidth / 2;
-  row.scrollBy({
-    left: direction === "prev" ? -distance : distance,
+  const cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+  if (!cards.length) return;
+
+  const rowCenter = row.scrollLeft + row.clientWidth / 2;
+  let currentIndex = 0;
+  let bestDistance = Infinity;
+
+  cards.forEach((card, index) => {
+    const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+    const distance = Math.abs(cardCenter - rowCenter);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      currentIndex = index;
+    }
+  });
+
+  const delta = direction === "prev" ? -1 : 1;
+  const targetIndex = Math.max(0, Math.min(cards.length - 1, currentIndex + delta));
+  const targetCard = cards[targetIndex];
+  const targetLeft = targetCard.offsetLeft - (row.clientWidth - targetCard.offsetWidth) / 2;
+
+  row.scrollTo({
+    left: Math.max(0, targetLeft),
     behavior: "smooth",
   });
   window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 260);
@@ -14766,6 +14963,30 @@ function buildIndexInfiniteScrollSentinelHtml() {
 let indexTagTrendsModulePromise = null;
 let indexTagTrendCloudModulePromise = null;
 
+function syncBubbleFrameTop() {
+  const btn = document.getElementById('index-sort-toggle');
+  const cloud = document.getElementById('agon-tag-trends-cloud');
+  if (!btn || !cloud) return;
+  const btnRect = btn.getBoundingClientRect();
+  const cloudRect = cloud.getBoundingClientRect();
+  const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top));
+  cloud.style.setProperty('--bubble-frame-top', offset + 'px');
+}
+
+(function initBubbleFrameSync() {
+  const debatesSection = document.querySelector('.debates-section');
+  if (debatesSection) {
+    new ResizeObserver(syncBubbleFrameTop).observe(debatesSection);
+  }
+
+  const cloud = document.getElementById('agon-tag-trends-cloud');
+  if (cloud) {
+    new ResizeObserver(syncBubbleFrameTop).observe(cloud);
+  }
+
+  window.addEventListener('resize', syncBubbleFrameTop, { passive: true });
+})();
+
 function updateIndexTagTrends(items) {
   window.AGON_TAG_TRENDS = [];
   const trendsSection = document.querySelector("#agon-tag-trends-section");
@@ -14779,11 +15000,12 @@ function updateIndexTagTrends(items) {
   }
 
   if (!indexTagTrendsModulePromise) {
-    indexTagTrendsModulePromise = import("/tagTrends.js?v=20260519-step4");
+    indexTagTrendsModulePromise = import("/tagTrends.js?v=20260520-canonical-groups");
   }
 
   indexTagTrendsModulePromise
     .then((module) => {
+      window._tagTrendsModule = module;
       const tagTrends = module.buildTagTrends(items, { limit: 12 });
       window.AGON_TAG_TRENDS = tagTrends;
       console.log("[Agôn] Tag trends:", tagTrends);
@@ -14795,12 +15017,27 @@ function updateIndexTagTrends(items) {
       }
 
       if (!indexTagTrendCloudModulePromise) {
-        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260519-3-3-6-bubbles-v17");
+        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260520-fix-label-clip");
       }
 
       indexTagTrendCloudModulePromise
         .then((cloudModule) => {
           cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(syncBubbleFrameTop);
+            if (currentBubbleTag) {
+              document.querySelectorAll('.agon-tag-bubble').forEach(bubble => {
+                const label = bubble.querySelector('.agon-tag-label');
+                const words = label?.querySelectorAll('.agon-tag-word');
+                const tag = words?.length
+                  ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
+                  : (label?.textContent.trim() || '');
+                if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
+                  bubble.classList.add('agon-tag-bubble-active');
+                }
+              });
+            }
+          });
         })
         .catch((error) => {
           console.warn("[Agôn] Tag cloud indisponible:", error);
@@ -14850,6 +15087,18 @@ function renderDebatesList(debates) {
   if (hasRows) {
     initThematicRowDragScroll();
     applyThematicTitleTwoLines();
+
+    // Fige la hauteur des shells X/Instagram dans le carousel
+    document.querySelectorAll(
+      '.theme-horizontal-inner [data-index-x-shell], .theme-horizontal-inner [data-index-instagram-shell]'
+    ).forEach(shell => {
+      const isMulti = !!shell.closest('.index-media-swipe-shell');
+      if (window.innerWidth >= 769 || isMulti) {
+        shell.style.maxHeight = '169px';
+        shell.style.minHeight = '169px';
+        shell.style.overflow = 'hidden';
+      }
+    });
     if (!window._carouselResizeBound) {
       window._carouselResizeBound = true;
       window.addEventListener('resize', () => {
@@ -14961,6 +15210,15 @@ function filterDebates() {
 function applyIndexSearch() {
   const input = document.getElementById("debate-search");
   currentIndexSearchQuery = String(input?.value || "").trim();
+  const activeBubble = document.querySelector('.agon-tag-bubble.agon-tag-bubble-active');
+  if (activeBubble) {
+    const label = activeBubble.querySelector('.agon-tag-label');
+    const words = label?.querySelectorAll('.agon-tag-word');
+    const tag = words?.length
+      ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
+      : (label?.textContent.trim() || '');
+    if (tag.toLowerCase() !== currentIndexSearchQuery.toLowerCase()) clearActiveBubbles();
+  }
 
   if (currentIndexSearchQuery && currentTypeFilter === "agon") {
     currentTypeFilter = "all";

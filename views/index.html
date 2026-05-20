@@ -250,6 +250,11 @@
         <span id="reports-count" class="notifications-count" style="display:none;"></span>
       </a>
 
+      <a class="button button-secondary admin-tags-button" href="/admin-tags" data-admin style="display:none;">
+        <i class="fa-solid fa-tags" aria-hidden="true"></i>
+        Tags
+      </a>
+
       <a class="button button-secondary" href="__VEILLE_URL__" target="_blank" rel="noopener" data-admin style="display:none;">
         🔍 Veille
       </a>
@@ -344,6 +349,10 @@
       </div>
 
       <div id="theme-filter-slot"></div>
+
+      <button type="button" class="index-explorer-close-btn" onclick="toggleIndexSortControls(event)" aria-label="Fermer les options">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
 
     <div id="index-active-filters" class="index-active-filters" style="display:none;"></div>
@@ -370,7 +379,7 @@
 
 <section id="agon-tag-trends-section" class="agon-tag-trends-section">
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
-  <p class="agon-tag-trends-caption">Tendance des sujets traités dans les médias français</p>
+  <p class="agon-tag-trends-caption">Tendance des sujets les plus traités dans les médias français</p>
 </section>
 
 <section id="debates-list" class="debates-list"></section>
@@ -1180,6 +1189,7 @@
   var POLL_INTERVAL = 5000;
   var _timer = null;
   var _toast = null;
+  var _wasOffline = false;
 
   function showToast() {
     if (_toast) return;
@@ -1209,14 +1219,9 @@
     if (!hasContent) startPolling();
   });
 
-  /* Cas 2 : retour en ligne après coupure réseau */
-  window.addEventListener('online', function() { startPolling(); });
-
-  /* Cas 3 : erreur réseau sur window (script non chargé, ressource bloquée) */
-  window.addEventListener('error', function(e) {
-    if (e && e.target && e.target !== window) return; // erreurs de ressources, pas globales
-    startPolling();
-  }, true);
+  /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
+  window.addEventListener('offline', function() { _wasOffline = true; });
+  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
 })();
 </script>
 </body>

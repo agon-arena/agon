@@ -10,6 +10,22 @@ const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { queueCommentNotificationEvents } = require("./lib/notification-events");
 const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents } = require("./lib/push-sender");
+const {
+  TAG_GROUPS,
+  getTagGroups,
+  replaceTagGroups,
+  normalizeTagGroupsMap,
+  getExcludedTags,
+  replaceExcludedTags,
+  normalizeExcludedTags,
+  normalizeTag,
+  extractRawTagsFromItem,
+  getCanonicalTag,
+  getCanonicalTagsFromItem,
+  getItemDate,
+  getTrendPercent,
+  buildTagTrends
+} = require("./lib/tagTrends");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -409,6 +425,10 @@ const debateStoryLinksMetaPath = path.join(__dirname, "data", "debate-story-link
 const veillePendingStoriesMetaPath = path.join(__dirname, "data", "veille-pending-stories.json");
 const veillePendingKeywordsMetaPath = path.join(__dirname, "data", "veille-pending-keywords.json");
 const debateKeywordsMetaPath = path.join(__dirname, "data", "debate-keywords.json");
+const tagGroupsMetaPath = path.join(__dirname, "data", "tag-groups.json");
+const publicTagGroupsMetaPath = path.join(__dirname, "public", "tag-groups.json");
+const tagExclusionsMetaPath = path.join(__dirname, "data", "tag-exclusions.json");
+const publicTagExclusionsMetaPath = path.join(__dirname, "public", "tag-exclusions.json");
 const debateEpisodeNavMetaPath = path.join(__dirname, "data", "debate-episode-nav.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
@@ -942,6 +962,65 @@ function getDebateKeywords(debateId) {
   return normalizeKeywordList(map?.[String(debateId)] || []);
 }
 
+function writeTagGroupsFiles(groups) {
+  const normalizedGroups = normalizeTagGroupsMap(groups);
+  fs.mkdirSync(path.dirname(tagGroupsMetaPath), { recursive: true });
+  fs.mkdirSync(path.dirname(publicTagGroupsMetaPath), { recursive: true });
+  fs.writeFileSync(tagGroupsMetaPath, JSON.stringify(normalizedGroups, null, 2), "utf8");
+  fs.writeFileSync(publicTagGroupsMetaPath, JSON.stringify(normalizedGroups, null, 2), "utf8");
+  replaceTagGroups(normalizedGroups);
+  return getTagGroups();
+}
+
+function writeTagExclusionFiles(tags) {
+  const normalizedTags = normalizeExcludedTags(tags);
+  fs.mkdirSync(path.dirname(tagExclusionsMetaPath), { recursive: true });
+  fs.mkdirSync(path.dirname(publicTagExclusionsMetaPath), { recursive: true });
+  fs.writeFileSync(tagExclusionsMetaPath, JSON.stringify(normalizedTags, null, 2), "utf8");
+  fs.writeFileSync(publicTagExclusionsMetaPath, JSON.stringify(normalizedTags, null, 2), "utf8");
+  replaceExcludedTags(normalizedTags);
+  return getExcludedTags();
+}
+
+function readTagExclusionsForAdmin() {
+  try {
+    if (fs.existsSync(tagExclusionsMetaPath)) {
+      const parsed = JSON.parse(fs.readFileSync(tagExclusionsMetaPath, "utf8") || "[]");
+      return writeTagExclusionFiles(parsed);
+    }
+  } catch (error) {
+    console.error("Erreur lecture exclusions tags:", error);
+  }
+
+  return writeTagExclusionFiles(getExcludedTags());
+}
+
+function readTagGroupsForAdmin() {
+  try {
+    if (fs.existsSync(tagGroupsMetaPath)) {
+      const parsed = JSON.parse(fs.readFileSync(tagGroupsMetaPath, "utf8") || "{}");
+      return writeTagGroupsFiles(parsed);
+    }
+  } catch (error) {
+    console.error("Erreur lecture groupes tags:", error);
+  }
+
+  return writeTagGroupsFiles(getTagGroups());
+}
+
+readTagGroupsForAdmin();
+readTagExclusionsForAdmin();
+
+function updateTagGroupsForAdmin(mutator) {
+  const groups = readTagGroupsForAdmin();
+  const excludedTags = readTagExclusionsForAdmin();
+  const result = mutator(groups, excludedTags) || {};
+  const nextGroups = result.groups || result || groups;
+  const nextExcludedTags = result.excludedTags || excludedTags;
+  writeTagExclusionFiles(nextExcludedTags);
+  return writeTagGroupsFiles(nextGroups);
+}
+
 function setDebateKeywords(debateId, keywords) {
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return;
@@ -953,6 +1032,28 @@ function setDebateKeywords(debateId, keywords) {
     map[debateKey] = normalized;
   }
   writeDebateKeywordsMap(map);
+}
+
+function removeDebateKeyword(debateId, keyword) {
+  const debateKey = String(debateId || "").trim();
+  const keywordKey = normalizeTag(keyword);
+  if (!debateKey || !keywordKey) return [];
+
+  const currentKeywords = getDebateKeywords(debateKey);
+  const nextKeywords = currentKeywords.filter((item) => normalizeTag(item) !== keywordKey);
+  setDebateKeywords(debateKey, nextKeywords);
+  return nextKeywords;
+}
+
+function removeDebateCanonicalTag(debateId, canonicalTag) {
+  const debateKey = String(debateId || "").trim();
+  const canonicalKey = normalizeTag(canonicalTag);
+  if (!debateKey || !canonicalKey) return [];
+
+  const currentKeywords = getDebateKeywords(debateKey);
+  const nextKeywords = currentKeywords.filter((item) => normalizeTag(getCanonicalTag(item)) !== canonicalKey);
+  setDebateKeywords(debateKey, nextKeywords);
+  return nextKeywords;
 }
 
 function normalizeStorySelection(value) {
@@ -3053,6 +3154,10 @@ app.get("/admin-reports", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-reports.html"));
 });
 
+app.get("/admin-tags", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/admin-tags.html"));
+});
+
 /* =========================
    OPEN GRAPH SHARE ROUTES
 ========================= */
@@ -3323,6 +3428,330 @@ app.post("/api/admin/logout", (req, res) => {
 
 app.get("/api/admin/session", requireAdmin, (req, res) => {
   res.json({ success: true });
+});
+
+function buildAdminTagOccurrenceStats(debates = []) {
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const currentStart = new Date(now.getTime() - (7 * dayMs));
+  const previousStart = new Date(now.getTime() - (14 * dayMs));
+  const enrichedItems = (Array.isArray(debates) ? debates : []).map((debate) => ({
+    ...debate,
+    keywords: getDebateKeywords(debate?.id)
+  }));
+  const bubbleTags = buildTagTrends(enrichedItems, { now, limit: 12 });
+  const bubbleRankByTag = new Map(bubbleTags.map((item, index) => [normalizeTag(item.tag), index + 1]));
+  const statsByKey = new Map();
+
+  enrichedItems.forEach((debate) => {
+    const rawTags = extractRawTagsFromItem(debate);
+    const keywordTags = getDebateKeywords(debate?.id);
+    const canonicalTags = getCanonicalTagsFromItem(debate);
+    const date = getItemDate(debate);
+    const inCurrent = !!date && date >= currentStart && date < now;
+    const inPrevious = !!date && date >= previousStart && date < currentStart;
+
+    canonicalTags.forEach((tag) => {
+      const key = normalizeTag(tag);
+      if (!key) return;
+      if (!statsByKey.has(key)) {
+        statsByKey.set(key, {
+          tag,
+          normalizedTag: key,
+          count: 0,
+          currentCount: 0,
+          previousCount: 0,
+          bubbleRank: bubbleRankByTag.get(key) || null,
+          rawTags: new Map(),
+          debates: []
+        });
+      }
+
+      const stat = statsByKey.get(key);
+      stat.count += 1;
+      if (inCurrent) stat.currentCount += 1;
+      if (inPrevious) stat.previousCount += 1;
+
+      rawTags.forEach((rawTag) => {
+        if (normalizeTag(getCanonicalTag(rawTag)) !== key) return;
+        const readableRawTag = String(rawTag || "").trim();
+        if (!readableRawTag) return;
+        stat.rawTags.set(readableRawTag, (stat.rawTags.get(readableRawTag) || 0) + 1);
+      });
+
+      stat.debates.push({
+        id: debate.id,
+        question: debate.question || debate.title || "Arène sans titre",
+        created_at: debate.created_at || null,
+        category: debate.category || debate.theme || null,
+        type: debate.type || null,
+        rawTags: rawTags.filter((rawTag) => normalizeTag(getCanonicalTag(rawTag)) === key),
+        removableTags: keywordTags.filter((rawTag) => normalizeTag(getCanonicalTag(rawTag)) === key)
+      });
+    });
+  });
+
+  const tags = Array.from(statsByKey.values()).map((stat) => ({
+    tag: stat.tag,
+    normalizedTag: stat.normalizedTag,
+    count: stat.count,
+    currentCount: stat.currentCount,
+    previousCount: stat.previousCount,
+    trend: getTrendPercent(stat.currentCount, stat.previousCount),
+    bubbleRank: stat.bubbleRank,
+    rawTags: Array.from(stat.rawTags.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag)),
+    debates: stat.debates.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+  })).sort((a, b) => (b.count - a.count) || ((a.bubbleRank || 999) - (b.bubbleRank || 999)) || a.tag.localeCompare(b.tag));
+
+  return {
+    generatedAt: now.toISOString(),
+    windows: {
+      currentStart: currentStart.toISOString(),
+      previousStart: previousStart.toISOString()
+    },
+    totals: {
+      debates: enrichedItems.length,
+      tags: tags.length,
+      bubbleTags: bubbleTags.length
+    },
+    bubbleTags,
+    tagGroups: getTagGroups(),
+    excludedTags: getExcludedTags(),
+    tags
+  };
+}
+
+app.get("/api/admin/tag-occurrences", requireAdmin, async (req, res) => {
+  try {
+    const { data: debates, error } = await supabase
+      .from("debates")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return sendServerError(res, "Erreur lecture tags.");
+    }
+
+    return res.json(buildAdminTagOccurrenceStats(debates || []));
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur lecture tags.");
+  }
+});
+
+app.put("/api/admin/tag-groups", requireAdmin, (req, res) => {
+  try {
+    const groups = normalizeTagGroupsMap(req.body?.tagGroups || {});
+    return res.json({ success: true, tagGroups: writeTagGroupsFiles(groups) });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur mise à jour tags.");
+  }
+});
+
+app.post("/api/admin/tag-groups", requireAdmin, (req, res) => {
+  try {
+    const canonical = String(req.body?.canonical || "").trim();
+    const variants = Array.isArray(req.body?.variants) ? req.body.variants : [];
+    const cleanCanonical = normalizeTagGroupsMap({ [canonical]: variants })[canonical] ? canonical : String(canonical || "").trim();
+    if (!normalizeTag(cleanCanonical)) {
+      return res.status(400).json({ error: "Tag canonique manquant." });
+    }
+
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const normalizedCanonical = normalizeTag(cleanCanonical);
+      const existingKey = Object.keys(groups).find((key) => normalizeTag(key) === normalizedCanonical);
+      const key = existingKey || cleanCanonical;
+      const currentVariants = Array.isArray(groups[key]) ? groups[key] : [];
+      groups[key] = normalizeTagGroupsMap({ [key]: currentVariants.concat(variants, [key]) })[key] || [key];
+      const allowed = new Set(groups[key].map(normalizeTag));
+      return { groups, excludedTags: excludedTags.filter((tag) => !allowed.has(normalizeTag(tag))) };
+    });
+
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur ajout tag.");
+  }
+});
+
+app.put("/api/admin/detected-tags", requireAdmin, (req, res) => {
+  try {
+    const tag = String(req.body?.tag || "").trim();
+    const nextTag = String(req.body?.nextTag || "").trim();
+    const variants = Array.isArray(req.body?.variants) ? req.body.variants : [];
+    if (!normalizeTag(tag) || !normalizeTag(nextTag)) {
+      return res.status(400).json({ error: "Tag manquant." });
+    }
+
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const oldKey = Object.keys(groups).find((key) => normalizeTag(key) === normalizeTag(tag));
+      const nextKey = Object.keys(groups).find((key) => normalizeTag(key) === normalizeTag(nextTag)) || nextTag;
+      const currentVariants = Array.isArray(groups[nextKey]) ? groups[nextKey] : [];
+      const sourceVariants = oldKey && Array.isArray(groups[oldKey]) ? groups[oldKey] : [];
+      if (oldKey && normalizeTag(oldKey) !== normalizeTag(nextKey)) delete groups[oldKey];
+      groups[nextKey] = normalizeTagGroupsMap({ [nextKey]: currentVariants.concat(sourceVariants, variants, [tag, nextTag]) })[nextKey] || [nextKey];
+      const allowed = new Set(groups[nextKey].map(normalizeTag));
+      return { groups, excludedTags: excludedTags.filter((item) => !allowed.has(normalizeTag(item))) };
+    });
+
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur modification tag.");
+  }
+});
+
+app.post("/api/admin/detected-tags/exclude", requireAdmin, (req, res) => {
+  try {
+    const tag = String(req.body?.tag || "").trim();
+    const variants = Array.isArray(req.body?.variants) ? req.body.variants : [];
+    if (!normalizeTag(tag)) {
+      return res.status(400).json({ error: "Tag manquant." });
+    }
+
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const key = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(tag));
+      const tagsToExclude = [tag].concat(variants);
+      if (key) {
+        tagsToExclude.push(key, ...(Array.isArray(groups[key]) ? groups[key] : []));
+        delete groups[key];
+      }
+      return { groups, excludedTags: excludedTags.concat(tagsToExclude) };
+    });
+
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression tag.");
+  }
+});
+
+app.post("/api/admin/tag-groups/:canonical/variants", requireAdmin, (req, res) => {
+  try {
+    const canonical = decodeURIComponent(String(req.params.canonical || ""));
+    const variant = String(req.body?.variant || "").trim();
+    if (!normalizeTag(canonical) || !normalizeTag(variant)) {
+      return res.status(400).json({ error: "Tag ou variante manquant." });
+    }
+
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const key = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(canonical)) || canonical;
+      const currentVariants = Array.isArray(groups[key]) ? groups[key] : [key];
+      groups[key] = normalizeTagGroupsMap({ [key]: currentVariants.concat([variant]) })[key] || currentVariants;
+      const variantKey = normalizeTag(variant);
+      return { groups, excludedTags: excludedTags.filter((tag) => normalizeTag(tag) !== variantKey) };
+    });
+
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur ajout variante.");
+  }
+});
+
+app.put("/api/admin/tag-groups/:canonical", requireAdmin, (req, res) => {
+  try {
+    const canonical = decodeURIComponent(String(req.params.canonical || ""));
+    const nextCanonical = String(req.body?.canonical || "").trim();
+    if (!normalizeTag(canonical) || !normalizeTag(nextCanonical)) {
+      return res.status(400).json({ error: "Tag manquant." });
+    }
+
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const oldKey = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(canonical));
+      if (!oldKey) return { groups, excludedTags };
+
+      const nextKey = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(nextCanonical));
+      if (nextKey && normalizeTag(nextKey) !== normalizeTag(oldKey)) {
+        return { groups, excludedTags };
+      }
+
+      const variants = Array.isArray(groups[oldKey]) ? groups[oldKey] : [oldKey];
+      delete groups[oldKey];
+      groups[nextCanonical] = normalizeTagGroupsMap({ [nextCanonical]: variants.concat([nextCanonical]) })[nextCanonical] || [nextCanonical];
+      const allowed = new Set(groups[nextCanonical].map(normalizeTag));
+      return { groups, excludedTags: excludedTags.filter((tag) => !allowed.has(normalizeTag(tag))) };
+    });
+
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur modification tag.");
+  }
+});
+
+app.delete("/api/admin/tag-groups/:canonical", requireAdmin, (req, res) => {
+  try {
+    const canonical = decodeURIComponent(String(req.params.canonical || ""));
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const key = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(canonical));
+      if (key) {
+        excludedTags = excludedTags.concat([key], Array.isArray(groups[key]) ? groups[key] : []);
+        delete groups[key];
+      }
+      return { groups, excludedTags };
+    });
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression tag.");
+  }
+});
+
+app.delete("/api/admin/tag-groups/:canonical/variants/:variant", requireAdmin, (req, res) => {
+  try {
+    const canonical = decodeURIComponent(String(req.params.canonical || ""));
+    const variant = decodeURIComponent(String(req.params.variant || ""));
+    const tagGroups = updateTagGroupsForAdmin((groups, excludedTags) => {
+      const key = Object.keys(groups).find((item) => normalizeTag(item) === normalizeTag(canonical));
+      if (!key) return { groups, excludedTags };
+      groups[key] = (Array.isArray(groups[key]) ? groups[key] : [])
+        .filter((item) => normalizeTag(item) !== normalizeTag(variant));
+      excludedTags = excludedTags.concat([variant]);
+      if (!groups[key].length) delete groups[key];
+      return { groups, excludedTags };
+    });
+    return res.json({ success: true, tagGroups });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression variante.");
+  }
+});
+
+app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) => {
+  try {
+    const debateId = String(req.params.id || "").trim();
+    const keyword = decodeURIComponent(String(req.params.keyword || "")).trim();
+    if (!debateId || !normalizeTag(keyword)) {
+      return res.status(400).json({ error: "Arène ou tag manquant." });
+    }
+
+    const keywords = removeDebateKeyword(debateId, keyword);
+    return res.json({ success: true, debateId, removedKeyword: keyword, keywords });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression tag de l’arène.");
+  }
+});
+
+app.delete("/api/admin/debate/:id/canonical-tags/:tag", requireAdmin, (req, res) => {
+  try {
+    const debateId = String(req.params.id || "").trim();
+    const tag = decodeURIComponent(String(req.params.tag || "")).trim();
+    if (!debateId || !normalizeTag(tag)) {
+      return res.status(400).json({ error: "Arène ou tag manquant." });
+    }
+
+    const keywords = removeDebateCanonicalTag(debateId, tag);
+    return res.json({ success: true, debateId, removedTag: tag, keywords });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression tag de l’arène.");
+  }
 });
 
 app.post("/api/admin/push/test-latest", requireAdmin, async (req, res) => {
@@ -5750,6 +6179,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
   const positionA = String(req.body?.positionA || "").trim();
   const positionB = String(req.body?.positionB || "").trim();
   const resume = String(req.body?.resume || "").trim().slice(0, 1800);
+  const keywords = Array.isArray(req.body?.keywords) ? req.body.keywords.map((k) => String(k || "").trim()).filter(Boolean).slice(0, 10) : [];
 
   if (!question && !positionA && !positionB && !resume) {
     return res.status(400).json({ error: "Aucun texte à corriger." });
@@ -5759,12 +6189,14 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
     "Tu corriges uniquement les fautes d'orthographe, de grammaire, de conjugaison, d'accord, de typographie et de ponctuation.",
     "Interdiction absolue de changer le sens, l'angle, la position politique, le niveau de nuance ou le contenu factuel.",
     "Tu peux reformuler très légèrement seulement si c'est indispensable pour corriger une faute ou rendre une phrase grammaticalement correcte.",
-    'Réponds uniquement en JSON sous la forme {"question":"...","positionA":"...","positionB":"...","resume":"..."}.',
+    "Pour les tags : corrige uniquement les fautes de frappe et la casse (majuscule en début de mot si pertinent). Ne change pas le sens ni n'ajoute de nouveaux tags.",
+    'Réponds uniquement en JSON sous la forme {"question":"...","positionA":"...","positionB":"...","resume":"...","keywords":[...]}.',
     '',
     'Question : ' + question,
     'Position A : ' + positionA,
     'Position B : ' + positionB,
-    'Résumé : ' + resume
+    'Résumé : ' + resume,
+    'Tags : ' + (keywords.length ? keywords.join(', ') : '(aucun)')
   ].join("\n");
 
   try {
@@ -5778,7 +6210,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
-        max_tokens: 700,
+        max_tokens: 2500,
         temperature: 0
       })
     });
@@ -5794,13 +6226,18 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
       return res.status(502).json({ error: 'Réponse vide du correcteur.' });
     }
 
-    const parsed = JSON.parse(content);
+    let parsed = {};
+    try { parsed = JSON.parse(content); } catch (_) { parsed = {}; }
+    const correctedKeywords = Array.isArray(parsed?.keywords)
+      ? parsed.keywords.map((k) => String(k || "").trim()).filter(Boolean).slice(0, 10)
+      : keywords;
     return res.json({
       ok: true,
       question: String(parsed?.question || question).trim().slice(0, 100),
       positionA: String(parsed?.positionA || positionA).trim(),
       positionB: String(parsed?.positionB || positionB).trim(),
-      resume: String(parsed?.resume || resume).trim().slice(0, 1800)
+      resume: String(parsed?.resume || resume).trim().slice(0, 1800),
+      keywords: correctedKeywords
     });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Erreur correction.' });

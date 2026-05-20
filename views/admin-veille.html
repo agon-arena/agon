@@ -542,7 +542,8 @@ async function proofread(btn) {
         question: questionField?.value.trim() || '',
         positionA: positionAField?.value.trim() || '',
         positionB: positionBField?.value.trim() || '',
-        resume: resumeField?.value.trim() || ''
+        resume: resumeField?.value.trim() || '',
+        keywords: getKeywordsFromEditor(item)
       })
     });
     if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
@@ -551,6 +552,14 @@ async function proofread(btn) {
     if (positionAField) positionAField.value = String(data.positionA || '');
     if (positionBField) positionBField.value = String(data.positionB || '');
     if (resumeField) resumeField.value = String(data.resume || '').slice(0, 1800);
+    if (Array.isArray(data.keywords) && data.keywords.length) {
+      const keywordList = item.querySelector('.keyword-list');
+      if (keywordList) {
+        keywordList.innerHTML = normalizeKeywordList(data.keywords, 10).map(function(keyword) {
+          return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+        }).join('');
+      }
+    }
     updateItemCounters(item);
     toast('Fautes corrigées ✓');
   } catch (error) {

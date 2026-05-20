@@ -36,7 +36,7 @@ function fitLabelInBubble(bubble) {
   label.style.paddingTop = trendH + "px";
   label.style.paddingBottom = trendH + "px";
 
-  const availW = bubble.clientWidth * 0.82;
+  const availW = bubble.clientWidth * 0.68;
   const availH = bubble.clientHeight - trendH * 2 - 6;
 
   // Ajuster la taille de base pour que le label tienne dans la bulle
@@ -99,10 +99,7 @@ function renderTagTrendCloud(container, trends) {
   centerBtn.className = "agon-tag-center-btn";
   centerBtn.innerHTML = `<span>TOUT</span><span>VOIR</span>`;
   centerBtn.addEventListener("click", () => {
-    const firstBand = document.querySelector(".theme-row-section");
-    if (firstBand) {
-      firstBand.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    window.dispatchEvent(new CustomEvent("agon:tag-trends-show-agon"));
   });
   container.appendChild(centerBtn);
 

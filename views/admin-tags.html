@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tags — Admin Agôn</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/style.css?v=20260520-admin-tags">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; background: #1a2028; color: #111827; font-family: Arial, Helvetica, sans-serif; min-height: 100vh; }
+
+    .at-shell { width: min(1200px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 64px; }
+
+    /* Header */
+    .at-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .at-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+    .at-header p { margin: 0; color: rgba(255,255,255,0.5); font-size: 13px; }
+    .at-header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .at-nav-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.07); color: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .15s; }
+    .at-nav-btn:hover { background: rgba(255,255,255,0.14); }
+    .at-nav-btn-primary { background: #fff; color: #111827; border-color: transparent; }
+    .at-nav-btn-primary:hover { background: #e5e7eb; }
+
+    /* Metrics */
+    .at-metrics { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .at-metric { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 16px; color: #fff; min-width: 110px; }
+    .at-metric-val { font-size: 22px; font-weight: 800; line-height: 1; }
+    .at-metric-lbl { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Panel */
+    .at-panel { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+
+    /* Toolbar */
+    .at-toolbar { display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+    .at-search-wrap { position: relative; flex: 1; min-width: 180px; }
+    .at-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 13px; pointer-events: none; }
+    .at-search { width: 100%; min-height: 36px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 10px 0 32px; font: inherit; font-size: 13px; background: #fff; }
+    .at-search:focus { outline: none; border-color: #111827; }
+    .at-sort { min-height: 36px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 10px; font: inherit; font-size: 13px; background: #fff; }
+
+    /* Quick grid */
+    .at-quick-grid { display: grid; grid-template-columns: 1fr; border-bottom: 1px solid #e5e7eb; }
+    .at-qcard { padding: 16px 18px; }
+    .at-qcard + .at-qcard { border-left: none; border-top: 1px solid #e5e7eb; }
+    .at-qcard-title { margin: 0 0 3px; font-size: 14px; font-weight: 800; color: #111827; }
+    .at-qcard-desc { margin: 0 0 12px; font-size: 12px; color: #6b7280; line-height: 1.4; }
+
+    /* Bubble chips */
+    .at-bubble-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .at-bchip { display: inline-flex; align-items: center; gap: 5px; background: #111827; color: #fff; border: none; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: background .12s; }
+    .at-bchip:hover { background: #374151; }
+    .at-bchip-num { opacity: 0.5; font-size: 10px; }
+    .at-bchip-count { font-size: 10px; background: rgba(255,255,255,0.15); border-radius: 999px; padding: 1px 6px; }
+
+    /* Add canonical form */
+    .at-add-form { display: flex; gap: 6px; margin-bottom: 12px; }
+    .at-add-form input { flex: 1; min-width: 80px; min-height: 32px; border: 1px solid #d1d5db; border-radius: 7px; padding: 0 9px; font: inherit; font-size: 12px; }
+    .at-add-form input:focus { outline: none; border-color: #111827; }
+
+    /* Buttons */
+    .at-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #111827; background: #111827; color: #fff; border-radius: 7px; padding: 0 10px; min-height: 32px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .12s; }
+    .at-btn:hover { background: #374151; }
+    .at-btn-sm { min-height: 26px; font-size: 11px; padding: 0 8px; border-radius: 6px; }
+    .at-btn-ghost { background: transparent; border-color: #d1d5db; color: #374151; }
+    .at-btn-ghost:hover { background: #f3f4f6; }
+    .at-btn-danger { background: #dc2626; border-color: #dc2626; }
+    .at-btn-danger:hover { background: #b91c1c; }
+
+    /* Canonical list */
+    .at-clist-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid #f0f2f5; }
+    .at-clist-item:first-child { border-top: none; padding-top: 0; }
+    .at-cleft { min-width: 130px; flex-shrink: 0; }
+    .at-cname { font-size: 13px; font-weight: 800; color: #111827; margin-bottom: 5px; }
+    .at-cname-link { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: #d1d5db; }
+    .at-cname-link:hover { color: #2563eb; text-decoration-color: #2563eb; }
+    .at-cactions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .at-cright { flex: 1; min-width: 0; }
+    .at-cvariants { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .at-vchip { display: inline-flex; align-items: center; gap: 3px; border: none; border-radius: 999px; background: #eef2f7; color: #334155; padding: 3px 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .1s; }
+    .at-vchip:hover { background: #fee2e2; color: #991b1b; }
+    .at-add-variant { display: flex; gap: 4px; }
+    .at-add-variant input { flex: 1; min-height: 26px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 7px; font: inherit; font-size: 11px; min-width: 0; }
+    .at-add-variant input:focus { outline: none; border-color: #111827; }
+    .at-edit-form { display: flex; gap: 4px; margin-top: 5px; }
+    .at-edit-form input { flex: 1; min-height: 26px; border: 1px solid #3b82f6; border-radius: 6px; padding: 0 7px; font: inherit; font-size: 12px; min-width: 0; background: #eff6ff; }
+
+    /* Detected header */
+    .at-detected-hdr { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid #e5e7eb; }
+    .at-detected-hdr h2 { margin: 0 0 2px; font-size: 14px; font-weight: 800; color: #111827; }
+    .at-detected-hdr p { margin: 0; font-size: 12px; color: #6b7280; }
+
+    /* Status */
+    .at-status { padding: 24px; color: #6b7280; font-size: 14px; text-align: center; }
+
+    /* Table */
+    .at-twrap { overflow-x: auto; }
+    .at-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    .at-table th { position: sticky; top: 0; z-index: 1; background: #1a2028; color: rgba(255,255,255,0.75); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 9px 12px; text-align: left; white-space: nowrap; }
+    .at-table td { padding: 9px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+    .at-table tbody tr { cursor: pointer; transition: background .08s; }
+    .at-table tbody tr:hover { background: #f8fafc; }
+    .at-table tbody tr.is-selected { background: #eff6ff; }
+    .at-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 #3b82f6; }
+    .at-tname { font-weight: 800; font-size: 14px; color: #111827; line-height: 1.2; }
+    .at-tkey { font-size: 11px; color: #9ca3af; }
+    .at-badge { display: inline-flex; align-items: center; background: #111827; color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; }
+    .at-muted { color: #9ca3af; font-size: 12px; }
+    .at-num-main { font-weight: 800; font-size: 14px; }
+    .at-num-sub { font-size: 12px; color: #6b7280; }
+    .trend-up { color: #16a34a; font-weight: 800; font-size: 13px; }
+    .trend-down { color: #dc2626; font-weight: 800; font-size: 13px; }
+    .trend-neutral { color: #9ca3af; font-weight: 800; font-size: 13px; }
+    .at-raw-preview { font-size: 11px; color: #9ca3af; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .at-row-acts { display: flex; gap: 4px; }
+    .at-ibtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; cursor: pointer; color: #374151; font-size: 14px; font-weight: 700; padding: 0; transition: all .1s; }
+    .at-ibtn:hover { background: #f3f4f6; border-color: #d1d5db; }
+    .at-ibtn-danger:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+    /* Detail panel */
+    .at-detail { display: none; padding: 16px; background: #f8fafc; border-top: 2px solid #e5e7eb; }
+    .at-detail.is-open { display: block; }
+    .at-detail-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .at-detail-ttl { font-size: 15px; font-weight: 800; color: #111827; }
+    .at-detail-close { background: none; border: 1px solid #d1d5db; border-radius: 6px; color: #6b7280; width: 28px; height: 28px; cursor: pointer; font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
+    .at-detail-close:hover { background: #e5e7eb; color: #111827; }
+    .at-detail-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+    .at-dcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
+    .at-dcard h3 { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
+    .at-raw-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .at-raw-chip { background: #eef2f7; border-radius: 999px; padding: 3px 9px; font-size: 12px; color: #334155; }
+    .at-debate-row { padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
+    .at-debate-row:last-child { border-bottom: none; }
+    .at-debate-q { display: block; color: #111827; text-decoration: none; font-size: 13px; font-weight: 600; line-height: 1.3; margin-bottom: 3px; }
+    .at-debate-q:hover { color: #2563eb; }
+    .at-debate-meta { font-size: 11px; color: #9ca3af; margin-bottom: 5px; }
+    .at-debate-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+    .at-rm-kw { border: none; border-radius: 999px; background: #fee2e2; color: #991b1b; padding: 3px 9px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .at-rm-kw:hover { background: #fecaca; }
+
+    /* Toast */
+    .at-toasts { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .at-toast { background: #111827; color: #fff; border-radius: 10px; padding: 12px 16px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); animation: toast-in .2s ease; max-width: 320px; }
+    .at-toast-err { background: #dc2626; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .at-shell { width: calc(100% - 20px); padding: 16px 0 40px; }
+      .at-header { flex-direction: column; }
+      .at-quick-grid { grid-template-columns: 1fr; }
+      .at-clist-item { flex-direction: column; gap: 6px; }
+      .at-cleft { min-width: 0; }
+      .at-detail-grid { grid-template-columns: 1fr; }
+      .at-add-form { flex-wrap: wrap; }
+      .at-toolbar { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="at-toasts" id="toasts"></div>
+
+<main class="at-shell">
+  <header class="at-header">
+    <div>
+      <h1>Tags &amp; Tendances</h1>
+      <p>Lecture admin — bulles de tendance, tags canoniques, arènes liées.</p>
+    </div>
+    <div class="at-header-actions">
+      <a class="at-nav-btn" href="/">← Accueil</a>
+      <a class="at-nav-btn" href="/admin-reports">Signalements</a>
+      <button class="at-nav-btn at-nav-btn-primary" type="button" id="refresh-btn">↻ Actualiser</button>
+    </div>
+  </header>
+
+  <div class="at-metrics" id="summary"></div>
+
+  <section class="at-panel">
+    <!-- Toolbar -->
+    <div class="at-toolbar">
+      <div class="at-search-wrap">
+        <span class="at-search-icon">⌕</span>
+        <input class="at-search" id="search-input" type="search" placeholder="Rechercher un tag, une variante, une arène…">
+      </div>
+      <select class="at-sort" id="sort-select" aria-label="Tri">
+        <option value="count">Occurrences totales</option>
+        <option value="current">Occurrences 7 jours</option>
+        <option value="bubble">Rang bulles</option>
+        <option value="trend">Progression</option>
+        <option value="name">Nom</option>
+      </select>
+    </div>
+
+    <!-- Quick sections côte à côte -->
+    <div class="at-quick-grid">
+      <div class="at-qcard">
+        <h2 class="at-qcard-title">Bulles actives</h2>
+        <p class="at-qcard-desc">Tags qui alimentent les bulles visibles sur l'index. Cliquer pour filtrer.</p>
+        <div class="at-bubble-chips" id="active-bubble-tags"></div>
+      </div>
+      <div class="at-qcard">
+        <h2 class="at-qcard-title">Tags canoniques</h2>
+        <p class="at-qcard-desc">Familles qui regroupent plusieurs variantes sous un même nom.</p>
+        <form class="at-add-form" id="add-canonical-form">
+          <input id="new-canonical-input" type="text" placeholder="Tag canonique ex : Éducation">
+          <input id="new-variants-input" type="text" placeholder="Variantes (virgule)">
+          <button class="at-btn" type="submit">Ajouter</button>
+        </form>
+        <div id="canonical-tags"></div>
+      </div>
+    </div>
+
+    <!-- Tags détectés -->
+    <div class="at-detected-hdr">
+      <div>
+        <h2>Tags détectés</h2>
+        <p>Cliquer sur une ligne pour voir le détail et les arènes liées.</p>
+      </div>
+    </div>
+    <div id="status" class="at-status">Chargement…</div>
+    <div class="at-twrap" id="table-wrap" style="display:none;">
+      <table class="at-table">
+        <thead>
+          <tr>
+            <th>Tag</th>
+            <th>Bulle</th>
+            <th>Total</th>
+            <th>7 j</th>
+            <th>7 j préc.</th>
+            <th>Tendance</th>
+            <th>Variantes</th>
+            <th>Arènes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tags-body"></tbody>
+      </table>
+    </div>
+    <div id="tag-detail" class="at-detail"></div>
+  </section>
+</main>
+
+<script>
+  let tagData = null;
+  let selectedTagKey = '';
+
+  function showToast(msg, isError) {
+    const container = document.getElementById('toasts');
+    const el = document.createElement('div');
+    el.className = 'at-toast' + (isError ? ' at-toast-err' : '');
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  function getAdminToken() {
+    try { return localStorage.getItem('admin_token') || ''; } catch { return ''; }
+  }
+
+  async function ensureAdminToken() {
+    let token = getAdminToken();
+    if (token) return token;
+    const password = prompt('Mot de passe admin');
+    if (!password) return '';
+    const response = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.token) throw new Error(data.error || 'Connexion admin impossible.');
+    try { localStorage.setItem('admin_token', data.token); } catch {}
+    return data.token;
+  }
+
+  const reAccents = new RegExp('[̀-ͯ]', 'g');
+  function normalizeTagKey(tag) {
+    return String(tag || '')
+      .normalize('NFD').replace(reAccents, '')
+      .toLowerCase().replace(/#/g, '').replace(/['']/g, ' ')
+      .replace(/[^a-z0-9\s-]/g, ' ').replace(/-/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function formatTrend(value) {
+    const n = Number(value || 0);
+    const cls = n > 0 ? 'trend-up' : n < 0 ? 'trend-down' : 'trend-neutral';
+    const pfx = n > 0 ? '▲ +' : n < 0 ? '▼ ' : '';
+    return '<span class="' + cls + '">' + pfx + n + '%</span>';
+  }
+
+  function formatDate(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  async function adminFetchJson(url, options) {
+    const token = await ensureAdminToken();
+    if (!token) throw new Error('Connexion admin nécessaire.');
+    const response = await fetch(url, Object.assign({}, options || {}, {
+      headers: Object.assign({ 'x-admin-token': token }, options && options.headers ? options.headers : {})
+    }));
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch {}
+    if (!response.ok) {
+      if (response.status === 404) throw new Error('Route admin indisponible : redémarre le serveur puis recharge la page.');
+      throw new Error(data.error || text || ('Erreur admin ' + response.status));
+    }
+    return data;
+  }
+
+  function parseVariantInput(value) {
+    return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  function getFilteredTags() {
+    if (!tagData) return [];
+    const q = document.getElementById('search-input').value.trim().toLowerCase();
+    const sort = document.getElementById('sort-select').value;
+    let tags = [...tagData.tags];
+    if (q) {
+      tags = tags.filter((tag) => {
+        const raw = (tag.rawTags || []).map((item) => item.tag).join(' ');
+        const debates = (tag.debates || []).map((item) => item.question).join(' ');
+        return (tag.tag + ' ' + raw + ' ' + debates).toLowerCase().includes(q);
+      });
+    }
+    tags.sort((a, b) => {
+      if (sort === 'name') return a.tag.localeCompare(b.tag);
+      if (sort === 'current') return (b.currentCount - a.currentCount) || (b.count - a.count);
+      if (sort === 'bubble') return ((a.bubbleRank || 999) - (b.bubbleRank || 999)) || (b.currentCount - a.currentCount);
+      if (sort === 'trend') return (b.trend - a.trend) || (b.currentCount - a.currentCount);
+      return (b.count - a.count) || a.tag.localeCompare(b.tag);
+    });
+    return tags;
+  }
+
+  function renderSummary() {
+    const el = document.getElementById('summary');
+    const t = tagData && tagData.totals ? tagData.totals : {};
+    el.innerHTML = [
+      '<div class="at-metric"><div class="at-metric-val">' + (t.tags || 0) + '</div><div class="at-metric-lbl">Tags détectés</div></div>',
+      '<div class="at-metric"><div class="at-metric-val">' + (t.bubbleTags || 0) + '</div><div class="at-metric-lbl">Bulles actives</div></div>',
+      '<div class="at-metric"><div class="at-metric-val">' + (t.debates || 0) + '</div><div class="at-metric-lbl">Arènes analysées</div></div>',
+      '<div class="at-metric"><div class="at-metric-val" style="font-size:14px;padding-top:5px;">' + escapeHtml(formatDate(tagData.generatedAt)) + '</div><div class="at-metric-lbl">Généré le</div></div>',
+    ].join('');
+  }
+
+  function renderActiveBubbleTags() {
+    const container = document.getElementById('active-bubble-tags');
+    const bubbleTags = Array.isArray(tagData && tagData.bubbleTags) ? tagData.bubbleTags : [];
+    if (!bubbleTags.length) {
+      container.innerHTML = '<span class="at-muted">Aucun tag actif sur les 7 derniers jours.</span>';
+      return;
+    }
+    container.innerHTML = bubbleTags.map((tag, index) => {
+      const normalized = String(tag.normalizedTag || tag.tag || '').toLowerCase();
+      const linked = (tagData.tags || []).find((item) => item.tag === tag.tag || item.normalizedTag === normalized);
+      const key = linked ? linked.normalizedTag : normalized;
+      return '<button type="button" class="at-bchip" data-tag-key="' + escapeHtml(key) + '">' +
+        '<span class="at-bchip-num">#' + (index + 1) + '</span>' +
+        '<span>' + escapeHtml(tag.tag) + '</span>' +
+        '<span class="at-bchip-count">' + escapeHtml(String(tag.count || 0)) + '</span>' +
+      '</button>';
+    }).join('');
+    container.querySelectorAll('button[data-tag-key]').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedTagKey = button.dataset.tagKey || '';
+        renderTable();
+        renderDetail();
+        scrollToTagDetail();
+      });
+    });
+  }
+
+  function renderCanonicalTags() {
+    const container = document.getElementById('canonical-tags');
+    const groups = tagData && tagData.tagGroups && typeof tagData.tagGroups === 'object' ? tagData.tagGroups : {};
+    const entries = Object.entries(groups);
+    if (!entries.length) {
+      container.innerHTML = '<span class="at-muted">Aucun tag canonique configuré.</span>';
+      return;
+    }
+    container.innerHTML = entries.map(([canonical, variants]) => {
+      const variantHtml = (Array.isArray(variants) ? variants : [])
+        .map((v) => '<button type="button" class="at-vchip" data-action="delete-variant" data-canonical="' + escapeHtml(canonical) + '" data-variant="' + escapeHtml(v) + '" title="Supprimer ' + escapeHtml(v) + '">' + escapeHtml(v) + ' ×</button>')
+        .join('');
+      return '<div class="at-clist-item">' +
+        '<div class="at-cleft">' +
+          '<button type="button" class="at-cname at-cname-link" data-action="show-canonical-detail" data-canonical="' + escapeHtml(canonical) + '">' + escapeHtml(canonical) + '</button>' +
+          '<div class="at-cactions">' +
+            '<button type="button" class="at-btn at-btn-sm at-btn-danger" data-action="delete-canonical" data-canonical="' + escapeHtml(canonical) + '">Supprimer</button>' +
+          '</div>' +
+          '<form class="at-edit-form" data-action="edit-canonical" data-canonical="' + escapeHtml(canonical) + '">' +
+            '<input type="text" value="' + escapeHtml(canonical) + '" aria-label="Nouveau nom">' +
+            '<button class="at-btn at-btn-sm" type="submit">Renommer</button>' +
+          '</form>' +
+        '</div>' +
+        '<div class="at-cright">' +
+          '<div class="at-cvariants">' + (variantHtml || '<span class="at-muted" style="font-size:11px;">Aucune variante</span>') + '</div>' +
+          '<form class="at-add-variant" data-action="add-variant" data-canonical="' + escapeHtml(canonical) + '">' +
+            '<input type="text" placeholder="+ Nouvelle variante">' +
+            '<button class="at-btn at-btn-sm" type="submit">Ajouter</button>' +
+          '</form>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  async function addCanonicalTag(event) {
+    event.preventDefault();
+    const canonicalInput = document.getElementById('new-canonical-input');
+    const variantsInput = document.getElementById('new-variants-input');
+    const canonical = canonicalInput.value.trim();
+    const variants = parseVariantInput(variantsInput.value);
+    if (!canonical) return showToast('Ajoute un tag canonique.', true);
+    await adminFetchJson('/api/admin/tag-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canonical, variants })
+    });
+    canonicalInput.value = '';
+    variantsInput.value = '';
+    showToast('Tag canonique ajouté.');
+    await loadTags();
+  }
+
+  async function addCanonicalVariant(form) {
+    const canonical = form.dataset.canonical || '';
+    const input = form.querySelector('input');
+    const variant = input.value.trim();
+    if (!variant) return;
+    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical) + '/variants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variant })
+    });
+    input.value = '';
+    showToast('Variante ajoutée.');
+    await loadTags();
+  }
+
+  async function editCanonicalTag(form) {
+    const canonical = form.dataset.canonical || '';
+    const input = form.querySelector('input');
+    const nextCanonical = input.value.trim();
+    if (!canonical || !nextCanonical) return;
+    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ canonical: nextCanonical })
+    });
+    showToast('Tag renommé.');
+    await loadTags();
+  }
+
+  async function deleteCanonicalTag(canonical) {
+    if (!confirm('Supprimer définitivement le tag "' + canonical + '" et toutes ses variantes ?')) return;
+    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical), { method: 'DELETE' });
+    showToast('Tag supprimé.');
+    await loadTags();
+  }
+
+  async function deleteCanonicalVariant(canonical, variant) {
+    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical) + '/variants/' + encodeURIComponent(variant), { method: 'DELETE' });
+    showToast('Variante supprimée.');
+    await loadTags();
+  }
+
+  function getTagPayload(tag) {
+    const rawVariants = (tag.rawTags || []).map((item) => item.tag).filter(Boolean);
+    return { tag: tag.tag, variants: rawVariants };
+  }
+
+  async function editDetectedTag(tag) {
+    const nextTag = prompt('Nouveau nom du tag', tag.tag);
+    if (!nextTag || !nextTag.trim()) return;
+    const payload = getTagPayload(tag);
+    const groups = tagData && tagData.tagGroups && typeof tagData.tagGroups === 'object' ? tagData.tagGroups : {};
+    const canonicalKey = Object.keys(groups).find((key) => key.toLowerCase() === String(tag.tag || '').toLowerCase());
+    const url = canonicalKey ? '/api/admin/tag-groups/' + encodeURIComponent(canonicalKey) : '/api/admin/detected-tags';
+    const body = canonicalKey
+      ? { canonical: nextTag.trim() }
+      : { tag: payload.tag, nextTag: nextTag.trim(), variants: payload.variants };
+    await adminFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    showToast('Tag modifié.');
+    await loadTags();
+  }
+
+  async function addDetectedTagVariant(tag) {
+    const variant = prompt('Nouvelle variante pour "' + tag.tag + '"');
+    if (!variant || !variant.trim()) return;
+    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(tag.tag) + '/variants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variant: variant.trim() })
+    });
+    showToast('Variante ajoutée.');
+    await loadTags();
+  }
+
+  async function deleteDetectedTag(tag) {
+    if (!confirm('Supprimer définitivement le tag "' + tag.tag + '" et ses variantes du calcul des bulles ?')) return;
+    const payload = getTagPayload(tag);
+    await adminFetchJson('/api/admin/detected-tags/exclude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    showToast('Tag exclu des bulles.');
+    await loadTags();
+  }
+
+  async function removeKeywordFromDebate(debateId, keyword) {
+    if (!debateId || !keyword) return;
+    await adminFetchJson('/api/admin/debate/' + encodeURIComponent(debateId) + '/keywords/' + encodeURIComponent(keyword), { method: 'DELETE' });
+    showToast('Mot-clé retiré.');
+    await loadTags();
+  }
+
+  function scrollToTagDetail() {
+    const detail = document.getElementById('tag-detail');
+    if (!detail || !detail.classList.contains('is-open')) return;
+    requestAnimationFrame(() => detail.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  function renderTable() {
+    const body = document.getElementById('tags-body');
+    const tags = getFilteredTags();
+    body.innerHTML = tags.map((tag) => {
+      const raw = (tag.rawTags || []).slice(0, 3).map((item) => escapeHtml(item.tag)).join(', ');
+      const bubble = tag.bubbleRank
+        ? '<span class="at-badge">#' + tag.bubbleRank + '</span>'
+        : '<span class="at-muted">—</span>';
+      const isSelected = tag.normalizedTag === selectedTagKey;
+      return '<tr data-tag-key="' + escapeHtml(tag.normalizedTag) + '"' + (isSelected ? ' class="is-selected"' : '') + '>' +
+        '<td><div class="at-tname">' + escapeHtml(tag.tag) + '</div><div class="at-tkey">' + escapeHtml(tag.normalizedTag) + '</div></td>' +
+        '<td>' + bubble + '</td>' +
+        '<td><span class="at-num-main">' + tag.count + '</span></td>' +
+        '<td>' + tag.currentCount + '</td>' +
+        '<td><span class="at-num-sub">' + tag.previousCount + '</span></td>' +
+        '<td>' + formatTrend(tag.trend) + '</td>' +
+        '<td><div class="at-raw-preview" title="' + escapeHtml((tag.rawTags || []).map((r) => r.tag).join(', ')) + '">' + (raw || '<span class="at-muted">—</span>') + '</div></td>' +
+        '<td>' + (tag.debates || []).length + '</td>' +
+        '<td><div class="at-row-acts">' +
+          '<button type="button" class="at-ibtn" data-action="edit-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Modifier le nom">✎</button>' +
+          '<button type="button" class="at-ibtn" data-action="add-detected-variant" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Ajouter une variante">+</button>' +
+          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Supprimer définitivement">×</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+
+    body.querySelectorAll('tr[data-tag-key]').forEach((row) => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest('button')) return;
+        selectedTagKey = row.dataset.tagKey || '';
+        renderTable();
+        renderDetail();
+        scrollToTagDetail();
+      });
+    });
+
+    if (selectedTagKey && !tags.some((tag) => tag.normalizedTag === selectedTagKey)) {
+      selectedTagKey = '';
+      renderDetail();
+    }
+  }
+
+  function renderDetail() {
+    const detail = document.getElementById('tag-detail');
+    if (!selectedTagKey || !tagData) {
+      detail.classList.remove('is-open');
+      detail.innerHTML = '';
+      return;
+    }
+    const tag = tagData.tags.find((item) => item.normalizedTag === selectedTagKey);
+    if (!tag) return;
+    const rawTagsHtml = (tag.rawTags || []).map((item) =>
+      '<span class="at-raw-chip">' + escapeHtml(item.tag) + ' · ' + item.count + '</span>'
+    ).join('');
+    const debatesHtml = (tag.debates || []).map((debate) => {
+      const rawTags = Array.isArray(debate.removableTags) ? debate.removableTags : [];
+      const rawActions = rawTags.map((rawTag) =>
+        '<button type="button" class="at-rm-kw" data-action="remove-debate-keyword" data-debate-id="' + escapeHtml(debate.id) + '" data-keyword="' + escapeHtml(rawTag) + '">' +
+          '× ' + escapeHtml(rawTag) +
+        '</button>'
+      ).join('');
+      return '<div class="at-debate-row">' +
+        '<a class="at-debate-q" href="/debates/' + encodeURIComponent(debate.id) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(debate.question) + '</a>' +
+        '<div class="at-debate-meta">' + escapeHtml(formatDate(debate.created_at)) + (debate.category ? ' · ' + escapeHtml(debate.category) : '') + '</div>' +
+        '<div class="at-debate-acts">' + (rawActions || '<span class="at-muted">Aucun tag administrable</span>') + '</div>' +
+      '</div>';
+    }).join('');
+
+    detail.innerHTML =
+      '<div class="at-detail-hdr">' +
+        '<div class="at-detail-ttl">Détail — ' + escapeHtml(tag.tag) + '</div>' +
+        '<button class="at-detail-close" id="detail-close-btn" title="Fermer">×</button>' +
+      '</div>' +
+      '<div class="at-detail-grid">' +
+        '<div class="at-dcard"><h3>Variantes brutes</h3><div class="at-raw-list">' + (rawTagsHtml || '<span class="at-muted">Aucune variante</span>') + '</div></div>' +
+        '<div class="at-dcard"><h3>Arènes liées</h3>' + (debatesHtml || '<span class="at-muted">Aucune arène</span>') + '</div>' +
+      '</div>';
+    detail.classList.add('is-open');
+
+    document.getElementById('detail-close-btn').addEventListener('click', () => {
+      selectedTagKey = '';
+      renderTable();
+      renderDetail();
+    });
+  }
+
+  function render() {
+    renderSummary();
+    renderActiveBubbleTags();
+    renderCanonicalTags();
+    renderTable();
+    renderDetail();
+  }
+
+  async function loadTags() {
+    const status = document.getElementById('status');
+    const tableWrap = document.getElementById('table-wrap');
+    status.style.display = '';
+    tableWrap.style.display = 'none';
+    status.textContent = 'Chargement…';
+    try {
+      const token = await ensureAdminToken();
+      if (!token) throw new Error('Connexion admin nécessaire.');
+      const response = await fetch('/api/admin/tag-occurrences', { headers: { 'x-admin-token': token } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Erreur de chargement.');
+      tagData = data;
+      status.style.display = 'none';
+      tableWrap.style.display = '';
+      render();
+    } catch (error) {
+      status.textContent = error.message || 'Erreur de chargement.';
+    }
+  }
+
+  document.getElementById('search-input').addEventListener('input', renderTable);
+  document.getElementById('sort-select').addEventListener('change', renderTable);
+
+  document.getElementById('tags-body').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button || !tagData) return;
+    event.stopPropagation();
+    const tag = (tagData.tags || []).find((item) => item.normalizedTag === (button.dataset.tagKey || ''));
+    if (!tag) return;
+    if (button.dataset.action === 'edit-detected-tag') editDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur modification tag.', true));
+    if (button.dataset.action === 'add-detected-variant') addDetectedTagVariant(tag).catch((e) => showToast(e.message || 'Erreur ajout variante.', true));
+    if (button.dataset.action === 'delete-detected-tag') deleteDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', loadTags);
+
+  document.getElementById('add-canonical-form').addEventListener('submit', (event) => {
+    addCanonicalTag(event).catch((e) => showToast(e.message || 'Erreur ajout tag.', true));
+  });
+
+  document.getElementById('canonical-tags').addEventListener('submit', (event) => {
+    const addForm = event.target.closest('form[data-action="add-variant"]');
+    if (addForm) {
+      event.preventDefault();
+      addCanonicalVariant(addForm).catch((e) => showToast(e.message || 'Erreur ajout variante.', true));
+      return;
+    }
+    const editForm = event.target.closest('form[data-action="edit-canonical"]');
+    if (editForm) {
+      event.preventDefault();
+      editCanonicalTag(editForm).catch((e) => showToast(e.message || 'Erreur modification tag.', true));
+      return;
+    }
+  });
+
+  document.getElementById('tag-detail').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    if (button.dataset.action === 'remove-debate-keyword') {
+      removeKeywordFromDebate(button.dataset.debateId || '', button.dataset.keyword || '')
+        .catch((e) => showToast(e.message || "Erreur suppression tag de l'arène.", true));
+    }
+  });
+
+  document.getElementById('canonical-tags').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const action = button.dataset.action || '';
+    if (action === 'show-canonical-detail') {
+      const canonical = button.dataset.canonical || '';
+      const canonicalKey = normalizeTagKey(canonical);
+      const match = (tagData && tagData.tags || []).find((t) =>
+        t.normalizedTag === canonicalKey || normalizeTagKey(t.tag) === canonicalKey
+      );
+      if (match) {
+        selectedTagKey = match.normalizedTag;
+        renderTable();
+        renderDetail();
+        scrollToTagDetail();
+      } else {
+        showToast('Aucune donnée de tendance pour ce tag.', false);
+      }
+    }
+    if (action === 'delete-canonical') deleteCanonicalTag(button.dataset.canonical || '').catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
+    if (action === 'delete-variant') deleteCanonicalVariant(button.dataset.canonical || '', button.dataset.variant || '').catch((e) => showToast(e.message || 'Erreur suppression variante.', true));
+  });
+
+  loadTags();
+</script>
+</body>
+</html>

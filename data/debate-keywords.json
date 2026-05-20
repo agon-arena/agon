@@ -20,7 +20,6 @@
     "extrême droite",
     "Londre",
     "manifestation",
-    "ympathisant",
     "remigration",
     "droite radicale",
     "mouvements identitaire"
@@ -66,7 +65,6 @@
     "Emirats arabes uni",
     "frappe militaire",
     "Moyen-Orient",
-    "écurité nucléaire",
     "conflit régional"
   ],
   "444": [
@@ -101,5 +99,23 @@
     "marché financier",
     "technologie",
     "régulation"
+  ],
+  "450": [
+    "JD Vance",
+    "assaut du Capitole",
+    "émeutier",
+    "indemnisation",
+    "États-Uni",
+    "Capitole",
+    "politique américaine"
+  ],
+  "451": [
+    "Nouvelle-Calédonie",
+    "Parlement françai",
+    "corps électoral",
+    "natif",
+    "crutin crucial",
+    "indépendantisme",
+    "tatut politique"
   ]
 }

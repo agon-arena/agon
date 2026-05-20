@@ -75,7 +75,10 @@
   <div>
     <h3 style="color:#ffffff;">Signalements</h3>
   </div>
-  <div style="display:flex; gap:8px; align-items:center;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+    <a class="button button-small" href="/admin-tags" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+      <i class="fa-solid fa-tags"></i> Tags
+    </a>
     <button class="delete-button" type="button" onclick="deleteAllReports()">
       <i class="fa-solid fa-trash"></i> Supprimer les signalements
     </button>

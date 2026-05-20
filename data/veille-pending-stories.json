@@ -16,5 +16,23 @@
       "strong_keywords_match": false
     },
     "storySummary": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron"
+  },
+  "1779301900746": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "01-les-conflits-au-moyen-orient-recomposent-les-equilibres-regionaux",
+    "matchedStoryTitle": "Les conflits au Moyen-Orient recomposent les équilibres régionaux",
+    "previousEpisodeTitle": "Israël est-il proche de son objectif de tuer tous les responsables du 7-Octobre ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=444",
+    "confidence": 0.85,
+    "reason": "Histoire choisie manuellement.",
+    "criteria": {
+      "main_actors_match": true,
+      "central_tension_match": true,
+      "temporal_continuity": true,
+      "editorial_theme_match": true,
+      "strong_keywords_match": true
+    },
+    "storySummary": ""
   }
 }

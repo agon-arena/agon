@@ -1,5 +1,20 @@
 [
   {
+    "story_id": "nouvelle-caledonie-mpee86jv",
+    "story_title": "Nouvelle Calédonie",
+    "story_summary": "",
+    "main_actors": [],
+    "central_tension": "",
+    "keywords": [],
+    "status": "active",
+    "created_at": "2026-05-20T18:26:31.339Z",
+    "updated_at": "2026-05-20T18:26:31.339Z",
+    "first_episode_id": null,
+    "latest_episode_id": null,
+    "latest_episode_title": "",
+    "latest_episode_summary": ""
+  },
+  {
     "story_id": "01-les-conflits-au-moyen-orient-recomposent-les-equilibres-regionaux",
     "story_title": "Les conflits au Moyen-Orient recomposent les équilibres régionaux",
     "story_summary": "",
@@ -53,11 +68,11 @@
     "keywords": [],
     "status": "active",
     "created_at": "2026-05-14T00:00:00.000Z",
-    "updated_at": "2026-05-14T00:00:00.000Z",
-    "first_episode_id": null,
-    "latest_episode_id": null,
-    "latest_episode_title": "",
-    "latest_episode_summary": ""
+    "updated_at": "2026-05-20T18:01:32.971Z",
+    "first_episode_id": "450",
+    "latest_episode_id": "450",
+    "latest_episode_title": "Faut-il indemniser les émeutiers du Capitole aux États-Unis ?",
+    "latest_episode_summary": "Aux États-Unis, JD Vance a récemment annoncé la possibilité d’une indemnisation pour les émeutiers responsables de l’assaut du Capitole. Cette déclaration inattendue ouvre la porte à une compensation financière pour des individus jusqu’ici principalement considérés sous l’angle judiciaire et pénal. En évoquant cette hypothèse, JD Vance soulève un débat inédit sur la manière dont les autorités fédérales pourraient gérer les conséquences de cet événement majeur, qui a profondément marqué la scène politique américaine.Cette annonce représente une étape importante dans le traitement des répercussions de l’assaut du Capitole. Jusqu’à présent, la priorité avait été donnée à la sanction et à la répression, mais l’idée d’une forme de réparation pour les participants introduit une perspective nouvelle. Ce changement de ton pourrait modifier significativement la façon dont la responsabilité et les droits des personnes impliquées sont envisagés, suscitant des interrogations sur l’équilibre entre justice et indemnisation dans ce contexte sensible.Faut-il indemniser les émeutiers du Capitole aux États-Unis ?J.L Grasso"
   },
   {
     "story_id": "05-la-vie-politique-francaise-traverse-une-periode-d-instabilite-et-de-recompositio",

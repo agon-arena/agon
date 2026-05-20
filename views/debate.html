@@ -2447,6 +2447,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var POLL_INTERVAL = 5000;
   var _timer = null;
   var _toast = null;
+  var _wasOffline = false;
 
   function showToast() {
     if (_toast) return;
@@ -2476,14 +2477,9 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     if (!hasContent) startPolling();
   });
 
-  /* Cas 2 : retour en ligne après coupure réseau */
-  window.addEventListener('online', function() { startPolling(); });
-
-  /* Cas 3 : erreur globale (script non chargé) */
-  window.addEventListener('error', function(e) {
-    if (e && e.target && e.target !== window) return;
-    startPolling();
-  }, true);
+  /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
+  window.addEventListener('offline', function() { _wasOffline = true; });
+  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
 })();
 </script>
 </body>
