@@ -4891,6 +4891,7 @@ body.page-debate .topbar::after {
 
 /* nom du site : plus visible */
 .debate-source-domain {
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-weight: 800;
   font-size: 1.35rem;
   line-height: 1.2;
@@ -7770,6 +7771,7 @@ padding:4px 14px 12px 14px;
 }
 
 .debate-source-card-domain {
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 13px;
   font-weight: 800;
   color: #6b7280;
@@ -9234,7 +9236,6 @@ body.is-standalone .agon-tag-trends-section {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-bottom: 70px; /* compense la zone vide en haut du cloud (bulles démarrent à ~116px) */
 }
 
 body.is-standalone .page-home-mobile .agon-tag-trends-caption {
@@ -9452,6 +9453,31 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 
 .install-modal-steps strong {
   color: #fff;
+}
+
+.home-topbar-login-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #374151;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.home-topbar-login-icon:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #111827;
+  transform: translateY(-1px);
+}
+
+.home-topbar-login-icon i {
+  font-size: 18px;
 }
 
 .home-topbar-menu-toggle{
@@ -11254,6 +11280,7 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
 }
 
 .idea-source-domain {
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   color: #6b7280;
   font-size: 11px;
   font-weight: 800;

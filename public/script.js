@@ -5062,6 +5062,7 @@ function ensureIndexSocialLoadingPlaceholderStyles() {
       background: rgba(255, 255, 255, 0.08);
       color: #f8fafc;
       border: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
       font-size: 12px;
       font-weight: 800;
       letter-spacing: 0.04em;
@@ -5078,6 +5079,7 @@ function ensureIndexSocialLoadingPlaceholderStyles() {
     }
 
     .index-social-loading-placeholder-title {
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
       color: #f8fafc;
       font-size: 16px;
       line-height: 1.35;
@@ -5085,6 +5087,7 @@ function ensureIndexSocialLoadingPlaceholderStyles() {
     }
 
     .index-social-loading-placeholder-subtitle {
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
       color: rgba(226, 232, 240, 0.82);
       font-size: 13px;
       line-height: 1.5;
@@ -23850,6 +23853,22 @@ scheduleMobileIndexCardHighlightUpdate();
 
   if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) initIndex();
   if (location.pathname === "/create") initCreate();
+
+  if (document.body.classList.contains('is-standalone')) {
+    requestAnimationFrame(() => {
+      const cloud = document.getElementById('agon-tag-trends-cloud');
+      const topbar = document.querySelector('.topbar');
+      const nav = document.querySelector('.home-bottom-nav');
+      if (!cloud || !topbar || !nav) return;
+      const topbarBottom = topbar.getBoundingClientRect().bottom;
+      const navTop = nav.getBoundingClientRect().top;
+      const availableCenter = (topbarBottom + navTop) / 2;
+      // Le centre visuel des bulles est à 311px dans le container de 548px
+      const targetCloudTop = availableCenter - 311;
+      const currentCloudTop = cloud.getBoundingClientRect().top;
+      cloud.style.marginTop = (targetCloudTop - currentCloudTop) + 'px';
+    });
+  }
 if (location.pathname === "/debate") {
   localStorage.setItem("debate_view_mode", "columns");
   initDebateCreateEntryPoints();
