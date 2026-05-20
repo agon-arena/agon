@@ -16279,3 +16279,37 @@ body.page-debate .debate-title-share-wrap.debate-title-share-wrap--right {
     padding-right: 36px !important;
   }
 }
+
+/* App mobile : bouton connexion aligne a droite du bandeau blanc */
+@media (max-width: 768px) {
+  body.is-standalone.page-home-mobile .home-topbar-login-icon {
+    grid-area: spacer;
+    justify-self: end;
+    align-self: center;
+    margin: 0 8px 0 0 !important;
+    width: 38px;
+    height: 38px;
+    display: inline-flex !important;
+  }
+
+  body.is-standalone.page-home-mobile .topbar-actions {
+    justify-content: flex-start !important;
+  }
+}
+
+/* Correction app mobile : connexion vraiment au bord droit du bandeau */
+@media (max-width: 768px) {
+  body.is-standalone.page-home-mobile .topbar-inner.topbar-home {
+    position: relative !important;
+  }
+
+  body.is-standalone.page-home-mobile .home-topbar-login-icon {
+    position: absolute !important;
+    top: 50% !important;
+    right: 10px !important;
+    left: auto !important;
+    transform: translateY(-50%) !important;
+    margin: 0 !important;
+    z-index: 10005 !important;
+  }
+}
