@@ -359,7 +359,7 @@ html.thematic-scroll body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
   .page-home-mobile .topbar-social .share-icon-button {
@@ -858,7 +858,7 @@ main.create-page {
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   color: #1f2937 !important;
   line-height: 1.25;
-  font-size: 16px !important;
+  font-size: 18px !important;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
@@ -5867,6 +5867,8 @@ body.page-debate .topbar::after {
   .page-home-mobile .topbar-inner.topbar-home {
     align-items: stretch;
     gap: 12px;
+    padding-top: 2px;
+    padding-bottom: 4px;
   }
 
   .page-home-mobile .home-brand-block {
@@ -16157,4 +16159,11 @@ body.page-debate .comment-card p {
   body.page-debate .argument-title { font-size: 24px; }
   body.page-debate .argument-body  { font-size: 19px; }
   body.page-debate .comment-card p { font-size: 18px; }
+}
+
+@media (min-width: 769px) {
+  body.page-home .debate-card-context-text,
+  body.page-home-mobile .debate-card-context-text {
+    font-size: 22px !important;
+  }
 }
