@@ -69,6 +69,7 @@ html.thematic-scroll body {
 }
 
 .agon-startup-logo {
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 44px;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -791,6 +792,7 @@ main.create-page {
   background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
   border: 1px solid rgba(67, 56, 202, 0.18);
   color: #312e81;
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
@@ -799,6 +801,7 @@ main.create-page {
 }
 
 .debate-card-date-badge {
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 10px;
   font-weight: 500;
   color: #9ca3af;
@@ -9223,6 +9226,24 @@ body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
+/* Standalone : bulles centrées à l'écran, débats sous le fold */
+body.is-standalone .index-explorer-topbar {
+  display: none;
+}
+
+body.is-standalone .agon-tag-trends-section {
+  margin-top: 0 !important;
+  min-height: calc(100dvh - 110px - 73px - env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+body.is-standalone .page-home-mobile .agon-tag-trends-caption {
+  transform: none;
+}
+
 .app-floating-refresh-btn {
   position: fixed;
   left: 50%;
@@ -14394,17 +14415,11 @@ body.voices-panel-open {
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.15) 0%,
-      rgba(255, 255, 255, 0.05) 20%,
-      rgba(255, 255, 255, 0) 45%
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.07) 25%,
+      rgba(255, 255, 255, 0) 55%
     ),
-    linear-gradient(
-      145deg,
-      #243038 0%,
-      #28353e 35%,
-      #243038 70%,
-      #202a31 100%
-    );
+    #111827;
   padding: 12px 16px 12px;
   border-radius: 10px 10px 0 0;
   width: 100%;
