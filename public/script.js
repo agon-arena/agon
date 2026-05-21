@@ -5461,6 +5461,14 @@ function renderIndexOpenGraphImageShell(shell) {
     shell.dataset.rendered = 'failed';
     shell.dataset.rendering = 'false';
     if (loading) loading.style.display = 'none';
+    const removedFromSwipe = removeFailedIndexSourceFromSwipe(shell);
+    if (!removedFromSwipe) {
+      const indexSourceCard = shell.closest('.page-home .debate-source-card, .page-home-mobile .debate-source-card');
+      if (indexSourceCard) {
+        indexSourceCard.remove();
+        return;
+      }
+    }
     shell.remove();
   };
 
@@ -5485,6 +5493,69 @@ function renderIndexOpenGraphImageShell(shell) {
   }, 6500);
 
   shell.dataset.ogImageFallbackTimer = String(fallbackTimer);
+}
+
+function removeFailedIndexSourceFromSwipe(imageShell) {
+  const swipeShell = imageShell?.closest?.('[data-index-media-swipe-shell]');
+  if (!swipeShell) return false;
+
+  let mediaItems;
+  try {
+    mediaItems = JSON.parse(swipeShell.dataset.mediaItems || '[]');
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(mediaItems) || !mediaItems.length) return false;
+
+  const currentIndex = Number(swipeShell.dataset.currentIndex || '0') || 0;
+  const currentItem = mediaItems[currentIndex] || null;
+  const failedSourceUrl = String(swipeShell.dataset.currentSourceUrl || currentItem?.url || '').trim();
+  if (!failedSourceUrl) return false;
+
+  const nextItems = mediaItems.filter((item) => {
+    return !(String(item?.type || '').trim() === 'source' && String(item?.url || '').trim() === failedSourceUrl);
+  });
+
+  if (nextItems.length === mediaItems.length) return false;
+
+  const debateId = String(swipeShell.dataset.debateId || '').trim();
+  const debate = getIndexDebateById(debateId) || { id: debateId };
+
+  if (!nextItems.length) {
+    swipeShell.remove();
+    return true;
+  }
+
+  const nextIndex = Math.min(currentIndex, nextItems.length - 1);
+  const nextItem = nextItems[nextIndex];
+  const nextPreview = String(nextItem?.type || '').trim() === 'source'
+    ? getResolvedIndexSourcePreview(String(nextItem.url || '').trim(), debate)
+    : null;
+  const nextHtml = renderIndexMediaItemHtml(nextItem, debate, nextPreview);
+  if (!nextHtml) {
+    swipeShell.remove();
+    return true;
+  }
+
+  if (nextItems.length === 1) {
+    swipeShell.insertAdjacentHTML('afterend', nextHtml);
+    const replacement = swipeShell.nextElementSibling;
+    swipeShell.remove();
+    if (replacement) refreshIndexCardMediaEnhancements(replacement.closest('.debate-card') || replacement);
+    return true;
+  }
+
+  const inner = swipeShell.querySelector('[data-index-media-swipe-content]');
+  if (!inner) return false;
+  inner.innerHTML = nextHtml;
+  swipeShell.dataset.mediaItems = JSON.stringify(nextItems);
+  swipeShell.dataset.currentIndex = String(nextIndex);
+  swipeShell.dataset.currentSourceUrl = String(nextItem?.type || '').trim() === 'source'
+    ? String(nextItem.url || '').trim()
+    : '';
+  swipeShell.dataset.currentSourcePreview = JSON.stringify(nextPreview || null);
+  refreshIndexCardMediaEnhancements(swipeShell.closest('.debate-card') || swipeShell);
+  return true;
 }
 
 function unloadIndexOpenGraphImageShell(shell) {
@@ -5887,7 +5958,25 @@ function getIndexDebateCurrentMediaItem(debate) {
   return null;
 }
 
-function getIndexDebateMediaItems(debate) {
+function shouldIncludeIndexMediaItem(item, debate = null, options = {}) {
+  if (!item) return false;
+
+  const itemType = String(item.type || "").trim();
+  const itemUrl = String(item.url || "").trim();
+  if (!itemType || !itemUrl) return false;
+
+  if (itemType !== "source") return true;
+  if (options.includeSourcesWithoutImages) return true;
+  if (isDirectImageUrl(itemUrl)) return true;
+  if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) return true;
+  if (isXStatusUrl(itemUrl) || isInstagramPostUrl(itemUrl)) return true;
+
+  const preview = getResolvedIndexSourcePreview(itemUrl, debate);
+  const normalizedPreview = normalizeSourcePreviewData(preview, itemUrl);
+  return !!String(normalizedPreview.image || "").trim();
+}
+
+function getIndexDebateMediaItems(debate, options = {}) {
   const currentItem = getIndexDebateCurrentMediaItem(debate);
   const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
 
@@ -5936,7 +6025,7 @@ function getIndexDebateMediaItems(debate) {
     const key = `${type}::${url}`;
     if (seen.has(key)) return false;
     seen.add(key);
-    return true;
+    return shouldIncludeIndexMediaItem(item, debate, options);
   });
 }
 
@@ -6403,12 +6492,12 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const mediaItems = getIndexDebateMediaItems(debate);
   const initialIndex = getPreferredIndexMediaStartIndex(mediaItems, debate);
   const currentItem = mediaItems[initialIndex] || null;
+  if (!currentItem) return "";
+
   const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
     ? getResolvedIndexSourcePreview(String(currentItem.url || "").trim(), debate)
     : null;
-  const baseHtml = currentItem
-    ? renderIndexMediaItemHtml(currentItem, debate, currentSourcePreview)
-    : renderIndexInlineSourceCard(debate);
+  const baseHtml = renderIndexMediaItemHtml(currentItem, debate, currentSourcePreview);
   if (!baseHtml) return "";
 
   if (mediaItems.length < 2) {
@@ -6549,7 +6638,7 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
 
   pendingIndexSourcePreviewHydrations.add(targetId);
 
-  const mediaItems = getIndexDebateMediaItems(debate).filter((item) => String(item?.type || '').trim() === 'source');
+  const mediaItems = getIndexDebateMediaItems(debate, { includeSourcesWithoutImages: true }).filter((item) => String(item?.type || '').trim() === 'source');
   const candidateUrls = [...new Set(mediaItems
     .map((item) => String(item?.url || '').trim())
     .filter((url) => url && !isDirectImageUrl(url) && !isIndexYouTubeSourceDebate({ source_url: url }))
@@ -14963,7 +15052,8 @@ function syncBubbleFrameTop() {
   if (!btn || !cloud) return;
   const btnRect = btn.getBoundingClientRect();
   const cloudRect = cloud.getBoundingClientRect();
-  const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top));
+  const frameDrop = 56;
+  const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top) + frameDrop);
   cloud.style.setProperty('--bubble-frame-top', offset + 'px');
 }
 
@@ -18511,7 +18601,7 @@ function getDebateSourceHistoryKey(item = {}) {
 }
 
 function syncDebateMediaHistoryActiveButton(item = null) {
-  const buttons = document.querySelectorAll("#debate-media-history .debate-media-history-btn");
+  const buttons = document.querySelectorAll("#debate-media-history .debate-media-history-btn, #debate-media-history .debate-media-source-menu-item");
   if (!buttons.length) return;
 
   const expectedKey = getDebateSourceHistoryKey(item || {});
@@ -18523,6 +18613,12 @@ function syncDebateMediaHistoryActiveButton(item = null) {
     const isActive = buttonType === expectedType
       && getDebateSourceHistoryKey({ type: buttonType, url: buttonUrl }) === expectedKey;
     button.classList.toggle("active", isActive);
+  });
+
+  document.querySelectorAll("#debate-media-history .debate-media-source-group").forEach((group) => {
+    const hasActiveSource = !!group.querySelector(".debate-media-source-menu-item.active");
+    group.classList.toggle("active", hasActiveSource);
+    group.querySelector(".debate-media-source-group-toggle")?.classList.toggle("active", hasActiveSource);
   });
 }
 
@@ -18914,6 +19010,65 @@ function initDebateMediaHistory(debate) {
     } catch { return 'Source'; }
   }
 
+  function getSourceHostname(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
+  const mediaOrientationByDomain = {
+    'franceinfo.fr': 'centre / service public',
+    'francetvinfo.fr': 'centre / service public',
+    'lemonde.fr': 'centre-gauche / généraliste',
+    'liberation.fr': 'gauche',
+    'humanite.fr': 'gauche',
+    'mediapart.fr': 'gauche / investigation',
+    'nouvelobs.com': 'centre-gauche',
+    'politis.fr': 'gauche',
+    'basta.media': 'gauche / écologie sociale',
+    'reporterre.net': 'écologie / gauche',
+    'lefigaro.fr': 'droite',
+    'valeursactuelles.com': 'droite / conservateur',
+    'lepoint.fr': 'centre-droit',
+    'lexpress.fr': 'centre / centre-droit',
+    'marianne.net': 'souverainiste / républicain',
+    'la-croix.com': 'centre / chrétien-social',
+    'publicsenat.fr': 'institutionnel / politique',
+    'bfmtv.com': 'généraliste / info continue',
+    'cnews.fr': 'droite / info continue',
+    'france24.com': 'international / service public',
+    'rfi.fr': 'international / service public',
+    'euronews.com': 'international / européen',
+    '20minutes.fr': 'généraliste populaire',
+    'huffingtonpost.fr': 'centre-gauche / société',
+    'huffpost.fr': 'centre-gauche / société',
+    'slate.fr': 'centre-gauche / analyse',
+    'alternatives-economiques.fr': 'gauche'
+  };
+
+  function getOrientationGroupFromBotLabel(orientation) {
+    const value = String(orientation || '').toLowerCase();
+    if (value.includes('gauche')) return 'left';
+    if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste')) return 'right';
+    return 'neutral';
+  }
+
+  function getSourceOrientation(url) {
+    const hostname = getSourceHostname(url);
+    const matchedDomain = Object.keys(mediaOrientationByDomain)
+      .find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+    return matchedDomain ? getOrientationGroupFromBotLabel(mediaOrientationByDomain[matchedDomain]) : 'other';
+  }
+
+  const sourceOrientationGroups = [
+    { key: 'left', label: 'Gauche', icon: 'fa-arrow-left' },
+    { key: 'neutral', label: 'Généraliste', icon: 'fa-scale-balanced' },
+    { key: 'right', label: 'Droite', icon: 'fa-arrow-right' },
+    { key: 'other', label: 'Autres médias', icon: 'fa-newspaper' }
+  ];
+
   // Aplatir toutes les sources de tous les batches en une liste unique
   const allFlatSources = sortedBatches.flatMap(([, srcs]) => srcs);
   const initialActiveSourceIdx = Math.max(0, allFlatSources.findIndex(s => s.url === currentSourceUrl));
@@ -18927,18 +19082,39 @@ function initDebateMediaHistory(debate) {
   selector.id = 'debate-media-history';
   selector.className = 'debate-media-history';
 
-  const sessionHtml = allFlatSources.map((src, i) => {
-    const name = getMediaName(src.url);
-    const isActive = i === initialActiveSourceIdx;
-    return `<button type="button" class="debate-media-history-btn${isActive ? ' active' : ''}" data-source-url="${escapeAttribute(src.url)}" title="${escapeAttribute(src.url)}">
-      <i class="fa-solid fa-link"></i><span>${escapeHtml(name)}</span>
-    </button>`;
+  const groupedSources = sourceOrientationGroups
+    .map((group) => {
+      const sources = allFlatSources
+        .map((src, i) => ({ ...src, index: i, name: getMediaName(src.url) }))
+        .filter((src) => getSourceOrientation(src.url) === group.key);
+      return { ...group, sources };
+    })
+    .filter((group) => group.sources.length > 0);
+
+  const sessionHtml = groupedSources.map((group) => {
+    const hasActive = group.sources.some((src) => src.index === initialActiveSourceIdx);
+    const count = group.sources.length;
+    const itemsHtml = group.sources.map((src) => {
+      const isActive = src.index === initialActiveSourceIdx;
+      return `<button type="button" class="debate-media-source-menu-item${isActive ? ' active' : ''}" data-source-url="${escapeAttribute(src.url)}" data-item-type="source" data-item-url="${escapeAttribute(src.url)}" title="${escapeAttribute(src.url)}">
+        <span>${escapeHtml(src.name)}</span>
+      </button>`;
+    }).join('');
+
+    return `<div class="debate-media-source-group${hasActive ? ' active' : ''}" data-source-orientation="${group.key}">
+      <button type="button" class="debate-media-history-btn debate-media-source-group-toggle${hasActive ? ' active' : ''}" aria-haspopup="true" aria-expanded="false">
+        <i class="fa-solid ${group.icon}"></i><span>${escapeHtml(group.label)}</span><span class="debate-session-count">${count}</span>
+      </button>
+      <div class="debate-media-source-menu" role="menu">
+        ${itemsHtml}
+      </div>
+    </div>`;
   }).join('');
 
   const mediaHtml = mediaExtras.map((e) => {
     const label = e.type === 'video' ? 'Vidéo' : 'Image';
     const icon  = e.type === 'video' ? 'fa-video' : 'fa-image';
-    return `<button type="button" class="debate-media-history-btn debate-media-history-btn--media" data-media-type="${e.type}" data-media-url="${escapeAttribute(e.url)}" title="${label}">
+    return `<button type="button" class="debate-media-history-btn debate-media-history-btn--media" data-item-type="${e.type}" data-item-url="${escapeAttribute(e.url)}" data-media-type="${e.type}" data-media-url="${escapeAttribute(e.url)}" title="${label}">
       <i class="fa-solid ${icon}"></i><span>${label}</span>
     </button>`;
   }).join('');
@@ -18983,12 +19159,34 @@ function initDebateMediaHistory(debate) {
 
   // --- Click handler ---
   selector.addEventListener('click', async (e) => {
-    const sourceBtn = e.target.closest('.debate-media-history-btn:not(.debate-media-history-btn--media)');
+    const groupToggle = e.target.closest('.debate-media-source-group-toggle');
+    if (groupToggle) {
+      const group = groupToggle.closest('.debate-media-source-group');
+      const willOpen = !group?.classList.contains('open');
+      selector.querySelectorAll('.debate-media-source-group.open').forEach((node) => {
+        if (node !== group) {
+          node.classList.remove('open');
+          node.querySelector('.debate-media-source-group-toggle')?.setAttribute('aria-expanded', 'false');
+        }
+      });
+      if (group) {
+        group.classList.toggle('open', willOpen);
+        groupToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      }
+      return;
+    }
+
+    const sourceBtn = e.target.closest('.debate-media-source-menu-item');
     if (sourceBtn && sourceBtn.dataset.sourceUrl) {
       const url = sourceBtn.dataset.sourceUrl;
       const item = { type: 'source', url };
-      selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
+      selector.querySelectorAll('.debate-media-history-btn, .debate-media-source-menu-item, .debate-media-source-group').forEach(b => b.classList.remove('active'));
       sourceBtn.classList.add('active');
+      const group = sourceBtn.closest('.debate-media-source-group');
+      group?.classList.add('active');
+      group?.querySelector('.debate-media-source-group-toggle')?.classList.add('active');
+      group?.classList.remove('open');
+      group?.querySelector('.debate-media-source-group-toggle')?.setAttribute('aria-expanded', 'false');
       await loadDebateMediaHistoryItem(item);
       setCurrentDebateSourceHistoryItem(item);
       return;
@@ -18996,10 +19194,32 @@ function initDebateMediaHistory(debate) {
     const mediaBtn = e.target.closest('.debate-media-history-btn--media');
     if (mediaBtn) {
       const item = { type: mediaBtn.dataset.mediaType, url: mediaBtn.dataset.mediaUrl };
-      selector.querySelectorAll('.debate-media-history-btn').forEach(b => b.classList.remove('active'));
+      selector.querySelectorAll('.debate-media-history-btn, .debate-media-source-menu-item, .debate-media-source-group').forEach(b => b.classList.remove('active'));
       mediaBtn.classList.add('active');
       await loadDebateMediaHistoryItem(item);
       setCurrentDebateSourceHistoryItem(item);
+    }
+  });
+
+  if (!window.__debateMediaSourceMenuOutsideClickBound) {
+    window.__debateMediaSourceMenuOutsideClickBound = true;
+    document.addEventListener('click', (event) => {
+      const currentSelector = document.getElementById('debate-media-history');
+      if (currentSelector && !currentSelector.contains(event.target)) {
+        currentSelector.querySelectorAll('.debate-media-source-group.open').forEach((group) => {
+          group.classList.remove('open');
+          group.querySelector('.debate-media-source-group-toggle')?.setAttribute('aria-expanded', 'false');
+        });
+      }
+    }, { capture: true });
+  }
+
+  selector.addEventListener('focusout', (event) => {
+    if (!selector.contains(event.relatedTarget)) {
+      selector.querySelectorAll('.debate-media-source-group.open').forEach((group) => {
+        group.classList.remove('open');
+        group.querySelector('.debate-media-source-group-toggle')?.setAttribute('aria-expanded', 'false');
+      });
     }
   });
 
