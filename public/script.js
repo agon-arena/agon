@@ -6618,7 +6618,7 @@ function rerenderIndexCardMedia(debateId) {
   if (existingWrapper) {
     existingWrapper.insertAdjacentHTML('beforeend', mediaHtml);
   } else {
-    const anchor = card.querySelector(':scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
+    const anchor = card.querySelector(':scope > .debate-card-context, :scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
     if (anchor) {
       anchor.insertAdjacentHTML('beforebegin', mediaHtml);
     } else {

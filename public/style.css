@@ -16056,9 +16056,24 @@ body.page-home-mobile .debate-card-agon-badge {
   text-transform: uppercase;
   overflow-wrap: normal;
   word-break: normal;
+  isolation: isolate;
   text-shadow:
     0 0 6px rgba(255,255,255,0.9),
     0 0 12px rgba(255,255,255,0.7);
+}
+
+.agon-tag-label::before {
+  content: "";
+  position: absolute;
+  inset: -50% -35%;
+  background: radial-gradient(ellipse at center,
+    rgba(255,255,255,0.92) 0%,
+    rgba(255,255,255,0.65) 38%,
+    rgba(255,255,255,0) 72%
+  );
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
 }
 
 .agon-tag-word {
