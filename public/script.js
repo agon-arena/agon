@@ -393,6 +393,7 @@ let indexPendingEmbedScrollRestoreTop = null;
 let indexUserScrollGuardBound = false;
 let indexXTabletRefreshBound = false;
 let indexFilterFeedWarmupPromise = null;
+let indexPendingAdminProtectedDebatesRender = null;
 
 const DEBATE_CATEGORY_OPTIONS = [
   "Politique",
@@ -12231,6 +12232,22 @@ function cleanupIndexInfiniteScrollObserver() {
   }
 }
 
+function isIndexAdminEditInteractionActive() {
+  if (location.pathname && location.pathname !== "/") return false;
+  return !!document.querySelector(
+    '.debate-card-admin-edit[data-open="true"], ' +
+    '.debate-card-admin-edit.is-open, ' +
+    '[data-admin-category-picker][data-open="true"]'
+  );
+}
+
+function flushIndexAdminProtectedDebatesRender() {
+  if (!indexPendingAdminProtectedDebatesRender || isIndexAdminEditInteractionActive()) return;
+  const pendingDebates = indexPendingAdminProtectedDebatesRender;
+  indexPendingAdminProtectedDebatesRender = null;
+  renderDebatesList(pendingDebates);
+}
+
 function updateIndexBatchLoadingOverlayBounds() {
   const overlay = document.getElementById('index-batch-loading-overlay');
   if (!overlay) return;
@@ -12462,6 +12479,7 @@ function initAdminEditCategoryPicker(panel) {
     picker.dataset.open = 'false';
     toggleButton.setAttribute('aria-expanded', 'false');
     categoryPanel.hidden = true;
+    setTimeout(flushIndexAdminProtectedDebatesRender, 0);
   };
 
   const openPanel = () => {
@@ -15139,6 +15157,12 @@ function renderDebatesList(debates) {
     window.__agonDebateModalPendingDebates = debates;
     return;
   }
+  // En mode admin, l'édition d'une carte peut contenir un menu thématique ouvert.
+  // On évite alors que le scroll infini reconstruise la liste et referme ce menu.
+  if (isIndexAdminEditInteractionActive()) {
+    indexPendingAdminProtectedDebatesRender = debates;
+    return;
+  }
   cleanupIndexInfiniteScrollObserver();
 
   const safeDebates = Array.isArray(debates) ? debates : [];
@@ -15217,6 +15241,7 @@ function appendDebatesToList(debates) {
 }
 
 async function loadMoreOtherDebates() {
+  if (isIndexAdminEditInteractionActive()) return;
   if (indexInfiniteScrollLoading) return;
   if (otherDebatesVisible >= otherDebatesCache.length && !indexDebatesApiHasMore) return;
 
@@ -19228,8 +19253,9 @@ function initDebateMediaHistory(debate) {
   if (hero && firstMedia) hero.insertBefore(selector, firstMedia);
   positionDebateContextBelowSources();
 
-  if (!currentSourceUrl && currentSessionSources.length > 0) {
-    loadSessionSource(currentSessionSources, 0);
+  if (!currentSourceUrl && initialSource) {
+    loadDebateMediaHistoryItem(initialSource);
+    setCurrentDebateSourceHistoryItem(initialSource);
   }
 }
 

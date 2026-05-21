@@ -9491,6 +9491,13 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   transform: none;
 }
 
+@media (min-width: 769px) {
+  body.is-standalone.page-home-mobile .agon-tag-trends-section {
+    padding-top: 76px !important;
+    padding-bottom: 44px !important;
+  }
+}
+
 .app-floating-refresh-btn {
   position: fixed;
   left: 50%;
@@ -15432,6 +15439,9 @@ body.page-home-mobile .debates-list {
 
 body.page-home .debate-card,
 body.page-home-mobile .debate-card {
+  background:
+    linear-gradient(rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0.12)),
+    #ffffff !important;
   padding-top: 8px !important;
   padding-bottom: 2px !important;
   gap: 6px !important;
@@ -15926,7 +15936,10 @@ body.page-home-mobile .debate-card-agon-badge {
 .agon-tag-bubble {
   position: absolute;
   border-radius: 50%;
-  background: #fff;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0.12)),
+    #ffffff;
   border: 3px solid #05070a;
   color: #05070a;
   display: flex;
@@ -15940,6 +15953,27 @@ body.page-home-mobile .debate-card-agon-badge {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.agon-tag-bubble::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 34%,
+    rgba(255, 255, 255, 0.78) 49%,
+    rgba(255, 255, 255, 0) 64%
+  );
+  transform: translateX(-78%) rotate(8deg);
+  opacity: 0;
+  pointer-events: none;
+  animation: agonBubbleFlash 5.8s ease-in-out infinite;
+}
+
+.agon-tag-bubble > * {
+  position: relative;
+  z-index: 1;
 }
 
 
@@ -15959,6 +15993,19 @@ body.page-home-mobile .debate-card-agon-badge {
 .agon-tag-pos-9  { animation-delay: 1.6s; }
 .agon-tag-pos-10 { animation-delay: 2.8s; }
 .agon-tag-pos-11 { animation-delay: 0.4s; }
+
+.agon-tag-pos-0::after  { animation-delay: 0.1s; }
+.agon-tag-pos-1::after  { animation-delay: 1.7s; }
+.agon-tag-pos-2::after  { animation-delay: 3.2s; }
+.agon-tag-pos-3::after  { animation-delay: 0.9s; }
+.agon-tag-pos-4::after  { animation-delay: 4.4s; }
+.agon-tag-pos-5::after  { animation-delay: 2.5s; }
+.agon-tag-pos-6::after  { animation-delay: 5.1s; }
+.agon-tag-pos-7::after  { animation-delay: 1.1s; }
+.agon-tag-pos-8::after  { animation-delay: 3.8s; }
+.agon-tag-pos-9::after  { animation-delay: 2.0s; }
+.agon-tag-pos-10::after { animation-delay: 4.8s; }
+.agon-tag-pos-11::after { animation-delay: 0.4s; }
 
 .agon-tag-bubble-large {
   width: 148px;
@@ -16035,6 +16082,20 @@ body.page-home-mobile .debate-card-agon-badge {
 @keyframes agonBubbleBreathe {
   0%, 100% { transform: scale(1); }
   50%       { transform: scale(1.06); }
+}
+
+@keyframes agonBubbleFlash {
+  0%, 72% {
+    opacity: 0;
+    transform: translateX(-78%) rotate(8deg);
+  }
+  78% {
+    opacity: 0.72;
+  }
+  88%, 100% {
+    opacity: 0;
+    transform: translateX(78%) rotate(8deg);
+  }
 }
 
 @keyframes agonTrendPulse {
@@ -16312,7 +16373,7 @@ body.page-debate :where(button, input, textarea, select, p, span, div, a, h1, h2
   font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
 }
 
-/* Oswald on create and notifications pages */
+/* Barlow Condensed on create and notifications pages, like debate */
 body.page-create,
 body.page-create-mobile,
 body.page-notifications,
@@ -16321,7 +16382,7 @@ body.page-create :where(button, input, textarea, select, p, span, div, a, h1, h2
 body.page-create-mobile :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
 body.page-notifications :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
 body.page-notifications-mobile :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
 }
 
 /* Idées page débat : titre en gras, corps en normal avec première lettre en gras */
@@ -16361,8 +16422,8 @@ body.page-home .topbar-inner {
   padding-bottom: 0 !important;
 }
 body.page-home .home-logo {
-  width: 500px !important;
-  max-height: 192px !important;
+  width: 470px !important;
+  max-height: 180px !important;
   object-fit: contain !important;
 }
 @media (min-width: 769px) {
@@ -16381,8 +16442,32 @@ body.page-home .topbar-social {
 }
 @media (min-width: 769px) {
   body.page-home .topbar-social {
-    transform: translateY(-44px) !important;
+    position: absolute !important;
+    top: -38px !important;
+    left: 50% !important;
+    width: auto !important;
+    transform: translateX(-50%) !important;
+    margin: 0 !important;
   }
+}
+
+body.page-home .theme-row-title,
+body.page-home .theme-row-title-text,
+body.page-home-mobile .theme-row-title,
+body.page-home-mobile .theme-row-title-text {
+  color: #000000 !important;
+  text-shadow: none !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+}
+
+body.page-home .home-bottom-nav-item,
+body.page-home .home-bottom-nav-item i,
+body.page-home .home-bottom-nav-item span,
+body.page-home-mobile .home-bottom-nav-item,
+body.page-home-mobile .home-bottom-nav-item i,
+body.page-home-mobile .home-bottom-nav-item span {
+  color: #000000 !important;
 }
 
 /* Bandeau blanc compact — index mobile */
@@ -16411,12 +16496,21 @@ body.page-home-mobile .topbar-social {
 @media (min-width: 769px) {
   body.page-home .topbar,
   body.page-home-mobile .topbar {
-    min-height: 207px !important;
+    height: 152px !important;
+    min-height: 152px !important;
+    max-height: 152px !important;
   }
 
   body.page-home.page-home-mobile .home-logo {
-    width: 500px !important;
-    max-height: 192px !important;
+    width: 402px !important;
+    max-height: 144px !important;
+    transform: translateY(2px) !important;
+  }
+
+  body.page-home.page-home-mobile .home-brand-block {
+    height: 146px !important;
+    max-height: 146px !important;
+    overflow: visible !important;
   }
 
   body.page-home-mobile .topbar-inner.topbar-home {
@@ -16425,15 +16519,15 @@ body.page-home-mobile .topbar-social {
 
   body.page-home .topbar-app-icon--desktop,
   body.page-home-mobile .topbar-app-icon--desktop {
-    width: 190px !important;
-    height: 190px !important;
+    width: 144px !important;
+    height: 144px !important;
     border-radius: 18px !important;
     margin: 0 !important;
     transform: none !important;
     align-self: center !important;
     justify-self: center !important;
     position: absolute !important;
-    top: 5px !important;
+    top: 4px !important;
     right: -51px !important;
     z-index: 2 !important;
   }
@@ -16470,8 +16564,184 @@ body.page-home-mobile .topbar-social {
 @media (min-width: 769px) {
   body.page-home .debate-card-context-text,
   body.page-home-mobile .debate-card-context-text {
-    font-size: 22px !important;
+    font-size: 18px !important;
   }
+}
+
+/* Bandeaux hauts compacts — create + notifications */
+@media (min-width: 769px) {
+  body.page-create .topbar,
+  body.page-create-mobile .topbar,
+  body.page-notifications .topbar,
+  body.page-notifications-mobile .topbar {
+    height: 152px !important;
+    min-height: 152px !important;
+    max-height: 152px !important;
+    padding-bottom: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.page-create .topbar-inner.topbar-home,
+  body.page-create-mobile .topbar-inner.topbar-home,
+  body.page-notifications .topbar-inner.topbar-home,
+  body.page-notifications-mobile .topbar-inner.topbar-home {
+    height: 146px !important;
+    min-height: 146px !important;
+    max-height: 146px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.page-create .home-logo,
+  body.page-create-mobile .home-logo,
+  body.page-notifications .home-logo,
+  body.page-notifications-mobile .home-logo {
+    width: 144px !important;
+    max-height: 144px !important;
+    object-fit: contain !important;
+  }
+
+  body.page-create .topbar-social,
+  body.page-create-mobile .topbar-social {
+    position: absolute !important;
+    top: -34px !important;
+    left: 50% !important;
+    width: auto !important;
+    transform: translateX(-50%) !important;
+    margin: 0 !important;
+    gap: 5px !important;
+  }
+
+  body.page-create .topbar-social .share-icon-button,
+  body.page-create-mobile .topbar-social .share-icon-button {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+  }
+
+  body.page-create .topbar-actions,
+  body.page-create-mobile .topbar-actions,
+  body.page-notifications .topbar-actions,
+  body.page-notifications-mobile .topbar-actions {
+    margin-top: 0 !important;
+  }
+
+  body.page-create .home-brand-main,
+  body.page-create-mobile .home-brand-main {
+    transform: translateX(25px) !important;
+  }
+
+  body.page-notifications .topbar-message,
+  body.page-notifications-mobile .topbar-message {
+    font-size: 16px !important;
+    line-height: 1.18 !important;
+    font-weight: 700 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  body.page-create .topbar,
+  body.page-create-mobile .topbar,
+  body.page-notifications .topbar,
+  body.page-notifications-mobile .topbar {
+    min-height: 78px !important;
+    padding-bottom: 2px !important;
+  }
+
+  body.page-create .topbar-inner.topbar-home,
+  body.page-create-mobile .topbar-inner.topbar-home,
+  body.page-notifications .topbar-inner.topbar-home,
+  body.page-notifications-mobile .topbar-inner.topbar-home {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    gap: 4px 8px !important;
+  }
+
+  body.page-create .home-logo,
+  body.page-create-mobile .home-logo,
+  body.page-notifications .home-logo,
+  body.page-notifications-mobile .home-logo {
+    width: 96px !important;
+    max-height: 74px !important;
+    object-fit: contain !important;
+  }
+
+  body.page-create .topbar-social,
+  body.page-create-mobile .topbar-social {
+    margin-top: -16px !important;
+    gap: 5px !important;
+  }
+
+  body.page-create .topbar-social .share-icon-button,
+  body.page-create-mobile .topbar-social .share-icon-button {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+  }
+
+  body.page-notifications .topbar-message,
+  body.page-notifications-mobile .topbar-message {
+    display: none !important;
+  }
+}
+
+/* Index : aération interne après le texte de contexte */
+body.page-home .debate-card-context,
+body.page-home-mobile .debate-card-context {
+  padding-bottom: 7px !important;
+  margin-bottom: 2px !important;
+}
+
+body.page-home .debate-card-context-extra,
+body.page-home-mobile .debate-card-context-extra {
+  margin-top: 7px !important;
+  padding-top: 7px !important;
+  border-top: 1px solid rgba(36, 48, 56, 0.12) !important;
+}
+
+body.page-home .debate-card-meta-below-media,
+body.page-home-mobile .debate-card-meta-below-media {
+  gap: 4px !important;
+  margin-top: 4px !important;
+}
+
+body.page-home .debate-card-counts-row,
+body.page-home-mobile .debate-card-counts-row {
+  gap: 6px !important;
+  row-gap: 4px !important;
+}
+
+body.page-home .debate-card-ideas-count,
+body.page-home .debate-card-comments-count,
+body.page-home .debate-card-votes-count,
+body.page-home .debate-date,
+body.page-home .debate-last-argument,
+body.page-home-mobile .debate-card-ideas-count,
+body.page-home-mobile .debate-card-comments-count,
+body.page-home-mobile .debate-card-votes-count,
+body.page-home-mobile .debate-date,
+body.page-home-mobile .debate-last-argument {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+  padding: 2px 7px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.58) !important;
+  border: 1px solid rgba(36, 48, 56, 0.1) !important;
+  color: #111827 !important;
+  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+}
+
+body.page-home .debate-card-comments-count::before,
+body.page-home .debate-card-votes-count::before,
+body.page-home-mobile .debate-card-comments-count::before,
+body.page-home-mobile .debate-card-votes-count::before {
+  content: none !important;
 }
 
 
