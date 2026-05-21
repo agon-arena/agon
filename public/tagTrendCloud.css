@@ -75,6 +75,11 @@
   font-size: 7px;
 }
 
+.agon-tag-pos-6 .agon-tag-trend {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .agon-tag-trend-up {
   color: #166534;
 }

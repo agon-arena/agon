@@ -30,24 +30,66 @@ function fitLabelInBubble(bubble) {
   if (!label) return;
 
   const trendEl = bubble.querySelector(".agon-tag-trend");
-  const trendH  = trendEl ? trendEl.offsetHeight + 1 : 0;
+  const trendH = trendEl ? trendEl.offsetHeight + 3 : 0;
+  const bubbleW = bubble.clientWidth || 0;
+  const bubbleH = bubble.clientHeight || 0;
 
-  // Padding-top dynamique : juste 1px de dégagement sous le badge
-  label.style.paddingTop = trendH + "px";
-  label.style.paddingBottom = trendH + "px";
+  // Le badge est dans le flux, juste au-dessus du texte, au centre de la bulle.
+  label.style.paddingTop = "0px";
+  label.style.paddingBottom = "0px";
+  label.style.maxWidth = Math.round(bubbleW * 1.04) + "px";
 
-  const availW = bubble.clientWidth * 0.68;
-  const availH = bubble.clientHeight - trendH * 2 - 6;
+  const availW = bubbleW * 1.04;
+  const availH = Math.max(16, bubbleH - trendH - 10);
 
-  // Ajuster la taille de base pour que le label tienne dans la bulle
-  let size = 52;
-  label.style.fontSize = size + "px";
+  let low = Math.max(10, bubbleW * 0.13);
+  let high = Math.min(82, Math.max(22, bubbleW * 0.48));
 
-  let iter = 0;
-  while (iter++ < 80 && size > 6 && (label.scrollWidth > availW || label.scrollHeight > availH)) {
-    size -= 0.5;
-    label.style.fontSize = size + "px";
+  for (let iter = 0; iter < 24; iter += 1) {
+    const mid = (low + high) / 2;
+    label.style.fontSize = mid + "px";
+    if (label.scrollWidth <= availW && label.scrollHeight <= availH) {
+      low = mid;
+    } else {
+      high = mid;
+    }
   }
+
+  label.style.fontSize = Math.max(10, Math.floor(low * 10) / 10) + "px";
+}
+
+function getTagTextFromLabel(label) {
+  const words = label?.querySelectorAll(".agon-tag-word");
+  return words?.length
+    ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
+    : (label?.textContent.trim() || "");
+}
+
+function renderLabelOverlays(container) {
+  container.querySelectorAll(".agon-tag-label-overlay").forEach(el => el.remove());
+
+  const containerRect = container.getBoundingClientRect();
+  container.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
+    const label = bubble.querySelector(".agon-tag-label");
+    if (!label) return;
+
+    const tag = getTagTextFromLabel(label);
+    const labelRect = label.getBoundingClientRect();
+    const overlay = label.cloneNode(true);
+    overlay.classList.add("agon-tag-label-overlay");
+    if (bubble.classList.contains("agon-tag-bubble-active")) {
+      overlay.classList.add("agon-tag-label-overlay-active");
+    }
+    overlay.dataset.tag = tag.toLowerCase();
+    overlay.style.position = "absolute";
+    overlay.style.left = (labelRect.left - containerRect.left) + "px";
+    overlay.style.top = (labelRect.top - containerRect.top) + "px";
+    overlay.style.width = labelRect.width + "px";
+    overlay.style.height = labelRect.height + "px";
+    overlay.style.fontSize = label.style.fontSize || getComputedStyle(label).fontSize;
+    overlay.style.maxWidth = label.style.maxWidth || getComputedStyle(label).maxWidth;
+    container.appendChild(overlay);
+  });
 }
 
 function renderTagTrendCloud(container, trends) {
@@ -90,7 +132,10 @@ function renderTagTrendCloud(container, trends) {
       label.appendChild(wordSpan);
     });
 
-    bubble.append(trendSpan, label);
+    const flashWrap = document.createElement("span");
+    flashWrap.className = "agon-tag-bubble-flash";
+
+    bubble.append(flashWrap, trendSpan, label);
     container.appendChild(bubble);
   });
 
@@ -112,7 +157,10 @@ function renderTagTrendCloud(container, trends) {
       if (!trend) return;
       const bubbleRect = bubble.getBoundingClientRect();
       const trendRect = trend.getBoundingClientRect();
-      const left = bubbleRect.right - containerRect.left - trendRect.width + 4;
+      const isCentered = bubble.classList.contains("agon-tag-pos-6") || bubble.classList.contains("agon-tag-pos-9");
+      const left = isCentered
+        ? bubbleRect.left - containerRect.left + (bubbleRect.width - trendRect.width) / 2
+        : bubbleRect.right - containerRect.left - trendRect.width + 4;
       const top  = bubbleRect.top  - containerRect.top  - trendRect.height / 2 + 10;
       trend.style.position = "absolute";
       trend.style.left = left + "px";
@@ -120,6 +168,8 @@ function renderTagTrendCloud(container, trends) {
       trend.style.right = "auto";
       container.appendChild(trend);
     });
+
+    renderLabelOverlays(container);
   });
 }
 

@@ -833,7 +833,8 @@ function getStableBottomBarOffset() {
 }
 
 function isIframeDebateLoadingOverlayContext() {
-  return location.pathname === "/debate" && window.self !== window.top;
+  const path = location.pathname;
+  return (path === "/debate" || path === "/create" || path === "/notifications") && window.self !== window.top;
 }
 
 function isCreateToDebateLoadingTransition() {
@@ -2715,8 +2716,7 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 }
 
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
-  const normalizedPath = String(pathname || "").trim().toLowerCase();
-  return normalizedPath === "/create";
+  return false;
 }
 
 function resetDebateIframeModalCloseButtonBadgeAlignment() {
@@ -3477,13 +3477,23 @@ function initDebateLinkPrewarm() {
   if (document.documentElement.dataset.debateLinkPrewarmInitialized === "true") return;
   document.documentElement.dataset.debateLinkPrewarmInitialized = "true";
 
+  const prewarmFromCard = (target) => {
+    const card = target instanceof Element ? target.closest('.debate-card[data-debate-id]') : null;
+    if (!card) return;
+    const id = String(card.dataset.debateId || "").trim();
+    if (!id) return;
+    const url = `/debate?id=${encodeURIComponent(id)}`;
+    prewarmDebateUrl(url);
+    if (Array.isArray(debatesCache)) {
+      const debate = debatesCache.find((d) => String(d?.id || "") === id);
+      if (debate) window.__agonPrefetchedDebateData = { id, debate };
+    }
+  };
+
   const maybePrewarmFromEventTarget = (target) => {
     const link = target instanceof Element ? target.closest('a[href]') : null;
-    if (!link) return;
-
-    const href = String(link.getAttribute("href") || "").trim();
-    if (!href) return;
-    prewarmDebateUrl(href);
+    if (link) prewarmDebateUrl(String(link.getAttribute("href") || "").trim());
+    prewarmFromCard(target);
   };
 
   document.addEventListener("pointerenter", (event) => {
@@ -3837,11 +3847,6 @@ function openNotificationsInDebateIframeModal(event = null) {
     rememberNotificationsReturnContext(`${location.pathname}${location.search}${location.hash}`);
   }
 
-  if (location.pathname === "/") {
-    window.location.href = "/notifications";
-    return false;
-  }
-
   // Pour /debates et /debates/:id : ouvrir les notifications dans l'iframe.
   // On efface d'abord l'ID de débat de l'URL pour qu'un refresh ne rouvre pas
   // le mauvais débat pendant que les notifications sont affichées.
@@ -3928,6 +3933,13 @@ function openIndexDebateFromMedia(debateId, event) {
   if (!safeDebateId) return;
 
   const nextUrl = `/debate?id=${encodeURIComponent(safeDebateId)}`;
+
+  try {
+    const cached = Array.isArray(debatesCache)
+      ? debatesCache.find((d) => String(d?.id || "") === safeDebateId)
+      : null;
+    if (cached) window.__agonPrefetchedDebateData = { id: safeDebateId, debate: cached };
+  } catch(e) {}
 
   if (window.self !== window.top) {
     try {
@@ -13963,6 +13975,8 @@ function clearActiveBubbles() {
   currentBubbleTag = null;
   document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
     .forEach(b => b.classList.remove('agon-tag-bubble-active'));
+  document.querySelectorAll('.agon-tag-label-overlay.agon-tag-label-overlay-active')
+    .forEach(label => label.classList.remove('agon-tag-label-overlay-active'));
 }
 
 function handleBubbleTagClick(bubble) {
@@ -13986,6 +14000,11 @@ function handleBubbleTagClick(bubble) {
   } else {
     currentBubbleTag = tag;
     bubble.classList.add('agon-tag-bubble-active');
+    document.querySelectorAll('.agon-tag-label-overlay').forEach(label => {
+      if ((label.dataset.tag || '').toLowerCase() === tag.toLowerCase()) {
+        label.classList.add('agon-tag-label-overlay-active');
+      }
+    });
     if (input) input.value = tag;
     currentIndexSearchQuery = tag;
     filterDebates();
@@ -15119,7 +15138,7 @@ function updateIndexTagTrends(items) {
       }
 
       if (!indexTagTrendCloudModulePromise) {
-        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260520-fix-label-clip");
+        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260521-active-overlay");
       }
 
       indexTagTrendCloudModulePromise
@@ -15136,6 +15155,11 @@ function updateIndexTagTrends(items) {
                   : (label?.textContent.trim() || '');
                 if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
                   bubble.classList.add('agon-tag-bubble-active');
+                  document.querySelectorAll('.agon-tag-label-overlay').forEach(label => {
+                    if ((label.dataset.tag || '').toLowerCase() === tag.toLowerCase()) {
+                      label.classList.add('agon-tag-label-overlay-active');
+                    }
+                  });
                 }
               });
             }
@@ -17000,6 +17024,7 @@ function initDebateImageLightbox() {
 }
 
 async function initCreate() {
+  markPageArrivalLoadingOverlayReady();
   const form = document.getElementById("create-form");
   if (!form) return;
 
@@ -19023,15 +19048,73 @@ function initDebateMediaHistory(debate) {
     return date ? `${base} — ${date}` : base;
   }
 
+  function formatMediaDisplayName(value, url = "") {
+    const rawValue = String(value || "").trim();
+    const rawUrl = String(url || "").trim();
+    const fallback = rawValue || rawUrl || "Source";
+
+    let candidate = rawValue;
+    try {
+      if (!candidate || candidate.includes(".")) {
+        candidate = new URL(candidate || rawUrl).hostname.replace(/^www\./, "");
+      }
+    } catch {}
+
+    const withoutTld = String(candidate || fallback)
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\.[a-z]{2,}(?:\.[a-z]{2,})?$/i, "")
+      .trim();
+    const key = withoutTld
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    const displayNames = {
+      "20minutes": "20 Minutes",
+      alternativeseconomiques: "Alternatives Economiques",
+      bfmtv: "BFM TV",
+      cnews: "CNews",
+      euronews: "Euronews",
+      france24: "France 24",
+      franceinfo: "France Info",
+      francetvinfo: "France TV Info",
+      huffingtonpost: "HuffPost",
+      huffpost: "HuffPost",
+      humanite: "L'Humanite",
+      lacroix: "La Croix",
+      lefigaro: "Le Figaro",
+      lemonde: "Le Monde",
+      lepoint: "Le Point",
+      lexpress: "L'Express",
+      liberation: "Liberation",
+      marianne: "Marianne",
+      mediapart: "Mediapart",
+      nouvelobs: "Le Nouvel Obs",
+      publicsenat: "Public Senat",
+      rfi: "RFI",
+      slate: "Slate",
+      valeursactuelles: "Valeurs Actuelles"
+    };
+
+    if (displayNames[key]) return displayNames[key];
+    if (/\s/.test(withoutTld)) return withoutTld;
+
+    return withoutTld
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Source";
+  }
+
   // --- Nom du média depuis l'URL ou les previews ---
   function getMediaName(url) {
     const previews = debate.index_source_previews || {};
     const preview = previews[url];
-    if (preview?.domain) return preview.domain;
+    if (preview?.domain) return formatMediaDisplayName(preview.domain, url);
     try {
       const hostname = new URL(url).hostname.replace(/^www\./, '');
       const parts = hostname.split('.');
-      return parts.length >= 2 ? parts[parts.length - 2] : hostname;
+      return formatMediaDisplayName(parts.length >= 2 ? parts[parts.length - 2] : hostname, url);
     } catch { return 'Source'; }
   }
 
@@ -20138,9 +20221,60 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   syncDebateSourceSwipeAvailability();
   positionDebateContextBelowSources();
 }
+function applyDebateCachedPreview(debate) {
+  const d = debate || {};
+  const questionEl = document.getElementById("debate-question");
+  if (questionEl) questionEl.textContent = d.question || "";
+  renderDebateContext(d.content || "");
+  renderDebateEpisodeNavigation(d);
+  const videoUrl = String(d.video_url || "").trim();
+  const imageUrl = String(d.image_url || "").trim();
+  const sourceUrl = String(d.source_url || "").trim();
+  if (videoUrl) {
+    renderDebateVideo(videoUrl);
+    renderDebateImage("");
+    resetDebateSourcePreview();
+  } else {
+    renderDebateVideo("");
+    renderDebateImage(imageUrl);
+    renderDebateSourcePreview(sourceUrl, null);
+  }
+  if (isOpenDebate(d)) {
+    const titleA = document.getElementById("title-a");
+    const titleB = document.getElementById("title-b");
+    if (titleA) titleA.textContent = "Réponses";
+    if (titleB) titleB.textContent = "";
+  } else {
+    const titleA = document.getElementById("title-a");
+    const titleB = document.getElementById("title-b");
+    if (titleA) titleA.textContent = d.option_a || "";
+    if (titleB) titleB.textContent = d.option_b || "";
+  }
+  currentDebateViewMode = getDebateViewMode();
+  updateDebateViewModeUI();
+  updateSortButtonLabel();
+  applyDebateTypeUI(d);
+  updateDeleteDebateButtonVisibility(d);
+  currentDebateCache = d;
+}
+
 async function loadDebate(id) {
   saveVisitedDebate(id);
 
+  try {
+    const p = window.parent?.__agonPrefetchedDebateData;
+    if (p && String(p.id || "") === String(id) && p.debate) {
+      window.parent.__agonPrefetchedDebateData = null;
+      applyDebateCachedPreview(p.debate);
+      loadDebateFullData(id).catch(() => {});
+      return;
+    }
+  } catch(e) {}
+
+  await loadDebateFullData(id);
+}
+
+async function loadDebateFullData(id) {
   try {
     const data = await fetchJSON(API + "/debates/" + id);
 
@@ -24411,6 +24545,7 @@ if (location.pathname === "/debate") {
 
 let notificationsPageLoadInFlight = null;
 async function loadNotificationsPage() {
+  markPageArrivalLoadingOverlayReady();
   const list = document.getElementById("notifications-page-list");
   if (!list) return;
   if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;

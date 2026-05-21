@@ -11,7 +11,9 @@
 <link rel="apple-touch-icon" href="/faviconiconemobile.png">
 <meta name="theme-color" content="#243038">
 <link rel="stylesheet" href="/style.css?v=20260521-topbar-compact">
-
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
@@ -46,6 +48,11 @@
   </style>
   <style>
     body { background-color: #243038; }
+    body.in-iframe .create-back-link,
+    body.in-iframe .topbar-back-arrow { display: none !important; }
+  </style>
+  <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
+  <style>
 
     /* Bandeau bas : blanc avec icônes noires */
     .home-bottom-nav {
@@ -122,7 +129,7 @@
             <span>Explorer les arènes</span>
           </a>
 
-          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link">
+          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
           </a>
@@ -510,7 +517,7 @@
     </div>
   </div>
 
-  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications">
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
     <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>

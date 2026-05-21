@@ -10,10 +10,30 @@
 <link rel="apple-touch-icon" href="/faviconiconemobile.png">
 <meta name="theme-color" content="#243038">
 <link rel="stylesheet" href="/style.css?v=20260521-topbar-compact" />
-
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     body { background-color: #243038; }
+    body.in-iframe .mobile-back-button,
+    body.in-iframe .back-link { display: none !important; }
+    .page-notifications .topbar-inner,
+    .page-notifications-mobile .topbar-inner {
+      justify-content: center;
+    }
+    .page-notifications .home-brand-block,
+    .page-notifications-mobile .home-brand-block {
+      flex: 0 0 auto;
+    }
+    .page-notifications .topbar-actions,
+    .page-notifications-mobile .topbar-actions {
+      position: absolute;
+      right: 16px;
+    }
+  </style>
+  <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
+  <style>
 
     /* Bandeau bas : blanc avec icônes noires */
     .home-bottom-nav {

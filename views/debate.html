@@ -80,7 +80,7 @@
       <span>Ouvrir une arène</span>
     </a>
 
-    <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link">
+    <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
       <i class="fa-regular fa-bell"></i>
       <span>Notifications</span>
     </a>
@@ -96,7 +96,7 @@
     </button>
   </div>
 </div>
-      <a href="/notifications" id="notifications-bell" class="topbar-notification-link" aria-label="Notifications">
+      <a href="/notifications" id="notifications-bell" class="topbar-notification-link" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
         <i class="fa-regular fa-bell"></i>
         <span id="notifications-count-compact" style="display:none;"></span>
       </a>
@@ -781,7 +781,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     </div>
   </div>
 
-  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications">
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
     <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
@@ -2483,6 +2483,53 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
   window.addEventListener('offline', function() { _wasOffline = true; });
   window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
+})();
+</script>
+
+<!-- Modale liens externes -->
+<div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
+  <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
+    <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
+      <img src="/favicon.png" alt="agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
+      <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers agôn</button>
+    </div>
+    <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
+  </div>
+</div>
+<script>
+(function() {
+  function openExtPanel(url) {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    var domain = document.getElementById('ext-link-domain');
+    if (!overlay || !iframe) return;
+    try { domain.textContent = new URL(url).hostname; } catch(e) { domain.textContent = url; }
+    iframe.src = url;
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    document.body.style.overflow = 'hidden';
+  }
+  function closeExtPanel() {
+    var overlay = document.getElementById('ext-link-overlay');
+    var iframe = document.getElementById('ext-link-iframe');
+    if (!overlay || !iframe) return;
+    overlay.style.display = 'none';
+    iframe.src = '';
+    document.body.style.overflow = '';
+  }
+  window.closeExtPanel = closeExtPanel;
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[target="_blank"]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    e.preventDefault();
+    openExtPanel(href);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeExtPanel();
+  });
 })();
 </script>
 </body>
