@@ -9,7 +9,72 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/faviconiconemobile.png">
 <meta name="theme-color" content="#243038">
-<link rel="stylesheet" href="/style.css?v=20260521-topbar-compact" />
+<style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
+<script id="agon-idle-home-guard">
+(function(){
+  var THRESHOLD = 3 * 60 * 1000;
+  var KEY = "agon_idle_hidden_at";
+  var timer = null;
+  var isStandalone = false;
+  try {
+    isStandalone = !!(window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches);
+  } catch (e) {}
+  if (!isStandalone) return;
+
+  function isHomePath() {
+    return location.pathname === "/" || location.pathname === "/debates";
+  }
+
+  function hideForRedirect() {
+    document.documentElement.classList.add("agon-idle-home-redirecting");
+  }
+
+  function goHomeIfStale() {
+    var hiddenAt = Number(sessionStorage.getItem(KEY) || 0);
+    if (!hiddenAt || Date.now() - hiddenAt <= THRESHOLD) return false;
+    sessionStorage.removeItem(KEY);
+    if (!isHomePath()) {
+      hideForRedirect();
+      location.replace("/");
+      return true;
+    }
+    return false;
+  }
+
+  function clearIdleTimer() {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function markHidden() {
+    var now = Date.now();
+    sessionStorage.setItem(KEY, String(now));
+    clearIdleTimer();
+    timer = setTimeout(function(){
+      if (document.hidden && Date.now() - now >= THRESHOLD) hideForRedirect();
+    }, THRESHOLD + 50);
+  }
+
+  function markVisible() {
+    clearIdleTimer();
+    if (!goHomeIfStale()) {
+      sessionStorage.removeItem(KEY);
+      document.documentElement.classList.remove("agon-idle-home-redirecting");
+    }
+  }
+
+  window.__agonIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
+  window.addEventListener("pageshow", markVisible, true);
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) markHidden();
+    else markVisible();
+  }, true);
+  goHomeIfStale();
+})();
+</script>
+<link rel="stylesheet" href="/style.css?v=20260522-about-media-list" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -306,7 +371,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260518-categories-v29"></script>
+<script src="/script.js?v=20260522-about-media-list"></script>
 <script>
 (function() {
   function notifyParentIframePageContext() {

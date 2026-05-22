@@ -2766,6 +2766,12 @@ function applyDebateIframeModalCloseButtonBadgeAlignment() {
   closeButton.style.bottom = "auto";
 }
 
+function syncDebateIframeModalPageClass(pathname = "") {
+  const modal = document.getElementById("debate-iframe-modal");
+  if (!modal) return;
+  modal.classList.toggle("contact-frame-open", String(pathname || "") === "/contact");
+}
+
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
   if (!frame) {
     setDebateIframeModalCloseButtonVisible(true);
@@ -2776,6 +2782,7 @@ function syncDebateIframeModalCloseButtonWithFramePage(frame) {
   try {
     const framePathname = String(frame.contentWindow?.location?.pathname || "");
     if (framePathname) {
+      syncDebateIframeModalPageClass(framePathname);
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(framePathname));
       applyDebateIframeModalCloseButtonBadgeAlignment();
       return;
@@ -2786,6 +2793,7 @@ function syncDebateIframeModalCloseButtonWithFramePage(frame) {
     const frameSrc = String(frame.getAttribute("src") || frame.src || "");
     if (frameSrc) {
       const parsedUrl = new URL(frameSrc, window.location.origin);
+      syncDebateIframeModalPageClass(parsedUrl.pathname);
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(parsedUrl.pathname));
       applyDebateIframeModalCloseButtonBadgeAlignment();
       return;
@@ -3083,6 +3091,7 @@ function ensureDebateIframeModal() {
       const readyPathname = String(e.data.pathname || "/debate");
       const readyHref = String(e.data.href || "").trim();
       window.__agonIframeCurrentPathname = readyPathname;
+      syncDebateIframeModalPageClass(readyPathname);
 
       let shouldKeepLoadingUntilNotificationTarget = false;
 
@@ -3138,6 +3147,7 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:iframe-page-context") {
       const newPathname = String(e.data.pathname || e.data.page || "");
       const newHref = String(e.data.href || "").trim();
+      syncDebateIframeModalPageClass(newPathname);
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(newPathname));
 
       // Si l'iframe revient sur /debate depuis une autre page (ex: /notifications)
@@ -3430,6 +3440,7 @@ function openDebateIframeModal(url, options = {}) {
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 250);
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 900);
   window.__agonIframeCurrentPathname = iframeUrlPathname;
+  syncDebateIframeModalPageClass(iframeUrlPathname);
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
   suspendIndexEmbedsForDebateModal();
@@ -25751,6 +25762,40 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
   }, 120);
 }
 
+function ensureHomeTopbarContactLink() {
+  const menu = document.getElementById("home-topbar-menu");
+  if (!menu || menu.querySelector('[href="/contact"]')) return;
+  const link = document.createElement("a");
+  link.href = "/contact";
+  link.className = "home-topbar-menu-item";
+  link.id = "home-topbar-contact-link";
+  link.setAttribute("onclick", "event.preventDefault(); openDebateIframeModal('/contact')");
+  link.innerHTML = '<i class="fa-regular fa-envelope"></i><span>Contact</span>';
+  const notifications = document.getElementById("home-topbar-notifications-link");
+  if (notifications && notifications.parentNode === menu) {
+    notifications.insertAdjacentElement("afterend", link);
+  } else {
+    menu.appendChild(link);
+  }
+}
+
+function ensureHomeTopbarAboutLink() {
+  const menu = document.getElementById("home-topbar-menu");
+  if (!menu || menu.querySelector('[href="/about"]')) return;
+  const link = document.createElement("a");
+  link.href = "/about";
+  link.className = "home-topbar-menu-item";
+  link.id = "home-topbar-about-link";
+  link.setAttribute("onclick", "event.preventDefault(); openDebateIframeModal('/about')");
+  link.innerHTML = '<i class="fa-regular fa-circle-question"></i><span>À propos</span>';
+  const contact = document.getElementById("home-topbar-contact-link") || menu.querySelector('[href="/contact"]');
+  if (contact && contact.parentNode === menu) {
+    contact.insertAdjacentElement("afterend", link);
+  } else {
+    menu.appendChild(link);
+  }
+}
+
 function positionHomeTopbarMenu() {
   const menu = document.getElementById("home-topbar-menu");
   const trigger = document.getElementById("home-topbar-menu-toggle");
@@ -25867,6 +25912,8 @@ function toggleHomeTopbarMenu(event) {
 function initHomeTopbarMenu() {
   if (window.__homeTopbarMenuInitDone) return;
   window.__homeTopbarMenuInitDone = true;
+  ensureHomeTopbarContactLink();
+  ensureHomeTopbarAboutLink();
 
   document.addEventListener("click", (event) => {
     if (event.target.closest(".home-topbar-menu-wrap")) return;
@@ -25889,7 +25936,6 @@ const notificationsLink = document.getElementById("home-topbar-notifications-lin
 }
 
 const loginButton = document.getElementById("home-topbar-login-button");
-const signupButton = document.getElementById("home-topbar-signup-button");
 
 function showAccountsComingSoonMessage() {
   closeHomeTopbarMenu();
@@ -25905,9 +25951,6 @@ if (loginButton) {
   loginButton.addEventListener("click", showAccountsComingSoonMessage);
 }
 
-if (signupButton) {
-  signupButton.addEventListener("click", showAccountsComingSoonMessage);
-}
 
 window.toggleHomeTopbarMenu = toggleHomeTopbarMenu;
 window.closeHomeTopbarMenu = closeHomeTopbarMenu;
@@ -25974,19 +26017,17 @@ window.addEventListener('pageshow', (event) => {
   }
 });
 
-// Auto-refresh après 3 min d'inactivité sur l'app
+// Retour accueil après 3 min d'inactivité sur l'app.
+// Le garde inline dans le <head> masque la page avant la redirection pour éviter
+// l'affichage furtif de la dernière page consultée au retour dans l'app.
 (function() {
-  const THRESHOLD = 3 * 60 * 1000;
-  const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-  if (!isStandalone) return;
-  let hiddenAt = null;
+  const guard = window.__agonIdleHomeGuard;
+  if (!guard) return;
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      hiddenAt = Date.now();
-    } else if (hiddenAt && Date.now() - hiddenAt > THRESHOLD) {
-      window.location.reload();
-    } else {
-      hiddenAt = null;
-    }
+    if (document.hidden) guard.markHidden();
+    else guard.markVisible();
+  });
+  window.addEventListener('pageshow', function() {
+    guard.markVisible();
   });
 })();

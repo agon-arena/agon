@@ -3107,6 +3107,14 @@ app.get("/notifications", (req, res) => {
   res.sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
+app.get("/contact", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/contact.html"));
+});
+
+app.get("/about", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/about.html"));
+});
+
 app.get("/debate", async (req, res) => {
   const template = readViewTemplate("debate.html");
   const debateId = String(req.query.id || "").trim();
