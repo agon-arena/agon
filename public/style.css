@@ -12111,7 +12111,7 @@ body.page-debate .debate-episode-link {
   font-weight: 600;
 }
 
-body.page-debate .debate-episode-link-next {
+body.page-debate .debate-episode-link-previous {
   margin-left: auto;
 }
 
@@ -15056,7 +15056,7 @@ html.thematic-scroll .theme-row-section {
     height: 48px !important;
     top: 50% !important;
     transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.42);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     border-radius: 8px;
@@ -15065,16 +15065,19 @@ html.thematic-scroll .theme-row-section {
     transition: background 0.18s ease, opacity 0.18s ease;
   }
 
+  .theme-carousel-next-hint { left: auto; right: 4px; }
+  .theme-carousel-prev-hint { right: auto; left: 4px; }
+
   .theme-carousel-next-hint:hover,
   .theme-carousel-prev-hint:hover {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.72);
   }
 
   .theme-carousel-next-hint i,
   .theme-carousel-prev-hint i {
     color: #374151;
     font-size: 12px;
-    opacity: 0.7;
+    opacity: 0.5;
     animation: none;
     filter: none;
     text-shadow: none;
@@ -15324,7 +15327,7 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     padding: 8px 10px 6px;
     gap: 4px;
     transition: filter 0.2s ease, transform 0.18s ease, background-color 0.3s ease;
-    transform-origin: center center;
+    transform-origin: top center;
     filter: blur(1.5px);
   }
   .theme-horizontal-inner > .debate-card.index-card-active,
@@ -15346,10 +15349,10 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     border-radius: 6px;
   }
 
-  /* Titre condensé */
+  /* Titre harmonisé avec les cartes à bandeau */
   .theme-horizontal-inner > .debate-card h2 {
-    font-size: 14px;
-    line-height: 1.25;
+    font-size: 22px;
+    line-height: 1.0;
     margin: 2px 0 0;
   }
 
@@ -16138,7 +16141,18 @@ body.page-home-mobile .debate-card-agon-badge {
   text-align: center;
   pointer-events: none;
   visibility: visible;
-  z-index: 18;
+  z-index: 22;
+}
+
+.agon-tag-label-overlay:not(.agon-tag-label-overlay-active),
+.agon-tag-label-overlay:not(.agon-tag-label-overlay-active) .agon-tag-word {
+  text-shadow:
+    -1px -1px 3px rgba(255,255,255,0.95),
+     1px -1px 3px rgba(255,255,255,0.95),
+    -1px  1px 3px rgba(255,255,255,0.95),
+     1px  1px 3px rgba(255,255,255,0.95),
+    0 0 8px rgba(255,255,255,0.9),
+    0 0 16px rgba(255,255,255,0.75);
 }
 
 .agon-tag-label-overlay-active,
@@ -17242,8 +17256,16 @@ body.page-contact.in-iframe .contact-page-shell {
   color: #6b7280;
 }
 
+.about-accordion-locked summary {
+  cursor: default;
+}
+
 .about-accordion[open] summary::after {
   content: "−";
+}
+
+.about-accordion-locked[open] summary::after {
+  content: "";
 }
 
 .about-accordion-content {

@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/faviconiconemobile.png">
   <meta name="theme-color" content="#243038">
-  <link rel="stylesheet" href="/style.css?v=20260522-about-media-list">
+  <link rel="stylesheet" href="/style.css?v=20260522-index-image-logo-fallback">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -37,8 +37,8 @@
   <section class="about-panel">
     <h1>À propos</h1>
 
-    <details class="about-accordion" open>
-      <summary>Présentation d’Agôn</summary>
+    <details class="about-accordion about-accordion-locked" open>
+      <summary onclick="event.preventDefault();">Présentation d’Agôn</summary>
       <div class="about-accordion-content">
         <p>Agôn veut élever le niveau des échanges publics. Dans un contexte de polarisation croissante, ce réseau se veut un espace de rencontre entre des points de vue différents.</p>
         <p>Agôn aide chacun à mieux comprendre les grands sujets du moment, à confronter les opinions et à améliorer la qualité des échanges, sans imposer ce qu’il faudrait penser.</p>
@@ -58,37 +58,46 @@
     <details class="about-accordion">
       <summary>Liste des médias</summary>
       <div class="about-accordion-content">
-        <ul class="about-media-list">
-          <li>Franceinfo</li>
-          <li>Le Monde</li>
-          <li>Libération</li>
-          <li>L'Humanité</li>
-          <li>Mediapart</li>
-          <li>L'Obs</li>
-          <li>Politis</li>
-          <li>Basta!</li>
-          <li>Reporterre</li>
-          <li>Le Figaro</li>
-          <li>Valeurs actuelles</li>
-          <li>Le Point</li>
-          <li>L'Express</li>
-          <li>Marianne</li>
-          <li>La Croix</li>
-          <li>Public Sénat</li>
-          <li>BFMTV</li>
-          <li>CNews</li>
-          <li>France 24</li>
-          <li>RFI</li>
-          <li>Euronews FR</li>
-          <li>20 Minutes</li>
-          <li>HuffPost France</li>
-          <li>Slate France</li>
-          <li>Alternatives économiques</li>
+        <ul class="about-media-list" id="about-media-list">
+          <li>Chargement des médias...</li>
         </ul>
       </div>
     </details>
   </section>
 </main>
-<script src="/script.js?v=20260522-about-media-list" defer></script>
+<script src="/script.js?v=20260522-index-image-logo-fallback" defer></script>
+<script>
+(function() {
+  var list = document.getElementById('about-media-list');
+  if (!list) return;
+
+  function render(items) {
+    list.textContent = '';
+    if (!items.length) {
+      var empty = document.createElement('li');
+      empty.textContent = 'Aucun média renseigné.';
+      list.appendChild(empty);
+      return;
+    }
+    items.forEach(function(media) {
+      var item = document.createElement('li');
+      item.textContent = media.nom;
+      list.appendChild(item);
+    });
+  }
+
+  function loadMedias() {
+    return fetch('/api/about/medias', { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) { render(Array.isArray(data.medias) ? data.medias : []); })
+      .catch(function() { render([]); });
+  }
+
+  list.closest('details')?.addEventListener('toggle', function(event) {
+    if (event.currentTarget.open) loadMedias();
+  });
+  loadMedias();
+})();
+</script>
 </body>
 </html>

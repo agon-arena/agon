@@ -4842,8 +4842,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
     <div class="index-card-episode-nav">
-      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">← Épisode précédent</a>` : '<span></span>'}
-      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">Épisode suivant →</a>` : '<span></span>'}
+      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : '<span></span>'}
+      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : '<span></span>'}
     </div>
   ` : "";
   const scoresHtml = !isOpenDebate(d) ? `
@@ -5335,6 +5335,26 @@ function buildIndexOpenGraphImageLoadingHtml() {
   `;
 }
 
+function buildIndexOpenGraphImageFallbackHtml() {
+  ensureIndexSocialLoadingPlaceholderStyles();
+
+  return `
+    <div
+      class="index-social-loading-placeholder index-social-loading-placeholder-og"
+      style="--index-social-loading-min-height:100%;"
+    >
+      <div class="index-social-loading-placeholder-box">
+        <div class="index-social-loading-placeholder-badge">
+          <span aria-hidden="true">↗</span>
+          <span>Source</span>
+        </div>
+        <img src="/logo.jpeg" alt="Agôn" style="width:72px; height:72px; object-fit:contain; border-radius:16px; background:#ffffff; box-shadow:0 10px 24px rgba(0,0,0,0.18);">
+        <div class="index-social-loading-placeholder-title">Agôn</div>
+      </div>
+    </div>
+  `;
+}
+
 function ensureAgonEmbedLoadingStyles() {
   if (document.getElementById('agon-embed-loading-style')) return;
 
@@ -5482,18 +5502,15 @@ function renderIndexOpenGraphImageShell(shell) {
 
   const fail = () => {
     clearTimer();
-    shell.dataset.rendered = 'failed';
+    shell.dataset.rendered = 'fallback';
     shell.dataset.rendering = 'false';
-    if (loading) loading.style.display = 'none';
-    const removedFromSwipe = removeFailedIndexSourceFromSwipe(shell);
-    if (!removedFromSwipe) {
-      const indexSourceCard = shell.closest('.page-home .debate-source-card, .page-home-mobile .debate-source-card');
-      if (indexSourceCard) {
-        indexSourceCard.remove();
-        return;
-      }
+    img.removeAttribute('src');
+    img.style.display = 'none';
+    img.style.opacity = '0';
+    if (loading) {
+      loading.innerHTML = buildIndexOpenGraphImageFallbackHtml();
+      loading.style.display = 'flex';
     }
-    shell.remove();
   };
 
   img.onload = finish;
@@ -5507,14 +5524,14 @@ function renderIndexOpenGraphImageShell(shell) {
   }
 
   // Filet de sécurité : si le navigateur a bien téléchargé l'image mais n'a pas lancé
-  // l'événement attendu, on libère quand même le placeholder. Sinon on supprime le shell.
+  // l'événement attendu, on libère quand même le placeholder. Sinon on garde un fallback visuel.
   const fallbackTimer = window.setTimeout(() => {
     if (img.complete && img.naturalWidth > 0) {
       finish();
     } else {
       fail();
     }
-  }, 6500);
+  }, 10000);
 
   shell.dataset.ogImageFallbackTimer = String(fallbackTimer);
 }
@@ -13531,6 +13548,7 @@ function toggleIndexContextPreview(button) {
 
   const nextExpanded = button.getAttribute('aria-expanded') !== 'true';
 
+
   if (textEl) {
     const nextText = nextExpanded
       ? String(textEl.getAttribute('data-full-text') || '')
@@ -14019,6 +14037,10 @@ function handleBubbleTagClick(bubble) {
     if (input) input.value = tag;
     currentIndexSearchQuery = tag;
     filterDebates();
+    requestAnimationFrame(() => {
+      const firstBand = document.querySelector('.theme-row-section');
+      if (firstBand) firstBand.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 }
 
@@ -15973,17 +15995,17 @@ function renderDebateEpisodeNavigation(debate) {
 
   const buttons = [];
 
-  if (previousUrl) {
-    const previousTitle = String(debate?.previous_episode_title || "Épisode précédent").trim();
-    buttons.push(
-      `<a class="debate-episode-link debate-episode-link-previous" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
-    );
-  }
-
   if (nextUrl) {
     const nextTitle = String(debate?.next_episode_title || "Épisode suivant").trim();
     buttons.push(
       `<a class="debate-episode-link debate-episode-link-next" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l’épisode suivant</a>`
+    );
+  }
+
+  if (previousUrl) {
+    const previousTitle = String(debate?.previous_episode_title || "Épisode précédent").trim();
+    buttons.push(
+      `<a class="debate-episode-link debate-episode-link-previous" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
     );
   }
 

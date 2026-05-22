@@ -113,6 +113,18 @@ function readViewTemplate(templateName) {
 }
 
 const VEILLE_URL = (process.env.VEILLE_URL || "http://localhost:3000/mixte").trim();
+const VEILLE_MEDIAS_PATH = (process.env.VEILLE_MEDIAS_PATH || path.join(__dirname, "..", "bot veille", "medias.json")).trim();
+
+function readVeilleMedias() {
+  const raw = fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8");
+  const data = JSON.parse(raw);
+  return (Array.isArray(data) ? data : [])
+    .map((item) => ({
+      nom: String(item?.nom || item?.name || "").trim(),
+      orientation: String(item?.orientation || "").trim()
+    }))
+    .filter((item) => item.nom);
+}
 
 function replaceMetaPlaceholders(template, meta) {
   return String(template || "")
@@ -3109,6 +3121,40 @@ app.get("/notifications", (req, res) => {
 
 app.get("/contact", (req, res) => {
   res.sendFile(path.join(__dirname, "views/contact.html"));
+});
+
+app.post("/api/contact", async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const email = String(req.body?.email || "").trim();
+  const message = String(req.body?.message || "").trim();
+  if (!name || !email || !message) return res.status(400).json({ error: "Champs manquants." });
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "Service mail non configuré." });
+  try {
+    const { Resend } = require("resend");
+    const resend = new Resend(apiKey);
+    await resend.emails.send({
+      from: "agôn <onboarding@resend.dev>",
+      to: "kevinbruyat@live.fr",
+      reply_to: email,
+      subject: `Contact agôn — ${name}`,
+      text: `Nom : ${name}\nEmail : ${email}\n\n${message}`
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Resend error:", e);
+    res.status(500).json({ error: "Erreur envoi." });
+  }
+});
+
+app.get("/api/about/medias", (req, res) => {
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ medias: readVeilleMedias() });
+  } catch (error) {
+    console.error("Erreur lecture médias veille:", error);
+    res.status(500).json({ error: "Liste des médias indisponible." });
+  }
 });
 
 app.get("/about", (req, res) => {
