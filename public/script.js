@@ -4850,8 +4850,11 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
     <div class="index-card-episode-nav">
-      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : '<span></span>'}
-      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : '<span></span>'}
+      <div class="index-card-episode-divider"></div>
+      <div class="debate-card-episode-toggle-row">
+        <span class="episode-toggle-side episode-toggle-left">${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : ''}</span>
+        <span class="episode-toggle-side episode-toggle-right">${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : ''}</span>
+      </div>
     </div>
   ` : "";
   const scoresHtml = !isOpenDebate(d) ? `
@@ -4872,7 +4875,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   ` : "";
   const metaHtml = buildIndexCardMetaHtml(d, { mediaOutsideLink });
   const shareHtml = buildIndexCardShareActionsHtml(d);
-  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml);
+  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml);
   const isNewDebate = isDebateNew(d);
   const isAgonGenerated = isAgonGeneratedDebate(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
@@ -4914,7 +4917,6 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
       ` : ""}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
       ${contextHtml}
-      ${episodeNavHtml}
       ${buildIndexCardFooterActionsHtml(d)}
     </article>
   `;
@@ -11717,8 +11719,47 @@ function attachAdminButtons() {
     logoutBtn.addEventListener("click", adminLogout);
   }
 
+  initAdminTopbarMenu();
   refreshAdminUI();
   verifyAdminSession();
+}
+
+function initAdminTopbarMenu() {
+  const menu = document.getElementById("admin-topbar-menu");
+  const toggle = document.getElementById("admin-topbar-menu-toggle");
+  const panel = document.getElementById("admin-topbar-menu-panel");
+  if (!menu || !toggle || !panel || menu.dataset.bound === "1") return;
+
+  menu.dataset.bound = "1";
+
+  const close = () => {
+    panel.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+  };
+
+  const open = () => {
+    panel.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+  };
+
+  toggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    panel.hidden ? open() : close();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!menu.contains(event.target)) close();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+  });
+
+  panel.querySelectorAll("a, button").forEach((item) => {
+    if (item.id === "admin-logout-btn") return;
+    item.addEventListener("click", close);
+  });
 }
 /* =========================
    Notifications
@@ -12704,6 +12745,75 @@ function adminInitDragPanel(panel) {
   }, { passive: true });
 }
 
+async function adminAddDebateTag(input, debateId) {
+  const tag = String(input?.value || '').trim();
+  if (!tag || !debateId) return;
+  try {
+    const data = await fetchJSON(API + `/admin/debate/${encodeURIComponent(debateId)}/keywords`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() },
+      body: JSON.stringify({ keyword: tag })
+    });
+    if (!data?.success) throw new Error('Erreur');
+    input.value = '';
+    const list = input.closest('.admin-edit-tags-wrap')?.querySelector('.admin-edit-tags-list');
+    if (list) {
+      const span = document.createElement('span');
+      span.className = 'admin-edit-tag';
+      span.innerHTML = `${escapeHtml(tag)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(debateId))}', '${escapeAttribute(tag)}')">×</button>`;
+      list.appendChild(span);
+    }
+  } catch(e) { alert('Erreur ajout tag : ' + e.message); }
+}
+
+async function adminRemoveDebateTag(btn, debateId, keyword) {
+  if (!debateId || !keyword) return;
+  try {
+    await fetchJSON(API + `/admin/debate/${encodeURIComponent(debateId)}/keywords/${encodeURIComponent(keyword)}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-token': getAdminToken() }
+    });
+    btn.closest('.admin-edit-tag')?.remove();
+  } catch(e) { alert('Erreur suppression tag : ' + e.message); }
+}
+
+async function adminCreateAndSelectStory(btn) {
+  const wrap = btn.closest('.admin-edit-new-story-form');
+  const input = wrap?.querySelector('.admin-edit-new-story-input');
+  const title = input ? input.value.trim() : '';
+  if (!title) { input?.focus(); return; }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const data = await fetchJSON(API + '/veille/stories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() },
+      body: JSON.stringify({ story_title: title })
+    });
+    if (!data?.story?.story_id) throw new Error('Création échouée');
+
+    const panel = btn.closest('.debate-card-admin-edit');
+    const select = panel?.querySelector('[data-edit-field="story_id"]');
+    if (select) {
+      const opt = document.createElement('option');
+      opt.value = data.story.story_id;
+      opt.textContent = data.story.story_title || data.story.story_id;
+      opt.selected = true;
+      select.appendChild(opt);
+      select.value = data.story.story_id;
+    }
+    input.value = '';
+    wrap.hidden = true;
+    btn.closest('.admin-edit-new-story-wrap').querySelector('.admin-edit-new-story-toggle').textContent = '+ Créer une nouvelle histoire';
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer';
+  }
+}
+
 async function adminLoadStorySelect(panel) {
   adminInitDragPanel(panel);
   const select = panel.querySelector('[data-edit-field="story_id"]');
@@ -13343,6 +13453,23 @@ function buildAdminEditPanelHtml(d) {
           <select class="admin-edit-input" data-edit-field="story_id" data-debate-id="${escapeAttribute(String(d.id || ''))}" data-current="${escapeAttribute(String(d.story_id || ''))}">
             <option value="">— Aucune histoire —</option>
           </select>
+          <div class="admin-edit-new-story-wrap" style="margin-top:6px;">
+            <button type="button" class="admin-edit-new-story-toggle" onclick="event.stopPropagation(); this.nextElementSibling.hidden = !this.nextElementSibling.hidden;" style="font-size:12px; color:#6b7280; background:none; border:none; cursor:pointer; padding:0; text-decoration:underline;">+ Créer une nouvelle histoire</button>
+            <div class="admin-edit-new-story-form" hidden style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+              <input type="text" class="admin-edit-input admin-edit-new-story-input" placeholder="Titre de l'histoire…" style="flex:1; font-size:12px;" onclick="event.stopPropagation()">
+              <button type="button" style="font-size:12px; padding:3px 8px; background:#111827; color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="event.stopPropagation(); adminCreateAndSelectStory(this)">Créer</button>
+            </div>
+          </div>
+        </div>
+        <div class="admin-edit-field">
+          <label class="admin-edit-label">Tags</label>
+          <div class="admin-edit-tags-wrap" data-debate-id="${escapeAttribute(String(d.id || ''))}">
+            <div class="admin-edit-tags-list">${(d.keywords || []).map(k => `<span class="admin-edit-tag">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(d.id || ''))}', '${escapeAttribute(k)}')">×</button></span>`).join('')}</div>
+            <div style="display:flex; gap:6px; margin-top:6px;">
+              <input type="text" class="admin-edit-input admin-edit-tag-input" placeholder="Ajouter un tag…" style="flex:1; font-size:12px;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault(); event.stopPropagation(); adminAddDebateTag(this, '${escapeAttribute(String(d.id || ''))}');}">
+              <button type="button" style="font-size:12px; padding:3px 8px; background:#111827; color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="event.stopPropagation(); adminAddDebateTag(this.previousElementSibling, '${escapeAttribute(String(d.id || ''))}')">+</button>
+            </div>
+          </div>
         </div>
         <div class="admin-edit-actions">
           <button class="admin-edit-save" type="button"
@@ -13454,9 +13581,9 @@ function getDebateCardDeleteButtonHtml(debate) {
   `;
 }
 
-function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "") {
+function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "", episodeNavHtml = "") {
   const fullText = String(debate?.content || '').trim();
-  const hasExtra = !!(scoresHtml || metaHtml || shareHtml);
+  const hasExtra = !!(scoresHtml || metaHtml || shareHtml || episodeNavHtml);
   if (!fullText && !hasExtra) return "";
 
   const previewLimit = 170;
@@ -13489,7 +13616,10 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
           ${scoresHtml}
           ${metaHtml}
           ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
+          ${episodeNavHtml}
         </div>
+      ` : ""}
+      ${needsToggle ? `
         <button
           type="button"
           class="debate-card-context-toggle"

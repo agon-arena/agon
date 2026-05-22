@@ -743,6 +743,8 @@ function setDebateStoryId(debateId, storyId) {
     map[debateKey] = String(storyId).trim();
   }
   writeDebateStoryLinks(map);
+  supabase.from("debates").update({ story_id: storyId || null }).eq("id", debateKey)
+    .then(() => {}).catch(e => console.error("[story_id sync Supabase]", e));
 }
 
 function removeDebateStoryId(debateId) {
@@ -828,24 +830,19 @@ async function recalculateStoryEpisodeNavigation(storyId) {
   const targetStoryId = String(storyId || "").trim();
   if (!targetStoryId) return;
 
-  const debateStoryMap = readDebateStoryLinks();
-  const debateIds = Object.entries(debateStoryMap)
-    .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === targetStoryId)
-    .map(([debateId]) => debateId);
-
   const navMap = readDebateEpisodeNavMap();
-
-  if (!debateIds.length) {
-    writeDebateEpisodeNavMap(navMap);
-    return;
-  }
 
   const { data: debates, error } = await supabase
     .from("debates")
     .select("id,question,created_at,source_published_at,media_extras")
-    .in("id", debateIds);
+    .eq("story_id", targetStoryId);
 
   if (error) throw new Error(error.message);
+
+  if (!debates || !debates.length) {
+    writeDebateEpisodeNavMap(navMap);
+    return;
+  }
 
   const orderedDebates = (debates || [])
     .map((debate) => ({
@@ -1528,7 +1525,7 @@ function enrichDebateWithStoredImage(debate) {
   const resolvedContent = normalizedStoredContent.length > normalizedDbContent.length
     ? normalizedStoredContent
     : normalizedDbContent;
-  const storyId = getDebateStoryId(debate?.id);
+  const storyId = debate?.story_id ?? getDebateStoryId(debate?.id);
   const episodeNav = getDebateEpisodeNav(debate?.id);
 
   return {
@@ -3793,6 +3790,24 @@ app.delete("/api/admin/tag-groups/:canonical/variants/:variant", requireAdmin, (
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur suppression variante.");
+  }
+});
+
+app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), (req, res) => {
+  try {
+    const debateId = String(req.params.id || "").trim();
+    const keyword = String(req.body?.keyword || "").trim();
+    if (!debateId || !normalizeTag(keyword)) {
+      return res.status(400).json({ error: "Arène ou tag manquant." });
+    }
+    const current = getDebateKeywords(debateId);
+    if (!current.map(normalizeTag).includes(normalizeTag(keyword))) {
+      setDebateKeywords(debateId, [...current, keyword]);
+    }
+    return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur ajout tag.");
   }
 });
 
@@ -6064,19 +6079,14 @@ app.get("/api/veille/stories/:storyId/debates", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Histoire introuvable." });
     }
 
-    const linkedDebateIds = Object.entries(readDebateStoryLinks())
-      .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === storyId)
-      .map(([debateId]) => Number(debateId))
-      .filter(Number.isFinite);
-
-    if (!linkedDebateIds.length) {
-      return res.json({ ok: true, story, debates: [] });
-    }
-
     const { data, error } = await supabase
       .from("debates")
-      .select("id, question, content, created_at")
-      .in("id", linkedDebateIds);
+      .select("id, question, content, created_at, story_id")
+      .eq("story_id", storyId);
+
+    if (!data || !data.length) {
+      return res.json({ ok: true, story, debates: [] });
+    }
 
     if (error) throw new Error(error.message);
 
@@ -6184,6 +6194,8 @@ app.delete("/api/veille/stories/:storyId", async (req, res) => {
       delete storyLinks[debateId];
     });
     writeDebateStoryLinks(storyLinks);
+
+    await supabase.from("debates").update({ story_id: null }).eq("story_id", storyId);
 
     const navMap = readDebateEpisodeNavMap();
     affectedDebateIds.forEach((debateId) => {
@@ -6541,10 +6553,21 @@ app.get("/ping", (req, res) => res.json({ ok: true }));
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   try {
-    const storyIds = [...new Set(Object.values(readDebateStoryLinks()).map(s => String(s || "").trim()).filter(Boolean))];
+    // Migration : push des story_id locaux vers Supabase
+    const localLinks = readDebateStoryLinks();
+    const localEntries = Object.entries(localLinks).filter(([, v]) => v);
+    if (localEntries.length) {
+      await Promise.all(localEntries.map(([id, story_id]) =>
+        supabase.from("debates").update({ story_id }).eq("id", id).then(() => {}).catch(e => console.error(e))
+      ));
+      console.log(`[Agôn] ${localEntries.length} story_id migrés vers Supabase.`);
+    }
+    // Recalcul depuis Supabase
+    const { data: storyRows } = await supabase.from("debates").select("story_id").not("story_id", "is", null);
+    const storyIds = [...new Set((storyRows || []).map(d => d.story_id).filter(Boolean))];
     await Promise.all(storyIds.map(id => recalculateStoryEpisodeNavigation(id)));
     if (storyIds.length) console.log(`[Agôn] Episode nav recalculé pour ${storyIds.length} histoire(s).`);
   } catch (e) {
-    console.error("[Agôn] Erreur recalcul episode nav au démarrage:", e);
+    console.error("[Agôn] Erreur initialisation story nav:", e);
   }
 });

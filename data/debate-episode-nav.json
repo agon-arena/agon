@@ -3,9 +3,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 483,
+    "next_episode_title": "Faut-il interdire toute affiliation politique dans la police ?",
+    "next_episode_url": "/debate?id=483"
   },
   "439": {
     "previous_episode_id": null,
@@ -91,6 +91,14 @@
     "previous_episode_id": 452,
     "previous_episode_title": "L’Iran doit-il saisir cette opportunité de négociation américaine ?",
     "previous_episode_url": "/debate?id=452",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "483": {
+    "previous_episode_id": 438,
+    "previous_episode_title": "L’extrême droite doit-elle pouvoir s’exprimer librement dans l’espace public ?",
+    "previous_episode_url": "/debate?id=438",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
