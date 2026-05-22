@@ -3409,6 +3409,14 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   } catch (error) {}
 }
 
+function scrollToIndexDebateCard(url) {
+  const match = String(url || "").match(/[?&]id=([^&]+)/);
+  const debateId = match ? decodeURIComponent(match[1]) : String(url || "").split("/").pop();
+  if (!debateId) return;
+  const card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(debateId.trim())}"]`);
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function openDebateIframeModal(url, options = {}) {
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
@@ -4842,8 +4850,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
     <div class="index-card-episode-nav">
-      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : '<span></span>'}
-      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : '<span></span>'}
+      ${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : '<span></span>'}
+      ${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : '<span></span>'}
     </div>
   ` : "";
   const scoresHtml = !isOpenDebate(d) ? `
@@ -4861,8 +4869,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
         <span>${d.percent_b ?? 50}%</span>
       </div>
     </div>
-    ${episodeNavHtml}
-  ` : episodeNavHtml;
+  ` : "";
   const metaHtml = buildIndexCardMetaHtml(d, { mediaOutsideLink });
   const shareHtml = buildIndexCardShareActionsHtml(d);
   const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml);
@@ -4907,6 +4914,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
       ` : ""}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
       ${contextHtml}
+      ${episodeNavHtml}
       ${buildIndexCardFooterActionsHtml(d)}
     </article>
   `;

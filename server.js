@@ -4463,7 +4463,11 @@ app.put("/api/admin/debate/:id", async (req, res) => {
 
     setDebateStoredContent(req.params.id, normalizedContent);
     if ('story_id' in (req.body || {})) {
+      const previousStoryId = getDebateStoryId(req.params.id);
       setDebateStoryId(req.params.id, story_id || "");
+      const newStoryId = String(story_id || "").trim();
+      if (newStoryId) await recalculateStoryEpisodeNavigation(newStoryId);
+      if (previousStoryId && previousStoryId !== newStoryId) await recalculateStoryEpisodeNavigation(previousStoryId);
     }
     invalidateDebateCaches(req.params.id);
     res.json({ success: true });
@@ -6534,6 +6538,13 @@ app.post("/api/admin/veille/merge", async (req, res) => {
 
 app.get("/ping", (req, res) => res.json({ ok: true }));
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
+  try {
+    const storyIds = [...new Set(Object.values(readDebateStoryLinks()).map(s => String(s || "").trim()).filter(Boolean))];
+    await Promise.all(storyIds.map(id => recalculateStoryEpisodeNavigation(id)));
+    if (storyIds.length) console.log(`[Agôn] Episode nav recalculé pour ${storyIds.length} histoire(s).`);
+  } catch (e) {
+    console.error("[Agôn] Erreur recalcul episode nav au démarrage:", e);
+  }
 });

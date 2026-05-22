@@ -105,6 +105,8 @@ function renderTagTrendCloud(container, trends) {
 
   container.innerHTML = "";
 
+  const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
   trends.slice(0, 12).forEach((trendItem, index) => {
     const tag = String(trendItem?.tag || "").trim();
     if (!tag) return;
@@ -114,7 +116,7 @@ function renderTagTrendCloud(container, trends) {
     bubble.className = [
       "agon-tag-bubble",
       getBubbleSizeClass(index),
-      `agon-tag-pos-${index}`
+      `agon-tag-pos-${POS_ORDER[index] ?? index}`
     ].join(" ");
     bubble.type = "button";
 
