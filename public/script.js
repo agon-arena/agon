@@ -14174,7 +14174,15 @@ function handleBubbleTagClick(bubble) {
     filterDebates();
     requestAnimationFrame(() => {
       const firstBand = document.querySelector('.theme-row-section');
-      if (firstBand) firstBand.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!firstBand) return;
+      const debatesList = document.getElementById('debates-list');
+      if (debatesList) {
+        const bandTop = Math.round(firstBand.getBoundingClientRect().top + window.scrollY);
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const extra = bandTop - maxScroll;
+        if (extra > 0) debatesList.style.paddingBottom = extra + 'px';
+      }
+      firstBand.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }
 }
@@ -15383,6 +15391,8 @@ function renderDebatesList(debates) {
   const div = document.getElementById("debates-list");
   const header = document.getElementById("other-section-header");
   if (!div) return;
+
+  div.style.paddingBottom = '';
 
   otherDebatesVisible = safeDebates.length;
   updateIndexTagTrends(safeDebates);

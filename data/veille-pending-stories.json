@@ -16,23 +16,5 @@
       "strong_keywords_match": false
     },
     "storySummary": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron"
-  },
-  "1779461495449": {
-    "selectionMode": "existing",
-    "storyDecision": "existing_story",
-    "matchedStoryId": "israel-mph1fbfh",
-    "matchedStoryTitle": "Israël",
-    "previousEpisodeTitle": null,
-    "previousEpisodeUrl": null,
-    "confidence": 0.85,
-    "reason": "Histoire choisie manuellement.",
-    "criteria": {
-      "main_actors_match": true,
-      "central_tension_match": true,
-      "temporal_continuity": true,
-      "editorial_theme_match": true,
-      "strong_keywords_match": true
-    },
-    "storySummary": ""
   }
 }

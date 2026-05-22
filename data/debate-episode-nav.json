@@ -67,9 +67,9 @@
     "previous_episode_id": 445,
     "previous_episode_title": "La modification du corps électoral en Nouvelle-Calédonie garantit-elle une démocratie juste ?",
     "previous_episode_url": "/debate?id=445",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 488,
+    "next_episode_title": "Gabriel Attal est-il le candidat idéal pour 2027 ?",
+    "next_episode_url": "/debate?id=488"
   },
   "447": {
     "previous_episode_id": null,
@@ -99,6 +99,94 @@
     "previous_episode_id": 438,
     "previous_episode_title": "L’extrême droite doit-elle pouvoir s’exprimer librement dans l’espace public ?",
     "previous_episode_url": "/debate?id=438",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "485": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "486": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 495,
+    "next_episode_title": "Les violences israéliennes contre la flottille sont-elles justifiables ?",
+    "next_episode_url": "/debate?id=495"
+  },
+  "488": {
+    "previous_episode_id": 446,
+    "previous_episode_title": "La France peut-elle être gouvernée efficacement sous un régime communiste ?",
+    "previous_episode_url": "/debate?id=446",
+    "next_episode_id": 492,
+    "next_episode_title": "Les élus doivent-ils être sanctionnés pour leurs propos privés en ligne ?",
+    "next_episode_url": "/debate?id=492"
+  },
+  "490": {
+    "previous_episode_id": 491,
+    "previous_episode_title": "Faut-il maintenir l’encadrement des loyers pour protéger les locataires ?",
+    "previous_episode_url": "/debate?id=491",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "491": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "492": {
+    "previous_episode_id": 488,
+    "previous_episode_title": "Gabriel Attal est-il le candidat idéal pour 2027 ?",
+    "previous_episode_url": "/debate?id=488",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "493": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "494": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "495": {
+    "previous_episode_id": 486,
+    "previous_episode_title": "Faut-il supprimer l’exemption militaire des ultraorthodoxes en Israël ?",
+    "previous_episode_url": "/debate?id=486",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "496": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "497": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

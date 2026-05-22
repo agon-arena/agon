@@ -674,6 +674,7 @@ main.create-page {
   padding: 16px 16px 8px;
   border-radius: 14px;
   border: 1px solid #111827;
+  box-shadow: inset 0 0 0 2px #111;
   overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
@@ -16334,19 +16335,19 @@ body.page-home-mobile .debate-card-agon-badge {
 }
 
 .agon-tag-bubble-large .agon-tag-label {
-  font-size: 31px;
+  font-size: 29px;
 }
 
 .agon-tag-pos-1.agon-tag-bubble-large .agon-tag-label {
-  font-size: 36px;
+  font-size: 34px;
 }
 
 .agon-tag-bubble-medium .agon-tag-label {
-  font-size: 25px;
+  font-size: 23px;
 }
 
 .agon-tag-bubble-small .agon-tag-label {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 
