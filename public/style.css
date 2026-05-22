@@ -8666,6 +8666,26 @@ padding:4px 14px 12px 14px;
   color: #ffffff;
 }
 
+@media (min-width: 769px) {
+  .index-media-swipe-controls {
+    padding: 0;
+    left: -14px;
+    right: -14px;
+  }
+  .index-media-swipe-hotspot {
+    background: #ffffff;
+    color: #1a1a2e;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .index-media-swipe-hotspot:hover,
+  .index-media-swipe-hotspot:focus-visible {
+    background: #f0f0f0;
+    color: #1a1a2e;
+  }
+}
+
 .index-media-swipe-hint {
   position: absolute;
   left: 50%;
@@ -9551,7 +9571,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   }
 
   body.is-standalone .topbar-app-icon--mobile {
-    display: none;
+    display: none !important;
   }
 }
 
@@ -9572,12 +9592,19 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   }
 
   body.is-standalone .topbar-app-icon--desktop {
-    display: none;
+    display: none !important;
   }
 
   body.is-standalone .topbar-refresh-btn {
     grid-area: spacer;
     margin: auto;
+  }
+}
+
+@media (display-mode: standalone) {
+  .topbar-app-icon--mobile,
+  .topbar-app-icon--desktop {
+    display: none !important;
   }
 }
 
@@ -14924,6 +14951,28 @@ body.voices-panel-open {
   border-radius: 0 0 14px 14px !important;
 }
 
+body.page-home .index-card-media-with-title .debate-source-card,
+body.page-home .index-card-media-with-title .index-media-swipe-media,
+body.page-home .index-card-media-with-title .debate-card-media,
+body.page-home .index-card-media-with-title .debate-card-youtube-shell,
+body.page-home .index-card-media-with-title .debate-card-x-shell,
+body.page-home .index-card-media-with-title .debate-card-instagram-shell,
+body.page-home .index-card-media-with-title .debate-card-local-video-shell,
+body.page-home .index-card-media-with-title .debate-card-local-image-shell,
+body.page-home-mobile .index-card-media-with-title .debate-source-card,
+body.page-home-mobile .index-card-media-with-title .index-media-swipe-media,
+body.page-home-mobile .index-card-media-with-title .debate-card-media,
+body.page-home-mobile .index-card-media-with-title .debate-card-youtube-shell,
+body.page-home-mobile .index-card-media-with-title .debate-card-x-shell,
+body.page-home-mobile .index-card-media-with-title .debate-card-instagram-shell,
+body.page-home-mobile .index-card-media-with-title .debate-card-local-video-shell,
+body.page-home-mobile .index-card-media-with-title .debate-card-local-image-shell {
+  border: 2px solid #05070a !important;
+  border-top: 0 !important;
+  box-shadow: inset 0 0 8px rgba(5, 7, 10, 0.28) !important;
+  box-sizing: border-box !important;
+}
+
 @media (max-width: 768px) {
   .debate-card-context-text {
     line-height: 1.1 !important;
@@ -15703,41 +15752,45 @@ body.page-home-mobile .debate-card-agon-badge {
   body.page-home .theme-carousel-next-hint,
   body.page-home .theme-carousel-prev-hint {
     position: absolute !important;
-    top: 52% !important;
+    top: var(--theme-carousel-button-top, 52%) !important;
     transform: translateY(-50%) !important;
     display: flex !important;
-    width: 38px !important;
-    height: 54px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
     border-radius: 999px !important;
-    background: rgba(255, 255, 255, 0.92) !important;
-    border: 1px solid rgba(17, 24, 39, 0.22) !important;
-    box-shadow: 0 10px 26px rgba(17, 24, 39, 0.22) !important;
+    background: rgba(255, 255, 255, 0.48) !important;
+    border: 1px solid rgba(17, 24, 39, 0.13) !important;
+    box-shadow: 0 4px 14px rgba(17, 24, 39, 0.10) !important;
     backdrop-filter: blur(4px) !important;
     -webkit-backdrop-filter: blur(4px) !important;
     z-index: 999 !important;
-    opacity: 1 !important;
+    opacity: 0.72 !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+    font-family: Arial, Helvetica, sans-serif !important;
   }
 
   body.page-home .theme-carousel-next-hint {
     left: auto !important;
-    right: 10px !important;
+    right: calc((100vw - 60px) / 4 + 10px) !important;
   }
 
   body.page-home .theme-carousel-prev-hint {
     right: auto !important;
-    left: 10px !important;
+    left: calc((100vw - 60px) / 4 + 10px) !important;
   }
 
   body.page-home .theme-carousel-next-hint::before,
   body.page-home .theme-carousel-prev-hint::before {
     display: block;
     color: #111827;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     line-height: 1;
-    opacity: 0.86;
+    opacity: 0.62;
   }
 
   body.page-home .theme-carousel-next-hint::before {
@@ -15754,9 +15807,12 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   body.page-home .theme-carousel-next-hint:hover,
-  body.page-home .theme-carousel-prev-hint:hover {
-    background: rgba(255, 255, 255, 0.92) !important;
+  body.page-home .theme-carousel-prev-hint:hover,
+  body.page-home .theme-carousel-next-hint:focus-visible,
+  body.page-home .theme-carousel-prev-hint:focus-visible {
+    background: rgba(255, 255, 255, 0.76) !important;
     opacity: 0.95 !important;
+    outline: none !important;
   }
 
   body.page-home .theme-carousel-next-hint i,

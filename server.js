@@ -100,6 +100,15 @@ function escapeMetaContent(value) {
     .replaceAll(">", "&gt;");
 }
 
+function escapeHtmlContent(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function buildAbsoluteUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
@@ -3158,7 +3167,18 @@ app.get("/api/about/medias", (req, res) => {
 });
 
 app.get("/about", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/about.html"));
+  try {
+    const template = fs.readFileSync(path.join(__dirname, "views/about.html"), "utf8");
+    const items = readVeilleMedias();
+    const listHtml = items.length
+      ? items.map((media) => `<li>${escapeHtmlContent(media.nom)}</li>`).join("\n          ")
+      : "<li>Aucun média renseigné.</li>";
+    res.setHeader("Cache-Control", "no-store");
+    res.type("html").send(template.replace("__ABOUT_MEDIA_ITEMS__", listHtml));
+  } catch (error) {
+    console.error("Erreur rendu À propos:", error);
+    res.sendFile(path.join(__dirname, "views/about.html"));
+  }
 });
 
 app.get("/debate", async (req, res) => {

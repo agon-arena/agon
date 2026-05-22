@@ -8827,29 +8827,26 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     <${cardTag}
       ${cardAttributes}
     >
+      ${image ? `
       <div
         class="debate-source-card-image-wrap"
-        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"` : ''}
+        data-index-og-image-shell
+        data-image-src="${escapeAttribute(image)}"
         style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
       >
-        ${image ? `
-          <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
-            ${buildIndexOpenGraphImageLoadingHtml()}
-          </div>
-          <img
-            class="debate-source-card-image"
-            data-index-og-image
-            alt="${escapeAttribute(title)}"
-            decoding="async"
-            style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
-          >
-        ` : `
-          <div style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
-            ${buildIndexOpenGraphImageLoadingHtml()}
-          </div>
-        `}
+        <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
+          ${buildIndexOpenGraphImageLoadingHtml()}
+        </div>
+        <img
+          class="debate-source-card-image"
+          data-index-og-image
+          alt="${escapeAttribute(title)}"
+          decoding="async"
+          style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
+        >
         <span class="debate-source-card-image-domain-badge">${escapeHtml(domain)}</span>
       </div>
+      ` : ``}
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
         <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; white-space:normal; overflow-wrap:break-word; word-break:break-word; min-width:0;">${escapeHtml(domain)}</div>
         <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
@@ -14591,8 +14588,10 @@ function updateIndexThemeRowSwipeButtons(row) {
 
   const prev = section.querySelector(".theme-row-swipe-button-prev");
   const next = section.querySelector(".theme-row-swipe-button-next");
+  const sidePrev = section.querySelector(".theme-carousel-prev-hint");
+  const sideNext = section.querySelector(".theme-carousel-next-hint");
   const jumpStart = section.querySelector(".theme-row-jump-start");
-  if (!prev && !next) return;
+  if (!prev && !next && !sidePrev && !sideNext) return;
 
   const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
   const canScroll = maxScroll > 8;
@@ -14601,6 +14600,8 @@ function updateIndexThemeRowSwipeButtons(row) {
 
   if (prev) prev.classList.toggle("is-hidden", !canScroll || isAtStart);
   if (next) next.classList.toggle("is-hidden", !canScroll || isAtEnd);
+  if (sidePrev) sidePrev.classList.toggle("is-hidden", !canScroll || isAtStart);
+  if (sideNext) sideNext.classList.toggle("is-hidden", !canScroll || isAtEnd);
   if (jumpStart) jumpStart.classList.toggle("is-hidden", !canScroll || isAtStart);
 }
 
@@ -14618,6 +14619,7 @@ function ensureCarouselHints(row) {
   const title = section.querySelector('.theme-row-title');
   const titleH = title ? title.offsetHeight : 0;
   const rowH = row.offsetHeight;
+  section.style.setProperty('--theme-carousel-button-top', `${Math.round(titleH + rowH / 2)}px`);
 
   const scrollBy = () => {
     const cards = row.querySelectorAll('.theme-horizontal-inner > .debate-card');
@@ -14626,8 +14628,10 @@ function ensureCarouselHints(row) {
 
   let next = section.querySelector('.theme-carousel-next-hint');
   if (!next) {
-    next = document.createElement('div');
+    next = document.createElement('button');
+    next.type = 'button';
     next.className = 'theme-carousel-next-hint';
+    next.setAttribute('aria-label', 'Voir les cartes suivantes');
     next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
     next.addEventListener('click', () => row.scrollBy({ left: scrollBy(), behavior: 'smooth' }));
     section.appendChild(next);
@@ -14637,8 +14641,10 @@ function ensureCarouselHints(row) {
 
   let prev = section.querySelector('.theme-carousel-prev-hint');
   if (!prev) {
-    prev = document.createElement('div');
+    prev = document.createElement('button');
+    prev.type = 'button';
     prev.className = 'theme-carousel-prev-hint';
+    prev.setAttribute('aria-label', 'Voir les cartes précédentes');
     prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
     prev.addEventListener('click', () => row.scrollBy({ left: -scrollBy(), behavior: 'smooth' }));
     section.appendChild(prev);
@@ -14698,6 +14704,15 @@ function updateCarouselCardHighlight(row) {
       card.classList.toggle("index-card-active", fullyVisible);
     });
     syncIndexThemeRowHeight(row);
+
+    const { next, prev } = ensureCarouselHints(row);
+    if (next && prev) {
+      const isAtEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 8;
+      const isAtStart = row.scrollLeft <= 8;
+      next.classList.toggle('is-hidden', isAtEnd || cards.length <= 1);
+      prev.classList.toggle('is-hidden', isAtStart || cards.length <= 1);
+    }
+    updateIndexThemeRowSwipeButtons(row);
     return;
   }
 
@@ -14822,8 +14837,12 @@ function initThematicRowDragScroll() {
     updateCarouselCardHighlight(row);
     applyCarouselScaleEffects(row);
     syncIndexThemeRowHeight(row);
+    ensureCarouselHints(row);
     updateIndexThemeRowSwipeButtons(row);
-    requestAnimationFrame(() => updateIndexThemeRowSwipeButtons(row));
+    requestAnimationFrame(() => {
+      ensureCarouselHints(row);
+      updateIndexThemeRowSwipeButtons(row);
+    });
 
     let isDragging = false;
     let pointerType = "";
