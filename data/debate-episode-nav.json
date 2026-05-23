@@ -11,9 +11,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 513,
+    "next_episode_title": "Faut-il renforcer la surveillance des agents municipaux pour protéger les mineurs ?",
+    "next_episode_url": "/debate?id=513"
   },
   "440": {
     "previous_episode_id": null,
@@ -179,9 +179,9 @@
     "previous_episode_id": 486,
     "previous_episode_title": "Faut-il supprimer l’exemption militaire des ultraorthodoxes en Israël ?",
     "previous_episode_url": "/debate?id=486",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 512,
+    "next_episode_title": "Faut-il renforcer l'intervention internationale au Liban ?",
+    "next_episode_url": "/debate?id=512"
   },
   "496": {
     "previous_episode_id": null,
@@ -283,6 +283,54 @@
     "previous_episode_id": 507,
     "previous_episode_title": "Les frappes israéliennes dans le sud Liban sont-elles justifiées ?",
     "previous_episode_url": "/debate?id=507",
+    "next_episode_id": 511,
+    "next_episode_title": "Les États-Unis sabotent-ils délibérément les négociations avec l’Iran ?",
+    "next_episode_url": "/debate?id=511"
+  },
+  "510": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "511": {
+    "previous_episode_id": 509,
+    "previous_episode_title": "L’Iran doit-il contrôler le détroit d’Ormuz pour sa sécurité nationale ?",
+    "previous_episode_url": "/debate?id=509",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "512": {
+    "previous_episode_id": 495,
+    "previous_episode_title": "Les violences israéliennes contre la flottille sont-elles justifiables ?",
+    "previous_episode_url": "/debate?id=495",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "513": {
+    "previous_episode_id": 439,
+    "previous_episode_title": "La centralisation des plaintes facilite-t-elle ou complique-t-elle la justice ?",
+    "previous_episode_url": "/debate?id=439",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "514": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "515": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

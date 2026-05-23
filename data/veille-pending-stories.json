@@ -16,5 +16,29 @@
       "strong_keywords_match": false
     },
     "storySummary": "EN DIRECT - Hantavirus : la situation en France est «sous contrôle», assure Emmanuel Macron"
+  },
+  "1779537520358": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "01-les-conflits-au-moyen-orient-recomposent-les-equilibres-regionaux",
+    "matchedStoryTitle": "Les conflits au Moyen-Orient recomposent les équilibres régionaux",
+    "previousEpisodeTitle": "Les États-Unis sabotent-ils délibérément les négociations avec l’Iran ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=511",
+    "confidence": 0.85,
+    "reason": "Histoire choisie manuellement.",
+    "criteria": {},
+    "storySummary": ""
+  },
+  "1779537590439": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "05-la-vie-politique-francaise-traverse-une-periode-d-instabilite-et-de-recompositio",
+    "matchedStoryTitle": "La vie politique française traverse une période d’instabilité et de recomposition",
+    "previousEpisodeTitle": "Les élus doivent-ils être sanctionnés pour leurs propos privés en ligne ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=492",
+    "confidence": 0.85,
+    "reason": "Histoire choisie manuellement.",
+    "criteria": {},
+    "storySummary": ""
   }
 }

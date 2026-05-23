@@ -16122,6 +16122,7 @@ body.page-home-mobile .debate-card-agon-badge {
   .agon-tag-trends-cloud::before {
     inset: var(--bubble-frame-top) 30px 78px;
   }
+
 }
 
 @media (min-width: 769px) {
@@ -16257,29 +16258,30 @@ body.page-home-mobile .debate-card-agon-badge {
 .agon-tag-pos-11 .agon-tag-bubble-flash::after  { animation-delay: 0.4s; }
 
 .agon-tag-bubble-large {
-  width: 139px;
-  height: 139px;
+  width: var(--agon-tag-bubble-size, 139px);
+  height: var(--agon-tag-bubble-size, 139px);
 }
 
 .agon-tag-pos-1.agon-tag-bubble-large {
-  width: 160px;
-  height: 160px;
+  width: var(--agon-tag-bubble-size, 160px);
+  height: var(--agon-tag-bubble-size, 160px);
 }
 
 .agon-tag-bubble-medium {
-  width: 116px;
-  height: 116px;
+  width: var(--agon-tag-bubble-size, 116px);
+  height: var(--agon-tag-bubble-size, 116px);
 }
 
 .agon-tag-bubble-small {
-  width: 78px;
-  height: 78px;
+  width: var(--agon-tag-bubble-size, 78px);
+  height: var(--agon-tag-bubble-size, 78px);
 }
 
 .agon-tag-center-btn {
   position: absolute;
-  left: 175px;
-  top: 303px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -16297,15 +16299,15 @@ body.page-home-mobile .debate-card-agon-badge {
   line-height: 1.2;
   text-transform: uppercase;
   cursor: pointer;
-  z-index: 20;
+  z-index: 60;
   box-shadow: 0 4px 10px rgba(0,0,0,0.35);
 }
 
 .agon-tag-label {
   font-family: Oswald, Impact, "Arial Narrow", sans-serif;
   font-weight: 900;
-  line-height: 0.95;
-  letter-spacing: -0.03em;
+  line-height: 1.04;
+  letter-spacing: 0;
   color: #05070a;
   text-transform: uppercase;
   overflow-wrap: normal;
@@ -16330,10 +16332,11 @@ body.page-home-mobile .debate-card-agon-badge {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.04em;
   text-align: center;
   pointer-events: none;
   visibility: visible;
-  z-index: 22;
+  z-index: 40;
 }
 
 .agon-tag-label-overlay:not(.agon-tag-label-overlay-active),
@@ -16445,17 +16448,17 @@ body.page-home-mobile .debate-card-agon-badge {
   color: #374151;
 }
 
-/* ===== POSITIONS NUAGE — VERROUILLÉES — NE PAS MODIFIER ===== */
-.agon-tag-pos-0  { left:  52px; top: 210px; z-index: 6; } /* grosse centre-gauche */
-.agon-tag-pos-1  { left: 182px; top: 202px; z-index: 9; } /* plus grosse : tag le plus cité */
-.agon-tag-pos-2  { left: 120px; top: 334px; z-index: 2; } /* grosse bas-centre */
-.agon-tag-pos-3  { left: 146px; top: 116px; z-index: 1; } /* moyenne haut-centre */
-.agon-tag-pos-4  { left:   8px; top: 318px; z-index: 7; } /* moyenne bas-gauche */
-.agon-tag-pos-5  { left: 264px; top: 342px; z-index: 1; } /* moyenne bas-droite */
-.agon-tag-pos-6  { left: -16px; top: 282px; z-index: 5; } /* petite jonction gauche */
-.agon-tag-pos-7  { left:  70px; top: 133px; z-index: 4; } /* petite jonction haut-gauche */
-.agon-tag-pos-8  { left: 261px; top: 137px; z-index: 0; } /* petite jonction haut-droite */
-.agon-tag-pos-9  { right: -20px; top: 274px; z-index: 4; } /* petite jonction droite */
+/* ===== POSITIONS NUAGE — bulles resserrées autour du centre ===== */
+.agon-tag-pos-0  { left:  82px; top: 218px; z-index: 6; } /* grosse centre-gauche */
+.agon-tag-pos-1  { left: 178px; top: 202px; z-index: 9; } /* plus grosse : tag le plus cité */
+.agon-tag-pos-2  { left: 132px; top: 304px; z-index: 2; } /* grosse bas-centre */
+.agon-tag-pos-3  { left: 148px; top: 150px; z-index: 1; } /* moyenne haut-centre */
+.agon-tag-pos-4  { left:  72px; top: 318px; z-index: 7; } /* moyenne bas-gauche */
+.agon-tag-pos-5  { left: 226px; top: 318px; z-index: 1; } /* moyenne bas-droite */
+.agon-tag-pos-6  { left:  38px; top: 276px; z-index: 5; } /* petite jonction gauche */
+.agon-tag-pos-7  { left:  88px; top: 166px; z-index: 4; } /* petite jonction haut-gauche */
+.agon-tag-pos-8  { left: 236px; top: 164px; z-index: 0; } /* petite jonction haut-droite */
+.agon-tag-pos-9  { right:  30px; top: 270px; z-index: 4; } /* petite jonction droite */
 
 @media (max-width: 768px) {
   .agon-tag-pos-9  { right: 2px; }
@@ -16463,11 +16466,11 @@ body.page-home-mobile .debate-card-agon-badge {
 
 @media (min-width: 769px) {
   .agon-tag-pos-4 {
-    top: 342px !important;
+    top: 318px !important;
   }
 }
-.agon-tag-pos-10 { left:  72px; top: 440px; z-index: 4; } /* petite jonction bas-gauche */
-.agon-tag-pos-11 { right:  72px; top: 436px; z-index: 4; } /* petite jonction bas-droite */
+.agon-tag-pos-10 { left: 110px; top: 394px; z-index: 4; } /* petite jonction bas-gauche */
+.agon-tag-pos-11 { right: 100px; top: 392px; z-index: 4; } /* petite jonction bas-droite */
 
 @media (max-width: 390px) {
   .agon-tag-trends-section {
@@ -16479,23 +16482,23 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   .agon-tag-bubble-large {
-    width: 118px;
-    height: 118px;
+    width: var(--agon-tag-bubble-size, 118px);
+    height: var(--agon-tag-bubble-size, 118px);
   }
 
   .agon-tag-pos-1.agon-tag-bubble-large {
-    width: 136px;
-    height: 136px;
+    width: var(--agon-tag-bubble-size, 136px);
+    height: var(--agon-tag-bubble-size, 136px);
   }
 
   .agon-tag-bubble-medium {
-    width: 96px;
-    height: 96px;
+    width: var(--agon-tag-bubble-size, 96px);
+    height: var(--agon-tag-bubble-size, 96px);
   }
 
   .agon-tag-bubble-small {
-    width: 66px;
-    height: 66px;
+    width: var(--agon-tag-bubble-size, 66px);
+    height: var(--agon-tag-bubble-size, 66px);
   }
 
   .agon-tag-bubble-large .agon-tag-label {
@@ -16515,25 +16518,21 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   .agon-tag-pos-6 {
-    left: 5px;
-    top: 289px;
+    left: 38px;
+    top: 282px;
   }
 
-  .agon-tag-pos-0  { left:  64px; top: 226px; z-index: 6; }
-  .agon-tag-pos-1  { left: 181px; top: 210px; z-index: 9; }
-  .agon-tag-pos-2  { left: 124px; top: 328px; }
-  .agon-tag-pos-3  { left: 134px; top: 146px; }
-  .agon-tag-pos-4  { left:  28px; top: 344px; }
-  .agon-tag-pos-5  { left: 246px; top: 332px; }
-  .agon-tag-pos-7  { left:  42px; top: 169px; }
-  .agon-tag-pos-8  { left: 258px; top: 158px; }
-  .agon-tag-pos-9  { right:  2px; top: 278px; }
-  .agon-tag-pos-10 { left:  88px; top: 426px; }
-  .agon-tag-pos-11 { right:  66px; top: 426px; }
-
-  .agon-tag-center-btn {
-    left: 168px;
-  }
+  .agon-tag-pos-0  { left:  76px; top: 226px; z-index: 6; }
+  .agon-tag-pos-1  { left: 174px; top: 212px; z-index: 9; }
+  .agon-tag-pos-2  { left: 128px; top: 314px; }
+  .agon-tag-pos-3  { left: 138px; top: 164px; }
+  .agon-tag-pos-4  { left:  70px; top: 328px; }
+  .agon-tag-pos-5  { left: 224px; top: 326px; }
+  .agon-tag-pos-7  { left:  86px; top: 182px; }
+  .agon-tag-pos-8  { left: 232px; top: 180px; }
+  .agon-tag-pos-9  { right:  34px; top: 278px; }
+  .agon-tag-pos-10 { left: 110px; top: 398px; }
+  .agon-tag-pos-11 { right:  94px; top: 398px; }
 
 }
 

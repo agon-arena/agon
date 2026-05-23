@@ -1,7 +1,31 @@
-function getBubbleSizeClass(index) {
+function getBubbleSizeClass(index, trendItem = null) {
+  const weight = Number(trendItem?.sizeWeight);
+  if (Number.isFinite(weight)) {
+    if (weight >= 0.72 || index === 0) return "agon-tag-bubble-large";
+    if (weight >= 0.38) return "agon-tag-bubble-medium";
+    return "agon-tag-bubble-small";
+  }
+
   if (index <= 2) return "agon-tag-bubble-large";
   if (index <= 5) return "agon-tag-bubble-medium";
   return "agon-tag-bubble-small";
+}
+
+const MAX_TAG_TREND_BUBBLES = 12;
+
+function getBubbleVisualSize(index, trendItem = null) {
+  const weight = Number(trendItem?.sizeWeight);
+  if (!Number.isFinite(weight)) return "";
+
+  const clamped = Math.max(0, Math.min(1, weight));
+  const amplified = Math.pow(clamped, 1.75);
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const minSize = isMobile ? 52 : 60;
+  const maxSize = index === 0
+    ? (isMobile ? 140 : 166)
+    : (isMobile ? 124 : 150);
+
+  return Math.round(minSize + ((maxSize - minSize) * amplified)) + "px";
 }
 
 function getTrendMeta(trend) {
@@ -33,17 +57,23 @@ function fitLabelInBubble(bubble) {
   const trendH = trendEl ? trendEl.offsetHeight + 3 : 0;
   const bubbleW = bubble.clientWidth || 0;
   const bubbleH = bubble.clientHeight || 0;
+  const wordCount = Math.max(1, label.querySelectorAll(".agon-tag-word").length);
+  const labelText = getTagTextFromLabel(label);
+  const charCount = labelText.replace(/\s+/g, "").length;
+  const lengthFactor = charCount >= 22 ? 0.72 : charCount >= 16 ? 0.82 : charCount >= 11 ? 0.92 : 1;
+  const wordFactor = wordCount >= 4 ? 0.22 : wordCount === 3 ? 0.26 : wordCount === 2 ? 0.31 : 0.38;
 
   // Le badge est dans le flux, juste au-dessus du texte, au centre de la bulle.
   label.style.paddingTop = "0px";
   label.style.paddingBottom = "0px";
-  label.style.maxWidth = Math.round(bubbleW * 1.04) + "px";
+  label.style.lineHeight = wordCount >= 2 ? "1.08" : "1.03";
+  label.style.maxWidth = Math.round(bubbleW * 0.9) + "px";
 
-  const availW = bubbleW * 1.04;
-  const availH = Math.max(16, bubbleH - trendH - 10);
+  const availW = bubbleW * 0.9;
+  const availH = Math.max(16, bubbleH - trendH - 26);
 
-  let low = Math.max(10, bubbleW * 0.13);
-  let high = Math.min(82, Math.max(22, bubbleW * 0.48));
+  let low = Math.max(8, Math.min(12, bubbleW * 0.1));
+  let high = Math.min(56, Math.max(14, bubbleW * wordFactor * lengthFactor));
 
   for (let iter = 0; iter < 24; iter += 1) {
     const mid = (low + high) / 2;
@@ -87,8 +117,283 @@ function renderLabelOverlays(container) {
     overlay.style.width = labelRect.width + "px";
     overlay.style.height = labelRect.height + "px";
     overlay.style.fontSize = label.style.fontSize || getComputedStyle(label).fontSize;
+    overlay.style.lineHeight = label.style.lineHeight || getComputedStyle(label).lineHeight;
     overlay.style.maxWidth = label.style.maxWidth || getComputedStyle(label).maxWidth;
     container.appendChild(overlay);
+  });
+
+  resolveLabelOverlayCollisions(container);
+}
+
+function getOverlayTextRect(overlay) {
+  const words = [...overlay.querySelectorAll(".agon-tag-word")];
+  const rects = words.length ? words.map((word) => word.getBoundingClientRect()) : [overlay.getBoundingClientRect()];
+  const visibleRects = rects.filter((rect) => rect.width > 0 && rect.height > 0);
+  if (!visibleRects.length) return overlay.getBoundingClientRect();
+
+  return {
+    left: Math.min(...visibleRects.map((rect) => rect.left)),
+    top: Math.min(...visibleRects.map((rect) => rect.top)),
+    right: Math.max(...visibleRects.map((rect) => rect.right)),
+    bottom: Math.max(...visibleRects.map((rect) => rect.bottom))
+  };
+}
+
+function getRectOverlapArea(a, b) {
+  const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+  const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  return width * height;
+}
+
+function shrinkOverlayText(overlay, factor = 0.9) {
+  const currentSize = parseFloat(overlay.style.fontSize || getComputedStyle(overlay).fontSize || "12");
+  const nextSize = Math.max(8, currentSize * factor);
+  if (nextSize >= currentSize - 0.1) return false;
+  overlay.style.fontSize = nextSize.toFixed(1) + "px";
+  return true;
+}
+
+function resolveLabelOverlayCollisions(container) {
+  const overlays = [...container.querySelectorAll(".agon-tag-label-overlay")];
+  if (overlays.length < 2) return;
+
+  for (let pass = 0; pass < 12; pass += 1) {
+    let changed = false;
+    const rects = overlays.map(getOverlayTextRect);
+
+    for (let i = 0; i < overlays.length; i += 1) {
+      for (let j = i + 1; j < overlays.length; j += 1) {
+        const overlapArea = getRectOverlapArea(rects[i], rects[j]);
+        if (overlapArea <= 8) continue;
+
+        changed = shrinkOverlayText(overlays[i]) || changed;
+        changed = shrinkOverlayText(overlays[j]) || changed;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  const centerBtn = container.querySelector(".agon-tag-center-btn");
+  if (!centerBtn) return;
+  const centerRect = centerBtn.getBoundingClientRect();
+  for (let pass = 0; pass < 14; pass += 1) {
+    let changed = false;
+    overlays.forEach((overlay) => {
+      const overlapArea = getRectOverlapArea(getOverlayTextRect(overlay), centerRect);
+      if (overlapArea <= 2) return;
+      changed = shrinkOverlayText(overlay, 0.86) || changed;
+    });
+    if (!changed) break;
+  }
+}
+
+function applyCompactBubbleLayout(container) {
+  const bubbles = [...container.querySelectorAll(".agon-tag-bubble")];
+  if (!bubbles.length) return;
+
+  const containerW = container.clientWidth || 390;
+  const containerH = container.clientHeight || 548;
+  const centerX = containerW / 2;
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const isNarrow = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+  // Lit la vraie valeur dynamique de --bubble-frame-top (mise à jour par syncBubbleFrameTop)
+  const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
+  const frameTop = parseFloat(frameTopRaw) || (isNarrow ? 55 : 40);
+  const frameBottomInset = isNarrow ? 78 : 23;
+  const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
+
+  // Positionne le bouton central au même centerY
+  const centerBtnEl = container.querySelector(".agon-tag-center-btn");
+  if (centerBtnEl) centerBtnEl.style.top = Math.round(centerY) + "px";
+  const margin = isMobile ? 1 : 2;
+  // Chevauchement autorisé entre bulles (aspect collé)
+  const bubbleOverlap = 6;
+  // Zone de sécurité autour du bouton central (rayon bouton 20px + 4px marge)
+  const btnRadius = 24;
+  const angles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+
+  // Placement initial : chaque bulle part juste au contact du bouton
+  const nodes = bubbles.map((bubble, index) => {
+    const size = bubble.offsetWidth || bubble.clientWidth || 80;
+    const radius = size / 2;
+    const angle = (angles[index] ?? (index * 137.5)) * Math.PI / 180;
+    const dist = btnRadius + radius;
+    return { bubble, radius, x: centerX + Math.cos(angle) * dist, y: centerY + Math.sin(angle) * dist };
+  });
+
+  function clamp(node) {
+    node.x = Math.min(containerW - node.radius - margin, Math.max(node.radius + margin, node.x));
+    node.y = Math.min(containerH - node.radius - margin, Math.max(node.radius + margin, node.y));
+  }
+
+  nodes.forEach(clamp);
+
+  for (let pass = 0; pass < 80; pass++) {
+    // Séparation bulle-bulle : chevauchement limité à bubbleOverlap px
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.max(0.1, Math.hypot(dx, dy));
+        const minD = a.radius + b.radius - bubbleOverlap;
+        if (d >= minD) continue;
+        const push = (minD - d) / 2;
+        const nx = dx / d, ny = dy / d;
+        a.x -= nx * push; a.y -= ny * push;
+        b.x += nx * push; b.y += ny * push;
+        clamp(a); clamp(b);
+      }
+    }
+
+    // Gravité vers le centre (forte au début, réduite ensuite)
+    const g = pass < 50 ? 0.07 : 0.03;
+    nodes.forEach(node => {
+      node.x += (centerX - node.x) * g;
+      node.y += (centerY - node.y) * g;
+      clamp(node);
+
+      // Exclusion dure du bouton central : aucun chevauchement
+      const dx = node.x - centerX, dy = node.y - centerY;
+      const d = Math.max(0.1, Math.hypot(dx, dy));
+      const minD = btnRadius + node.radius;
+      if (d < minD) {
+        node.x = centerX + (dx / d) * minD;
+        node.y = centerY + (dy / d) * minD;
+        clamp(node);
+      }
+    });
+  }
+
+  nodes.forEach(node => {
+    node.bubble.style.left = Math.round(node.x - node.radius) + "px";
+    node.bubble.style.top = Math.round(node.y - node.radius) + "px";
+    node.bubble.style.right = "auto";
+  });
+}
+
+function positionTrendBadges(container) {
+  const containerRect = container.getBoundingClientRect();
+  const cW = container.clientWidth;
+  const cH = container.clientHeight;
+
+  const allBubbles = [...container.querySelectorAll(".agon-tag-bubble")];
+
+  const bubbleGeo = allBubbles.map(b => {
+    const br = b.getBoundingClientRect();
+    return {
+      cx: br.left - containerRect.left + br.width / 2,
+      cy: br.top  - containerRect.top  + br.height / 2,
+      r:  br.width / 2
+    };
+  });
+
+  // Overlays de texte déjà rendus (z-index 40, au-dessus des badges z-index 10)
+  const overlayRects = [...container.querySelectorAll(".agon-tag-label-overlay")].map(el => {
+    const r = el.getBoundingClientRect();
+    return { l: r.left - containerRect.left, t: r.top - containerRect.top, r: r.right - containerRect.left, b: r.bottom - containerRect.top };
+  });
+
+  const cbtn = container.querySelector(".agon-tag-center-btn");
+  const cbtnR = cbtn ? (() => {
+    const r = cbtn.getBoundingClientRect();
+    return { l: r.left - containerRect.left - 4, t: r.top - containerRect.top - 4, r: r.right - containerRect.left + 4, b: r.bottom - containerRect.top + 4 };
+  })() : null;
+
+  const placed = [];
+
+  // Angles candidats : sommet en priorité, puis expansion symétrique vers les côtés
+  const ANGLES = [-90, -105, -75, -120, -60, -135, -45, -150, -30, 180, 0, 150, 30];
+
+  function rectsOverlap(al, at, ar, ab, bl, bt, br, bb) {
+    return al < br && ar > bl && at < bb && ab > bt;
+  }
+
+  allBubbles.forEach((bubble, idx) => {
+    const trend = bubble.querySelector(".agon-tag-trend");
+    if (!trend) return;
+
+    const geo = bubbleGeo[idx];
+
+    container.appendChild(trend);
+    trend.style.position = "absolute";
+    trend.style.left = "0px";
+    trend.style.top  = "0px";
+    trend.style.right = "auto";
+
+    const tw = trend.offsetWidth  || 32;
+    const th = trend.offsetHeight || 14;
+
+    // Centre du badge à ~85 % du rayon depuis le centre de la bulle
+    const d = Math.max(geo.r * 0.72, geo.r - th / 2 - 4);
+
+    function scoreAngle(angleDeg) {
+      const rad = angleDeg * Math.PI / 180;
+      const cx = geo.cx + Math.cos(rad) * d;
+      const cy = geo.cy + Math.sin(rad) * d;
+      const l = cx - tw / 2, t = cy - th / 2;
+      const r = l + tw,      b = t + th;
+
+      if (l < 1 || t < 1 || r > cW - 1 || b > cH - 1) return -9999;
+
+      let s = 0;
+
+      // Préférer le sommet (-90°)
+      s -= Math.abs(angleDeg + 90) * 2;
+
+      // Pénalité : badge profond dans une autre bulle
+      for (let i = 0; i < bubbleGeo.length; i++) {
+        if (i === idx) continue;
+        const ob = bubbleGeo[i];
+        const bCx = (l + r) / 2, bCy = (t + b) / 2;
+        const dist = Math.hypot(bCx - ob.cx, bCy - ob.cy);
+        if (dist < ob.r - 10) s -= 300;
+        else if (dist < ob.r)  s -= 60 * (ob.r - dist);
+      }
+
+      // Pénalité : chevauchement avec overlay de texte (z-index 40 > badge z-index 10)
+      for (const or of overlayRects) {
+        if (rectsOverlap(l, t, r, b, or.l, or.t, or.r, or.b)) {
+          const ow = Math.min(r, or.r) - Math.max(l, or.l);
+          const oh = Math.min(b, or.b) - Math.max(t, or.t);
+          s -= ow * oh * 10;
+        }
+      }
+
+      // Pénalité : chevauchement avec badge déjà placé
+      for (const pb of placed) {
+        if (rectsOverlap(l, t, r, b, pb.l, pb.t, pb.r, pb.b)) {
+          const ow = Math.min(r, pb.r) - Math.max(l, pb.l);
+          const oh = Math.min(b, pb.b) - Math.max(t, pb.t);
+          s -= ow * oh * 15;
+        }
+      }
+
+      // Blocage absolu : bouton central
+      if (cbtnR && rectsOverlap(l, t, r, b, cbtnR.l, cbtnR.t, cbtnR.r, cbtnR.b)) {
+        return -9999;
+      }
+
+      return s;
+    }
+
+    let bestAngle = ANGLES[0];
+    let bestScore = -Infinity;
+    for (const a of ANGLES) {
+      const s = scoreAngle(a);
+      if (s > bestScore) { bestScore = s; bestAngle = a; }
+    }
+
+    const rad = bestAngle * Math.PI / 180;
+    const finalCx = geo.cx + Math.cos(rad) * d;
+    const finalCy = geo.cy + Math.sin(rad) * d;
+    const finalL = Math.round(finalCx - tw / 2);
+    const finalT = Math.round(finalCy - th / 2);
+
+    trend.style.left = finalL + "px";
+    trend.style.top  = finalT + "px";
+
+    placed.push({ l: finalL, t: finalT, r: finalL + tw, b: finalT + th });
   });
 }
 
@@ -107,7 +412,7 @@ function renderTagTrendCloud(container, trends) {
 
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
-  trends.slice(0, 12).forEach((trendItem, index) => {
+  trends.slice(0, MAX_TAG_TREND_BUBBLES).forEach((trendItem, index) => {
     const tag = String(trendItem?.tag || "").trim();
     if (!tag) return;
 
@@ -115,9 +420,13 @@ function renderTagTrendCloud(container, trends) {
     const bubble = document.createElement("button");
     bubble.className = [
       "agon-tag-bubble",
-      getBubbleSizeClass(index),
+      getBubbleSizeClass(index, trendItem),
       `agon-tag-pos-${POS_ORDER[index] ?? index}`
     ].join(" ");
+    const visualSize = getBubbleVisualSize(index, trendItem);
+    if (visualSize) {
+      bubble.style.setProperty("--agon-tag-bubble-size", visualSize);
+    }
     bubble.type = "button";
 
     const trendSpan = document.createElement("span");
@@ -151,27 +460,12 @@ function renderTagTrendCloud(container, trends) {
   container.appendChild(centerBtn);
 
   requestAnimationFrame(() => {
+    applyCompactBubbleLayout(container);
     container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
-
-    const containerRect = container.getBoundingClientRect();
-    container.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
-      const trend = bubble.querySelector(".agon-tag-trend");
-      if (!trend) return;
-      const bubbleRect = bubble.getBoundingClientRect();
-      const trendRect = trend.getBoundingClientRect();
-      const isCentered = bubble.classList.contains("agon-tag-pos-6") || bubble.classList.contains("agon-tag-pos-9");
-      const left = isCentered
-        ? bubbleRect.left - containerRect.left + (bubbleRect.width - trendRect.width) / 2
-        : bubbleRect.right - containerRect.left - trendRect.width + 4;
-      const top  = bubbleRect.top  - containerRect.top  - trendRect.height / 2 + 10;
-      trend.style.position = "absolute";
-      trend.style.left = left + "px";
-      trend.style.top  = top  + "px";
-      trend.style.right = "auto";
-      container.appendChild(trend);
-    });
-
+    // Overlays de texte en premier : les badges éviteront leurs positions
     renderLabelOverlays(container);
+    // Badges positionnés après, avec connaissance des overlays
+    positionTrendBadges(container);
   });
 }
 

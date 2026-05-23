@@ -6220,12 +6220,18 @@ function getPreferredIndexMediaStartIndex(mediaItems, debate = null) {
   return bestIndex;
 }
 
-async function getIndexSourcePreviewData(sourceUrl) {
+function scheduleIndexSourcePreviewHydration(debateId) {
+  const targetId = String(debateId || "").trim();
+  if (!targetId) return;
+  window.setTimeout(() => hydrateIndexSourcePreviewForDebate(targetId), 0);
+}
+
+async function getIndexSourcePreviewData(sourceUrl, options = {}) {
   const safeUrl = String(sourceUrl || '').trim();
   if (!safeUrl) return null;
 
   const cached = indexSourcePreviewCache.get(safeUrl);
-  if (cached) {
+  if (cached && !options.forceRefresh) {
     return Promise.resolve(cached);
   }
 
@@ -6619,6 +6625,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const currentItem = mediaItems[initialIndex] || null;
   if (!currentItem) {
     if (hasAnyIndexAssociatedMediaOrSource(debate) && !debate?._indexSourcePreviewHydrationDone) {
+      scheduleIndexSourcePreviewHydration(String(debate?.id || "").trim());
       return buildIndexSourcePreviewLoadingCardHtml(String(debate?.id || "").trim());
     }
     return buildIndexLocalImageCardHtml("/fondchargement.png", String(debate?.id || "").trim());
@@ -6793,7 +6800,7 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
   const candidateUrls = getIndexHydratableSourceUrls(debate);
 
   Promise.all(candidateUrls.map((url) =>
-    getIndexSourcePreviewData(url)
+    getIndexSourcePreviewData(url, { forceRefresh: true })
       .then((preview) => ({ url, preview }))
       .catch(() => ({ url, preview: null }))
   )).then((results) => {
@@ -14573,9 +14580,23 @@ function getFilteredDebatesForIndex(baseDebates) {
   const query = getCurrentIndexSearchQuery().toLowerCase();
 
   if (currentBubbleTag && window._tagTrendsModule) {
-    const { getCanonicalTagsFromItem, normalizeTag } = window._tagTrendsModule;
+    const { getCanonicalTagsFromItem, normalizeTag, extractRawTagsFromItem } = window._tagTrendsModule;
     const normalizedBubble = normalizeTag(currentBubbleTag);
+    const activeTrend = Array.isArray(window.AGON_TAG_TRENDS)
+      ? window.AGON_TAG_TRENDS.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedBubble)
+      : null;
+    const activeSubjectId = String(activeTrend?.subjectId || "").trim();
+
     filteredDebates = filteredDebates.filter((debate) => {
+      if (activeTrend?.kind === "subject") {
+        const memberIds = new Set((Array.isArray(activeTrend.memberSubjectIds) ? activeTrend.memberSubjectIds : [activeSubjectId]).map((id) => String(id || "").trim()).filter(Boolean));
+        const sameId = memberIds.has(String(debate?.id || "").trim());
+        const sameTitle = normalizeTag(debate?.question || debate?.title || "") === normalizedBubble;
+        const canonicalTags = getCanonicalTagsFromItem(debate).map(normalizeTag);
+        const rawTags = typeof extractRawTagsFromItem === "function" ? extractRawTagsFromItem(debate).map(normalizeTag) : [];
+        return sameId || sameTitle || canonicalTags.includes(normalizedBubble) || rawTags.includes(normalizedBubble);
+      }
+
       const canonicalTags = getCanonicalTagsFromItem(debate).map(normalizeTag);
       if (canonicalTags.includes(normalizedBubble)) return true;
       // fallback : recherche textuelle aussi
@@ -15401,8 +15422,36 @@ function buildIndexInfiniteScrollSentinelHtml() {
   `;
 }
 
-let indexTagTrendsModulePromise = null;
-let indexTagTrendCloudModulePromise = null;
+let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260523-center-protect");
+
+function _tagMergeHash(subjects) {
+  const str = JSON.stringify(subjects);
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return "agon_mg_" + Math.abs(h).toString(36);
+}
+
+async function _fetchMergeGroupsCached(subjects) {
+  const key = _tagMergeHash(subjects);
+  const ttl = 10 * 60 * 1000;
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || "null");
+    if (cached && Date.now() - cached.ts < ttl) return cached.mergeGroups;
+  } catch {}
+  try {
+    const res = await fetchJSON(API + "/subject-cloud-merges", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subjects })
+    });
+    const mergeGroups = Array.isArray(res?.mergeGroups) ? res.mergeGroups : [];
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), mergeGroups })); } catch {}
+    return mergeGroups;
+  } catch {
+    return [];
+  }
+}
 
 function syncBubbleFrameTop() {
   const btn = document.getElementById('index-sort-toggle');
@@ -15441,54 +15490,64 @@ function updateIndexTagTrends(items) {
     return;
   }
 
-  if (!indexTagTrendsModulePromise) {
-    indexTagTrendsModulePromise = import("/tagTrends.js?v=20260520-canonical-groups");
-  }
-
-  indexTagTrendsModulePromise
-    .then((module) => {
+  Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
+    .then(async ([module, cloudModule]) => {
       window._tagTrendsModule = module;
-      const tagTrends = module.buildTagTrends(items, { limit: 12 });
-      window.AGON_TAG_TRENDS = tagTrends;
-      console.log("[Agôn] Tag trends:", tagTrends);
 
-      if (!cloudContainer || !Array.isArray(tagTrends) || !tagTrends.length) {
-        if (trendsSection) trendsSection.hidden = true;
-        if (cloudContainer) cloudContainer.innerHTML = "";
-        return;
-      }
+      const buildTrends = (mergeGroups) => typeof module.buildSubjectTrends === "function"
+        ? module.buildSubjectTrends(items, { limit: 12, mergeGroups })
+        : module.buildTagTrends(items, { limit: 12 });
 
-      if (!indexTagTrendCloudModulePromise) {
-        indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260521-active-overlay");
-      }
-
-      indexTagTrendCloudModulePromise
-        .then((cloudModule) => {
-          cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
-          requestAnimationFrame(() => {
-            requestAnimationFrame(syncBubbleFrameTop);
-            if (currentBubbleTag) {
-              document.querySelectorAll('.agon-tag-bubble').forEach(bubble => {
-                const label = bubble.querySelector('.agon-tag-label');
-                const words = label?.querySelectorAll('.agon-tag-word');
-                const tag = words?.length
-                  ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
-                  : (label?.textContent.trim() || '');
-                if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
-                  bubble.classList.add('agon-tag-bubble-active');
-                  document.querySelectorAll('.agon-tag-label-overlay').forEach(label => {
-                    if ((label.dataset.tag || '').toLowerCase() === tag.toLowerCase()) {
-                      label.classList.add('agon-tag-label-overlay-active');
-                    }
-                  });
-                }
-              });
-            }
-          });
-        })
-        .catch((error) => {
-          console.warn("[Agôn] Tag cloud indisponible:", error);
+      function doRender(tagTrends) {
+        if (!cloudContainer || !Array.isArray(tagTrends) || !tagTrends.length) {
+          if (trendsSection) trendsSection.hidden = true;
+          if (cloudContainer) cloudContainer.innerHTML = "";
+          return;
+        }
+        cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(syncBubbleFrameTop);
+          if (currentBubbleTag) {
+            document.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
+              const label = bubble.querySelector(".agon-tag-label");
+              const words = label?.querySelectorAll(".agon-tag-word");
+              const tag = words?.length
+                ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
+                : (label?.textContent.trim() || "");
+              if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
+                bubble.classList.add("agon-tag-bubble-active");
+                document.querySelectorAll(".agon-tag-label-overlay").forEach(overlay => {
+                  if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
+                    overlay.classList.add("agon-tag-label-overlay-active");
+                  }
+                });
+              }
+            });
+          }
         });
+      }
+
+      // Affichage immédiat sans IA
+      const initialTrends = buildTrends([]);
+      window.AGON_TAG_TRENDS = initialTrends;
+      console.log("[Agôn] Tag trends (initial):", initialTrends);
+      doRender(initialTrends);
+
+      // Fusion IA en arrière-plan (avec cache localStorage)
+      if (typeof module.buildSubjectCloudMergeCandidates !== "function") return;
+      const subjects = module.buildSubjectCloudMergeCandidates(items, { limit: 80 });
+      if (subjects.length < 2) return;
+
+      const mergeGroups = await _fetchMergeGroupsCached(subjects);
+      if (!mergeGroups.length) return;
+
+      const finalTrends = buildTrends(mergeGroups);
+      window.AGON_TAG_TRENDS = finalTrends;
+      console.log("[Agôn] Tag trends (merged):", finalTrends);
+
+      const initialKeys = initialTrends.map(t => t.tag).join(",");
+      const finalKeys = finalTrends.map(t => t.tag).join(",");
+      if (initialKeys !== finalKeys) doRender(finalTrends);
     })
     .catch((error) => {
       console.warn("[Agôn] Tag trends indisponibles:", error);

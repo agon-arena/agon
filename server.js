@@ -52,6 +52,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
+const subjectCloudMergeCache = new Map();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -3503,6 +3504,183 @@ app.post("/api/admin/logout", (req, res) => {
 
 app.get("/api/admin/session", requireAdmin, (req, res) => {
   res.json({ success: true });
+});
+
+function normalizeSubjectCloudAiSubjects(subjects) {
+  return (Array.isArray(subjects) ? subjects : [])
+    .map((subject) => {
+      const subjectId = String(subject?.subjectId || "").trim().slice(0, 80);
+      const subjectTitle = String(subject?.subjectTitle || "").replace(/\s+/g, " ").trim().slice(0, 180);
+      if (!subjectId || !subjectTitle) return null;
+      const tags = Array.isArray(subject?.tags)
+        ? subject.tags.map((tag) => String(tag || "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6)
+        : [];
+      const mainTag = String(subject?.mainTag || subject?.primaryTag || subject?.tagPrincipal || "").replace(/\s+/g, " ").trim().slice(0, 80);
+      return {
+        subjectId,
+        subjectTitle,
+        ...(mainTag ? { mainTag } : {}),
+        ...(tags.length ? { tags } : {})
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80);
+}
+
+function sanitizeSubjectCloudMergeGroups(rawGroups, knownIds) {
+  const consumed = new Set();
+  return (Array.isArray(rawGroups) ? rawGroups : [])
+    .map((group) => {
+      const keepSubjectId = String(group?.keepSubjectId || "").trim();
+      const confidence = Number(group?.confidence);
+      if (!knownIds.has(keepSubjectId) || !Number.isFinite(confidence) || confidence < 0.8) return null;
+
+      const mergeSubjectIds = [...new Set(
+        (Array.isArray(group?.mergeSubjectIds) ? group.mergeSubjectIds : [])
+          .map((id) => String(id || "").trim())
+          .filter((id) => id && id !== keepSubjectId && knownIds.has(id))
+      )];
+
+      if (!mergeSubjectIds.length) return null;
+      const allIds = [keepSubjectId, ...mergeSubjectIds];
+      if (allIds.some((id) => consumed.has(id))) return null;
+      allIds.forEach((id) => consumed.add(id));
+
+      return {
+        keepSubjectId,
+        mergeSubjectIds,
+        suggestedTitle: String(group?.suggestedTitle || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        confidence,
+        reason: String(group?.reason || "").replace(/\s+/g, " ").trim().slice(0, 260)
+      };
+    })
+    .filter(Boolean);
+}
+
+async function analyzeSubjectCloudMergesWithAI(subjects) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || subjects.length < 2) return { mergeGroups: [] };
+
+  const cacheKey = crypto.createHash("sha1").update(JSON.stringify(subjects)).digest("hex");
+  const cached = subjectCloudMergeCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < 10 * 60 * 1000) {
+    return cached.result;
+  }
+
+  const prompt = [
+    "Tu es un agent de déduplication éditoriale pour une application d'actualité.",
+    "",
+    "Ta mission :",
+    "analyser une liste de sujets d'actualité récents et repérer uniquement les sujets qui doivent être fusionnés parce qu'ils désignent clairement la même actualité, le même événement, la même affaire, la même décision, la même polémique ou la même séquence médiatique.",
+    "",
+    "Données fournies :",
+    "chaque sujet peut contenir :",
+    "- subjectId",
+    "- subjectTitle",
+    "- cloudLabel",
+    "- mainTag",
+    "- primaryTag",
+    "- tagPrincipal",
+    "- tags",
+    "",
+    "Règle principale :",
+    "fusionne uniquement les doublons ou quasi-doublons évidents.",
+    "",
+    "Tu dois être très prudent.",
+    "",
+    "Tu peux proposer une fusion seulement si les sujets parlent clairement :",
+    "- du même événement précis ;",
+    "- de la même décision précise ;",
+    "- de la même affaire ;",
+    "- de la même polémique ;",
+    "- de la même séquence médiatique ;",
+    "- des mêmes acteurs principaux ;",
+    "- du même enjeu central précis.",
+    "",
+    "Ne fusionne jamais deux sujets seulement parce qu'ils appartiennent à la même grande thématique.",
+    "",
+    "Exemples à ne pas fusionner :",
+    "- deux sujets différents sur Trump ;",
+    "- deux sujets différents sur l'immigration ;",
+    "- deux sujets différents sur la guerre en Ukraine ;",
+    "- deux sujets différents sur l'éducation ;",
+    "- deux sujets différents sur le budget ;",
+    "- deux sujets différents sur la présidentielle ;",
+    "- deux sujets différents sur le climat ;",
+    "- deux sujets différents sur Israël / Gaza ;",
+    "- deux sujets différents sur l'économie.",
+    "",
+    "Ne fusionne pas si :",
+    "- les titres sont vagues ;",
+    "- le lien est seulement thématique ;",
+    "- les sujets peuvent désigner deux événements différents ;",
+    "- tu dois inventer le contexte ;",
+    "- la fusion serait trop large ;",
+    "- la confiance est inférieure à 0.8.",
+    "",
+    "Choisis comme sujet principal :",
+    "- le sujet dont le titre est le plus clair, précis et compréhensible ;",
+    "- ou celui qui semble le plus central dans le groupe ;",
+    "- ou celui qui possède le meilleur tag principal exploitable pour l'affichage dans le nuage.",
+    "",
+    "Sortie attendue :",
+    "réponds uniquement en JSON valide, sans texte autour, sans markdown.",
+    "",
+    "Format obligatoire :",
+    '{"mergeGroups":[{"keepSubjectId":"id_du_sujet_principal","mergeSubjectIds":["id_sujet_a_rattacher_1","id_sujet_a_rattacher_2"],"suggestedTitle":"titre fusionné court et précis si utile","confidence":0.92,"reason":"justification courte"}],"doNotMerge":[{"subjectIds":["id_1","id_2"],"reason":"raison courte"}]}',
+    "",
+    "Important :",
+    "- mergeSubjectIds ne doit jamais contenir keepSubjectId ;",
+    "- un même subjectId ne doit pas apparaître dans plusieurs groupes de fusion ;",
+    "- ne propose aucune fusion avec confidence < 0.8 ;",
+    "- si aucune fusion fiable n'est trouvée, retourne mergeGroups vide ;",
+    "- ne modifie pas les IDs ;",
+    "- n'invente aucun sujet ;",
+    "- n'invente aucun contexte absent des titres ou tags fournis.",
+    "",
+    "Sujets récents :",
+    JSON.stringify(subjects, null, 2)
+  ].join("\n");
+
+  try {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 1800,
+        temperature: 0
+      })
+    });
+
+    if (!r.ok) return { mergeGroups: [] };
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    if (!content) return { mergeGroups: [] };
+    const parsed = JSON.parse(content);
+    const knownIds = new Set(subjects.map((subject) => subject.subjectId));
+    const result = { mergeGroups: sanitizeSubjectCloudMergeGroups(parsed?.mergeGroups, knownIds) };
+    subjectCloudMergeCache.set(cacheKey, { createdAt: Date.now(), result });
+    return result;
+  } catch (error) {
+    return { mergeGroups: [] };
+  }
+}
+
+app.post("/api/subject-cloud-merges", rateLimit("subject-cloud-merges", 20), async (req, res) => {
+  try {
+    const subjects = normalizeSubjectCloudAiSubjects(req.body?.subjects);
+    if (subjects.length < 2) return res.json({ ok: true, mergeGroups: [] });
+    const result = await analyzeSubjectCloudMergesWithAI(subjects);
+    return res.json({ ok: true, mergeGroups: result.mergeGroups || [] });
+  } catch (error) {
+    return res.json({ ok: false, mergeGroups: [], error: error.message || "Erreur fusion IA." });
+  }
 });
 
 function buildAdminTagOccurrenceStats(debates = []) {
