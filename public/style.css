@@ -10900,6 +10900,12 @@ body.admin-edit-open::after {
   box-shadow: 0 0 0 2px rgba(245,158,11,0.15);
 }
 
+.admin-edit-story-search {
+  margin-bottom: 6px;
+  font-size: 12px;
+  border-color: #e5e7eb;
+}
+
 .admin-edit-info {
   display: flex;
   flex-wrap: wrap;
@@ -12290,6 +12296,19 @@ body.page-debate .debate-episode-link:hover {
 
 .index-card-episode-btn:hover {
   background: #e5e7eb;
+}
+
+.theme-horizontal-inner > .debate-card.index-card-episode-flash,
+.debate-card.index-card-episode-flash {
+  animation: flashBlueCard 1s ease-in-out 2;
+  filter: none !important;
+}
+
+.debate-card.index-card-episode-flash .debate-card-link,
+.debate-card.index-card-episode-flash .index-card-title-banner,
+.debate-card.index-card-episode-flash .debate-card-context,
+.debate-card.index-card-episode-flash .debate-card-bottom-entry {
+  animation: flashBlueCard 1s ease-in-out 2;
 }
 
 @media (max-width: 768px) {

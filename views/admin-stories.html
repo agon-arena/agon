@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Histoires associées — Admin Agôn</title>
+  <link rel="stylesheet" href="/style.css?v=20260522-admin-topbar-dropdown">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f6f6f3;
+      color: #111;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .stories-admin {
+      width: min(1100px, calc(100% - 32px));
+      margin: 32px auto;
+    }
+
+    .stories-admin-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .stories-admin h1 {
+      margin: 0 0 4px;
+      font-size: 1.6rem;
+    }
+
+    .stories-admin p {
+      margin: 0;
+      color: #666;
+    }
+
+    .stories-admin-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stories-admin-search,
+    .stories-admin-button {
+      border: 1px solid #ddd;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      background: #fff;
+    }
+
+    .stories-admin-search {
+      min-width: min(320px, 100%);
+    }
+
+    .stories-admin-button {
+      color: #111;
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .stories-admin-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .story-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .story-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .story-card h2 {
+      margin: 0 0 6px;
+      font-size: 1.02rem;
+    }
+
+    .story-meta {
+      color: #777;
+      font-size: 0.84rem;
+    }
+
+    .story-card-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 4px;
+      flex: 0 0 104px;
+    }
+
+    .story-toggle,
+    .story-edit,
+    .story-delete,
+    .story-save,
+    .story-cancel {
+      width: 100%;
+      border: 1px solid #d8d8d8;
+      border-radius: 999px;
+      background: #f8f8f8;
+      color: #444;
+      padding: 4px 7px;
+      font: inherit;
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .story-edit,
+    .story-cancel {
+      background: #fbfbfb;
+      color: #555;
+      border-color: #e2e2e2;
+    }
+
+    .story-delete {
+      background: #fff;
+      color: #9b4a43;
+      border-color: #efd9d6;
+    }
+
+    .story-edit-form {
+      display: none;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .story-card.editing .story-edit-form {
+      display: grid;
+    }
+
+    .story-edit-input,
+    .story-edit-summary {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    .story-edit-summary {
+      min-height: 76px;
+      resize: vertical;
+    }
+
+    .story-edit-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .story-debates {
+      margin-top: 14px;
+      border-top: 1px solid #eee;
+      padding-top: 12px;
+      display: none;
+    }
+
+    .story-card.open .story-debates {
+      display: block;
+    }
+
+    .story-debate-link {
+      display: block;
+      flex: 1;
+      padding: 8px 0;
+      color: #111;
+      text-decoration: none;
+    }
+
+    .story-debate-link:hover {
+      text-decoration: underline;
+    }
+
+    .story-debate-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .story-unlink {
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: #fff;
+      color: #666;
+      padding: 4px 8px;
+      font: inherit;
+      font-size: 0.72rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .story-unlink:hover {
+      border-color: #bbb;
+      color: #111;
+    }
+
+    .story-empty,
+    .story-loading {
+      color: #777;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="stories-admin">
+    <div class="stories-admin-header">
+      <div>
+        <h1>Histoires associées</h1>
+        <p id="stories-admin-count">Chargement des histoires…</p>
+      </div>
+      <div class="stories-admin-actions">
+        <input id="stories-admin-search" class="stories-admin-search" type="search" placeholder="Rechercher une histoire">
+        <a class="stories-admin-button" id="stories-admin-back" href="/">Retour</a>
+      </div>
+    </div>
+    <section id="stories-admin-list" class="stories-admin-list">
+      <div class="story-loading">Chargement…</div>
+    </section>
+  </main>
+
+  <script>
+    const listEl = document.getElementById("stories-admin-list");
+    const countEl = document.getElementById("stories-admin-count");
+    const searchEl = document.getElementById("stories-admin-search");
+    const backEl = document.getElementById("stories-admin-back");
+    let stories = [];
+
+    if (window.self !== window.top && backEl) {
+      backEl.textContent = "Fermer";
+      backEl.addEventListener("click", (event) => {
+        event.preventDefault();
+        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+      });
+    }
+
+    function getAdminToken() {
+      return localStorage.getItem("admin_token") || "";
+    }
+
+    function adminHeaders() {
+      return {
+        "Content-Type": "application/json",
+        "x-admin-token": getAdminToken()
+      };
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function renderStories() {
+      const query = String(searchEl.value || "").trim().toLowerCase();
+      const filtered = stories.filter((story) => {
+        return !query || String(story.story_title || "").toLowerCase().includes(query);
+      });
+
+      countEl.textContent = filtered.length + " histoire(s) affichée(s) sur " + stories.length;
+      if (!filtered.length) {
+        listEl.innerHTML = '<div class="story-empty">Aucune histoire trouvée.</div>';
+        return;
+      }
+
+      listEl.innerHTML = filtered.map((story) => {
+        const title = escapeHtml(story.story_title || "Histoire sans titre");
+        const summary = escapeHtml(story.story_summary || "");
+        const id = escapeHtml(story.story_id || "");
+        const latest = story.latest_episode_title ? "Dernier épisode : " + escapeHtml(story.latest_episode_title) : "Aucune arène associée pour le moment";
+        return '<article class="story-card" data-story-id="' + id + '">' +
+          '<div class="story-card-header">' +
+            '<div><h2>' + title + '</h2><div class="story-meta"><strong class="story-debate-count" data-count-for="' + id + '">…</strong> arène(s) associée(s) · ' + latest + '</div></div>' +
+            '<div class="story-card-actions">' +
+              '<button class="story-toggle" type="button">Voir les arènes</button>' +
+              '<button class="story-edit" type="button">Modifier</button>' +
+              '<button class="story-delete" type="button">Supprimer</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="story-edit-form">' +
+            '<input class="story-edit-input" type="text" value="' + title + '">' +
+            '<textarea class="story-edit-summary" placeholder="Résumé de l’histoire">' + summary + '</textarea>' +
+            '<div class="story-edit-actions">' +
+              '<button class="story-save" type="button">Enregistrer</button>' +
+              '<button class="story-cancel" type="button">Annuler</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="story-debates"><div class="story-loading">Chargement…</div></div>' +
+        '</article>';
+      }).join("");
+    }
+
+    async function loadStories() {
+      const response = await fetch("/api/veille/stories");
+      const data = await response.json();
+      stories = Array.isArray(data.stories) ? data.stories : [];
+      renderStories();
+      updateDebateCounts();
+    }
+
+    async function updateDebateCounts() {
+      await Promise.all(stories.map(async (story) => {
+        const storyId = String(story.story_id || "");
+        if (!storyId) return;
+        const countEl = document.querySelector('[data-count-for="' + CSS.escape(storyId) + '"]');
+        if (!countEl) return;
+        try {
+          const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId) + "/debates");
+          const data = await response.json().catch(() => ({ debates: [] }));
+          const count = Array.isArray(data.debates) ? data.debates.length : 0;
+          countEl.textContent = String(count);
+        } catch (error) {
+          countEl.textContent = "0";
+        }
+      }));
+    }
+
+    async function toggleStory(card) {
+      const debatesEl = card.querySelector(".story-debates");
+      card.classList.toggle("open");
+      if (!card.classList.contains("open") || debatesEl.dataset.loaded === "1") return;
+
+      const storyId = card.dataset.storyId || "";
+      const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId) + "/debates");
+      const data = await response.json().catch(() => ({ ok: false, debates: [] }));
+      const debates = Array.isArray(data.debates) ? data.debates : [];
+      debatesEl.dataset.loaded = "1";
+      debatesEl.innerHTML = debates.length
+        ? debates.map((debate) => '<div class="story-debate-row" data-debate-id="' + escapeHtml(debate.id || "") + '">' +
+            '<a class="story-debate-link" href="' + escapeHtml(debate.url || "#") + '" target="_blank" rel="noopener">' + escapeHtml(debate.question || "Arène sans titre") + '</a>' +
+            '<button class="story-unlink" type="button">Dissocier</button>' +
+          '</div>').join("")
+        : '<div class="story-empty">Aucune arène associée.</div>';
+    }
+
+    async function unlinkDebate(card, row) {
+      const storyId = card.dataset.storyId || "";
+      const debateId = row.dataset.debateId || "";
+      if (!storyId || !debateId) return;
+      if (!confirm("Dissocier cette arène de l’histoire ?")) return;
+
+      const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId) + "/debates/" + encodeURIComponent(debateId), {
+        method: "DELETE",
+        headers: adminHeaders()
+      });
+      const data = await response.json().catch(() => ({ ok: false, error: "Erreur dissociation arène" }));
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || "Erreur dissociation arène");
+      }
+
+      row.remove();
+      const debatesEl = card.querySelector(".story-debates");
+      if (!debatesEl.querySelector(".story-debate-row")) {
+        debatesEl.innerHTML = '<div class="story-empty">Aucune arène associée.</div>';
+      }
+      const countEl = card.querySelector(".story-debate-count");
+      if (countEl) {
+        countEl.textContent = String(Math.max(0, Number(countEl.textContent || 0) - 1));
+      }
+    }
+
+    async function saveStory(card) {
+      const storyId = card.dataset.storyId || "";
+      const title = card.querySelector(".story-edit-input").value.trim();
+      const summary = card.querySelector(".story-edit-summary").value.trim();
+      if (!title) {
+        card.querySelector(".story-edit-input").focus();
+        return;
+      }
+
+      const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId), {
+        method: "PUT",
+        headers: adminHeaders(),
+        body: JSON.stringify({ story_title: title, story_summary: summary })
+      });
+      const data = await response.json().catch(() => ({ ok: false, error: "Erreur modification histoire" }));
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || "Erreur modification histoire");
+      }
+
+      const index = stories.findIndex((story) => String(story.story_id || "") === storyId);
+      if (index !== -1) stories[index] = data.story;
+      renderStories();
+    }
+
+    async function deleteStory(card) {
+      const storyId = card.dataset.storyId || "";
+      const title = card.querySelector("h2").textContent.trim();
+      if (!confirm('Supprimer l’histoire "' + title + '" ? Les arènes associées seront dissociées.')) return;
+
+      const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId), {
+        method: "DELETE",
+        headers: adminHeaders()
+      });
+      const data = await response.json().catch(() => ({ ok: false, error: "Erreur suppression histoire" }));
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || "Erreur suppression histoire");
+      }
+
+      stories = stories.filter((story) => String(story.story_id || "") !== storyId);
+      renderStories();
+    }
+
+    searchEl.addEventListener("input", renderStories);
+    document.addEventListener("click", (event) => {
+      const card = event.target.closest(".story-card");
+      if (!card) return;
+
+      const toggleButton = event.target.closest(".story-toggle");
+      if (toggleButton) {
+        toggleStory(card).catch(() => {
+          const debatesEl = card.querySelector(".story-debates");
+          debatesEl.innerHTML = '<div class="story-empty">Erreur de chargement.</div>';
+        });
+        return;
+      }
+
+      if (event.target.closest(".story-edit")) {
+        card.classList.add("editing");
+        return;
+      }
+
+      if (event.target.closest(".story-cancel")) {
+        card.classList.remove("editing");
+        return;
+      }
+
+      if (event.target.closest(".story-save")) {
+        saveStory(card).catch((error) => alert(error.message));
+        return;
+      }
+
+      if (event.target.closest(".story-delete")) {
+        deleteStory(card).catch((error) => alert(error.message));
+        return;
+      }
+
+      const unlinkButton = event.target.closest(".story-unlink");
+      if (unlinkButton) {
+        unlinkDebate(card, unlinkButton.closest(".story-debate-row")).catch((error) => alert(error.message));
+      }
+    });
+
+    loadStories().catch(() => {
+      countEl.textContent = "Erreur de chargement";
+      listEl.innerHTML = '<div class="story-empty">Impossible de charger les histoires.</div>';
+    });
+  </script>
+</body>
+</html>

@@ -35,9 +35,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": 445,
-    "next_episode_title": "La modification du corps électoral en Nouvelle-Calédonie garantit-elle une démocratie juste ?",
-    "next_episode_url": "/debate?id=445"
+    "next_episode_id": 446,
+    "next_episode_title": "La France peut-elle être gouvernée efficacement sous un régime communiste ?",
+    "next_episode_url": "/debate?id=446"
   },
   "443": {
     "previous_episode_id": 440,
@@ -56,17 +56,17 @@
     "next_episode_url": "/debate?id=452"
   },
   "445": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 451,
+    "next_episode_title": "Faut-il ouvrir le corps électoral aux natifs en Nouvelle-Calédonie ?",
+    "next_episode_url": "/debate?id=451"
+  },
+  "446": {
     "previous_episode_id": 442,
     "previous_episode_title": "La gauche peut-elle encore s’unir sans primaire en 2027 ?",
     "previous_episode_url": "/debate?id=442",
-    "next_episode_id": 446,
-    "next_episode_title": "La France peut-elle être gouvernée efficacement sous un régime communiste ?",
-    "next_episode_url": "/debate?id=446"
-  },
-  "446": {
-    "previous_episode_id": 445,
-    "previous_episode_title": "La modification du corps électoral en Nouvelle-Calédonie garantit-elle une démocratie juste ?",
-    "previous_episode_url": "/debate?id=445",
     "next_episode_id": 488,
     "next_episode_title": "Gabriel Attal est-il le candidat idéal pour 2027 ?",
     "next_episode_url": "/debate?id=488"
@@ -75,6 +75,14 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "451": {
+    "previous_episode_id": 445,
+    "previous_episode_title": "La modification du corps électoral en Nouvelle-Calédonie garantit-elle une démocratie juste ?",
+    "previous_episode_url": "/debate?id=445",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
@@ -91,9 +99,9 @@
     "previous_episode_id": 452,
     "previous_episode_title": "L’Iran doit-il saisir cette opportunité de négociation américaine ?",
     "previous_episode_url": "/debate?id=452",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 499,
+    "next_episode_title": "Faut-il sanctionner Israël pour les violences contre la flottille ?",
+    "next_episode_url": "/debate?id=499"
   },
   "483": {
     "previous_episode_id": 438,
@@ -147,9 +155,9 @@
     "previous_episode_id": 488,
     "previous_episode_title": "Gabriel Attal est-il le candidat idéal pour 2027 ?",
     "previous_episode_url": "/debate?id=488",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 504,
+    "next_episode_title": "Gabriel Attal peut-il vraiment réussir en partant de l’Aveyron ?",
+    "next_episode_url": "/debate?id=504"
   },
   "493": {
     "previous_episode_id": null,
@@ -187,6 +195,94 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "498": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 501,
+    "next_episode_title": "La démission de Tulsi Gabbard fragilise-t-elle la sécurité nationale américaine ?",
+    "next_episode_url": "/debate?id=501"
+  },
+  "499": {
+    "previous_episode_id": 453,
+    "previous_episode_title": "La diffusion d’images humiliantes des détenus est-elle justifiable ?",
+    "previous_episode_url": "/debate?id=453",
+    "next_episode_id": 502,
+    "next_episode_title": "Les sanctions américaines sabotent-elles les négociations avec l’Iran ?",
+    "next_episode_url": "/debate?id=502"
+  },
+  "500": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "501": {
+    "previous_episode_id": 498,
+    "previous_episode_title": "La démission de Tulsi Gabbard affaiblit-elle la sécurité nationale américaine ?",
+    "previous_episode_url": "/debate?id=498",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "502": {
+    "previous_episode_id": 499,
+    "previous_episode_title": "Faut-il sanctionner Israël pour les violences contre la flottille ?",
+    "previous_episode_url": "/debate?id=499",
+    "next_episode_id": 507,
+    "next_episode_title": "Les frappes israéliennes dans le sud Liban sont-elles justifiées ?",
+    "next_episode_url": "/debate?id=507"
+  },
+  "504": {
+    "previous_episode_id": 492,
+    "previous_episode_title": "Les élus doivent-ils être sanctionnés pour leurs propos privés en ligne ?",
+    "previous_episode_url": "/debate?id=492",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "505": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 506,
+    "next_episode_title": "Faut-il renforcer drastiquement la surveillance dans le périscolaire ?",
+    "next_episode_url": "/debate?id=506"
+  },
+  "506": {
+    "previous_episode_id": 505,
+    "previous_episode_title": "Faut-il renforcer la protection judiciaire des enfants en danger à l’étranger ?",
+    "previous_episode_url": "/debate?id=505",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "507": {
+    "previous_episode_id": 502,
+    "previous_episode_title": "Les sanctions américaines sabotent-elles les négociations avec l’Iran ?",
+    "previous_episode_url": "/debate?id=502",
+    "next_episode_id": 509,
+    "next_episode_title": "L’Iran doit-il contrôler le détroit d’Ormuz pour sa sécurité nationale ?",
+    "next_episode_url": "/debate?id=509"
+  },
+  "508": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "509": {
+    "previous_episode_id": 507,
+    "previous_episode_title": "Les frappes israéliennes dans le sud Liban sont-elles justifiées ?",
+    "previous_episode_url": "/debate?id=507",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

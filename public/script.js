@@ -3414,7 +3414,36 @@ function scrollToIndexDebateCard(url) {
   const debateId = match ? decodeURIComponent(match[1]) : String(url || "").split("/").pop();
   if (!debateId) return;
   const card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(debateId.trim())}"]`);
-  if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (!card) return;
+
+  const row = card.closest(".theme-horizontal-row");
+  if (row) {
+    const targetLeft = card.offsetLeft - ((row.clientWidth - card.offsetWidth) / 2);
+    row.scrollTo({
+      left: Math.max(0, targetLeft),
+      behavior: "smooth"
+    });
+    window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 360);
+  }
+
+  card.classList.remove("index-card-episode-flash");
+  void card.offsetWidth;
+  card.classList.add("index-card-episode-flash");
+  window.setTimeout(() => {
+    card.classList.remove("index-card-episode-flash");
+  }, 2200);
+
+  if (window.matchMedia("(min-width: 769px)").matches) {
+    const rect = card.getBoundingClientRect();
+    const targetTop = window.scrollY + rect.top - ((window.innerHeight - rect.height) / 2);
+    window.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: "smooth"
+    });
+    return;
+  }
+
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function openDebateIframeModal(url, options = {}) {
@@ -4633,7 +4662,7 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.closest('div')?.remove();"
+            onerror="this.onerror=null; this.src='/fondchargement.png';"
           >
         </div>
       ` : ""}
@@ -5365,6 +5394,21 @@ function buildIndexOpenGraphImageFallbackHtml() {
   `;
 }
 
+function buildIndexSourcePreviewLoadingCardHtml(debateId = "") {
+  const safeDebateId = escapeAttribute(String(debateId || "").trim());
+  const clickAttr = safeDebateId
+    ? ` onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="cursor:pointer;"`
+    : "";
+
+  return `
+    <div class="debate-card-media debate-card-media-local-image index-source-preview-loading-card"${clickAttr}>
+      <div class="debate-card-local-image-shell">
+        ${buildIndexOpenGraphImageLoadingHtml()}
+      </div>
+    </div>
+  `;
+}
+
 function ensureAgonEmbedLoadingStyles() {
   if (document.getElementById('agon-embed-loading-style')) return;
 
@@ -5514,12 +5558,15 @@ function renderIndexOpenGraphImageShell(shell) {
     clearTimer();
     shell.dataset.rendered = 'fallback';
     shell.dataset.rendering = 'false';
-    img.removeAttribute('src');
-    img.style.display = 'none';
+    img.onerror = null;
+    img.onload = finish;
+    img.style.display = 'block';
     img.style.opacity = '0';
-    if (loading) {
-      loading.innerHTML = buildIndexOpenGraphImageFallbackHtml();
-      loading.style.display = 'flex';
+    if (loading) loading.style.display = '';
+    if (img.getAttribute('src') !== '/fondchargement.png') {
+      img.src = '/fondchargement.png';
+    } else {
+      finish();
     }
   };
 
@@ -5743,7 +5790,7 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.closest('div')?.remove();"
+            onerror="this.onerror=null; this.src='/fondchargement.png';"
           >
         </div>
       ` : ""}
@@ -6060,23 +6107,50 @@ function getIndexDebateMediaItems(debate, options = {}) {
     matchingSourceExtras = sourceExtrasAll.filter(e => batchKey(e) === activeBatchKey);
   }
 
-  const filteredExtras = [...nonSourceExtras, ...matchingSourceExtras];
+  const filterUniqueMediaItems = (items) => {
+    const seen = new Set();
+    return items.filter((item) => {
+      if (!item) return false;
+      const type = String(item.type || "").trim();
+      const url = String(item.url || "").trim();
+      if (!type || !url) return false;
+      const key = `${type}::${url}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return shouldIncludeIndexMediaItem(item, debate, options);
+    });
+  };
 
-  const allItems = [
+  const activeBatchItems = [
     ...(currentItem ? [currentItem] : []),
-    ...filteredExtras
+    ...nonSourceExtras,
+    ...matchingSourceExtras
   ];
+  const activeDisplayableItems = filterUniqueMediaItems(activeBatchItems);
 
-  const seen = new Set();
-  return allItems.filter((item) => {
+  if (activeDisplayableItems.length || !sourceExtrasAll.length || options.includeSourcesWithoutImages) {
+    return activeDisplayableItems;
+  }
+
+  return filterUniqueMediaItems([
+    ...(currentItem ? [currentItem] : []),
+    ...nonSourceExtras,
+    ...sourceExtrasAll
+  ]);
+}
+
+function hasAnyIndexAssociatedMediaOrSource(debate) {
+  if (!debate || typeof debate !== "object") return false;
+  if (String(debate.image_url || "").trim()) return true;
+  if (String(debate.video_url || "").trim()) return true;
+  if (String(debate.source_url || "").trim()) return true;
+
+  const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
+  return extras.some((item) => {
     if (!item) return false;
     const type = String(item.type || "").trim();
     const url = String(item.url || "").trim();
-    if (!type || !url) return false;
-    const key = `${type}::${url}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return shouldIncludeIndexMediaItem(item, debate, options);
+    return !!url && (type === "image" || type === "video" || type === "source");
   });
 }
 
@@ -6543,7 +6617,12 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const mediaItems = getIndexDebateMediaItems(debate);
   const initialIndex = getPreferredIndexMediaStartIndex(mediaItems, debate);
   const currentItem = mediaItems[initialIndex] || null;
-  if (!currentItem) return "";
+  if (!currentItem) {
+    if (hasAnyIndexAssociatedMediaOrSource(debate) && !debate?._indexSourcePreviewHydrationDone) {
+      return buildIndexSourcePreviewLoadingCardHtml(String(debate?.id || "").trim());
+    }
+    return buildIndexLocalImageCardHtml("/fondchargement.png", String(debate?.id || "").trim());
+  }
 
   const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
     ? getResolvedIndexSourcePreview(String(currentItem.url || "").trim(), debate)
@@ -6618,19 +6697,41 @@ function getIndexDebateById(debateId) {
     : null;
 }
 
-function shouldHydrateIndexSourcePreview(debate) {
+function getIndexHydratableSourceUrls(debate) {
   if (!debate || typeof debate !== 'object') return false;
-
-  const sourceUrl = String(debate.source_url || '').trim();
-  if (!sourceUrl) return false;
   if (String(debate.image_url || '').trim()) return false;
   if (String(debate.video_url || '').trim()) return false;
-  if (isDirectImageUrl(sourceUrl)) return false;
-  if (isIndexYouTubeSourceDebate(debate)) return false;
-  if (isXStatusUrl(sourceUrl)) return false;
-  if (isInstagramPostUrl(sourceUrl)) return false;
 
-  return isWeakSourcePreviewData(debate.source_preview, sourceUrl);
+  const candidates = [];
+  const sourceUrl = String(debate.source_url || '').trim();
+  if (sourceUrl) {
+    candidates.push(sourceUrl);
+  }
+
+  const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
+  extras.forEach((item) => {
+    if (String(item?.type || '').trim() !== 'source') return;
+    const url = String(item?.url || '').trim();
+    if (url) candidates.push(url);
+  });
+
+  return [...new Set(candidates)].filter((url) => {
+    if (!url) return false;
+    if (isDirectImageUrl(url)) return false;
+    if (isIndexYouTubeSourceDebate({ source_url: url })) return false;
+    if (isXStatusUrl(url)) return false;
+    if (isInstagramPostUrl(url)) return false;
+
+    const preview = getResolvedIndexSourcePreview(url, debate);
+    const normalizedPreview = normalizeSourcePreviewData(preview, url);
+    if (String(normalizedPreview.image || '').trim()) return false;
+    return true;
+  });
+}
+
+function shouldHydrateIndexSourcePreview(debate) {
+  const urls = getIndexHydratableSourceUrls(debate);
+  return Array.isArray(urls) && urls.length > 0;
 }
 
 function refreshIndexCardMediaEnhancements(card) {
@@ -6689,11 +6790,7 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
 
   pendingIndexSourcePreviewHydrations.add(targetId);
 
-  const mediaItems = getIndexDebateMediaItems(debate, { includeSourcesWithoutImages: true }).filter((item) => String(item?.type || '').trim() === 'source');
-  const candidateUrls = [...new Set(mediaItems
-    .map((item) => String(item?.url || '').trim())
-    .filter((url) => url && !isDirectImageUrl(url) && !isIndexYouTubeSourceDebate({ source_url: url }))
-  )];
+  const candidateUrls = getIndexHydratableSourceUrls(debate);
 
   Promise.all(candidateUrls.map((url) =>
     getIndexSourcePreviewData(url)
@@ -6709,7 +6806,8 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
       : {};
 
     results.forEach(({ url, preview }) => {
-      if (!preview || isWeakSourcePreviewData(preview, url)) return;
+      const normalizedPreview = normalizeSourcePreviewData(preview, url);
+      if (!preview || !String(normalizedPreview.image || '').trim()) return;
       previewMap[url] = preview;
       if (String(refreshedDebate.source_url || '').trim() === url) {
         refreshedDebate.source_preview = preview;
@@ -6717,9 +6815,10 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
       changed = true;
     });
 
-    if (!changed) return;
-
-    refreshedDebate.index_source_previews = previewMap;
+    refreshedDebate._indexSourcePreviewHydrationDone = true;
+    if (changed) {
+      refreshedDebate.index_source_previews = previewMap;
+    }
     rerenderIndexCardMedia(targetId);
   }).catch(() => {}).finally(() => {
     pendingIndexSourcePreviewHydrations.delete(targetId);
@@ -11675,7 +11774,6 @@ async function adminLogin() {
 
     setAdminToken(result.token);
     refreshAdminUI();
-    location.reload();
   } catch (error) {
     alert(error.message);
   }
@@ -12818,17 +12916,41 @@ async function adminLoadStorySelect(panel) {
   adminInitDragPanel(panel);
   const select = panel.querySelector('[data-edit-field="story_id"]');
   if (!select || select.dataset.loaded) return;
-  const debateId = select.dataset.debateId;
   try {
     const data = await fetchJSON(API + "/veille/stories");
     const stories = Array.isArray(data.stories) ? data.stories : [];
     const currentStoryId = select.getAttribute('data-current') || '';
-    select.innerHTML = '<option value="">— Aucune histoire —</option>' +
-      stories.map(s => `<option value="${escapeAttribute(String(s.story_id || ''))}"${String(s.story_id || '') === currentStoryId ? ' selected' : ''}>${escapeHtml(s.story_title || s.story_id)}</option>`).join('');
+    select._adminStories = stories;
+    adminRenderStorySelectOptions(select, stories, currentStoryId);
     select.dataset.loaded = '1';
   } catch(e) {
     console.warn('Erreur chargement histoires:', e);
   }
+}
+
+function adminRenderStorySelectOptions(select, stories, selectedValue = "") {
+  const currentValue = selectedValue || select.value || select.getAttribute('data-current') || "";
+  select.innerHTML = '<option value="">— Aucune histoire —</option>' +
+    stories.map(s => {
+      const id = String(s.story_id || '');
+      return `<option value="${escapeAttribute(id)}"${id === currentValue ? ' selected' : ''}>${escapeHtml(s.story_title || s.story_id)}</option>`;
+    }).join('');
+  if (currentValue && ![...select.options].some(option => option.value === currentValue)) {
+    select.value = "";
+  }
+}
+
+function adminFilterStorySelect(input) {
+  const field = input.closest('.admin-edit-field');
+  const select = field?.querySelector('[data-edit-field="story_id"]');
+  if (!select) return;
+  const query = String(input.value || '').trim().toLowerCase();
+  const stories = Array.isArray(select._adminStories) ? select._adminStories : [];
+  const currentValue = select.value;
+  const filtered = query
+    ? stories.filter((story) => String(story.story_title || story.story_id || '').toLowerCase().includes(query))
+    : stories;
+  adminRenderStorySelectOptions(select, filtered, currentValue);
 }
 
 async function saveAdminCardEdit(debateId, btn) {
@@ -13450,6 +13572,7 @@ function buildAdminEditPanelHtml(d) {
         </div>
         <div class="admin-edit-field">
           <label class="admin-edit-label">Histoire associée</label>
+          <input class="admin-edit-input admin-edit-story-search" type="search" placeholder="Rechercher une histoire…" autocomplete="off" onclick="event.stopPropagation()" oninput="adminFilterStorySelect(this)">
           <select class="admin-edit-input" data-edit-field="story_id" data-debate-id="${escapeAttribute(String(d.id || ''))}" data-current="${escapeAttribute(String(d.story_id || ''))}">
             <option value="">— Aucune histoire —</option>
           </select>

@@ -3229,6 +3229,10 @@ app.get("/admin-tags", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-tags.html"));
 });
 
+app.get("/admin-stories", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/admin-stories.html"));
+});
+
 /* =========================
    OPEN GRAPH SHARE ROUTES
 ========================= */
@@ -6111,7 +6115,26 @@ app.get("/api/veille/stories/:storyId/debates", async (req, res) => {
   }
 });
 
-app.post("/api/veille/stories", async (req, res) => {
+app.delete("/api/veille/stories/:storyId/debates/:debateId", requireAdmin, async (req, res) => {
+  const storyId = String(req.params.storyId || "").trim();
+  const debateId = String(req.params.debateId || "").trim();
+  if (!storyId || !debateId) {
+    return res.status(400).json({ ok: false, error: "storyId et debateId requis" });
+  }
+
+  try {
+    const previousStoryId = getDebateStoryId(debateId) || storyId;
+    setDebateStoryId(debateId, "");
+    await supabase.from("debates").update({ story_id: null }).eq("id", debateId);
+    if (previousStoryId) await recalculateStoryEpisodeNavigation(previousStoryId);
+    invalidateDebateCaches(debateId);
+    res.json({ ok: true, debate_id: debateId, removed_story_id: storyId });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Erreur dissociation arène" });
+  }
+});
+
+app.post("/api/veille/stories", requireAdmin, async (req, res) => {
   try {
     const title = String(req.body?.story_title || "").trim();
     const summary = String(req.body?.story_summary || "").trim();
@@ -6149,7 +6172,7 @@ app.post("/api/veille/stories", async (req, res) => {
   }
 });
 
-app.put("/api/veille/stories/:storyId", async (req, res) => {
+app.put("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   const storyId = String(req.params.storyId || "").trim();
   if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
 
@@ -6176,7 +6199,7 @@ app.put("/api/veille/stories/:storyId", async (req, res) => {
   }
 });
 
-app.delete("/api/veille/stories/:storyId", async (req, res) => {
+app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   const storyId = String(req.params.storyId || "").trim();
   if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
 
