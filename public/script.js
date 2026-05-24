@@ -4788,6 +4788,15 @@ function buildIndexCardSourceLabelHtml(debate) {
   return `<span class="debate-card-source-label">${escapeHtml(label)}</span>`;
 }
 
+function getDebateSourceLabelText(debate) {
+  const sourceCount = getDebateSourceCount(debate);
+  if (!sourceCount) return '';
+  const mediaName = getDebatePrimaryMediaName(debate) || 'Source inconnue';
+  return sourceCount > 1
+    ? `${mediaName} + ${sourceCount} source${sourceCount >= 2 ? 's' : ''}`
+    : mediaName;
+}
+
 function buildIndexCardEnterButtonHtml(debate) {
   const debateId = escapeAttribute(String(debate?.id || ""));
 
@@ -4806,7 +4815,6 @@ function buildIndexCardEnterButtonHtml(debate) {
 function buildIndexCardFooterActionsHtml(debate) {
   const d = debate || {};
   const safeId = escapeAttribute(String(d.id || ''));
-  const sourceLabelHtml = buildIndexCardSourceLabelHtml(d);
 
   return `
     <div class="debate-card-footer-actions">
@@ -4832,7 +4840,6 @@ function buildIndexCardFooterActionsHtml(debate) {
             >Signaler</button>
           </div>
         </div>
-        ${sourceLabelHtml}
       </div>
       ${buildIndexCardEnterButtonHtml(d)}
     </div>
@@ -6363,12 +6370,14 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
     ? explicitSourcePreview
     : getResolvedIndexSourcePreview(itemUrl, debate);
 
+  const sourceLabel = getDebateSourceLabelText(debate);
+
   if (isDirectImageUrl(itemUrl)) {
     return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
   }
 
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
-    const ytLabel = String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
+    const ytLabel = sourceLabel || String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
     return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel);
   }
 
@@ -6380,7 +6389,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
     return buildIndexInstagramEmbedHtml(itemUrl, sourcePreview, safeDebateId);
   }
 
-  return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId });
+  return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId, badgeLabel: sourceLabel });
 }
 
 function startIndexSourceAutoPlay(root) {
@@ -8999,6 +9008,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const image = normalizedPreview.image || "";
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
+  const badgeLabel = String(options?.badgeLabel || '').trim() || domain;
 
   let cardTag, cardAttributes, openSourceHtml;
 
@@ -9046,7 +9056,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
           decoding="async"
           style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
         >
-        <span class="debate-source-card-image-domain-badge">${escapeHtml(domain)}</span>
+        <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
       </div>
       ` : ``}
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
