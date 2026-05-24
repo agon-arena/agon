@@ -6370,14 +6370,23 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
     ? explicitSourcePreview
     : getResolvedIndexSourcePreview(itemUrl, debate);
 
-  const sourceLabel = getDebateSourceLabelText(debate);
+  // Compte total depuis media_extras du débat complet, nom depuis la preview de l'item courant
+  const sourceCount = getDebateSourceCount(debate);
+  const currentItemDomain = sourcePreview
+    ? (normalizeSourcePreviewData(sourcePreview, itemUrl).domain || getDomainLabel(itemUrl))
+    : getDomainLabel(itemUrl);
+  const mediaName = currentItemDomain || 'Source inconnue';
+  const sourceLabel = sourceCount > 1
+    ? `${mediaName} + ${sourceCount} source${sourceCount >= 2 ? 's' : ''}`
+    : (sourceCount === 1 ? mediaName : '');
 
   if (isDirectImageUrl(itemUrl)) {
     return buildIndexLocalImageCardHtml(itemUrl, safeDebateId);
   }
 
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
-    const ytLabel = sourceLabel || String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
+    const ytBase = String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
+    const ytLabel = sourceCount > 1 ? `${ytBase} + ${sourceCount} sources` : ytBase;
     return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel);
   }
 
@@ -6483,6 +6492,7 @@ function initIndexMediaSwipeEnhancements(root) {
       if (!mediaItems) return false;
 
       const normalizedIndex = ((nextIndex % mediaItems.length) + mediaItems.length) % mediaItems.length;
+      const _debateData = getIndexDebateById(shell.dataset.debateId || "");
       const debate = {
         id: shell.dataset.debateId || "",
         source_url: shell.dataset.currentSourceUrl || "",
@@ -6493,12 +6503,10 @@ function initIndexMediaSwipeEnhancements(root) {
             return null;
           }
         })(),
-        index_source_previews: (() => {
-          const debateData = getIndexDebateById(shell.dataset.debateId || "");
-          return debateData?.index_source_previews && typeof debateData.index_source_previews === "object"
-            ? debateData.index_source_previews
-            : {};
-        })()
+        index_source_previews: _debateData?.index_source_previews && typeof _debateData.index_source_previews === "object"
+          ? _debateData.index_source_previews
+          : {},
+        media_extras: Array.isArray(_debateData?.media_extras) ? _debateData.media_extras : []
       };
       const nextItem = mediaItems[normalizedIndex];
       const inner = shell.querySelector("[data-index-media-swipe-content]");
