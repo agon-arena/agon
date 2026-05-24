@@ -1,4 +1,20 @@
 {
+  "266": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 425,
+    "next_episode_title": "Procès en appel du financement libyen : justice impartiale ou chasse politique contre Sarkozy ?",
+    "next_episode_url": "/debate?id=425"
+  },
+  "425": {
+    "previous_episode_id": 266,
+    "previous_episode_title": "Nicolas Sarkozy accusé d'association de malfaiteurs : justice impartiale ou chasse politique ?",
+    "previous_episode_url": "/debate?id=266",
+    "next_episode_id": 508,
+    "next_episode_title": "Faut-il réformer la procédure des panthéonisations pour plus de transparence ?",
+    "next_episode_url": "/debate?id=508"
+  },
   "438": {
     "previous_episode_id": null,
     "previous_episode_title": null,
@@ -27,9 +43,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 532,
+    "next_episode_title": "La riposte africaine contre Ebola est-elle suffisamment efficace ?",
+    "next_episode_url": "/debate?id=532"
   },
   "442": {
     "previous_episode_id": null,
@@ -219,9 +235,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 539,
+    "next_episode_title": "Les «Enhanced Games» sont-ils la fin du sport traditionnel ?",
+    "next_episode_url": "/debate?id=539"
   },
   "501": {
     "previous_episode_id": 498,
@@ -243,9 +259,9 @@
     "previous_episode_id": 492,
     "previous_episode_title": "Les élus doivent-ils être sanctionnés pour leurs propos privés en ligne ?",
     "previous_episode_url": "/debate?id=492",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 521,
+    "next_episode_title": "Trump doit-il intervenir militairement en Iran malgré les négociations en cours ?",
+    "next_episode_url": "/debate?id=521"
   },
   "505": {
     "previous_episode_id": null,
@@ -272,12 +288,12 @@
     "next_episode_url": "/debate?id=509"
   },
   "508": {
-    "previous_episode_id": null,
-    "previous_episode_title": null,
-    "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "previous_episode_id": 425,
+    "previous_episode_title": "Procès en appel du financement libyen : justice impartiale ou chasse politique contre Sarkozy ?",
+    "previous_episode_url": "/debate?id=425",
+    "next_episode_id": 538,
+    "next_episode_title": "Le procès Sarkozy-Kadhafi révèle-t-il une justice impartiale ou un acharnement politique ?",
+    "next_episode_url": "/debate?id=538"
   },
   "509": {
     "previous_episode_id": 507,
@@ -291,33 +307,33 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 531,
+    "next_episode_title": "Les attaques ukrainiennes sur les infrastructures russes sont-elles justifiées ?",
+    "next_episode_url": "/debate?id=531"
   },
   "511": {
     "previous_episode_id": 509,
     "previous_episode_title": "L’Iran doit-il contrôler le détroit d’Ormuz pour sa sécurité nationale ?",
     "previous_episode_url": "/debate?id=509",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 519,
+    "next_episode_title": "Faut-il privilégier la fermeté militaire ou le dialogue diplomatique avec l’Iran ?",
+    "next_episode_url": "/debate?id=519"
   },
   "512": {
     "previous_episode_id": 495,
     "previous_episode_title": "Les violences israéliennes contre la flottille sont-elles justifiables ?",
     "previous_episode_url": "/debate?id=495",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 526,
+    "next_episode_title": "La France doit-elle protéger les militants pro-palestiniens à tout prix ?",
+    "next_episode_url": "/debate?id=526"
   },
   "513": {
     "previous_episode_id": 439,
     "previous_episode_title": "La centralisation des plaintes facilite-t-elle ou complique-t-elle la justice ?",
     "previous_episode_url": "/debate?id=439",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 517,
+    "next_episode_title": "Les fabricants doivent-ils être tenus responsables des implants défectueux ?",
+    "next_episode_url": "/debate?id=517"
   },
   "514": {
     "previous_episode_id": null,
@@ -331,6 +347,206 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": 530,
+    "next_episode_title": "Les mines de charbon doivent-elles être fermées immédiatement en Chine ?",
+    "next_episode_url": "/debate?id=530"
+  },
+  "516": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "517": {
+    "previous_episode_id": 513,
+    "previous_episode_title": "Faut-il renforcer la surveillance des agents municipaux pour protéger les mineurs ?",
+    "previous_episode_url": "/debate?id=513",
+    "next_episode_id": 533,
+    "next_episode_title": "Recruter sans contrôle strict dans l’animation périscolaire est-il une faute grave ?",
+    "next_episode_url": "/debate?id=533"
+  },
+  "518": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "519": {
+    "previous_episode_id": 511,
+    "previous_episode_title": "Les États-Unis sabotent-ils délibérément les négociations avec l’Iran ?",
+    "previous_episode_url": "/debate?id=511",
+    "next_episode_id": 525,
+    "next_episode_title": "Les frappes américaines au Moyen-Orient sont-elles inévitables ?",
+    "next_episode_url": "/debate?id=525"
+  },
+  "520": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": 528,
+    "next_episode_title": "L’extrême droite doit-elle être combattue par tous les moyens dans le domaine culturel ?",
+    "next_episode_url": "/debate?id=528"
+  },
+  "521": {
+    "previous_episode_id": 504,
+    "previous_episode_title": "Gabriel Attal peut-il vraiment réussir en partant de l’Aveyron ?",
+    "previous_episode_url": "/debate?id=504",
+    "next_episode_id": 522,
+    "next_episode_title": "Gabriel Attal est-il prêt à incarner un vrai renouveau politique ?",
+    "next_episode_url": "/debate?id=522"
+  },
+  "522": {
+    "previous_episode_id": 521,
+    "previous_episode_title": "Trump doit-il intervenir militairement en Iran malgré les négociations en cours ?",
+    "previous_episode_url": "/debate?id=521",
+    "next_episode_id": 524,
+    "next_episode_title": "Gabriel Attal peut-il vraiment s'imposer dans la course à l’Élysée ?",
+    "next_episode_url": "/debate?id=524"
+  },
+  "523": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "524": {
+    "previous_episode_id": 522,
+    "previous_episode_title": "Gabriel Attal est-il prêt à incarner un vrai renouveau politique ?",
+    "previous_episode_url": "/debate?id=522",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "525": {
+    "previous_episode_id": 519,
+    "previous_episode_title": "Faut-il privilégier la fermeté militaire ou le dialogue diplomatique avec l’Iran ?",
+    "previous_episode_url": "/debate?id=519",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "526": {
+    "previous_episode_id": 512,
+    "previous_episode_title": "Faut-il renforcer l'intervention internationale au Liban ?",
+    "previous_episode_url": "/debate?id=512",
+    "next_episode_id": 534,
+    "next_episode_title": "L'interdiction de Ben Gvir en France est-elle une atteinte à la liberté d'expression ?",
+    "next_episode_url": "/debate?id=534"
+  },
+  "527": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "528": {
+    "previous_episode_id": 520,
+    "previous_episode_title": "La France a-t-elle raison d'interdire l'accès à Ben Gvir ?",
+    "previous_episode_url": "/debate?id=520",
+    "next_episode_id": 536,
+    "next_episode_title": "L'influence de Vincent Bolloré nuit-elle à la liberté du cinéma français ?",
+    "next_episode_url": "/debate?id=536"
+  },
+  "530": {
+    "previous_episode_id": 515,
+    "previous_episode_title": "La sécurité minière doit-elle primer sur la production économique en Chine ?",
+    "previous_episode_url": "/debate?id=515",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "531": {
+    "previous_episode_id": 510,
+    "previous_episode_title": "L’usage des drones transforme-t-il la nature du conflit en Ukraine ?",
+    "previous_episode_url": "/debate?id=510",
+    "next_episode_id": 537,
+    "next_episode_title": "La responsabilité des civils dans les zones de conflit justifie-t-elle les frappes militaires ?",
+    "next_episode_url": "/debate?id=537"
+  },
+  "532": {
+    "previous_episode_id": 441,
+    "previous_episode_title": "Faut-il renforcer immédiatement les mesures internationales contre Ebola en RDC ?",
+    "previous_episode_url": "/debate?id=441",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "533": {
+    "previous_episode_id": 517,
+    "previous_episode_title": "Les fabricants doivent-ils être tenus responsables des implants défectueux ?",
+    "previous_episode_url": "/debate?id=517",
+    "next_episode_id": 543,
+    "next_episode_title": "La liberté d’expression doit-elle primer sur les intérêts économiques des médias ?",
+    "next_episode_url": "/debate?id=543"
+  },
+  "534": {
+    "previous_episode_id": 526,
+    "previous_episode_title": "La France doit-elle protéger les militants pro-palestiniens à tout prix ?",
+    "previous_episode_url": "/debate?id=526",
+    "next_episode_id": 535,
+    "next_episode_title": "L'accord sur le détroit d'Ormuz peut-il vraiment garantir la paix régionale ?",
+    "next_episode_url": "/debate?id=535"
+  },
+  "535": {
+    "previous_episode_id": 534,
+    "previous_episode_title": "L'interdiction de Ben Gvir en France est-elle une atteinte à la liberté d'expression ?",
+    "previous_episode_url": "/debate?id=534",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "536": {
+    "previous_episode_id": 528,
+    "previous_episode_title": "L’extrême droite doit-elle être combattue par tous les moyens dans le domaine culturel ?",
+    "previous_episode_url": "/debate?id=528",
+    "next_episode_id": 540,
+    "next_episode_title": "La Palme d’or doit-elle privilégier l’originalité géographique au détriment du cinéma grand public ?",
+    "next_episode_url": "/debate?id=540"
+  },
+  "537": {
+    "previous_episode_id": 531,
+    "previous_episode_title": "Les attaques ukrainiennes sur les infrastructures russes sont-elles justifiées ?",
+    "previous_episode_url": "/debate?id=531",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "538": {
+    "previous_episode_id": 508,
+    "previous_episode_title": "Faut-il réformer la procédure des panthéonisations pour plus de transparence ?",
+    "previous_episode_url": "/debate?id=508",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "539": {
+    "previous_episode_id": 500,
+    "previous_episode_title": "Le soutien des supporters est-il le facteur clé des succès sportifs ?",
+    "previous_episode_url": "/debate?id=500",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "540": {
+    "previous_episode_id": 536,
+    "previous_episode_title": "L'influence de Vincent Bolloré nuit-elle à la liberté du cinéma français ?",
+    "previous_episode_url": "/debate?id=536",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "543": {
+    "previous_episode_id": 533,
+    "previous_episode_title": "Recruter sans contrôle strict dans l’animation périscolaire est-il une faute grave ?",
+    "previous_episode_url": "/debate?id=533",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

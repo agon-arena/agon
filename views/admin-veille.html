@@ -61,6 +61,12 @@
   <h1>Veille → Agôn</h1>
   <p class="intro">Arènes envoyées depuis la veille, en attente de publication.</p>
 
+  <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <strong style="font-size:0.88rem;color:#444;">Nuage de bulles</strong>
+    <button id="btn-update-cloud" style="background:#111;color:white;border:none;border-radius:999px;padding:8px 16px;font:inherit;font-size:0.84rem;font-weight:700;cursor:pointer;">Mise à jour des bulles</button>
+    <span id="cloud-update-feedback" style="font-size:0.82rem;color:#6b7280;"></span>
+  </div>
+
   <div id="content"></div>
   <button id="btn-new" onclick="addEmptyForm()" style="position:fixed;bottom:32px;right:24px;background:#111;color:white;border:none;border-radius:999px;padding:12px 22px;font:inherit;font-size:0.95rem;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.18);z-index:50;">+ Nouvelle arène</button>
   <div class="toast" id="toast"></div>
@@ -244,13 +250,20 @@ function normalizeKeywordList(values, max) {
   return list.slice(0, max || 10);
 }
 
+function renderKeywordChip(keyword, isMain) {
+  var style = isMain
+    ? 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;font-size:0.82rem;font-weight:700;line-height:1.2;'
+    : 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;';
+  return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="' + style + '">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:' + (isMain ? '#1e40af' : '#666') + ';cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+}
+
 function renderKeywordEditor(item) {
   const keywords = normalizeKeywordList(item && item.keywords || [], 10);
   return '<div class="keyword-editor" style="margin-top:12px;">' +
     '<div style="font-size:0.82rem;font-weight:700;color:#555;margin-bottom:6px;">Mots-clés relevés</div>' +
     '<div class="keyword-list" style="display:flex;flex-wrap:wrap;gap:8px;">' +
-      keywords.map(function(keyword) {
-        return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+      keywords.map(function(keyword, i) {
+        return renderKeywordChip(keyword, i === 0);
       }).join('') +
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:8px;">' +
@@ -354,6 +367,7 @@ async function checkSimilar(item) {
     el.textContent = '';
   }
 }
+
 
 let storiesCache = null;
 
@@ -496,8 +510,8 @@ function addKeywordToEditor(item, value) {
   const input = item.querySelector('.keyword-input');
   if (!list) return;
   const keywords = normalizeKeywordList(getKeywordsFromEditor(item).concat([value]), 10);
-  list.innerHTML = keywords.map(function(keyword) {
-    return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+  list.innerHTML = keywords.map(function(keyword, i) {
+    return renderKeywordChip(keyword, i === 0);
   }).join('');
   if (input) input.value = '';
 }
@@ -555,8 +569,8 @@ async function proofread(btn) {
     if (Array.isArray(data.keywords) && data.keywords.length) {
       const keywordList = item.querySelector('.keyword-list');
       if (keywordList) {
-        keywordList.innerHTML = normalizeKeywordList(data.keywords, 10).map(function(keyword) {
-          return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:#666;cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+        keywordList.innerHTML = normalizeKeywordList(data.keywords, 10).map(function(keyword, i) {
+          return renderKeywordChip(keyword, i === 0);
         }).join('');
       }
     }
@@ -724,8 +738,38 @@ document.addEventListener('keydown', function(e) {
 });
 
 function adminHeaders() {
-  return { 'Content-Type': 'application/json' };
+  const token = (function() { try { return localStorage.getItem('admin_token') || ''; } catch { return ''; } })();
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['x-admin-token'] = token;
+  return h;
 }
+
+(function() {
+  const btn = document.getElementById('btn-update-cloud');
+  if (!btn) return;
+  btn.addEventListener('click', async function() {
+    const feedback = document.getElementById('cloud-update-feedback');
+    btn.disabled = true;
+    btn.textContent = 'Mise à jour…';
+    if (feedback) feedback.textContent = '';
+    try {
+      const r = await fetch('/api/admin/update-cloud', { method: 'POST', headers: adminHeaders() });
+      const data = await r.json();
+      btn.textContent = 'Mise à jour des bulles';
+      if (data.ok) {
+        const n = data.count || 0;
+        const nNew = data.newCount || 0;
+        if (feedback) feedback.textContent = '✓ ' + n + ' bulle' + (n > 1 ? 's' : '') + ' enregistrée' + (n > 1 ? 's' : '') + (nNew > 0 ? ' — ' + nNew + ' nouveau' + (nNew > 1 ? 'x' : '') + ' sujet' + (nNew > 1 ? 's' : '') : '');
+      } else {
+        if (feedback) feedback.textContent = '⚠ ' + (data.error || 'Erreur.');
+      }
+    } catch {
+      btn.textContent = 'Mise à jour des bulles';
+      if (feedback) feedback.textContent = '⚠ Erreur réseau.';
+    }
+    btn.disabled = false;
+  });
+})();
 
 function buildAdminActions(debateId, pendingItem) {
   const html = '<div class="actions" id="actions-' + debateId + '" style="flex-wrap:wrap;">' +

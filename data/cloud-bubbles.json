@@ -1,0 +1,89 @@
+{
+  "bubbles": [
+    {
+      "tag": "Bordeaux-Bègle",
+      "subjectId": "544",
+      "count": 4,
+      "sizeWeight": 0.4,
+      "trend": 100
+    },
+    {
+      "tag": "Vincent Bolloré",
+      "subjectId": "543",
+      "count": 10,
+      "sizeWeight": 1,
+      "trend": 0
+    },
+    {
+      "tag": "Gabriel Attal",
+      "subjectId": "488",
+      "count": 7,
+      "sizeWeight": 0.7,
+      "trend": 0
+    },
+    {
+      "tag": "flottille pour Gaza",
+      "subjectId": "495",
+      "count": 6,
+      "sizeWeight": 0.6,
+      "trend": 0
+    },
+    {
+      "tag": "flottille pour Gaza",
+      "subjectId": "453",
+      "count": 6,
+      "sizeWeight": 0.6,
+      "trend": 0
+    },
+    {
+      "tag": "Téhéran",
+      "subjectId": "511",
+      "count": 6,
+      "sizeWeight": 0.6,
+      "trend": 0
+    },
+    {
+      "tag": "droits de douane",
+      "subjectId": "518",
+      "count": 4,
+      "sizeWeight": 0.4,
+      "trend": 0
+    },
+    {
+      "tag": "Iran",
+      "subjectId": "440",
+      "count": 4,
+      "sizeWeight": 0.4,
+      "trend": 0
+    },
+    {
+      "tag": "71 femmes mutilées",
+      "subjectId": "517",
+      "count": 3,
+      "sizeWeight": 0.3,
+      "trend": 0
+    },
+    {
+      "tag": "accident minier en Chine",
+      "subjectId": "515",
+      "count": 3,
+      "sizeWeight": 0.3,
+      "trend": 0
+    },
+    {
+      "tag": "Benyamin Nétanyahou",
+      "subjectId": "444",
+      "count": 3,
+      "sizeWeight": 0.3,
+      "trend": 0
+    },
+    {
+      "tag": "Sénégal",
+      "subjectId": "516",
+      "count": 3,
+      "sizeWeight": 0.3,
+      "trend": 0
+    }
+  ],
+  "lastUpdatedAt": "2026-05-24T07:43:27.530Z"
+}

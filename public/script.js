@@ -3409,41 +3409,96 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   } catch (error) {}
 }
 
-function scrollToIndexDebateCard(url) {
+async function scrollToIndexDebateCard(url) {
   const match = String(url || "").match(/[?&]id=([^&]+)/);
   const debateId = match ? decodeURIComponent(match[1]) : String(url || "").split("/").pop();
   if (!debateId) return;
-  const card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(debateId.trim())}"]`);
-  if (!card) return;
 
+  const trimmedId = debateId.trim();
+  const selector = `.debate-card[data-debate-id="${CSS.escape(trimmedId)}"]`;
+
+  // Chemin rapide : la carte est déjà dans le DOM
+  const existingCard = document.querySelector(selector);
+  if (existingCard) {
+    _doScrollToEpisodeCard(existingCard);
+    return;
+  }
+
+  // La carte n'est pas visible : vérifier si le débat est dans le cache (filtré)
+  const inCache = Array.isArray(debatesCache) && debatesCache.some(d => String(d?.id || "") === trimmedId);
+
+  if (!inCache) {
+    // Tenter de récupérer ce débat spécifiquement et l'injecter dans le cache
+    try {
+      const data = await fetchJSON(`${API}/debates/${encodeURIComponent(trimmedId)}`);
+      const debate = data?.debate || (data && data.id ? data : null);
+      if (!debate || !debate.id) { _showEpisodeNavNotFound(); return; }
+      debatesCache = [debate, ...debatesCache.filter(d => String(d?.id || "") !== String(debate.id))];
+    } catch {
+      _showEpisodeNavNotFound();
+      return;
+    }
+  }
+
+  // Neutraliser tous les filtres actifs (sans toucher au tri) pour que la carte puisse apparaître
+  clearActiveBubbles();
+  currentIndexSearchQuery = "";
+  const searchInput = document.getElementById("debate-search");
+  if (searchInput) searchInput.value = "";
+  currentCategoryFilters = [];
+  currentCategoryFilter = "all";
+  currentTypeFilter = "all";
+  syncIndexTypeFilterButtons();
+  syncIndexShortcutFilterButtons();
+  visitedDebatesVisible = 5;
+  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+  applyIndexFilters();
+
+  // Attendre que la carte apparaisse dans le DOM (max ~2,25 s)
+  let attempts = 0;
+  const tryScroll = () => {
+    const card = document.querySelector(selector);
+    if (card) { _doScrollToEpisodeCard(card); return; }
+    if (++attempts < 15) { setTimeout(tryScroll, 150); }
+    else { _showEpisodeNavNotFound(); }
+  };
+  tryScroll();
+}
+
+function _doScrollToEpisodeCard(card) {
   const row = card.closest(".theme-horizontal-row");
   if (row) {
     const targetLeft = card.offsetLeft - ((row.clientWidth - card.offsetWidth) / 2);
-    row.scrollTo({
-      left: Math.max(0, targetLeft),
-      behavior: "smooth"
-    });
+    row.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
     window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 360);
   }
 
   card.classList.remove("index-card-episode-flash");
   void card.offsetWidth;
   card.classList.add("index-card-episode-flash");
-  window.setTimeout(() => {
-    card.classList.remove("index-card-episode-flash");
-  }, 2200);
+  window.setTimeout(() => card.classList.remove("index-card-episode-flash"), 2200);
 
   if (window.matchMedia("(min-width: 769px)").matches) {
     const rect = card.getBoundingClientRect();
     const targetTop = window.scrollY + rect.top - ((window.innerHeight - rect.height) / 2);
-    window.scrollTo({
-      top: Math.max(0, targetTop),
-      behavior: "smooth"
-    });
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     return;
   }
-
   card.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function _showEpisodeNavNotFound() {
+  let notice = document.getElementById("episode-nav-toast");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "episode-nav-toast";
+    notice.className = "custom-toast";
+    document.body.appendChild(notice);
+  }
+  notice.textContent = "L’histoire ciblée n’a pas pu être retrouvée.";
+  notice.classList.add("show");
+  clearTimeout(notice._hideTimer);
+  notice._hideTimer = setTimeout(() => notice.classList.remove("show"), 3500);
 }
 
 function openDebateIframeModal(url, options = {}) {
@@ -15425,33 +15480,6 @@ function buildIndexInfiniteScrollSentinelHtml() {
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
 let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260523-center-protect");
 
-function _tagMergeHash(subjects) {
-  const str = JSON.stringify(subjects);
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-  return "agon_mg_" + Math.abs(h).toString(36);
-}
-
-async function _fetchMergeGroupsCached(subjects) {
-  const key = _tagMergeHash(subjects);
-  const ttl = 10 * 60 * 1000;
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || "null");
-    if (cached && Date.now() - cached.ts < ttl) return cached.mergeGroups;
-  } catch {}
-  try {
-    const res = await fetchJSON(API + "/subject-cloud-merges", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subjects })
-    });
-    const mergeGroups = Array.isArray(res?.mergeGroups) ? res.mergeGroups : [];
-    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), mergeGroups })); } catch {}
-    return mergeGroups;
-  } catch {
-    return [];
-  }
-}
 
 function syncBubbleFrameTop() {
   const btn = document.getElementById('index-sort-toggle');
@@ -15486,7 +15514,6 @@ function updateIndexTagTrends(items) {
   if (!Array.isArray(items) || !items.length) {
     if (trendsSection) trendsSection.hidden = true;
     if (cloudContainer) cloudContainer.innerHTML = "";
-    console.log("[Agôn] Tag trends:", window.AGON_TAG_TRENDS);
     return;
   }
 
@@ -15494,60 +15521,40 @@ function updateIndexTagTrends(items) {
     .then(async ([module, cloudModule]) => {
       window._tagTrendsModule = module;
 
-      const buildTrends = (mergeGroups) => typeof module.buildSubjectTrends === "function"
-        ? module.buildSubjectTrends(items, { limit: 12, mergeGroups })
-        : module.buildTagTrends(items, { limit: 12 });
+      let tagTrends = [];
+      try {
+        const res = await fetchJSON(API + "/cloud-bubbles");
+        tagTrends = Array.isArray(res?.bubbles) ? res.bubbles : [];
+      } catch {}
 
-      function doRender(tagTrends) {
-        if (!cloudContainer || !Array.isArray(tagTrends) || !tagTrends.length) {
-          if (trendsSection) trendsSection.hidden = true;
-          if (cloudContainer) cloudContainer.innerHTML = "";
-          return;
-        }
-        cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(syncBubbleFrameTop);
-          if (currentBubbleTag) {
-            document.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
-              const label = bubble.querySelector(".agon-tag-label");
-              const words = label?.querySelectorAll(".agon-tag-word");
-              const tag = words?.length
-                ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
-                : (label?.textContent.trim() || "");
-              if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
-                bubble.classList.add("agon-tag-bubble-active");
-                document.querySelectorAll(".agon-tag-label-overlay").forEach(overlay => {
-                  if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
-                    overlay.classList.add("agon-tag-label-overlay-active");
-                  }
-                });
-              }
-            });
-          }
-        });
+      if (!tagTrends.length) {
+        if (trendsSection) trendsSection.hidden = true;
+        if (cloudContainer) cloudContainer.innerHTML = "";
+        return;
       }
 
-      // Affichage immédiat sans IA
-      const initialTrends = buildTrends([]);
-      window.AGON_TAG_TRENDS = initialTrends;
-      console.log("[Agôn] Tag trends (initial):", initialTrends);
-      doRender(initialTrends);
-
-      // Fusion IA en arrière-plan (avec cache localStorage)
-      if (typeof module.buildSubjectCloudMergeCandidates !== "function") return;
-      const subjects = module.buildSubjectCloudMergeCandidates(items, { limit: 80 });
-      if (subjects.length < 2) return;
-
-      const mergeGroups = await _fetchMergeGroupsCached(subjects);
-      if (!mergeGroups.length) return;
-
-      const finalTrends = buildTrends(mergeGroups);
-      window.AGON_TAG_TRENDS = finalTrends;
-      console.log("[Agôn] Tag trends (merged):", finalTrends);
-
-      const initialKeys = initialTrends.map(t => t.tag).join(",");
-      const finalKeys = finalTrends.map(t => t.tag).join(",");
-      if (initialKeys !== finalKeys) doRender(finalTrends);
+      window.AGON_TAG_TRENDS = tagTrends;
+      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(syncBubbleFrameTop);
+        if (currentBubbleTag) {
+          document.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
+            const label = bubble.querySelector(".agon-tag-label");
+            const words = label?.querySelectorAll(".agon-tag-word");
+            const tag = words?.length
+              ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
+              : (label?.textContent.trim() || "");
+            if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
+              bubble.classList.add("agon-tag-bubble-active");
+              document.querySelectorAll(".agon-tag-label-overlay").forEach(overlay => {
+                if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
+                  overlay.classList.add("agon-tag-label-overlay-active");
+                }
+              });
+            }
+          });
+        }
+      });
     })
     .catch((error) => {
       console.warn("[Agôn] Tag trends indisponibles:", error);

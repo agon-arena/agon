@@ -52,7 +52,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
-const subjectCloudMergeCache = new Map();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -447,6 +446,7 @@ const debateStoryLinksMetaPath = path.join(__dirname, "data", "debate-story-link
 const veillePendingStoriesMetaPath = path.join(__dirname, "data", "veille-pending-stories.json");
 const veillePendingKeywordsMetaPath = path.join(__dirname, "data", "veille-pending-keywords.json");
 const debateKeywordsMetaPath = path.join(__dirname, "data", "debate-keywords.json");
+const cloudBubblesPath = path.join(__dirname, "data", "cloud-bubbles.json");
 const tagGroupsMetaPath = path.join(__dirname, "data", "tag-groups.json");
 const publicTagGroupsMetaPath = path.join(__dirname, "public", "tag-groups.json");
 const tagExclusionsMetaPath = path.join(__dirname, "data", "tag-exclusions.json");
@@ -933,6 +933,74 @@ function writeVeillePendingKeywordsMap(map) {
   ensureJsonMetaStorage(veillePendingKeywordsMetaPath);
   fs.writeFileSync(veillePendingKeywordsMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
   _veillePendingKeywordsCache = map || {};
+}
+
+let _cloudBubblesCache = null;
+
+function loadCloudBubbles() {
+  if (_cloudBubblesCache) return _cloudBubblesCache;
+  try {
+    if (!fs.existsSync(cloudBubblesPath)) {
+      fs.mkdirSync(path.dirname(cloudBubblesPath), { recursive: true });
+      fs.writeFileSync(cloudBubblesPath, JSON.stringify({ bubbles: [], lastUpdatedAt: null }, null, 2), "utf8");
+    }
+    const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
+    _cloudBubblesCache = parsed && typeof parsed === "object" ? parsed : { bubbles: [], lastUpdatedAt: null };
+    return _cloudBubblesCache;
+  } catch {
+    return { bubbles: [], lastUpdatedAt: null };
+  }
+}
+
+function saveCloudBubbles(data) {
+  try {
+    fs.mkdirSync(path.dirname(cloudBubblesPath), { recursive: true });
+    const safe = { bubbles: Array.isArray(data?.bubbles) ? data.bubbles : [], lastUpdatedAt: data?.lastUpdatedAt || null };
+    fs.writeFileSync(cloudBubblesPath, JSON.stringify(safe, null, 2), "utf8");
+    _cloudBubblesCache = safe;
+  } catch (e) {
+    console.error("[cloud-bubbles] save error:", e.message);
+  }
+}
+
+function syncCloudBubbleTagIfPresent(debateId) {
+  const id = String(debateId || "").trim();
+  if (!id) return;
+  const data = loadCloudBubbles();
+  const idx = (data.bubbles || []).findIndex(b => String(b.subjectId) === id);
+  if (idx < 0) return;
+  const newTag = getCloudLabelFromDebate(id, readDebateKeywordsMap());
+  if (!newTag || newTag === data.bubbles[idx].tag) return;
+  data.bubbles[idx] = { ...data.bubbles[idx], tag: newTag };
+  saveCloudBubbles(data);
+}
+
+const CLOUD_GENERIC_LABELS_SET = new Set([
+  "actualite", "actualites", "politique", "international", "societe", "economie",
+  "education", "justice", "culture", "medias", "sport", "sports", "sante",
+  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
+  "information", "infos"
+]);
+
+function normalizeCloudLabel(tag) {
+  return String(tag || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/#/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getCloudLabelFromDebate(debateId, keywordsMap) {
+  const keywords = normalizeKeywordList(keywordsMap?.[String(debateId)] || []);
+  for (const keyword of keywords) {
+    const normalized = normalizeCloudLabel(keyword);
+    if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
+      return String(keyword).replace(/#/g, "").replace(/\s+/g, " ").trim();
+    }
+  }
+  return "";
 }
 
 function getVeillePendingKeywords(id) {
@@ -2614,6 +2682,33 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
   }
 }
 
+
+function normalizeSourceDomain(value) {
+  const str = String(value || "").trim().toLowerCase();
+  if (!str) return "";
+  try {
+    const u = new URL(str.startsWith("http") ? str : "http://" + str);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return str.split("/")[0].replace(/^www\./, "");
+  }
+}
+
+function extractDebateSourceKeys(debate) {
+  const keys = new Set();
+  const srcUrl = normalizeSourceDomain(debate.source_url || "");
+  if (srcUrl) keys.add(srcUrl);
+  (Array.isArray(debate.media_extras) ? debate.media_extras : []).forEach((extra) => {
+    if (!extra || typeof extra !== "object") return;
+    if (String(extra.type || "source").trim() !== "source") return;
+    const url = String(extra.url || extra.source_url || "").trim();
+    const name = String(extra.source || extra.media || extra.publisher || "").trim().toLowerCase();
+    const key = url ? normalizeSourceDomain(url) : name;
+    if (key) keys.add(key);
+  });
+  return keys;
+}
+
 function computePositionLabelSimilarity(labelA, labelB) {
   const textA = normalizeSimilarityText(labelA);
   const textB = normalizeSimilarityText(labelB);
@@ -3506,182 +3601,6 @@ app.get("/api/admin/session", requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-function normalizeSubjectCloudAiSubjects(subjects) {
-  return (Array.isArray(subjects) ? subjects : [])
-    .map((subject) => {
-      const subjectId = String(subject?.subjectId || "").trim().slice(0, 80);
-      const subjectTitle = String(subject?.subjectTitle || "").replace(/\s+/g, " ").trim().slice(0, 180);
-      if (!subjectId || !subjectTitle) return null;
-      const tags = Array.isArray(subject?.tags)
-        ? subject.tags.map((tag) => String(tag || "").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6)
-        : [];
-      const mainTag = String(subject?.mainTag || subject?.primaryTag || subject?.tagPrincipal || "").replace(/\s+/g, " ").trim().slice(0, 80);
-      return {
-        subjectId,
-        subjectTitle,
-        ...(mainTag ? { mainTag } : {}),
-        ...(tags.length ? { tags } : {})
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 80);
-}
-
-function sanitizeSubjectCloudMergeGroups(rawGroups, knownIds) {
-  const consumed = new Set();
-  return (Array.isArray(rawGroups) ? rawGroups : [])
-    .map((group) => {
-      const keepSubjectId = String(group?.keepSubjectId || "").trim();
-      const confidence = Number(group?.confidence);
-      if (!knownIds.has(keepSubjectId) || !Number.isFinite(confidence) || confidence < 0.8) return null;
-
-      const mergeSubjectIds = [...new Set(
-        (Array.isArray(group?.mergeSubjectIds) ? group.mergeSubjectIds : [])
-          .map((id) => String(id || "").trim())
-          .filter((id) => id && id !== keepSubjectId && knownIds.has(id))
-      )];
-
-      if (!mergeSubjectIds.length) return null;
-      const allIds = [keepSubjectId, ...mergeSubjectIds];
-      if (allIds.some((id) => consumed.has(id))) return null;
-      allIds.forEach((id) => consumed.add(id));
-
-      return {
-        keepSubjectId,
-        mergeSubjectIds,
-        suggestedTitle: String(group?.suggestedTitle || "").replace(/\s+/g, " ").trim().slice(0, 120),
-        confidence,
-        reason: String(group?.reason || "").replace(/\s+/g, " ").trim().slice(0, 260)
-      };
-    })
-    .filter(Boolean);
-}
-
-async function analyzeSubjectCloudMergesWithAI(subjects) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || subjects.length < 2) return { mergeGroups: [] };
-
-  const cacheKey = crypto.createHash("sha1").update(JSON.stringify(subjects)).digest("hex");
-  const cached = subjectCloudMergeCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < 10 * 60 * 1000) {
-    return cached.result;
-  }
-
-  const prompt = [
-    "Tu es un agent de déduplication éditoriale pour une application d'actualité.",
-    "",
-    "Ta mission :",
-    "analyser une liste de sujets d'actualité récents et repérer uniquement les sujets qui doivent être fusionnés parce qu'ils désignent clairement la même actualité, le même événement, la même affaire, la même décision, la même polémique ou la même séquence médiatique.",
-    "",
-    "Données fournies :",
-    "chaque sujet peut contenir :",
-    "- subjectId",
-    "- subjectTitle",
-    "- cloudLabel",
-    "- mainTag",
-    "- primaryTag",
-    "- tagPrincipal",
-    "- tags",
-    "",
-    "Règle principale :",
-    "fusionne uniquement les doublons ou quasi-doublons évidents.",
-    "",
-    "Tu dois être très prudent.",
-    "",
-    "Tu peux proposer une fusion seulement si les sujets parlent clairement :",
-    "- du même événement précis ;",
-    "- de la même décision précise ;",
-    "- de la même affaire ;",
-    "- de la même polémique ;",
-    "- de la même séquence médiatique ;",
-    "- des mêmes acteurs principaux ;",
-    "- du même enjeu central précis.",
-    "",
-    "Ne fusionne jamais deux sujets seulement parce qu'ils appartiennent à la même grande thématique.",
-    "",
-    "Exemples à ne pas fusionner :",
-    "- deux sujets différents sur Trump ;",
-    "- deux sujets différents sur l'immigration ;",
-    "- deux sujets différents sur la guerre en Ukraine ;",
-    "- deux sujets différents sur l'éducation ;",
-    "- deux sujets différents sur le budget ;",
-    "- deux sujets différents sur la présidentielle ;",
-    "- deux sujets différents sur le climat ;",
-    "- deux sujets différents sur Israël / Gaza ;",
-    "- deux sujets différents sur l'économie.",
-    "",
-    "Ne fusionne pas si :",
-    "- les titres sont vagues ;",
-    "- le lien est seulement thématique ;",
-    "- les sujets peuvent désigner deux événements différents ;",
-    "- tu dois inventer le contexte ;",
-    "- la fusion serait trop large ;",
-    "- la confiance est inférieure à 0.8.",
-    "",
-    "Choisis comme sujet principal :",
-    "- le sujet dont le titre est le plus clair, précis et compréhensible ;",
-    "- ou celui qui semble le plus central dans le groupe ;",
-    "- ou celui qui possède le meilleur tag principal exploitable pour l'affichage dans le nuage.",
-    "",
-    "Sortie attendue :",
-    "réponds uniquement en JSON valide, sans texte autour, sans markdown.",
-    "",
-    "Format obligatoire :",
-    '{"mergeGroups":[{"keepSubjectId":"id_du_sujet_principal","mergeSubjectIds":["id_sujet_a_rattacher_1","id_sujet_a_rattacher_2"],"suggestedTitle":"titre fusionné court et précis si utile","confidence":0.92,"reason":"justification courte"}],"doNotMerge":[{"subjectIds":["id_1","id_2"],"reason":"raison courte"}]}',
-    "",
-    "Important :",
-    "- mergeSubjectIds ne doit jamais contenir keepSubjectId ;",
-    "- un même subjectId ne doit pas apparaître dans plusieurs groupes de fusion ;",
-    "- ne propose aucune fusion avec confidence < 0.8 ;",
-    "- si aucune fusion fiable n'est trouvée, retourne mergeGroups vide ;",
-    "- ne modifie pas les IDs ;",
-    "- n'invente aucun sujet ;",
-    "- n'invente aucun contexte absent des titres ou tags fournis.",
-    "",
-    "Sujets récents :",
-    JSON.stringify(subjects, null, 2)
-  ].join("\n");
-
-  try {
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 1800,
-        temperature: 0
-      })
-    });
-
-    if (!r.ok) return { mergeGroups: [] };
-    const data = await r.json();
-    const content = data?.choices?.[0]?.message?.content || "";
-    if (!content) return { mergeGroups: [] };
-    const parsed = JSON.parse(content);
-    const knownIds = new Set(subjects.map((subject) => subject.subjectId));
-    const result = { mergeGroups: sanitizeSubjectCloudMergeGroups(parsed?.mergeGroups, knownIds) };
-    subjectCloudMergeCache.set(cacheKey, { createdAt: Date.now(), result });
-    return result;
-  } catch (error) {
-    return { mergeGroups: [] };
-  }
-}
-
-app.post("/api/subject-cloud-merges", rateLimit("subject-cloud-merges", 20), async (req, res) => {
-  try {
-    const subjects = normalizeSubjectCloudAiSubjects(req.body?.subjects);
-    if (subjects.length < 2) return res.json({ ok: true, mergeGroups: [] });
-    const result = await analyzeSubjectCloudMergesWithAI(subjects);
-    return res.json({ ok: true, mergeGroups: result.mergeGroups || [] });
-  } catch (error) {
-    return res.json({ ok: false, mergeGroups: [], error: error.message || "Erreur fusion IA." });
-  }
-});
 
 function buildAdminTagOccurrenceStats(debates = []) {
   const now = new Date();
@@ -3985,6 +3904,7 @@ app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), (req, r
     const current = getDebateKeywords(debateId);
     if (!current.map(normalizeTag).includes(normalizeTag(keyword))) {
       setDebateKeywords(debateId, [...current, keyword]);
+      syncCloudBubbleTagIfPresent(debateId);
     }
     return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
   } catch (error) {
@@ -4002,6 +3922,7 @@ app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) =
     }
 
     const keywords = removeDebateKeyword(debateId, keyword);
+    syncCloudBubbleTagIfPresent(debateId);
     return res.json({ success: true, debateId, removedKeyword: keyword, keywords });
   } catch (error) {
     console.error(error);
@@ -4018,6 +3939,7 @@ app.delete("/api/admin/debate/:id/canonical-tags/:tag", requireAdmin, (req, res)
     }
 
     const keywords = removeDebateCanonicalTag(debateId, tag);
+    syncCloudBubbleTagIfPresent(debateId);
     return res.json({ success: true, debateId, removedTag: tag, keywords });
   } catch (error) {
     console.error(error);
@@ -6449,6 +6371,104 @@ app.post("/api/admin/veille/check-similar", async (req, res) => {
     res.json({ similar });
   } catch (e) {
     res.json({ similar: [], error: e.message });
+  }
+});
+
+app.get("/api/cloud-bubbles", (req, res) => {
+  try {
+    const data = loadCloudBubbles();
+    res.json({ ok: true, bubbles: data.bubbles || [], lastUpdatedAt: data.lastUpdatedAt || null });
+  } catch {
+    res.json({ ok: true, bubbles: [], lastUpdatedAt: null });
+  }
+});
+
+app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
+  try {
+    const existing = loadCloudBubbles();
+    const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
+    const keywordsMap = readDebateKeywordsMap();
+
+    const prevCountMap = {};
+    for (const b of (existing.bubbles || [])) {
+      if (b.subjectId) prevCountMap[String(b.subjectId)] = b.count || 0;
+    }
+
+    const { data: newDebates, error } = await supabase
+      .from("debates")
+      .select("id, source_url, media_extras, created_at")
+      .gt("created_at", lastUpdateISO)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    const mapToCandidate = (debate) => {
+      const label = getCloudLabelFromDebate(debate.id, keywordsMap);
+      if (!label) return null;
+      const sourceCount = extractDebateSourceKeys(debate).size;
+      return { tag: label, subjectId: String(debate.id), count: sourceCount };
+    };
+
+    const newCandidates = (newDebates || [])
+      .map(mapToCandidate)
+      .filter(Boolean)
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+
+    let bubbles = newCandidates.slice(0, 12);
+
+    if (bubbles.length < 12) {
+      const usedIds = new Set(bubbles.map(b => b.subjectId));
+      for (const b of (existing.bubbles || [])) {
+        if (bubbles.length >= 12) break;
+        if (usedIds.has(b.subjectId)) continue;
+        usedIds.add(b.subjectId);
+        const refreshedTag = getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
+        bubbles.push({ tag: refreshedTag, subjectId: b.subjectId, count: b.count || 0 });
+      }
+    }
+
+    if (bubbles.length < 12) {
+      const usedIds = new Set(bubbles.map(b => b.subjectId));
+      const { data: olderDebates } = await supabase
+        .from("debates")
+        .select("id, source_url, media_extras, created_at")
+        .lte("created_at", lastUpdateISO)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      for (const debate of (olderDebates || [])) {
+        if (bubbles.length >= 12) break;
+        if (usedIds.has(String(debate.id))) continue;
+        const candidate = mapToCandidate(debate);
+        if (!candidate) continue;
+        usedIds.add(String(debate.id));
+        bubbles.push(candidate);
+      }
+    }
+
+    const maxCount = bubbles.reduce((max, b) => Math.max(max, b.count || 0), 0);
+    bubbles = bubbles.map(b => {
+      const newCount = b.count || 0;
+      const prevCount = Object.prototype.hasOwnProperty.call(prevCountMap, b.subjectId)
+        ? prevCountMap[b.subjectId]
+        : null;
+      const trend = prevCount === null
+        ? (newCount > 0 ? 100 : 0)
+        : getTrendPercent(newCount, prevCount);
+      return {
+        tag: b.tag,
+        subjectId: b.subjectId,
+        count: newCount,
+        sizeWeight: maxCount > 0 ? newCount / maxCount : 0,
+        trend
+      };
+    });
+
+    const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
+    saveCloudBubbles(newData);
+
+    res.json({ ok: true, count: bubbles.length, newCount: newCandidates.length, updatedAt: newData.lastUpdatedAt });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
