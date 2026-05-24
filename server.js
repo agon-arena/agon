@@ -6389,14 +6389,30 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
     const keywordsMap = readDebateKeywordsMap();
 
+    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    const BUBBLE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+    const freshExistingBubbles = (existing.bubbles || []).filter(b => {
+      const enteredMs = b.enteredCloudAt ? new Date(b.enteredCloudAt).getTime() : NaN;
+      if (isNaN(enteredMs)) return true; // absent ou invalide → conserver prudemment
+      return (nowMs - enteredMs) < BUBBLE_MAX_AGE_MS;
+    });
+    const expiredCount = (existing.bubbles || []).length - freshExistingBubbles.length;
+    console.log(`[cloud] existantes: ${(existing.bubbles || []).length}, fraîches (< 48h): ${freshExistingBubbles.length}, expirées: ${expiredCount}`);
+
     const prevCountMap = {};
+    const existingEnteredMap = {};
     for (const b of (existing.bubbles || [])) {
       if (b.subjectId) prevCountMap[String(b.subjectId)] = b.count || 0;
+    }
+    for (const b of freshExistingBubbles) {
+      if (b.subjectId && b.enteredCloudAt) existingEnteredMap[String(b.subjectId)] = b.enteredCloudAt;
     }
 
     const { data: newDebates, error } = await supabase
       .from("debates")
-      .select("id, source_url, media_extras, created_at")
+      .select("id, source_url, media_extras, created_at, source_published_at")
       .gt("created_at", lastUpdateISO)
       .order("created_at", { ascending: false });
 
@@ -6406,46 +6422,55 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       const label = getCloudLabelFromDebate(debate.id, keywordsMap);
       if (!label) return null;
       const sourceCount = extractDebateSourceKeys(debate).size;
-      return { tag: label, subjectId: String(debate.id), count: sourceCount };
+      const debateDate = debate.source_published_at || debate.created_at || now;
+      return { tag: label, subjectId: String(debate.id), count: sourceCount, debateDate };
     };
 
-    const newCandidates = (newDebates || [])
-      .map(mapToCandidate)
-      .filter(Boolean)
-      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    // Pool unifié : bulles fraîches existantes + nouveaux débats
+    const allCandidates = new Map();
 
-    let bubbles = newCandidates.slice(0, 12);
-
-    if (bubbles.length < 12) {
-      const usedIds = new Set(bubbles.map(b => b.subjectId));
-      for (const b of (existing.bubbles || [])) {
-        if (bubbles.length >= 12) break;
-        if (usedIds.has(b.subjectId)) continue;
-        usedIds.add(b.subjectId);
-        const refreshedTag = getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
-        bubbles.push({ tag: refreshedTag, subjectId: b.subjectId, count: b.count || 0 });
-      }
+    for (const b of freshExistingBubbles) {
+      const label = getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
+      if (!label) continue;
+      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count: b.count || 0 });
     }
+    const freshKeptCount = allCandidates.size;
 
-    if (bubbles.length < 12) {
-      const usedIds = new Set(bubbles.map(b => b.subjectId));
+    for (const debate of (newDebates || [])) {
+      const id = String(debate.id);
+      if (allCandidates.has(id)) continue;
+      const candidate = mapToCandidate(debate);
+      if (!candidate) continue;
+      allCandidates.set(id, candidate);
+    }
+    const newAddedCount = allCandidates.size - freshKeptCount;
+
+    if (allCandidates.size < 12) {
       const { data: olderDebates } = await supabase
         .from("debates")
-        .select("id, source_url, media_extras, created_at")
+        .select("id, source_url, media_extras, created_at, source_published_at")
         .lte("created_at", lastUpdateISO)
         .order("created_at", { ascending: false })
         .limit(60);
       for (const debate of (olderDebates || [])) {
-        if (bubbles.length >= 12) break;
-        if (usedIds.has(String(debate.id))) continue;
+        const id = String(debate.id);
+        if (allCandidates.has(id)) continue;
         const candidate = mapToCandidate(debate);
         if (!candidate) continue;
-        usedIds.add(String(debate.id));
-        bubbles.push(candidate);
+        allCandidates.set(id, candidate);
       }
     }
 
+    // Tri par sourceCount décroissant, top 12
+    let bubbles = [...allCandidates.values()]
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+      .slice(0, 12);
+
+    console.log(`[cloud] fraîches gardées: ${freshKeptCount}, nouveaux: ${newAddedCount}, pool: ${allCandidates.size}, final: ${bubbles.length}`);
+
     const maxCount = bubbles.reduce((max, b) => Math.max(max, b.count || 0), 0);
+    console.log(`[cloud] sourceCount max: ${maxCount}`);
+
     bubbles = bubbles.map(b => {
       const newCount = b.count || 0;
       const prevCount = Object.prototype.hasOwnProperty.call(prevCountMap, b.subjectId)
@@ -6454,19 +6479,21 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       const trend = prevCount === null
         ? (newCount > 0 ? 100 : 0)
         : getTrendPercent(newCount, prevCount);
+      const enteredCloudAt = existingEnteredMap[b.subjectId] || now;
       return {
         tag: b.tag,
         subjectId: b.subjectId,
         count: newCount,
         sizeWeight: maxCount > 0 ? newCount / maxCount : 0,
-        trend
+        trend,
+        enteredCloudAt
       };
     });
 
     const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
     saveCloudBubbles(newData);
 
-    res.json({ ok: true, count: bubbles.length, newCount: newCandidates.length, updatedAt: newData.lastUpdatedAt });
+    res.json({ ok: true, count: bubbles.length, freshKept: freshKeptCount, newAdded: newAddedCount, updatedAt: newData.lastUpdatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

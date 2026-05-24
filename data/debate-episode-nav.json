@@ -243,9 +243,9 @@
     "previous_episode_id": 498,
     "previous_episode_title": "La démission de Tulsi Gabbard affaiblit-elle la sécurité nationale américaine ?",
     "previous_episode_url": "/debate?id=498",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 550,
+    "next_episode_title": "La répression immédiate des suspects violents garantit-elle vraiment la sécurité publique ?",
+    "next_episode_url": "/debate?id=550"
   },
   "502": {
     "previous_episode_id": 499,
@@ -515,9 +515,9 @@
     "previous_episode_id": 531,
     "previous_episode_title": "Les attaques ukrainiennes sur les infrastructures russes sont-elles justifiées ?",
     "previous_episode_url": "/debate?id=531",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 549,
+    "next_episode_title": "L’usage de missiles hypersoniques justifie-t-il une riposte militaire accrue ?",
+    "next_episode_url": "/debate?id=549"
   },
   "538": {
     "previous_episode_id": 508,
@@ -531,22 +531,70 @@
     "previous_episode_id": 500,
     "previous_episode_title": "Le soutien des supporters est-il le facteur clé des succès sportifs ?",
     "previous_episode_url": "/debate?id=500",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 544,
+    "next_episode_title": "Le forfait d’Arthur Fils affaiblit-il gravement Roland-Garros ?",
+    "next_episode_url": "/debate?id=544"
   },
   "540": {
     "previous_episode_id": 536,
     "previous_episode_title": "L'influence de Vincent Bolloré nuit-elle à la liberté du cinéma français ?",
     "previous_episode_url": "/debate?id=536",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 548,
+    "next_episode_title": "Le Festival de Cannes doit-il privilégier le cinéma d'Europe de l'Est ?",
+    "next_episode_url": "/debate?id=548"
   },
   "543": {
     "previous_episode_id": 533,
     "previous_episode_title": "Recruter sans contrôle strict dans l’animation périscolaire est-il une faute grave ?",
     "previous_episode_url": "/debate?id=533",
+    "next_episode_id": 547,
+    "next_episode_title": "La mobilisation citoyenne peut-elle vraiment faire avancer les enquêtes ?",
+    "next_episode_url": "/debate?id=547"
+  },
+  "544": {
+    "previous_episode_id": 539,
+    "previous_episode_title": "Les «Enhanced Games» sont-ils la fin du sport traditionnel ?",
+    "previous_episode_url": "/debate?id=539",
+    "next_episode_id": 546,
+    "next_episode_title": "Les Enhanced Games détruisent-ils l'esprit du sport traditionnel ?",
+    "next_episode_url": "/debate?id=546"
+  },
+  "546": {
+    "previous_episode_id": 544,
+    "previous_episode_title": "Le forfait d’Arthur Fils affaiblit-il gravement Roland-Garros ?",
+    "previous_episode_url": "/debate?id=544",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "547": {
+    "previous_episode_id": 543,
+    "previous_episode_title": "La liberté d’expression doit-elle primer sur les intérêts économiques des médias ?",
+    "previous_episode_url": "/debate?id=543",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "548": {
+    "previous_episode_id": 540,
+    "previous_episode_title": "La Palme d’or doit-elle privilégier l’originalité géographique au détriment du cinéma grand public ?",
+    "previous_episode_url": "/debate?id=540",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "549": {
+    "previous_episode_id": 537,
+    "previous_episode_title": "La responsabilité des civils dans les zones de conflit justifie-t-elle les frappes militaires ?",
+    "previous_episode_url": "/debate?id=537",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "550": {
+    "previous_episode_id": 501,
+    "previous_episode_title": "La démission de Tulsi Gabbard fragilise-t-elle la sécurité nationale américaine ?",
+    "previous_episode_url": "/debate?id=501",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
