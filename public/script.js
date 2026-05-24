@@ -4759,6 +4759,35 @@ function buildIndexCardBottomEntryHtml(debate, options = {}) {
   return "";
 }
 
+function getDebateSourceCount(debate) {
+  const d = debate || {};
+  const mainSourceUrl = String(d.source_url || '').trim();
+  const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
+  const sourceExtras = extras.filter(e => e && String(e.type || '').trim() === 'source' && String(e.url || '').trim());
+  const allUrls = new Set();
+  if (mainSourceUrl) allUrls.add(mainSourceUrl);
+  sourceExtras.forEach(e => { const u = String(e.url || '').trim(); if (u) allUrls.add(u); });
+  return allUrls.size;
+}
+
+function getDebatePrimaryMediaName(debate) {
+  const d = debate || {};
+  const sourceUrl = String(d.source_url || '').trim();
+  if (!sourceUrl && !d.source_preview) return '';
+  const normalized = normalizeSourcePreviewData(d.source_preview || null, sourceUrl);
+  return String(normalized.domain || '').trim();
+}
+
+function buildIndexCardSourceLabelHtml(debate) {
+  const sourceCount = getDebateSourceCount(debate);
+  if (!sourceCount) return '';
+  const mediaName = getDebatePrimaryMediaName(debate) || 'Source inconnue';
+  const label = sourceCount > 1
+    ? `${mediaName} + ${sourceCount} source${sourceCount >= 2 ? 's' : ''}`
+    : mediaName;
+  return `<span class="debate-card-source-label">${escapeHtml(label)}</span>`;
+}
+
 function buildIndexCardEnterButtonHtml(debate) {
   const debateId = escapeAttribute(String(debate?.id || ""));
 
@@ -4777,6 +4806,7 @@ function buildIndexCardEnterButtonHtml(debate) {
 function buildIndexCardFooterActionsHtml(debate) {
   const d = debate || {};
   const safeId = escapeAttribute(String(d.id || ''));
+  const sourceLabelHtml = buildIndexCardSourceLabelHtml(d);
 
   return `
     <div class="debate-card-footer-actions">
@@ -4802,6 +4832,7 @@ function buildIndexCardFooterActionsHtml(debate) {
             >Signaler</button>
           </div>
         </div>
+        ${sourceLabelHtml}
       </div>
       ${buildIndexCardEnterButtonHtml(d)}
     </div>
