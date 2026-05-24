@@ -60,6 +60,13 @@ registerServiceWorker();
   const loader = document.getElementById("agon-startup-loader");
   if (!loader) return;
 
+  const SEEN_KEY = "agon_startup_seen";
+  if (sessionStorage.getItem(SEEN_KEY)) {
+    if (loader.parentNode) loader.parentNode.removeChild(loader);
+    return;
+  }
+  sessionStorage.setItem(SEEN_KEY, "1");
+
   const MIN_STARTUP_LOADER_TIME = 4400;
   const MAX_STARTUP_LOADER_TIME = 5000;
   const startTime = Date.now();
@@ -11928,6 +11935,26 @@ function attachAdminButtons() {
     logoutBtn.addEventListener("click", adminLogout);
   }
 
+  const updateCloudBtn = document.getElementById("admin-update-cloud-btn");
+  if (updateCloudBtn) {
+    updateCloudBtn.addEventListener("click", async () => {
+      updateCloudBtn.disabled = true;
+      updateCloudBtn.textContent = "⟳ Mise à jour…";
+      try {
+        const res = await fetchJSON(API + "/admin/update-cloud", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
+          body: JSON.stringify({})
+        });
+        updateCloudBtn.textContent = "✓ " + (res.count || 0) + " bulle(s) mises à jour";
+        setTimeout(() => { updateCloudBtn.textContent = "⟳ Mettre à jour les bulles"; updateCloudBtn.disabled = false; }, 3000);
+      } catch (e) {
+        updateCloudBtn.textContent = "⚠ Erreur";
+        setTimeout(() => { updateCloudBtn.textContent = "⟳ Mettre à jour les bulles"; updateCloudBtn.disabled = false; }, 3000);
+      }
+    });
+  }
+
   initAdminTopbarMenu();
   refreshAdminUI();
   verifyAdminSession();
@@ -14684,7 +14711,7 @@ function getFilteredDebatesForIndex(baseDebates) {
   const query = getCurrentIndexSearchQuery().toLowerCase();
 
   if (currentBubbleTag && window._tagTrendsModule) {
-    const { getCanonicalTagsFromItem, normalizeTag, extractRawTagsFromItem } = window._tagTrendsModule;
+    const { normalizeTag, extractRawTagsFromItem } = window._tagTrendsModule;
     const normalizedBubble = normalizeTag(currentBubbleTag);
     const activeTrend = Array.isArray(window.AGON_TAG_TRENDS)
       ? window.AGON_TAG_TRENDS.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedBubble)
@@ -14696,14 +14723,12 @@ function getFilteredDebatesForIndex(baseDebates) {
         const memberIds = new Set((Array.isArray(activeTrend.memberSubjectIds) ? activeTrend.memberSubjectIds : [activeSubjectId]).map((id) => String(id || "").trim()).filter(Boolean));
         const sameId = memberIds.has(String(debate?.id || "").trim());
         const sameTitle = normalizeTag(debate?.question || debate?.title || "") === normalizedBubble;
-        const canonicalTags = getCanonicalTagsFromItem(debate).map(normalizeTag);
         const rawTags = typeof extractRawTagsFromItem === "function" ? extractRawTagsFromItem(debate).map(normalizeTag) : [];
-        return sameId || sameTitle || canonicalTags.includes(normalizedBubble) || rawTags.includes(normalizedBubble);
+        return sameId || sameTitle || rawTags.includes(normalizedBubble);
       }
 
-      const canonicalTags = getCanonicalTagsFromItem(debate).map(normalizeTag);
-      if (canonicalTags.includes(normalizedBubble)) return true;
-      // fallback : recherche textuelle aussi
+      const rawTags = typeof extractRawTagsFromItem === "function" ? extractRawTagsFromItem(debate).map(normalizeTag) : [];
+      if (rawTags.includes(normalizedBubble)) return true;
       const text = [debate.question, debate.category, debate.option_a, debate.option_b]
         .join(' ').toLowerCase();
       return text.includes(query);
@@ -15527,7 +15552,7 @@ function buildIndexInfiniteScrollSentinelHtml() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260523-center-protect");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260524-bigtext");
 
 
 function syncBubbleFrameTop() {

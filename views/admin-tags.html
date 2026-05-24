@@ -53,11 +53,6 @@
     .at-bchip-num { opacity: 0.5; font-size: 10px; }
     .at-bchip-count { font-size: 10px; background: rgba(255,255,255,0.15); border-radius: 999px; padding: 1px 6px; }
 
-    /* Add canonical form */
-    .at-add-form { display: flex; gap: 6px; margin-bottom: 12px; }
-    .at-add-form input { flex: 1; min-width: 80px; min-height: 32px; border: 1px solid #d1d5db; border-radius: 7px; padding: 0 9px; font: inherit; font-size: 12px; }
-    .at-add-form input:focus { outline: none; border-color: #111827; }
-
     /* Buttons */
     .at-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #111827; background: #111827; color: #fff; border-radius: 7px; padding: 0 10px; min-height: 32px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .12s; }
     .at-btn:hover { background: #374151; }
@@ -66,24 +61,6 @@
     .at-btn-ghost:hover { background: #f3f4f6; }
     .at-btn-danger { background: #dc2626; border-color: #dc2626; }
     .at-btn-danger:hover { background: #b91c1c; }
-
-    /* Canonical list */
-    .at-clist-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid #f0f2f5; }
-    .at-clist-item:first-child { border-top: none; padding-top: 0; }
-    .at-cleft { min-width: 130px; flex-shrink: 0; }
-    .at-cname { font-size: 13px; font-weight: 800; color: #111827; margin-bottom: 5px; }
-    .at-cname-link { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: #d1d5db; }
-    .at-cname-link:hover { color: #2563eb; text-decoration-color: #2563eb; }
-    .at-cactions { display: flex; gap: 4px; flex-wrap: wrap; }
-    .at-cright { flex: 1; min-width: 0; }
-    .at-cvariants { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-    .at-vchip { display: inline-flex; align-items: center; gap: 3px; border: none; border-radius: 999px; background: #eef2f7; color: #334155; padding: 3px 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: background .1s; }
-    .at-vchip:hover { background: #fee2e2; color: #991b1b; }
-    .at-add-variant { display: flex; gap: 4px; }
-    .at-add-variant input { flex: 1; min-height: 26px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 7px; font: inherit; font-size: 11px; min-width: 0; }
-    .at-add-variant input:focus { outline: none; border-color: #111827; }
-    .at-edit-form { display: flex; gap: 4px; margin-top: 5px; }
-    .at-edit-form input { flex: 1; min-height: 26px; border: 1px solid #3b82f6; border-radius: 6px; padding: 0 7px; font: inherit; font-size: 12px; min-width: 0; background: #eff6ff; }
 
     /* Detected header */
     .at-detected-hdr { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid #e5e7eb; }
@@ -107,24 +84,19 @@
     .at-badge { display: inline-flex; align-items: center; background: #111827; color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; }
     .at-muted { color: #9ca3af; font-size: 12px; }
     .at-num-main { font-weight: 800; font-size: 14px; }
-    .at-num-sub { font-size: 12px; color: #6b7280; }
-    .trend-up { color: #16a34a; font-weight: 800; font-size: 13px; }
-    .trend-down { color: #dc2626; font-weight: 800; font-size: 13px; }
-    .trend-neutral { color: #9ca3af; font-weight: 800; font-size: 13px; }
     .at-raw-preview { font-size: 11px; color: #9ca3af; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .at-row-acts { display: flex; gap: 4px; }
     .at-ibtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; cursor: pointer; color: #374151; font-size: 14px; font-weight: 700; padding: 0; transition: all .1s; }
     .at-ibtn:hover { background: #f3f4f6; border-color: #d1d5db; }
     .at-ibtn-danger:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
 
-    /* Detail panel */
-    .at-detail { display: none; padding: 16px; background: #f8fafc; border-top: 2px solid #e5e7eb; }
-    .at-detail.is-open { display: block; }
-    .at-detail-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    /* Detail panel inline */
+    .at-detail-row td { padding: 0; background: #f8fafc; border-top: 2px solid #3b82f6; border-bottom: 2px solid #e5e7eb; }
+    .at-detail-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 16px 16px 0; }
     .at-detail-ttl { font-size: 15px; font-weight: 800; color: #111827; }
     .at-detail-close { background: none; border: 1px solid #d1d5db; border-radius: 6px; color: #6b7280; width: 28px; height: 28px; cursor: pointer; font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
     .at-detail-close:hover { background: #e5e7eb; color: #111827; }
-    .at-detail-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; }
+    .at-detail-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; padding: 12px 16px 16px; }
     .at-dcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
     .at-dcard h3 { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
     .at-raw-list { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -165,11 +137,12 @@
   <header class="at-header">
     <div>
       <h1>Tags &amp; Tendances</h1>
-      <p>Lecture admin — bulles de tendance, tags canoniques, arènes liées.</p>
+      <p>Lecture admin — bulles de tendance, arènes liées.</p>
     </div>
     <div class="at-header-actions">
-      <a class="at-nav-btn" href="/">← Accueil</a>
+      <a class="at-nav-btn" href="/" onclick="if(history.length>1){history.back();return false;}">← Accueil</a>
       <a class="at-nav-btn" href="/admin-reports">Signalements</a>
+      <button class="at-nav-btn" type="button" id="update-cloud-btn">⟳ Mise à jour des bulles</button>
       <button class="at-nav-btn at-nav-btn-primary" type="button" id="refresh-btn">↻ Actualiser</button>
     </div>
   </header>
@@ -185,29 +158,17 @@
       </div>
       <select class="at-sort" id="sort-select" aria-label="Tri">
         <option value="count">Occurrences totales</option>
-        <option value="current">Occurrences 7 jours</option>
         <option value="bubble">Rang bulles</option>
-        <option value="trend">Progression</option>
         <option value="name">Nom</option>
       </select>
     </div>
 
-    <!-- Quick sections côte à côte -->
+    <!-- Bulles actives -->
     <div class="at-quick-grid">
       <div class="at-qcard">
         <h2 class="at-qcard-title">Bulles actives</h2>
         <p class="at-qcard-desc">Tags qui alimentent les bulles visibles sur l'index. Cliquer pour filtrer.</p>
         <div class="at-bubble-chips" id="active-bubble-tags"></div>
-      </div>
-      <div class="at-qcard">
-        <h2 class="at-qcard-title">Tags canoniques</h2>
-        <p class="at-qcard-desc">Familles qui regroupent plusieurs variantes sous un même nom.</p>
-        <form class="at-add-form" id="add-canonical-form">
-          <input id="new-canonical-input" type="text" placeholder="Tag canonique ex : Éducation">
-          <input id="new-variants-input" type="text" placeholder="Variantes (virgule)">
-          <button class="at-btn" type="submit">Ajouter</button>
-        </form>
-        <div id="canonical-tags"></div>
       </div>
     </div>
 
@@ -226,9 +187,6 @@
             <th>Tag</th>
             <th>Bulle</th>
             <th>Total</th>
-            <th>7 j</th>
-            <th>7 j préc.</th>
-            <th>Tendance</th>
             <th>Variantes</th>
             <th>Arènes</th>
             <th>Actions</th>
@@ -237,7 +195,6 @@
         <tbody id="tags-body"></tbody>
       </table>
     </div>
-    <div id="tag-detail" class="at-detail"></div>
   </section>
 </main>
 
@@ -274,26 +231,10 @@
     return data.token;
   }
 
-  const reAccents = new RegExp('[̀-ͯ]', 'g');
-  function normalizeTagKey(tag) {
-    return String(tag || '')
-      .normalize('NFD').replace(reAccents, '')
-      .toLowerCase().replace(/#/g, '').replace(/['']/g, ' ')
-      .replace(/[^a-z0-9\s-]/g, ' ').replace(/-/g, ' ')
-      .replace(/\s+/g, ' ').trim();
-  }
-
   function escapeHtml(value) {
     return String(value == null ? '' : value)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  function formatTrend(value) {
-    const n = Number(value || 0);
-    const cls = n > 0 ? 'trend-up' : n < 0 ? 'trend-down' : 'trend-neutral';
-    const pfx = n > 0 ? '▲ +' : n < 0 ? '▼ ' : '';
-    return '<span class="' + cls + '">' + pfx + n + '%</span>';
   }
 
   function formatDate(value) {
@@ -319,10 +260,6 @@
     return data;
   }
 
-  function parseVariantInput(value) {
-    return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
-  }
-
   function getFilteredTags() {
     if (!tagData) return [];
     const q = document.getElementById('search-input').value.trim().toLowerCase();
@@ -337,9 +274,7 @@
     }
     tags.sort((a, b) => {
       if (sort === 'name') return a.tag.localeCompare(b.tag);
-      if (sort === 'current') return (b.currentCount - a.currentCount) || (b.count - a.count);
-      if (sort === 'bubble') return ((a.bubbleRank || 999) - (b.bubbleRank || 999)) || (b.currentCount - a.currentCount);
-      if (sort === 'trend') return (b.trend - a.trend) || (b.currentCount - a.currentCount);
+      if (sort === 'bubble') return ((a.bubbleRank || 999) - (b.bubbleRank || 999)) || (b.count - a.count);
       return (b.count - a.count) || a.tag.localeCompare(b.tag);
     });
     return tags;
@@ -360,7 +295,7 @@
     const container = document.getElementById('active-bubble-tags');
     const bubbleTags = Array.isArray(tagData && tagData.bubbleTags) ? tagData.bubbleTags : [];
     if (!bubbleTags.length) {
-      container.innerHTML = '<span class="at-muted">Aucun tag actif sur les 7 derniers jours.</span>';
+      container.innerHTML = '<span class="at-muted">Aucun tag actif.</span>';
       return;
     }
     container.innerHTML = bubbleTags.map((tag, index) => {
@@ -383,130 +318,9 @@
     });
   }
 
-  function renderCanonicalTags() {
-    const container = document.getElementById('canonical-tags');
-    const groups = tagData && tagData.tagGroups && typeof tagData.tagGroups === 'object' ? tagData.tagGroups : {};
-    const entries = Object.entries(groups);
-    if (!entries.length) {
-      container.innerHTML = '<span class="at-muted">Aucun tag canonique configuré.</span>';
-      return;
-    }
-    container.innerHTML = entries.map(([canonical, variants]) => {
-      const variantHtml = (Array.isArray(variants) ? variants : [])
-        .map((v) => '<button type="button" class="at-vchip" data-action="delete-variant" data-canonical="' + escapeHtml(canonical) + '" data-variant="' + escapeHtml(v) + '" title="Supprimer ' + escapeHtml(v) + '">' + escapeHtml(v) + ' ×</button>')
-        .join('');
-      return '<div class="at-clist-item">' +
-        '<div class="at-cleft">' +
-          '<button type="button" class="at-cname at-cname-link" data-action="show-canonical-detail" data-canonical="' + escapeHtml(canonical) + '">' + escapeHtml(canonical) + '</button>' +
-          '<div class="at-cactions">' +
-            '<button type="button" class="at-btn at-btn-sm at-btn-danger" data-action="delete-canonical" data-canonical="' + escapeHtml(canonical) + '">Supprimer</button>' +
-          '</div>' +
-          '<form class="at-edit-form" data-action="edit-canonical" data-canonical="' + escapeHtml(canonical) + '">' +
-            '<input type="text" value="' + escapeHtml(canonical) + '" aria-label="Nouveau nom">' +
-            '<button class="at-btn at-btn-sm" type="submit">Renommer</button>' +
-          '</form>' +
-        '</div>' +
-        '<div class="at-cright">' +
-          '<div class="at-cvariants">' + (variantHtml || '<span class="at-muted" style="font-size:11px;">Aucune variante</span>') + '</div>' +
-          '<form class="at-add-variant" data-action="add-variant" data-canonical="' + escapeHtml(canonical) + '">' +
-            '<input type="text" placeholder="+ Nouvelle variante">' +
-            '<button class="at-btn at-btn-sm" type="submit">Ajouter</button>' +
-          '</form>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-  }
-
-  async function addCanonicalTag(event) {
-    event.preventDefault();
-    const canonicalInput = document.getElementById('new-canonical-input');
-    const variantsInput = document.getElementById('new-variants-input');
-    const canonical = canonicalInput.value.trim();
-    const variants = parseVariantInput(variantsInput.value);
-    if (!canonical) return showToast('Ajoute un tag canonique.', true);
-    await adminFetchJson('/api/admin/tag-groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ canonical, variants })
-    });
-    canonicalInput.value = '';
-    variantsInput.value = '';
-    showToast('Tag canonique ajouté.');
-    await loadTags();
-  }
-
-  async function addCanonicalVariant(form) {
-    const canonical = form.dataset.canonical || '';
-    const input = form.querySelector('input');
-    const variant = input.value.trim();
-    if (!variant) return;
-    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical) + '/variants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variant })
-    });
-    input.value = '';
-    showToast('Variante ajoutée.');
-    await loadTags();
-  }
-
-  async function editCanonicalTag(form) {
-    const canonical = form.dataset.canonical || '';
-    const input = form.querySelector('input');
-    const nextCanonical = input.value.trim();
-    if (!canonical || !nextCanonical) return;
-    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ canonical: nextCanonical })
-    });
-    showToast('Tag renommé.');
-    await loadTags();
-  }
-
-  async function deleteCanonicalTag(canonical) {
-    if (!confirm('Supprimer définitivement le tag "' + canonical + '" et toutes ses variantes ?')) return;
-    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical), { method: 'DELETE' });
-    showToast('Tag supprimé.');
-    await loadTags();
-  }
-
-  async function deleteCanonicalVariant(canonical, variant) {
-    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(canonical) + '/variants/' + encodeURIComponent(variant), { method: 'DELETE' });
-    showToast('Variante supprimée.');
-    await loadTags();
-  }
-
   function getTagPayload(tag) {
     const rawVariants = (tag.rawTags || []).map((item) => item.tag).filter(Boolean);
     return { tag: tag.tag, variants: rawVariants };
-  }
-
-  async function editDetectedTag(tag) {
-    const nextTag = prompt('Nouveau nom du tag', tag.tag);
-    if (!nextTag || !nextTag.trim()) return;
-    const payload = getTagPayload(tag);
-    const groups = tagData && tagData.tagGroups && typeof tagData.tagGroups === 'object' ? tagData.tagGroups : {};
-    const canonicalKey = Object.keys(groups).find((key) => key.toLowerCase() === String(tag.tag || '').toLowerCase());
-    const url = canonicalKey ? '/api/admin/tag-groups/' + encodeURIComponent(canonicalKey) : '/api/admin/detected-tags';
-    const body = canonicalKey
-      ? { canonical: nextTag.trim() }
-      : { tag: payload.tag, nextTag: nextTag.trim(), variants: payload.variants };
-    await adminFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    showToast('Tag modifié.');
-    await loadTags();
-  }
-
-  async function addDetectedTagVariant(tag) {
-    const variant = prompt('Nouvelle variante pour "' + tag.tag + '"');
-    if (!variant || !variant.trim()) return;
-    await adminFetchJson('/api/admin/tag-groups/' + encodeURIComponent(tag.tag) + '/variants', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variant: variant.trim() })
-    });
-    showToast('Variante ajoutée.');
-    await loadTags();
   }
 
   async function deleteDetectedTag(tag) {
@@ -528,69 +342,13 @@
     await loadTags();
   }
 
-  function scrollToTagDetail() {
-    const detail = document.getElementById('tag-detail');
-    if (!detail || !detail.classList.contains('is-open')) return;
-    requestAnimationFrame(() => detail.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }
-
-  function renderTable() {
-    const body = document.getElementById('tags-body');
-    const tags = getFilteredTags();
-    body.innerHTML = tags.map((tag) => {
-      const raw = (tag.rawTags || []).slice(0, 3).map((item) => escapeHtml(item.tag)).join(', ');
-      const bubble = tag.bubbleRank
-        ? '<span class="at-badge">#' + tag.bubbleRank + '</span>'
-        : '<span class="at-muted">—</span>';
-      const isSelected = tag.normalizedTag === selectedTagKey;
-      return '<tr data-tag-key="' + escapeHtml(tag.normalizedTag) + '"' + (isSelected ? ' class="is-selected"' : '') + '>' +
-        '<td><div class="at-tname">' + escapeHtml(tag.tag) + '</div><div class="at-tkey">' + escapeHtml(tag.normalizedTag) + '</div></td>' +
-        '<td>' + bubble + '</td>' +
-        '<td><span class="at-num-main">' + tag.count + '</span></td>' +
-        '<td>' + tag.currentCount + '</td>' +
-        '<td><span class="at-num-sub">' + tag.previousCount + '</span></td>' +
-        '<td>' + formatTrend(tag.trend) + '</td>' +
-        '<td><div class="at-raw-preview" title="' + escapeHtml((tag.rawTags || []).map((r) => r.tag).join(', ')) + '">' + (raw || '<span class="at-muted">—</span>') + '</div></td>' +
-        '<td>' + (tag.debates || []).length + '</td>' +
-        '<td><div class="at-row-acts">' +
-          '<button type="button" class="at-ibtn" data-action="edit-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Modifier le nom">✎</button>' +
-          '<button type="button" class="at-ibtn" data-action="add-detected-variant" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Ajouter une variante">+</button>' +
-          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Supprimer définitivement">×</button>' +
-        '</div></td>' +
-      '</tr>';
-    }).join('');
-
-    body.querySelectorAll('tr[data-tag-key]').forEach((row) => {
-      row.addEventListener('click', (event) => {
-        if (event.target.closest('button')) return;
-        selectedTagKey = row.dataset.tagKey || '';
-        renderTable();
-        renderDetail();
-        scrollToTagDetail();
-      });
-    });
-
-    if (selectedTagKey && !tags.some((tag) => tag.normalizedTag === selectedTagKey)) {
-      selectedTagKey = '';
-      renderDetail();
-    }
-  }
-
-  function renderDetail() {
-    const detail = document.getElementById('tag-detail');
-    if (!selectedTagKey || !tagData) {
-      detail.classList.remove('is-open');
-      detail.innerHTML = '';
-      return;
-    }
-    const tag = tagData.tags.find((item) => item.normalizedTag === selectedTagKey);
-    if (!tag) return;
+  function buildDetailHtml(tag) {
     const rawTagsHtml = (tag.rawTags || []).map((item) =>
       '<span class="at-raw-chip">' + escapeHtml(item.tag) + ' · ' + item.count + '</span>'
     ).join('');
     const debatesHtml = (tag.debates || []).map((debate) => {
-      const rawTags = Array.isArray(debate.removableTags) ? debate.removableTags : [];
-      const rawActions = rawTags.map((rawTag) =>
+      const removable = Array.isArray(debate.removableTags) ? debate.removableTags : [];
+      const rawActions = removable.map((rawTag) =>
         '<button type="button" class="at-rm-kw" data-action="remove-debate-keyword" data-debate-id="' + escapeHtml(debate.id) + '" data-keyword="' + escapeHtml(rawTag) + '">' +
           '× ' + escapeHtml(rawTag) +
         '</button>'
@@ -601,31 +359,74 @@
         '<div class="at-debate-acts">' + (rawActions || '<span class="at-muted">Aucun tag administrable</span>') + '</div>' +
       '</div>';
     }).join('');
-
-    detail.innerHTML =
-      '<div class="at-detail-hdr">' +
+    return '<div class="at-detail-hdr">' +
         '<div class="at-detail-ttl">Détail — ' + escapeHtml(tag.tag) + '</div>' +
-        '<button class="at-detail-close" id="detail-close-btn" title="Fermer">×</button>' +
+        '<button class="at-detail-close" data-action="close-detail" title="Fermer">×</button>' +
       '</div>' +
       '<div class="at-detail-grid">' +
         '<div class="at-dcard"><h3>Variantes brutes</h3><div class="at-raw-list">' + (rawTagsHtml || '<span class="at-muted">Aucune variante</span>') + '</div></div>' +
         '<div class="at-dcard"><h3>Arènes liées</h3>' + (debatesHtml || '<span class="at-muted">Aucune arène</span>') + '</div>' +
       '</div>';
-    detail.classList.add('is-open');
+  }
 
-    document.getElementById('detail-close-btn').addEventListener('click', () => {
+  function renderTable() {
+    const body = document.getElementById('tags-body');
+    const tags = getFilteredTags();
+
+    if (selectedTagKey && !tags.some((tag) => tag.normalizedTag === selectedTagKey)) {
       selectedTagKey = '';
-      renderTable();
-      renderDetail();
+    }
+
+    body.innerHTML = '';
+    tags.forEach((tag) => {
+      const raw = (tag.rawTags || []).slice(0, 3).map((item) => escapeHtml(item.tag)).join(', ');
+      const bubble = tag.bubbleRank
+        ? '<span class="at-badge">#' + tag.bubbleRank + '</span>'
+        : '<span class="at-muted">—</span>';
+      const isSelected = tag.normalizedTag === selectedTagKey;
+
+      const tr = document.createElement('tr');
+      tr.dataset.tagKey = tag.normalizedTag;
+      if (isSelected) tr.classList.add('is-selected');
+      tr.innerHTML =
+        '<td><div class="at-tname">' + escapeHtml(tag.tag) + '</div><div class="at-tkey">' + escapeHtml(tag.normalizedTag) + '</div></td>' +
+        '<td>' + bubble + '</td>' +
+        '<td><span class="at-num-main">' + tag.count + '</span></td>' +
+        '<td><div class="at-raw-preview" title="' + escapeHtml((tag.rawTags || []).map((r) => r.tag).join(', ')) + '">' + (raw || '<span class="at-muted">—</span>') + '</div></td>' +
+        '<td>' + (tag.debates || []).length + '</td>' +
+        '<td><div class="at-row-acts">' +
+          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Exclure des bulles">×</button>' +
+        '</div></td>';
+      tr.addEventListener('click', (event) => {
+        if (event.target.closest('button')) return;
+        selectedTagKey = isSelected ? '' : tag.normalizedTag;
+        renderTable();
+        if (selectedTagKey) {
+          const detailRow = body.querySelector('tr.at-detail-row');
+          if (detailRow) requestAnimationFrame(() => detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+        }
+      });
+      body.appendChild(tr);
+
+      if (isSelected) {
+        const fullTag = tagData.tags.find((t) => t.normalizedTag === tag.normalizedTag);
+        if (fullTag) {
+          const detailTr = document.createElement('tr');
+          detailTr.className = 'at-detail-row';
+          const td = document.createElement('td');
+          td.colSpan = 6;
+          td.innerHTML = buildDetailHtml(fullTag);
+          detailTr.appendChild(td);
+          body.appendChild(detailTr);
+        }
+      }
     });
   }
 
   function render() {
     renderSummary();
     renderActiveBubbleTags();
-    renderCanonicalTags();
     renderTable();
-    renderDetail();
   }
 
   async function loadTags() {
@@ -656,64 +457,38 @@
     const button = event.target.closest('button[data-action]');
     if (!button || !tagData) return;
     event.stopPropagation();
+    const action = button.dataset.action || '';
+    if (action === 'close-detail') {
+      selectedTagKey = '';
+      renderTable();
+      return;
+    }
+    if (action === 'remove-debate-keyword') {
+      removeKeywordFromDebate(button.dataset.debateId || '', button.dataset.keyword || '')
+        .catch((e) => showToast(e.message || "Erreur suppression tag de l'arène.", true));
+      return;
+    }
     const tag = (tagData.tags || []).find((item) => item.normalizedTag === (button.dataset.tagKey || ''));
     if (!tag) return;
-    if (button.dataset.action === 'edit-detected-tag') editDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur modification tag.', true));
-    if (button.dataset.action === 'add-detected-variant') addDetectedTagVariant(tag).catch((e) => showToast(e.message || 'Erreur ajout variante.', true));
-    if (button.dataset.action === 'delete-detected-tag') deleteDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
+    if (action === 'delete-detected-tag') deleteDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
   });
 
   document.getElementById('refresh-btn').addEventListener('click', loadTags);
 
-  document.getElementById('add-canonical-form').addEventListener('submit', (event) => {
-    addCanonicalTag(event).catch((e) => showToast(e.message || 'Erreur ajout tag.', true));
-  });
-
-  document.getElementById('canonical-tags').addEventListener('submit', (event) => {
-    const addForm = event.target.closest('form[data-action="add-variant"]');
-    if (addForm) {
-      event.preventDefault();
-      addCanonicalVariant(addForm).catch((e) => showToast(e.message || 'Erreur ajout variante.', true));
-      return;
+  document.getElementById('update-cloud-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('update-cloud-btn');
+    btn.disabled = true;
+    btn.textContent = '⟳ Mise à jour…';
+    try {
+      const data = await adminFetchJson('/api/admin/update-cloud', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      showToast('Bulles mises à jour — ' + (data.count || 0) + ' bulle(s).');
+      await loadTags();
+    } catch (e) {
+      showToast(e.message || 'Erreur mise à jour des bulles.', true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⟳ Mise à jour des bulles';
     }
-    const editForm = event.target.closest('form[data-action="edit-canonical"]');
-    if (editForm) {
-      event.preventDefault();
-      editCanonicalTag(editForm).catch((e) => showToast(e.message || 'Erreur modification tag.', true));
-      return;
-    }
-  });
-
-  document.getElementById('tag-detail').addEventListener('click', (event) => {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    if (button.dataset.action === 'remove-debate-keyword') {
-      removeKeywordFromDebate(button.dataset.debateId || '', button.dataset.keyword || '')
-        .catch((e) => showToast(e.message || "Erreur suppression tag de l'arène.", true));
-    }
-  });
-
-  document.getElementById('canonical-tags').addEventListener('click', (event) => {
-    const button = event.target.closest('button[data-action]');
-    if (!button) return;
-    const action = button.dataset.action || '';
-    if (action === 'show-canonical-detail') {
-      const canonical = button.dataset.canonical || '';
-      const canonicalKey = normalizeTagKey(canonical);
-      const match = (tagData && tagData.tags || []).find((t) =>
-        t.normalizedTag === canonicalKey || normalizeTagKey(t.tag) === canonicalKey
-      );
-      if (match) {
-        selectedTagKey = match.normalizedTag;
-        renderTable();
-        renderDetail();
-        scrollToTagDetail();
-      } else {
-        showToast('Aucune donnée de tendance pour ce tag.', false);
-      }
-    }
-    if (action === 'delete-canonical') deleteCanonicalTag(button.dataset.canonical || '').catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
-    if (action === 'delete-variant') deleteCanonicalVariant(button.dataset.canonical || '', button.dataset.variant || '').catch((e) => showToast(e.message || 'Erreur suppression variante.', true));
   });
 
   loadTags();

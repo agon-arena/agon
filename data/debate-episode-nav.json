@@ -187,9 +187,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 551,
+    "next_episode_title": "Patrick Bruel doit-il être interdit de scène pour protéger les femmes ?",
+    "next_episode_url": "/debate?id=551"
   },
   "495": {
     "previous_episode_id": 486,
@@ -427,9 +427,9 @@
     "previous_episode_id": 519,
     "previous_episode_title": "Faut-il privilégier la fermeté militaire ou le dialogue diplomatique avec l’Iran ?",
     "previous_episode_url": "/debate?id=519",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 554,
+    "next_episode_title": "La réforme des retraites est-elle une nécessité économique ou une injustice sociale ?",
+    "next_episode_url": "/debate?id=554"
   },
   "526": {
     "previous_episode_id": 512,
@@ -499,9 +499,9 @@
     "previous_episode_id": 534,
     "previous_episode_title": "L'interdiction de Ben Gvir en France est-elle une atteinte à la liberté d'expression ?",
     "previous_episode_url": "/debate?id=534",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 553,
+    "next_episode_title": "L’accord USA-Iran menace-t-il la sécurité d’Israël ?",
+    "next_episode_url": "/debate?id=553"
   },
   "536": {
     "previous_episode_id": 528,
@@ -587,14 +587,46 @@
     "previous_episode_id": 537,
     "previous_episode_title": "La responsabilité des civils dans les zones de conflit justifie-t-elle les frappes militaires ?",
     "previous_episode_url": "/debate?id=537",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 552,
+    "next_episode_title": "L'usage d'armes nucléaires en Ukraine justifie-t-il une intervention militaire internationale ?",
+    "next_episode_url": "/debate?id=552"
   },
   "550": {
     "previous_episode_id": 501,
     "previous_episode_title": "La démission de Tulsi Gabbard fragilise-t-elle la sécurité nationale américaine ?",
     "previous_episode_url": "/debate?id=501",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "551": {
+    "previous_episode_id": 494,
+    "previous_episode_title": "Les « personnes de confiance » sont-elles efficaces contre les violences étudiantes ?",
+    "previous_episode_url": "/debate?id=494",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "552": {
+    "previous_episode_id": 549,
+    "previous_episode_title": "L’usage de missiles hypersoniques justifie-t-il une riposte militaire accrue ?",
+    "previous_episode_url": "/debate?id=549",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "553": {
+    "previous_episode_id": 535,
+    "previous_episode_title": "L'accord sur le détroit d'Ormuz peut-il vraiment garantir la paix régionale ?",
+    "previous_episode_url": "/debate?id=535",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "554": {
+    "previous_episode_id": 525,
+    "previous_episode_title": "Les frappes américaines au Moyen-Orient sont-elles inévitables ?",
+    "previous_episode_url": "/debate?id=525",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

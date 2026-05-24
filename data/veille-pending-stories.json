@@ -40,5 +40,17 @@
     "reason": "Histoire choisie manuellement.",
     "criteria": {},
     "storySummary": ""
+  },
+  "1779647674557": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "40-le-changement-climatique-transforme-les-territoires-et-multiplie-les-enjeux-d-ad",
+    "matchedStoryTitle": "Le changement climatique transforme les territoires et multiplie les enjeux d’adaptation",
+    "previousEpisodeTitle": "Faut-il renforcer les contrôles migratoires au détriment des droits des migrants ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=555",
+    "confidence": 0.85,
+    "reason": "Histoire choisie manuellement.",
+    "criteria": {},
+    "storySummary": ""
   }
 }

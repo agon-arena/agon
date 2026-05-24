@@ -21,7 +21,14 @@
     "presidentielle"
   ],
   "Moyen-Orient": [
-    "Moyen-Orient"
+    "moyen orient",
+    "gaza",
+    "israel",
+    "iran",
+    "palestine",
+    "hamas",
+    "hezbollah",
+    "liban"
   ],
   "Violences sexuelles": [
     "violences sexuelles",
@@ -29,18 +36,14 @@
     "agressions sexuelles",
     "harcelement sexuel",
     "violences sexistes",
-    "metoo",
-    "Violence sexuelles"
+    "metoo"
   ],
   "États-Unis": [
-    "États-Uni",
-    "États-Unis"
-  ],
-  "7 Octobre": [
-    "7-Octobre"
-  ],
-  "Emirats arabes unis": [
-    "Emirats arabes unis"
+    "États-Unis",
+    "usa",
+    "amerique",
+    "americain",
+    "americaine"
   ],
   "Sécurité nucléaire": [
     "securite nucleaire",
@@ -55,19 +58,6 @@
     "armes nucleaires",
     "dissuasion nucleaire",
     "proliferation nucleaire",
-    "reacteur nucleaire",
-    "Sécurité nucléaires"
-  ],
-  "scrutin crucial": [
-    "scrutin crucial"
-  ],
-  "statut politique": [
-    "statut politique"
-  ],
-  "Londres": [
-    "Londres"
-  ],
-  "Parlement français": [
-    "Parlement français"
+    "reacteur nucleaire"
   ]
 }

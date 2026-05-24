@@ -3,8 +3,32 @@
     {
       "tag": "Festival de Cannes 2026",
       "subjectId": "548",
-      "count": 11,
+      "count": 22,
       "sizeWeight": 1,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+    },
+    {
+      "tag": "Fusillade près de la Maison-Blanche",
+      "subjectId": "550",
+      "count": 16,
+      "sizeWeight": 0.7272727272727273,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+    },
+    {
+      "tag": "Gabriel Attal",
+      "subjectId": "488",
+      "count": 11,
+      "sizeWeight": 0.5,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+    },
+    {
+      "tag": "missile Orechnik",
+      "subjectId": "549",
+      "count": 10,
+      "sizeWeight": 0.45454545454545453,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
     },
@@ -12,70 +36,22 @@
       "tag": "Vincent Bolloré",
       "subjectId": "543",
       "count": 10,
-      "sizeWeight": 0.9090909090909091,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Fusillade près de la Maison-Blanche",
-      "subjectId": "550",
-      "count": 9,
-      "sizeWeight": 0.8181818181818182,
-      "trend": 100,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Gabriel Attal",
-      "subjectId": "488",
-      "count": 7,
-      "sizeWeight": 0.6363636363636364,
+      "sizeWeight": 0.45454545454545453,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
     },
     {
       "tag": "missile Orechnik",
-      "subjectId": "549",
-      "count": 7,
-      "sizeWeight": 0.6363636363636364,
+      "subjectId": "552",
+      "count": 9,
+      "sizeWeight": 0.4090909090909091,
       "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+      "enteredCloudAt": "2026-05-24T14:42:35.320Z"
     },
     {
-      "tag": "flottille pour Gaza",
+      "tag": "Israël",
       "subjectId": "495",
-      "count": 6,
-      "sizeWeight": 0.5454545454545454,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "flottille pour Gaza",
-      "subjectId": "453",
-      "count": 6,
-      "sizeWeight": 0.5454545454545454,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Téhéran",
-      "subjectId": "511",
-      "count": 6,
-      "sizeWeight": 0.5454545454545454,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Bordeaux-Bègle",
-      "subjectId": "544",
-      "count": 4,
-      "sizeWeight": 0.36363636363636365,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "droits de douane",
-      "subjectId": "518",
-      "count": 4,
+      "count": 8,
       "sizeWeight": 0.36363636363636365,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
@@ -83,19 +59,43 @@
     {
       "tag": "Iran",
       "subjectId": "440",
-      "count": 4,
-      "sizeWeight": 0.36363636363636365,
+      "count": 7,
+      "sizeWeight": 0.3181818181818182,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
     },
     {
-      "tag": "71 femmes mutilées",
-      "subjectId": "517",
-      "count": 3,
+      "tag": "Téhéran",
+      "subjectId": "511",
+      "count": 7,
+      "sizeWeight": 0.3181818181818182,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+    },
+    {
+      "tag": "Donald Trump",
+      "subjectId": "554",
+      "count": 6,
+      "sizeWeight": 0.2727272727272727,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T18:26:46.360Z"
+    },
+    {
+      "tag": "flottille pour Gaza",
+      "subjectId": "453",
+      "count": 6,
       "sizeWeight": 0.2727272727272727,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
+    },
+    {
+      "tag": "vigilance jaune canicule",
+      "subjectId": "555",
+      "count": 6,
+      "sizeWeight": 0.2727272727272727,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-24T18:28:57.818Z"
     }
   ],
-  "lastUpdatedAt": "2026-05-24T12:58:11.482Z"
+  "lastUpdatedAt": "2026-05-24T18:28:58.666Z"
 }

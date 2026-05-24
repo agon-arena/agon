@@ -61,16 +61,16 @@ function fitLabelInBubble(bubble) {
   const labelText = getTagTextFromLabel(label);
   const charCount = labelText.replace(/\s+/g, "").length;
   const lengthFactor = charCount >= 22 ? 0.72 : charCount >= 16 ? 0.82 : charCount >= 11 ? 0.92 : 1;
-  const wordFactor = wordCount >= 4 ? 0.22 : wordCount === 3 ? 0.26 : wordCount === 2 ? 0.31 : 0.38;
+  const wordFactor = wordCount >= 4 ? 0.27 : wordCount === 3 ? 0.32 : wordCount === 2 ? 0.38 : 0.46;
 
   // Le badge est dans le flux, juste au-dessus du texte, au centre de la bulle.
   label.style.paddingTop = "0px";
   label.style.paddingBottom = "0px";
   label.style.lineHeight = wordCount >= 2 ? "1.08" : "1.03";
-  label.style.maxWidth = Math.round(bubbleW * 0.9) + "px";
+  label.style.maxWidth = Math.round(bubbleW * 0.92) + "px";
 
-  const availW = bubbleW * 0.9;
-  const availH = Math.max(16, bubbleH - trendH - 26);
+  const availW = bubbleW * 0.92;
+  const availH = Math.max(16, bubbleH - trendH - 18);
 
   let low = Math.max(8, Math.min(12, bubbleW * 0.1));
   let high = Math.min(56, Math.max(14, bubbleW * wordFactor * lengthFactor));
@@ -197,78 +197,72 @@ function applyCompactBubbleLayout(container) {
   const centerX = containerW / 2;
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   const isNarrow = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
-  // Lit la vraie valeur dynamique de --bubble-frame-top (mise à jour par syncBubbleFrameTop)
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
   const frameTop = parseFloat(frameTopRaw) || (isNarrow ? 55 : 40);
   const frameBottomInset = isNarrow ? 78 : 23;
   const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
 
-  // Positionne le bouton central au même centerY
   const centerBtnEl = container.querySelector(".agon-tag-center-btn");
   if (centerBtnEl) centerBtnEl.style.top = Math.round(centerY) + "px";
-  const margin = isMobile ? 1 : 2;
-  // Chevauchement autorisé entre bulles (aspect collé)
-  const bubbleOverlap = 6;
-  // Zone de sécurité autour du bouton central (rayon bouton 20px + 4px marge)
+
+  const margin = isMobile ? 3 : 4;
   const btnRadius = 24;
-  const angles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+  const preferredAngles = isNarrow
+    ? [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12]
+    : [-8, 215, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
-  // Placement initial : chaque bulle part juste au contact du bouton
-  const nodes = bubbles.map((bubble, index) => {
-    const size = bubble.offsetWidth || bubble.clientWidth || 80;
-    const radius = size / 2;
-    const angle = (angles[index] ?? (index * 137.5)) * Math.PI / 180;
-    const dist = btnRadius + radius;
-    return { bubble, radius, x: centerX + Math.cos(angle) * dist, y: centerY + Math.sin(angle) * dist };
-  });
+  // Obstacles déjà placés (bouton central inclus)
+  const placed = [{ x: centerX, y: centerY, r: btnRadius }];
 
-  function clamp(node) {
-    node.x = Math.min(containerW - node.radius - margin, Math.max(node.radius + margin, node.x));
-    node.y = Math.min(containerH - node.radius - margin, Math.max(node.radius + margin, node.y));
-  }
+  bubbles.forEach((bubble, index) => {
+    const inlineSize = bubble.style.getPropertyValue("--agon-tag-bubble-size");
+    let size;
+    if (inlineSize) {
+      size = parseFloat(inlineSize);
+    } else if (bubble.classList.contains("agon-tag-bubble-large")) {
+      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 136 : 160) : (isNarrow ? 118 : 139);
+    } else if (bubble.classList.contains("agon-tag-bubble-medium")) {
+      size = isNarrow ? 96 : 116;
+    } else {
+      size = isNarrow ? 66 : 78;
+    }
+    if (!size || !Number.isFinite(size)) size = 80;
+    const r = size / 2;
+    const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
+    const minX = r + margin, maxX = containerW - r - margin;
+    const minY = r + margin, maxY = containerH - r - margin;
 
-  nodes.forEach(clamp);
+    let fx = null, fy = null;
+    const maxDist = Math.hypot(containerW, containerH);
 
-  for (let pass = 0; pass < 80; pass++) {
-    // Séparation bulle-bulle : chevauchement limité à bubbleOverlap px
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const d = Math.max(0.1, Math.hypot(dx, dy));
-        const minD = a.radius + b.radius - bubbleOverlap;
-        if (d >= minD) continue;
-        const push = (minD - d) / 2;
-        const nx = dx / d, ny = dy / d;
-        a.x -= nx * push; a.y -= ny * push;
-        b.x += nx * push; b.y += ny * push;
-        clamp(a); clamp(b);
+    // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
+    for (let dist = btnRadius + r; dist <= maxDist && fx === null; dist += 3) {
+      const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
+      for (let step = 0; step < steps && fx === null; step++) {
+        const dAngle = step % 2 === 0
+          ? (step / 2) * (2 * Math.PI / steps)
+          : -Math.ceil(step / 2) * (2 * Math.PI / steps);
+        const angle = prefAngle + dAngle;
+        const cx = centerX + Math.cos(angle) * dist;
+        const cy = centerY + Math.sin(angle) * dist;
+        if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
+        let valid = true;
+        for (const p of placed) {
+          if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 10) { valid = false; break; }
+        }
+        if (valid) { fx = cx; fy = cy; }
       }
     }
 
-    // Gravité vers le centre (forte au début, réduite ensuite)
-    const g = pass < 50 ? 0.07 : 0.03;
-    nodes.forEach(node => {
-      node.x += (centerX - node.x) * g;
-      node.y += (centerY - node.y) * g;
-      clamp(node);
+    if (fx === null) {
+      fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r)));
+      fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r)));
+    }
 
-      // Exclusion dure du bouton central : aucun chevauchement
-      const dx = node.x - centerX, dy = node.y - centerY;
-      const d = Math.max(0.1, Math.hypot(dx, dy));
-      const minD = btnRadius + node.radius;
-      if (d < minD) {
-        node.x = centerX + (dx / d) * minD;
-        node.y = centerY + (dy / d) * minD;
-        clamp(node);
-      }
-    });
-  }
-
-  nodes.forEach(node => {
-    node.bubble.style.left = Math.round(node.x - node.radius) + "px";
-    node.bubble.style.top = Math.round(node.y - node.radius) + "px";
-    node.bubble.style.right = "auto";
+    placed.push({ x: fx, y: fy, r });
+    bubble.style.left = Math.round(fx - r) + "px";
+    bubble.style.top  = Math.round(fy - r) + "px";
+    bubble.style.right = "auto";
   });
 }
 
