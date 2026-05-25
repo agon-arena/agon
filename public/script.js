@@ -5006,9 +5006,10 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const shareHtml = buildIndexCardShareActionsHtml(d);
   const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml);
   const isNewDebate = isDebateNew(d);
-  const isAgonGenerated = isAgonGeneratedDebate(d);
+  const isTrending = (d.trend ?? 0) > 0;
+  const trendValue = Math.round(d.trend ?? 0);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-  const agonBadgeHtml = isAgonGenerated ? `<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Publié par agôn</span></div>` : "";
+  const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : "";
   const shortDate = formatShortDate(d.created_at);
   const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
@@ -6115,7 +6116,7 @@ function renderIndexInlineSourceCard(debate) {
 
   if (isIndexYouTubeSourceDebate(debate)) {
     const norm = normalizeSourcePreviewData(sourcePreview, sourceUrl);
-    const ytLabel = sourcePreview?.author || norm.domain;
+    const ytLabel = sourcePreview?.author || getDomainLabel(sourceUrl);
     return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId, ytLabel);
   }
   const debateId = String(debate?.id || "").trim();
@@ -6392,7 +6393,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
   }
 
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
-    const ytBase = String(item.source || '').trim() || sourcePreview?.author || normalizeSourcePreviewData(sourcePreview, itemUrl).domain;
+    const ytBase = String(item.source || '').trim() || sourcePreview?.author || getDomainLabel(itemUrl);
     const ytLabel = sourceCount > 1 ? `${ytBase} + ${sourceCount} sources` : ytBase;
     return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel);
   }
@@ -12877,9 +12878,10 @@ function syncAdminEditCardTopBadges(card, debate) {
   if (!topRow) return;
 
   const isNewDebate = isDebateNew(debate);
-  const isAgonGenerated = isAgonGeneratedDebate(debate);
+  const isTrending = (debate.trend ?? 0) > 0;
+  const trendValue = Math.round(debate.trend ?? 0);
   const newBadgeHtml = isNewDebate ? '<div class="debate-card-new-badge">Nouveau</div>' : '';
-  const agonBadgeHtml = isAgonGenerated ? '<div class="debate-card-agon-badge"><img src="/favicon.png" alt="agôn" class="debate-card-agon-badge-icon"><span>Publié par agôn</span></div>' : '';
+  const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : '';
   const existingWrap = topRow.querySelector('.debate-card-top-badges');
 
   if (!newBadgeHtml && !agonBadgeHtml) {
@@ -13009,8 +13011,41 @@ async function adminRemoveDebateTag(btn, debateId, keyword) {
       method: 'DELETE',
       headers: { 'x-admin-token': getAdminToken() }
     });
-    btn.closest('.admin-edit-tag')?.remove();
+    const removed = btn.closest('.admin-edit-tag');
+    const list = removed?.closest('.admin-edit-tags-list');
+    removed?.remove();
+    if (list) refreshAdminTagListPrimary(list);
   } catch(e) { alert('Erreur suppression tag : ' + e.message); }
+}
+
+function refreshAdminTagListPrimary(list) {
+  list.querySelectorAll('.admin-edit-tag').forEach((el, i) => {
+    const isPrimary = i === 0;
+    el.classList.toggle('admin-edit-tag--primary', isPrimary);
+    el.title = isPrimary ? 'Tag principal' : 'Cliquer pour définir comme tag principal';
+  });
+}
+
+async function adminPromoteDebateTag(tagEl) {
+  if (tagEl.classList.contains('admin-edit-tag--primary')) return;
+  const wrap = tagEl.closest('.admin-edit-tags-wrap');
+  const debateId = wrap?.dataset.debateId || '';
+  const keyword = tagEl.dataset.tag || '';
+  if (!debateId || !keyword) return;
+  try {
+    const data = await fetchJSON(API + `/admin/debate/${encodeURIComponent(debateId)}/keywords/primary`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() },
+      body: JSON.stringify({ primary: keyword })
+    });
+    if (!data?.success) throw new Error('Erreur');
+    const list = wrap.querySelector('.admin-edit-tags-list');
+    if (list && data.keywords) {
+      list.innerHTML = data.keywords.map((k, i) =>
+        `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(debateId)}', '${escapeAttribute(k)}')">×</button></span>`
+      ).join('');
+    }
+  } catch(e) { alert('Erreur promotion tag : ' + e.message); }
 }
 
 async function adminCreateAndSelectStory(btn) {
@@ -13725,7 +13760,7 @@ function buildAdminEditPanelHtml(d) {
         <div class="admin-edit-field">
           <label class="admin-edit-label">Tags</label>
           <div class="admin-edit-tags-wrap" data-debate-id="${escapeAttribute(String(d.id || ''))}">
-            <div class="admin-edit-tags-list">${(d.keywords || []).map(k => `<span class="admin-edit-tag">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(d.id || ''))}', '${escapeAttribute(k)}')">×</button></span>`).join('')}</div>
+            <div class="admin-edit-tags-list">${(d.keywords || []).map((k, i) => `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(d.id || ''))}', '${escapeAttribute(k)}')">×</button></span>`).join('')}</div>
             <div style="display:flex; gap:6px; margin-top:6px;">
               <input type="text" class="admin-edit-input admin-edit-tag-input" placeholder="Ajouter un tag…" style="flex:1; font-size:12px;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault(); event.stopPropagation(); adminAddDebateTag(this, '${escapeAttribute(String(d.id || ''))}');}">
               <button type="button" style="font-size:12px; padding:3px 8px; background:#111827; color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="event.stopPropagation(); adminAddDebateTag(this.previousElementSibling, '${escapeAttribute(String(d.id || ''))}')">+</button>
@@ -19573,6 +19608,13 @@ function initDebateMediaHistory(debate) {
   function getMediaName(url) {
     const previews = debate.index_source_previews || {};
     const preview = previews[url];
+    // YouTube : utilise le nom de chaîne (author) plutôt que siteName "YouTube"
+    try {
+      const h = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+      if ((h === 'youtube.com' || h === 'youtu.be') && preview?.author) {
+        return String(preview.author).trim();
+      }
+    } catch {}
     if (preview?.domain) return formatMediaDisplayName(preview.domain, url);
     try {
       const hostname = new URL(url).hostname.replace(/^www\./, '');
@@ -19616,7 +19658,8 @@ function initDebateMediaHistory(debate) {
     'huffingtonpost.fr': 'centre-gauche / société',
     'huffpost.fr': 'centre-gauche / société',
     'slate.fr': 'centre-gauche / analyse',
-    'alternatives-economiques.fr': 'gauche'
+    'alternatives-economiques.fr': 'gauche',
+    'ledauphine.com': 'généraliste / régional'
   };
 
   function getOrientationGroupFromBotLabel(orientation) {
@@ -19626,17 +19669,39 @@ function initDebateMediaHistory(debate) {
     return 'neutral';
   }
 
-  function getSourceOrientation(url) {
+  const veilleMediasMap = {};
+  const veilleYouTubeChannelMap = {};
+  try {
+    (window.__VEILLE_MEDIAS__ || []).forEach(function(m) {
+      if (!m.domain || !m.orientation) return;
+      if (m.domain === 'youtube.com') {
+        if (m.nom) veilleYouTubeChannelMap[String(m.nom).toLowerCase().trim()] = m.orientation;
+      } else {
+        veilleMediasMap[m.domain] = m.orientation;
+      }
+    });
+  } catch (_) {}
+
+  function getSourceOrientation(url, author) {
     const hostname = getSourceHostname(url);
-    const matchedDomain = Object.keys(mediaOrientationByDomain)
+    // YouTube : cherche par nom de chaîne (author) dans les médias bot veille
+    if ((hostname === 'youtube.com' || hostname === 'youtu.be') && author) {
+      const key = String(author).toLowerCase().trim();
+      const matchedName = Object.keys(veilleYouTubeChannelMap)
+        .find((n) => key === n || key.includes(n) || n.includes(key));
+      if (matchedName) return getOrientationGroupFromBotLabel(veilleYouTubeChannelMap[matchedName]);
+    }
+    // Presse : cherche par domaine
+    const allDomains = Object.assign({}, mediaOrientationByDomain, veilleMediasMap);
+    const matchedDomain = Object.keys(allDomains)
       .find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
-    return matchedDomain ? getOrientationGroupFromBotLabel(mediaOrientationByDomain[matchedDomain]) : 'other';
+    return matchedDomain ? getOrientationGroupFromBotLabel(allDomains[matchedDomain]) : 'other';
   }
 
   const sourceOrientationGroups = [
-    { key: 'left', label: 'Gauche', icon: 'fa-arrow-left' },
+    { key: 'left', label: 'Gauche', icon: null },
     { key: 'neutral', label: 'Généraliste', icon: 'fa-scale-balanced' },
-    { key: 'right', label: 'Droite', icon: 'fa-arrow-right' },
+    { key: 'right', label: 'Droite', icon: null },
     { key: 'other', label: 'Autres médias', icon: 'fa-newspaper' }
   ];
 
@@ -19656,8 +19721,11 @@ function initDebateMediaHistory(debate) {
   const groupedSources = sourceOrientationGroups
     .map((group) => {
       const sources = allFlatSources
-        .map((src, i) => ({ ...src, index: i, name: getMediaName(src.url) }))
-        .filter((src) => getSourceOrientation(src.url) === group.key);
+        .map((src, i) => {
+          const preview = (debate.index_source_previews || {})[src.url];
+          return { ...src, index: i, name: getMediaName(src.url), _author: preview?.author || '' };
+        })
+        .filter((src) => getSourceOrientation(src.url, src._author) === group.key);
       return { ...group, sources };
     })
     .filter((group) => group.sources.length > 0);
@@ -19674,7 +19742,7 @@ function initDebateMediaHistory(debate) {
 
     return `<div class="debate-media-source-group${hasActive ? ' active' : ''}" data-source-orientation="${group.key}">
       <button type="button" class="debate-media-history-btn debate-media-source-group-toggle${hasActive ? ' active' : ''}" aria-haspopup="true" aria-expanded="false">
-        <i class="fa-solid ${group.icon}"></i><span>${escapeHtml(group.label)}</span><span class="debate-session-count">${count}</span>
+        ${group.icon ? `<i class="fa-solid ${group.icon}" style="flex-shrink:0;font-size:11px"></i>` : ''}<span>${escapeHtml(group.label)}</span><span class="debate-session-count">${count}</span>
       </button>
       <div class="debate-media-source-menu" role="menu">
         ${itemsHtml}
@@ -20673,7 +20741,7 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
 
   const ytContainer = document.createElement('div');
   ytContainer.id = 'debate-source-yt-container';
-  const ytMediaLabel = sourcePreviewData?.author || normalizeSourcePreviewData(sourcePreviewData, sourceUrl).domain;
+  const ytMediaLabel = sourcePreviewData?.author || getDomainLabel(sourceUrl);
   ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "", ytMediaLabel);
   sourcePreviewWrap.appendChild(ytContainer);
   sourcePreviewWrap.style.display = "block";
@@ -26150,6 +26218,13 @@ document.addEventListener('click', (e) => {
   if (!e.isTrusted) return;
   if (e.target && e.target.closest && e.target.closest('#index-explorer-menu, #index-explorer-toggle')) return;
   closeIndexExplorerMenu();
+});
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.admin-edit-tag-remove')) return;
+  const tag = e.target.closest('.admin-edit-tag');
+  if (!tag || tag.classList.contains('admin-edit-tag--primary')) return;
+  adminPromoteDebateTag(tag);
 });
 
 window.toggleIndexExplorerMenu = toggleIndexExplorerMenu;

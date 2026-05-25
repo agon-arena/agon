@@ -255,9 +255,11 @@ function normalizeKeywordList(values, max) {
 
 function renderKeywordChip(keyword, isMain) {
   var style = isMain
-    ? 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;font-size:0.82rem;font-weight:700;line-height:1.2;'
-    : 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;';
-  return '<span class="keyword-chip" data-keyword="' + esc(keyword) + '" style="' + style + '">' + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:' + (isMain ? '#1e40af' : '#666') + ';cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
+    ? 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#eff6ff;border:1px solid #3b82f6;color:#1d4ed8;font-size:0.82rem;font-weight:700;line-height:1.2;cursor:default;'
+    : 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:999px;background:#f3f4f7;border:1px solid #e2e4ea;color:#2b2e38;font-size:0.82rem;font-weight:600;line-height:1.2;cursor:pointer;';
+  var prefix = isMain ? '★ ' : '';
+  var title = isMain ? 'Tag principal' : 'Cliquer pour définir comme tag principal';
+  return '<span class="keyword-chip' + (isMain ? ' keyword-chip--primary' : '') + '" data-keyword="' + esc(keyword) + '" style="' + style + '" title="' + title + '">' + prefix + esc(keyword) + '<button type="button" class="keyword-remove-btn" style="margin-left:8px;border:none;background:transparent;color:' + (isMain ? '#1e40af' : '#666') + ';cursor:pointer;font:inherit;font-size:0.9rem;line-height:1;padding:0;">×</button></span>';
 }
 
 function renderKeywordEditor(item) {
@@ -728,10 +730,30 @@ async function merge(btn, item) {
 
 document.addEventListener('click', function(e) {
   const removeBtn = e.target.closest('.keyword-remove-btn');
-  if (!removeBtn) return;
-  const chip = removeBtn.closest('.keyword-chip');
-  if (chip) chip.remove();
+  if (removeBtn) {
+    const chip = removeBtn.closest('.keyword-chip');
+    if (chip) chip.remove();
+    const list = removeBtn.closest('.keyword-list');
+    if (list) rerenderKeywordListPrimary(list);
+    return;
+  }
+  const chip = e.target.closest('.keyword-chip');
+  if (!chip || chip.classList.contains('keyword-chip--primary')) return;
+  const list = chip.closest('.keyword-list');
+  if (!list) return;
+  const allChips = Array.from(list.querySelectorAll('.keyword-chip'));
+  const keywords = allChips.map(function(c) { return c.dataset.keyword; });
+  const idx = allChips.indexOf(chip);
+  if (idx <= 0) return;
+  const reordered = [keywords[idx]].concat(keywords.slice(0, idx)).concat(keywords.slice(idx + 1));
+  list.innerHTML = reordered.map(function(k, i) { return renderKeywordChip(k, i === 0); }).join('');
 });
+
+function rerenderKeywordListPrimary(list) {
+  const chips = Array.from(list.querySelectorAll('.keyword-chip'));
+  const keywords = chips.map(function(c) { return c.dataset.keyword; });
+  list.innerHTML = keywords.map(function(k, i) { return renderKeywordChip(k, i === 0); }).join('');
+}
 
 document.addEventListener('keydown', function(e) {
   if (!e.target.classList.contains('keyword-input')) return;

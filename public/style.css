@@ -856,25 +856,23 @@ main.create-page {
   }
 }
 
-.debate-card-agon-badge {
+.debate-card-trend-badge {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 10;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  background: linear-gradient(135deg, #ffffff 0%, #eef2ff 100%);
-  border: 1px solid rgba(67, 56, 202, 0.18);
-  color: #312e81;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: #fff;
   white-space: nowrap;
-  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.10);
+  color: #137333;
+  animation: agonTrendPulse 2.4s ease-in-out infinite;
 }
 
 .debate-card-date-badge {
@@ -888,13 +886,6 @@ main.create-page {
   align-self: flex-end;
 }
 
-.debate-card-agon-badge-icon {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  display: block;
-  flex-shrink: 0;
-}
 
 .debate-card h2 {
   margin: 3px 0 4px 0;
@@ -934,7 +925,6 @@ main.create-page {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  text-indent: 1.1em;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -948,6 +938,7 @@ main.create-page {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
+  text-indent: 1.1em;
 }
 
 .debate-card-context-text[data-expanded="true"] .context-text-clamp {
@@ -8287,6 +8278,88 @@ padding:4px 14px 12px 14px;
   background: rgba(255,255,255,0.25);
 }
 
+/* Group-toggle : texte et compteur toujours visibles */
+.debate-media-source-group-toggle {
+  max-width: 240px !important;
+  gap: 5px !important;
+  padding: 6px 10px !important;
+  justify-content: center;
+}
+.debate-media-source-group-toggle span:not(.debate-session-count) {
+  max-width: 200px !important;
+  opacity: 1 !important;
+}
+.debate-media-source-group-toggle .debate-session-count {
+  max-width: 40px !important;
+  opacity: 1 !important;
+}
+
+/* Gauche → rouge doux */
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle {
+  color: #b94040;
+  border-color: rgba(185, 64, 64, 0.30);
+  background: rgba(185, 64, 64, 0.06);
+}
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle .debate-session-count {
+  background: rgba(185, 64, 64, 0.18);
+  color: #b94040;
+}
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle:hover,
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle.active {
+  background: #b94040;
+  border-color: #b94040;
+  color: #ffffff;
+}
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle:hover .debate-session-count,
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-group-toggle.active .debate-session-count {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+
+/* Généraliste → noir constant, blanc au survol (inversé) */
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle {
+  color: #ffffff;
+  border-color: #111827;
+  background: #111827;
+}
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle .debate-session-count {
+  background: rgba(255,255,255,0.20);
+  color: #fff;
+}
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle:hover,
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle.active {
+  background: #ffffff;
+  border-color: #111827;
+  color: #111827;
+}
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle:hover .debate-session-count,
+.debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-group-toggle.active .debate-session-count {
+  background: rgba(0,0,0,0.12);
+  color: #111827;
+}
+
+/* Droite → bleu nuit constant, écriture blanche */
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle {
+  color: #ffffff;
+  border-color: #0f2244;
+  background: #0f2244;
+}
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle .debate-session-count {
+  background: rgba(255,255,255,0.20);
+  color: #fff;
+}
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle:hover,
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle.active {
+  background: #1a3a6c;
+  border-color: #1a3a6c;
+  color: #ffffff;
+}
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle:hover .debate-session-count,
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-group-toggle.active .debate-session-count {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+
 
 #debate-media-tooltip {
   position: fixed;
@@ -10863,6 +10936,23 @@ body.admin-edit-open::after {
   border-radius: 999px;
   font-size: 11px;
   color: #374151;
+  cursor: pointer;
+}
+.admin-edit-tag:not(.admin-edit-tag--primary):hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.admin-edit-tag--primary {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 700;
+  cursor: default;
+}
+.admin-edit-tag--primary::before {
+  content: "★ ";
+  font-size: 9px;
 }
 .admin-edit-tag-remove {
   background: none;
@@ -15732,6 +15822,11 @@ body.page-home-mobile .debate-card-top-badges {
   top: 0 !important;
 }
 
+body.page-home .debate-card-trend-badge,
+body.page-home-mobile .debate-card-trend-badge {
+  top: 0 !important;
+}
+
 body.page-home .debate-card-agon-badge,
 body.page-home-mobile .debate-card-agon-badge {
   top: 3px;
@@ -15762,6 +15857,11 @@ body.page-home-mobile .debate-card-agon-badge {
   body.page-home .debate-card-top-badges {
     top: 0 !important;
     right: 8px !important;
+  }
+
+  body.page-home .debate-card-trend-badge {
+    top: 0 !important;
+    left: 8px !important;
   }
 
   body.page-home .theme-row-title {

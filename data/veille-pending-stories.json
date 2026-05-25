@@ -40,17 +40,5 @@
     "reason": "Histoire choisie manuellement.",
     "criteria": {},
     "storySummary": ""
-  },
-  "1779687530493": {
-    "selectionMode": "existing",
-    "storyDecision": "existing_story",
-    "matchedStoryId": "09-les-menaces-terroristes-radicales-et-hybrides-transforment-les-politiques-de-sec",
-    "matchedStoryTitle": "Les menaces terroristes, radicales et hybrides transforment les politiques de sécurité",
-    "previousEpisodeTitle": null,
-    "previousEpisodeUrl": null,
-    "confidence": 0.85,
-    "reason": "Histoire choisie manuellement.",
-    "criteria": {},
-    "storySummary": ""
   }
 }

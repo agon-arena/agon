@@ -89,13 +89,25 @@
     .at-ibtn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e5e7eb; background: #f9fafb; cursor: pointer; color: #374151; font-size: 14px; font-weight: 700; padding: 0; transition: all .1s; }
     .at-ibtn:hover { background: #f3f4f6; border-color: #d1d5db; }
     .at-ibtn-danger:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+    .at-ibtn-rename { width: auto; padding: 0 8px; gap: 5px; font-size: 13px; color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+    .at-ibtn-rename:hover { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .at-ibtn-ok { width: auto; padding: 0 10px; font-size: 13px; background: #2563eb; color: #fff; border-color: #2563eb; }
+    .at-ibtn-ok:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 
     /* Detail panel inline */
     .at-detail-row td { padding: 0; background: #f8fafc; border-top: 2px solid #3b82f6; border-bottom: 2px solid #e5e7eb; }
     .at-detail-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 16px 16px 0; }
+    .at-detail-hdr-acts { display: flex; align-items: center; gap: 8px; }
     .at-detail-ttl { font-size: 15px; font-weight: 800; color: #111827; }
     .at-detail-close { background: none; border: 1px solid #d1d5db; border-radius: 6px; color: #6b7280; width: 28px; height: 28px; cursor: pointer; font-size: 18px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
     .at-detail-close:hover { background: #e5e7eb; color: #111827; }
+    .at-kw-row { display: inline-flex; align-items: center; gap: 2px; margin: 2px; }
+    .at-kw-primary { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: #f59e0b; font-size: 12px; }
+    .at-rm-kw--promote { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; background: none; color: #d1d5db; cursor: pointer; font-size: 12px; padding: 0; border-radius: 4px; }
+    .at-rm-kw--promote:hover { color: #f59e0b; background: #fef3c7; }
+    .at-rename-form { display: none; align-items: center; gap: 8px; padding: 8px 16px 12px; }
+    .at-rename-input { flex: 1; max-width: 280px; height: 32px; border: 1px solid #93c5fd; border-radius: 6px; padding: 0 10px; font-size: 14px; font-weight: 600; color: #111827; outline: none; }
+    .at-rename-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
     .at-detail-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; padding: 12px 16px 16px; }
     .at-dcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
     .at-dcard h3 { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -323,6 +335,26 @@
     return { tag: tag.tag, variants: rawVariants };
   }
 
+  async function promoteDebateKeyword(debateId, keyword) {
+    await adminFetchJson(`/api/admin/debate/${encodeURIComponent(debateId)}/keywords/primary`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primary: keyword })
+    });
+    showToast('Tag principal mis à jour.');
+    await loadTags();
+  }
+
+  async function renameTag(oldTag, newTag) {
+    const data = await adminFetchJson('/api/admin/tags/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldTag, newTag })
+    });
+    showToast('Tag renommé — ' + (data.updatedDebates || 0) + ' arène(s) mise(s) à jour.');
+    await loadTags();
+  }
+
   async function deleteDetectedTag(tag) {
     if (!confirm('Supprimer définitivement le tag "' + tag.tag + '" et ses variantes du calcul des bulles ?')) return;
     const payload = getTagPayload(tag);
@@ -348,11 +380,15 @@
     ).join('');
     const debatesHtml = (tag.debates || []).map((debate) => {
       const removable = Array.isArray(debate.removableTags) ? debate.removableTags : [];
-      const rawActions = removable.map((rawTag) =>
-        '<button type="button" class="at-rm-kw" data-action="remove-debate-keyword" data-debate-id="' + escapeHtml(debate.id) + '" data-keyword="' + escapeHtml(rawTag) + '">' +
-          '× ' + escapeHtml(rawTag) +
-        '</button>'
-      ).join('');
+      const rawActions = removable.map((rawTag) => {
+        const promoteBtn = debate.isPrimary
+          ? '<span class="at-kw-primary" title="Tag principal">★</span>'
+          : '<button type="button" class="at-rm-kw at-rm-kw--promote" data-action="promote-debate-keyword" data-debate-id="' + escapeHtml(debate.id) + '" data-keyword="' + escapeHtml(rawTag) + '" title="Définir comme tag principal">★</button>';
+        return '<span class="at-kw-row">' +
+          promoteBtn +
+          '<button type="button" class="at-rm-kw" data-action="remove-debate-keyword" data-debate-id="' + escapeHtml(debate.id) + '" data-keyword="' + escapeHtml(rawTag) + '">× ' + escapeHtml(rawTag) + '</button>' +
+        '</span>';
+      }).join('');
       return '<div class="at-debate-row">' +
         '<a class="at-debate-q" href="/debates/' + encodeURIComponent(debate.id) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(debate.question) + '</a>' +
         '<div class="at-debate-meta">' + escapeHtml(formatDate(debate.created_at)) + (debate.category ? ' · ' + escapeHtml(debate.category) : '') + '</div>' +
@@ -361,7 +397,15 @@
     }).join('');
     return '<div class="at-detail-hdr">' +
         '<div class="at-detail-ttl">Détail — ' + escapeHtml(tag.tag) + '</div>' +
-        '<button class="at-detail-close" data-action="close-detail" title="Fermer">×</button>' +
+        '<div class="at-detail-hdr-acts">' +
+          '<button class="at-ibtn at-ibtn-rename" data-action="open-rename" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" data-tag-name="' + escapeHtml(tag.tag) + '" title="Renommer ce tag">✎ Renommer</button>' +
+          '<button class="at-detail-close" data-action="close-detail" title="Fermer">×</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="at-rename-form" id="rename-form-' + escapeHtml(tag.normalizedTag) + '" style="display:none;">' +
+        '<input class="at-rename-input" type="text" value="' + escapeHtml(tag.tag) + '" placeholder="Nouveau nom…" data-old-tag="' + escapeHtml(tag.tag) + '">' +
+        '<button type="button" class="at-ibtn at-ibtn-ok" data-action="confirm-rename" data-tag-key="' + escapeHtml(tag.normalizedTag) + '">Valider</button>' +
+        '<button type="button" class="at-ibtn" data-action="cancel-rename" data-tag-key="' + escapeHtml(tag.normalizedTag) + '">Annuler</button>' +
       '</div>' +
       '<div class="at-detail-grid">' +
         '<div class="at-dcard"><h3>Variantes brutes</h3><div class="at-raw-list">' + (rawTagsHtml || '<span class="at-muted">Aucune variante</span>') + '</div></div>' +
@@ -395,6 +439,7 @@
         '<td><div class="at-raw-preview" title="' + escapeHtml((tag.rawTags || []).map((r) => r.tag).join(', ')) + '">' + (raw || '<span class="at-muted">—</span>') + '</div></td>' +
         '<td>' + (tag.debates || []).length + '</td>' +
         '<td><div class="at-row-acts">' +
+          '<button type="button" class="at-ibtn at-ibtn-rename" data-action="open-rename" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" data-tag-name="' + escapeHtml(tag.tag) + '" title="Renommer">✎</button>' +
           '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Exclure des bulles">×</button>' +
         '</div></td>';
       tr.addEventListener('click', (event) => {
@@ -463,6 +508,36 @@
       renderTable();
       return;
     }
+    if (action === 'open-rename') {
+      const key = button.dataset.tagKey || '';
+      const form = document.getElementById('rename-form-' + key);
+      if (form) {
+        form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+        if (form.style.display === 'flex') form.querySelector('.at-rename-input')?.focus();
+      }
+      return;
+    }
+    if (action === 'cancel-rename') {
+      const key = button.dataset.tagKey || '';
+      const form = document.getElementById('rename-form-' + key);
+      if (form) form.style.display = 'none';
+      return;
+    }
+    if (action === 'confirm-rename') {
+      const key = button.dataset.tagKey || '';
+      const form = document.getElementById('rename-form-' + key);
+      const input = form?.querySelector('.at-rename-input');
+      const oldTag = input?.dataset.oldTag || '';
+      const newTag = (input?.value || '').trim();
+      if (!newTag || newTag === oldTag) { if (form) form.style.display = 'none'; return; }
+      renameTag(oldTag, newTag).catch((e) => showToast(e.message || 'Erreur renommage.', true));
+      return;
+    }
+    if (action === 'promote-debate-keyword') {
+      promoteDebateKeyword(button.dataset.debateId || '', button.dataset.keyword || '')
+        .catch((e) => showToast(e.message || "Erreur promotion tag.", true));
+      return;
+    }
     if (action === 'remove-debate-keyword') {
       removeKeywordFromDebate(button.dataset.debateId || '', button.dataset.keyword || '')
         .catch((e) => showToast(e.message || "Erreur suppression tag de l'arène.", true));
@@ -471,6 +546,15 @@
     const tag = (tagData.tags || []).find((item) => item.normalizedTag === (button.dataset.tagKey || ''));
     if (!tag) return;
     if (action === 'delete-detected-tag') deleteDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
+  });
+
+  document.getElementById('tags-body').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    const input = event.target.closest('.at-rename-input');
+    if (!input) return;
+    const form = input.closest('.at-rename-form');
+    const btn = form?.querySelector('[data-action="confirm-rename"]');
+    if (btn) btn.click();
   });
 
   document.getElementById('refresh-btn').addEventListener('click', loadTags);

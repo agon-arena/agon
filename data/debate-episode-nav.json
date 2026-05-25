@@ -91,9 +91,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 563,
+    "next_episode_title": "Faut-il « désarmer » l’intelligence artificielle pour empêcher qu’elle domine l’humain ?",
+    "next_episode_url": "/debate?id=563"
   },
   "451": {
     "previous_episode_id": 445,
@@ -611,9 +611,9 @@
     "previous_episode_id": 549,
     "previous_episode_title": "L’usage de missiles hypersoniques justifie-t-il une riposte militaire accrue ?",
     "previous_episode_url": "/debate?id=549",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 558,
+    "next_episode_title": "Faut-il considérer l'emploi du missile hypersonique Orechnik comme une escalade dangereuse ?",
+    "next_episode_url": "/debate?id=558"
   },
   "553": {
     "previous_episode_id": 535,
@@ -627,22 +627,86 @@
     "previous_episode_id": 525,
     "previous_episode_title": "Les frappes américaines au Moyen-Orient sont-elles inévitables ?",
     "previous_episode_url": "/debate?id=525",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 556,
+    "next_episode_title": "Faut-il conclure rapidement un accord avec l'Iran pour stabiliser le Moyen-Orient ?",
+    "next_episode_url": "/debate?id=556"
   },
   "555": {
     "previous_episode_id": 496,
     "previous_episode_title": "La post-croissance peut-elle remplacer la croissance économique ?",
     "previous_episode_url": "/debate?id=496",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 557,
+    "next_episode_title": "Faut-il augmenter la taxe sur les logements vacants pour résoudre la pénurie à Paris ?",
+    "next_episode_url": "/debate?id=557"
+  },
+  "556": {
+    "previous_episode_id": 554,
+    "previous_episode_title": "La réforme des retraites est-elle une nécessité économique ou une injustice sociale ?",
+    "previous_episode_url": "/debate?id=554",
+    "next_episode_id": 564,
+    "next_episode_title": "Faut-il privilégier un accord nucléaire ambitieux avec l'Iran ou refuser tout compromis insuffisan…",
+    "next_episode_url": "/debate?id=564"
+  },
+  "557": {
+    "previous_episode_id": 555,
+    "previous_episode_title": "Faut-il renforcer les contrôles migratoires au détriment des droits des migrants ?",
+    "previous_episode_url": "/debate?id=555",
+    "next_episode_id": 560,
+    "next_episode_title": "Faut-il renforcer les alertes canicule dès les premières chaleurs inhabituelles en mai ?",
+    "next_episode_url": "/debate?id=560"
+  },
+  "558": {
+    "previous_episode_id": 552,
+    "previous_episode_title": "L'usage d'armes nucléaires en Ukraine justifie-t-il une intervention militaire internationale ?",
+    "previous_episode_url": "/debate?id=552",
+    "next_episode_id": 562,
+    "next_episode_title": "Faut-il considérer l'emploi du missile Orechnik par la Russie comme une menace nucléaire directe e…",
+    "next_episode_url": "/debate?id=562"
   },
   "559": {
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "560": {
+    "previous_episode_id": 557,
+    "previous_episode_title": "Faut-il augmenter la taxe sur les logements vacants pour résoudre la pénurie à Paris ?",
+    "previous_episode_url": "/debate?id=557",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "561": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "562": {
+    "previous_episode_id": 558,
+    "previous_episode_title": "Faut-il considérer l'emploi du missile hypersonique Orechnik comme une escalade dangereuse ?",
+    "previous_episode_url": "/debate?id=558",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "563": {
+    "previous_episode_id": 447,
+    "previous_episode_title": "L'entrée en Bourse des géants de l'IA est-elle une opportunité ou un risque ?",
+    "previous_episode_url": "/debate?id=447",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "564": {
+    "previous_episode_id": 556,
+    "previous_episode_title": "Faut-il conclure rapidement un accord avec l'Iran pour stabiliser le Moyen-Orient ?",
+    "previous_episode_url": "/debate?id=556",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

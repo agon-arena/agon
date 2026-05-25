@@ -349,6 +349,7 @@
   </div>
 
   <div id="debate-admin-edit-slot" class="debate-admin-edit-slot" data-admin style="display:none;"></div>
+  <div id="debate-ai-analysis-slot" data-admin style="display:none;"></div>
 </div>
 
 <section class="debate-hero">
@@ -896,7 +897,9 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
+<script>window.__VEILLE_MEDIAS__ = __VEILLE_MEDIAS_JSON__;</script>
 <script src="/script.js?v=20260522-admin-topbar-dropdown"></script>
+<script src="/admin-debate-analysis.js"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

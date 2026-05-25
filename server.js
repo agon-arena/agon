@@ -119,26 +119,37 @@ function readVeilleMedias() {
   const raw = fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8");
   const data = JSON.parse(raw);
   return (Array.isArray(data) ? data : [])
-    .map((item) => ({
-      nom: String(item?.nom || item?.name || "").trim(),
-      orientation: String(item?.orientation || "").trim()
-    }))
+    .map((item) => {
+      let domain = "";
+      try {
+        const rss = String(item?.rss || "").trim();
+        if (rss) domain = new URL(rss).hostname.replace(/^www\./, "").toLowerCase();
+      } catch (_) {}
+      return {
+        nom: String(item?.nom || item?.name || "").trim(),
+        orientation: String(item?.orientation || "").trim(),
+        domain
+      };
+    })
     .filter((item) => item.nom);
 }
 
 function replaceMetaPlaceholders(template, meta) {
+  let mediasJson = "[]";
+  try { mediasJson = JSON.stringify(readVeilleMedias()); } catch (_) {}
   return String(template || "")
     .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
     .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"))
-    .replaceAll("__VEILLE_URL__", VEILLE_URL);
+    .replaceAll("__VEILLE_URL__", VEILLE_URL)
+    .replaceAll("__VEILLE_MEDIAS_JSON__", mediasJson);
 }
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn est le réseau des sujets du moment. En combinant intelligence collective et intelligence artificielle, il facilite le décryptage des enjeux, la confrontation des points de vue et l’émergence des idées les plus convaincantes.",
+    title: "Agôn est un réseau qui combine intelligence collective et intelligence artificielle pour faire émerger les réponses les plus solides.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
     imageAlt: "Agôn — l'arène des idées"
@@ -1578,6 +1589,9 @@ function enrichDebateWithStoredImage(debate) {
   const storyId = debate?.story_id ?? getDebateStoryId(debate?.id);
   const episodeNav = getDebateEpisodeNav(debate?.id);
 
+  const trendData = getDebateTrend(debate?.id);
+  const trendScore = trendData !== null ? (trendData.trend ?? 0) : 0;
+
   return {
     ...debate,
     image_url: getResolvedDebateImageUrl(debate),
@@ -1585,6 +1599,7 @@ function enrichDebateWithStoredImage(debate) {
     content: resolvedContent,
     keywords: getDebateKeywords(debate?.id),
     story_id: storyId || null,
+    trend: trendScore,
     previous_episode_id: episodeNav.previous_episode_id || null,
     previous_episode_title: episodeNav.previous_episode_title || null,
     previous_episode_url: episodeNav.previous_episode_url || null,
@@ -1854,8 +1869,9 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
   );
 
   const author = cleanPreviewText(
+    getFirstMetaValue(metaTags, ["author"]) ||
     pickStructuredValue(jsonLdObjects, ["author", "creator", "contributor"]) ||
-    extractJsonLikeValueFromScripts(html, ["author", "channelName", "channel"], 160),
+    extractJsonLikeValueFromScripts(html, ["ownerChannelName", "author", "channelName", "channel"], 160),
     160
   );
 
@@ -3716,7 +3732,8 @@ function buildAdminTagOccurrenceStats(debates = []) {
         category: debate.category || debate.theme || null,
         type: debate.type || null,
         rawTags: [rawTag],
-        removableTags: keywordTags.filter((k) => normalizeTag(k) === key)
+        removableTags: keywordTags.filter((k) => normalizeTag(k) === key),
+        isPrimary: keywordTags.length > 0 && normalizeTag(keywordTags[0]) === key
       });
     });
   });
@@ -3799,6 +3816,27 @@ app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), (req, r
   }
 });
 
+app.put("/api/admin/debate/:id/keywords/primary", requireAdmin, express.json(), (req, res) => {
+  try {
+    const debateId = String(req.params.id || "").trim();
+    const primary = String(req.body?.primary || "").trim();
+    if (!debateId || !normalizeTag(primary)) {
+      return res.status(400).json({ error: "Arène ou tag manquant." });
+    }
+    const current = getDebateKeywords(debateId);
+    const primaryKey = normalizeTag(primary);
+    const idx = current.findIndex((k) => normalizeTag(k) === primaryKey);
+    if (idx <= 0) return res.json({ success: true, debateId, keywords: current });
+    const reordered = [current[idx], ...current.slice(0, idx), ...current.slice(idx + 1)];
+    setDebateKeywords(debateId, reordered);
+    syncCloudBubbleTagIfPresent(debateId);
+    return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur promotion tag.");
+  }
+});
+
 app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) => {
   try {
     const debateId = String(req.params.id || "").trim();
@@ -3816,6 +3854,44 @@ app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) =
   }
 });
 
+
+app.post("/api/admin/tags/rename", requireAdmin, express.json(), (req, res) => {
+  try {
+    const oldTag = String(req.body?.oldTag || "").trim();
+    const newTag = String(req.body?.newTag || "").trim();
+    if (!normalizeTag(oldTag) || !normalizeTag(newTag)) {
+      return res.status(400).json({ error: "Ancien et nouveau tag requis." });
+    }
+    const oldKey = normalizeTag(oldTag);
+    if (oldKey === normalizeTag(newTag)) {
+      return res.status(400).json({ error: "Le nouveau nom est identique." });
+    }
+
+    // Mise à jour debate-keywords.json
+    const map = readDebateKeywordsMap();
+    let updatedDebates = 0;
+    for (const [debateId, keywords] of Object.entries(map)) {
+      const updated = keywords.map((k) => normalizeTag(k) === oldKey ? newTag : k);
+      if (updated.some((k, i) => k !== keywords[i])) {
+        map[debateId] = updated;
+        updatedDebates++;
+      }
+    }
+    writeDebateKeywordsMap(map);
+
+    // Mise à jour cloud-bubbles.json
+    const cloudData = loadCloudBubbles();
+    for (const bubble of cloudData.bubbles || []) {
+      if (normalizeTag(bubble.tag) === oldKey) bubble.tag = newTag;
+    }
+    saveCloudBubbles(cloudData);
+
+    return res.json({ success: true, oldTag, newTag, updatedDebates });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur renommage tag.");
+  }
+});
 
 app.post("/api/admin/push/test-latest", requireAdmin, async (req, res) => {
   try {
@@ -6261,18 +6337,15 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
 
     const now = new Date().toISOString();
     const nowMs = Date.now();
-    const BUBBLE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+    // Pas de TTL fixe : score = sourceCount × fraîcheur (décroît sur 7 jours)
+    // Les plus anciennes sont donc naturellement évincées en premier par les nouvelles.
+    const CLOUD_DECAY_DAYS = 7;
 
-    const freshExistingBubbles = (existing.bubbles || []).filter(b => {
-      const enteredMs = b.enteredCloudAt ? new Date(b.enteredCloudAt).getTime() : NaN;
-      if (isNaN(enteredMs)) return true; // absent ou invalide → conserver prudemment
-      return (nowMs - enteredMs) < BUBBLE_MAX_AGE_MS;
-    });
-    const expiredCount = (existing.bubbles || []).length - freshExistingBubbles.length;
-    console.log(`[cloud] existantes: ${(existing.bubbles || []).length}, fraîches (< 48h): ${freshExistingBubbles.length}, expirées: ${expiredCount}`);
+    const existingBubbles = existing.bubbles || [];
+    console.log(`[cloud] existantes: ${existingBubbles.length}`);
 
     const existingEnteredMap = {};
-    for (const b of freshExistingBubbles) {
+    for (const b of existingBubbles) {
       if (b.subjectId && b.enteredCloudAt) existingEnteredMap[String(b.subjectId)] = b.enteredCloudAt;
     }
 
@@ -6302,7 +6375,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     };
 
     // Recalcule le sourceCount des bulles fraîches existantes depuis Supabase
-    const existingIds = freshExistingBubbles.map(b => b.subjectId).filter(Boolean);
+    const existingIds = existingBubbles.map(b => b.subjectId).filter(Boolean);
     let existingDebatesById = new Map();
     if (existingIds.length > 0) {
       const { data: existingDebates } = await supabase
@@ -6312,27 +6385,27 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       for (const d of (existingDebates || [])) existingDebatesById.set(String(d.id), d);
     }
 
-    // Pool unifié : bulles fraîches existantes + nouveaux débats
+    // Pool unifié : bulles existantes + nouveaux débats (chaque candidat conserve son enteredAt)
     const allCandidates = new Map();
 
-    for (const b of freshExistingBubbles) {
+    for (const b of existingBubbles) {
       const debate = existingDebatesById.get(b.subjectId);
       const candidate = debate ? mapToCandidate(debate) : null;
       const label = (candidate && candidate.tag) || getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
       if (!label) continue;
       const count = candidate ? candidate.count : (b.count || 0);
-      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count });
+      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count, enteredAt: b.enteredCloudAt || now });
     }
-    const freshKeptCount = allCandidates.size;
+    const existingKeptCount = allCandidates.size;
 
     for (const debate of (newDebates || [])) {
       const id = String(debate.id);
       if (allCandidates.has(id)) continue;
       const candidate = mapToCandidate(debate);
       if (!candidate) continue;
-      allCandidates.set(id, candidate);
+      allCandidates.set(id, { ...candidate, enteredAt: now });
     }
-    const newAddedCount = allCandidates.size - freshKeptCount;
+    const newAddedCount = allCandidates.size - existingKeptCount;
 
     if (allCandidates.size < 12) {
       const { data: olderDebates } = await supabase
@@ -6346,16 +6419,24 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
         if (allCandidates.has(id)) continue;
         const candidate = mapToCandidate(debate);
         if (!candidate) continue;
-        allCandidates.set(id, candidate);
+        allCandidates.set(id, { ...candidate, enteredAt: now });
       }
     }
 
-    // Tri par sourceCount décroissant, top 12
+    // Tri par score = sourceCount × fraîcheur décroissante sur 7 jours
+    // → les plus anciennes sont naturellement évincées par les nouvelles
+    const cloudScore = (c) => {
+      const enteredMs = c.enteredAt ? new Date(c.enteredAt).getTime() : nowMs;
+      const ageDays = Math.max(0, (nowMs - enteredMs) / (24 * 60 * 60 * 1000));
+      const freshness = Math.max(0.05, 1 - ageDays / CLOUD_DECAY_DAYS);
+      return (c.count || 1) * freshness;
+    };
+
     let bubbles = [...allCandidates.values()]
-      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+      .sort((a, b) => cloudScore(b) - cloudScore(a) || a.tag.localeCompare(b.tag))
       .slice(0, 12);
 
-    console.log(`[cloud] fraîches gardées: ${freshKeptCount}, nouveaux: ${newAddedCount}, pool: ${allCandidates.size}, final: ${bubbles.length}`);
+    console.log(`[cloud] existantes: ${existingKeptCount}, nouveaux: ${newAddedCount}, pool: ${allCandidates.size}, final: ${bubbles.length}`);
 
     const maxCount = bubbles.reduce((max, b) => Math.max(max, b.count || 0), 0);
     console.log(`[cloud] sourceCount max: ${maxCount}`);
@@ -6782,6 +6863,181 @@ app.post("/api/admin/veille/merge", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ================================================================= */
+
+/* --- Analyse IA d'un débat (admin) -------------------------------- */
+
+function _buildAnalysisPrompt1(payload) {
+  const fmtArgs = (args) => Array.isArray(args) && args.length
+    ? args.slice(0, 20).map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
+    : "(aucun)";
+
+  const fmtComments = (comments) => Array.isArray(comments) && comments.length
+    ? comments.map((c, i) => {
+        const stance = c.stance ? ` [${c.stance}]` : "";
+        return `${i + 1}.${stance} ${String(c.text || "").trim()}`;
+      }).join("\n")
+    : "(aucun)";
+
+  const isOpen = !String(payload.positionA || "").trim() && !String(payload.positionB || "").trim();
+
+  return `Tu es un analyste critique de débats publics pour Agôn.
+
+Analyse le débat fourni à partir des données disponibles :
+question, positions, contexte, sources, arguments, commentaires, soutiens ou votes s'ils existent.
+
+Ta mission :
+- résumer le débat ;
+- expliquer le vrai enjeu ;
+- expliquer pourquoi le sujet divise ;
+- analyser les sources disponibles ;
+- identifier les meilleurs arguments ;
+- identifier les arguments fragiles ;
+- repérer les angles morts ;
+- lister les points à vérifier.
+
+Règles :
+- N'invente aucun fait, chiffre, source ou citation.
+- Si une information manque, dis-le clairement.
+- Ne juge pas les personnes, seulement les arguments.
+- Ne donne pas encore de gagnant.
+- Distingue faits, interprétations, valeurs et émotions.
+- Explique pourquoi un argument est fort ou faible.
+- Ne cherche pas un compromis artificiel.
+- Reste clair, direct et accessible.
+
+---
+
+Question : ${String(payload.question || "").trim()}
+${isOpen ? "" : `Position A : ${String(payload.positionA || "").trim()}
+Position B : ${String(payload.positionB || "").trim()}`}
+Contexte : ${String(payload.content || "").trim().slice(0, 800)}
+
+Arguments ${isOpen ? "" : "du camp A"} :
+${fmtArgs(payload.argumentsA)}
+${isOpen ? "" : `
+Arguments du camp B :
+${fmtArgs(payload.argumentsB)}`}
+
+Commentaires des participants :
+${fmtComments(payload.comments)}
+
+---
+
+${isOpen
+  ? `Structure obligatoire :
+
+## Synthèse du débat
+## Ce qui est vraiment en jeu
+## Pourquoi le sujet divise
+## Analyse des sources
+## Principales lignes d'argumentation
+## Meilleurs arguments du débat
+## Arguments séduisants mais fragiles
+## Points absents ou à approfondir
+## Points à vérifier`
+
+  : `Structure obligatoire :
+
+## Synthèse du débat
+## Ce qui est vraiment en jeu
+## Pourquoi le sujet divise
+## Analyse des sources
+## Analyse des arguments du camp A
+## Analyse des arguments du camp B
+## Meilleurs arguments du débat
+## Arguments séduisants mais fragiles
+## Points absents ou à approfondir
+## Points à vérifier`}`;
+}
+
+const _PROMPT2 = `Tu es un arbitre argumentatif pour Agôn.
+
+À partir de l'analyse critique précédente, désigne le camp qui gagne argumentativement dans l'état actuel du débat.
+
+Important :
+Tu ne dois pas dire qui a raison absolument.
+Tu dois dire quelle position est la mieux défendue dans ce débat.
+
+Critères de victoire :
+Une position gagne si elle :
+- répond mieux à la question ;
+- présente les arguments les plus solides ;
+- utilise mieux les sources disponibles ;
+- répond mieux aux objections ;
+- a moins d'angles morts importants ;
+- évite mieux les exagérations ou caricatures.
+
+Règles :
+- Le verdict est obligatoire sauf si les données sont vraiment insuffisantes.
+- Tu peux choisir : camp A, camp B, égalité, impossible à déterminer.
+- Ne choisis "égalité" que si les deux positions sont réellement proches.
+- Ne choisis "impossible à déterminer" que si les données ne permettent vraiment pas de trancher.
+- Formule le verdict comme provisoire et dépendant des données disponibles.
+- Ne méprise jamais le camp perdant.
+
+Structure obligatoire :
+
+## Verdict argumentatif
+Gagnant : camp A / camp B / égalité / impossible à déterminer
+
+Confiance : faible / moyenne / forte
+
+Pourquoi ce camp l'emporte :
+Explique clairement le facteur décisif.
+
+Faiblesse principale du camp perdant :
+Explique sans mépris.
+
+Ce qui pourrait changer le verdict :
+Indique quelle information, source ou réponse à une objection pourrait faire évoluer l'analyse.
+
+Phrase finale :
+Résume en une phrase ce que le lecteur doit retenir.`;
+
+async function _callOpenAI(apiKey, messages) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+    body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: 0.3 })
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw Object.assign(new Error(body || "Erreur OpenAI."), { status: 502 });
+  }
+  const data = await r.json();
+  return data?.choices?.[0]?.message?.content || "";
+}
+
+app.post("/api/admin/analyze-debate", requireAdmin, express.json(), async (req, res) => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+
+  const payload = req.body || {};
+  if (!String(payload.question || "").trim()) {
+    return res.status(400).json({ error: "Question du débat manquante." });
+  }
+
+  try {
+    const prompt1 = _buildAnalysisPrompt1(payload);
+
+    const analysis = await _callOpenAI(apiKey, [{ role: "user", content: prompt1 }]);
+    if (!analysis) return res.status(502).json({ error: "Réponse vide de l'IA (analyse)." });
+
+    const verdict = await _callOpenAI(apiKey, [
+      { role: "user",      content: prompt1  },
+      { role: "assistant", content: analysis },
+      { role: "user",      content: _PROMPT2 }
+    ]);
+    if (!verdict) return res.status(502).json({ error: "Réponse vide de l'IA (verdict)." });
+
+    return res.json({ raw: analysis + "\n\n---\n\n" + verdict });
+  } catch (err) {
+    console.error("[analyze-debate]", err.message);
+    return res.status(err.status || 500).json({ error: err.message || "Erreur serveur lors de l'analyse." });
   }
 });
 
