@@ -203,9 +203,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 555,
+    "next_episode_title": "Faut-il renforcer les contrôles migratoires au détriment des droits des migrants ?",
+    "next_episode_url": "/debate?id=555"
   },
   "497": {
     "previous_episode_id": null,
@@ -627,6 +627,22 @@
     "previous_episode_id": 525,
     "previous_episode_title": "Les frappes américaines au Moyen-Orient sont-elles inévitables ?",
     "previous_episode_url": "/debate?id=525",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "555": {
+    "previous_episode_id": 496,
+    "previous_episode_title": "La post-croissance peut-elle remplacer la croissance économique ?",
+    "previous_episode_url": "/debate?id=496",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "559": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

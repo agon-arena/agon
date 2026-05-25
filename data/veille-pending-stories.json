@@ -41,13 +41,13 @@
     "criteria": {},
     "storySummary": ""
   },
-  "1779647674557": {
+  "1779687530493": {
     "selectionMode": "existing",
     "storyDecision": "existing_story",
-    "matchedStoryId": "40-le-changement-climatique-transforme-les-territoires-et-multiplie-les-enjeux-d-ad",
-    "matchedStoryTitle": "Le changement climatique transforme les territoires et multiplie les enjeux d’adaptation",
-    "previousEpisodeTitle": "Faut-il renforcer les contrôles migratoires au détriment des droits des migrants ?",
-    "previousEpisodeUrl": "http://localhost:3001/debate?id=555",
+    "matchedStoryId": "09-les-menaces-terroristes-radicales-et-hybrides-transforment-les-politiques-de-sec",
+    "matchedStoryTitle": "Les menaces terroristes, radicales et hybrides transforment les politiques de sécurité",
+    "previousEpisodeTitle": null,
+    "previousEpisodeUrl": null,
     "confidence": 0.85,
     "reason": "Histoire choisie manuellement.",
     "criteria": {},

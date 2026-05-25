@@ -6608,78 +6608,110 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     }
     setDebateKeywords(data.id, resolvedKeywords);
 
-    // Calcul du trend au moment de la publication
-    try {
-      const newSourceCount = allExtras.length > 0 ? allExtras.length : (sourceUrl ? 1 : 0);
-      console.log(`[trend] nouveau sujet id=${data.id} newSourceCount=${newSourceCount}`);
 
-      const { data: recentRows } = await supabase
-        .from("debates")
-        .select("id, question, content, source_url, media_extras, created_at")
-        .neq("id", data.id)
-        .order("created_at", { ascending: false })
-        .limit(24);
 
-      const recentSubjects = (recentRows || []).map((d) => {
-        const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
-        const srcExtras = extras.filter((e) => e && typeof e === "object" &&
-          String(e.type || "source").trim() === "source" &&
-          (e.url || e.source_url || e.source || e.media || e.publisher));
-        const sc = srcExtras.length > 0 ? srcExtras.length : (d.source_url ? 1 : 0);
-        return {
-          id: String(d.id),
-          question: String(d.question || ""),
-          resume: String(d.content || "").slice(0, 200),
-          tags: getDebateKeywords(d.id),
-          sourceCount: sc,
-          created_at: d.created_at
-        };
-      });
+// Calcul du badge de tendance au moment de la publication
+// Logique : comparer le nombre de sources distinctes du nouveau débat
+// avec le nombre de sources distinctes du dernier débat publié ayant un thème similaire.
+try {
+const currentSourceKeys = new Set(
+  (allExtras || [])
+    .filter((e) => e && typeof e === "object" && String(e.type || "source").trim() === "source")
+    .map((e) => String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase())
+    .filter(Boolean)
+);
 
-      console.log(`[trend] comparaison avec ${recentSubjects.length} publications récentes`);
+if (!currentSourceKeys.size && sourceUrl) {
+  currentSourceKeys.add(String(sourceUrl).trim().toLowerCase());
+}
 
-      const newSubject = {
-        id: String(data.id),
-        question: String(question || ""),
-        resume: String(resolvedContent || "").slice(0, 200),
-        tags: resolvedKeywords,
-        sourceCount: newSourceCount
-      };
+const currentSourceCount = currentSourceKeys.size;
+  console.log(`[trend] nouveau sujet id=${data.id} currentSourceCount=${currentSourceCount}`);
 
-      const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
+  const { data: recentRows } = await supabase
+    .from("debates")
+    .select("id, question, content, source_url, media_extras, created_at")
+    .neq("id", data.id)
+    .order("created_at", { ascending: false })
+    .limit(24);
 
-      let computedTrend = 0;
-      let trendEntry;
+  const recentSubjects = (recentRows || []).map((d) => {
+    const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
+    const srcExtras = extras.filter((e) => e && typeof e === "object" &&
+      String(e.type || "source").trim() === "source" &&
+      (e.url || e.source_url || e.source || e.media || e.publisher));
 
-      if (!matched) {
-        console.log(`[trend] aucun sujet similaire trouvé → trend=0`);
-        trendEntry = { trend: 0, sourceCount: newSourceCount, matchedSubjectId: null };
-      } else {
-        const oldSourceCount = matched.sourceCount || 0;
-        console.log(`[trend] match id=${matched.id} oldSourceCount=${oldSourceCount} confidence=${matched.confidence}`);
+   const previousSourceKeys = new Set(
+  srcExtras
+    .map((e) => String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase())
+    .filter(Boolean)
+);
 
-        if (oldSourceCount === 0 && newSourceCount === 0) {
-          computedTrend = 0;
-        } else if (oldSourceCount === 0) {
-          computedTrend = 100;
-        } else {
-          computedTrend = Math.round(((newSourceCount - oldSourceCount) / oldSourceCount) * 100);
-        }
+if (!previousSourceKeys.size && d.source_url) {
+  previousSourceKeys.add(String(d.source_url).trim().toLowerCase());
+}
 
-        console.log(`[trend] trend calculé = ${computedTrend}%`);
-        trendEntry = {
-          trend: computedTrend,
-          sourceCount: newSourceCount,
-          matchedSubjectId: matched.id,
-          matchedSubjectTitle: matched.question,
-          reason: matched.reason || ""
-        };
-      }
+const previousSourceCount = previousSourceKeys.size;
 
-      setDebateTrend(data.id, trendEntry);
-    } catch (trendErr) {
-      console.error("[trend] erreur calcul tendance (non bloquant) :", trendErr.message);
+    return {
+      id: String(d.id),
+      question: String(d.question || ""),
+      resume: String(d.content || "").slice(0, 200),
+      tags: getDebateKeywords(d.id),
+      sourceCount: previousSourceCount,
+      created_at: d.created_at
+    };
+  });
+
+  console.log(`[trend] recherche du dernier sujet similaire parmi ${recentSubjects.length} publications récentes`);
+
+  const newSubject = {
+    id: String(data.id),
+    question: String(question || ""),
+    resume: String(resolvedContent || "").slice(0, 200),
+    tags: resolvedKeywords,
+    sourceCount: currentSourceCount
+  };
+
+  const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
+
+  let computedTrend = 0;
+  let trendEntry;
+
+  if (!matched) {
+    console.log(`[trend] aucun sujet similaire trouvé → trend=0`);
+    trendEntry = {
+      trend: 0,
+      sourceCount: currentSourceCount,
+      matchedSubjectId: null
+    };
+  } else {
+    const previousSourceCount = matched.sourceCount || 0;
+    console.log(`[trend] dernier sujet similaire id=${matched.id} previousSourceCount=${previousSourceCount} confidence=${matched.confidence}`);
+
+    if (previousSourceCount === 0 && currentSourceCount === 0) {
+      computedTrend = 0;
+    } else if (previousSourceCount === 0) {
+      computedTrend = 100;
+    } else {
+      computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);
     }
+
+    console.log(`[trend] tendance calculée = ${computedTrend}%`);
+    trendEntry = {
+      trend: computedTrend,
+      sourceCount: currentSourceCount,
+      matchedSubjectId: matched.id,
+      matchedSubjectTitle: matched.question,
+      previousSourceCount,
+      reason: matched.reason || ""
+    };
+  }
+
+  setDebateTrend(data.id, trendEntry);
+} catch (trendErr) {
+  console.error("[trend] erreur calcul tendance (non bloquant) :", trendErr.message);
+}
 
     if (canonicalLinkedDebateId) {
       linkDebateToSharedSpace(data.id, canonicalLinkedDebateId);

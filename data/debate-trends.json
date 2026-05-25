@@ -10,5 +10,33 @@
     "sourceCount": 6,
     "matchedSubjectId": null,
     "computedAt": "2026-05-24T18:28:53.805Z"
+  },
+  "556": {
+    "trend": 50,
+    "sourceCount": 6,
+    "matchedSubjectId": "553",
+    "matchedSubjectTitle": "L’accord USA-Iran menace-t-il la sécurité d’Israël ?",
+    "reason": "Le sujet traite également d'un accord entre les États-Unis et l'Iran dans le contexte des tensions au Moyen-Orient, ce qui le relie directement à la séquence actuelle.",
+    "computedAt": "2026-05-25T05:19:39.138Z"
+  },
+  "557": {
+    "trend": 0,
+    "sourceCount": 6,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-25T05:22:59.994Z"
+  },
+  "558": {
+    "trend": -44,
+    "sourceCount": 5,
+    "matchedSubjectId": "552",
+    "matchedSubjectTitle": "L'usage d'armes nucléaires en Ukraine justifie-t-il une intervention militaire internationale ?",
+    "reason": "Le sujet traite également de l'usage du missile hypersonique Orechnik dans le contexte de la guerre en Ukraine, ce qui en fait une séquence similaire.",
+    "computedAt": "2026-05-25T05:50:23.456Z"
+  },
+  "559": {
+    "trend": 0,
+    "sourceCount": 6,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-25T05:57:22.526Z"
   }
 }
