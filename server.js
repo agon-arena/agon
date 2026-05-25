@@ -138,7 +138,7 @@ function replaceMetaPlaceholders(template, meta) {
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn est le réseau des sujets qui font réagir. En combinant intelligence collective et intelligence artificielle, il aide à comprendre les enjeux, à confronter les points de vue et à faire émerger les idées les plus convaincantes.",
+    title: "Agôn est le réseau des sujets du moment. En combinant intelligence collective et intelligence artificielle, il facilite le décryptage des enjeux, la confrontation des points de vue et l’émergence des idées les plus convaincantes.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
     imageAlt: "Agôn — l'arène des idées"
