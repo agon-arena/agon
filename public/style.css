@@ -2803,6 +2803,7 @@ body.page-debate #score-b {
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  text-indent: 1.2em;
 }
 
 @media (min-width: 769px) {
@@ -8136,6 +8137,10 @@ padding:4px 14px 12px 14px;
   position: relative;
   display: inline-flex;
 }
+.debate-media-source-group[data-source-orientation="left"]    { order: 1; }
+.debate-media-source-group[data-source-orientation="neutral"] { order: 2; }
+.debate-media-source-group[data-source-orientation="other"]   { order: 3; }
+.debate-media-source-group[data-source-orientation="right"]   { order: 99; }
 
 .debate-media-source-group-toggle .debate-session-count {
   display: inline-flex;
@@ -8167,6 +8172,33 @@ padding:4px 14px 12px 14px;
   visibility: visible;
   pointer-events: auto;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Bouton Gauche : aligner le menu à gauche pour éviter le débordement */
+.debate-media-source-group[data-source-orientation="left"] .debate-media-source-menu {
+  left: 0;
+  transform: translateY(-4px);
+}
+.debate-media-source-group[data-source-orientation="left"].open .debate-media-source-menu {
+  transform: translateY(0);
+}
+
+/* Bouton Droite : aligner le menu à droite pour éviter le débordement */
+.debate-media-source-group[data-source-orientation="right"] .debate-media-source-menu {
+  left: auto;
+  right: 0;
+  transform: translateY(-4px);
+}
+.debate-media-source-group[data-source-orientation="right"].open .debate-media-source-menu {
+  transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+  /* Sur très petit écran : limiter la largeur de tous les menus */
+  .debate-media-source-menu {
+    max-width: calc(100vw - 24px);
+    min-width: 0;
+  }
 }
 
 .debate-media-source-menu-item {

@@ -283,8 +283,6 @@
         </div>
       </div>
 
-
-
       <div class="debate-top-sticky-actions">
         <button
           type="button"
@@ -320,7 +318,6 @@
 
 </div>
 
-
 <div id="debate-image-lightbox" class="debate-image-lightbox" style="display:none;" aria-hidden="true">
   <button
     type="button"
@@ -333,6 +330,8 @@
 
   <img id="debate-image-lightbox-img" class="debate-image-lightbox-img" alt="Image du débat agrandie">
 </div>
+<div id="debate-ai-countdown-slot"></div>
+
 </div><!-- .debate-hero-outer -->
 
 <div class="debate-admin-top-actions">
@@ -349,7 +348,6 @@
   </div>
 
   <div id="debate-admin-edit-slot" class="debate-admin-edit-slot" data-admin style="display:none;"></div>
-  <div id="debate-ai-analysis-slot" data-admin style="display:none;"></div>
 </div>
 
 <section class="debate-hero">
@@ -447,6 +445,8 @@
 
 
 <div id="debate-score-bar" class="debate-score-bar"></div>
+
+<div id="debate-ai-analysis-slot"></div>
 
 <div id="voices-summary" class="voices-summary-container"></div>
 
@@ -899,6 +899,7 @@ document.addEventListener('keydown', function(e) {
 
 <script>window.__VEILLE_MEDIAS__ = __VEILLE_MEDIAS_JSON__;</script>
 <script src="/script.js?v=20260522-admin-topbar-dropdown"></script>
+<script src="/ai-analysis-animation.js"></script>
 <script src="/admin-debate-analysis.js"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires

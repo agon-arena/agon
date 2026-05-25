@@ -5299,6 +5299,23 @@ app.post("/api/debates/:id/video-file", express.raw({
   }
 });
 
+// Map id → { status, scheduledAt } — doit être AVANT /api/debates/:id
+app.get("/api/debates/analysis-statuses", async (req, res) => {
+  const { data, error } = await supabase
+    .from("debates")
+    .select("id, ai_analysis_status, ai_analysis_scheduled_at")
+    .in("ai_analysis_status", ["scheduled", "generating", "ready"]);
+  if (error) return res.json({});
+  const map = {};
+  for (const row of data || []) {
+    map[row.id] = {
+      status:      row.ai_analysis_status,
+      scheduledAt: row.ai_analysis_scheduled_at || null
+    };
+  }
+  return res.json(map);
+});
+
 app.get("/api/debates/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -5515,6 +5532,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
     res.json({ success: true, id: data.id });
 
     snapshotAndWatchMajority(sharedDebateId, data.id, side, authorKey).catch(console.error);
+    _scheduleAnalysisIfNeeded(sharedDebateId).catch(console.error);
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur création argument.");
@@ -5829,6 +5847,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
 
     invalidateSharedDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     res.json(row);
+    if (argumentRow?.debate_id) _scheduleAnalysisIfNeeded(argumentRow.debate_id).catch(console.error);
     queueCommentNotificationEvents(supabase, {
       authorKey,
       argumentRow,
@@ -6868,11 +6887,157 @@ app.post("/api/admin/veille/merge", async (req, res) => {
 
 /* ================================================================= */
 
-/* --- Analyse IA d'un débat (admin) -------------------------------- */
+/* --- Analyse IA d'un débat ---------------------------------------- */
+
+// Lecture publique du rapport stocké
+app.get("/api/debates/:id/analysis", async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from("debates")
+    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at")
+    .eq("id", id)
+    .single();
+  if (error || !data) {
+    console.error("[analysis GET]", id, error?.message || "no data");
+    return res.status(404).json({ error: error?.message || "Débat introuvable." });
+  }
+  return res.json({
+    raw:         data.ai_analysis || null,
+    status:      data.ai_analysis_status || "none",
+    scheduledAt: data.ai_analysis_scheduled_at || null,
+    generatedAt: data.ai_analysis_generated_at || null
+  });
+});
+
+// Construit le payload à partir de la base (pour la génération automatique)
+async function _fetchDebatePayload(debateId) {
+  const debate = await getDebateById(debateId);
+  if (!debate) throw new Error("Débat introuvable.");
+
+  const { data: args } = await supabase.from("arguments").select("*").eq("debate_id", debateId);
+  const argIds = (args || []).map((a) => a.id);
+
+  let comments = [];
+  if (argIds.length) {
+    const { data: rows } = await supabase.from("comments").select("*").in("argument_id", argIds);
+    comments = rows || [];
+  }
+
+  return {
+    question:   debate.question  || "",
+    positionA:  debate.option_a  || "",
+    positionB:  debate.option_b  || "",
+    content:    debate.content   || "",
+    argumentsA: (args || []).filter((a) => a.side === "A").map((a) => ({ text: a.body || a.title || "" })),
+    argumentsB: (args || []).filter((a) => a.side === "B").map((a) => ({ text: a.body || a.title || "" })),
+    comments:   comments.map((c) => ({ text: c.content || "", stance: c.stance || "" }))
+  };
+}
+
+// Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin)
+async function _generateAndSaveAnalysis(debateId) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+
+  await supabase.from("debates").update({ ai_analysis_status: "generating" }).eq("id", debateId);
+
+  try {
+    const payload  = await _fetchDebatePayload(debateId);
+    const prompt1  = _buildAnalysisPrompt1(payload);
+    const analysis = await _callOpenAI(apiKey, [{ role: "user", content: prompt1 }]);
+    if (!analysis) throw new Error("Réponse vide (analyse).");
+
+    const verdict = await _callOpenAI(apiKey, [
+      { role: "user",      content: prompt1  },
+      { role: "assistant", content: analysis },
+      { role: "user",      content: _PROMPT2 }
+    ]);
+    if (!verdict) throw new Error("Réponse vide (verdict).");
+
+    const raw = analysis + "\n\n---\n\n" + verdict;
+
+    const { error: saveError } = await supabase.from("debates").update({
+      ai_analysis:              raw,
+      ai_analysis_status:       "ready",
+      ai_analysis_generated_at: new Date().toISOString()
+    }).eq("id", debateId);
+
+    if (saveError) console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde :`, saveError.message);
+    else console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
+
+    return raw;
+  } catch (err) {
+    console.error(`[auto-analysis] débat ${debateId} — échec :`, err.message);
+    await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", debateId);
+    throw err;
+  }
+}
+
+// Vérifie si le seuil est atteint et programme l'analyse si besoin
+async function _scheduleAnalysisIfNeeded(debateId) {
+  if (!debateId) return;
+
+  const { data: debate } = await supabase
+    .from("debates")
+    .select("ai_analysis_status, ai_analysis")
+    .eq("id", debateId)
+    .single();
+
+  if (!debate) return;
+  const status = debate.ai_analysis_status || "none";
+  if (status !== "none" || debate.ai_analysis) return; // déjà programmé ou généré
+
+  const { count: argCount } = await supabase
+    .from("arguments")
+    .select("*", { count: "exact", head: true })
+    .eq("debate_id", debateId);
+
+  const { data: argIds } = await supabase
+    .from("arguments")
+    .select("id")
+    .eq("debate_id", debateId);
+
+  let commentCount = 0;
+  if (argIds && argIds.length) {
+    const { count } = await supabase
+      .from("comments")
+      .select("*", { count: "exact", head: true })
+      .in("argument_id", argIds.map((a) => a.id));
+    commentCount = count || 0;
+  }
+
+  const score = (argCount || 0) + commentCount * 0.5;
+  if (score >= 10) {
+    const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from("debates").update({
+      ai_analysis_status:       "scheduled",
+      ai_analysis_scheduled_at: scheduledAt
+    }).eq("id", debateId);
+    console.log(`[auto-analysis] débat ${debateId} — seuil atteint (score ${score}), analyse programmée pour ${scheduledAt}`);
+  }
+}
+
+// Scheduler : vérifie toutes les 15 min les analyses à générer
+setInterval(async () => {
+  try {
+    const now = new Date().toISOString();
+    const { data: pending } = await supabase
+      .from("debates")
+      .select("id")
+      .eq("ai_analysis_status", "scheduled")
+      .lte("ai_analysis_scheduled_at", now);
+
+    for (const row of (pending || [])) {
+      await _generateAndSaveAnalysis(row.id);
+    }
+  } catch (err) {
+    console.error("[auto-analysis scheduler]", err.message);
+  }
+}, 15 * 60 * 1000).unref();
 
 function _buildAnalysisPrompt1(payload) {
   const fmtArgs = (args) => Array.isArray(args) && args.length
-    ? args.slice(0, 20).map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
+    ? args.map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
     : "(aucun)";
 
   const fmtComments = (comments) => Array.isArray(comments) && comments.length
@@ -7013,31 +7178,17 @@ async function _callOpenAI(apiKey, messages) {
 }
 
 app.post("/api/admin/analyze-debate", requireAdmin, express.json(), async (req, res) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
 
-  const payload = req.body || {};
-  if (!String(payload.question || "").trim()) {
-    return res.status(400).json({ error: "Question du débat manquante." });
-  }
+  const { debateId } = req.body || {};
+  if (!debateId) return res.status(400).json({ error: "debateId manquant." });
 
   try {
-    const prompt1 = _buildAnalysisPrompt1(payload);
-
-    const analysis = await _callOpenAI(apiKey, [{ role: "user", content: prompt1 }]);
-    if (!analysis) return res.status(502).json({ error: "Réponse vide de l'IA (analyse)." });
-
-    const verdict = await _callOpenAI(apiKey, [
-      { role: "user",      content: prompt1  },
-      { role: "assistant", content: analysis },
-      { role: "user",      content: _PROMPT2 }
-    ]);
-    if (!verdict) return res.status(502).json({ error: "Réponse vide de l'IA (verdict)." });
-
-    return res.json({ raw: analysis + "\n\n---\n\n" + verdict });
+    const raw = await _generateAndSaveAnalysis(debateId);
+    return res.json({ raw });
   } catch (err) {
     console.error("[analyze-debate]", err.message);
-    return res.status(err.status || 500).json({ error: err.message || "Erreur serveur lors de l'analyse." });
+    return res.status(502).json({ error: err.message || "Erreur lors de la génération." });
   }
 });
 
