@@ -26,6 +26,7 @@
   // ── Styles ──────────────────────────────────────────────────────────
   function injectStyles() {
     const css = `
+      /* ── Wrapper & trigger ── */
       .ada-wrap { margin: 16px 0 4px; display: flex; flex-direction: column; align-items: center; }
       @media (max-width: 768px) { .ada-wrap { margin-bottom: 18px; } }
       .ada-trigger-btn, .ada-countdown-badge, .ada-countdown-ready {
@@ -55,9 +56,11 @@
         50%  { filter: drop-shadow(0 0 22px rgba(0,0,0,.65)) drop-shadow(0 0 8px rgba(0,0,0,.3)); transform: scale(1.07); background-position: 0% 0; }
         100% { filter: drop-shadow(0 0 4px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
       }
+
+      /* ── Panel shell ── */
       .ada-panel {
-        margin-top: 10px; border: 1px solid #c7d2fe; border-radius: 10px;
-        background: #f5f3ff; overflow: hidden; display: none;
+        margin-top: 10px; border: 1px solid #c7d2fe; border-radius: 12px;
+        background: #f5f3ff; overflow: hidden; display: none; width: 100%;
       }
       .ada-panel-header {
         display: flex; align-items: center; justify-content: space-between;
@@ -70,7 +73,7 @@
       }
       .ada-close-btn:hover { color: #1e1b4b; }
       .ada-body {
-        padding: 12px 14px; font-size: 13px; line-height: 1.65; color: #1e1b4b;
+        padding: 14px 14px 18px; font-size: 13px; line-height: 1.65; color: #1e1b4b;
       }
       .ada-panel-footer {
         padding: 8px 14px; border-top: 1px solid #c7d2fe; background: #e0e7ff;
@@ -83,14 +86,18 @@
       }
       .ada-regen-btn:hover { background: #6366f1; color: #fff; }
       .ada-regen-btn:disabled { opacity: .55; cursor: default; }
+
+      /* ── Meta ── */
       .ada-date {
         font-size: 11px; color: #6b7280; font-style: italic;
-        margin-bottom: 10px; padding-bottom: 8px;
+        margin-bottom: 14px; padding-bottom: 10px;
         border-bottom: 1px solid #e5e7eb;
       }
       .ada-loading { color: #6366f1; font-style: italic; }
       .ada-error   { color: #b91c1c; }
       .ada-empty   { color: #6b7280; font-style: italic; }
+
+      /* ── Countdown ── */
       .ada-countdown-badge {
         display: inline-flex; align-items: center;
         padding: 3px 12px; border-radius: 999px;
@@ -120,20 +127,147 @@
         display: flex; justify-content: center;
         margin-top: 6px;
       }
-      .ada-scoring-report { padding: 4px 0; }
-      .ada-r-h1 { font-size: 15px; font-weight: 800; color: #312e81; margin: 6px 0 14px; }
-      .ada-r-h2 { font-size: 13px; font-weight: 700; color: #3730a3; margin: 18px 0 8px; border-bottom: 1px solid #c7d2fe; padding-bottom: 4px; }
-      .ada-r-h3 { font-size: 12px; font-weight: 700; color: #4338ca; margin: 12px 0 6px; }
-      .ada-bar-row { margin: 4px 0 10px; }
-      .ada-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: #374151; margin-bottom: 3px; font-weight: 600; }
-      .ada-bar-pct { color: #6366f1; font-weight: 700; flex-shrink: 0; margin-left: 8px; }
-      .ada-bar-wrap { height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
-      .ada-bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #818cf8); border-radius: 5px; }
-      .ada-r-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 12px; }
-      .ada-r-table th { background: #e0e7ff; color: #3730a3; font-weight: 700; padding: 5px 8px; border: 1px solid #c7d2fe; text-align: left; }
-      .ada-r-table td { padding: 5px 8px; border: 1px solid #e5e7eb; color: #1e1b4b; vertical-align: top; }
-      .ada-r-sep { border: none; border-top: 1px solid #e0e7ff; margin: 14px 0; }
-      .ada-r-p { font-size: 12px; line-height: 1.6; color: #1e1b4b; margin: 4px 0 6px; }
+
+      /* ── Report container ── */
+      .ada-scoring-report { padding: 2px 0; }
+      .ada-report { max-width: 760px; margin: 0 auto; }
+
+      /* ── Verdict card ── */
+      .ada-verdict-card {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border-radius: 14px; padding: 20px 20px 16px;
+        margin: 4px 0 22px;
+        color: #fff; box-shadow: 0 4px 24px rgba(99,102,241,.3);
+      }
+      .ada-verdict-eyebrow {
+        font-size: 10px; font-weight: 700; letter-spacing: .12em;
+        text-transform: uppercase; opacity: .65; margin-bottom: 6px;
+      }
+      .ada-verdict-winner {
+        font-size: 17px; font-weight: 800; line-height: 1.3;
+        margin: 0 0 14px; color: #e0e7ff;
+      }
+      .ada-verdict-scores-row {
+        display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px;
+      }
+      .ada-verdict-score-a {
+        font-size: 30px; font-weight: 900; color: #818cf8; line-height: 1;
+      }
+      .ada-verdict-score-b {
+        font-size: 30px; font-weight: 900; opacity: .45; line-height: 1;
+      }
+      .ada-verdict-vs {
+        font-size: 11px; opacity: .45; font-weight: 600; align-self: center;
+      }
+      .ada-verdict-confidence {
+        display: inline-block; padding: 3px 10px; border-radius: 999px;
+        font-size: 10px; font-weight: 700; letter-spacing: .04em;
+        margin-bottom: 14px;
+      }
+      .ada-conf-faible  { background: rgba(239,68,68,.25);  border: 1px solid rgba(239,68,68,.4);  color: #fca5a5; }
+      .ada-conf-moyenne { background: rgba(234,179,8,.25);   border: 1px solid rgba(234,179,8,.4);   color: #fde68a; }
+      .ada-conf-forte   { background: rgba(34,197,94,.25);   border: 1px solid rgba(34,197,94,.4);   color: #86efac; }
+      .ada-verdict-expl {
+        font-size: 12px; line-height: 1.6; opacity: .85; margin-bottom: 14px;
+      }
+      .ada-verdict-prudence {
+        font-size: 11px; opacity: .65; font-style: italic; line-height: 1.5;
+        border-top: 1px solid rgba(255,255,255,.15); padding-top: 10px;
+      }
+
+      /* ── Combined bar ── */
+      .ada-combined-bar { margin: 8px 0 12px; }
+      .ada-combined-bar-labels {
+        display: flex; justify-content: space-between;
+        font-size: 11px; font-weight: 700; margin-bottom: 5px;
+      }
+      .ada-combined-bar-label-a { color: #6366f1; }
+      .ada-combined-bar-label-b { color: #6b7280; text-align: right; }
+      .ada-verdict-card .ada-combined-bar-label-a { color: #a5b4fc; }
+      .ada-verdict-card .ada-combined-bar-label-b { color: rgba(255,255,255,.45); }
+      .ada-combined-bar-track {
+        height: 12px; border-radius: 6px; overflow: hidden;
+        display: flex; background: #e5e7eb;
+      }
+      .ada-verdict-card .ada-combined-bar-track { background: rgba(255,255,255,.15); }
+      .ada-combined-bar-seg-a {
+        height: 100%; background: linear-gradient(90deg, #4338ca, #6366f1);
+        border-radius: 6px 0 0 6px; min-width: 2px;
+        transition: width .6s ease;
+      }
+      .ada-verdict-card .ada-combined-bar-seg-a {
+        background: linear-gradient(90deg, #818cf8, #a5b4fc);
+      }
+      .ada-combined-bar-seg-b {
+        height: 100%; background: #d1d5db; border-radius: 0 6px 6px 0; flex: 1;
+      }
+      .ada-verdict-card .ada-combined-bar-seg-b { background: rgba(255,255,255,.2); }
+
+      /* ── Section header ── */
+      .ada-section-h2 {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; font-weight: 800; color: #1e1b4b;
+        margin: 24px 0 12px; padding-bottom: 7px;
+        border-bottom: 2px solid #e0e7ff;
+      }
+      .ada-section-icon { font-size: 15px; line-height: 1; }
+
+      /* ── Criterion card ── */
+      .ada-criterion-card {
+        border: 1px solid #e0e7ff; border-radius: 10px;
+        padding: 13px 15px; margin: 0 0 10px;
+        background: #fafbff;
+      }
+      .ada-criterion-header {
+        display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+      }
+      .ada-criterion-icon { font-size: 15px; line-height: 1; }
+      .ada-criterion-title { font-size: 12px; font-weight: 700; color: #312e81; }
+      .ada-criterion-arrow {
+        font-size: 12px; line-height: 1.55; color: #374151; margin-top: 8px;
+      }
+      .ada-criterion-arrow::before { content: '→ '; color: #6366f1; font-weight: 700; }
+
+      /* ── Responsive card tables ── */
+      .ada-card-table { width: 100%; margin: 0 0 4px; }
+      .ada-card-table-row {
+        display: grid; gap: 8px; padding: 10px 0;
+        border-bottom: 1px solid #ede9fe; font-size: 12px; line-height: 1.5;
+        color: #1e1b4b;
+      }
+      .ada-card-table-row:last-child { border-bottom: none; }
+      .ada-card-table-head {
+        font-size: 10px; font-weight: 700; color: #6366f1;
+        letter-spacing: .06em; text-transform: uppercase;
+        padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;
+        margin-bottom: 2px;
+      }
+      .ada-card-table-3col .ada-card-table-row { grid-template-columns: 1fr 2fr 2fr; }
+      .ada-card-table-2col .ada-card-table-row { grid-template-columns: 1fr 2fr; }
+      .ada-card-table-3col .ada-card-table-head { grid-template-columns: 1fr 2fr 2fr; display: grid; gap: 8px; }
+      .ada-card-table-2col .ada-card-table-head { grid-template-columns: 1fr 2fr; display: grid; gap: 8px; }
+      @media (max-width: 560px) {
+        .ada-card-table-3col .ada-card-table-row,
+        .ada-card-table-2col .ada-card-table-row { grid-template-columns: 1fr; gap: 3px; }
+        .ada-card-table-3col .ada-card-table-head,
+        .ada-card-table-2col .ada-card-table-head { display: none; }
+        .ada-card-table-row > *:first-child { font-weight: 700; color: #3730a3; }
+      }
+
+      /* ── Phrase finale ── */
+      .ada-finale {
+        margin: 20px 0 8px;
+        padding: 14px 16px;
+        background: #f0f4ff;
+        border-left: 4px solid #6366f1;
+        border-radius: 0 10px 10px 0;
+        font-size: 13px; line-height: 1.65; color: #1e1b4b; font-style: italic;
+      }
+      .ada-finale-label {
+        font-style: normal; font-weight: 700; font-size: 10px;
+        color: #6366f1; letter-spacing: .08em; text-transform: uppercase;
+        display: block; margin-bottom: 6px;
+      }
     `;
     const el = document.createElement('style');
     el.textContent = css;
@@ -150,68 +284,269 @@
       .replace(/\*(.*?)\*/g, '<em>$1</em>');
   }
 
+  // ── Render helpers ──────────────────────────────────────────────────
+
+  function renderCombinedBar(labelA, scoreA, labelB, scoreB) {
+    const a = Math.min(100, Math.max(0, scoreA));
+    return (
+      '<div class="ada-combined-bar">' +
+        '<div class="ada-combined-bar-labels">' +
+          '<span class="ada-combined-bar-label-a">' + esc(labelA) + ' ' + a + '%</span>' +
+          '<span class="ada-combined-bar-label-b">' + Math.min(100, Math.max(0, scoreB)) + '% ' + esc(labelB) + '</span>' +
+        '</div>' +
+        '<div class="ada-combined-bar-track">' +
+          '<div class="ada-combined-bar-seg-a" style="width:' + a + '%"></div>' +
+          '<div class="ada-combined-bar-seg-b"></div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderSourcesTable(header, rows) {
+    const cols = header ? header.length : (rows[0] ? rows[0].length : 2);
+    const cls = cols >= 3 ? 'ada-card-table-3col' : 'ada-card-table-2col';
+    let h = '<div class="ada-card-table ' + cls + '">';
+    if (header) {
+      h += '<div class="ada-card-table-head">' +
+        header.map(function(c){ return '<span>' + esc(c) + '</span>'; }).join('') +
+      '</div>';
+    }
+    rows.forEach(function(r) {
+      h += '<div class="ada-card-table-row">' +
+        r.map(function(c){ return '<span>' + md(c) + '</span>'; }).join('') +
+      '</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  const CRIT_ICONS = {
+    'réponse': '📊',
+    'solidité': '🧠',
+    'sources': '🔍',
+    'objections': '🛡️',
+    'conviction': '🎯',
+  };
+
+  function getCritIcon(title) {
+    const t = title.toLowerCase();
+    for (const k in CRIT_ICONS) {
+      if (t.indexOf(k) !== -1) return CRIT_ICONS[k];
+    }
+    return '📊';
+  }
+
+  function parseCombinedScore(trimmed) {
+    // "[A label] X % | [B label] Y %"
+    const m = trimmed.match(/^(.*?)\s+(\d+)\s*%\s*\|\s*(.*?)\s+(\d+)\s*%/);
+    if (m) return { labelA: m[1].trim(), scoreA: parseInt(m[2], 10), labelB: m[3].trim(), scoreB: parseInt(m[4], 10) };
+    return null;
+  }
+
+  // ── Main parser ─────────────────────────────────────────────────────
+
   function renderScoringReport(raw) {
     const lines = String(raw || '').split('\n');
-    let html = '<div class="ada-scoring-report">';
-    let i = 0;
+    let out = '<div class="ada-scoring-report"><div class="ada-report">';
 
+    let section = null;
+
+    // Verdict state
+    let vWinner = '', vConfiance = '', vScoreA = 0, vScoreB = 0;
+    let vLabelA = '', vLabelB = '', vExplLines = [], vInVerdict = false;
+
+    // Criterion state
+    let cTitle = '', cIcon = '', cLabelA = '', cLabelB = '';
+    let cScoreA = 0, cScoreB = 0, cArrow = '', cInCard = false;
+
+    // Table state
+    let tHeader = null, tRows = [];
+
+    function flushVerdict() {
+      if (!vInVerdict) return;
+      vInVerdict = false;
+      const confLow = vConfiance.toLowerCase();
+      const confCls = confLow.indexOf('forte') !== -1 ? 'ada-conf-forte'
+                    : confLow.indexOf('moyenne') !== -1 ? 'ada-conf-moyenne'
+                    : 'ada-conf-faible';
+      out += '<div class="ada-verdict-card">' +
+        '<div class="ada-verdict-eyebrow">⚖️ Verdict argumentatif</div>' +
+        '<div class="ada-verdict-winner">' + esc(vWinner) + '</div>' +
+        '<div class="ada-verdict-scores-row">' +
+          '<span class="ada-verdict-score-a">' + vScoreA + '%</span>' +
+          '<span class="ada-verdict-vs">vs</span>' +
+          '<span class="ada-verdict-score-b">' + vScoreB + '%</span>' +
+        '</div>' +
+        (vConfiance ? '<div class="ada-verdict-confidence ' + confCls + '">Confiance : ' + esc(vConfiance) + '</div>' : '') +
+        (vLabelA && vLabelB ? renderCombinedBar(vLabelA, vScoreA, vLabelB, vScoreB) : '') +
+        (vExplLines.length ? '<div class="ada-verdict-expl">' + vExplLines.map(md).join(' ') + '</div>' : '') +
+        '<div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans ce débat, pas une vérité définitive.</div>' +
+      '</div>';
+    }
+
+    function flushCriterion() {
+      if (!cInCard) return;
+      cInCard = false;
+      out += '<div class="ada-criterion-card">' +
+        '<div class="ada-criterion-header">' +
+          '<span class="ada-criterion-icon">' + cIcon + '</span>' +
+          '<span class="ada-criterion-title">' + esc(cTitle) + '</span>' +
+        '</div>' +
+        (cLabelA && cLabelB ? renderCombinedBar(cLabelA, cScoreA, cLabelB, cScoreB) : '') +
+        (cArrow ? '<div class="ada-criterion-arrow">' + md(cArrow) + '</div>' : '') +
+      '</div>';
+    }
+
+    function flushTable() {
+      if (!tRows.length) return;
+      out += renderSourcesTable(tHeader, tRows);
+      tHeader = null; tRows = [];
+    }
+
+    let i = 0;
     while (i < lines.length) {
       const line = lines[i];
-      const trimmed = line.trim();
+      const t = line.trim();
 
-      // Multi-line: table rows starting with |
-      if (trimmed.startsWith('|')) {
-        let headerCells = null;
-        let bodyRows = [];
-        let firstData = true;
-        while (i < lines.length && lines[i].trim().startsWith('|')) {
-          const row = lines[i].trim();
-          i++;
-          if (/^\|[\s\-:|]+\|$/.test(row)) continue; // separator row
-          const cells = row.split('|').slice(1, -1).map(function (c) { return c.trim(); });
-          if (firstData) { headerCells = cells; firstData = false; }
-          else bodyRows.push(cells);
-        }
-        html += '<table class="ada-r-table">';
-        if (headerCells) {
-          html += '<tr>' + headerCells.map(function (c) { return '<th>' + md(c) + '</th>'; }).join('') + '</tr>';
-        }
-        bodyRows.forEach(function (r) {
-          html += '<tr>' + r.map(function (c) { return '<td>' + md(c) + '</td>'; }).join('') + '</tr>';
-        });
-        html += '</table>';
-        continue; // i already advanced inside inner loop
+      // ── Major section headings ──────────────────────────
+      if (t === '# Verdict argumentatif') {
+        section = 'verdict';
+        vInVerdict = true; vWinner = ''; vConfiance = '';
+        vScoreA = 0; vScoreB = 0; vLabelA = ''; vLabelB = ''; vExplLines = [];
+        i++; continue;
       }
 
-      // Single-line cases — all advance i by 1
-      if (trimmed.startsWith('# ')) {
-        html += '<div class="ada-r-h1">' + md(trimmed.slice(2)) + '</div>';
-      } else if (trimmed.startsWith('## ')) {
-        html += '<div class="ada-r-h2">' + md(trimmed.slice(3)) + '</div>';
-      } else if (trimmed.startsWith('### ')) {
-        html += '<div class="ada-r-h3">' + md(trimmed.slice(4)) + '</div>';
-      } else if (trimmed === '---' || trimmed === '***') {
-        html += '<hr class="ada-r-sep">';
-      } else if (/[█░]/.test(trimmed) && /\d+\s*%/.test(trimmed)) {
-        const m = trimmed.match(/^(.*?)\s*[█░]+\s*(\d+)\s*%\s*$/);
-        if (m) {
-          const label = m[1].replace(/\*\*/g, '').trim();
-          const pct = Math.min(100, Math.max(0, parseInt(m[2], 10)));
-          html += '<div class="ada-bar-row">' +
-            '<div class="ada-bar-label"><span>' + esc(label) + '</span><span class="ada-bar-pct">' + pct + '%</span></div>' +
-            '<div class="ada-bar-wrap"><div class="ada-bar-fill" style="width:' + pct + '%"></div></div>' +
-            '</div>';
-        } else {
-          html += '<p class="ada-r-p">' + md(trimmed) + '</p>';
-        }
-      } else if (trimmed) {
-        html += '<p class="ada-r-p">' + md(trimmed) + '</p>';
+      if (t.indexOf('## Position gagnante') === 0) {
+        const colon = t.indexOf(':');
+        if (colon !== -1) vWinner = t.slice(colon + 1).trim();
+        i++; continue;
       }
+
+      if (t.indexOf('## Barres d') === 0) {
+        flushVerdict();
+        out += '<div class="ada-section-h2"><span class="ada-section-icon">📊</span> Barres d\'évaluation</div>';
+        section = 'barres';
+        i++; continue;
+      }
+
+      if (t === '## Lecture des sources') {
+        flushVerdict();
+        flushCriterion();
+        out += '<div class="ada-section-h2"><span class="ada-section-icon">📚</span> Lecture des sources</div>';
+        section = 'sources';
+        tHeader = null; tRows = [];
+        i++; continue;
+      }
+
+      if (t.indexOf('## Ce qui manque') === 0) {
+        flushTable();
+        out += '<div class="ada-section-h2"><span class="ada-section-icon">🧩</span> Ce qui manque pour trancher mieux</div>';
+        section = 'manque';
+        tHeader = null; tRows = [];
+        i++; continue;
+      }
+
+      if (t === '## Phrase finale') {
+        flushTable();
+        section = 'finale';
+        i++; continue;
+      }
+
+      // ── Separators ─────────────────────────────────────
+      if (t === '---' || t === '***') {
+        if (section === 'verdict') { flushVerdict(); section = null; }
+        i++; continue;
+      }
+
+      // ── Verdict section ─────────────────────────────────
+      if (section === 'verdict') {
+        // **Score global : X % / Y %**
+        const sgm = t.match(/Score global\s*:\s*(\d+)\s*%\s*\/\s*(\d+)\s*%/);
+        if (sgm) { vScoreA = parseInt(sgm[1], 10); vScoreB = parseInt(sgm[2], 10); i++; continue; }
+        // **Confiance : ...**
+        const cfm = t.match(/Confiance\s*:\s*(.+)/);
+        if (cfm) { vConfiance = cfm[1].replace(/\*\*/g, '').trim(); i++; continue; }
+        // Score line "[A] X % | [B] Y %"
+        const sc = parseCombinedScore(t);
+        if (sc && !vLabelA) {
+          vLabelA = sc.labelA; vLabelB = sc.labelB;
+          if (!vScoreA) { vScoreA = sc.scoreA; vScoreB = sc.scoreB; }
+          i++; continue;
+        }
+        // Bar line (skip — data already extracted)
+        if (/[█░]/.test(t)) { i++; continue; }
+        // Explanation text (non-empty, not a heading)
+        if (t && t[0] !== '#' && t[0] !== '|') {
+          const clean = t.replace(/^\*\*|\*\*$/g, '').trim();
+          if (clean) vExplLines.push(clean);
+        }
+        i++; continue;
+      }
+
+      // ── Barres section ──────────────────────────────────
+      if (section === 'barres') {
+        if (t.indexOf('### ') === 0) {
+          flushCriterion();
+          cTitle = t.slice(4).trim();
+          cIcon = getCritIcon(cTitle);
+          cLabelA = ''; cLabelB = ''; cScoreA = 0; cScoreB = 0; cArrow = '';
+          cInCard = true;
+          i++; continue;
+        }
+        if (cInCard) {
+          // Score line
+          const sc = parseCombinedScore(t);
+          if (sc) { cLabelA = sc.labelA; cLabelB = sc.labelB; cScoreA = sc.scoreA; cScoreB = sc.scoreB; i++; continue; }
+          // Bar line (skip)
+          if (/[█░]/.test(t)) { i++; continue; }
+          // "| Lecture rapide |" table → extract body text
+          if (t === '| Lecture rapide |' || t.toLowerCase().indexOf('lecture rapide') !== -1 && t[0] === '|') {
+            i++; // skip separator |---|
+            if (i < lines.length && /^\|[\s\-:]+\|/.test(lines[i].trim())) i++;
+            if (i < lines.length && lines[i].trim()[0] === '|') {
+              const cells = lines[i].trim().split('|').slice(1, -1).map(function(c){ return c.trim(); });
+              if (cells[0]) cArrow = cells[0];
+              i++;
+            }
+            continue;
+          }
+        }
+        i++; continue;
+      }
+
+      // ── Sources / manque tables ─────────────────────────
+      if (section === 'sources' || section === 'manque') {
+        if (t[0] === '|') {
+          if (/^\|[\s\-:]+\|/.test(t)) { i++; continue; } // separator row
+          const cells = t.split('|').slice(1, -1).map(function(c){ return c.trim(); });
+          if (!tHeader) tHeader = cells;
+          else tRows.push(cells);
+        }
+        i++; continue;
+      }
+
+      // ── Phrase finale ────────────────────────────────────
+      if (section === 'finale') {
+        if (t && t[0] !== '#' && t !== '---') {
+          out += '<div class="ada-finale">' +
+            '<span class="ada-finale-label">✍️ Phrase finale</span>' +
+            md(t) +
+          '</div>';
+          section = null;
+        }
+        i++; continue;
+      }
+
       i++;
     }
 
-    html += '</div>';
-    return html;
+    // Flush any pending state
+    flushVerdict();
+    flushCriterion();
+    flushTable();
+
+    out += '</div></div>';
+    return out;
   }
 
   function fmtDate(iso) {
@@ -307,7 +642,6 @@
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Ouvrir et charger l'analyse après le scroll
           setTimeout(() => {
             const triggerBtn = document.getElementById('ada-trigger-btn');
             if (triggerBtn) triggerBtn.click();
@@ -345,13 +679,11 @@
 
     injectStyles();
 
-    // Countdown : toujours lancé (slot dans le bloc titre, indépendant du bouton)
     initCountdown(debateId);
 
     const slot = document.getElementById('debate-ai-analysis-slot');
     if (!slot) return;
 
-    // Admins : bouton toujours visible pour déclencher/regénérer
     if (isAdmin()) {
       const adminFooter = `
         <div class="ada-panel-footer">
@@ -371,7 +703,7 @@
           </div>
         </div>`;
 
-      document.getElementById('ada-trigger-btn').addEventListener('click', () => regenerate(debateId));
+      document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
       document.getElementById('ada-close-btn').addEventListener('click', () => {
         document.getElementById('ada-panel').style.display = 'none';
       });
@@ -380,7 +712,6 @@
       return;
     }
 
-    // Non-admin : bouton affiché uniquement si analyse disponible
     try {
       const r    = await fetch('/api/debates/' + debateId + '/analysis');
       const json = await r.json().catch(() => ({}));

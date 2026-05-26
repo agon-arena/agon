@@ -410,7 +410,8 @@ function renderTagTrendCloud(container, trends) {
     const tag = String(trendItem?.tag || "").trim();
     if (!tag) return;
 
-    const trendMeta = getTrendMeta(trendItem?.trend);
+    const trendValue = Number(trendItem?.trend);
+    const trendMeta = getTrendMeta(trendValue);
     const bubble = document.createElement("button");
     bubble.className = [
       "agon-tag-bubble",
@@ -422,10 +423,6 @@ function renderTagTrendCloud(container, trends) {
       bubble.style.setProperty("--agon-tag-bubble-size", visualSize);
     }
     bubble.type = "button";
-
-    const trendSpan = document.createElement("span");
-    trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
-    trendSpan.textContent = trendMeta.label;
 
     const label = document.createElement("span");
     label.className = "agon-tag-label";
@@ -440,7 +437,14 @@ function renderTagTrendCloud(container, trends) {
     const flashWrap = document.createElement("span");
     flashWrap.className = "agon-tag-bubble-flash";
 
-    bubble.append(flashWrap, trendSpan, label);
+    if (trendValue !== 0 && Number.isFinite(trendValue)) {
+      const trendSpan = document.createElement("span");
+      trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
+      trendSpan.textContent = trendMeta.label;
+      bubble.append(flashWrap, trendSpan, label);
+    } else {
+      bubble.append(flashWrap, label);
+    }
     container.appendChild(bubble);
   });
 

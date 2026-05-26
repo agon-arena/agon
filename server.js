@@ -2083,7 +2083,7 @@ const externalPreviewCache = new Map();
 const externalPreviewInFlightRequests = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
 const debatesApiResponseCache = new Map();
-const DEBATES_API_CACHE_TTL_MS = 45 * 1000;
+const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
 const notificationsApiResponseCache = new Map();
@@ -6431,7 +6431,13 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       const label = (candidate && candidate.tag) || getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
       if (!label) continue;
       const count = candidate ? candidate.count : (b.count || 0);
-      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count, enteredAt: b.enteredCloudAt || now });
+      // Priorité : debateDate du candidat rafraîchi > debateDate stocké > created_at Supabase
+      const debateDate = candidate?.debateDate
+        || b.debateDate
+        || (debate ? (debate.source_published_at || debate.created_at) : null)
+        || b.enteredCloudAt
+        || now;
+      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count, enteredAt: b.enteredCloudAt || now, debateDate });
     }
     const existingKeptCount = allCandidates.size;
 
@@ -6460,13 +6466,14 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       }
     }
 
-    // Tri par score = sourceCount × fraîcheur décroissante sur 7 jours
-    // → les plus anciennes sont naturellement évincées par les nouvelles
+    // Tri par date de publication de l'article (plus récent = priorité),
+    // à égalité de date le nombre de sources départage.
+    // → les plus vieilles sont systématiquement évincées par les nouvelles publications.
     const cloudScore = (c) => {
-      const enteredMs = c.enteredAt ? new Date(c.enteredAt).getTime() : nowMs;
-      const ageDays = Math.max(0, (nowMs - enteredMs) / (24 * 60 * 60 * 1000));
-      const freshness = Math.max(0.05, 1 - ageDays / CLOUD_DECAY_DAYS);
-      return (c.count || 1) * freshness;
+      const dateMs = c.debateDate
+        ? new Date(c.debateDate).getTime()
+        : (c.enteredAt ? new Date(c.enteredAt).getTime() : 0);
+      return dateMs / 1000 + (c.count || 0) * 3600; // +1h par source comme tiebreaker
     };
 
     let bubbles = [...allCandidates.values()]
@@ -6474,6 +6481,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       .slice(0, 12);
 
     console.log(`[cloud] existantes: ${existingKeptCount}, nouveaux: ${newAddedCount}, pool: ${allCandidates.size}, final: ${bubbles.length}`);
+    console.log(`[cloud] dates retenues:`, bubbles.map(b => `${b.tag}(${b.debateDate ? b.debateDate.slice(0,10) : '?'},src=${b.count})`).join(', '));
 
     const maxCount = bubbles.reduce((max, b) => Math.max(max, b.count || 0), 0);
     console.log(`[cloud] sourceCount max: ${maxCount}`);
@@ -6487,6 +6495,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
         tag: b.tag,
         subjectId: b.subjectId,
         count: newCount,
+        debateDate: b.debateDate || null,
         sizeWeight: maxCount > 0 ? newCount / maxCount : 0,
         trend,
         enteredCloudAt
@@ -7475,4 +7484,19 @@ app.listen(PORT, "0.0.0.0", async () => {
   } catch (e) {
     console.error("[Agôn] Erreur initialisation story nav:", e);
   }
+
+  // Pré-chauffe du cache /api/debates au démarrage
+  setTimeout(async () => {
+    try {
+      for (const sort of ["popular", "recent"]) {
+        const cacheKey = getDebatesApiCacheKey({ limit: null, offset: 0, sort });
+        if (!getCachedDebatesApiResponse(cacheKey)) {
+          const res = await fetch(`http://localhost:${PORT}/api/debates?sort=${sort}`);
+          if (res.ok) console.log(`[Agôn] Cache /api/debates?sort=${sort} préchauffé.`);
+        }
+      }
+    } catch (e) {
+      console.error("[Agôn] Erreur pré-chauffe cache debates:", e);
+    }
+  }, 2000);
 });

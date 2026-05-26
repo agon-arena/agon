@@ -8204,6 +8204,14 @@ padding:4px 14px 12px 14px;
 .debate-media-source-group[data-source-orientation="left"].open .debate-media-source-menu {
   transform: translateY(0);
 }
+/* Sur mobile, la règle générique pose right:0 ; on l'annule pour gauche
+   afin que left:0 + min-width fonctionne comme prévu */
+@media (max-width: 768px) {
+  .debate-media-source-group[data-source-orientation="left"] .debate-media-source-menu {
+    right: auto;
+    min-width: 172px;
+  }
+}
 
 /* Bouton Droite : aligner le menu à droite pour éviter le débordement */
 .debate-media-source-group[data-source-orientation="right"] .debate-media-source-menu {
@@ -9739,7 +9747,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 .app-floating-refresh-btn {
   position: fixed;
   left: 50%;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 96;
   width: 46px;
@@ -9832,7 +9840,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 
 @media (max-width: 768px) {
   .app-floating-refresh-btn {
-    bottom: calc(58px + min(env(safe-area-inset-bottom, 0px), 10px));
+    bottom: calc(36px + min(env(safe-area-inset-bottom, 0px), 10px));
     width: 44px;
     height: 44px;
     backdrop-filter: none;
@@ -14839,6 +14847,10 @@ body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
     top: 0 !important;
     margin-top: 0 !important;
   }
+}
+
+body.debate-embedded-frame .debate-floating-refresh-btn {
+  display: none !important;
 }
 
 /* Desktop : badge au-dessus de la nav bar */

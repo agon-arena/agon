@@ -6681,8 +6681,15 @@ function initMediaSwipeAutoScroll(scope = document) {
     let resumeTimer = null;
     let paused = false;
 
+    const videoSelector = 'video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell, [data-index-local-video-shell], [data-index-youtube-shell]';
+
     const advance = () => {
       if (paused) return;
+      // Ne pas avancer si une vidéo a été lancée par l'utilisateur dans cette carte
+      if (shell.querySelector('[data-index-local-video-shell][data-user-started="true"], [data-index-youtube-shell][data-user-started="true"]')) {
+        stopPermanently();
+        return;
+      }
       const nextBtn = shell.querySelector("[data-index-media-swipe-step='next']");
       if (nextBtn) nextBtn.click();
     };
@@ -6702,8 +6709,15 @@ function initMediaSwipeAutoScroll(scope = document) {
       clearTimeout(resumeTimer);
     };
 
+    // Phase capture : intercepte les clics sur posters vidéo avant leur stopPropagation
+    shell.addEventListener("click", (e) => {
+      if (e.target.closest('[data-index-local-video-poster], [data-index-local-video-overlay], [data-index-local-video-sound-btn], [data-index-youtube-poster], [data-index-youtube-overlay]')) {
+        stopPermanently();
+      }
+    }, { capture: true });
+
     shell.addEventListener("pointerdown", (e) => {
-      if (e.target.closest('video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell')) {
+      if (e.target.closest(videoSelector)) {
         stopPermanently();
       } else {
         pause();
@@ -6711,7 +6725,7 @@ function initMediaSwipeAutoScroll(scope = document) {
     }, { passive: true });
 
     shell.addEventListener("touchstart", (e) => {
-      if (e.target.closest('video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell')) {
+      if (e.target.closest(videoSelector)) {
         stopPermanently();
       } else {
         pause();
@@ -12478,7 +12492,6 @@ const INDEX_OTHER_DEBATES_BATCH_SIZE = Number.MAX_SAFE_INTEGER;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
 let indexInfiniteScrollObserver = null;
 let indexInfiniteScrollLoading = false;
-let indexSortRefreshPromise = null;
 let indexBatchScrollLockY = null;
 let indexBatchScrollLockAnchor = null;
 let indexBatchScrollLockHandlers = null;
@@ -14597,11 +14610,6 @@ function setIndexExplorerControlsOpen(forceOpen) {
   const shouldOpen = !!forceOpen;
   controls.style.display = shouldOpen ? "grid" : "none";
 
-  if (!shouldOpen) {
-    const menu = document.getElementById("index-sort-menu");
-    if (menu) menu.classList.remove("sort-menu-visible");
-  }
-
   syncIndexExplorerControlButtons(shouldOpen);
 }
 
@@ -14824,34 +14832,7 @@ function getFilteredDebatesForIndex(baseDebates) {
 function sortDebatesForIndex(debates) {
   const sorted = [...debates];
 
-  if (currentIndexSortMode === "recent") {
-    return sorted.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime() || 0;
-      const dateB = new Date(b.created_at || 0).getTime() || 0;
-      if (dateB !== dateA) return dateB - dateA;
-      return Number(b.id || 0) - Number(a.id || 0);
-    });
-  }
-
-  if (currentIndexSortMode === "old") {
-    return sorted.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime() || 0;
-      const dateB = new Date(b.created_at || 0).getTime() || 0;
-      if (dateA !== dateB) return dateA - dateB;
-      return Number(a.id || 0) - Number(b.id || 0);
-    });
-  }
-
-  if (currentIndexSortMode === "ideas") {
-    return sorted.sort((a, b) => {
-      if (b.argument_count !== a.argument_count) return b.argument_count - a.argument_count;
-      const dateA = new Date(getDebateLastActivityAt(a) || 0).getTime();
-      const dateB = new Date(getDebateLastActivityAt(b) || 0).getTime();
-      return dateB - dateA;
-    });
-  }
-
-  // "popular" : miroir exact du tri serveur — groupe A (≤24h) toujours avant groupe B.
+  // Tri "popular" : miroir exact du tri serveur — groupe A (≤24h) toujours avant groupe B.
   // Groupe B : activité 8h → bump 7j → last_activity global → counts → id.
 
   const now = Date.now();
@@ -14895,54 +14876,6 @@ function sortDebatesForIndex(debates) {
 
 }
 
-const INDEX_SORT_LABELS = {
-  popular: "À la une",
-  recent: "Plus récentes",
-  old: "Plus anciennes",
-  ideas: "Plus d'idées",
-};
-
-function setIndexSort(mode) {
-  const normalizedMode = ["popular", "recent", "old", "ideas"].includes(mode) ? mode : "popular";
-  currentIndexSortMode = normalizedMode;
-
-  const btn = document.getElementById("index-sort-button-label");
-  if (btn) btn.textContent = (INDEX_SORT_LABELS[normalizedMode] || "Trier") + " ▾";
-
-  const menu = document.getElementById("index-sort-menu");
-  if (menu) menu.classList.remove("sort-menu-visible");
-
-  document.querySelectorAll("#index-sort-menu button").forEach((b) => {
-    b.classList.toggle("sort-menu-active", b.dataset.mode === normalizedMode);
-  });
-
-  visitedDebatesVisible = 5;
-  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-  clearIndexDebatesSessionCache();
-
-  // Important : ne pas retrier immédiatement les cartes déjà scrollées.
-  // Sinon une carte déjà présente en mémoire peut apparaître en tête puis
-  // redescendre dès que la vraie page serveur revient. Le tri doit repartir
-  // d'une première page serveur propre.
-  refreshIndexFirstDebatesPageForCurrentSort();
-}
-
-function toggleIndexSortMenu() {
-  const menu = document.getElementById("index-sort-menu");
-  if (!menu) return;
-  menu.classList.toggle("sort-menu-visible");
-}
-
-document.addEventListener("click", function(event) {
-  const dropdown = document.querySelector(".debate-sort-bar .sort-dropdown");
-  const menu = document.getElementById("index-sort-menu");
-
-  if (!dropdown || !menu) return;
-
-  if (!dropdown.contains(event.target)) {
-    menu.classList.remove("sort-menu-visible");
-  }
-});
 
 function applyIndexFilters() {
   syncIndexTypeFilterButtons();
@@ -15945,8 +15878,7 @@ function saveDebatesToSessionCache(debates, meta = null) {
     if (meta && typeof meta === "object") {
       sessionStorage.setItem(INDEX_DEBATES_CACHE_META_KEY, JSON.stringify({
         nextOffset: Math.max(0, Number(meta.nextOffset) || 0),
-        hasMore: meta.hasMore !== false,
-        sortMode: String(meta.sortMode || getIndexDebatesSortQueryValue())
+        hasMore: meta.hasMore !== false
       }));
     }
   } catch (e) {}
@@ -15955,8 +15887,7 @@ function saveDebatesToSessionCache(debates, meta = null) {
 function syncIndexDebatesSessionCache() {
   saveDebatesToSessionCache(debatesCache || [], {
     nextOffset: indexDebatesApiNextOffset,
-    hasMore: indexDebatesApiHasMore,
-    sortMode: getIndexDebatesSortQueryValue()
+    hasMore: indexDebatesApiHasMore
   });
 }
 
@@ -16006,14 +15937,6 @@ function getDebatesFromSessionCache() {
   try {
     const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
     if (Date.now() - time > INDEX_DEBATES_CACHE_TTL) return null;
-
-    const rawMeta = sessionStorage.getItem(INDEX_DEBATES_CACHE_META_KEY);
-    if (rawMeta) {
-      const parsedMeta = JSON.parse(rawMeta);
-      const cachedSortMode = String(parsedMeta?.sortMode || "popular");
-      if (cachedSortMode !== getIndexDebatesSortQueryValue()) return null;
-    }
-
     const raw = sessionStorage.getItem(INDEX_DEBATES_CACHE_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
@@ -16026,18 +15949,12 @@ function getIndexDebatesCacheMetaFromSessionCache() {
   try {
     const time = Number(sessionStorage.getItem(INDEX_DEBATES_CACHE_TIME_KEY) || 0);
     if (Date.now() - time > INDEX_DEBATES_CACHE_TTL) return null;
-
     const raw = sessionStorage.getItem(INDEX_DEBATES_CACHE_META_KEY);
     if (!raw) return null;
-
     const parsed = JSON.parse(raw);
-    const cachedSortMode = String(parsed?.sortMode || "popular");
-    if (cachedSortMode !== getIndexDebatesSortQueryValue()) return null;
-
     return {
       nextOffset: Math.max(0, Number(parsed?.nextOffset) || 0),
-      hasMore: parsed?.hasMore !== false,
-      sortMode: cachedSortMode
+      hasMore: parsed?.hasMore !== false
     };
   } catch (e) {
     return null;
@@ -16045,10 +15962,6 @@ function getIndexDebatesCacheMetaFromSessionCache() {
 }
 
 function getIndexDebatesSortQueryValue() {
-  if (["recent", "old", "ideas", "popular"].includes(currentIndexSortMode)) {
-    return currentIndexSortMode;
-  }
-
   return "popular";
 }
 
@@ -16071,66 +15984,6 @@ function resetIndexDebatesPaginationState(count = 0, hasMore = false) {
   indexDebatesApiHasMore = hasMore !== false;
 }
 
-async function refreshIndexFirstDebatesPageForCurrentSort() {
-  const p = location.pathname;
-  if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return [];
-
-  const requestedSortMode = getIndexDebatesSortQueryValue();
-
-  if (indexSortRefreshPromise) {
-    return indexSortRefreshPromise;
-  }
-
-  indexSortRefreshPromise = (async () => {
-    try {
-      resetIndexDebatesPaginationState(0, false);
-      debatesCache = [];
-      visitedDebatesCache = [];
-      otherDebatesCache = [];
-      refreshCategoryFilterOptions(debatesCache);
-      applyIndexFilters();
-
-      const fresh = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), {
-        cache: "no-store"
-      });
-      const safeFresh = Array.isArray(fresh) ? fresh : [];
-
-      if (requestedSortMode !== getIndexDebatesSortQueryValue()) {
-        return safeFresh;
-      }
-
-      // Le changement de tri doit remplacer la liste par la première page serveur.
-      // En mode chronologique, on conserve l'ordre exact renvoyé par Supabase :
-      // aucune fusion avec les cartes déjà scrollées, aucun tri local parasite.
-      debatesCache = ["recent", "old"].includes(getIndexDebatesSortQueryValue())
-        ? safeFresh
-        : sortDebatesForIndex(safeFresh);
-      resetIndexDebatesPaginationState(
-        safeFresh.length,
-        Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT)
-      );
-
-      saveDebatesToSessionCache(debatesCache, {
-        nextOffset: indexDebatesApiNextOffset,
-        hasMore: indexDebatesApiHasMore,
-        sortMode: getIndexDebatesSortQueryValue()
-      });
-
-      refreshCategoryFilterOptions(debatesCache);
-      applyIndexFilters();
-      indexLastBatchCompletedAt = Date.now();
-
-      return safeFresh;
-    } catch (error) {
-      console.warn("Impossible de rafraîchir les arènes avec le tri serveur", error);
-      return [];
-    } finally {
-      indexSortRefreshPromise = null;
-    }
-  })();
-
-  return indexSortRefreshPromise;
-}
 
 function restoreIndexDebatesPaginationStateFromCache(cachedDebates = []) {
   const safeDebates = Array.isArray(cachedDebates) ? cachedDebates : [];
@@ -26010,8 +25863,6 @@ window.setIndexMobileTypeFilter = setIndexMobileTypeFilter;
 window.removeIndexActiveFilterTag = removeIndexActiveFilterTag;
 window.applyIndexSearch = applyIndexSearch;
 window.toggleSortMenu = toggleSortMenu;
-window.setIndexSort = setIndexSort;
-window.toggleIndexSortMenu = toggleIndexSortMenu;
 window.scrollIndexThemeRowFromButton = scrollIndexThemeRowFromButton;
 window.jumpToStartOfCarousel = jumpToStartOfCarousel;
 window.loadMoreArguments = loadMoreArguments;
@@ -26587,9 +26438,15 @@ window.addEventListener('pageshow', (event) => {
   if (window.__agonDebateModalOpen) {
     try { closeDebateIframeModal(); } catch (e) {}
   }
-  if (typeof refreshIndexFirstDebatesPageForCurrentSort === "function") {
-    refreshIndexFirstDebatesPageForCurrentSort();
-  }
+  fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" })
+    .then(function(fresh) {
+      if (!Array.isArray(fresh)) return;
+      debatesCache = sortDebatesForIndex(fresh);
+      resetIndexDebatesPaginationState(fresh.length, false);
+      saveDebatesToSessionCache(debatesCache, { nextOffset: fresh.length, hasMore: false });
+      refreshCategoryFilterOptions(debatesCache);
+      applyIndexFilters();
+    }).catch(function() {});
 });
 
 // Retour accueil après 3 min d'inactivité sur l'app.

@@ -699,17 +699,17 @@
     "previous_episode_id": 447,
     "previous_episode_title": "L'entrée en Bourse des géants de l'IA est-elle une opportunité ou un risque ?",
     "previous_episode_url": "/debate?id=447",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 575,
+    "next_episode_title": "Faut-il suivre l'appel du pape Léon XIV à désarmer l'intelligence artificielle militaire ?",
+    "next_episode_url": "/debate?id=575"
   },
   "564": {
     "previous_episode_id": 556,
     "previous_episode_title": "Faut-il conclure rapidement un accord avec l'Iran pour stabiliser le Moyen-Orient ?",
     "previous_episode_url": "/debate?id=556",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 573,
+    "next_episode_title": "Les frappes américaines en Iran compromettent-elles les négociations pour la paix au Moyen-Orient ?",
+    "next_episode_url": "/debate?id=573"
   },
   "566": {
     "previous_episode_id": 553,
@@ -723,9 +723,9 @@
     "previous_episode_id": 560,
     "previous_episode_title": "Faut-il renforcer les alertes canicule dès les premières chaleurs inhabituelles en mai ?",
     "previous_episode_url": "/debate?id=560",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 574,
+    "next_episode_title": "Le gouvernement doit-il renforcer les mesures de prévention contre les noyades durant les vagues de",
+    "next_episode_url": "/debate?id=574"
   },
   "568": {
     "previous_episode_id": 562,
@@ -747,9 +747,9 @@
     "previous_episode_id": 559,
     "previous_episode_title": "Faut-il renforcer la surveillance et la protection des enfants dans les quartiers urbains comme Renn",
     "previous_episode_url": "/debate?id=559",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 576,
+    "next_episode_title": "Faut-il renforcer la sécurité et la transparence après la pulvérisation d'une substance inconnue à T",
+    "next_episode_url": "/debate?id=576"
   },
   "571": {
     "previous_episode_id": 532,
@@ -763,6 +763,54 @@
     "previous_episode_id": 546,
     "previous_episode_title": "Les Enhanced Games détruisent-ils l'esprit du sport traditionnel ?",
     "previous_episode_url": "/debate?id=546",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "573": {
+    "previous_episode_id": 564,
+    "previous_episode_title": "Faut-il privilégier un accord nucléaire ambitieux avec l'Iran ou refuser tout compromis insuffisan…",
+    "previous_episode_url": "/debate?id=564",
+    "next_episode_id": 577,
+    "next_episode_title": "Les frappes américaines en Iran compromettent-elles la paix au Moyen-Orient malgré les négociations",
+    "next_episode_url": "/debate?id=577"
+  },
+  "574": {
+    "previous_episode_id": 567,
+    "previous_episode_title": "La réunion ministérielle de Lecornu peut-elle améliorer la gestion des canicules en France ?",
+    "previous_episode_url": "/debate?id=567",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "575": {
+    "previous_episode_id": 563,
+    "previous_episode_title": "Faut-il « désarmer » l’intelligence artificielle pour empêcher qu’elle domine l’humain ?",
+    "previous_episode_url": "/debate?id=563",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "576": {
+    "previous_episode_id": 570,
+    "previous_episode_title": "Faut-il appliquer des sanctions pénales sévères aux adolescents impliqués dans ce meurtre à Rennes…",
+    "previous_episode_url": "/debate?id=570",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "577": {
+    "previous_episode_id": 573,
+    "previous_episode_title": "Les frappes américaines en Iran compromettent-elles les négociations pour la paix au Moyen-Orient ?",
+    "previous_episode_url": "/debate?id=573",
+    "next_episode_id": 578,
+    "next_episode_title": "Les frappes américaines en Iran compromettent-elles la paix au Moyen-Orient malgré les négociations",
+    "next_episode_url": "/debate?id=578"
+  },
+  "578": {
+    "previous_episode_id": 577,
+    "previous_episode_title": "Les frappes américaines en Iran compromettent-elles la paix au Moyen-Orient malgré les négociations",
+    "previous_episode_url": "/debate?id=577",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

@@ -27,6 +27,7 @@
   <link rel="preconnect" href="https://syndication.twitter.com">
   <link rel="preconnect" href="https://www.instagram.com">
 
+  <link rel="preload" href="/sablier.png" as="image">
   <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
@@ -393,21 +394,7 @@
     </div>
 
     <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
-      <div class="debate-sort-bar">
-        <div class="sort-dropdown">
-          <button type="button" class="sort-button" onclick="toggleIndexSortMenu()">
-            <span id="index-sort-button-label">À la une ▾</span>
-          </button>
-          <div id="index-sort-menu" class="sort-menu" onclick="event.stopPropagation()">
-            <button type="button" data-mode="popular" onclick="setIndexSort('popular')">À la une</button>
-            <button type="button" data-mode="recent" onclick="setIndexSort('recent')">Plus récentes</button>
-            <button type="button" data-mode="old" onclick="setIndexSort('old')">Plus anciennes</button>
-            <button type="button" data-mode="ideas" onclick="setIndexSort('ideas')">Plus d'idées</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="search-box">
+<div class="search-box">
         <input
           id="debate-search"
           type="text"
@@ -426,7 +413,6 @@
         <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
         <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
         <button onclick="setTypeFilter('agon')" id="filter-agon">Arènes publiées par agôn</button>
-        <button onclick="toggleIndexYouthCategoryFilter()" id="filter-youth">Espace jeunes</button>
       </div>
 
       <div class="index-theme-filter-wrap index-type-filter-mobile" data-active="false">
@@ -441,7 +427,6 @@
             <option value="question">Arènes libres</option>
             <option value="visited">Arènes consultées</option>
             <option value="agon">Arènes publiées par agôn</option>
-            <option value="youth">Espace jeunes</option>
           </select>
         </div>
       </div>
@@ -476,7 +461,7 @@
 </div>
 
 <section id="agon-tag-trends-section" class="agon-tag-trends-section">
-  <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
+  <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"><div class="agon-cloud-loading"><img src="/sablier.png" alt="" class="agon-cloud-spinner"></div></div>
 <p class="agon-tag-trends-caption" style="text-align: center;">
   Sujets les plus évoqués par les principaux sites d'information français <br> ces dernières 24 heures.<br>
 </p>
