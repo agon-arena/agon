@@ -143,19 +143,13 @@
       display: grid;
     }
 
-    .story-edit-input,
-    .story-edit-summary {
+    .story-edit-input {
       width: 100%;
       box-sizing: border-box;
       border: 1px solid #ddd;
       border-radius: 10px;
       padding: 10px 12px;
       font: inherit;
-    }
-
-    .story-edit-summary {
-      min-height: 76px;
-      resize: vertical;
     }
 
     .story-edit-actions {
@@ -284,7 +278,6 @@
 
       listEl.innerHTML = filtered.map((story) => {
         const title = escapeHtml(story.story_title || "Histoire sans titre");
-        const summary = escapeHtml(story.story_summary || "");
         const id = escapeHtml(story.story_id || "");
         const latest = story.latest_episode_title ? "Dernier épisode : " + escapeHtml(story.latest_episode_title) : "Aucune arène associée pour le moment";
         return '<article class="story-card" data-story-id="' + id + '">' +
@@ -296,10 +289,9 @@
               '<button class="story-delete" type="button">Supprimer</button>' +
             '</div>' +
           '</div>' +
-          '<div class="story-edit-form">' +
-            '<input class="story-edit-input" type="text" value="' + title + '">' +
-            '<textarea class="story-edit-summary" placeholder="Résumé de l’histoire">' + summary + '</textarea>' +
-            '<div class="story-edit-actions">' +
+          ‘<div class="story-edit-form">’ +
+            ‘<input class="story-edit-input" type="text" value="’ + title + ‘">’ +
+            ‘<div class="story-edit-actions">’ +
               '<button class="story-save" type="button">Enregistrer</button>' +
               '<button class="story-cancel" type="button">Annuler</button>' +
             '</div>' +
@@ -381,7 +373,6 @@
     async function saveStory(card) {
       const storyId = card.dataset.storyId || "";
       const title = card.querySelector(".story-edit-input").value.trim();
-      const summary = card.querySelector(".story-edit-summary").value.trim();
       if (!title) {
         card.querySelector(".story-edit-input").focus();
         return;
@@ -390,7 +381,7 @@
       const response = await fetch("/api/veille/stories/" + encodeURIComponent(storyId), {
         method: "PUT",
         headers: adminHeaders(),
-        body: JSON.stringify({ story_title: title, story_summary: summary })
+        body: JSON.stringify({ story_title: title })
       });
       const data = await response.json().catch(() => ({ ok: false, error: "Erreur modification histoire" }));
       if (!response.ok || data.ok === false) {

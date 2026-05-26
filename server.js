@@ -41,7 +41,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
 });
 
-const MAX_VOTES_PER_DEBATE = 5;
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
@@ -545,9 +544,11 @@ function normalizeKeywordList(values, max = 10) {
       .replace(/[?!.;,:\s]+$/g, "")
       .trim();
     if (!keyword) return;
-    if (keyword.length < 2 || keyword.length > 40) return;
+    if (keyword.length < 2 || keyword.length > 28) return;
     const lower = keyword.toLowerCase();
     if (seen.has(lower)) return;
+    if (lower.length > 4 && lower.endsWith("s") && seen.has(lower.slice(0, -1))) return;
+    if (lower.length > 3 && !lower.endsWith("s") && seen.has(lower + "s")) return;
     seen.add(lower);
     list.push(keyword);
   });
@@ -1166,14 +1167,12 @@ function normalizeStorySelection(value) {
     previousEpisodeUrl: String(value.previousEpisodeUrl || "").trim() || null,
     confidence: Number.isFinite(Number(value.confidence)) ? Number(value.confidence) : 0,
     reason: String(value.reason || "").trim(),
-    criteria: value.criteria && typeof value.criteria === "object" ? value.criteria : {},
-    storySummary: String(value.storySummary || "").trim()
+    criteria: value.criteria && typeof value.criteria === "object" ? value.criteria : {}
   };
 
   if (selectionMode === "new" && value.newStory && typeof value.newStory === "object") {
     normalized.newStory = {
       story_title: String(value.newStory.story_title || "").trim(),
-      story_summary: String(value.newStory.story_summary || "").trim(),
       main_actors: Array.isArray(value.newStory.main_actors) ? value.newStory.main_actors.map((item) => String(item || "").trim()).filter(Boolean) : [],
       central_tension: String(value.newStory.central_tension || "").trim(),
       keywords: Array.isArray(value.newStory.keywords) ? value.newStory.keywords.map((item) => String(item || "").trim()).filter(Boolean) : [],
@@ -1192,7 +1191,6 @@ function saveStoryForDebateSelection(selection, debatePayload) {
   const now = nowIso();
   const debateId = String(debatePayload?.debateId || "").trim() || null;
   const latestTitle = String(debatePayload?.question || "").trim();
-  const latestSummary = String(debatePayload?.resume || "").trim();
 
   if (normalized.selectionMode === "existing" && normalized.matchedStoryId) {
     const story = stories.find((item) => String(item.story_id) === normalized.matchedStoryId);
@@ -1200,14 +1198,10 @@ function saveStoryForDebateSelection(selection, debatePayload) {
       throw new Error("Histoire existante introuvable au moment de la publication.");
     }
 
-    if (normalized.storySummary) {
-      story.story_summary = normalized.storySummary;
-    }
     story.updated_at = now;
     if (debateId && !story.first_episode_id) story.first_episode_id = debateId;
     if (debateId) story.latest_episode_id = debateId;
     if (latestTitle) story.latest_episode_title = latestTitle;
-    if (latestSummary) story.latest_episode_summary = latestSummary;
     writeStories(stories);
     return story;
   }
@@ -1216,7 +1210,6 @@ function saveStoryForDebateSelection(selection, debatePayload) {
     const story = {
       story_id: createStoryId(normalized.newStory.story_title || latestTitle || "story"),
       story_title: normalized.newStory.story_title,
-      story_summary: normalized.newStory.story_summary,
       main_actors: normalized.newStory.main_actors || [],
       central_tension: normalized.newStory.central_tension || "",
       keywords: normalized.newStory.keywords || [],
@@ -1225,8 +1218,7 @@ function saveStoryForDebateSelection(selection, debatePayload) {
       updated_at: now,
       first_episode_id: debateId,
       latest_episode_id: debateId,
-      latest_episode_title: latestTitle,
-      latest_episode_summary: latestSummary
+      latest_episode_title: latestTitle
     };
     stories.unshift(story);
     writeStories(stories);
@@ -2793,21 +2785,6 @@ function normalizeSourceDomain(value) {
   }
 }
 
-function extractDebateSourceKeys(debate) {
-  const keys = new Set();
-  const srcUrl = normalizeSourceDomain(debate.source_url || "");
-  if (srcUrl) keys.add(srcUrl);
-  (Array.isArray(debate.media_extras) ? debate.media_extras : []).forEach((extra) => {
-    if (!extra || typeof extra !== "object") return;
-    if (String(extra.type || "source").trim() !== "source") return;
-    const url = String(extra.url || extra.source_url || "").trim();
-    const name = String(extra.source || extra.media || extra.publisher || "").trim().toLowerCase();
-    const key = url ? normalizeSourceDomain(url) : name;
-    if (key) keys.add(key);
-  });
-  return keys;
-}
-
 function computePositionLabelSimilarity(labelA, labelB) {
   const textA = normalizeSimilarityText(labelA);
   const textB = normalizeSimilarityText(labelB);
@@ -3232,42 +3209,6 @@ async function getCommentLikesTotal(commentId) {
   if (error) throw error;
 
   return (data || []).reduce((sum, row) => sum + Number(row.value || 0), 0);
-}
-
-async function getUserVotesUsedInDebate(debateId, voterKey) {
-  try {
-    const { data, error } = await supabase
-      .from("votes")
-      .select("vote_count, arguments!inner(debate_id)")
-      .eq("voter_key", voterKey)
-      .eq("arguments.debate_id", debateId);
-
-    if (!error) {
-      return (data || []).reduce((sum, row) => sum + Number(row.vote_count || 0), 0);
-    }
-  } catch (error) {
-    // fallback silencieux vers l'ancienne logique
-  }
-
-  const { data: args, error: argsErr } = await supabase
-    .from("arguments")
-    .select("id")
-    .eq("debate_id", debateId);
-
-  if (argsErr) throw argsErr;
-
-  const argumentIds = (args || []).map((a) => a.id);
-  if (!argumentIds.length) return 0;
-
-  const { data: votes, error: votesErr } = await supabase
-    .from("votes")
-    .select("vote_count")
-    .eq("voter_key", voterKey)
-    .in("argument_id", argumentIds);
-
-  if (votesErr) throw votesErr;
-
-  return (votes || []).reduce((sum, row) => sum + Number(row.vote_count || 0), 0);
 }
 
 async function getVoteRow(argumentId, voterKey) {
@@ -6219,7 +6160,6 @@ app.delete("/api/veille/stories/:storyId/debates/:debateId", requireAdmin, async
 app.post("/api/veille/stories", requireAdmin, async (req, res) => {
   try {
     const title = String(req.body?.story_title || "").trim();
-    const summary = String(req.body?.story_summary || "").trim();
     if (!title) {
       return res.status(400).json({ ok: false, error: "Titre d’histoire requis." });
     }
@@ -6233,7 +6173,6 @@ app.post("/api/veille/stories", requireAdmin, async (req, res) => {
     const story = {
       story_id: createStoryId(title),
       story_title: title,
-      story_summary: summary,
       main_actors: [],
       central_tension: "",
       keywords: [],
@@ -6242,8 +6181,7 @@ app.post("/api/veille/stories", requireAdmin, async (req, res) => {
       updated_at: nowIso(),
       first_episode_id: null,
       latest_episode_id: null,
-      latest_episode_title: "",
-      latest_episode_summary: ""
+      latest_episode_title: ""
     };
 
     stories.unshift(story);
@@ -6266,12 +6204,8 @@ app.put("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
     }
 
     const nextTitle = String(req.body?.story_title || "").trim();
-    const nextSummary = String(req.body?.story_summary || "").trim();
 
     if (nextTitle) story.story_title = nextTitle;
-    if (req.body && Object.prototype.hasOwnProperty.call(req.body, "story_summary")) {
-      story.story_summary = nextSummary;
-    }
     story.updated_at = nowIso();
 
     writeStories(stories);
@@ -6539,7 +6473,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
     "Tu corriges uniquement les fautes d'orthographe, de grammaire, de conjugaison, d'accord, de typographie et de ponctuation.",
     "Interdiction absolue de changer le sens, l'angle, la position politique, le niveau de nuance ou le contenu factuel.",
     "Tu peux reformuler très légèrement seulement si c'est indispensable pour corriger une faute ou rendre une phrase grammaticalement correcte.",
-    "Pour les tags : corrige uniquement les fautes de frappe et la casse (majuscule en début de mot si pertinent). Ne change pas le sens ni n'ajoute de nouveaux tags.",
+    "Pour les tags : corrige les fautes de frappe, la casse (majuscule en début de mot si pertinent), et normalise au singulier (ex: 'Migrants' → 'Migrant', 'Réformes' → 'Réforme', 'Élections' → 'Élection'). Ne change pas le sens ni n'ajoute de nouveaux tags.",
     'Réponds uniquement en JSON sous la forme {"question":"...","positionA":"...","positionB":"...","resume":"...","keywords":[...]}.',
     '',
     'Question : ' + question,
@@ -6806,9 +6740,9 @@ const previousSourceCount = previousSourceKeys.size;
   let trendEntry;
 
   if (!matched) {
-    console.log(`[trend] aucun sujet similaire trouvé → trend=0`);
+    console.log(`[trend] aucun sujet similaire trouvé → trend=100 (nouveau)`);
     trendEntry = {
-      trend: 0,
+      trend: 100,
       sourceCount: currentSourceCount,
       matchedSubjectId: null
     };
@@ -6816,9 +6750,7 @@ const previousSourceCount = previousSourceKeys.size;
     const previousSourceCount = matched.sourceCount || 0;
     console.log(`[trend] dernier sujet similaire id=${matched.id} previousSourceCount=${previousSourceCount} confidence=${matched.confidence}`);
 
-    if (previousSourceCount === 0 && currentSourceCount === 0) {
-      computedTrend = 0;
-    } else if (previousSourceCount === 0) {
+    if (previousSourceCount === 0) {
       computedTrend = 100;
     } else {
       computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);

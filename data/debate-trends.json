@@ -101,5 +101,23 @@
     "sourceCount": 5,
     "matchedSubjectId": null,
     "computedAt": "2026-05-26T03:22:01.428Z"
+  },
+  "583": {
+    "trend": 100,
+    "sourceCount": 8,
+    "matchedSubjectId": "580",
+    "matchedSubjectTitle": "La France doit-elle saisir la justice contre Israël pour les actes envers la flottille pour Gaza ?",
+    "previousSourceCount": 4,
+    "reason": "Le sujet concerne également les frappes américaines en Iran et leur impact sur la paix au Moyen-Orient, ce qui le relie directement à la séquence actuelle des tensions entre les États-Unis et l'Iran.",
+    "computedAt": "2026-05-26T18:52:57.285Z"
+  },
+  "584": {
+    "trend": 0,
+    "sourceCount": 8,
+    "matchedSubjectId": "583",
+    "matchedSubjectTitle": "Les États-Unis doivent-ils suspendre leurs frappes pour préserver le cessez-le-feu avec l’Iran ?",
+    "previousSourceCount": 8,
+    "reason": "Le nouveau sujet traite des tensions militaires entre les États-Unis et l'Iran, tout comme l'article récent qui aborde la nécessité de suspendre les frappes pour préserver le cessez-le-feu, ce qui indique qu'il s'agit de la même séquence d'actualité.",
+    "computedAt": "2026-05-26T18:54:10.806Z"
   }
 }

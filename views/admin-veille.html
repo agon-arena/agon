@@ -49,7 +49,6 @@
     .story-save-feedback, .context-save-feedback { display: none; color: #496756; font-size: 0.82rem; font-weight: 600; }
     .story-manual-picker select { margin-top: 6px; }
     .story-manual-meta { margin-top: 6px; font-size: 0.8rem; color: #666; }
-    .story-manual-summary { margin-top: 10px; }
     .keyword-editor { margin-top: 12px; }
     .keyword-list { display: flex; flex-wrap: wrap; gap: 8px; }
     .keyword-chip { display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border-radius: 999px; background: #f3f4f7; border: 1px solid #e2e4ea; color: #2b2e38; font-size: 0.82rem; font-weight: 600; line-height: 1.2; }
@@ -244,9 +243,11 @@ function normalizeKeywordList(values, max) {
   const list = [];
   (Array.isArray(values) ? values : []).forEach(function(value) {
     const keyword = String(value || '').replace(/^[-–—•\s]+/, '').replace(/[?!.;,:\s]+$/g, '').trim();
-    if (!keyword || keyword.length < 2 || keyword.length > 40) return;
+    if (!keyword || keyword.length < 2 || keyword.length > 28) return;
     const lower = keyword.toLowerCase();
     if (seen.has(lower)) return;
+    if (lower.length > 4 && lower.endsWith('s') && seen.has(lower.slice(0, -1))) return;
+    if (lower.length > 3 && !lower.endsWith('s') && seen.has(lower + 's')) return;
     seen.add(lower);
     list.push(keyword);
   });
@@ -488,7 +489,6 @@ function collectStorySelection(item) {
       selection.storyDecision = 'none';
       selection.matchedStoryId = '';
       selection.matchedStoryTitle = '';
-      selection.storySummary = '';
     }
     return selection;
   }

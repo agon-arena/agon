@@ -69,36 +69,72 @@ registerServiceWorker();
   window.scrollTo(0, 0);
   try { history.scrollRestoration = 'auto'; } catch (_) {}
 
-  const MIN_STARTUP_LOADER_TIME = 7000;
-  const MAX_STARTUP_LOADER_TIME = 8000;
-  const startTime = Date.now();
+  const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+
+  let introSequenceDone = false;
+  let contentReady = false;
   let hidden = false;
 
-  function hideLoader() {
-    if (hidden) return;
+  function tryHide() {
+    if (hidden || !introSequenceDone || !contentReady) return;
     hidden = true;
-    clearTimeout(safetyTimer);
-
-    const elapsed = Date.now() - startTime;
-    const remaining = Math.max(0, MIN_STARTUP_LOADER_TIME - elapsed);
-
-    setTimeout(() => {
-      try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
-      loader.classList.add("is-hiding");
-      setTimeout(() => {
-        if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-      }, 500);
-    }, remaining);
+    try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
+    loader.classList.add('is-hiding');
+    setTimeout(function() {
+      if (loader.parentNode) loader.parentNode.removeChild(loader);
+    }, 500);
   }
 
-  window.addEventListener("load", hideLoader, { once: true });
-  window.addEventListener("agon:feed-ready", hideLoader, { once: true });
+  // Condition contenu : feed prêt ou window.load (premier événement reçu)
+  window.addEventListener('agon:feed-ready', function() { contentReady = true; tryHide(); }, { once: true });
+  window.addEventListener('load', function() { contentReady = true; tryHide(); }, { once: true });
 
-  const safetyTimer = setTimeout(() => {
+  // Filet de sécurité absolu
+  setTimeout(function() {
     if (hidden) return;
     hidden = true;
-    if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
-  }, MAX_STARTUP_LOADER_TIME);
+    if (loader.parentNode) loader.parentNode.removeChild(loader);
+  }, 10000);
+
+  async function runIntroSequence() {
+    const logo = loader.querySelector('.agon-startup-logo');
+
+    // Attendre que la police du logo soit chargée (ou fallback 900ms)
+    await new Promise(function(resolve) {
+      if (!logo || logo.classList.contains('font-ready')) { resolve(); return; }
+      const obs = new MutationObserver(function() {
+        if (logo.classList.contains('font-ready')) { obs.disconnect(); resolve(); }
+      });
+      obs.observe(logo, { attributes: true, attributeFilter: ['class'] });
+      setTimeout(function() { obs.disconnect(); resolve(); }, 900);
+    });
+
+    // Pause sur le logo avant les messages
+    await wait(900);
+
+    // Message 1
+    const line1 = loader.querySelector('.agon-startup-line-1');
+    if (line1) line1.classList.add('is-playing');
+    await wait(1200);
+
+    // Message 2
+    const line2 = loader.querySelector('.agon-startup-line-2');
+    if (line2) line2.classList.add('is-playing');
+    await wait(1400);
+
+    // Message 3
+    const line3 = loader.querySelector('.agon-startup-line-3');
+    if (line3) line3.classList.add('is-playing');
+    await wait(700); // durée animation (0.5s) + marge
+
+    introSequenceDone = true;
+    tryHide();
+  }
+
+  runIntroSequence().catch(function() {
+    introSequenceDone = true;
+    tryHide();
+  });
 })();
 
 // Accès localStorage/sessionStorage robustes (private browsing, quota plein, Safari ITP)
@@ -5015,7 +5051,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : "";
   const shortDate = formatShortDate(d.created_at);
   const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
-  const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
+  const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml + agonBadgeHtml;
   const topBadgesHtml = topBadgesInnerHtml
     ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
     : "";
@@ -5025,7 +5061,6 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
 
   return `
     <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
-      ${agonBadgeHtml}
       ${topBadgesHtml}
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
@@ -5473,26 +5508,6 @@ function buildIndexOpenGraphImageLoadingHtml() {
         <div class="index-social-loading-placeholder-spinner" aria-hidden="true"></div>
         <div class="index-social-loading-placeholder-title">Chargement de l’image…</div>
         <div class="index-social-loading-placeholder-subtitle">L’aperçu se prépare.</div>
-      </div>
-    </div>
-  `;
-}
-
-function buildIndexOpenGraphImageFallbackHtml() {
-  ensureIndexSocialLoadingPlaceholderStyles();
-
-  return `
-    <div
-      class="index-social-loading-placeholder index-social-loading-placeholder-og"
-      style="--index-social-loading-min-height:100%;"
-    >
-      <div class="index-social-loading-placeholder-box">
-        <div class="index-social-loading-placeholder-badge">
-          <span aria-hidden="true">↗</span>
-          <span>Source</span>
-        </div>
-        <img src="/logo.jpeg" alt="Agôn" style="width:72px; height:72px; object-fit:contain; border-radius:16px; background:#ffffff; box-shadow:0 10px 24px rgba(0,0,0,0.18);">
-        <div class="index-social-loading-placeholder-title">Agôn</div>
       </div>
     </div>
   `;
@@ -6091,52 +6106,6 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
       </div>
     </div>
   `;
-}
-
-function renderIndexInlineSourceCard(debate) {
-  const safeDebateId = String(debate?.id || "").trim();
-  const debateHref = safeDebateId ? `/debate?id=${encodeURIComponent(safeDebateId)}` : "";
-  const localImageUrl = String(debate?.image_url || "").trim();
-  if (localImageUrl) {
-    return buildIndexLocalImageCardHtml(localImageUrl, safeDebateId);
-  }
-
-  const localVideoUrl = String(debate?.video_url || "").trim();
-  if (localVideoUrl) {
-    return buildIndexLocalVideoCardHtml(localVideoUrl);
-  }
-
-  const sourceUrl = String(debate?.source_url || "").trim();
-  if (!sourceUrl) return "";
-
-  if (isDirectImageUrl(sourceUrl)) {
-    return buildIndexLocalImageCardHtml(sourceUrl, safeDebateId);
-  }
-
-  const sourcePreview = debate?.source_preview && typeof debate.source_preview === "object"
-    ? debate.source_preview
-    : null;
-
-  if (isIndexYouTubeSourceDebate(debate)) {
-    const norm = normalizeSourcePreviewData(sourcePreview, sourceUrl);
-    const ytLabel = sourcePreview?.author || getDomainLabel(sourceUrl);
-    return buildIndexYouTubeEmbedHtml(sourceUrl, safeDebateId, ytLabel);
-  }
-  const debateId = String(debate?.id || "").trim();
-
-  if (isXStatusUrl(sourceUrl)) {
-    return buildIndexXEmbedHtml(sourceUrl, sourcePreview, debateId);
-  }
-
-  if (isInstagramPostUrl(sourceUrl)) {
-    return buildIndexInstagramEmbedHtml(sourceUrl, sourcePreview, debateId);
-  }
-
-  if (isWeakSourcePreviewData(sourcePreview, sourceUrl)) {
-    return "";
-  }
-
-  return buildSourcePreviewCardHtml(sourcePreview, sourceUrl, { debateId: safeDebateId });
 }
 
 function getIndexDebateCurrentMediaItem(debate) {
@@ -7358,17 +7327,6 @@ function setIndexYouTubeSoundEnabled(shell, enabled) {
   }
 
   disableSoundOnIndexYouTubeShell(shell);
-}
-
-function toggleSoundOnIndexYouTubeShell(shell) {
-  if (!shell || shell.dataset.active !== 'true') return;
-
-  if (shell.dataset.userActivated === 'true') {
-    disableSoundOnIndexYouTubeShell(shell);
-    return;
-  }
-
-  enableSoundOnIndexYouTubeShell(shell);
 }
 
 function bindIndexYouTubeSoundButton(shell, state) {
@@ -12232,36 +12190,6 @@ title = getNotificationDisplayTitle(notification, title);
   return notificationsLoadInFlight;
 }
 
-async function markNotificationsAsRead() {
-  try {
-    await fetchJSON(API + "/notifications/read-all", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        userKey: getKey()
-      })
-    });
-
-    markAllNotificationElementsAsReadLocally();
-    setStoredUnreadNotificationCount(0);
-  } catch (error) {
-    alert(error.message);
-  }
-}
-async function markOneNotificationAsRead(notificationId) {
-  return fetchJSON(API + "/notifications/read-one", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      userKey: getKey(),
-      notificationId
-    })
-  });
-}
 function shouldOpenNotificationTargetInIframeModal(link) {
   if (window.self !== window.top) return false;
   if (typeof openDebateIframeModal !== "function") return false;
@@ -12596,56 +12524,6 @@ function updateIndexBatchLoadingOverlayBounds() {
 
   overlay.style.setProperty('--index-batch-loading-top', `${top}px`);
   overlay.style.setProperty('--index-batch-loading-bottom', `${bottom}px`);
-}
-
-function sanitizeIndexBatchLoadingSnapshotClone(root) {
-  if (!root || typeof root.querySelectorAll !== 'function') return root;
-
-  if (root.hasAttribute && root.hasAttribute('id')) {
-    root.removeAttribute('id');
-  }
-
-  root.querySelectorAll('*').forEach((node) => {
-    if (node.hasAttribute('id')) node.removeAttribute('id');
-    if (node.hasAttribute('onclick')) node.removeAttribute('onclick');
-    if (node.hasAttribute('onmousedown')) node.removeAttribute('onmousedown');
-    if (node.hasAttribute('onmouseup')) node.removeAttribute('onmouseup');
-    if (node.hasAttribute('onpointerdown')) node.removeAttribute('onpointerdown');
-    if (node.hasAttribute('onpointerup')) node.removeAttribute('onpointerup');
-    if (node.hasAttribute('onkeydown')) node.removeAttribute('onkeydown');
-    if (node.hasAttribute('href')) node.removeAttribute('href');
-    if (node.hasAttribute('tabindex')) node.removeAttribute('tabindex');
-    if (node.matches('iframe')) {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'index-batch-loading-media-placeholder';
-      placeholder.style.width = '100%';
-      placeholder.style.minHeight = `${Math.max(160, Math.round(node.getBoundingClientRect().height || 220))}px`;
-      placeholder.style.borderRadius = '18px';
-      placeholder.style.background = 'rgba(15, 23, 42, 0.10)';
-      placeholder.style.boxShadow = 'inset 0 0 0 1px rgba(15, 23, 42, 0.06)';
-      node.replaceWith(placeholder);
-      return;
-    }
-
-    if (node.matches('video, audio')) {
-      node.pause?.();
-      node.removeAttribute('src');
-      node.removeAttribute('autoplay');
-      node.removeAttribute('controls');
-      node.removeAttribute('muted');
-      node.load?.();
-      node.style.pointerEvents = 'none';
-    }
-  });
-
-  return root;
-}
-
-function clearIndexBatchLoadingSnapshot() {
-  const viewport = document.querySelector('#index-batch-loading-overlay .index-batch-loading-snapshot-viewport');
-  if (!viewport) return;
-  viewport.innerHTML = '';
-  indexBatchLoadingSnapshotActive = false;
 }
 
 function ensureIndexBatchLoadingOverlay() {
@@ -14385,26 +14263,6 @@ function setIndexMobileTypeFilter(value) {
   setTypeFilter(normalized);
 }
 
-function toggleIndexYouthCategoryFilter() {
-  const activeFilters = getCurrentCategoryFilters();
-
-  if (activeFilters.includes(YOUTH_CATEGORY_FILTER)) {
-    removeCurrentCategoryFilter(YOUTH_CATEGORY_FILTER);
-  } else {
-    addCurrentCategoryFilter(YOUTH_CATEGORY_FILTER);
-  }
-
-  visitedDebatesVisible = 5;
-  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-
-  const select = document.getElementById("filter-theme");
-  if (select) {
-    select.value = "all";
-  }
-
-  applyIndexFilters();
-}
-
 function getCurrentIndexSearchQuery() {
   return String(currentIndexSearchQuery || "").trim();
 }
@@ -14931,12 +14789,6 @@ section.style.display = "block";
 function loadMoreVisitedDebates() {
   visitedDebatesVisible += 5;
   renderVisitedDebatesList(visitedDebatesCache);
-}
-
-function buildIndexDebatesListHtml(debates = []) {
-  return (Array.isArray(debates) ? debates : []).map((d) => {
-    return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
-  }).join("");
 }
 
 function scrollIndexThemeRowFromButton(button, direction) {
@@ -15522,22 +15374,6 @@ function buildIndexThematicSectionsHtml(debates) {
   }
 }
 
-function buildIndexInfiniteScrollSentinelHtml() {
-  return `
-    <div
-      id="index-infinite-scroll-sentinel"
-      class="load-more-container"
-      aria-live="polite"
-      aria-busy="false"
-      data-base-message="Découvrir plus d'arènes"
-    >
-      <button class="button button-small" type="button" onclick="loadMoreOtherDebates()">
-        Découvrir plus d'arènes
-      </button>
-    </div>
-  `;
-}
-
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
 let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260524-bigtext");
 
@@ -16076,15 +15912,6 @@ function warmIndexFeedAfterLeavingAgonFilter() {
     .finally(() => {
       indexFilterFeedWarmupPromise = null;
     });
-}
-
-function shouldShowIndexInfiniteScrollSentinel(visibleCount = 0, totalCount = 0) {
-  if (currentTypeFilter === "visited") return false;
-
-  const safeVisible = Math.max(0, Number(visibleCount) || 0);
-  const safeTotal = Math.max(0, Number(totalCount) || 0);
-
-  return safeVisible < safeTotal || indexDebatesApiHasMore;
 }
 
 function isSafeInternalModalUrl(modalUrl = "") {
