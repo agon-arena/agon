@@ -9188,7 +9188,7 @@ body.page-home.page-home-mobile {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 92;
+  z-index: 135;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
