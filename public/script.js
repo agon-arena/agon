@@ -66,9 +66,11 @@ registerServiceWorker();
     return;
   }
   sessionStorage.setItem(SEEN_KEY, "1");
+  window.scrollTo(0, 0);
+  try { history.scrollRestoration = 'auto'; } catch (_) {}
 
-  const MIN_STARTUP_LOADER_TIME = 4400;
-  const MAX_STARTUP_LOADER_TIME = 5000;
+  const MIN_STARTUP_LOADER_TIME = 7000;
+  const MAX_STARTUP_LOADER_TIME = 8000;
   const startTime = Date.now();
   let hidden = false;
 
@@ -81,6 +83,7 @@ registerServiceWorker();
     const remaining = Math.max(0, MIN_STARTUP_LOADER_TIME - elapsed);
 
     setTimeout(() => {
+      try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
       loader.classList.add("is-hiding");
       setTimeout(() => {
         if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
@@ -15528,6 +15531,22 @@ function buildIndexThematicSectionsHtml(debates) {
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
+    // ── À la une : toutes les publications, les plus récentes en tête ──
+    if (allDebates.length) {
+      const sortedAll = [...allDebates].sort(byDate);
+      const aLaUneCards = sortedAll.map((d) => {
+        try {
+          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
+        } catch (cardErr) {
+          console.warn("Erreur rendu carte à la une", d && d.id, cardErr);
+          return "";
+        }
+      }).join("");
+      if (aLaUneCards) {
+        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${aLaUneCards}</div></div></section>`);
+      }
+    }
+
     DEBATE_CATEGORY_OPTIONS.forEach((theme) => {
       const themeDebates = allDebates.filter((d) => debateHasCategory(d.category, theme)).sort(byDate);
       if (!themeDebates.length) return;
@@ -15626,6 +15645,11 @@ function updateIndexTagTrends(items) {
     return;
   }
 
+  if (cloudContainer) {
+    cloudContainer.innerHTML = '<div class="agon-cloud-loading"><img src="/sablier.png" alt="" class="agon-cloud-spinner"></div>';
+  }
+  const _vortexStartTime = Date.now();
+
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
       window._tagTrendsModule = module;
@@ -15643,6 +15667,9 @@ function updateIndexTagTrends(items) {
       }
 
       window.AGON_TAG_TRENDS = tagTrends;
+      const _vortexElapsed = Date.now() - _vortexStartTime;
+      const _vortexDelay = Math.max(0, 3000 - _vortexElapsed);
+      await new Promise(r => setTimeout(r, _vortexDelay));
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
@@ -19461,6 +19488,20 @@ function startSourceAutoPlay() {
         _sourceAutoPlayPaused = true;
       }
     }, true);
+
+    // Pause pendant la saisie dans un input ou textarea
+    document.addEventListener("focusin", function(e) {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) {
+        _sourceAutoPlayPaused = true;
+      }
+    }, true);
+    document.addEventListener("focusout", function(e) {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA") && !_sourceAutoPlayVideoPlaying) {
+        setTimeout(function() { _sourceAutoPlayPaused = false; }, 500);
+      }
+    }, true);
   }
 }
 
@@ -19593,7 +19634,9 @@ function initDebateMediaHistory(debate) {
       publicsenat: "Public Senat",
       rfi: "RFI",
       slate: "Slate",
-      valeursactuelles: "Valeurs Actuelles"
+      valeursactuelles: "Valeurs Actuelles",
+      youtube: "YouTube",
+      youtu: "YouTube"
     };
 
     if (displayNames[key]) return displayNames[key];
@@ -19605,14 +19648,15 @@ function initDebateMediaHistory(debate) {
   }
 
   // --- Nom du média depuis l'URL ou les previews ---
-  function getMediaName(url) {
+  function getMediaName(url, sourceHint) {
     const previews = debate.index_source_previews || {};
     const preview = previews[url];
-    // YouTube : utilise le nom de chaîne (author) plutôt que siteName "YouTube"
+    // YouTube : utilise sourceHint (nom stocké dans l'extra) ou preview.author
     try {
       const h = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-      if ((h === 'youtube.com' || h === 'youtu.be') && preview?.author) {
-        return String(preview.author).trim();
+      if (h === 'youtube.com' || h === 'youtu.be') {
+        const name = String(sourceHint || preview?.author || '').trim();
+        if (name) return name;
       }
     } catch {}
     if (preview?.domain) return formatMediaDisplayName(preview.domain, url);
@@ -19673,11 +19717,13 @@ function initDebateMediaHistory(debate) {
   const veilleYouTubeChannelMap = {};
   try {
     (window.__VEILLE_MEDIAS__ || []).forEach(function(m) {
-      if (!m.domain || !m.orientation) return;
+      if (!m.orientation) return;
       if (m.domain === 'youtube.com') {
         if (m.nom) veilleYouTubeChannelMap[String(m.nom).toLowerCase().trim()] = m.orientation;
       } else {
-        veilleMediasMap[m.domain] = m.orientation;
+        if (m.domain) veilleMediasMap[m.domain] = m.orientation;
+        // Les noms des médias presse servent aussi de fallback pour les chaînes YouTube
+        if (m.nom) veilleYouTubeChannelMap[String(m.nom).toLowerCase().trim()] = m.orientation;
       }
     });
   } catch (_) {}
@@ -19723,7 +19769,9 @@ function initDebateMediaHistory(debate) {
       const sources = allFlatSources
         .map((src, i) => {
           const preview = (debate.index_source_previews || {})[src.url];
-          return { ...src, index: i, name: getMediaName(src.url), _author: preview?.author || '' };
+          const sourceHint = String(src.source || '').trim();
+          const _author = sourceHint || preview?.author || '';
+          return { ...src, index: i, name: getMediaName(src.url, sourceHint), _author };
         })
         .filter((src) => getSourceOrientation(src.url, src._author) === group.key);
       return { ...group, sources };

@@ -36,23 +36,24 @@
       }
       .ada-trigger-btn {
         display: inline-flex; align-items: center; gap: 8px;
-        padding: 11px 28px; border-radius: 999px; border: 3px solid #fff;
-        background: linear-gradient(135deg, #111 0%, #3a3a3a 50%, #111 100%);
-        background-size: 200% 200%;
-        color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .03em;
+        padding: 11px 28px; border-radius: 999px; border: 3px solid #111;
+        background: linear-gradient(120deg, #fff 15%, #b0b0b0 50%, #fff 85%);
+        background-size: 300% 100%;
+        color: #111; font-size: 14px; font-weight: 700; letter-spacing: .03em;
         cursor: pointer;
-        box-shadow: 0 0 18px 4px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
-        animation: adaShine 2.4s ease-in-out infinite;
-        transition: box-shadow .2s, transform .15s;
+        animation: adaShine 1.8s ease-in-out infinite;
+        transition: filter .2s, transform .15s;
+        will-change: transform, filter, background-position;
       }
       .ada-trigger-btn:hover {
-        box-shadow: 0 0 28px 8px rgba(0,0,0,.6), 0 4px 16px rgba(0,0,0,.4);
+        filter: drop-shadow(0 0 16px rgba(0,0,0,.55));
         transform: translateY(-1px);
       }
-      .ada-trigger-btn:disabled { opacity: .55; cursor: default; animation: none; box-shadow: none; }
+      .ada-trigger-btn:disabled { opacity: .55; cursor: default; animation: none; }
       @keyframes adaShine {
-        0%,100% { box-shadow: 0 0 10px 2px rgba(255,255,255,.25), 0 0 18px 4px rgba(0,0,0,.45); transform: scale(1); }
-        50%     { box-shadow: 0 0 28px 10px rgba(255,255,255,.55), 0 0 32px 10px rgba(0,0,0,.3); transform: scale(1.06); }
+        0%   { filter: drop-shadow(0 0 4px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
+        50%  { filter: drop-shadow(0 0 22px rgba(0,0,0,.65)) drop-shadow(0 0 8px rgba(0,0,0,.3)); transform: scale(1.07); background-position: 0% 0; }
+        100% { filter: drop-shadow(0 0 4px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
       }
       .ada-panel {
         margin-top: 10px; border: 1px solid #c7d2fe; border-radius: 10px;
@@ -70,7 +71,6 @@
       .ada-close-btn:hover { color: #1e1b4b; }
       .ada-body {
         padding: 12px 14px; font-size: 13px; line-height: 1.65; color: #1e1b4b;
-        white-space: pre-wrap;
       }
       .ada-panel-footer {
         padding: 8px 14px; border-top: 1px solid #c7d2fe; background: #e0e7ff;
@@ -94,20 +94,25 @@
       .ada-countdown-badge {
         display: inline-flex; align-items: center;
         padding: 3px 12px; border-radius: 999px;
-        background: #111; border: 3px solid #fff;
-        font-size: 10px; font-weight: 600; color: #fff;
+        background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
+        background-size: 300% 100%;
+        border: 3px solid #111;
+        font-size: 10px; font-weight: 600; color: #111;
         white-space: nowrap;
         animation: adaBadgeShine 2.4s ease-in-out infinite;
       }
       @keyframes adaBadgeShine {
-        0%,100% { box-shadow: 0 0 8px 2px rgba(255,255,255,.2), 0 2px 6px rgba(0,0,0,.4); transform: scale(1); }
-        50%     { box-shadow: 0 0 18px 6px rgba(255,255,255,.45), 0 4px 12px rgba(0,0,0,.3); transform: scale(1.05); }
+        0%   { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
+        50%  { filter: drop-shadow(0 0 12px rgba(0,0,0,.5)); transform: scale(1.05); background-position:   0% 0; }
+        100% { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
       }
       .ada-countdown-ready {
         display: inline-flex; align-items: center; gap: 4px;
         margin: 4px auto 0; padding: 3px 12px; border-radius: 999px;
-        background: #111; border: 3px solid #fff;
-        font-size: 10px; font-weight: 600; color: #fff;
+        background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
+        background-size: 300% 100%;
+        border: 3px solid #111;
+        font-size: 10px; font-weight: 600; color: #111;
         white-space: nowrap;
         animation: adaBadgeShine 2.4s ease-in-out infinite;
       }
@@ -115,6 +120,20 @@
         display: flex; justify-content: center;
         margin-top: 6px;
       }
+      .ada-scoring-report { padding: 4px 0; }
+      .ada-r-h1 { font-size: 15px; font-weight: 800; color: #312e81; margin: 6px 0 14px; }
+      .ada-r-h2 { font-size: 13px; font-weight: 700; color: #3730a3; margin: 18px 0 8px; border-bottom: 1px solid #c7d2fe; padding-bottom: 4px; }
+      .ada-r-h3 { font-size: 12px; font-weight: 700; color: #4338ca; margin: 12px 0 6px; }
+      .ada-bar-row { margin: 4px 0 10px; }
+      .ada-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: #374151; margin-bottom: 3px; font-weight: 600; }
+      .ada-bar-pct { color: #6366f1; font-weight: 700; flex-shrink: 0; margin-left: 8px; }
+      .ada-bar-wrap { height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
+      .ada-bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #818cf8); border-radius: 5px; }
+      .ada-r-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 12px; }
+      .ada-r-table th { background: #e0e7ff; color: #3730a3; font-weight: 700; padding: 5px 8px; border: 1px solid #c7d2fe; text-align: left; }
+      .ada-r-table td { padding: 5px 8px; border: 1px solid #e5e7eb; color: #1e1b4b; vertical-align: top; }
+      .ada-r-sep { border: none; border-top: 1px solid #e0e7ff; margin: 14px 0; }
+      .ada-r-p { font-size: 12px; line-height: 1.6; color: #1e1b4b; margin: 4px 0 6px; }
     `;
     const el = document.createElement('style');
     el.textContent = css;
@@ -123,6 +142,76 @@
 
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function md(s) {
+    return esc(s)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+  }
+
+  function renderScoringReport(raw) {
+    const lines = String(raw || '').split('\n');
+    let html = '<div class="ada-scoring-report">';
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Multi-line: table rows starting with |
+      if (trimmed.startsWith('|')) {
+        let headerCells = null;
+        let bodyRows = [];
+        let firstData = true;
+        while (i < lines.length && lines[i].trim().startsWith('|')) {
+          const row = lines[i].trim();
+          i++;
+          if (/^\|[\s\-:|]+\|$/.test(row)) continue; // separator row
+          const cells = row.split('|').slice(1, -1).map(function (c) { return c.trim(); });
+          if (firstData) { headerCells = cells; firstData = false; }
+          else bodyRows.push(cells);
+        }
+        html += '<table class="ada-r-table">';
+        if (headerCells) {
+          html += '<tr>' + headerCells.map(function (c) { return '<th>' + md(c) + '</th>'; }).join('') + '</tr>';
+        }
+        bodyRows.forEach(function (r) {
+          html += '<tr>' + r.map(function (c) { return '<td>' + md(c) + '</td>'; }).join('') + '</tr>';
+        });
+        html += '</table>';
+        continue; // i already advanced inside inner loop
+      }
+
+      // Single-line cases — all advance i by 1
+      if (trimmed.startsWith('# ')) {
+        html += '<div class="ada-r-h1">' + md(trimmed.slice(2)) + '</div>';
+      } else if (trimmed.startsWith('## ')) {
+        html += '<div class="ada-r-h2">' + md(trimmed.slice(3)) + '</div>';
+      } else if (trimmed.startsWith('### ')) {
+        html += '<div class="ada-r-h3">' + md(trimmed.slice(4)) + '</div>';
+      } else if (trimmed === '---' || trimmed === '***') {
+        html += '<hr class="ada-r-sep">';
+      } else if (/[█░]/.test(trimmed) && /\d+\s*%/.test(trimmed)) {
+        const m = trimmed.match(/^(.*?)\s*[█░]+\s*(\d+)\s*%\s*$/);
+        if (m) {
+          const label = m[1].replace(/\*\*/g, '').trim();
+          const pct = Math.min(100, Math.max(0, parseInt(m[2], 10)));
+          html += '<div class="ada-bar-row">' +
+            '<div class="ada-bar-label"><span>' + esc(label) + '</span><span class="ada-bar-pct">' + pct + '%</span></div>' +
+            '<div class="ada-bar-wrap"><div class="ada-bar-fill" style="width:' + pct + '%"></div></div>' +
+            '</div>';
+        } else {
+          html += '<p class="ada-r-p">' + md(trimmed) + '</p>';
+        }
+      } else if (trimmed) {
+        html += '<p class="ada-r-p">' + md(trimmed) + '</p>';
+      }
+      i++;
+    }
+
+    html += '</div>';
+    return html;
   }
 
   function fmtDate(iso) {
@@ -155,11 +244,7 @@
           const header = json.generatedAt
             ? `<div class="ada-date">Analyse générée le ${esc(fmtDate(json.generatedAt))}</div>`
             : '';
-          body.innerHTML = header;
-          const text = document.createElement('div');
-          text.style.whiteSpace = 'pre-wrap';
-          text.textContent = json.raw;
-          body.appendChild(text);
+          body.innerHTML = header + renderScoringReport(json.raw);
         };
       } else if (json.status === 'scheduled' || json.status === 'generating') {
         applyContent = () => { body.innerHTML = '<span class="ada-empty">Analyse IA en préparation — disponible prochainement.</span>'; };
@@ -198,11 +283,8 @@
         return;
       }
       const now = new Date().toISOString();
-      body.innerHTML = `<div class="ada-date">Analyse générée le ${esc(fmtDate(now))}</div>`;
-      const text = document.createElement('div');
-      text.style.whiteSpace = 'pre-wrap';
-      text.textContent = json.raw || '(réponse vide)';
-      body.appendChild(text);
+      body.innerHTML = `<div class="ada-date">Analyse générée le ${esc(fmtDate(now))}</div>` +
+        renderScoringReport(json.raw || '');
     } catch (err) {
       body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`;
     } finally {
@@ -211,15 +293,6 @@
   }
 
   // ── Countdown ────────────────────────────────────────────────────────
-  function formatCountdown(secs) {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'min';
-    if (m > 0) return m + 'min ' + String(s).padStart(2,'0') + 's';
-    return s + 's';
-  }
-
   async function initCountdown(debateId) {
     const slot = document.getElementById('debate-ai-countdown-slot');
     if (!slot) return;
@@ -234,6 +307,11 @@
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Ouvrir et charger l'analyse après le scroll
+          setTimeout(() => {
+            const triggerBtn = document.getElementById('ada-trigger-btn');
+            if (triggerBtn) triggerBtn.click();
+          }, 400);
         });
         observeAnimated(slot);
         return;
@@ -251,7 +329,7 @@
           if (secs <= 0) {
             slot.innerHTML = '<span class="ada-countdown-ready">✦ Analyse IA disponible</span>';
           } else {
-            badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
+            badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
             setTimeout(tick, 1000);
           }
         };

@@ -50,5 +50,56 @@
     "sourceCount": 5,
     "matchedSubjectId": null,
     "computedAt": "2026-05-25T13:18:44.656Z"
+  },
+  "566": {
+    "trend": -25,
+    "sourceCount": 3,
+    "matchedSubjectId": "553",
+    "matchedSubjectTitle": "L’accord USA-Iran menace-t-il la sécurité d’Israël ?",
+    "previousSourceCount": 4,
+    "reason": "Le sujet concerne également le conflit au Moyen-Orient et mentionne Israël, ce qui le relie à l'intensification de l'offensive israélienne au Liban contre le Hezbollah.",
+    "computedAt": "2026-05-26T03:20:08.206Z"
+  },
+  "567": {
+    "trend": -43,
+    "sourceCount": 4,
+    "matchedSubjectId": "560",
+    "matchedSubjectTitle": "Faut-il renforcer les alertes canicule dès les premières chaleurs inhabituelles en mai ?",
+    "previousSourceCount": 7,
+    "reason": "Le sujet de la réunion ministérielle de Lecornu sur la gestion des canicules est directement lié à l'alerte canicule récente, ce qui en fait une séquence sur la gestion des canicules en France.",
+    "computedAt": "2026-05-26T03:20:50.567Z"
+  },
+  "568": {
+    "trend": -57,
+    "sourceCount": 3,
+    "matchedSubjectId": "560",
+    "matchedSubjectTitle": "Faut-il renforcer les alertes canicule dès les premières chaleurs inhabituelles en mai ?",
+    "previousSourceCount": 7,
+    "reason": "Le sujet concerne également des frappes militaires russes en Ukraine, ce qui le relie directement à la demande d'évacuation des diplomates.",
+    "computedAt": "2026-05-26T03:21:15.329Z"
+  },
+  "569": {
+    "trend": 0,
+    "sourceCount": 4,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-26T03:21:16.477Z"
+  },
+  "570": {
+    "trend": 0,
+    "sourceCount": 6,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-26T03:21:29.585Z"
+  },
+  "571": {
+    "trend": 0,
+    "sourceCount": 4,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-26T03:21:41.595Z"
+  },
+  "572": {
+    "trend": 0,
+    "sourceCount": 5,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-26T03:22:01.428Z"
   }
 }

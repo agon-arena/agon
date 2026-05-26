@@ -15,20 +15,23 @@
     var el = document.createElement('style');
     el.textContent = `
       @keyframes aiCardShine {
-        0%,100% { box-shadow: 0 0 8px 2px rgba(255,255,255,.2), 0 2px 6px rgba(0,0,0,.4); transform: scale(1); }
-        50%     { box-shadow: 0 0 18px 6px rgba(255,255,255,.45), 0 4px 12px rgba(0,0,0,.3); transform: scale(1.05); }
-      }
-      .ai-card-badge {
-        display: flex; justify-content: center;
-        margin: 4px 0 6px;
-        grid-column: 1 / -1;
+        0%   { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: translateX(-50%) scale(1);    background-position: 100% 0; }
+        50%  { filter: drop-shadow(0 0 12px rgba(0,0,0,.5)); transform: translateX(-50%) scale(1.05); background-position:   0% 0; }
+        100% { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: translateX(-50%) scale(1);    background-position: 100% 0; }
       }
       .ai-card-badge-inner {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 50;
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 3px 10px; border-radius: 999px;
-        font-size: 10px; font-weight: 600; color: #fff;
+        padding: 2px 7px; border-radius: 999px;
+        font-size: 9px; font-weight: 600; color: #111;
         white-space: nowrap; cursor: default;
-        background: #111; border: 2px solid #fff;
+        background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
+        background-size: 300% 100%;
+        border: 2px solid #111;
         animation: aiCardShine 2.4s ease-in-out infinite;
         animation-play-state: paused;
       }
@@ -36,8 +39,10 @@
         animation-play-state: running;
       }
       .ai-card-badge-inner.ai-card-badge-countdown {
-        background: #111; color: #fff;
-        border: 2px solid #fff;
+        background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
+        background-size: 300% 100%;
+        color: #111;
+        border: 2px solid #111;
       }
     `;
     document.head.appendChild(el);
@@ -59,7 +64,7 @@
         inner.className = 'ai-card-badge-inner';
         inner.textContent = '✦ Analyse et arbitrage IA';
       } else {
-        inner.textContent = '⏳ ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' s';
+        inner.textContent = 'IA : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
       }
     }
     tick();
@@ -69,13 +74,11 @@
   function injectBadges() {
     if (!_statuses) return;
     document.querySelectorAll('.debate-card[data-debate-id]').forEach(function (card) {
-      if (card.querySelector('.ai-card-badge')) return;
+      if (card.querySelector('.ai-card-badge-inner')) return;
       var id = card.getAttribute('data-debate-id');
       var entry = _statuses[id];
       if (!entry) return;
 
-      var wrap = document.createElement('div');
-      wrap.className = 'ai-card-badge';
       var inner = document.createElement('span');
 
       if (entry.status === 'ready') {
@@ -88,14 +91,15 @@
         return; // pas de scheduledAt → rien à afficher
       }
 
-      wrap.appendChild(inner);
       _observer.observe(inner);
-      var footer = card.querySelector('.debate-card-footer-actions');
-      if (footer) {
-        card.insertBefore(wrap, footer);
-      } else {
-        card.appendChild(wrap);
+
+      var topBadges = card.querySelector('.debate-card-top-badges');
+      if (!topBadges) {
+        topBadges = document.createElement('div');
+        topBadges.className = 'debate-card-top-badges';
+        card.insertBefore(topBadges, card.firstChild);
       }
+      topBadges.appendChild(inner);
     });
   }
 

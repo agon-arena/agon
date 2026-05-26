@@ -180,6 +180,7 @@
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
+<script>(function(){if(sessionStorage.getItem('agon_scroll_top')){sessionStorage.removeItem('agon_scroll_top');try{history.scrollRestoration='manual';}catch(_){}window.scrollTo(0,0);}})()</script>
 
 <div id="agon-startup-loader" class="agon-startup-loader">
   <div class="agon-startup-loader-inner">
@@ -476,7 +477,10 @@
 
 <section id="agon-tag-trends-section" class="agon-tag-trends-section">
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
-  <p class="agon-tag-trends-caption">Tendance et volumes des sujets les plus traités ces 24 dernières heures dans les grands médias français</p>
+<p class="agon-tag-trends-caption" style="text-align: center;">
+  Tendances et volume des sujets les plus traités<br>
+  ces dernières 24 dernières heures dans les grands médias français
+</p>
 </section>
 
 <section id="debates-list" class="debates-list"></section>
@@ -488,7 +492,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn index-floating-refresh-btn"
-  onclick="window.location.reload()"
+  onclick="(function(){sessionStorage.removeItem('agon_startup_seen');sessionStorage.setItem('agon_scroll_top','1');var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >

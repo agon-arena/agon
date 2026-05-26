@@ -355,9 +355,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 569,
+    "next_episode_title": "La nomination d’Ahmadou Al Aminou Mohamed Lô est-elle une meilleure option que le maintien d’Ousmane",
+    "next_episode_url": "/debate?id=569"
   },
   "517": {
     "previous_episode_id": 513,
@@ -475,9 +475,9 @@
     "previous_episode_id": 441,
     "previous_episode_title": "Faut-il renforcer immédiatement les mesures internationales contre Ebola en RDC ?",
     "previous_episode_url": "/debate?id=441",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 571,
+    "next_episode_title": "Faut-il renforcer les mesures de quarantaine pour contenir le hantavirus à Madrid ?",
+    "next_episode_url": "/debate?id=571"
   },
   "533": {
     "previous_episode_id": 517,
@@ -563,9 +563,9 @@
     "previous_episode_id": 544,
     "previous_episode_title": "Le forfait d’Arthur Fils affaiblit-il gravement Roland-Garros ?",
     "previous_episode_url": "/debate?id=544",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 572,
+    "next_episode_title": "Gaël Monfils doit-il être considéré comme un des plus grands joueurs français de Roland-Garros ?",
+    "next_episode_url": "/debate?id=572"
   },
   "547": {
     "previous_episode_id": 543,
@@ -619,9 +619,9 @@
     "previous_episode_id": 535,
     "previous_episode_title": "L'accord sur le détroit d'Ormuz peut-il vraiment garantir la paix régionale ?",
     "previous_episode_url": "/debate?id=535",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 566,
+    "next_episode_title": "Faut-il soutenir l'intensification de l'offensive israélienne au Liban contre le Hezbollah ?",
+    "next_episode_url": "/debate?id=566"
   },
   "554": {
     "previous_episode_id": 525,
@@ -667,17 +667,17 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 570,
+    "next_episode_title": "Faut-il appliquer des sanctions pénales sévères aux adolescents impliqués dans ce meurtre à Rennes…",
+    "next_episode_url": "/debate?id=570"
   },
   "560": {
     "previous_episode_id": 557,
     "previous_episode_title": "Faut-il augmenter la taxe sur les logements vacants pour résoudre la pénurie à Paris ?",
     "previous_episode_url": "/debate?id=557",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 567,
+    "next_episode_title": "La réunion ministérielle de Lecornu peut-elle améliorer la gestion des canicules en France ?",
+    "next_episode_url": "/debate?id=567"
   },
   "561": {
     "previous_episode_id": null,
@@ -691,9 +691,9 @@
     "previous_episode_id": 558,
     "previous_episode_title": "Faut-il considérer l'emploi du missile hypersonique Orechnik comme une escalade dangereuse ?",
     "previous_episode_url": "/debate?id=558",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 568,
+    "next_episode_title": "Faut-il suivre l'appel russe et évacuer les diplomates étrangers de Kiev avant les frappes ?",
+    "next_episode_url": "/debate?id=568"
   },
   "563": {
     "previous_episode_id": 447,
@@ -707,6 +707,62 @@
     "previous_episode_id": 556,
     "previous_episode_title": "Faut-il conclure rapidement un accord avec l'Iran pour stabiliser le Moyen-Orient ?",
     "previous_episode_url": "/debate?id=556",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "566": {
+    "previous_episode_id": 553,
+    "previous_episode_title": "L’accord USA-Iran menace-t-il la sécurité d’Israël ?",
+    "previous_episode_url": "/debate?id=553",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "567": {
+    "previous_episode_id": 560,
+    "previous_episode_title": "Faut-il renforcer les alertes canicule dès les premières chaleurs inhabituelles en mai ?",
+    "previous_episode_url": "/debate?id=560",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "568": {
+    "previous_episode_id": 562,
+    "previous_episode_title": "Faut-il considérer l'emploi du missile Orechnik par la Russie comme une menace nucléaire directe e…",
+    "previous_episode_url": "/debate?id=562",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "569": {
+    "previous_episode_id": 516,
+    "previous_episode_title": "Le limogeage de Sonko affaiblit-il la démocratie sénégalaise ?",
+    "previous_episode_url": "/debate?id=516",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "570": {
+    "previous_episode_id": 559,
+    "previous_episode_title": "Faut-il renforcer la surveillance et la protection des enfants dans les quartiers urbains comme Renn",
+    "previous_episode_url": "/debate?id=559",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "571": {
+    "previous_episode_id": 532,
+    "previous_episode_title": "La riposte africaine contre Ebola est-elle suffisamment efficace ?",
+    "previous_episode_url": "/debate?id=532",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "572": {
+    "previous_episode_id": 546,
+    "previous_episode_title": "Les Enhanced Games détruisent-ils l'esprit du sport traditionnel ?",
+    "previous_episode_url": "/debate?id=546",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

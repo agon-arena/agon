@@ -114,11 +114,12 @@ function readViewTemplate(templateName) {
 
 const VEILLE_URL = (process.env.VEILLE_URL || "http://localhost:3000/mixte").trim();
 const VEILLE_MEDIAS_PATH = (process.env.VEILLE_MEDIAS_PATH || path.join(__dirname, "..", "bot veille", "medias.json")).trim();
+const VEILLE_YOUTUBE_PATH = (process.env.VEILLE_YOUTUBE_PATH || path.join(__dirname, "..", "bot veille", "youtube-chaines.json")).trim();
 
 function readVeilleMedias() {
   const raw = fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8");
   const data = JSON.parse(raw);
-  return (Array.isArray(data) ? data : [])
+  const pressItems = (Array.isArray(data) ? data : [])
     .map((item) => {
       let domain = "";
       try {
@@ -132,6 +133,21 @@ function readVeilleMedias() {
       };
     })
     .filter((item) => item.nom);
+
+  let youtubeItems = [];
+  try {
+    const rawYt = fs.readFileSync(VEILLE_YOUTUBE_PATH, "utf8");
+    const dataYt = JSON.parse(rawYt);
+    youtubeItems = (Array.isArray(dataYt) ? dataYt : [])
+      .map((item) => ({
+        nom: String(item?.nom || "").trim(),
+        orientation: String(item?.orientation || "").trim(),
+        domain: "youtube.com"
+      }))
+      .filter((item) => item.nom);
+  } catch (_) {}
+
+  return [...pressItems, ...youtubeItems];
 }
 
 function replaceMetaPlaceholders(template, meta) {
@@ -2709,8 +2725,9 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
   const prompt = [
     "Tu analyses si un nouveau sujet d'actualité appartient à une séquence déjà couverte récemment.",
     "",
-    "Séquence = même affaire, même polémique, même réforme, même crise, même conflit, même compétition, même dossier politique, même controverse, rebond évident du même sujet.",
-    "PAS une séquence = simple proximité thématique, même personnalité mais événement différent, même pays mais actualité différente, même institution mais affaire différente, mot-clé isolé commun.",
+    "Séquence = même affaire, même polémique, même réforme, même crise, même conflit EN COURS, même compétition, même dossier politique, même controverse, rebond évident du même sujet.",
+    "IMPORTANT : un conflit armé, une guerre, une opération militaire récurrente = SÉQUENCE même si chaque article couvre un épisode différent (ex : nouvelles frappes dans le même conflit, nouveaux bombardements, nouvelle offensive = même séquence que les précédentes).",
+    "PAS une séquence = simple proximité thématique sans lien direct, même personnalité mais événement sans rapport, même pays mais actualité complètement différente, même institution mais affaire sans lien, mot-clé isolé commun.",
     "",
     "Nouveau sujet :",
     formatSubject(newSubject),
@@ -2747,7 +2764,7 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     const confidence = Number(parsed?.confidence ?? 0);
     const isSameSequence = parsed?.isSameSequence === true;
 
-    if (!matchedId || matchedId === "null" || confidence < 0.75 || !isSameSequence) return null;
+    if (!matchedId || matchedId === "null" || confidence < 0.65 || !isSameSequence) return null;
 
     const matched = recentSubjects.find((s) => String(s.id) === matchedId);
     if (!matched) return null;
@@ -6352,6 +6369,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
   try {
     const existing = loadCloudBubbles();
     const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
+    _debateKeywordsCache = null;
     const keywordsMap = readDebateKeywordsMap();
 
     const now = new Date().toISOString();
@@ -6478,7 +6496,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
     saveCloudBubbles(newData);
 
-    res.json({ ok: true, count: bubbles.length, freshKept: freshKeptCount, newAdded: newAddedCount, updatedAt: newData.lastUpdatedAt });
+    res.json({ ok: true, count: bubbles.length, freshKept: existingKeptCount, newAdded: newAddedCount, updatedAt: newData.lastUpdatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -6733,7 +6751,7 @@ const currentSourceCount = currentSourceKeys.size;
     .select("id, question, content, source_url, media_extras, created_at")
     .neq("id", data.id)
     .order("created_at", { ascending: false })
-    .limit(24);
+    .limit(60);
 
   const recentSubjects = (recentRows || []).map((d) => {
     const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
@@ -6901,8 +6919,15 @@ app.get("/api/debates/:id/analysis", async (req, res) => {
     console.error("[analysis GET]", id, error?.message || "no data");
     return res.status(404).json({ error: error?.message || "Débat introuvable." });
   }
+  const fullAnalysis = data.ai_analysis || null;
+  let raw = null;
+  if (fullAnalysis) {
+    const marker = "\n%%AGON_SCORING%%\n";
+    const idx = fullAnalysis.indexOf(marker);
+    if (idx !== -1) raw = fullAnalysis.slice(idx + marker.length).trim();
+  }
   return res.json({
-    raw:         data.ai_analysis || null,
+    raw:         raw,
     status:      data.ai_analysis_status || "none",
     scheduledAt: data.ai_analysis_scheduled_at || null,
     generatedAt: data.ai_analysis_generated_at || null
@@ -6954,7 +6979,13 @@ async function _generateAndSaveAnalysis(debateId) {
     ]);
     if (!verdict) throw new Error("Réponse vide (verdict).");
 
-    const raw = analysis + "\n\n---\n\n" + verdict;
+    const hasPositions = String(payload.positionA || "").trim() && String(payload.positionB || "").trim();
+    let scoring = "";
+    if (hasPositions) {
+      scoring = await _callOpenAI(apiKey, [{ role: "user", content: _buildPrompt3(payload) }]);
+    }
+
+    const raw = analysis + "\n\n---\n\n" + verdict + (scoring ? "\n%%AGON_SCORING%%\n" + scoring : "");
 
     const { error: saveError } = await supabase.from("debates").update({
       ai_analysis:              raw,
@@ -6974,18 +7005,21 @@ async function _generateAndSaveAnalysis(debateId) {
 }
 
 // Vérifie si le seuil est atteint et programme l'analyse si besoin
+// — 1re analyse à 10 pts, puis re-déclenchement tous les 5 pts supplémentaires
 async function _scheduleAnalysisIfNeeded(debateId) {
   if (!debateId) return;
 
   const { data: debate } = await supabase
     .from("debates")
-    .select("ai_analysis_status, ai_analysis")
+    .select("ai_analysis_status, ai_analysis, ai_analysis_last_score")
     .eq("id", debateId)
     .single();
 
   if (!debate) return;
   const status = debate.ai_analysis_status || "none";
-  if (status !== "none" || debate.ai_analysis) return; // déjà programmé ou généré
+
+  // Ne pas re-programmer si déjà en attente ou en cours de génération
+  if (status === "scheduled" || status === "generating") return;
 
   const { count: argCount } = await supabase
     .from("arguments")
@@ -7007,13 +7041,22 @@ async function _scheduleAnalysisIfNeeded(debateId) {
   }
 
   const score = (argCount || 0) + commentCount * 0.5;
-  if (score >= 10) {
+  const lastScore = Number(debate.ai_analysis_last_score || 0);
+  const hasExisting = !!(debate.ai_analysis);
+
+  // 1re analyse : score >= 10 et aucune analyse existante
+  const isFirstTrigger = !hasExisting && score >= 10;
+  // Re-déclenchements : analyse existante + 5 pts de plus depuis le dernier trigger
+  const isRetrigger = hasExisting && score >= 10 && score >= lastScore + 5;
+
+  if (isFirstTrigger || isRetrigger) {
     const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await supabase.from("debates").update({
       ai_analysis_status:       "scheduled",
-      ai_analysis_scheduled_at: scheduledAt
+      ai_analysis_scheduled_at: scheduledAt,
+      ai_analysis_last_score:   score
     }).eq("id", debateId);
-    console.log(`[auto-analysis] débat ${debateId} — seuil atteint (score ${score}), analyse programmée pour ${scheduledAt}`);
+    console.log(`[auto-analysis] débat ${debateId} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
   }
 }
 
@@ -7162,6 +7205,222 @@ Indique quelle information, source ou réponse à une objection pourrait faire �
 
 Phrase finale :
 Résume en une phrase ce que le lecteur doit retenir.`;
+
+function _buildPrompt3(payload) {
+  const fmtArgs = (args) => Array.isArray(args) && args.length
+    ? args.map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
+    : "(aucun)";
+
+  const fmtComments = (comments) => Array.isArray(comments) && comments.length
+    ? comments.map((c, i) => {
+        const stance = c.stance ? ` [${c.stance}]` : "";
+        return `${i + 1}.${stance} ${String(c.text || "").trim()}`;
+      }).join("\n")
+    : "(aucun)";
+
+  const question   = String(payload.question  || "").trim();
+  const positionA  = String(payload.positionA || "").trim();
+  const positionB  = String(payload.positionB || "").trim();
+  const argumentsA = fmtArgs(payload.argumentsA);
+  const argumentsB = fmtArgs(payload.argumentsB);
+  const comments   = fmtComments(payload.comments);
+  const sources    = String(payload.content   || "").trim().slice(0, 600) || "(aucun)";
+
+  return `Tu dois produire une analyse très synthétique du débat, sous forme de rapport visuel et lisible rapidement.
+
+Objectif :
+Afficher immédiatement quelle position gagne argumentativement, puis comparer les deux positions avec des scores en pourcentage et des barres combinées.
+
+Important :
+Tu ne dois jamais écrire "Camp A" ou "Camp B" dans le rapport final.
+Tu dois utiliser les intitulés réels des positions du débat.
+
+Données du débat :
+Question : ${question}
+Position A : ${positionA}
+Position B : ${positionB}
+
+Arguments / idées de la position A :
+${argumentsA}
+
+Arguments / idées de la position B :
+${argumentsB}
+
+Commentaires / réactions éventuelles :
+${comments}
+
+Sources éventuelles :
+${sources}
+
+---
+
+FORMAT DE SORTIE OBLIGATOIRE
+
+# Verdict argumentatif
+
+## Position gagnante : [intitulé court de la position gagnante]
+
+**Score global : X % / Y %**
+**Confiance : faible / moyenne / forte**
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte : partie gauche pour la position A, partie droite pour la position B]
+
+[Explication brève en 2 phrases maximum.]
+
+---
+
+## Barres d'évaluation
+
+### Réponse à la question
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte]
+
+| Lecture rapide |
+|---|
+| [Une phrase courte expliquant le score.] |
+
+---
+
+### Solidité argumentative
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte]
+
+| Lecture rapide |
+|---|
+| [Une phrase courte expliquant le score.] |
+
+---
+
+### Sources / faits vérifiables
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte]
+
+| Lecture rapide |
+|---|
+| [Une phrase courte expliquant le score.] |
+
+---
+
+### Prise en compte des objections
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte]
+
+| Lecture rapide |
+|---|
+| [Une phrase courte expliquant le score.] |
+
+---
+
+### Force de conviction
+
+[intitulé court position A] X % | [intitulé court position B] Y %
+
+[barre combinée en texte]
+
+| Lecture rapide |
+|---|
+| [Une phrase courte expliquant le score.] |
+
+---
+
+## Lecture des sources
+
+| Position | Usage des sources | Limite principale |
+|---|---|---|
+| [Position A courte] | [Usage des sources par cette position] | [Limite principale] |
+| [Position B courte] | [Usage des sources par cette position] | [Limite principale] |
+
+---
+
+## Ce qui manque pour trancher mieux
+
+| Donnée manquante | Pourquoi ça compte |
+|---|---|
+| [Donnée 1] | [Explication courte] |
+| [Donnée 2] | [Explication courte] |
+| [Donnée 3] | [Explication courte] |
+
+---
+
+## Phrase finale
+
+[Une phrase claire, éditoriale, qui résume le verdict sans exagérer.]
+
+---
+
+RÈGLES SUR LES SCORES
+
+- Les scores ne mesurent pas la vérité absolue.
+- Les scores mesurent uniquement la force argumentative observée dans le débat.
+- Chaque score doit toujours opposer les deux positions et faire exactement 100 % au total.
+- Pour chaque critère, il faut une seule barre combinée, pas deux barres séparées.
+- Le score global doit être cohérent avec les scores par critère.
+- La position gagnante doit être cohérente avec le score global.
+- Si le débat est équilibré, utilise des scores proches de 50/50 : 51/49, 52/48, 53/47.
+- Si une position domine légèrement, utilise 55/45 ou 60/40.
+- Si une position domine nettement, utilise 65/35 ou 70/30.
+- Ne jamais utiliser de score extrême sauf domination écrasante.
+- Si aucune position ne domine clairement, indique une victoire très courte ou une égalité argumentative.
+
+RÈGLES SUR LES BARRES
+
+Utilise une barre texte de 20 caractères.
+La partie ████ (gauche) représente TOUJOURS la position A.
+La partie ░░░░ (droite) représente TOUJOURS la position B.
+Cette règle est absolue : ne jamais inverser, même si la position B domine.
+
+Exemples où A domine :
+A = 60 %, B = 40 % → ████████████░░░░░░░░
+A = 65 %, B = 35 % → █████████████░░░░░░░
+A = 55 %, B = 45 % → ███████████░░░░░░░░░
+
+Exemples où B domine (A reste à gauche, B à droite) :
+A = 40 %, B = 60 % → ████████░░░░░░░░░░░░
+A = 35 %, B = 65 % → ███████░░░░░░░░░░░░░
+A = 45 %, B = 55 % → █████████░░░░░░░░░░░
+
+Exemple équilibré :
+A = 50 %, B = 50 % → ██████████░░░░░░░░░░
+
+La barre doit toujours correspondre approximativement au score annoncé.
+La ligne de score au-dessus de la barre suit le même ordre : [A] X % | [B] Y %
+
+RÈGLES SUR LES POSITIONS
+
+- Utilise les intitulés réels des positions.
+- Si les intitulés sont trop longs, crée une version courte et fidèle.
+- Ne modifie jamais le sens des positions.
+- Ne parle pas de "camp A" ou "camp B" dans le rapport final.
+- Tu peux parler de "position A" et "position B" uniquement dans ton raisonnement interne, jamais dans la sortie finale.
+
+RÈGLES SUR LES SOURCES
+
+- Ne jamais inventer de source.
+- Si aucune source solide n'est fournie, le dire clairement.
+- Le critère "Sources / faits vérifiables" évalue la qualité, la pertinence et l'usage des sources, pas seulement leur nombre.
+- Une position avec peu de sources mais bien utilisées peut obtenir un meilleur score qu'une position avec beaucoup de sources faibles ou hors sujet.
+- Si les deux positions manquent de sources, les scores doivent rester proches.
+- Ne jamais affirmer qu'un point est prouvé si le débat ne fournit pas d'éléments vérifiables.
+
+STYLE
+
+- Ton clair, synthétique, direct.
+- Pas de long développement.
+- Pas de formulation scolaire lourde.
+- Pas de conclusion molle.
+- L'analyse doit être lisible en moins d'une minute.
+- Le verdict doit rester prudent si les données du débat sont faibles.`;
+}
 
 async function _callOpenAI(apiKey, messages) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
