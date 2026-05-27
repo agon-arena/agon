@@ -451,7 +451,7 @@ function renderTagTrendCloud(container, trends) {
   const centerBtn = document.createElement("button");
   centerBtn.type = "button";
   centerBtn.className = "agon-tag-center-btn";
-  centerBtn.innerHTML = `<span>TOUT</span><span>VOIR</span>`;
+  centerBtn.innerHTML = `<span>À LA</span><span>UNE</span>`;
   centerBtn.addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("agon:tag-trends-show-agon"));
   });

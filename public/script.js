@@ -14508,7 +14508,10 @@ function handleBubbleTagClick(bubble) {
 }
 
 function showAgonOnlyFromTagCloud() {
-  _restoreMainTagCloud();
+  if (_tagCloudSecondaryMode) {
+    _restoreMainTagCloud();
+    return;
+  }
   clearActiveBubbles();
   currentIndexSearchQuery = "";
   setCurrentCategoryFilters([]);
