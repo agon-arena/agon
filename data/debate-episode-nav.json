@@ -523,9 +523,9 @@
     "previous_episode_id": 508,
     "previous_episode_title": "Faut-il réformer la procédure des panthéonisations pour plus de transparence ?",
     "previous_episode_url": "/debate?id=508",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 595,
+    "next_episode_title": "La justice doit-elle privilégier la responsabilité du chef ou celle des exécutants ?",
+    "next_episode_url": "/debate?id=595"
   },
   "539": {
     "previous_episode_id": 500,
@@ -843,9 +843,9 @@
     "previous_episode_id": 568,
     "previous_episode_title": "Faut-il suivre l'appel russe et évacuer les diplomates étrangers de Kiev avant les frappes ?",
     "previous_episode_url": "/debate?id=568",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 596,
+    "next_episode_title": "La Russie doit-elle poursuivre ses ripostes militaires directes contre Kiev ?",
+    "next_episode_url": "/debate?id=596"
   },
   "583": {
     "previous_episode_id": 578,
@@ -867,9 +867,9 @@
     "previous_episode_id": 583,
     "previous_episode_title": "Les États-Unis doivent-ils suspendre leurs frappes pour préserver le cessez-le-feu avec l’Iran ?",
     "previous_episode_url": "/debate?id=583",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 594,
+    "next_episode_title": "Les acteurs régionaux doivent-ils privilégier la retenue ou la préparation militaire ?",
+    "next_episode_url": "/debate?id=594"
   },
   "589": {
     "previous_episode_id": 574,
@@ -899,6 +899,30 @@
     "previous_episode_id": 580,
     "previous_episode_title": "La France doit-elle saisir la justice contre Israël pour les actes envers la flottille pour Gaza ?",
     "previous_episode_url": "/debate?id=580",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "594": {
+    "previous_episode_id": 588,
+    "previous_episode_title": "Les États-Unis doivent-ils suspendre leurs frappes pour préserver le cessez-le-feu avec l’Iran ?",
+    "previous_episode_url": "/debate?id=588",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "595": {
+    "previous_episode_id": 538,
+    "previous_episode_title": "Le procès Sarkozy-Kadhafi révèle-t-il une justice impartiale ou un acharnement politique ?",
+    "previous_episode_url": "/debate?id=538",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "596": {
+    "previous_episode_id": 582,
+    "previous_episode_title": "Faut-il évacuer les diplomates et étrangers de Kiev face aux menaces de frappes russes ?",
+    "previous_episode_url": "/debate?id=582",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

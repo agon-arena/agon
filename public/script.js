@@ -6889,6 +6889,17 @@ function rerenderIndexCardMedia(debateId) {
   }
 
   refreshIndexCardMediaEnhancements(card);
+
+  // Quand un média est ajouté dynamiquement (hydration source preview), la hauteur
+  // explicite du row carousel peut être trop petite → overflow-y:clip coupe la carte.
+  // On retire la hauteur explicite pour que le row s'auto-dimensionne pendant le repaint,
+  // puis on la resynchronise dans le prochain frame.
+  const _carouselRow = card.closest('.theme-horizontal-row');
+  if (_carouselRow) {
+    _carouselRow.style.height = '';
+    requestAnimationFrame(() => syncIndexThemeRowHeight(_carouselRow));
+  }
+
   return true;
 }
 
@@ -14320,6 +14331,60 @@ function clearActiveBubbles() {
     .forEach(label => label.classList.remove('agon-tag-label-overlay-active'));
 }
 
+let _tagCloudSecondaryMode = false;
+let _tagCloudOriginalTrends = null;
+let _tagCloudSecondaryTrends = null;
+
+function _showSecondaryTagsInCloud(primaryTag, primaryDebateId) {
+  const container = document.querySelector('#agon-tag-trends-cloud');
+  if (!container || !window._tagTrendCloudModule || !window._tagTrendsModule) return;
+  if (!Array.isArray(debatesCache) || !debatesCache.length) return;
+
+  const { normalizeTag, extractRawTagsFromItem } = window._tagTrendsModule;
+  const normalizedPrimary = normalizeTag(primaryTag);
+  const primaryDebate = debatesCache.find(d => String(d.id) === String(primaryDebateId));
+  if (!primaryDebate) return;
+
+  const seen = new Set();
+  const secondaryTrends = [];
+
+  for (const rawTag of extractRawTagsFromItem(primaryDebate)) {
+    const norm = normalizeTag(rawTag);
+    if (norm === normalizedPrimary || seen.has(norm)) continue;
+    seen.add(norm);
+
+    const others = debatesCache.filter(d => {
+      if (String(d.id) === String(primaryDebateId)) return false;
+      return extractRawTagsFromItem(d).map(t => normalizeTag(t)).includes(norm);
+    });
+
+    if (others.length > 0) {
+      secondaryTrends.push({
+        tag: rawTag,
+        subjectId: String(others[0].id),
+        count: others.length + 1,
+        debateDate: others[0].created_at,
+      });
+    }
+  }
+
+  if (!secondaryTrends.length) return;
+
+  _tagCloudSecondaryMode = true;
+  _tagCloudSecondaryTrends = secondaryTrends;
+  window._tagTrendCloudModule.renderTagTrendCloud(container, secondaryTrends);
+}
+
+function _restoreMainTagCloud() {
+  if (!_tagCloudSecondaryMode) return;
+  const container = document.querySelector('#agon-tag-trends-cloud');
+  if (!container || !window._tagTrendCloudModule) return;
+  _tagCloudSecondaryMode = false;
+  _tagCloudOriginalTrends = null;
+  _tagCloudSecondaryTrends = null;
+  window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || []);
+}
+
 function handleBubbleTagClick(bubble) {
   const label = bubble.querySelector('.agon-tag-label');
   if (!label) return;
@@ -14329,23 +14394,98 @@ function handleBubbleTagClick(bubble) {
     : label.textContent.trim();
   if (!tag) return;
 
-  const isActive = bubble.classList.contains('agon-tag-bubble-active');
-  clearActiveBubbles();
+  // Trouve l'ID du débat associé au tag (dans les trends principaux ou secondaires selon le mode)
+  let targetDebateId = null;
+  const trendsToSearch = _tagCloudSecondaryMode
+    ? (_tagCloudSecondaryTrends || [])
+    : (Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : []);
 
-  const input = document.getElementById('debate-search');
-  if (isActive) {
-    currentBubbleTag = null;
-    currentIndexSearchQuery = '';
-    if (input) input.value = '';
-    filterDebates();
-  } else {
-    currentBubbleTag = tag;
-    bubble.classList.add('agon-tag-bubble-active');
-    document.querySelectorAll('.agon-tag-label-overlay').forEach(label => {
-      if ((label.dataset.tag || '').toLowerCase() === tag.toLowerCase()) {
-        label.classList.add('agon-tag-label-overlay-active');
-      }
+  if (window._tagTrendsModule && trendsToSearch.length) {
+    const { normalizeTag } = window._tagTrendsModule;
+    const norm = normalizeTag(tag);
+    const hit = trendsToSearch.find(item => normalizeTag(item?.tag || item?.subjectTitle || '') === norm);
+    if (hit?.subjectId) targetDebateId = String(hit.subjectId).trim();
+  }
+
+  // Fallback texte sur debatesCache
+  if (!targetDebateId && Array.isArray(debatesCache) && debatesCache.length) {
+    const tagLower = tag.toLowerCase();
+    const match = debatesCache.find(d => {
+      const text = [d.question, d.category, d.option_a, d.option_b].join(' ').toLowerCase();
+      return text.includes(tagLower);
     });
+    if (match) targetDebateId = String(match.id);
+  }
+
+  // Cherche la carte dans le DOM
+  let card = targetDebateId
+    ? document.querySelector(`.debate-card[data-debate-id="${targetDebateId}"]`)
+    : null;
+
+  // Force-charge depuis _carouselPendingBatches si besoin
+  if (!card && targetDebateId) {
+    for (const [key, pending] of _carouselPendingBatches) {
+      if (!pending.some(d => String(d.id) === targetDebateId)) continue;
+      const sentinel = Array.from(document.querySelectorAll('.carousel-load-sentinel'))
+        .find(s => s.dataset.carouselKey === key);
+      if (!sentinel) continue;
+      const inner = sentinel.parentNode;
+      const row = inner ? inner.closest('.theme-horizontal-row') : null;
+      const allPending = pending.splice(0, pending.length);
+      const html = allPending.map(d => {
+        try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
+        catch (e) { return ''; }
+      }).join('');
+      if (html) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
+        initIndexCardShareMenus(inner);
+        initIndexMediaSwipeEnhancements(inner);
+        initIndexYouTubeObserver(inner);
+        initIndexLocalVideoObserver(inner);
+        initIndexXObserver(inner);
+        initIndexInstagramObserver(inner);
+        initIndexOpenGraphImageObserver(inner);
+        initIndexEmbedUnloadObserver(inner);
+        observeIndexCardsMissingSourcePreview(inner);
+        refreshAdminUI();
+        if (row) requestAnimationFrame(() => syncIndexThemeRowHeight(row));
+      }
+      sentinel.remove();
+      card = document.querySelector(`.debate-card[data-debate-id="${targetDebateId}"]`);
+      break;
+    }
+  }
+
+  // Scroll vers la carte
+  if (card) {
+    requestAnimationFrame(() => {
+      const carouselInner = card.closest('.theme-horizontal-inner');
+      if (carouselInner) {
+        const cardRect = card.getBoundingClientRect();
+        const innerRect = carouselInner.getBoundingClientRect();
+        const cardCenter = carouselInner.scrollLeft + (cardRect.left - innerRect.left) + cardRect.width / 2;
+        carouselInner.scrollTo({ left: cardCenter - innerRect.width / 2, behavior: 'smooth' });
+      }
+      const section = card.closest('.theme-row-section') || card;
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        card.classList.add('agon-card-blink');
+        card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
+      }, 600);
+    });
+  } else {
+    const firstBand = document.querySelector('.theme-row-section');
+    if (firstBand) firstBand.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Mise à jour du nuage
+  if (_tagCloudSecondaryMode) {
+    // Tag secondaire cliqué → restaure nuage principal + filtre par ce tag
+    _restoreMainTagCloud();
+    const input = document.getElementById('debate-search');
+    currentBubbleTag = tag;
     if (input) input.value = tag;
     currentIndexSearchQuery = tag;
     filterDebates();
@@ -14361,10 +14501,14 @@ function handleBubbleTagClick(bubble) {
       }
       firstBand.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+  } else if (targetDebateId) {
+    // Tag principal cliqué → affiche tags secondaires (sans filtrer)
+    _showSecondaryTagsInCloud(tag, targetDebateId);
   }
 }
 
 function showAgonOnlyFromTagCloud() {
+  _restoreMainTagCloud();
   clearActiveBubbles();
   currentIndexSearchQuery = "";
   setCurrentCategoryFilters([]);
@@ -15087,6 +15231,17 @@ function initThematicRowDragScroll() {
     updateCarouselCardHighlight(row);
     applyCarouselScaleEffects(row);
     syncIndexThemeRowHeight(row);
+
+    // Réécoute les images et vidéos lazy qui se chargent après la première mesure
+    // et pourraient modifier la hauteur des cartes (ex. image lazy dans un shell sans aspect-ratio).
+    row.addEventListener('load', function(e) {
+      const t = e.target;
+      if (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO')) {
+        row.style.height = '';
+        requestAnimationFrame(() => syncIndexThemeRowHeight(row));
+      }
+    }, { capture: true, passive: true });
+
     ensureCarouselHints(row);
     updateIndexThemeRowSwipeButtons(row);
     requestAnimationFrame(() => {
@@ -15321,9 +15476,9 @@ const _CAROUSEL_INITIAL = 5;
 const _CAROUSEL_BATCH = 5;
 const _carouselPendingBatches = new Map();
 
-function _buildCarouselInner(debates, key) {
-  const initial = debates.slice(0, _CAROUSEL_INITIAL);
-  const pending = debates.slice(_CAROUSEL_INITIAL);
+function _buildCarouselInner(debates, key, initialCount = _CAROUSEL_INITIAL) {
+  const initial = debates.slice(0, initialCount);
+  const pending = debates.slice(initialCount);
   _carouselPendingBatches.set(key, pending);
   const cardsHtml = initial.map((d) => {
     try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
@@ -15346,7 +15501,7 @@ function buildIndexThematicSectionsHtml(debates) {
     // ── À la une : toutes les publications, les plus récentes en tête ──
     if (allDebates.length) {
       const sortedAll = [...allDebates].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une");
+      const inner = _buildCarouselInner(sortedAll, "À la une", 12);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
@@ -15429,6 +15584,8 @@ function initCarouselLazyLoad() {
         initIndexEmbedUnloadObserver(inner);
         observeIndexCardsMissingSourcePreview(inner);
         refreshAdminUI();
+        // Resynchronise la hauteur du row après l'ajout du nouveau lot de cartes
+        requestAnimationFrame(() => syncIndexThemeRowHeight(row));
       }
 
       if (!pending.length) {
@@ -15514,6 +15671,7 @@ function updateIndexTagTrends(items) {
       const _vortexElapsed = Date.now() - _vortexStartTime;
       const _vortexDelay = Math.max(0, 3000 - _vortexElapsed);
       await new Promise(r => setTimeout(r, _vortexDelay));
+      window._tagTrendCloudModule = cloudModule;
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);

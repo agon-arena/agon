@@ -15553,6 +15553,9 @@ html.thematic-scroll .theme-row-section {
     width: calc(100vw - 8px) !important;
     max-width: calc(100vw - 8px) !important;
     flex: 0 0 calc(100vw - 8px) !important;
+    /* Hauteur minimale : évite que la carte s'effondre avant que le
+       placeholder source preview (aspect-ratio 16/9) soit calculé */
+    min-height: 120px;
   }
 }
 
@@ -17689,4 +17692,17 @@ body.page-contact.in-iframe .contact-page-shell {
   .about-media-list {
     grid-template-columns: 1fr;
   }
+}
+
+@keyframes agon-card-blink {
+  0%   { opacity: 1; }
+  20%  { opacity: 0; }
+  40%  { opacity: 1; }
+  60%  { opacity: 0; }
+  80%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+.agon-card-blink {
+  animation: agon-card-blink 0.8s ease-in-out;
 }
