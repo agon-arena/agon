@@ -6740,9 +6740,9 @@ const previousSourceCount = previousSourceKeys.size;
   let trendEntry;
 
   if (!matched) {
-    console.log(`[trend] aucun sujet similaire trouvé → trend=100 (nouveau)`);
+    console.log(`[trend] aucun sujet similaire trouvé → trend=0`);
     trendEntry = {
-      trend: 100,
+      trend: 0,
       sourceCount: currentSourceCount,
       matchedSubjectId: null
     };
@@ -6750,7 +6750,9 @@ const previousSourceCount = previousSourceKeys.size;
     const previousSourceCount = matched.sourceCount || 0;
     console.log(`[trend] dernier sujet similaire id=${matched.id} previousSourceCount=${previousSourceCount} confidence=${matched.confidence}`);
 
-    if (previousSourceCount === 0) {
+    if (previousSourceCount === 0 && currentSourceCount === 0) {
+      computedTrend = 0;
+    } else if (previousSourceCount === 0) {
       computedTrend = 100;
     } else {
       computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);

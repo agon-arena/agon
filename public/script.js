@@ -5051,7 +5051,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : "";
   const shortDate = formatShortDate(d.created_at);
   const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
-  const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml + agonBadgeHtml;
+  const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
   const topBadgesHtml = topBadgesInnerHtml
     ? `<div class="debate-card-top-badges">${topBadgesInnerHtml}</div>`
     : "";
@@ -5061,6 +5061,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
 
   return `
     <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+      ${agonBadgeHtml}
       ${topBadgesHtml}
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
         <div class="debate-card-top-row">
