@@ -9,9 +9,12 @@
     h1 { margin-bottom: 4px; }
     .intro { color: #555; margin-bottom: 28px; font-size: 0.9rem; }
     #content { display: none; }
-    .refresh-btn { float: right; margin-bottom: 16px; padding: 6px 14px; border: 1px solid #ddd; border-radius: 999px; background: white; cursor: pointer; font: inherit; font-size: 0.85rem; }
+    .pending-toolbar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+    .refresh-btn, .sort-pending-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 999px; background: white; cursor: pointer; font: inherit; font-size: 0.85rem; }
+    .sort-pending-btn.active { background: #111; color: white; border-color: #111; }
     .pending-item { background: white; border: 1px solid #e0e0e0; border-radius: 14px; padding: 20px 24px; margin-bottom: 20px; }
-    .pending-meta { font-size: 0.78rem; color: #aaa; margin-bottom: 14px; }
+    .pending-meta { font-size: 0.78rem; color: #aaa; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pending-number { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; padding: 3px 8px; border-radius: 999px; background: #111; color: white; font-size: 0.76rem; font-weight: 700; }
     label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 4px; margin-top: 12px; }
     input[type=text], textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font: inherit; font-size: 0.9rem; }
     textarea { min-height: 70px; resize: vertical; }
@@ -277,13 +280,28 @@ function renderKeywordEditor(item) {
   '</div>';
 }
 
+function countPendingSources(item) {
+  const names = new Set();
+  (Array.isArray(item && item.links) ? item.links : []).forEach(function(link) {
+    const source = String(link && link.source || '').trim().toLowerCase();
+    if (source) names.add(source);
+  });
+  if (!names.size) {
+    String(item && item.sources || '').split(/[,;\n]+/).forEach(function(source) {
+      const normalized = source.trim().toLowerCase();
+      if (normalized) names.add(normalized);
+    });
+  }
+  return names.size;
+}
+
 function renderItem(item) {
   const catOptions = CATEGORIES.map(function(c) {
     return '<option value="' + esc(c) + '"' + (c === item.theme ? ' selected' : '') + '>' + esc(c) + '</option>';
   }).join('');
 
-  return '<div class="pending-item" data-id="' + item.id + '" data-linked-debate-id="' + esc(item.linkedDebateId || '') + '">' +
-    '<div class="pending-meta">Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</div>' +
+  return '<div class="pending-item" data-id="' + item.id + '" data-source-count="' + countPendingSources(item) + '" data-linked-debate-id="' + esc(item.linkedDebateId || '') + '">' +
+    '<div class="pending-meta"><span class="pending-number"></span><span>Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</span><span>· ' + countPendingSources(item) + ' source(s)</span></div>' +
     '<div class="similar-checking" id="similar-' + item.id + '">Vérification des doublons…</div>' +
     renderLinkedDebateNotice(item) +
     '<div class="generated-title-label">Titre généré par IA</div>' +
@@ -408,8 +426,9 @@ async function populateManualStoryPicker(itemEl, selection) {
 
 async function loadPending() {
   const el = document.getElementById('content');
-  el.innerHTML = '<button class="refresh-btn" id="refresh-btn">↻ Actualiser</button><div id="list"><p style="color:#aaa;text-align:center;margin-top:40px">Chargement…</p></div>';
+  el.innerHTML = '<div class="pending-toolbar"><button class="sort-pending-btn" id="sort-pending-btn" type="button">Classer</button><button class="refresh-btn" id="refresh-btn" type="button">↻ Actualiser</button></div><div id="list"><p style="color:#aaa;text-align:center;margin-top:40px">Chargement…</p></div>';
   document.getElementById('refresh-btn').addEventListener('click', loadPending);
+  document.getElementById('sort-pending-btn').addEventListener('click', sortPendingBySources);
 
   try {
     const r = await fetch('/api/admin/veille', { headers: headers() });
@@ -421,6 +440,7 @@ async function loadPending() {
       return;
     }
     list.innerHTML = items.map(renderItem).join('');
+    updatePendingNumbers();
     items.forEach(function(item) {
       const el = list.querySelector('.pending-item[data-id="' + item.id + '"]');
       if (el) {
@@ -469,6 +489,35 @@ async function loadPending() {
   } catch(e) {
     document.getElementById('list').innerHTML = '<p class="error">Erreur : ' + e.message + '</p>';
   }
+}
+
+function updatePendingNumbers() {
+  const items = [].slice.call(document.querySelectorAll('#list .pending-item'));
+  const total = items.length;
+  items.forEach(function(item, index) {
+    const number = item.querySelector('.pending-number');
+    if (number) number.textContent = (index + 1) + '/' + total;
+  });
+}
+
+function sortPendingBySources() {
+  const list = document.getElementById('list');
+  if (!list) return;
+  const items = [].slice.call(list.querySelectorAll('.pending-item'));
+  items
+    .map(function(item, index) {
+      return { item: item, index: index, sourceCount: Number(item.dataset.sourceCount) || 0 };
+    })
+    .sort(function(a, b) {
+      if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
+      return a.index - b.index;
+    })
+    .forEach(function(entry) {
+      list.appendChild(entry.item);
+    });
+  updatePendingNumbers();
+  const btn = document.getElementById('sort-pending-btn');
+  if (btn) btn.classList.add('active');
 }
 
 function collectStorySelection(item) {

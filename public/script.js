@@ -16233,7 +16233,7 @@ async function initIndex() {
       window.dispatchEvent(new Event("agon:feed-ready"));
 
       // Rafraîchissement silencieux en arrière-plan
-      fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0)).then((fresh) => {
+      fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" }).then((fresh) => {
         const safeFresh = Array.isArray(fresh) ? fresh : [];
         debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
         indexDebatesApiHasMore = Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT);

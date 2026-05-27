@@ -875,17 +875,17 @@
     "previous_episode_id": 574,
     "previous_episode_title": "Le gouvernement doit-il renforcer les mesures de prévention contre les noyades durant les vagues de",
     "previous_episode_url": "/debate?id=574",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 603,
+    "next_episode_title": "Le Brésil doit-il prioriser la lutte contre la déforestation ou soutenir l’exploitation économique ?",
+    "next_episode_url": "/debate?id=603"
   },
   "590": {
     "previous_episode_id": 585,
     "previous_episode_title": "Faut-il renforcer drastiquement la sécurisation des passages à niveau malgré les coûts élevés ?",
     "previous_episode_url": "/debate?id=585",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 601,
+    "next_episode_title": "Comment concilier présomption d’innocence et protection des mineurs dans les affaires sexuelles ?",
+    "next_episode_url": "/debate?id=601"
   },
   "591": {
     "previous_episode_id": null,
@@ -899,9 +899,9 @@
     "previous_episode_id": 580,
     "previous_episode_title": "La France doit-elle saisir la justice contre Israël pour les actes envers la flottille pour Gaza ?",
     "previous_episode_url": "/debate?id=580",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 597,
+    "next_episode_title": "Faut-il privilégier la fermeté militaire ou la diplomatie pour éviter une escalade au Moyen-Orient ?",
+    "next_episode_url": "/debate?id=597"
   },
   "594": {
     "previous_episode_id": 588,
@@ -915,14 +915,94 @@
     "previous_episode_id": 538,
     "previous_episode_title": "Le procès Sarkozy-Kadhafi révèle-t-il une justice impartiale ou un acharnement politique ?",
     "previous_episode_url": "/debate?id=538",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 599,
+    "next_episode_title": "La responsabilité politique doit-elle primer sur la responsabilité exécutive ?",
+    "next_episode_url": "/debate?id=599"
   },
   "596": {
     "previous_episode_id": 582,
     "previous_episode_title": "Faut-il évacuer les diplomates et étrangers de Kiev face aux menaces de frappes russes ?",
     "previous_episode_url": "/debate?id=582",
+    "next_episode_id": 598,
+    "next_episode_title": "La Russie doit-elle continuer ses ripostes militaires ou privilégier la désescalade diplomatique ?",
+    "next_episode_url": "/debate?id=598"
+  },
+  "597": {
+    "previous_episode_id": 592,
+    "previous_episode_title": "La France doit-elle soutenir les renforts israéliens malgré les risques d’escalade au Liban ?",
+    "previous_episode_url": "/debate?id=592",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "598": {
+    "previous_episode_id": 596,
+    "previous_episode_title": "La Russie doit-elle poursuivre ses ripostes militaires directes contre Kiev ?",
+    "previous_episode_url": "/debate?id=596",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "599": {
+    "previous_episode_id": 595,
+    "previous_episode_title": "La justice doit-elle privilégier la responsabilité du chef ou celle des exécutants ?",
+    "previous_episode_url": "/debate?id=595",
+    "next_episode_id": 602,
+    "next_episode_title": "La responsabilité politique doit-elle primer sur la responsabilité exécutive dans les affaires de fi",
+    "next_episode_url": "/debate?id=602"
+  },
+  "600": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "601": {
+    "previous_episode_id": 590,
+    "previous_episode_title": "Faut-il privilégier la répression ou la prévention face à la violence entre adolescents ?",
+    "previous_episode_url": "/debate?id=590",
+    "next_episode_id": 605,
+    "next_episode_title": "Faut-il renforcer la sécurité des bennes à vêtements pour prévenir les accidents ?",
+    "next_episode_url": "/debate?id=605"
+  },
+  "602": {
+    "previous_episode_id": 599,
+    "previous_episode_title": "La responsabilité politique doit-elle primer sur la responsabilité exécutive ?",
+    "previous_episode_url": "/debate?id=599",
+    "next_episode_id": 608,
+    "next_episode_title": "Le groupe Bolloré doit-il répondre publiquement aux critiques pour apaiser ou éviter d’alimenter la",
+    "next_episode_url": "/debate?id=608"
+  },
+  "603": {
+    "previous_episode_id": 589,
+    "previous_episode_title": "Faut-il renforcer les mesures de prévention contre la canicule malgré leur coût élevé ?",
+    "previous_episode_url": "/debate?id=589",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "605": {
+    "previous_episode_id": 601,
+    "previous_episode_title": "Comment concilier présomption d’innocence et protection des mineurs dans les affaires sexuelles ?",
+    "previous_episode_url": "/debate?id=601",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "608": {
+    "previous_episode_id": 602,
+    "previous_episode_title": "La responsabilité politique doit-elle primer sur la responsabilité exécutive dans les affaires de fi",
+    "previous_episode_url": "/debate?id=602",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "611": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

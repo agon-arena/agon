@@ -1010,16 +1010,6 @@ function normalizeCloudLabel(tag) {
 
 function getCloudLabelFromDebate(debateId, keywordsMap) {
   const keywords = normalizeKeywordList(keywordsMap?.[String(debateId)] || []);
-  // Premier passage : préférer les tags courts (≤3 mots) — évite les titres de sujet complets
-  for (const keyword of keywords) {
-    const normalized = normalizeCloudLabel(keyword);
-    if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
-      if (keyword.trim().split(/\s+/).length <= 3) {
-        return String(keyword).replace(/#/g, "").replace(/\s+/g, " ").trim();
-      }
-    }
-  }
-  // Fallback : n'importe quel tag valide si aucun tag court n'existe
   for (const keyword of keywords) {
     const normalized = normalizeCloudLabel(keyword);
     if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
@@ -1027,6 +1017,45 @@ function getCloudLabelFromDebate(debateId, keywordsMap) {
     }
   }
   return "";
+}
+
+function normalizeCloudSourceName(value) {
+  return String(value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/['']/g, " ")
+    .replace(/[^a-z0-9\s.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeCloudSourceUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
+function countCloudSources(debate) {
+  const sources = new Set();
+  (Array.isArray(debate?.media_extras) ? debate.media_extras : []).forEach((extra) => {
+    if (!extra || typeof extra !== "object") return;
+    if (String(extra.type || "source").trim() !== "source") return;
+    const url = String(extra.url || extra.source_url || "").trim();
+    const sourceName = normalizeCloudSourceName(extra.source || extra.media || extra.publisher || "");
+    const sourceKey = sourceName || normalizeCloudSourceUrl(url);
+    if (sourceKey) sources.add(sourceKey);
+  });
+
+  if (!sources.size && debate?.source_url) {
+    const sourceKey = normalizeCloudSourceUrl(debate.source_url);
+    if (sourceKey) sources.add(sourceKey);
+  }
+
+  return sources.size;
 }
 
 function getVeillePendingKeywords(id) {
@@ -4667,7 +4696,8 @@ app.get("/api/debates", async (req, res) => {
       offset: safeOffset,
       sort: sortMode
     });
-    const cachedResponse = getCachedDebatesApiResponse(cacheKey);
+    const bypassCache = req.query._ || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
       return res.json(cachedResponse);
@@ -4918,7 +4948,9 @@ app.get("/api/debates", async (req, res) => {
     const cacheTtlMs = (sortMode === "recent" || sortMode === "old")
       ? 10 * 1000
       : DEBATES_API_CACHE_TTL_MS;
-    setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
+    if (!bypassCache) {
+      setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
+    }
     res.json(rowsWithSourcePreview);
   } catch (error) {
     console.error(error);
@@ -6326,141 +6358,96 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
     _debateKeywordsCache = null;
     const keywordsMap = readDebateKeywordsMap();
-
     const now = new Date().toISOString();
-    const nowMs = Date.now();
-    // Pas de TTL fixe : score = sourceCount × fraîcheur (décroît sur 7 jours)
-    // Les plus anciennes sont donc naturellement évincées en premier par les nouvelles.
-    const CLOUD_DECAY_DAYS = 7;
-
-    const existingBubbles = existing.bubbles || [];
-    console.log(`[cloud] existantes: ${existingBubbles.length}`);
-
-    const existingEnteredMap = {};
-    for (const b of existingBubbles) {
-      if (b.subjectId && b.enteredCloudAt) existingEnteredMap[String(b.subjectId)] = b.enteredCloudAt;
-    }
+    let bubbles = Array.isArray(existing.bubbles) ? existing.bubbles.filter(b => b?.subjectId && b?.tag) : [];
+    bubbles = bubbles.slice(-12);
 
     const { data: newDebates, error } = await supabase
       .from("debates")
       .select("id, source_url, media_extras, created_at, source_published_at")
       .gt("created_at", lastUpdateISO)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) throw new Error(error.message);
-
-    const countDebateSources = (debate) => {
-      const extras = Array.isArray(debate.media_extras) ? debate.media_extras : [];
-      const sourceExtras = extras.filter(e => e && typeof e === "object" &&
-        String(e.type || "source").trim() === "source" &&
-        (e.url || e.source_url || e.source || e.media || e.publisher));
-      if (sourceExtras.length > 0) return sourceExtras.length;
-      return debate.source_url ? 1 : 0;
-    };
 
     const mapToCandidate = (debate) => {
       const label = getCloudLabelFromDebate(debate.id, keywordsMap);
       if (!label) return null;
-      const sourceCount = countDebateSources(debate);
+      const sourceCount = countCloudSources(debate);
+      if (sourceCount <= 0) return null;
       const debateDate = debate.source_published_at || debate.created_at || now;
       return { tag: label, subjectId: String(debate.id), count: sourceCount, debateDate };
     };
 
-    // Recalcule le sourceCount des bulles fraîches existantes depuis Supabase
-    const existingIds = existingBubbles.map(b => b.subjectId).filter(Boolean);
-    let existingDebatesById = new Map();
-    if (existingIds.length > 0) {
-      const { data: existingDebates } = await supabase
-        .from("debates")
-        .select("id, source_url, media_extras, created_at, source_published_at")
-        .in("id", existingIds);
-      for (const d of (existingDebates || [])) existingDebatesById.set(String(d.id), d);
-    }
-
-    // Pool unifié : bulles existantes + nouveaux débats (chaque candidat conserve son enteredAt)
-    const allCandidates = new Map();
-
-    for (const b of existingBubbles) {
-      const debate = existingDebatesById.get(b.subjectId);
-      const candidate = debate ? mapToCandidate(debate) : null;
-      const label = (candidate && candidate.tag) || getCloudLabelFromDebate(b.subjectId, keywordsMap) || b.tag;
-      if (!label) continue;
-      const count = candidate ? candidate.count : (b.count || 0);
-      // Priorité : debateDate du candidat rafraîchi > debateDate stocké > created_at Supabase
-      const debateDate = candidate?.debateDate
-        || b.debateDate
-        || (debate ? (debate.source_published_at || debate.created_at) : null)
-        || b.enteredCloudAt
-        || now;
-      allCandidates.set(b.subjectId, { tag: label, subjectId: b.subjectId, count, enteredAt: b.enteredCloudAt || now, debateDate });
-    }
-    const existingKeptCount = allCandidates.size;
+    let added = 0;
+    let updated = 0;
 
     for (const debate of (newDebates || [])) {
-      const id = String(debate.id);
-      if (allCandidates.has(id)) continue;
       const candidate = mapToCandidate(debate);
       if (!candidate) continue;
-      allCandidates.set(id, { ...candidate, enteredAt: now });
+      const existingIndex = bubbles.findIndex(b => String(b.subjectId) === candidate.subjectId);
+      if (existingIndex >= 0) {
+        bubbles[existingIndex] = {
+          ...bubbles[existingIndex],
+          ...candidate,
+          enteredCloudAt: bubbles[existingIndex].enteredCloudAt || now
+        };
+        updated++;
+        continue;
+      }
+      const nextBubble = { ...candidate, trend: 0, enteredCloudAt: now };
+      if (bubbles.length < 12) {
+        bubbles.push(nextBubble);
+      } else {
+        let oldestIndex = 0;
+        for (let i = 1; i < bubbles.length; i++) {
+          const currentTime = new Date(bubbles[i].enteredCloudAt || bubbles[i].debateDate || 0).getTime() || 0;
+          const oldestTime = new Date(bubbles[oldestIndex].enteredCloudAt || bubbles[oldestIndex].debateDate || 0).getTime() || 0;
+          if (currentTime < oldestTime) oldestIndex = i;
+        }
+        bubbles[oldestIndex] = nextBubble;
+      }
+      added++;
     }
-    const newAddedCount = allCandidates.size - existingKeptCount;
 
-    if (allCandidates.size < 12) {
-      const { data: olderDebates } = await supabase
+    const ids = bubbles.map(b => b.subjectId).filter(Boolean);
+    const debateMap = new Map();
+    if (ids.length) {
+      const { data: currentDebates, error: currentError } = await supabase
         .from("debates")
         .select("id, source_url, media_extras, created_at, source_published_at")
-        .lte("created_at", lastUpdateISO)
-        .order("created_at", { ascending: false })
-        .limit(60);
-      for (const debate of (olderDebates || [])) {
-        const id = String(debate.id);
-        if (allCandidates.has(id)) continue;
-        const candidate = mapToCandidate(debate);
-        if (!candidate) continue;
-        allCandidates.set(id, { ...candidate, enteredAt: now });
-      }
+        .in("id", ids);
+      if (currentError) throw new Error(currentError.message);
+      for (const debate of (currentDebates || [])) debateMap.set(String(debate.id), debate);
     }
 
-    // Tri par date de publication de l'article (plus récent = priorité),
-    // à égalité de date le nombre de sources départage.
-    // → les plus vieilles sont systématiquement évincées par les nouvelles publications.
-    const cloudScore = (c) => {
-      const dateMs = c.debateDate
-        ? new Date(c.debateDate).getTime()
-        : (c.enteredAt ? new Date(c.enteredAt).getTime() : 0);
-      return dateMs / 1000 + (c.count || 0) * 3600; // +1h par source comme tiebreaker
-    };
+    bubbles = bubbles
+      .map((bubble) => {
+        const debate = debateMap.get(String(bubble.subjectId));
+        const refreshedCount = debate ? countCloudSources(debate) : Number(bubble.count || 0);
+        const tag = getCloudLabelFromDebate(bubble.subjectId, keywordsMap) || bubble.tag;
+        return {
+          tag,
+          subjectId: String(bubble.subjectId),
+          count: refreshedCount,
+          debateDate: debate ? (debate.source_published_at || debate.created_at || bubble.debateDate || null) : (bubble.debateDate || null),
+          trend: Number(bubble.trend || 0),
+          enteredCloudAt: bubble.enteredCloudAt || now
+        };
+      })
+      .filter(bubble => bubble.tag && bubble.subjectId && bubble.count > 0)
+      .slice(-12);
 
-    let bubbles = [...allCandidates.values()]
-      .sort((a, b) => cloudScore(b) - cloudScore(a) || a.tag.localeCompare(b.tag))
-      .slice(0, 12);
-
-    console.log(`[cloud] existantes: ${existingKeptCount}, nouveaux: ${newAddedCount}, pool: ${allCandidates.size}, final: ${bubbles.length}`);
-    console.log(`[cloud] dates retenues:`, bubbles.map(b => `${b.tag}(${b.debateDate ? b.debateDate.slice(0,10) : '?'},src=${b.count})`).join(', '));
-
-    const maxCount = bubbles.reduce((max, b) => Math.max(max, b.count || 0), 0);
-    console.log(`[cloud] sourceCount max: ${maxCount}`);
-
-    bubbles = bubbles.map(b => {
-      const newCount = b.count || 0;
-      const storedTrend = getDebateTrend(b.subjectId);
-      const trend = storedTrend !== null ? (storedTrend.trend ?? 0) : 0;
-      const enteredCloudAt = existingEnteredMap[b.subjectId] || now;
-      return {
-        tag: b.tag,
-        subjectId: b.subjectId,
-        count: newCount,
-        debateDate: b.debateDate || null,
-        sizeWeight: maxCount > 0 ? newCount / maxCount : 0,
-        trend,
-        enteredCloudAt
-      };
-    });
+    const maxCount = bubbles.reduce((max, bubble) => Math.max(max, bubble.count || 0), 0);
+    bubbles = bubbles.map((bubble) => ({
+      ...bubble,
+      sizeWeight: maxCount > 0 ? bubble.count / maxCount : 0
+    }));
 
     const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
     saveCloudBubbles(newData);
 
-    res.json({ ok: true, count: bubbles.length, freshKept: existingKeptCount, newAdded: newAddedCount, updatedAt: newData.lastUpdatedAt });
+    res.json({ ok: true, count: bubbles.length, newAdded: added, updated, updatedAt: newData.lastUpdatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

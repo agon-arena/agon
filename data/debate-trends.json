@@ -152,5 +152,68 @@
     "sourceCount": 3,
     "matchedSubjectId": null,
     "computedAt": "2026-05-27T05:44:29.525Z"
+  },
+  "604": {
+    "trend": 0,
+    "sourceCount": 2,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T13:57:44.635Z"
+  },
+  "605": {
+    "trend": 0,
+    "sourceCount": 2,
+    "matchedSubjectId": "604",
+    "matchedSubjectTitle": "Faut-il renforcer la surveillance et la sécurité autour des bornes de collecte de vêtements ?",
+    "previousSourceCount": 2,
+    "reason": "Le nouveau sujet traite d'un accident similaire à celui couvert dans la publication récente, concernant un homme coincé dans une benne à vêtements à Bordeaux.",
+    "computedAt": "2026-05-27T14:19:08.667Z"
+  },
+  "606": {
+    "trend": 250,
+    "sourceCount": 7,
+    "matchedSubjectId": "605",
+    "matchedSubjectTitle": "Faut-il renforcer la sécurité des bennes à vêtements pour prévenir les accidents ?",
+    "previousSourceCount": 2,
+    "reason": "Le sujet concerne le procès en appel de Nicolas Sarkozy sur le financement de sa campagne, qui est directement lié à l'affaire libyenne mentionnée dans d'autres articles récents.",
+    "computedAt": "2026-05-27T17:37:08.077Z"
+  },
+  "607": {
+    "trend": 0,
+    "sourceCount": 5,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T17:37:08.508Z"
+  },
+  "608": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T17:37:08.274Z"
+  },
+  "609": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T17:37:06.152Z"
+  },
+  "610": {
+    "trend": -80,
+    "sourceCount": 1,
+    "matchedSubjectId": "603",
+    "matchedSubjectTitle": "Le Brésil doit-il prioriser la lutte contre la déforestation ou soutenir l’exploitation économique ?",
+    "previousSourceCount": 5,
+    "reason": "Le sujet de la plainte de Mélenchon contre Le Pen est similaire à la plainte de Bardella contre le rappeur Soli, car les deux concernent des actions judiciaires entre personnalités politiques et des discours violents.",
+    "computedAt": "2026-05-27T17:37:06.634Z"
+  },
+  "611": {
+    "trend": 0,
+    "sourceCount": 2,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T17:37:20.731Z"
+  },
+  "612": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T17:38:29.620Z"
   }
 }
