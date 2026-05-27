@@ -243,11 +243,9 @@ function normalizeKeywordList(values, max) {
   const list = [];
   (Array.isArray(values) ? values : []).forEach(function(value) {
     const keyword = String(value || '').replace(/^[-–—•\s]+/, '').replace(/[?!.;,:\s]+$/g, '').trim();
-    if (!keyword || keyword.length < 2 || keyword.length > 28) return;
+    if (!keyword || keyword.length < 2 || keyword.length > 60) return;
     const lower = keyword.toLowerCase();
     if (seen.has(lower)) return;
-    if (lower.length > 4 && lower.endsWith('s') && seen.has(lower.slice(0, -1))) return;
-    if (lower.length > 3 && !lower.endsWith('s') && seen.has(lower + 's')) return;
     seen.add(lower);
     list.push(keyword);
   });

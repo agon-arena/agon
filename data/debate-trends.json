@@ -119,5 +119,38 @@
     "previousSourceCount": 8,
     "reason": "Le nouveau sujet traite des tensions militaires entre les États-Unis et l'Iran, tout comme l'article récent qui aborde la nécessité de suspendre les frappes pour préserver le cessez-le-feu, ce qui indique qu'il s'agit de la même séquence d'actualité.",
     "computedAt": "2026-05-26T18:54:10.806Z"
+  },
+  "586": {
+    "trend": -23,
+    "sourceCount": 10,
+    "matchedSubjectId": "581",
+    "matchedSubjectTitle": "Faut-il renforcer la sécurité aux passages à niveau ?",
+    "previousSourceCount": 13,
+    "reason": "Le nouveau sujet et l'article id:581 traitent tous deux d'un accident tragique impliquant un minibus scolaire percuté par un train en Belgique, soulevant la question de la sécurisation des passages à niveau.",
+    "computedAt": "2026-05-27T02:59:30.966Z"
+  },
+  "587": {
+    "trend": 0,
+    "sourceCount": 9,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T03:04:18.289Z"
+  },
+  "588": {
+    "trend": 0,
+    "sourceCount": 8,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T03:21:29.662Z"
+  },
+  "591": {
+    "trend": 0,
+    "sourceCount": 4,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T05:39:08.525Z"
+  },
+  "592": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-27T05:44:29.525Z"
   }
 }

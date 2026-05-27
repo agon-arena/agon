@@ -450,6 +450,7 @@ const DEBATE_CATEGORY_OPTIONS = [
   "Climat - environnement",
   "Justice - faits divers",
   "Culture - modes",
+  "Philosophie - sciences sociales",
   "Médias - divertissements",
   "Sports - loisirs",
   "Santé - bien-être",
@@ -14632,6 +14633,7 @@ function getFilteredDebatesForIndex(baseDebates) {
         return sameId || sameTitle || rawTags.includes(normalizedBubble);
       }
 
+      if (activeSubjectId && String(debate?.id || "").trim() === activeSubjectId) return true;
       const rawTags = typeof extractRawTagsFromItem === "function" ? extractRawTagsFromItem(debate).map(normalizeTag) : [];
       if (rawTags.includes(normalizedBubble)) return true;
       const text = [debate.question, debate.category, debate.option_a, debate.option_b]
@@ -15310,8 +15312,27 @@ function initThematicRowDragScroll() {
   });
 }
 
+const _CAROUSEL_INITIAL = 5;
+const _CAROUSEL_BATCH = 5;
+const _carouselPendingBatches = new Map();
+
+function _buildCarouselInner(debates, key) {
+  const initial = debates.slice(0, _CAROUSEL_INITIAL);
+  const pending = debates.slice(_CAROUSEL_INITIAL);
+  _carouselPendingBatches.set(key, pending);
+  const cardsHtml = initial.map((d) => {
+    try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
+    catch (e) { return ""; }
+  }).join("");
+  const sentinel = pending.length
+    ? `<div class="carousel-load-sentinel" data-carousel-key="${escapeAttribute(key)}"></div>`
+    : "";
+  return cardsHtml + sentinel;
+}
+
 function buildIndexThematicSectionsHtml(debates) {
   try {
+    _carouselPendingBatches.clear();
     const allDebates = Array.isArray(debates) ? debates : [];
     const sections = [];
 
@@ -15320,34 +15341,29 @@ function buildIndexThematicSectionsHtml(debates) {
     // ── À la une : toutes les publications, les plus récentes en tête ──
     if (allDebates.length) {
       const sortedAll = [...allDebates].sort(byDate);
-      const aLaUneCards = sortedAll.map((d) => {
-        try {
-          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
-        } catch (cardErr) {
-          console.warn("Erreur rendu carte à la une", d && d.id, cardErr);
-          return "";
-        }
-      }).join("");
-      if (aLaUneCards) {
-        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${aLaUneCards}</div></div></section>`);
+      const inner = _buildCarouselInner(sortedAll, "À la une");
+      if (inner) {
+        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+      }
+    }
+
+    // ── Arènes sous tension : activité 24h (idées × 1 + commentaires × 0,5) ──
+    const tensionDebates = allDebates
+      .filter((d) => (d.tension_score || 0) > 0)
+      .sort((a, b) => (b.tension_score || 0) - (a.tension_score || 0));
+    if (tensionDebates.length) {
+      const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension");
+      if (inner) {
+        sections.push(`<section class="theme-row-section theme-row-section--tension" data-theme="Arènes sous tension"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Arènes sous tension</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 
     DEBATE_CATEGORY_OPTIONS.forEach((theme) => {
       const themeDebates = allDebates.filter((d) => debateHasCategory(d.category, theme)).sort(byDate);
       if (!themeDebates.length) return;
-
-      const cardsHtml = themeDebates.map((d) => {
-        try {
-          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
-        } catch (cardErr) {
-          console.warn("Erreur rendu carte", d && d.id, cardErr);
-          return "";
-        }
-      }).join("");
-
-      if (!cardsHtml) return;
-      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${escapeHtml(theme)}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+      const inner = _buildCarouselInner(themeDebates, theme);
+      if (!inner) return;
+      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${escapeHtml(theme)}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
 
     const uncategorized = allDebates
@@ -15355,16 +15371,9 @@ function buildIndexThematicSectionsHtml(debates) {
       .sort(byDate);
 
     if (uncategorized.length) {
-      const cardsHtml = uncategorized.map((d) => {
-        try {
-          return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d);
-        } catch (cardErr) {
-          console.warn("Erreur rendu carte sans catégorie", d && d.id, cardErr);
-          return "";
-        }
-      }).join("");
-      if (cardsHtml) {
-        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${cardsHtml}</div></div></section>`);
+      const inner = _buildCarouselInner(uncategorized, "sans-categorie");
+      if (inner) {
+        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 
@@ -15373,6 +15382,66 @@ function buildIndexThematicSectionsHtml(debates) {
     console.error("buildIndexThematicSectionsHtml error:", err);
     return "";
   }
+}
+
+function initCarouselLazyLoad() {
+  document.querySelectorAll('.carousel-load-sentinel').forEach((sentinel) => {
+    const key = sentinel.dataset.carouselKey;
+    const row = sentinel.closest('.theme-horizontal-row');
+    if (!row) return;
+
+    let rafPending = false;
+
+    function loadBatchIfNeeded() {
+      rafPending = false;
+      const pending = _carouselPendingBatches.get(key);
+      if (!pending || !pending.length) {
+        row.removeEventListener('scroll', onScroll);
+        sentinel.remove();
+        return;
+      }
+      // Déclenche le chargement quand on est à moins d'une largeur de la fin
+      if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
+
+      const batch = pending.splice(0, _CAROUSEL_BATCH);
+      const html = batch.map((d) => {
+        try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
+        catch (e) { return ""; }
+      }).join("");
+
+      if (html) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        const inner = sentinel.parentNode;
+        while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
+        initIndexCardShareMenus(inner);
+        initIndexMediaSwipeEnhancements(inner);
+        initIndexYouTubeObserver(inner);
+        initIndexLocalVideoObserver(inner);
+        initIndexXObserver(inner);
+        initIndexInstagramObserver(inner);
+        initIndexOpenGraphImageObserver(inner);
+        initIndexEmbedUnloadObserver(inner);
+        observeIndexCardsMissingSourcePreview(inner);
+        refreshAdminUI();
+      }
+
+      if (!pending.length) {
+        row.removeEventListener('scroll', onScroll);
+        sentinel.remove();
+      }
+    }
+
+    function onScroll() {
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(loadBatchIfNeeded);
+    }
+
+    row.addEventListener('scroll', onScroll, { passive: true });
+    // Vérification immédiate si le carrousel est déjà court (< 5 cartes visibles)
+    requestAnimationFrame(loadBatchIfNeeded);
+  });
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
@@ -15513,6 +15582,7 @@ function renderDebatesList(debates) {
 
   if (hasRows) {
     initThematicRowDragScroll();
+    initCarouselLazyLoad();
     applyThematicTitleTwoLines();
 
     // Fige la hauteur des shells X/Instagram dans le carousel

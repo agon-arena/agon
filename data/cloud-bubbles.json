@@ -1,7 +1,34 @@
 {
   "bubbles": [
     {
-      "tag": "Frappes USA-Iran au Moyen-Orient",
+      "tag": "négociation diplomatique",
+      "subjectId": "588",
+      "count": 8,
+      "debateDate": "2026-05-27T03:21:20.536+00:00",
+      "sizeWeight": 0.36363636363636365,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-27T03:31:03.764Z"
+    },
+    {
+      "tag": "tirs à Sainte-Soline",
+      "subjectId": "591",
+      "count": 4,
+      "debateDate": "2026-05-27T05:39:01.044+00:00",
+      "sizeWeight": 0.18181818181818182,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-27T05:39:43.540Z"
+    },
+    {
+      "tag": "Machghara",
+      "subjectId": "592",
+      "count": 3,
+      "debateDate": "2026-05-27T05:44:23.997+00:00",
+      "sizeWeight": 0.13636363636363635,
+      "trend": 0,
+      "enteredCloudAt": "2026-05-27T05:44:34.073Z"
+    },
+    {
+      "tag": "ce ez-le-feu",
       "subjectId": "583",
       "count": 8,
       "debateDate": "2026-05-26T18:52:51.758+00:00",
@@ -19,7 +46,7 @@
       "enteredCloudAt": "2026-05-26T03:22:45.891Z"
     },
     {
-      "tag": "mort d'un enfant de 11 ans à Rennes",
+      "tag": "enquête pour meurtre",
       "subjectId": "570",
       "count": 6,
       "debateDate": "2026-05-26T03:21:26.502+00:00",
@@ -28,7 +55,7 @@
       "enteredCloudAt": "2026-05-26T03:22:45.891Z"
     },
     {
-      "tag": "vigilance jaune canicule en mai",
+      "tag": "Fini tère",
       "subjectId": "560",
       "count": 7,
       "debateDate": "2026-05-25T12:47:09.179+00:00",
@@ -46,7 +73,7 @@
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
     },
     {
-      "tag": "Fusillade près de la Maison-Blanche",
+      "tag": "tireur abattu",
       "subjectId": "550",
       "count": 16,
       "debateDate": "2026-05-24T12:57:28.671+00:00",
@@ -80,34 +107,7 @@
       "sizeWeight": 0.45454545454545453,
       "trend": 0,
       "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Téhéran",
-      "subjectId": "511",
-      "count": 7,
-      "debateDate": "2026-05-23T06:23:08.74+00:00",
-      "sizeWeight": 0.3181818181818182,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Gabriel Attal",
-      "subjectId": "488",
-      "count": 11,
-      "debateDate": "2026-05-22T16:32:01.481+00:00",
-      "sizeWeight": 0.5,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
-    },
-    {
-      "tag": "Israël",
-      "subjectId": "495",
-      "count": 8,
-      "debateDate": "2026-05-22T16:37:06.879+00:00",
-      "sizeWeight": 0.36363636363636365,
-      "trend": 0,
-      "enteredCloudAt": "2026-05-24T12:58:11.156Z"
     }
   ],
-  "lastUpdatedAt": "2026-05-26T18:53:51.359Z"
+  "lastUpdatedAt": "2026-05-27T05:44:35.363Z"
 }

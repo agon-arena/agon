@@ -535,7 +535,7 @@ function ensureJsonMetaStorage(filePath) {
   }
 }
 
-function normalizeKeywordList(values, max = 10) {
+function normalizeKeywordList(values, max = 10, maxLength = 28) {
   const seen = new Set();
   const list = [];
   (Array.isArray(values) ? values : []).forEach((value) => {
@@ -544,11 +544,9 @@ function normalizeKeywordList(values, max = 10) {
       .replace(/[?!.;,:\s]+$/g, "")
       .trim();
     if (!keyword) return;
-    if (keyword.length < 2 || keyword.length > 28) return;
+    if (keyword.length < 2 || keyword.length > maxLength) return;
     const lower = keyword.toLowerCase();
     if (seen.has(lower)) return;
-    if (lower.length > 4 && lower.endsWith("s") && seen.has(lower.slice(0, -1))) return;
-    if (lower.length > 3 && !lower.endsWith("s") && seen.has(lower + "s")) return;
     seen.add(lower);
     list.push(keyword);
   });
@@ -1012,6 +1010,16 @@ function normalizeCloudLabel(tag) {
 
 function getCloudLabelFromDebate(debateId, keywordsMap) {
   const keywords = normalizeKeywordList(keywordsMap?.[String(debateId)] || []);
+  // Premier passage : préférer les tags courts (≤3 mots) — évite les titres de sujet complets
+  for (const keyword of keywords) {
+    const normalized = normalizeCloudLabel(keyword);
+    if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
+      if (keyword.trim().split(/\s+/).length <= 3) {
+        return String(keyword).replace(/#/g, "").replace(/\s+/g, " ").trim();
+      }
+    }
+  }
+  // Fallback : n'importe quel tag valide si aucun tag court n'existe
   for (const keyword of keywords) {
     const normalized = normalizeCloudLabel(keyword);
     if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
@@ -1023,14 +1031,14 @@ function getCloudLabelFromDebate(debateId, keywordsMap) {
 
 function getVeillePendingKeywords(id) {
   const map = readVeillePendingKeywordsMap();
-  return normalizeKeywordList(map?.[String(id)] || []);
+  return normalizeKeywordList(map?.[String(id)] || [], 10, 60);
 }
 
 function setVeillePendingKeywords(id, keywords) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
   const map = readVeillePendingKeywordsMap();
-  const normalized = normalizeKeywordList(keywords);
+  const normalized = normalizeKeywordList(keywords, 10, 60);
   if (!normalized.length) {
     delete map[pendingId];
   } else {
@@ -1064,7 +1072,7 @@ function writeDebateKeywordsMap(map) {
 
 function getDebateKeywords(debateId) {
   const map = readDebateKeywordsMap();
-  return normalizeKeywordList(map?.[String(debateId)] || []);
+  return normalizeKeywordList(map?.[String(debateId)] || [], 10, 60);
 }
 
 
@@ -1098,7 +1106,7 @@ function setDebateKeywords(debateId, keywords) {
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return;
   const map = readDebateKeywordsMap();
-  const normalized = normalizeKeywordList(keywords);
+  const normalized = normalizeKeywordList(keywords, 10, 60);
   if (!normalized.length) {
     delete map[debateKey];
   } else {
@@ -4700,15 +4708,18 @@ app.get("/api/debates", async (req, res) => {
     const argsByDebate = new Map();
     const debateIdByArgumentId = new Map();
     for (const arg of args || []) {
-      if (!argsByDebate.has(arg.debate_id)) argsByDebate.set(arg.debate_id, []);
-      argsByDebate.get(arg.debate_id).push(arg);
-      debateIdByArgumentId.set(String(arg.id), arg.debate_id);
+      const debateKey = String(arg.debate_id || "");
+      if (!argsByDebate.has(debateKey)) argsByDebate.set(debateKey, []);
+      argsByDebate.get(debateKey).push(arg);
+      debateIdByArgumentId.set(String(arg.id), debateKey);
     }
 
     const commentCountByDebate = new Map();
+    const recentCommentCountByDebate = new Map();
     const lastCommentAtByDebate = new Map();
     const lastVoteAtByDebate = new Map();
     const argumentIds = (args || []).map((arg) => arg.id);
+    const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
 
     if (argumentIds.length) {
       const [commentsResult, votesResult] = await Promise.all([
@@ -4731,6 +4742,9 @@ app.get("/api/debates", async (req, res) => {
         commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
 
         if (comment.created_at) {
+          if (new Date(comment.created_at).getTime() > cutoff24h) {
+            recentCommentCountByDebate.set(debateId, Number(recentCommentCountByDebate.get(debateId) || 0) + 1);
+          }
           const previousLastCommentAt = lastCommentAtByDebate.get(debateId);
           if (!previousLastCommentAt || new Date(comment.created_at) > new Date(previousLastCommentAt)) {
             lastCommentAtByDebate.set(debateId, comment.created_at);
@@ -4754,6 +4768,9 @@ app.get("/api/debates", async (req, res) => {
       const debateArgs = argsByDebate.get(sharedDebateId) || [];
       const argument_count = debateArgs.length;
       const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
+      const recent_argument_count = debateArgs.filter(a => a.created_at && new Date(a.created_at).getTime() > cutoff24h).length;
+      const recent_comment_count = Number(recentCommentCountByDebate.get(sharedDebateId) || 0);
+      const tension_score = recent_argument_count * 1 + recent_comment_count * 0.5;
       const last_argument_at = debateArgs.length
         ? debateArgs
             .map((a) => a.created_at)
@@ -4785,6 +4802,9 @@ app.get("/api/debates", async (req, res) => {
         ...enrichDebateWithStoredImage(d),
         argument_count,
         comment_count,
+        recent_argument_count,
+        recent_comment_count,
+        tension_score,
         last_argument_at,
         last_comment_at,
         last_vote_at,
@@ -6063,6 +6083,7 @@ async function deleteVeillePending(id) {
 }
 
 app.post("/api/veille/receive", async (req, res) => {
+  console.log("[veille/receive] payload reçu:", JSON.stringify(req.body || {}, null, 2));
   const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
   const pendingId = Date.now();
