@@ -15504,7 +15504,7 @@ function buildIndexThematicSectionsHtml(debates) {
     // ── À la une : toutes les publications, les plus récentes en tête ──
     if (allDebates.length) {
       const sortedAll = [...allDebates].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une", 12);
+      const inner = _buildCarouselInner(sortedAll, "À la une", 24);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
