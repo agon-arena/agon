@@ -16881,12 +16881,13 @@ body.page-home-mobile .debate-card-agon-badge {
     height: 48px;
     background: url('/sablier.png') center / contain no-repeat;
     opacity: 0.85;
+    will-change: transform;
     animation: indexCarouselSablierBounce 1.4s ease-in-out infinite;
   }
 
   @keyframes indexCarouselSablierBounce {
-    0%, 100% { transform: translateY(0); opacity: 0.85; }
-    50%       { transform: translateY(-5px); opacity: 1; }
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(0.78); }
   }
 }
 
