@@ -5879,7 +5879,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:20px;"
       >
         <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">
-          <img src="/sablier.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 1.4s ease-in-out infinite;">
+          <img src="/sablier.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;">
         </div>
         <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:100%; margin:0;"></div>
         <div data-index-x-fallback style="display:block;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
