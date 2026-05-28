@@ -12359,12 +12359,12 @@ body.page-debate .debate-context-text {
   box-sizing: border-box;
   text-indent: 1.1em;
   font-weight: 200 !important;
-  font-size: 19px;
+  font-size: 21px;
 }
 
 @media (min-width: 769px) {
   body.page-debate .debate-context-text {
-    font-size: 26px;
+    font-size: 28px;
     line-height: 1.3;
   }
 }
@@ -12397,9 +12397,11 @@ body.page-debate .debate-context-text .article-body-paragraph {
 }
 
 body.page-debate .debate-context-text .article-latin-question {
-  text-align: center;
+  display: block;
+  text-align: center !important;
   text-indent: 0;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  font-style: normal !important;
   margin-top: 1em;
 }
 
@@ -15727,6 +15729,14 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     border-radius: 6px;
   }
 
+  .theme-horizontal-inner > .debate-card .debate-card-media-local-image .debate-card-local-image-shell {
+    max-height: 160px;
+  }
+
+  .theme-horizontal-inner > .debate-card .debate-card-media-local-image .debate-card-local-image {
+    max-height: none;
+  }
+
   /* Titre harmonisé avec les cartes à bandeau */
   .theme-horizontal-inner > .debate-card h2 {
     font-size: 22px;
@@ -17110,7 +17120,7 @@ body.page-home-mobile .topbar-social {
   }
 
   body.page-debate .debate-context-text {
-    font-size: 21px;
+    font-size: 23px;
   }
   body.page-debate .argument-title {
     font-size: 23px;

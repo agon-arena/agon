@@ -19,7 +19,7 @@
     input[type=text], textarea, select { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font: inherit; font-size: 0.9rem; }
     textarea { min-height: 70px; resize: vertical; }
     .f-resume { min-height: 260px; }
-    input:focus, textarea:focus, select:focus { outline: 2px solid #111; }
+    input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus { outline: 2px solid #111; }
     .actions { display: flex; gap: 10px; margin-top: 16px; }
     .btn-publish { background: #111; color: white; border: none; border-radius: 999px; padding: 10px 22px; font: inherit; font-weight: 700; cursor: pointer; }
     .btn-publish:hover { background: #333; }
@@ -42,9 +42,10 @@
     .generated-title-label { margin: 14px 0 6px; font-size: 0.8rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.02em; }
     .field-counter { margin-top: 4px; font-size: 0.78rem; color: #6b7280; text-align: right; }
     .article-format-preview { margin: 8px 0 10px; padding: 12px 14px; border: 1px solid #eceff3; border-radius: 10px; background: #fbfbfb; color: #1f2937; font-size: 0.9rem; line-height: 1.35; }
-    .article-format-preview:empty { display: none; }
-    .article-format-preview p { margin: 0 0 0.65em; }
-    .article-format-preview .article-body-paragraph { white-space: pre-line; }
+    .article-format-preview[contenteditable="true"] { cursor: text; }
+    .article-format-preview:empty:not([contenteditable="true"]) { display: none; }
+    .article-format-preview[contenteditable="true"]:empty::before { content: attr(data-placeholder); color: #9ca3af; }
+    .article-format-preview p { margin: 0 0 0.65em; white-space: pre-line; }
     .article-format-preview .article-latin-question { text-align: center; font-weight: 700; margin-top: 1em; }
     .article-format-preview .article-debate-question { text-align: center; font-style: italic; margin-top: 1em; }
     .article-format-preview .article-signature { text-align: left; font-weight: 400; margin-bottom: 0; }
@@ -112,27 +113,52 @@ function renderArticleFormatPreviewHtml(articleText) {
   const parts = String(articleText || '').split(/\n\n+/)
     .map(function(part) { return part.trim(); })
     .filter(Boolean);
-  if (!parts.length) return '';
-  const signature = parts[parts.length - 1] || '';
-  const question = parts[parts.length - 2] || '';
-  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
-  if (!hasAgonTail) {
+  if (parts.length < 3) {
     return parts.map(function(part) {
-      return '<p class="article-body-paragraph">' + esc(part) + '</p>';
+      return '<p>' + esc(part) + '</p>';
     }).join('');
   }
 
-  const possibleLatinQuestion = parts.length >= 4 ? parts[parts.length - 3] : '';
-  const hasLatinQuestion = !!possibleLatinQuestion && !/[?？]$/.test(possibleLatinQuestion);
+  const signature = parts[parts.length - 1] || '';
+  const question = parts[parts.length - 2] || '';
+  const hasLatinQuestion = parts.length >= 4;
   const latinQuestion = hasLatinQuestion ? parts[parts.length - 3] : '';
   const bodyParts = parts.slice(0, parts.length - (hasLatinQuestion ? 3 : 2));
 
   return bodyParts.map(function(part) {
-    return '<p class="article-body-paragraph">' + esc(part) + '</p>';
+    return '<p>' + esc(part) + '</p>';
   }).join('') +
     (latinQuestion ? '<p class="article-latin-question">' + esc(latinQuestion) + '</p>' : '') +
     '<p class="article-debate-question">' + esc(question) + '</p>' +
     '<p class="article-signature">' + esc(signature) + '</p>';
+}
+
+function getResumeFieldValue(field) {
+  if (!field) return '';
+  if ('value' in field) return String(field.value || '').trim();
+  return String(field.innerText || field.textContent || '')
+    .split(/\n+/)
+    .map(function(line) { return line.trim(); })
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+function setResumeFieldValue(field, value) {
+  if (!field) return;
+  const safeValue = String(value || '').trim();
+  if ('value' in field) {
+    field.value = safeValue;
+    return;
+  }
+  field.innerHTML = renderArticleFormatPreviewHtml(safeValue);
+}
+
+function normalizeResumeEditor(item) {
+  if (!item) return;
+  const resume = item.querySelector('.f-resume');
+  if (!resume || 'value' in resume) return;
+  setResumeFieldValue(resume, getResumeFieldValue(resume));
 }
 
 function toast(msg) {
@@ -171,7 +197,7 @@ function getPendingItemPayload(item) {
     question: item.querySelector('.f-question')?.value.trim() || '',
     positionA: item.querySelector('.f-pos-a')?.value.trim() || '',
     positionB: item.querySelector('.f-pos-b')?.value.trim() || '',
-    resume: item.querySelector('.f-resume')?.value.trim() || ''
+    resume: getResumeFieldValue(item.querySelector('.f-resume'))
   };
 }
 
@@ -346,8 +372,7 @@ function renderItem(item) {
     '<label>Position B</label>' +
     '<input type="text" class="f-pos-b" value="' + esc(item.positionB || '') + '">' +
     '<label>Résumé (contexte)</label>' +
-    '<div class="article-format-preview">' + renderArticleFormatPreviewHtml(item.resume || '') + '</div>' +
-    '<textarea class="f-resume">' + esc(item.resume || '') + '</textarea>' +
+    '<div class="article-format-preview f-resume" contenteditable="true" spellcheck="true" data-placeholder="Contexte de l’arène…">' + renderArticleFormatPreviewHtml(item.resume || '') + '</div>' +
     '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
       '<button type="button" class="context-save-btn">Enregistrer les modifications</button>' +
@@ -389,10 +414,12 @@ function updateFieldCounter(item, selector, counterSelector, maxLength) {
   const field = item.querySelector(selector);
   const counter = item.querySelector(counterSelector);
   if (!field || !counter) return;
-  const rawValue = field.value || '';
+  const isResumeField = field.classList && field.classList.contains('f-resume');
+  const rawValue = isResumeField ? getResumeFieldValue(field) : (field.value || '');
   const safeValue = rawValue.slice(0, maxLength);
   if (rawValue !== safeValue) {
-    field.value = safeValue;
+    if (isResumeField) setResumeFieldValue(field, safeValue);
+    else field.value = safeValue;
   }
   counter.textContent = safeValue.length + ' / ' + maxLength;
   counter.style.color = safeValue.length >= maxLength ? '#b42318' : '#6b7280';
@@ -402,15 +429,13 @@ function updateItemCounters(item) {
   if (!item) return;
   updateFieldCounter(item, '.f-question', '.question-counter', 98);
   updateFieldCounter(item, '.f-resume', '.resume-counter', 1800);
-  updateArticleFormatPreview(item);
 }
 
 function updateArticleFormatPreview(item) {
   if (!item) return;
-  const preview = item.querySelector('.article-format-preview');
   const resume = item.querySelector('.f-resume');
-  if (!preview || !resume) return;
-  preview.innerHTML = renderArticleFormatPreviewHtml(resume.value || '');
+  if (!resume) return;
+  setResumeFieldValue(resume, getResumeFieldValue(resume));
 }
 
 async function checkSimilar(item) {
@@ -522,6 +547,12 @@ async function loadPending() {
         updateItemCounters(field.closest('.pending-item'));
       });
     });
+    list.querySelectorAll('.f-resume[contenteditable="true"]').forEach(function(field) {
+      field.addEventListener('blur', function() {
+        normalizeResumeEditor(field.closest('.pending-item'));
+        updateItemCounters(field.closest('.pending-item'));
+      });
+    });
     list.querySelectorAll('.keyword-add-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         const item = btn.closest('.pending-item');
@@ -628,7 +659,10 @@ function saveContextEdits(item) {
   const resume = item.querySelector('.f-resume');
   const feedback = item.querySelector('.context-save-feedback');
   if (question) question.dataset.savedValue = question.value.trim();
-  if (resume) resume.dataset.savedValue = resume.value.trim();
+  if (resume) {
+    normalizeResumeEditor(item);
+    resume.dataset.savedValue = getResumeFieldValue(resume);
+  }
   flashInlineFeedback(feedback);
 }
 
@@ -652,7 +686,7 @@ async function proofread(btn) {
         question: questionField?.value.trim() || '',
         positionA: positionAField?.value.trim() || '',
         positionB: positionBField?.value.trim() || '',
-        resume: resumeField?.value.trim() || '',
+        resume: getResumeFieldValue(resumeField),
         keywords: getKeywordsFromEditor(item)
       })
     });
@@ -661,7 +695,7 @@ async function proofread(btn) {
     if (questionField) questionField.value = String(data.question || '').slice(0, 98);
     if (positionAField) positionAField.value = String(data.positionA || '');
     if (positionBField) positionBField.value = String(data.positionB || '');
-    if (resumeField) resumeField.value = String(data.resume || '').slice(0, 1800);
+    if (resumeField) setResumeFieldValue(resumeField, String(data.resume || '').slice(0, 1800));
     if (Array.isArray(data.keywords) && data.keywords.length) {
       const keywordList = item.querySelector('.keyword-list');
       if (keywordList) {
@@ -708,7 +742,7 @@ async function publish(btn) {
     positionA: item.querySelector('.f-pos-a').value.trim(),
     positionB: item.querySelector('.f-pos-b').value.trim(),
     theme: item.querySelector('.f-theme').value,
-    resume: item.querySelector('.f-resume').value.trim().slice(0, 1800),
+    resume: getResumeFieldValue(item.querySelector('.f-resume')).slice(0, 1800),
     keywords: keywords,
     links: links,
     linkedDebateId: item.dataset.linkedDebateId || '',
@@ -785,7 +819,7 @@ async function merge(btn, item) {
         question: pendingItem.querySelector('.f-question').value.trim().slice(0, 98),
         positionA: pendingItem.querySelector('.f-pos-a').value.trim(),
         positionB: pendingItem.querySelector('.f-pos-b').value.trim(),
-        resume: pendingItem.querySelector('.f-resume').value.trim().slice(0, 1800),
+        resume: getResumeFieldValue(pendingItem.querySelector('.f-resume')).slice(0, 1800),
         links: links
       })
     });
@@ -919,7 +953,7 @@ async function saveMerge(debateId, pendingItem, agonGenerated) {
         option_a: pendingItem.querySelector('.f-pos-a').value.trim(),
         option_b: pendingItem.querySelector('.f-pos-b').value.trim(),
         category: pendingItem.querySelector('.f-theme').value,
-        content: pendingItem.querySelector('.f-resume').value.trim(),
+        content: getResumeFieldValue(pendingItem.querySelector('.f-resume')),
         ...(agonGenerated ? { mark_as_agon_generated: true } : {})
       })
     });
@@ -983,7 +1017,8 @@ function addEmptyForm() {
     '<label>Thématique</label>' +
     '<select class="f-theme">' + catOptions + '</select>' +
     '<label>Résumé (contexte)</label>' +
-    '<textarea class="f-resume" placeholder="Contexte de l’arène…"></textarea>' +
+    '<div class="article-format-preview f-resume" contenteditable="true" spellcheck="true" data-placeholder="Contexte de l’arène…"></div>' +
+    '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
     '<div class="actions">' +
     '<button class="btn-publish">Publier sur Agôn</button>' +
     '<button class="btn-check-similar" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Vérifier doublons</button>' +
@@ -995,6 +1030,8 @@ function addEmptyForm() {
   const card = list.querySelector('[data-id="' + tempId + '"]');
   card.querySelector('.btn-publish').addEventListener('click', function() { publish(this); });
   card.querySelector('.btn-delete').addEventListener('click', function() { card.remove(); });
+  card.querySelector('.f-resume')?.addEventListener('input', function() { updateItemCounters(card); });
+  card.querySelector('.f-resume')?.addEventListener('blur', function() { normalizeResumeEditor(card); updateItemCounters(card); });
   card.querySelector('.btn-check-similar').addEventListener('click', async function() {
     const q = card.querySelector('.f-question').value.trim();
     if (!q) { toast('Saisissez d\'abord une question.'); return; }

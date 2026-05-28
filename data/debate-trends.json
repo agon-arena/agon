@@ -221,5 +221,116 @@
     "sourceCount": 4,
     "matchedSubjectId": null,
     "computedAt": "2026-05-28T03:01:00.859Z"
+  },
+  "618": {
+    "trend": -50,
+    "sourceCount": 3,
+    "matchedSubjectId": "559",
+    "matchedSubjectTitle": "Faut-il renforcer la surveillance et la protection des enfants dans les quartiers urbains comme Renn",
+    "previousSourceCount": 6,
+    "reason": "Le sujet sur l'encadrement des loyers est lié à la question de la pénurie de logements à Paris, ce qui en fait une séquence pertinente sur les politiques de logement.",
+    "computedAt": "2026-05-28T04:55:03.031Z"
+  },
+  "619": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-28T04:58:49.719Z"
+  },
+  "620": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": "612",
+    "matchedSubjectTitle": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet aborde également la réaction de Cyrille Bolloré face à des critiques, ce qui est directement lié à l'article précédent sur le groupe Bolloré.",
+    "computedAt": "2026-05-28T05:11:42.208Z"
+  },
+  "621": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": "612",
+    "matchedSubjectTitle": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet concerne une frappe israélienne au Liban, similaire à l'article id:612 qui traite également d'une frappe israélienne à Tyr, indiquant une continuité dans le conflit au Liban.",
+    "computedAt": "2026-05-28T05:22:42.894Z"
+  },
+  "622": {
+    "trend": -25,
+    "sourceCount": 3,
+    "matchedSubjectId": "613",
+    "matchedSubjectTitle": "L’Ouganda doit-il maintenir la fermeture de ses frontières avec la RDC malgré les conséquences éco…",
+    "previousSourceCount": 4,
+    "reason": "Le nouveau sujet traite d'une frappe israélienne à Tyr, similaire à l'article id:613 qui couvre également une frappe israélienne dans la même région, indiquant une continuité dans le conflit.",
+    "computedAt": "2026-05-28T05:29:22.322Z"
+  },
+  "623": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": "622",
+    "matchedSubjectTitle": "Faut-il privilégier la dissuasion militaire ou la diplomatie pour stabiliser la frontière israélo?",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet traite d'une frappe israélienne au Liban, tout comme l'article id:622, qui couvre également une frappe israélienne dans la même région et dans un contexte de tensions similaires.",
+    "computedAt": "2026-05-28T05:41:31.560Z"
+  },
+  "626": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": "615",
+    "matchedSubjectTitle": "Faut-il autoriser les interruptions militantes lors de spectacles impliquant des artistes accusés",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet traite d'une frappe israélienne au Liban, similaire à celle couverte dans l'article id:615, qui aborde également une frappe israélienne dans la même région et contexte.",
+    "computedAt": "2026-05-28T07:31:32.962Z"
+  },
+  "628": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": "612",
+    "matchedSubjectTitle": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet traite de la même affaire concernant Jean Messiha et les dons aux victimes, déjà couverte dans l'article du 27 mai 2026.",
+    "computedAt": "2026-05-28T09:00:08.231Z"
+  },
+  "630": {
+    "trend": 33,
+    "sourceCount": 4,
+    "matchedSubjectId": "612",
+    "matchedSubjectTitle": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "previousSourceCount": 3,
+    "reason": "Le nouveau sujet traite également des frappes américaines en Iran et de la riposte iranienne, ce qui le relie directement à une séquence déjà couverte.",
+    "computedAt": "2026-05-28T11:51:19.106Z"
+  },
+  "631": {
+    "trend": 25,
+    "sourceCount": 5,
+    "matchedSubjectId": "613",
+    "matchedSubjectTitle": "L’Ouganda doit-il maintenir la fermeture de ses frontières avec la RDC malgré les conséquences éco…",
+    "previousSourceCount": 4,
+    "reason": "Le nouveau sujet traite des frappes américaines en Iran et de la riposte iranienne, ce qui est directement lié à la publication récente sur la même question de riposte militaire ou négociation avec l'Iran.",
+    "computedAt": "2026-05-28T12:00:39.422Z"
+  },
+  "632": {
+    "trend": 0,
+    "sourceCount": 5,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-28T13:22:43.609Z"
+  },
+  "633": {
+    "trend": 0,
+    "sourceCount": 3,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-28T13:28:01.421Z"
+  },
+  "634": {
+    "trend": 0,
+    "sourceCount": 5,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-28T13:28:41.405Z"
+  },
+  "635": {
+    "trend": 0,
+    "sourceCount": 5,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-28T13:29:03.663Z"
   }
 }

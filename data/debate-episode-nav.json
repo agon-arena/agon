@@ -123,9 +123,9 @@
     "previous_episode_id": 438,
     "previous_episode_title": "L’extrême droite doit-elle pouvoir s’exprimer librement dans l’espace public ?",
     "previous_episode_url": "/debate?id=438",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 607,
+    "next_episode_title": "La justice doit-elle sanctionner plus sévèrement les propos violents dans le rap politique ?",
+    "next_episode_url": "/debate?id=607"
   },
   "485": {
     "previous_episode_id": null,
@@ -163,9 +163,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 618,
+    "next_episode_title": "Faut-il prolonger l’encadrement des loyers malgré ses impacts sur l’investissement immobilier?",
+    "next_episode_url": "/debate?id=618"
   },
   "492": {
     "previous_episode_id": 488,
@@ -419,9 +419,9 @@
     "previous_episode_id": 522,
     "previous_episode_title": "Gabriel Attal est-il prêt à incarner un vrai renouveau politique ?",
     "previous_episode_url": "/debate?id=522",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 610,
+    "next_episode_title": "La justice doit-elle être un outil régulier pour régler les différends entre candidats politiques ?",
+    "next_episode_url": "/debate?id=610"
   },
   "525": {
     "previous_episode_id": 519,
@@ -571,9 +571,9 @@
     "previous_episode_id": 543,
     "previous_episode_title": "La liberté d’expression doit-elle primer sur les intérêts économiques des médias ?",
     "previous_episode_url": "/debate?id=543",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 606,
+    "next_episode_title": "La justice doit-elle renforcer les enquêtes sur les financements politiques douteux ?",
+    "next_episode_url": "/debate?id=606"
   },
   "548": {
     "previous_episode_id": 540,
@@ -755,9 +755,9 @@
     "previous_episode_id": 532,
     "previous_episode_title": "La riposte africaine contre Ebola est-elle suffisamment efficace ?",
     "previous_episode_url": "/debate?id=532",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 613,
+    "next_episode_title": "L’Ouganda doit-il maintenir la fermeture de ses frontières avec la RDC malgré les conséquences éco…",
+    "next_episode_url": "/debate?id=613"
   },
   "572": {
     "previous_episode_id": 546,
@@ -907,9 +907,9 @@
     "previous_episode_id": 588,
     "previous_episode_title": "Les États-Unis doivent-ils suspendre leurs frappes pour préserver le cessez-le-feu avec l’Iran ?",
     "previous_episode_url": "/debate?id=588",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 609,
+    "next_episode_title": "Faut-il privilégier la riposte militaire immédiate ou la retenue pour éviter l’escalade au Liban ?",
+    "next_episode_url": "/debate?id=609"
   },
   "595": {
     "previous_episode_id": 538,
@@ -979,9 +979,9 @@
     "previous_episode_id": 589,
     "previous_episode_title": "Faut-il renforcer les mesures de prévention contre la canicule malgré leur coût élevé ?",
     "previous_episode_url": "/debate?id=589",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 614,
+    "next_episode_title": "Faut-il renforcer les mesures de prévention canicule dans toutes les zones concernées ?",
+    "next_episode_url": "/debate?id=614"
   },
   "605": {
     "previous_episode_id": 601,
@@ -991,15 +991,183 @@
     "next_episode_title": null,
     "next_episode_url": null
   },
+  "606": {
+    "previous_episode_id": 547,
+    "previous_episode_title": "La mobilisation citoyenne peut-elle vraiment faire avancer les enquêtes ?",
+    "previous_episode_url": "/debate?id=547",
+    "next_episode_id": 615,
+    "next_episode_title": "Faut-il autoriser les interruptions militantes lors de spectacles impliquant des artistes accusés",
+    "next_episode_url": "/debate?id=615"
+  },
+  "607": {
+    "previous_episode_id": 483,
+    "previous_episode_title": "Faut-il interdire toute affiliation politique dans la police ?",
+    "previous_episode_url": "/debate?id=483",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
   "608": {
     "previous_episode_id": 602,
     "previous_episode_title": "La responsabilité politique doit-elle primer sur la responsabilité exécutive dans les affaires de fi",
     "previous_episode_url": "/debate?id=602",
+    "next_episode_id": 612,
+    "next_episode_title": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "next_episode_url": "/debate?id=612"
+  },
+  "609": {
+    "previous_episode_id": 594,
+    "previous_episode_title": "Les acteurs régionaux doivent-ils privilégier la retenue ou la préparation militaire ?",
+    "previous_episode_url": "/debate?id=594",
+    "next_episode_id": 616,
+    "next_episode_title": "Faut-il privilégier la riposte militaire ou la négociation pour gérer le conflit avec l'Iran ?",
+    "next_episode_url": "/debate?id=616"
+  },
+  "610": {
+    "previous_episode_id": 524,
+    "previous_episode_title": "Gabriel Attal peut-il vraiment s'imposer dans la course à l’Élysée ?",
+    "previous_episode_url": "/debate?id=524",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
   },
   "611": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "612": {
+    "previous_episode_id": 608,
+    "previous_episode_title": "Le groupe Bolloré doit-il répondre publiquement aux critiques pour apaiser ou éviter d’alimenter la",
+    "previous_episode_url": "/debate?id=608",
+    "next_episode_id": 617,
+    "next_episode_title": "La justice doit-elle appliquer un traitement identique aux personnalités politiques et aux citoyen",
+    "next_episode_url": "/debate?id=617"
+  },
+  "613": {
+    "previous_episode_id": 571,
+    "previous_episode_title": "Faut-il renforcer les mesures de quarantaine pour contenir le hantavirus à Madrid ?",
+    "previous_episode_url": "/debate?id=571",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "614": {
+    "previous_episode_id": 603,
+    "previous_episode_title": "Le Brésil doit-il prioriser la lutte contre la déforestation ou soutenir l’exploitation économique ?",
+    "previous_episode_url": "/debate?id=603",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "615": {
+    "previous_episode_id": 606,
+    "previous_episode_title": "La justice doit-elle renforcer les enquêtes sur les financements politiques douteux ?",
+    "previous_episode_url": "/debate?id=606",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "616": {
+    "previous_episode_id": 609,
+    "previous_episode_title": "Faut-il privilégier la riposte militaire immédiate ou la retenue pour éviter l’escalade au Liban ?",
+    "previous_episode_url": "/debate?id=609",
+    "next_episode_id": 623,
+    "next_episode_title": "La France doit-elle soutenir les frappes israéliennes au Liban malgré le risque d’escalade?",
+    "next_episode_url": "/debate?id=623"
+  },
+  "617": {
+    "previous_episode_id": 612,
+    "previous_episode_title": "Comment garantir la transparence dans la gestion des dons pour les victimes ?",
+    "previous_episode_url": "/debate?id=612",
+    "next_episode_id": 620,
+    "next_episode_title": "Le groupe Bolloré doit-il s'engager davantage dans le débat politique ou rester neutre?",
+    "next_episode_url": "/debate?id=620"
+  },
+  "618": {
+    "previous_episode_id": 491,
+    "previous_episode_title": "Faut-il maintenir l’encadrement des loyers pour protéger les locataires ?",
+    "previous_episode_url": "/debate?id=491",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "619": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "620": {
+    "previous_episode_id": 617,
+    "previous_episode_title": "La justice doit-elle appliquer un traitement identique aux personnalités politiques et aux citoyen",
+    "previous_episode_url": "/debate?id=617",
+    "next_episode_id": 628,
+    "next_episode_title": "Comment garantir la transparence des dons aux victimes sans freiner leur versement?",
+    "next_episode_url": "/debate?id=628"
+  },
+  "621": {
+    "previous_episode_id": 616,
+    "previous_episode_title": "Faut-il privilégier la riposte militaire ou la négociation pour gérer le conflit avec l'Iran ?",
+    "previous_episode_url": "/debate?id=616",
+    "next_episode_id": 622,
+    "next_episode_title": "Faut-il privilégier la dissuasion militaire ou la diplomatie pour stabiliser la frontière israélo?",
+    "next_episode_url": "/debate?id=622"
+  },
+  "622": {
+    "previous_episode_id": 621,
+    "previous_episode_title": "Faut-il privilégier les frappes préventives malgré le risque d’escalade au sud du Liban?",
+    "previous_episode_url": "/debate?id=621",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "623": {
+    "previous_episode_id": 616,
+    "previous_episode_title": "Faut-il privilégier la riposte militaire ou la négociation pour gérer le conflit avec l'Iran ?",
+    "previous_episode_url": "/debate?id=616",
+    "next_episode_id": 626,
+    "next_episode_title": "Faut-il privilégier la dissuasion militaire ou la retenue diplomatique face aux menaces au Liban?",
+    "next_episode_url": "/debate?id=626"
+  },
+  "626": {
+    "previous_episode_id": 623,
+    "previous_episode_title": "La France doit-elle soutenir les frappes israéliennes au Liban malgré le risque d’escalade?",
+    "previous_episode_url": "/debate?id=623",
+    "next_episode_id": 630,
+    "next_episode_title": "Les États-Unis doivent-ils privilégier la riposte militaire ou la désescalade face à l’Iran au Mo?",
+    "next_episode_url": "/debate?id=630"
+  },
+  "628": {
+    "previous_episode_id": 620,
+    "previous_episode_title": "Le groupe Bolloré doit-il s'engager davantage dans le débat politique ou rester neutre?",
+    "previous_episode_url": "/debate?id=620",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "630": {
+    "previous_episode_id": 626,
+    "previous_episode_title": "Faut-il privilégier la dissuasion militaire ou la retenue diplomatique face aux menaces au Liban?",
+    "previous_episode_url": "/debate?id=626",
+    "next_episode_id": 631,
+    "next_episode_title": "Le État -Uni doivent-il privilégier la ripo te militaire ou la diplomatie face à l’Iran?",
+    "next_episode_url": "/debate?id=631"
+  },
+  "631": {
+    "previous_episode_id": 630,
+    "previous_episode_title": "Les États-Unis doivent-ils privilégier la riposte militaire ou la désescalade face à l’Iran au Mo?",
+    "previous_episode_url": "/debate?id=630",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "632": {
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,

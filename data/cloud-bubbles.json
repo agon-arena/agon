@@ -1,113 +1,113 @@
 {
   "bubbles": [
     {
-      "tag": "homme coincé dans benne",
-      "subjectId": "604",
-      "count": 2,
-      "debateDate": "2026-05-27T13:57:35.333+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T14:01:20.058Z",
-      "sizeWeight": 0.25
-    },
-    {
-      "tag": "négociations diplomatiques",
-      "subjectId": "588",
-      "count": 8,
-      "debateDate": "2026-05-27T03:21:20.536+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T03:31:03.764Z",
-      "sizeWeight": 1
-    },
-    {
-      "tag": "tirs à Sainte-Soline",
-      "subjectId": "591",
-      "count": 4,
-      "debateDate": "2026-05-27T05:39:01.044+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T05:39:43.540Z",
-      "sizeWeight": 0.5
-    },
-    {
-      "tag": "Machghara",
-      "subjectId": "592",
+      "tag": "Cyrille Bolloré",
+      "subjectId": "620",
       "count": 3,
-      "debateDate": "2026-05-27T05:44:23.997+00:00",
+      "debateDate": "2026-05-28T05:11:29.333+00:00",
       "trend": 0,
-      "enteredCloudAt": "2026-05-27T05:44:34.073Z",
-      "sizeWeight": 0.375
-    },
-    {
-      "tag": "Jean Messiha",
-      "subjectId": "612",
-      "count": 2,
-      "debateDate": "2026-05-27T17:37:09.029+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.25
-    },
-    {
-      "tag": "Plainte Mélenchon Le Pen",
-      "subjectId": "610",
-      "count": 1,
-      "debateDate": "2026-05-27T17:37:02.288+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.125
-    },
-    {
-      "tag": "Dette du Venezuela",
-      "subjectId": "611",
-      "count": 2,
-      "debateDate": "2026-05-27T17:37:04.593+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.25
+      "enteredCloudAt": "2026-05-28T05:11:46.953Z",
+      "sizeWeight": 0.6
     },
     {
       "tag": "frappe israélienne à Tyr",
-      "subjectId": "609",
+      "subjectId": "633",
       "count": 3,
-      "debateDate": "2026-05-27T17:37:00.739+00:00",
+      "debateDate": "2026-05-28T13:27:56.661+00:00",
       "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.375
+      "enteredCloudAt": "2026-05-28T13:29:25.050Z",
+      "sizeWeight": 0.6
     },
     {
-      "tag": "homme coincé dans benne",
-      "subjectId": "605",
-      "count": 2,
-      "debateDate": "2026-05-27T14:19:04.261+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T14:19:15.402Z",
-      "sizeWeight": 0.25
-    },
-    {
-      "tag": "procès en appel Sarkozy",
-      "subjectId": "606",
-      "count": 7,
-      "debateDate": "2026-05-27T17:36:56.993+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.875
-    },
-    {
-      "tag": "Cyrille Bolloré",
-      "subjectId": "608",
-      "count": 3,
-      "debateDate": "2026-05-27T17:36:59.561+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.375
-    },
-    {
-      "tag": "Plainte de Jordan Bardella",
-      "subjectId": "607",
+      "tag": "Amende UE à Temu",
+      "subjectId": "634",
       "count": 5,
-      "debateDate": "2026-05-27T17:36:58.304+00:00",
+      "debateDate": "2026-05-28T13:28:35.877+00:00",
       "trend": 0,
-      "enteredCloudAt": "2026-05-27T17:38:38.153Z",
-      "sizeWeight": 0.625
+      "enteredCloudAt": "2026-05-28T13:29:25.050Z",
+      "sizeWeight": 1
+    },
+    {
+      "tag": "médicaments anti-obésité",
+      "subjectId": "635",
+      "count": 5,
+      "debateDate": "2026-05-28T13:28:57.176+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T13:29:25.050Z",
+      "sizeWeight": 1
+    },
+    {
+      "tag": "frappe israélienne à Tyr",
+      "subjectId": "622",
+      "count": 3,
+      "debateDate": "2026-05-28T05:29:18.637+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T05:30:15.214Z",
+      "sizeWeight": 0.6
+    },
+    {
+      "tag": "frappe israélienne à Tyr",
+      "subjectId": "623",
+      "count": 3,
+      "debateDate": "2026-05-28T05:41:26.377+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T05:41:36.661Z",
+      "sizeWeight": 0.6
+    },
+    {
+      "tag": "frappe israélienne à Tyr",
+      "subjectId": "626",
+      "count": 3,
+      "debateDate": "2026-05-28T07:31:27.941+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T07:32:58.531Z",
+      "sizeWeight": 0.6
+    },
+    {
+      "tag": "Jean Messiha",
+      "subjectId": "628",
+      "count": 2,
+      "debateDate": "2026-05-28T09:00:04.188+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T09:00:37.216Z",
+      "sizeWeight": 0.4
+    },
+    {
+      "tag": "frappe israélienne à Tyr",
+      "subjectId": "621",
+      "count": 3,
+      "debateDate": "2026-05-28T05:22:34.36+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T05:30:15.214Z",
+      "sizeWeight": 0.6
+    },
+    {
+      "tag": "frappes américaines en Iran",
+      "subjectId": "630",
+      "count": 3,
+      "debateDate": "2026-05-28T11:51:13.885+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T11:51:24.362Z",
+      "sizeWeight": 0.6
+    },
+    {
+      "tag": "frappes américaines en Iran",
+      "subjectId": "631",
+      "count": 4,
+      "debateDate": "2026-05-28T12:00:29.735+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T12:03:27.696Z",
+      "sizeWeight": 0.8
+    },
+    {
+      "tag": "suppression de postes",
+      "subjectId": "632",
+      "count": 5,
+      "debateDate": "2026-05-28T13:22:39.823+00:00",
+      "trend": 0,
+      "enteredCloudAt": "2026-05-28T13:23:14.430Z",
+      "sizeWeight": 1
     }
   ],
-  "lastUpdatedAt": "2026-05-27T17:38:39.115Z"
+  "lastUpdatedAt": "2026-05-28T13:29:25.866Z"
 }
