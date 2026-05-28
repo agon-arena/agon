@@ -16341,6 +16341,29 @@ function getCreateContextText() {
   return input ? input.value.trim().slice(0, 1800) : "";
 }
 
+function renderAgonArticleContextHtml(content) {
+  const parts = String(content || "").split(/\n\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const signature = parts[parts.length - 1] || "";
+  const question = parts[parts.length - 2] || "";
+  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
+  if (!hasAgonTail) {
+    return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
+  }
+
+  const possibleLatinQuestion = parts.length >= 4 ? parts[parts.length - 3] : "";
+  const hasLatinQuestion = !!possibleLatinQuestion && !/[?？]$/.test(possibleLatinQuestion);
+  const latinQuestion = hasLatinQuestion ? parts[parts.length - 3] : "";
+  const bodyParts = parts.slice(0, parts.length - (hasLatinQuestion ? 3 : 2));
+
+  return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
+    + (latinQuestion ? `<p class="article-latin-question">${escapeHtml(latinQuestion)}</p>` : "")
+    + `<p class="article-debate-question">${escapeHtml(question)}</p>`
+    + `<p class="article-signature">${escapeHtml(signature)}</p>`;
+}
+
 function renderDebateContext(content) {
   const wrap = document.getElementById("debate-context-wrap");
   const text = document.getElementById("debate-context-text");
@@ -16349,13 +16372,13 @@ function renderDebateContext(content) {
 
   const safeContent = String(content || "").trim();
   if (!safeContent) {
-    text.textContent = "";
+    text.innerHTML = "";
     const hasEpisodeNav = !!(nav && nav.innerHTML.trim() && window.getComputedStyle(nav).display !== "none");
     wrap.style.display = hasEpisodeNav ? "block" : "none";
     return;
   }
 
-  text.textContent = safeContent;
+  text.innerHTML = renderAgonArticleContextHtml(safeContent);
   wrap.style.display = "block";
   positionDebateContextBelowSources();
 }

@@ -6118,10 +6118,11 @@ app.post("/api/veille/receive", async (req, res) => {
   console.log("[veille/receive] payload reçu:", JSON.stringify(req.body || {}, null, 2));
   const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
+  const safeQuestion = String(question || "").trim().slice(0, 98);
   const pendingId = Date.now();
   const { error } = await supabase.from("veille_pending").insert({
     id: pendingId,
-    question,
+    question: safeQuestion,
     position_a: positionA || null,
     position_b: positionB || null,
     theme: theme || null,
@@ -6467,7 +6468,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
     return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
   }
 
-  const question = String(req.body?.question || "").trim().slice(0, 100);
+  const question = String(req.body?.question || "").trim().slice(0, 98);
   const positionA = String(req.body?.positionA || "").trim();
   const positionB = String(req.body?.positionB || "").trim();
   const resume = String(req.body?.resume || "").trim().slice(0, 1800);
@@ -6525,7 +6526,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
       : keywords;
     return res.json({
       ok: true,
-      question: String(parsed?.question || question).trim().slice(0, 100),
+      question: String(parsed?.question || question).trim().slice(0, 98),
       positionA: String(parsed?.positionA || positionA).trim(),
       positionB: String(parsed?.positionB || positionB).trim(),
       resume: String(parsed?.resume || resume).trim().slice(0, 1800),
@@ -6570,6 +6571,7 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
 app.post("/api/admin/veille/publish", async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
+    const safeQuestion = String(question || "").trim().slice(0, 98);
     let pendingResume = "";
     if (id) {
       const { data: pendingRow, error: pendingError } = await supabase
@@ -6605,7 +6607,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     console.warn("[veille publish] debug lengths", {
       pendingId: id ? Number(id) : null,
       linkedDebateId: canonicalLinkedDebateId || null,
-      questionLength: String(question || "").trim().length,
+      questionLength: safeQuestion.length,
       resumeLength: String(resume || "").trim().length,
       pendingResumeLength: pendingResume.length,
       resolvedContentLength: resolvedContent.length
@@ -6650,7 +6652,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     }
 
     const { data, error } = await supabase.from("debates").insert({
-      question,
+      question: safeQuestion,
       option_a: debateType === "open" ? "" : normalizedPositionA,
       option_b: debateType === "open" ? "" : normalizedPositionB,
       category: theme || null,

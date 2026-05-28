@@ -108,5 +108,16 @@
       "editorial_theme_match": true,
       "strong_keywords_match": true
     }
+  },
+  "1779937581962": {
+    "selectionMode": "existing",
+    "storyDecision": "existing_story",
+    "matchedStoryId": "40-le-changement-climatique-transforme-les-territoires-et-multiplie-les-enjeux-d-ad",
+    "matchedStoryTitle": "Le changement climatique transforme les territoires et multiplie les enjeux d’adaptation",
+    "previousEpisodeTitle": "La réunion ministérielle de Lecornu peut-elle améliorer la gestion des canicules en France ?",
+    "previousEpisodeUrl": "http://localhost:3001/debate?id=567",
+    "confidence": 0.85,
+    "reason": "Histoire choisie manuellement.",
+    "criteria": {}
   }
 }

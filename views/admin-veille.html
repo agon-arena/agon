@@ -41,6 +41,13 @@
     .similar-checking { margin-top: 14px; font-size: 0.82rem; color: #aaa; }
     .generated-title-label { margin: 14px 0 6px; font-size: 0.8rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.02em; }
     .field-counter { margin-top: 4px; font-size: 0.78rem; color: #6b7280; text-align: right; }
+    .article-format-preview { margin: 8px 0 10px; padding: 12px 14px; border: 1px solid #eceff3; border-radius: 10px; background: #fbfbfb; color: #1f2937; font-size: 0.9rem; line-height: 1.35; }
+    .article-format-preview:empty { display: none; }
+    .article-format-preview p { margin: 0 0 0.65em; }
+    .article-format-preview .article-body-paragraph { white-space: pre-line; }
+    .article-format-preview .article-latin-question { text-align: center; font-weight: 700; margin-top: 1em; }
+    .article-format-preview .article-debate-question { text-align: center; font-style: italic; margin-top: 1em; }
+    .article-format-preview .article-signature { text-align: left; font-weight: 400; margin-bottom: 0; }
     .story-selection-box, .story-manual-picker { margin-top: 12px; }
     .story-selection-box { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
     .story-selection-title { font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 8px; }
@@ -99,6 +106,33 @@ function headers() {
 
 function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderArticleFormatPreviewHtml(articleText) {
+  const parts = String(articleText || '').split(/\n\n+/)
+    .map(function(part) { return part.trim(); })
+    .filter(Boolean);
+  if (!parts.length) return '';
+  const signature = parts[parts.length - 1] || '';
+  const question = parts[parts.length - 2] || '';
+  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
+  if (!hasAgonTail) {
+    return parts.map(function(part) {
+      return '<p class="article-body-paragraph">' + esc(part) + '</p>';
+    }).join('');
+  }
+
+  const possibleLatinQuestion = parts.length >= 4 ? parts[parts.length - 3] : '';
+  const hasLatinQuestion = !!possibleLatinQuestion && !/[?？]$/.test(possibleLatinQuestion);
+  const latinQuestion = hasLatinQuestion ? parts[parts.length - 3] : '';
+  const bodyParts = parts.slice(0, parts.length - (hasLatinQuestion ? 3 : 2));
+
+  return bodyParts.map(function(part) {
+    return '<p class="article-body-paragraph">' + esc(part) + '</p>';
+  }).join('') +
+    (latinQuestion ? '<p class="article-latin-question">' + esc(latinQuestion) + '</p>' : '') +
+    '<p class="article-debate-question">' + esc(question) + '</p>' +
+    '<p class="article-signature">' + esc(signature) + '</p>';
 }
 
 function toast(msg) {
@@ -305,13 +339,14 @@ function renderItem(item) {
     '<div class="similar-checking" id="similar-' + item.id + '">Vérification des doublons…</div>' +
     renderLinkedDebateNotice(item) +
     '<div class="generated-title-label">Titre généré par IA</div>' +
-    '<input type="text" class="f-question" maxlength="100" value="' + esc(item.question) + '">' +
-    '<div class="field-counter question-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 100</div>' +
+    '<input type="text" class="f-question" maxlength="98" value="' + esc(item.question) + '">' +
+    '<div class="field-counter question-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 98</div>' +
     '<label>Position A</label>' +
     '<input type="text" class="f-pos-a" value="' + esc(item.positionA || '') + '">' +
     '<label>Position B</label>' +
     '<input type="text" class="f-pos-b" value="' + esc(item.positionB || '') + '">' +
     '<label>Résumé (contexte)</label>' +
+    '<div class="article-format-preview">' + renderArticleFormatPreviewHtml(item.resume || '') + '</div>' +
     '<textarea class="f-resume">' + esc(item.resume || '') + '</textarea>' +
     '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
@@ -365,8 +400,17 @@ function updateFieldCounter(item, selector, counterSelector, maxLength) {
 
 function updateItemCounters(item) {
   if (!item) return;
-  updateFieldCounter(item, '.f-question', '.question-counter', 100);
+  updateFieldCounter(item, '.f-question', '.question-counter', 98);
   updateFieldCounter(item, '.f-resume', '.resume-counter', 1800);
+  updateArticleFormatPreview(item);
+}
+
+function updateArticleFormatPreview(item) {
+  if (!item) return;
+  const preview = item.querySelector('.article-format-preview');
+  const resume = item.querySelector('.f-resume');
+  if (!preview || !resume) return;
+  preview.innerHTML = renderArticleFormatPreviewHtml(resume.value || '');
 }
 
 async function checkSimilar(item) {
@@ -614,7 +658,7 @@ async function proofread(btn) {
     });
     if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
     const data = await r.json();
-    if (questionField) questionField.value = String(data.question || '').slice(0, 100);
+    if (questionField) questionField.value = String(data.question || '').slice(0, 98);
     if (positionAField) positionAField.value = String(data.positionA || '');
     if (positionBField) positionBField.value = String(data.positionB || '');
     if (resumeField) resumeField.value = String(data.resume || '').slice(0, 1800);
@@ -660,7 +704,7 @@ async function publish(btn) {
 
   const body = {
     id: id,
-    question: item.querySelector('.f-question').value.trim().slice(0, 100),
+    question: item.querySelector('.f-question').value.trim().slice(0, 98),
     positionA: item.querySelector('.f-pos-a').value.trim(),
     positionB: item.querySelector('.f-pos-b').value.trim(),
     theme: item.querySelector('.f-theme').value,
@@ -738,7 +782,7 @@ async function merge(btn, item) {
       body: JSON.stringify({
         id: item.id,
         debateId: debateId,
-        question: pendingItem.querySelector('.f-question').value.trim().slice(0, 100),
+        question: pendingItem.querySelector('.f-question').value.trim().slice(0, 98),
         positionA: pendingItem.querySelector('.f-pos-a').value.trim(),
         positionB: pendingItem.querySelector('.f-pos-b').value.trim(),
         resume: pendingItem.querySelector('.f-resume').value.trim().slice(0, 1800),

@@ -12390,6 +12390,32 @@ body.page-debate .debate-context-text span {
   margin-bottom: 0.45em;
 }
 
+body.page-debate .debate-context-text .article-body-paragraph {
+  text-align: left;
+  text-indent: 1.1em;
+  white-space: pre-line;
+}
+
+body.page-debate .debate-context-text .article-latin-question {
+  text-align: center;
+  text-indent: 0;
+  font-weight: 700 !important;
+  margin-top: 1em;
+}
+
+body.page-debate .debate-context-text .article-debate-question {
+  text-align: center;
+  text-indent: 0;
+  font-style: italic;
+  margin-top: 1em;
+}
+
+body.page-debate .debate-context-text .article-signature {
+  text-align: left;
+  text-indent: 0;
+  font-weight: 400 !important;
+}
+
 body.page-debate .debate-episode-nav {
   display: flex;
   flex-direction: row;
