@@ -13812,13 +13812,13 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
-      ${fullText ? `<p
+      ${fullText ? `<div
         class="debate-card-context-text"
         data-index-context-text
         data-full-text="${escapeAttribute(fullText)}"
         data-short-text="${escapeAttribute(shortText)}"
         data-expanded="false"
-      ><span class="context-text-clamp">${shortText ? `<b class="context-first-letter">${escapeHtml(shortText[0])}</b>${escapeHtmlNl(shortText.slice(1))}` : ''}</span></p>` : ""}
+      ><div class="context-text-clamp">${renderIndexContextPreviewText(shortText, false)}</div></div>` : ""}
       ${needsToggle ? `
         <div class="debate-card-context-extra">
           ${scoresHtml}
@@ -13841,6 +13841,48 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
   `;
 }
 
+function renderIndexContextPreviewText(text, expanded) {
+  const rawText = String(text || "");
+  if (!rawText) return "";
+  if (!expanded) {
+    return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+  }
+  return renderIndexContextExpandedText(rawText);
+}
+
+function renderIndexContextExpandedText(text) {
+  const rawText = String(text || "");
+  if (!rawText) return "";
+
+  const parts = rawText.split(/\n\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const signature = parts[parts.length - 1] || "";
+  const question = parts[parts.length - 2] || "";
+  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
+  const latinQuestion = hasAgonTail && parts.length >= 4 && !/[?？]$/.test(parts[parts.length - 3] || "")
+    ? parts[parts.length - 3]
+    : "";
+  if (!latinQuestion) {
+    return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+  }
+
+  const latinStart = rawText.indexOf(latinQuestion);
+  if (latinStart < 0) {
+    return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+  }
+  const questionStart = rawText.indexOf(question, latinStart + latinQuestion.length);
+  if (questionStart < 0) {
+    const beforeLatin = rawText.slice(0, latinStart);
+    const afterLatin = rawText.slice(latinStart + latinQuestion.length);
+    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}`;
+  }
+  const beforeLatin = rawText.slice(0, latinStart);
+  const afterLatin = rawText.slice(latinStart + latinQuestion.length, questionStart).replace(/^\n{2,}/, "\n");
+  const afterQuestion = rawText.slice(questionStart + question.length).replace(/^\n{2,}/, "\n");
+  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="article-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}`;
+}
+
 function closeIndexContextPreview(button) {
   if (!button || button.getAttribute('aria-expanded') !== 'true') return;
   const card = button.closest('[data-index-context-card]');
@@ -13849,7 +13891,7 @@ function closeIndexContextPreview(button) {
   const shortText = textEl?.getAttribute('data-short-text') || '';
   if (textEl) {
     const clamp = textEl.querySelector('.context-text-clamp');
-    if (clamp) clamp.innerHTML = shortText ? `<b class="context-first-letter">${escapeHtml(shortText[0])}</b>${escapeHtmlNl(shortText.slice(1))}` : '';
+    if (clamp) clamp.innerHTML = renderIndexContextPreviewText(shortText, false);
     textEl.setAttribute('data-expanded', 'false');
   }
   if (metaEl) metaEl.classList.remove('is-open');
@@ -13898,7 +13940,7 @@ function toggleIndexContextPreview(button) {
       : String(textEl.getAttribute('data-short-text') || '');
     const clampSpan = textEl.querySelector('.context-text-clamp');
     if (clampSpan) {
-      clampSpan.innerHTML = nextText ? `<b class="context-first-letter">${escapeHtml(nextText[0])}</b>${escapeHtmlNl(nextText.slice(1))}` : '';
+      clampSpan.innerHTML = renderIndexContextPreviewText(nextText, nextExpanded);
     } else {
       textEl.textContent = nextText;
     }

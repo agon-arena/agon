@@ -984,10 +984,41 @@ font-family: "Barlow Condensed", sans-serif;
 }
 
 .debate-card-context-text p {
-  font-size: 15px;
+  font-size: inherit;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.debate-card-context-text[data-expanded="true"] .context-text-clamp,
+.debate-card-context-text[data-expanded="true"] p,
+.debate-card-context-text[data-expanded="true"] .article-body-paragraph,
+.debate-card-context-text[data-expanded="true"] .article-latin-question,
+.debate-card-context-text[data-expanded="true"] .article-debate-question,
+.debate-card-context-text[data-expanded="true"] .article-signature {
+  font-size: inherit !important;
+}
+
+.debate-card-context-text,
+.debate-card-context-text .context-text-clamp,
+.debate-card-context-text p,
+.debate-card-context-text span,
+.debate-card-context-text div {
+  font-weight: 400 !important;
+}
+
+.debate-card-context-text .article-latin-question {
+  display: block;
+  font-weight: 800 !important;
+  text-align: center;
+  margin: 0;
+}
+
+.debate-card-context-text .article-debate-question {
+  display: block;
+  font-style: italic !important;
+  text-align: center;
+  margin: 0;
 }
 
 .debate-card-episode-toggle-row {
@@ -12360,12 +12391,12 @@ body.page-debate .debate-context-text {
   box-sizing: border-box;
   text-indent: 1.1em;
   font-weight: 400 !important;
-  font-size: 75px
+  font-size: 26px !important;
 }
 
 @media (min-width: 769px) {
   body.page-debate .debate-context-text {
-    font-size: 32px;
+    font-size: 33px !important;
     line-height: 1.3;
   }
 }
@@ -12374,6 +12405,7 @@ body.page-debate .debate-context-text p,
 body.page-debate .debate-context-text span,
 body.page-debate .debate-context-text div {
   font-family: inherit !important;
+  font-size: inherit !important;
   font-weight: 200 !important;
 }
 
@@ -13355,7 +13387,7 @@ body.page-debate.debate-title-hidden .debate-hero-outer {
 @media (min-width: 769px) {
   body.page-debate #debate-question,
   body.page-debate .debate-hero h1 {
-    font-size: 30px !important;
+    font-size: 26px !important;
   }
   body.page-debate .column-header h2 {
     font-size: 18px !important;
@@ -16025,7 +16057,7 @@ body.page-home-mobile .debate-card-agon-badge {
 
   body.page-home .debate-card-context-text,
   body.page-home .debate-card-context-text p {
-    font-size: 13px !important;
+    font-size: 22px !important;
     line-height: 1.22 !important;
   }
 
@@ -16941,6 +16973,19 @@ body.page-home-mobile :where(button, input, textarea, select, p, span, div, a, h
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
 }
 
+body.page-home .debate-card-context-text,
+body.page-home .debate-card-context-text :where(p, span, div),
+body.page-home-mobile .debate-card-context-text,
+body.page-home-mobile .debate-card-context-text :where(p, span, div) {
+  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif !important;
+  font-weight: 400 !important;
+}
+
+body.page-home .debate-card-context-text .article-latin-question,
+body.page-home-mobile .debate-card-context-text .article-latin-question {
+  font-weight: 800 !important;
+}
+
 /* Barlow Condensed on the debate page */
 body.page-debate,
 body.page-debate :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
@@ -17122,7 +17167,7 @@ body.page-home-mobile .topbar-social {
   }
 
   body.page-debate .debate-context-text {
-    font-size: 25px;
+    font-size: 26px !important;
   }
   body.page-debate .argument-title {
     font-size: 23px;

@@ -32,7 +32,15 @@
       .ada-trigger-btn, .ada-countdown-badge, .ada-countdown-ready {
         animation-play-state: paused;
       }
+      .ada-trigger-btn::before,
+      .ada-countdown-ready::after {
+        animation-play-state: paused;
+      }
       .ada-trigger-btn.is-visible, .ada-countdown-badge.is-visible, .ada-countdown-ready.is-visible {
+        animation-play-state: running;
+      }
+      .ada-trigger-btn.is-visible::before,
+      .ada-countdown-ready.is-visible::after {
         animation-play-state: running;
       }
       .ada-trigger-btn {
@@ -267,6 +275,357 @@
         font-style: normal; font-weight: 700; font-size: 10px;
         color: #6366f1; letter-spacing: .08em; text-transform: uppercase;
         display: block; margin-bottom: 6px;
+      }
+
+      /* ── Visual refresh: calmer palette, richer hierarchy ── */
+      .ada-wrap {
+        margin: 18px auto 8px;
+        width: min(100%, 920px);
+      }
+      .ada-trigger-btn {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(232,232,232,.28);
+        background: linear-gradient(135deg, #243038, #31424a);
+        color: #f3f6f4;
+        box-shadow:
+          0 12px 30px rgba(0,0,0,.26),
+          0 0 0 3px rgba(244,198,107,.08),
+          0 0 22px rgba(244,198,107,.18),
+          inset 0 1px 0 rgba(255,255,255,.28);
+        letter-spacing: .02em;
+        animation: adaBreath 3.2s ease-in-out infinite;
+      }
+      .ada-trigger-btn::before {
+        content: '';
+        position: absolute;
+        inset: -70% auto -70% -42%;
+        width: 42%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), rgba(244,198,107,.72), transparent);
+        transform: rotate(19deg) translateX(-170%);
+        animation: adaTriggerGlint 2.35s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .ada-trigger-btn::after {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        border-radius: inherit;
+        border: 1px solid rgba(244,198,107,.38);
+        box-shadow: inset 0 0 14px rgba(244,198,107,.14);
+        opacity: .9;
+        pointer-events: none;
+      }
+      .ada-trigger-btn:hover {
+        filter: none;
+        transform: translateY(-2px);
+        box-shadow:
+          0 16px 38px rgba(0,0,0,.32),
+          0 0 0 5px rgba(244,198,107,.16),
+          0 0 34px rgba(244,198,107,.36);
+      }
+      @keyframes adaTriggerGlint {
+        0%, 20% { transform: rotate(19deg) translateX(-190%); opacity: 0; }
+        34% { opacity: 1; }
+        58%, 100% { transform: rotate(19deg) translateX(430%); opacity: 0; }
+      }
+      @keyframes adaBreath {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-1px) scale(1.025); }
+      }
+      .ada-panel {
+        border: 1px solid rgba(232,232,232,.18);
+        border-radius: 16px;
+        background: linear-gradient(180deg, #eef3f0 0%, #dfe8e6 100%);
+        box-shadow: 0 24px 70px rgba(0,0,0,.28);
+      }
+      .ada-panel-header {
+        background: linear-gradient(135deg, #243038 0%, #31424a 72%, #5a4a2f 100%);
+        border-bottom: 1px solid rgba(244,198,107,.34);
+        padding: 12px 16px;
+      }
+      .ada-panel-title {
+        color: #f3f6f4;
+        font-size: 14px;
+        letter-spacing: .03em;
+      }
+      .ada-panel-title::before {
+        content: '🧭 ';
+      }
+      .ada-close-btn {
+        color: #f4d18a;
+        border-radius: 999px;
+        transition: background .18s ease, color .18s ease, transform .18s ease;
+      }
+      .ada-close-btn:hover {
+        background: rgba(244,198,107,.15);
+        color: #fff;
+        transform: rotate(8deg);
+      }
+      .ada-body {
+        color: #18252c;
+        font-size: 20px;
+        line-height: 1.58;
+        padding: 18px clamp(14px, 3vw, 24px) 24px;
+      }
+      .ada-date {
+        color: #4d6268;
+        text-align: center;
+        border-bottom: 1px solid rgba(36,48,56,.18);
+      }
+      .ada-date::before {
+        content: '🕰️ ';
+        font-style: normal;
+      }
+      .ada-scoring-report {
+        animation: adaReportRise .42s ease both;
+      }
+      @keyframes adaReportRise {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .ada-verdict-card {
+        position: relative;
+        overflow: hidden;
+        text-align: center;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(244,198,107,.24), transparent 34%),
+          linear-gradient(135deg, #243038 0%, #31424a 54%, #1b252b 100%);
+        border: 1px solid rgba(244,198,107,.24);
+        border-radius: 16px;
+        box-shadow: 0 18px 44px rgba(17,24,29,.35);
+      }
+      .ada-verdict-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.11) 42%, transparent 58%);
+        transform: translateX(-120%);
+        animation: adaPanelGlint 5.8s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes adaPanelGlint {
+        0%, 62% { transform: translateX(-120%); }
+        78%, 100% { transform: translateX(120%); }
+      }
+      .ada-verdict-eyebrow {
+        color: #f4d18a;
+        opacity: 1;
+      }
+      .ada-verdict-winner {
+        color: #f3f6f4;
+        font-size: clamp(20px, 3vw, 28px);
+      }
+      .ada-verdict-scores-row {
+        justify-content: center;
+      }
+      .ada-verdict-score-a,
+      .ada-verdict-score-b {
+        color: #f4d18a;
+        opacity: 1;
+      }
+      .ada-verdict-vs {
+        color: rgba(243,246,244,.7);
+        opacity: 1;
+      }
+      .ada-verdict-confidence {
+        background: rgba(232,232,232,.1);
+        color: #f3f6f4;
+        border: 1px solid rgba(232,232,232,.18);
+      }
+      .ada-conf-faible { color: #ffc7b8; }
+      .ada-conf-moyenne { color: #f4d18a; }
+      .ada-conf-forte { color: #a7f3d0; }
+      .ada-verdict-expl {
+        font-size: 18px;
+      }
+      .ada-verdict-expl,
+      .ada-verdict-prudence {
+        color: rgba(243,246,244,.86);
+      }
+      .ada-combined-bar-label-a,
+      .ada-combined-bar-label-b,
+      .ada-verdict-card .ada-combined-bar-label-a,
+      .ada-verdict-card .ada-combined-bar-label-b {
+        color: #243038;
+      }
+      .ada-combined-bar-labels {
+        font-size: 14px;
+        line-height: 1.25;
+        gap: 12px;
+      }
+      .ada-verdict-card .ada-combined-bar-label-a,
+      .ada-verdict-card .ada-combined-bar-label-b {
+        color: rgba(243,246,244,.82);
+      }
+      .ada-combined-bar-track {
+        height: 14px;
+        border-radius: 999px;
+        background: rgba(36,48,56,.15);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,.14);
+      }
+      .ada-combined-bar-seg-a {
+        border-radius: 999px 0 0 999px;
+        background: linear-gradient(90deg, #243038, #4d6268);
+        animation: adaBarGrow .7s ease-out both;
+      }
+      .ada-verdict-card .ada-combined-bar-seg-a {
+        background: linear-gradient(90deg, #f4d18a, #f7faf8);
+      }
+      .ada-combined-bar-seg-b {
+        border-radius: 0 999px 999px 0;
+        background: rgba(36,48,56,.22);
+      }
+      @keyframes adaBarGrow {
+        from { width: 0; }
+      }
+      .ada-section-h2 {
+        justify-content: center;
+        text-align: center;
+        color: #243038;
+        border-bottom: 1px solid rgba(36,48,56,.18);
+        margin-top: 28px;
+        letter-spacing: .02em;
+      }
+      .ada-section-icon {
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,.12));
+      }
+      .ada-criterion-card {
+        background: rgba(255,255,255,.62);
+        border: 1px solid rgba(36,48,56,.12);
+        border-radius: 14px;
+        box-shadow: 0 10px 24px rgba(36,48,56,.08);
+        transition: transform .18s ease, box-shadow .18s ease;
+      }
+      .ada-criterion-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 30px rgba(36,48,56,.12);
+      }
+      .ada-criterion-header {
+        justify-content: center;
+        text-align: center;
+      }
+      .ada-criterion-title {
+        color: #243038;
+      }
+      .ada-criterion-arrow {
+        text-align: center;
+        color: #283941;
+        font-size: 18px;
+      }
+      .ada-criterion-arrow::before {
+        content: '💡 ';
+        color: #5a4a2f;
+      }
+      .ada-card-table-row {
+        color: #22323a;
+        border-bottom: 1px solid rgba(36,48,56,.12);
+        font-size: 18px;
+      }
+      .ada-card-table-head {
+        color: #5a4a2f;
+        border-bottom: 1px solid rgba(36,48,56,.18);
+      }
+      .ada-finale {
+        text-align: center;
+        background: linear-gradient(135deg, rgba(244,198,107,.18), rgba(255,255,255,.62));
+        border-left: 0;
+        border: 1px solid rgba(90,74,47,.22);
+        border-radius: 14px;
+        color: #243038;
+        box-shadow: 0 10px 26px rgba(36,48,56,.1);
+        font-size: 20px;
+      }
+      .ada-finale-label {
+        color: #5a4a2f;
+      }
+      .ada-loading,
+      .ada-empty {
+        display: block;
+        text-align: center;
+        color: #4d6268;
+      }
+      .ada-loading::before { content: '⏳ '; }
+      .ada-empty::before { content: '🫧 '; }
+      .ada-error {
+        display: block;
+        text-align: center;
+      }
+      .ada-error::before { content: '⚠️ '; }
+      .ada-countdown-badge,
+      .ada-countdown-ready {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(232,232,232,.28);
+        background: linear-gradient(135deg, #243038, #31424a);
+        color: #f3f6f4;
+        box-shadow: 0 8px 18px rgba(0,0,0,.22);
+        animation: adaBreath 3.4s ease-in-out infinite;
+      }
+      .ada-countdown-ready::after {
+        content: '';
+        position: absolute;
+        top: -55%;
+        bottom: -55%;
+        left: -45%;
+        width: 34%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+        transform: rotate(18deg) translateX(-160%);
+        animation: adaBadgeGlint 3.6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .ada-countdown-ready:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(0,0,0,.28), 0 0 0 4px rgba(244,198,107,.12);
+      }
+      @keyframes adaBadgeGlint {
+        0%, 38% { transform: rotate(18deg) translateX(-160%); opacity: 0; }
+        48% { opacity: .9; }
+        66%, 100% { transform: rotate(18deg) translateX(360%); opacity: 0; }
+      }
+      .ada-regen-btn {
+        border-color: rgba(36,48,56,.3);
+        color: #243038;
+        border-radius: 999px;
+      }
+      .ada-regen-btn:hover {
+        background: #243038;
+        color: #f3f6f4;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ada-trigger-btn,
+        .ada-countdown-badge,
+        .ada-countdown-ready,
+        .ada-scoring-report,
+        .ada-combined-bar-seg-a,
+        .ada-verdict-card::after,
+        .ada-countdown-ready::after,
+        .ada-trigger-btn::before {
+          animation: none !important;
+        }
+        .ada-criterion-card,
+        .ada-trigger-btn {
+          transition: none !important;
+        }
+      }
+      @media (min-width: 769px) {
+        .ada-body {
+          font-size: 21px;
+        }
+        .ada-verdict-expl,
+        .ada-criterion-arrow,
+        .ada-card-table-row {
+          font-size: 19px;
+        }
+        .ada-combined-bar-labels {
+          font-size: 16px;
+        }
+        .ada-verdict-winner {
+          font-size: clamp(24px, 3.3vw, 32px);
+        }
+        .ada-finale {
+          font-size: 21px;
+        }
       }
     `;
     const el = document.createElement('style');
@@ -529,7 +888,7 @@
       if (section === 'finale') {
         if (t && t[0] !== '#' && t !== '---') {
           out += '<div class="ada-finale">' +
-            '<span class="ada-finale-label">✍️ Phrase finale</span>' +
+            '<span class="ada-finale-label">✍️ Conclusion</span>' +
             md(t) +
           '</div>';
           section = null;
@@ -638,7 +997,7 @@
       if (!r.ok) return;
 
       if (json.raw || json.status === 'ready') {
-        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse">✦ Analyse IA disponible</span>';
+        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse">✨ Analyse IA disponible</span>';
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -661,7 +1020,7 @@
         const tick = () => {
           const secs = Math.max(0, Math.round((target - Date.now()) / 1000));
           if (secs <= 0) {
-            slot.innerHTML = '<span class="ada-countdown-ready">✦ Analyse IA disponible</span>';
+            slot.innerHTML = '<span class="ada-countdown-ready">✨ Analyse IA disponible</span>';
           } else {
             badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
             setTimeout(tick, 1000);
@@ -692,7 +1051,7 @@
 
       slot.innerHTML = `
         <div class="ada-wrap">
-          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✦ Analyse et arbitrage IA</button>
+          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✨ Analyse et arbitrage IA</button>
           <div id="ada-panel" class="ada-panel">
             <div class="ada-panel-header">
               <span class="ada-panel-title">Analyse et arbitrage IA</span>
@@ -720,7 +1079,7 @@
 
     slot.innerHTML = `
       <div class="ada-wrap">
-        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✦ Analyse et arbitrage IA</button>
+        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✨ Analyse et arbitrage IA</button>
         <div id="ada-panel" class="ada-panel">
           <div class="ada-panel-header">
             <span class="ada-panel-title">Analyse et arbitrage IA</span>
