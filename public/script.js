@@ -4753,8 +4753,8 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
   const image = normalizedPreview.image || "";
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const rootClickAttr = safeDebateId
-    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
-    : `style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
 
   return `
     <div
@@ -5876,7 +5876,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         data-index-x-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-tweet-id="${escapeAttribute(tweetId)}"
-        style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:20px;"
+        style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:0;"
       >
         <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">
           <img src="/sablier.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;">
@@ -5900,8 +5900,8 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
   const description = normalizedPreview.description || "Ouvrir ce post Instagram.";
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const rootClickAttr = safeDebateId
-    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
-    : `style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
 
   return `
     <div
@@ -5949,7 +5949,7 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
         data-index-instagram-shell
         data-source-url="${escapeAttribute(String(sourceUrl || "").trim())}"
         data-instagram-permalink="${escapeAttribute(embedPermalink)}"
-        style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:20px; background:${loadingShellBackground};"
+        style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:0; background:${loadingShellBackground};"
       >
         <div data-index-instagram-loading style="position:absolute; inset:0; z-index:2; display:none;"></div>
         <div data-index-instagram-embed onclick="event.stopPropagation()" style="display:none; justify-content:center;"></div>
@@ -5990,7 +5990,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
         data-index-youtube-shell
         data-embed-base="${escapeAttribute(embedData.embedUrl)}"
         data-media-label="${escapeAttribute(mediaLabel || '')}"
-        style="position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border-radius:20px; background:#000;"
+        style="position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border-radius:0; background:#000;"
       >
         <button
           type="button"
@@ -9024,15 +9024,15 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   if (debateId) {
     // Index : toute la carte ouvre la modale iframe
     cardTag = "div";
-    cardAttributes = `class="debate-source-card" onclick="openIndexDebateFromMedia('${debateId}', event)" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`;
+    cardAttributes = `class="debate-source-card" onclick="openIndexDebateFromMedia('${debateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`;
     openSourceHtml = "";
   } else if (debateHref) {
     cardTag = "a";
-    cardAttributes = `class="debate-source-card" href="${escapeAttribute(debateHref)}" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; text-decoration:none;"`;
+    cardAttributes = `class="debate-source-card" href="${escapeAttribute(debateHref)}" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; text-decoration:none;"`;
     openSourceHtml = "";
   } else {
     cardTag = "div";
-    cardAttributes = `class="debate-source-card" style="display:block; overflow:hidden; border-radius:20px; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    cardAttributes = `class="debate-source-card" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
     openSourceHtml = `<div>
           <a
             class="debate-source-link"
@@ -13100,11 +13100,8 @@ async function saveAdminCardEdit(debateId, btn) {
         if (!newContent) {
           contextWrap.remove();
         } else {
-          const previewLimit = 170;
-          const shortText = newContent.length > previewLimit
-            ? `${newContent.slice(0, previewLimit).trimEnd()}…`
-            : newContent;
-          const needsToggle = newContent.length > previewLimit;
+          const shortText = getIndexContextClosedPreviewText(newContent);
+          const needsToggle = newContent !== shortText;
           const ctxText = contextWrap.querySelector('[data-index-context-text]');
           if (ctxText) {
             ctxText.textContent = shortText;
@@ -13789,16 +13786,22 @@ function getDebateCardDeleteButtonHtml(debate) {
   `;
 }
 
+function getIndexContextClosedPreviewText(text) {
+  const fullText = String(text || "").trim();
+  if (!fullText) return "";
+  const firstSentence = fullText.match(/^.*?[.!?…](?=\s|$)/s);
+  if (firstSentence?.[0]) return firstSentence[0].trim();
+  const firstLine = fullText.split(/\n+/)[0]?.trim();
+  return firstLine || fullText;
+}
+
 function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "", episodeNavHtml = "") {
   const fullText = String(debate?.content || '').trim();
   const hasExtra = !!(scoresHtml || metaHtml || shareHtml || episodeNavHtml);
   if (!fullText && !hasExtra) return "";
 
-  const previewLimit = 170;
-  const shortText = fullText.length > previewLimit
-    ? `${fullText.slice(0, previewLimit).trimEnd()}…`
-    : fullText;
-  const needsToggle = fullText.length > previewLimit || hasExtra;
+  const shortText = getIndexContextClosedPreviewText(fullText);
+  const needsToggle = fullText !== shortText || hasExtra;
 
   const debateId = escapeAttribute(String(debate?.id || ""));
 
@@ -24311,18 +24314,22 @@ function ensureCommentStanceMobileStyles() {
   style.textContent = `
     @media (max-width: 768px) {
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option {
-        padding: 4px 7px !important;
+        padding: 5px 9px !important;
         border-radius: 999px !important;
         border: 1px solid transparent !important;
         background: transparent !important;
-        font-size: 10px !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
         gap: 4px !important;
       }
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
-        background: #243038 !important;
-        border-color: #243038 !important;
-        color: #ffffff !important;
+        background: transparent !important;
+        border-color: #111827 !important;
+        color: inherit !important;
+        outline: 3px solid rgba(255,255,255,0.98) !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 2px rgba(36,48,56,0.74), 0 0 18px rgba(36,48,56,0.68) !important;
       }
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"] {
@@ -24350,9 +24357,9 @@ function ensureCommentStanceMobileStyles() {
       }
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
-        border-color: #ffffff !important;
-        background: #ffffff !important;
-        box-shadow: inset 0 0 0 3px #243038 !important;
+        border-color: currentColor !important;
+        background: currentColor !important;
+        box-shadow: inset 0 0 0 3px #ffffff !important;
       }
     }
   `;
