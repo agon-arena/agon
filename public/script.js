@@ -15692,7 +15692,9 @@ function updateIndexTagTrends(items) {
   }
 
   if (cloudContainer) {
-    cloudContainer.innerHTML = '<div class="agon-cloud-loading"><img src="/sablier.png" alt="" class="agon-cloud-spinner"></div>';
+    if (!cloudContainer.querySelector('.agon-cloud-spinner')) {
+      cloudContainer.innerHTML = '<div class="agon-cloud-loading"><img src="/sablier.png" alt="" class="agon-cloud-spinner" width="370" height="370" decoding="async"></div>';
+    }
   }
   const _vortexStartTime = Date.now();
 
@@ -22267,7 +22269,7 @@ async function submitArgument(debateId, side) {
     return;
   }
 
-  if (body.length > 600) {
+  if (rawBody.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
     return;
   }
@@ -22400,7 +22402,7 @@ async function submitListArgument(debateId) {
     return;
   }
 
-  if (body.length > 600) {
+  if (rawBody.length > 600) {
     alert("Maximum 600 caractères pour le texte de l'idée.");
     return;
   }

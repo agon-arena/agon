@@ -880,8 +880,8 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script>window.__VEILLE_MEDIAS__ = __VEILLE_MEDIAS_JSON__;</script>
-<script src="/script.js?v=20260522-admin-topbar-dropdown"></script>
-<script src="/ai-analysis-animation.js"></script>
+<script src="/script.js?v=20260529-idea-url-free"></script>
+<script src="/ai-analysis-animation.js?v=20260529-sablier-preload"></script>
 <script src="/admin-debate-analysis.js?v=20260529-ai-trigger-bright"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
@@ -1892,12 +1892,12 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
     var nextValue = current + '\n\n' + SOURCE_MARKER_LABEL + normalizedUrl;
     var max = Number(body.getAttribute('maxlength') || 600);
-    if(nextValue.length > max){
+    if(current.length > max){
       if(event){
         event.preventDefault();
         event.stopImmediatePropagation();
       }
-      alert('Ton idée est trop longue avec le lien. Raccourcis légèrement le développement ou le lien avant de publier.');
+      alert('Ton idée est trop longue. Raccourcis légèrement le développement avant de publier.');
       body.focus();
       return;
     }

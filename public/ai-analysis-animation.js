@@ -5,6 +5,31 @@
   var FADE_MS   = 450;
   var _showAt   = 0;
   var _injected = false;
+  var _showToken = 0;
+  var _sablierImg = null;
+  var _sablierPromise = null;
+
+  function preloadSablier() {
+    if (_sablierPromise) return _sablierPromise;
+    _sablierImg = new Image();
+    _sablierImg.decoding = 'sync';
+    _sablierImg.src = '/sablier.png';
+    _sablierPromise = new Promise(function (resolve) {
+      function done() {
+        if (_sablierImg && typeof _sablierImg.decode === 'function') {
+          _sablierImg.decode().then(resolve).catch(resolve);
+        } else {
+          resolve();
+        }
+      }
+      if (_sablierImg.complete && _sablierImg.naturalWidth) done();
+      else {
+        _sablierImg.onload = done;
+        _sablierImg.onerror = resolve;
+      }
+    });
+    return _sablierPromise;
+  }
 
   function injectStyles() {
     if (_injected) return;
@@ -116,41 +141,57 @@
     document.head.appendChild(el);
   }
 
+  function buildOverlay() {
+    var sablier = _sablierImg || document.createElement('img');
+    sablier.className = 'aala-sablier';
+    sablier.src = '/sablier.png';
+    sablier.alt = '';
+    sablier.decoding = 'sync';
+
+    var overlay = document.createElement('div');
+    overlay.id = 'aala-overlay';
+    overlay.innerHTML =
+      '<div class="aala-brain aala-far  aala-far-1">🧠</div>' +
+      '<div class="aala-brain aala-far  aala-far-2">🧠</div>' +
+      '<div class="aala-brain aala-far  aala-far-3">🧠</div>' +
+      '<div class="aala-brain aala-mid  aala-mid-1">🧠</div>' +
+      '<div class="aala-brain aala-mid  aala-mid-2">🧠</div>' +
+      '<div class="aala-brain aala-mid  aala-mid-3">🧠</div>' +
+      '<div class="aala-brain aala-near aala-near-1">🧠</div>' +
+      '<div class="aala-brain aala-near aala-near-2">🧠</div>' +
+      '<div class="aala-brain aala-near aala-near-3">🧠</div>' +
+      '<div class="aala-label">Analyse en cours…</div>';
+    overlay.insertBefore(sablier, overlay.querySelector('.aala-label'));
+    return overlay;
+  }
+
   function showAiAnalysisAnimation() {
     injectStyles();
-    _showAt = Date.now();
+    var token = ++_showToken;
 
     var existing = document.getElementById('aala-overlay');
     if (existing) existing.parentNode.removeChild(existing);
 
-    var overlay = document.createElement('div');
-    overlay.id  = 'aala-overlay';
-    overlay.innerHTML =
-      /* Anneau extérieur */
-      '<div class="aala-brain aala-far  aala-far-1">🧠</div>'  +
-      '<div class="aala-brain aala-far  aala-far-2">🧠</div>'  +
-      '<div class="aala-brain aala-far  aala-far-3">🧠</div>'  +
-      /* Anneau intermédiaire */
-      '<div class="aala-brain aala-mid  aala-mid-1">🧠</div>'  +
-      '<div class="aala-brain aala-mid  aala-mid-2">🧠</div>'  +
-      '<div class="aala-brain aala-mid  aala-mid-3">🧠</div>'  +
-      /* Anneau intérieur */
-      '<div class="aala-brain aala-near aala-near-1">🧠</div>' +
-      '<div class="aala-brain aala-near aala-near-2">🧠</div>' +
-      '<div class="aala-brain aala-near aala-near-3">🧠</div>' +
-      /* Sablier au-dessus */
-      '<img class="aala-sablier" src="/sablier.png" alt="">'    +
-      '<div class="aala-label">Analyse en cours…</div>';
-
-    document.body.appendChild(overlay);
+    preloadSablier().then(function () {
+      if (token !== _showToken) return;
+      _showAt = Date.now();
+      document.body.appendChild(buildOverlay());
+    });
   }
 
   function hideAiAnalysisAnimation(callback) {
+    var overlay = document.getElementById('aala-overlay');
+    if (!overlay) {
+      _showToken++;
+      if (callback) callback();
+      return;
+    }
+
     var elapsed   = Date.now() - _showAt;
     var remaining = Math.max(0, MIN_MS - elapsed);
 
     setTimeout(function () {
-      var overlay = document.getElementById('aala-overlay');
+      overlay = document.getElementById('aala-overlay');
       if (overlay) {
         overlay.classList.add('is-hiding');
         setTimeout(function () {
@@ -165,4 +206,5 @@
 
   window.showAiAnalysisAnimation = showAiAnalysisAnimation;
   window.hideAiAnalysisAnimation = hideAiAnalysisAnimation;
+  preloadSablier();
 })();

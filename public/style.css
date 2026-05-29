@@ -16378,9 +16378,9 @@ body.page-home-mobile .debate-card-agon-badge {
 
 /* ── Cloud loading spinner ─────────────────────────────────── */
 @keyframes agonCloudPulse {
-  0%   { transform: scale(1);    }
-  50%  { transform: scale(1.22); }
-  100% { transform: scale(1);    }
+  0%   { transform: translate3d(0, 0, 0) scale(1);    }
+  50%  { transform: translate3d(0, 0, 0) scale(1.22); }
+  100% { transform: translate3d(0, 0, 0) scale(1);    }
 }
 
 .agon-cloud-loading {
@@ -16399,10 +16399,13 @@ body.page-home-mobile .debate-card-agon-badge {
   height: 370px;
   object-fit: contain;
   display: block;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: center center;
   animation: agonCloudPulse 3.2s ease-in-out infinite;
-  will-change: transform;
+  will-change: transform, opacity;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  contain: layout paint;
 }
 
 @media (max-width: 768px) {
