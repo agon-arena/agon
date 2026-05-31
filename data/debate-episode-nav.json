@@ -443,9 +443,9 @@
     "previous_episode_id": null,
     "previous_episode_title": null,
     "previous_episode_url": null,
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 657,
+    "next_episode_title": "Canal+ doit-il privilégier la fermeté face aux critiques internes ou protéger la liberté?",
+    "next_episode_url": "/debate?id=657"
   },
   "528": {
     "previous_episode_id": 520,
@@ -1203,17 +1203,17 @@
     "previous_episode_id": 551,
     "previous_episode_title": "Patrick Bruel doit-il être interdit de scène pour protéger les femmes ?",
     "previous_episode_url": "/debate?id=551",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 655,
+    "next_episode_title": "La manifestation contre Patrick Bruel doit-elle primer sur le déroulement du concert?",
+    "next_episode_url": "/debate?id=655"
   },
   "637": {
     "previous_episode_id": 633,
     "previous_episode_title": "Doit-on privilégier les frappes préventives ou la retenue pour éviter une escalade au Liban?",
     "previous_episode_url": "/debate?id=633",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 651,
+    "next_episode_title": "Donald Trump doit-il approuver l’accord avec l’Iran pour désamorcer la crise au Moyen-Orient?",
+    "next_episode_url": "/debate?id=651"
   },
   "638": {
     "previous_episode_id": 628,
@@ -1259,17 +1259,17 @@
     "previous_episode_id": 598,
     "previous_episode_title": "La Russie doit-elle continuer ses ripostes militaires ou privilégier la désescalade diplomatique ?",
     "previous_episode_url": "/debate?id=598",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 649,
+    "next_episode_title": "L’OTAN doit-elle répondre militairement à l’attaque russe en Roumanie ou privilégier?",
+    "next_episode_url": "/debate?id=649"
   },
   "644": {
     "previous_episode_id": 597,
     "previous_episode_title": "Faut-il privilégier la fermeté militaire ou la diplomatie pour éviter une escalade au Moyen-Orient ?",
     "previous_episode_url": "/debate?id=597",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 658,
+    "next_episode_title": "Faut-il étendre les opérations militaires israéliennes au Liban malgré le risque d’escalade?",
+    "next_episode_url": "/debate?id=658"
   },
   "645": {
     "previous_episode_id": 575,
@@ -1283,9 +1283,9 @@
     "previous_episode_id": 635,
     "previous_episode_title": "La France doit-elle élargir le remboursement des médicaments anti-obésité malgré leur coût élevé?",
     "previous_episode_url": "/debate?id=635",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 654,
+    "next_episode_title": "La France doit-elle élargir le remboursement des médicaments anti-obésité malgré les coûts élevés?",
+    "next_episode_url": "/debate?id=654"
   },
   "647": {
     "previous_episode_id": 639,
@@ -1299,6 +1299,86 @@
     "previous_episode_id": 640,
     "previous_episode_title": "Les personnalités publiques doivent-elles privilégier la justice ou la médiation pour régler?",
     "previous_episode_url": "/debate?id=640",
+    "next_episode_id": 650,
+    "next_episode_title": "Faut-il exclure une personnalité accusée avant toute condamnation judiciaire?",
+    "next_episode_url": "/debate?id=650"
+  },
+  "649": {
+    "previous_episode_id": 643,
+    "previous_episode_title": "L’OTAN doit-elle riposter militairement après l’incident du drone en Roumanie?",
+    "previous_episode_url": "/debate?id=643",
+    "next_episode_id": 656,
+    "next_episode_title": "La Roumanie doit-elle durcir sa réponse face aux incursions russes ou privilégier la retenue?",
+    "next_episode_url": "/debate?id=656"
+  },
+  "650": {
+    "previous_episode_id": 648,
+    "previous_episode_title": "La justice doit-elle être privilégiée pour régler les conflits entre figures publiques?",
+    "previous_episode_url": "/debate?id=648",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "651": {
+    "previous_episode_id": 637,
+    "previous_episode_title": "La communauté internationale doit-elle privilégier la pression militaire ou la diplomatie?",
+    "previous_episode_url": "/debate?id=637",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "652": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "653": {
+    "previous_episode_id": null,
+    "previous_episode_title": null,
+    "previous_episode_url": null,
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "654": {
+    "previous_episode_id": 646,
+    "previous_episode_title": "La communauté internationale doit-elle maintenir ou réduire son aide contre Ebola en RDC?",
+    "previous_episode_url": "/debate?id=646",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "655": {
+    "previous_episode_id": 636,
+    "previous_episode_title": "Faut-il condamner les interruptions militantes lors de spectacles pour dénoncer des accusations ?",
+    "previous_episode_url": "/debate?id=636",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "656": {
+    "previous_episode_id": 649,
+    "previous_episode_title": "L’OTAN doit-elle répondre militairement à l’attaque russe en Roumanie ou privilégier?",
+    "previous_episode_url": "/debate?id=649",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "657": {
+    "previous_episode_id": 527,
+    "previous_episode_title": "La politique de Bolloré à Canal+ détruit-elle le cinéma français ?",
+    "previous_episode_url": "/debate?id=527",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "658": {
+    "previous_episode_id": 644,
+    "previous_episode_title": "Le Liban doit-il privilégier la riposte militaire ou la désescalade face aux frappes israéliennes?",
+    "previous_episode_url": "/debate?id=644",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null

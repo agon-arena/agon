@@ -1,13 +1,13 @@
 {
   "bubbles": [
     {
-      "tag": "Cyrille Bolloré",
-      "subjectId": "620",
-      "count": 3,
-      "debateDate": "2026-05-28T05:11:29.333+00:00",
-      "trend": 0,
-      "enteredCloudAt": "2026-05-28T05:11:46.953Z",
-      "sizeWeight": 0.6
+      "tag": "guerre au Moyen-Orient",
+      "subjectId": "658",
+      "count": 5,
+      "debateDate": "2026-05-31T06:49:21.69+00:00",
+      "trend": 100,
+      "enteredCloudAt": "2026-05-31T06:49:57.402Z",
+      "sizeWeight": 1
     },
     {
       "tag": "frappe israélienne à Tyr",
@@ -41,7 +41,7 @@
       "subjectId": "622",
       "count": 3,
       "debateDate": "2026-05-28T05:29:18.637+00:00",
-      "trend": 0,
+      "trend": -25,
       "enteredCloudAt": "2026-05-28T05:30:15.214Z",
       "sizeWeight": 0.6
     },
@@ -86,7 +86,7 @@
       "subjectId": "630",
       "count": 3,
       "debateDate": "2026-05-28T11:51:13.885+00:00",
-      "trend": 0,
+      "trend": 33,
       "enteredCloudAt": "2026-05-28T11:51:24.362Z",
       "sizeWeight": 0.6
     },
@@ -95,7 +95,7 @@
       "subjectId": "631",
       "count": 4,
       "debateDate": "2026-05-28T12:00:29.735+00:00",
-      "trend": 0,
+      "trend": 25,
       "enteredCloudAt": "2026-05-28T12:03:27.696Z",
       "sizeWeight": 0.8
     },
@@ -109,5 +109,5 @@
       "sizeWeight": 1
     }
   ],
-  "lastUpdatedAt": "2026-05-28T13:29:25.866Z"
+  "lastUpdatedAt": "2026-05-31T06:55:44.072Z"
 }

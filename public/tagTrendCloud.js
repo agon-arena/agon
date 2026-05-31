@@ -437,14 +437,10 @@ function renderTagTrendCloud(container, trends) {
     const flashWrap = document.createElement("span");
     flashWrap.className = "agon-tag-bubble-flash";
 
-    if (trendValue !== 0 && Number.isFinite(trendValue)) {
-      const trendSpan = document.createElement("span");
-      trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
-      trendSpan.textContent = trendMeta.label;
-      bubble.append(flashWrap, trendSpan, label);
-    } else {
-      bubble.append(flashWrap, label);
-    }
+    const trendSpan = document.createElement("span");
+    trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
+    trendSpan.textContent = trendMeta.label;
+    bubble.append(flashWrap, trendSpan, label);
     container.appendChild(bubble);
   });
 

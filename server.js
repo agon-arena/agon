@@ -2764,9 +2764,10 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     "Publications récentes (les 24 dernières) :",
     recentLines,
     "",
-    "Si plusieurs sujets semblent similaires, retourne l'id de celui dont la date est la plus récente.",
+    "Si plusieurs sujets semblent appartenir à la même séquence, retourne TOUS leurs ids dans le tableau matchedSubjectIds (pas seulement un).",
+    "Si aucun sujet ne correspond, matchedSubjectIds doit être un tableau vide [].",
     'Réponds UNIQUEMENT en JSON strict :',
-    '{"matchedSubjectId":"id ou null","confidence":0.0,"reason":"courte justification","isSameSequence":true}'
+    '{"matchedSubjectIds":["id1","id2"],"confidence":0.0,"reason":"courte justification","isSameSequence":true}'
   ].join("\n");
 
   try {
@@ -2789,14 +2790,46 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     let parsed;
     try { parsed = JSON.parse(content); } catch { return null; }
 
-    const matchedId = String(parsed?.matchedSubjectId || "").trim();
     const confidence = Number(parsed?.confidence ?? 0);
     const isSameSequence = parsed?.isSameSequence === true;
+    if (confidence < 0.65 || !isSameSequence) return null;
 
-    if (!matchedId || matchedId === "null" || confidence < 0.65 || !isSameSequence) return null;
+    // Récupérer les IDs matchés (tableau ou fallback vers ancien format)
+    let matchedIds = [];
+    if (Array.isArray(parsed?.matchedSubjectIds)) {
+      matchedIds = parsed.matchedSubjectIds.map(id => String(id || "").trim()).filter(id => id && id !== "null");
+    } else if (parsed?.matchedSubjectId) {
+      // Compatibilité avec l'ancien format
+      const single = String(parsed.matchedSubjectId || "").trim();
+      if (single && single !== "null") matchedIds = [single];
+    }
+    if (!matchedIds.length) return null;
 
-    const matched = recentSubjects.find((s) => String(s.id) === matchedId);
-    if (!matched) return null;
+    // Résoudre les sujets correspondants dans la liste
+    const candidates = matchedIds
+      .map(id => recentSubjects.find(s => String(s.id) === id))
+      .filter(Boolean);
+
+    if (!candidates.length) return null;
+
+    // Log : tous les matchs trouvés
+    console.log(`[trend-match] ${candidates.length} sujet(s) similaire(s) trouvé(s) pour "${String(newSubject?.question || "").slice(0, 60)}" :`);
+    candidates.forEach(c => {
+      const date = c.published_at || c.publishedAt || c.created_at || c.createdAt || c.date || c.timestamp || null;
+      console.log(`  → id:${c.id} | date:${date || "inconnue"} | sources:${c.sourceCount || 0} | "${String(c.question || "").slice(0, 50)}"`);
+    });
+
+    // Sélectionner le plus récemment publié côté serveur
+    const getDate = (s) => {
+      const raw = s.published_at || s.publishedAt || s.created_at || s.createdAt || s.date || s.timestamp || null;
+      if (!raw) return 0;
+      const t = new Date(raw).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
+    const matched = candidates.reduce((best, c) => getDate(c) >= getDate(best) ? c : best, candidates[0]);
+
+    console.log(`[trend-match] → Sujet retenu : id:${matched.id} | date:${matched.published_at || matched.created_at || "?"} | sources:${matched.sourceCount || 0} | "${String(matched.question || "").slice(0, 60)}"`);
 
     return {
       id: matched.id,
@@ -6396,9 +6429,20 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
         updated++;
         continue;
       }
-      const nextBubble = { ...candidate, trend: 0, enteredCloudAt: now };
-      if (bubbles.length < 12) {
+      // Utiliser le même trend que le badge carte (debate-trends.json) pour cohérence visuelle
+      const trendEntry = getDebateTrend(debate.id);
+      const debateTrendValue = Number(trendEntry?.trend ?? 0);
+      const nextBubble = { ...candidate, trend: debateTrendValue, enteredCloudAt: now };
+      const matchedId = trendEntry?.matchedSubjectId ? String(trendEntry.matchedSubjectId).trim() : null;
+      const matchedBubbleIndex = matchedId ? bubbles.findIndex(b => String(b.subjectId) === matchedId) : -1;
+
+      if (matchedBubbleIndex >= 0) {
+        // Remplace la bulle qui correspond au match IA — pas de doublon
+        bubbles[matchedBubbleIndex] = { ...bubbles[matchedBubbleIndex], ...nextBubble };
+        updated++;
+      } else if (bubbles.length < 12) {
         bubbles.push(nextBubble);
+        added++;
       } else {
         let oldestIndex = 0;
         for (let i = 1; i < bubbles.length; i++) {
@@ -6407,8 +6451,8 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
           if (currentTime < oldestTime) oldestIndex = i;
         }
         bubbles[oldestIndex] = nextBubble;
+        added++;
       }
-      added++;
     }
 
     const ids = bubbles.map(b => b.subjectId).filter(Boolean);
@@ -6432,7 +6476,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
           subjectId: String(bubble.subjectId),
           count: refreshedCount,
           debateDate: debate ? (debate.source_published_at || debate.created_at || bubble.debateDate || null) : (bubble.debateDate || null),
-          trend: Number(bubble.trend || 0),
+          trend: Number(getDebateTrend(bubble.subjectId)?.trend ?? bubble.trend ?? 0),
           enteredCloudAt: bubble.enteredCloudAt || now
         };
       })

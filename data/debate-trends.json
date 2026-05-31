@@ -332,5 +332,14 @@
     "sourceCount": 5,
     "matchedSubjectId": null,
     "computedAt": "2026-05-28T13:29:03.663Z"
+  },
+  "658": {
+    "trend": 100,
+    "sourceCount": 6,
+    "matchedSubjectId": "647",
+    "matchedSubjectTitle": "Faut-il lever systématiquement l’immunité parlementaire en cas de soupçons graves?",
+    "previousSourceCount": 3,
+    "reason": "Le sujet concerne l'escalade des opérations militaires israéliennes au Liban, en lien direct avec les frappes israéliennes récentes, ce qui en fait une continuation de la même séquence de conflit au Moyen-Orient.",
+    "computedAt": "2026-05-31T06:49:26.088Z"
   }
 }

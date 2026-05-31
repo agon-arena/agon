@@ -923,6 +923,7 @@
     const useAnim  = typeof showAiAnalysisAnimation === 'function';
 
     panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     body.innerHTML = '';
     if (useAnim) showAiAnalysisAnimation();
     else body.innerHTML = '<span class="ada-loading">Chargement…</span>';
@@ -1000,7 +1001,7 @@
         slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse">✨ Analyse IA disponible</span>';
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
-          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
           setTimeout(() => {
             const triggerBtn = document.getElementById('ada-trigger-btn');
             if (triggerBtn) triggerBtn.click();

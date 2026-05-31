@@ -4753,8 +4753,8 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
   const image = normalizedPreview.image || "";
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const rootClickAttr = safeDebateId
-    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
-    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; color:inherit;"`;
 
   return `
     <div
@@ -5076,18 +5076,17 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
             ${youthBadgeHtml}
           </div>
         </div>
-        <h2>${escapeHtml(d.question)}</h2>
-
         ${mediaOutsideLink ? "" : mediaHtml}
+        <h2>${escapeHtml(d.question)}</h2>
       </a>
 
       ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       ${mediaOutsideLink ? `
         <div class="index-card-media-with-title">
-          <div class="index-card-title-banner" role="button" tabindex="0" style="cursor:pointer;" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
-            <p class="index-card-title-banner-text">${escapeHtml(d.question)}</p>
-          </div>
           ${mediaHtml}
+        </div>
+        <div class="index-card-title-banner" role="button" tabindex="0" style="cursor:pointer;" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
+          <p class="index-card-title-banner-text">${escapeHtml(d.question)}</p>
         </div>
       ` : ""}
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
@@ -5900,8 +5899,8 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
   const description = normalizedPreview.description || "Ouvrir ce post Instagram.";
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const rootClickAttr = safeDebateId
-    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`
-    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    ? `onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; color:inherit; cursor:pointer;"`
+    : `style="display:block; overflow:hidden; border-radius:0; background:#ffffff; color:inherit;"`;
 
   return `
     <div
@@ -6878,7 +6877,7 @@ function rerenderIndexCardMedia(debateId) {
   }
 
   if (existingWrapper) {
-    existingWrapper.insertAdjacentHTML('beforeend', mediaHtml);
+    existingWrapper.insertAdjacentHTML('afterbegin', mediaHtml);
   } else {
     const anchor = card.querySelector(':scope > .debate-card-context, :scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
     if (anchor) {
@@ -9048,16 +9047,16 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     <${cardTag}
       ${cardAttributes}
     >
-      ${image ? `
+      ${(image || (!debateId && !debateHref)) ? `
       <div
         class="debate-source-card-image-wrap"
-        data-index-og-image-shell
-        data-image-src="${escapeAttribute(image)}"
+        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"` : ''}
         style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
       >
         <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
           ${buildIndexOpenGraphImageLoadingHtml()}
         </div>
+        ${image ? `
         <img
           class="debate-source-card-image"
           data-index-og-image
@@ -9066,6 +9065,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
           style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
         >
         <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
+        ` : ''}
       </div>
       ` : ``}
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
@@ -15694,13 +15694,6 @@ function updateIndexTagTrends(items) {
     return;
   }
 
-  if (cloudContainer) {
-    if (!cloudContainer.querySelector('.agon-cloud-spinner')) {
-      cloudContainer.innerHTML = '<div class="agon-cloud-loading"><img src="/sablier.png" alt="" class="agon-cloud-spinner" width="370" height="370" decoding="async"></div>';
-    }
-  }
-  const _vortexStartTime = Date.now();
-
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
       window._tagTrendsModule = module;
@@ -15718,9 +15711,6 @@ function updateIndexTagTrends(items) {
       }
 
       window.AGON_TAG_TRENDS = tagTrends;
-      const _vortexElapsed = Date.now() - _vortexStartTime;
-      const _vortexDelay = Math.max(0, 3000 - _vortexElapsed);
-      await new Promise(r => setTimeout(r, _vortexDelay));
       window._tagTrendCloudModule = cloudModule;
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
       requestAnimationFrame(() => {
@@ -20666,9 +20656,6 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
   sourceFallback.style.display = "block";
 
-  // Les aperçus Open Graph de la page débat réutilisent le shell d'image
-  // introduit pour la page index. Il faut donc initialiser ici le chargement
-  // différé, sinon le placeholder peut rester affiché indéfiniment sur /debate.
   initIndexOpenGraphImageObserver(sourceFallback);
 
   syncDebateSourceSwipeAvailability();
