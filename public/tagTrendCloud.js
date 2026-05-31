@@ -20,10 +20,10 @@ function getBubbleVisualSize(index, trendItem = null) {
   const clamped = Math.max(0, Math.min(1, weight));
   const amplified = Math.pow(clamped, 1.75);
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  const minSize = isMobile ? 52 : 60;
+  const minSize = isMobile ? 52 : 56;
   const maxSize = index === 0
-    ? (isMobile ? 140 : 166)
-    : (isMobile ? 124 : 150);
+    ? (isMobile ? 140 : 160)
+    : (isMobile ? 124 : 142);
 
   return Math.round(minSize + ((maxSize - minSize) * amplified)) + "px";
 }
@@ -209,7 +209,7 @@ function applyCompactBubbleLayout(container) {
   const btnRadius = 24;
   const preferredAngles = isNarrow
     ? [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12]
-    : [-8, 215, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+    : [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
   // Obstacles déjà placés (bouton central inclus)
   const placed = [{ x: centerX, y: centerY, r: btnRadius }];
@@ -220,11 +220,11 @@ function applyCompactBubbleLayout(container) {
     if (inlineSize) {
       size = parseFloat(inlineSize);
     } else if (bubble.classList.contains("agon-tag-bubble-large")) {
-      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 136 : 160) : (isNarrow ? 118 : 139);
+      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 136 : 154) : (isNarrow ? 118 : 136);
     } else if (bubble.classList.contains("agon-tag-bubble-medium")) {
-      size = isNarrow ? 96 : 116;
+      size = isNarrow ? 96 : 112;
     } else {
-      size = isNarrow ? 66 : 78;
+      size = isNarrow ? 66 : 76;
     }
     if (!size || !Number.isFinite(size)) size = 80;
     const r = size / 2;

@@ -15664,6 +15664,10 @@ function syncBubbleFrameTop() {
   if (!btn || !cloud) return;
   const btnRect = btn.getBoundingClientRect();
   const cloudRect = cloud.getBoundingClientRect();
+  if (btnRect.bottom <= cloudRect.top) {
+    cloud.style.removeProperty('--bubble-frame-top');
+    return;
+  }
   const frameDrop = 56;
   const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top) + frameDrop);
   cloud.style.setProperty('--bubble-frame-top', offset + 'px');

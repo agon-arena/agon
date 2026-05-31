@@ -265,6 +265,51 @@
       </div>
     </div>
 
+    <div class="admin-controls-row" data-admin style="display:none;">
+      <div class="admin-topbar-menu" id="admin-topbar-menu">
+        <button
+          id="admin-topbar-menu-toggle"
+          class="button button-secondary admin-topbar-menu-toggle"
+          type="button"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
+          <i class="fa-solid fa-gear" aria-hidden="true"></i>
+          <span>Admin</span>
+          <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div class="admin-topbar-menu-panel" id="admin-topbar-menu-panel" hidden>
+          <button id="admin-logout-btn" class="admin-topbar-menu-item admin-topbar-menu-item-danger" type="button">
+            Quitter le mode admin
+          </button>
+
+          <a class="admin-topbar-menu-item admin-reports-button" href="/admin-reports" data-admin style="display:none;">
+            Signalements
+            <span id="reports-count" class="notifications-count" style="display:none;"></span>
+          </a>
+
+          <a class="admin-topbar-menu-item admin-tags-button" href="/admin-tags" data-admin style="display:none;">
+            <i class="fa-solid fa-tags" aria-hidden="true"></i>
+            <span>Tags</span>
+          </a>
+
+          <a class="admin-topbar-menu-item" href="/admin-stories" onclick="event.preventDefault(); openDebateIframeModal('/admin-stories')" data-admin style="display:none;">
+            <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+            <span>Histoires associées</span>
+          </a>
+
+          <a class="admin-topbar-menu-item" href="/admin/veille" target="_blank" rel="noopener" data-admin style="display:none;">
+            <span aria-hidden="true">📥</span>
+            <span>Sujets en attente</span>
+          </a>
+
+          <a class="admin-topbar-menu-item" href="__VEILLE_URL__" target="_blank" rel="noopener" data-admin style="display:none;">
+            <span aria-hidden="true">🔍</span>
+            <span>Veille</span>
+          </a>
+        </div>
+      </div>
+    </div>
 
   </div>
 </header>

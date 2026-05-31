@@ -341,5 +341,35 @@
     "previousSourceCount": 3,
     "reason": "Le sujet concerne l'escalade des opérations militaires israéliennes au Liban, en lien direct avec les frappes israéliennes récentes, ce qui en fait une continuation de la même séquence de conflit au Moyen-Orient.",
     "computedAt": "2026-05-31T06:49:26.088Z"
+  },
+  "659": {
+    "trend": 0,
+    "sourceCount": 32,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-31T09:42:28.436Z"
+  },
+  "660": {
+    "trend": 0,
+    "sourceCount": 6,
+    "matchedSubjectId": null,
+    "computedAt": "2026-05-31T09:50:59.835Z"
+  },
+  "661": {
+    "trend": 0,
+    "sourceCount": 32,
+    "matchedSubjectId": "659",
+    "matchedSubjectTitle": "Comment concilier célébrations sportives et maintien strict de l’ordre public en France?",
+    "previousSourceCount": 32,
+    "reason": "Le nouveau sujet traite des célébrations sportives liées à la victoire du PSG, ce qui est directement lié à l'article récent sur la conciliation entre célébrations sportives et maintien de l'ordre public après la même victoire.",
+    "computedAt": "2026-05-31T09:58:50.515Z"
+  },
+  "662": {
+    "trend": 0,
+    "sourceCount": 4,
+    "matchedSubjectId": "600",
+    "matchedSubjectTitle": "La loi post-Bétharram doit-elle privilégier répression stricte ou accompagnement éducatif ?",
+    "previousSourceCount": 4,
+    "reason": "Le sujet de la violence entre adolescents et la proposition de loi post-Bétharram sur les violences à l'école sont liés à la même problématique de la violence juvénile et des réponses législatives à y apporter.",
+    "computedAt": "2026-05-31T10:14:41.012Z"
   }
 }

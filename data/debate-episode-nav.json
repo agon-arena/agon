@@ -987,9 +987,9 @@
     "previous_episode_id": 601,
     "previous_episode_title": "Comment concilier présomption d’innocence et protection des mineurs dans les affaires sexuelles ?",
     "previous_episode_url": "/debate?id=601",
-    "next_episode_id": null,
-    "next_episode_title": null,
-    "next_episode_url": null
+    "next_episode_id": 659,
+    "next_episode_title": "Comment concilier célébrations sportives et maintien strict de l’ordre public en France?",
+    "next_episode_url": "/debate?id=659"
   },
   "606": {
     "previous_episode_id": 547,
@@ -1379,6 +1379,30 @@
     "previous_episode_id": 644,
     "previous_episode_title": "Le Liban doit-il privilégier la riposte militaire ou la désescalade face aux frappes israéliennes?",
     "previous_episode_url": "/debate?id=644",
+    "next_episode_id": null,
+    "next_episode_title": null,
+    "next_episode_url": null
+  },
+  "659": {
+    "previous_episode_id": 605,
+    "previous_episode_title": "Faut-il renforcer la sécurité des bennes à vêtements pour prévenir les accidents ?",
+    "previous_episode_url": "/debate?id=605",
+    "next_episode_id": 661,
+    "next_episode_title": "Comment encadrer les célébrations sportives pour éviter violences et tensions?",
+    "next_episode_url": "/debate?id=661"
+  },
+  "661": {
+    "previous_episode_id": 659,
+    "previous_episode_title": "Comment concilier célébrations sportives et maintien strict de l’ordre public en France?",
+    "previous_episode_url": "/debate?id=659",
+    "next_episode_id": 662,
+    "next_episode_title": "Comment prévenir la violence extrême entre adolescents sans stigmatiser la jeunesse?",
+    "next_episode_url": "/debate?id=662"
+  },
+  "662": {
+    "previous_episode_id": 661,
+    "previous_episode_title": "Comment encadrer les célébrations sportives pour éviter violences et tensions?",
+    "previous_episode_url": "/debate?id=661",
     "next_episode_id": null,
     "next_episode_title": null,
     "next_episode_url": null
