@@ -6148,9 +6148,7 @@ function shouldIncludeIndexMediaItem(item, debate = null, options = {}) {
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) return true;
   if (isXStatusUrl(itemUrl) || isInstagramPostUrl(itemUrl)) return true;
 
-  const preview = getResolvedIndexSourcePreview(itemUrl, debate);
-  const normalizedPreview = normalizeSourcePreviewData(preview, itemUrl);
-  return !!String(normalizedPreview.image || "").trim();
+  return true;
 }
 
 function getIndexDebateMediaItems(debate, options = {}) {
@@ -11970,6 +11968,9 @@ function initAdminTopbarMenu() {
   const open = () => {
     panel.hidden = false;
     toggle.setAttribute("aria-expanded", "true");
+    const rect = toggle.getBoundingClientRect();
+    panel.style.top = (rect.bottom + 8) + 'px';
+    panel.style.right = (window.innerWidth - rect.right) + 'px';
   };
 
   toggle.addEventListener("click", (event) => {
@@ -12758,10 +12759,6 @@ function initAdminEditCategoryPicker(panel) {
     event.stopPropagation();
   });
 
-  document.addEventListener('click', (event) => {
-    if (!picker.contains(event.target)) closePanel();
-  });
-
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closePanel();
   });
@@ -12910,6 +12907,9 @@ async function adminAddDebateTag(input, debateId) {
     if (list) {
       const span = document.createElement('span');
       span.className = 'admin-edit-tag';
+      span.title = 'Cliquer pour définir comme tag principal';
+      span.dataset.tag = tag;
+      span.setAttribute('onclick', `event.stopPropagation(); adminPromoteDebateTag(this)`);
       span.innerHTML = `${escapeHtml(tag)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(debateId))}', '${escapeAttribute(tag)}')">×</button>`;
       list.appendChild(span);
     }
@@ -12954,7 +12954,7 @@ async function adminPromoteDebateTag(tagEl) {
     const list = wrap.querySelector('.admin-edit-tags-list');
     if (list && data.keywords) {
       list.innerHTML = data.keywords.map((k, i) =>
-        `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(debateId)}', '${escapeAttribute(k)}')">×</button></span>`
+        `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}" onclick="event.stopPropagation(); adminPromoteDebateTag(this)">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(debateId)}', '${escapeAttribute(k)}')">×</button></span>`
       ).join('');
     }
   } catch(e) { alert('Erreur promotion tag : ' + e.message); }
@@ -13598,25 +13598,6 @@ function buildAdminEditPanelHtml(d) {
       </button>
       <div class="admin-edit-form" style="display:none;">
         <div class="admin-edit-field">
-          <label class="admin-edit-label">Thématiques</label>
-          <input type="hidden" data-edit-field="category" data-admin-category-hidden value="${escapeAttribute(initialCategoryValue)}">
-          <div class="create-category-picker" data-admin-category-picker data-open="false">
-            <button
-              type="button"
-              class="create-category-toggle"
-              data-admin-category-toggle
-              aria-expanded="false"
-            >
-              <span data-admin-category-toggle-label>Choisir une ou plusieurs thématiques</span>
-              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-            </button>
-            <div class="create-category-panel" data-admin-category-panel hidden aria-label="Choisir une ou plusieurs thématiques">
-              <div class="create-category-options" data-admin-category-options></div>
-            </div>
-            <div class="create-category-selected" data-admin-category-selected aria-live="polite"></div>
-          </div>
-        </div>
-        <div class="admin-edit-field">
           <label class="admin-edit-label">Question / Titre</label>
           <textarea class="admin-edit-textarea" data-edit-field="question" rows="2">${escapeHtml(d.question || '')}</textarea>
         </div>
@@ -13653,6 +13634,25 @@ function buildAdminEditPanelHtml(d) {
           </div>
         </div>
         <div class="admin-edit-field">
+          <label class="admin-edit-label">Thématiques</label>
+          <input type="hidden" data-edit-field="category" data-admin-category-hidden value="${escapeAttribute(initialCategoryValue)}">
+          <div class="create-category-picker" data-admin-category-picker data-open="false">
+            <button
+              type="button"
+              class="create-category-toggle"
+              data-admin-category-toggle
+              aria-expanded="false"
+            >
+              <span data-admin-category-toggle-label>Choisir une ou plusieurs thématiques</span>
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
+            <div class="create-category-panel" data-admin-category-panel hidden aria-label="Choisir une ou plusieurs thématiques">
+              <div class="create-category-options" data-admin-category-options></div>
+            </div>
+            <div class="create-category-selected" data-admin-category-selected aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="admin-edit-field">
           <label class="admin-edit-label">Histoire associée</label>
           <input class="admin-edit-input admin-edit-story-search" type="search" placeholder="Rechercher une histoire…" autocomplete="off" onclick="event.stopPropagation()" oninput="adminFilterStorySelect(this)">
           <select class="admin-edit-input" data-edit-field="story_id" data-debate-id="${escapeAttribute(String(d.id || ''))}" data-current="${escapeAttribute(String(d.story_id || ''))}">
@@ -13669,7 +13669,7 @@ function buildAdminEditPanelHtml(d) {
         <div class="admin-edit-field">
           <label class="admin-edit-label">Tags</label>
           <div class="admin-edit-tags-wrap" data-debate-id="${escapeAttribute(String(d.id || ''))}">
-            <div class="admin-edit-tags-list">${(d.keywords || []).map((k, i) => `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(d.id || ''))}', '${escapeAttribute(k)}')">×</button></span>`).join('')}</div>
+            <div class="admin-edit-tags-list">${(d.keywords || []).map((k, i) => `<span class="admin-edit-tag${i === 0 ? ' admin-edit-tag--primary' : ''}" data-tag="${escapeAttribute(k)}" title="${i === 0 ? 'Tag principal' : 'Cliquer pour définir comme tag principal'}" onclick="event.stopPropagation(); adminPromoteDebateTag(this)">${escapeHtml(k)}<button type="button" class="admin-edit-tag-remove" onclick="event.stopPropagation(); adminRemoveDebateTag(this, '${escapeAttribute(String(d.id || ''))}', '${escapeAttribute(k)}')">×</button></span>`).join('')}</div>
             <div style="display:flex; gap:6px; margin-top:6px;">
               <input type="text" class="admin-edit-input admin-edit-tag-input" placeholder="Ajouter un tag…" style="flex:1; font-size:12px;" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault(); event.stopPropagation(); adminAddDebateTag(this, '${escapeAttribute(String(d.id || ''))}');}">
               <button type="button" style="font-size:12px; padding:3px 8px; background:#111827; color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="event.stopPropagation(); adminAddDebateTag(this.previousElementSibling, '${escapeAttribute(String(d.id || ''))}')">+</button>
@@ -15655,7 +15655,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260524-bigtext");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260531-align");
 
 
 function syncBubbleFrameTop() {

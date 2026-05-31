@@ -1,5 +1,31 @@
 [
   {
+    "story_id": "necrologie-mptpfwpi",
+    "story_title": "Nécrologie",
+    "main_actors": [],
+    "central_tension": "",
+    "keywords": [],
+    "status": "active",
+    "created_at": "2026-05-31T11:37:00.246Z",
+    "updated_at": "2026-05-31T11:37:00.246Z",
+    "first_episode_id": null,
+    "latest_episode_id": null,
+    "latest_episode_title": ""
+  },
+  {
+    "story_id": "les-hommes-et-les-femmes-finissent-toujours-par--mptp2ax1",
+    "story_title": "Les hommes et les femmes finissent toujours par  mourrir",
+    "main_actors": [],
+    "central_tension": "",
+    "keywords": [],
+    "status": "active",
+    "created_at": "2026-05-31T11:26:25.477Z",
+    "updated_at": "2026-05-31T11:26:25.477Z",
+    "first_episode_id": null,
+    "latest_episode_id": null,
+    "latest_episode_title": ""
+  },
+  {
     "story_id": "les-violences-policieres-ravivent-les-tensions-e-mphv0lsu",
     "story_title": "Les violences policières ravivent les tensions entre sécurité, justice et libertés publiques",
     "story_summary": "",

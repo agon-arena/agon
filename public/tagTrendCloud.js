@@ -20,10 +20,10 @@ function getBubbleVisualSize(index, trendItem = null) {
   const clamped = Math.max(0, Math.min(1, weight));
   const amplified = Math.pow(clamped, 1.75);
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  const minSize = isMobile ? 52 : 56;
+  const minSize = isMobile ? 64 : 80;
   const maxSize = index === 0
-    ? (isMobile ? 140 : 160)
-    : (isMobile ? 124 : 142);
+    ? (isMobile ? 170 : 220)
+    : (isMobile ? 150 : 200);
 
   return Math.round(minSize + ((maxSize - minSize) * amplified)) + "px";
 }
@@ -192,39 +192,39 @@ function applyCompactBubbleLayout(container) {
   const bubbles = [...container.querySelectorAll(".agon-tag-bubble")];
   if (!bubbles.length) return;
 
-  const containerW = container.clientWidth || 390;
-  const containerH = container.clientHeight || 548;
+  const containerW = Math.round(container.getBoundingClientRect().width) || container.clientWidth || 390;
+  const containerH = Math.round(container.getBoundingClientRect().height) || container.clientHeight || 548;
   const centerX = containerW / 2;
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   const isNarrow = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
-  const frameTop = parseFloat(frameTopRaw) || (isNarrow ? 55 : 40);
-  const frameBottomInset = isNarrow ? 78 : 23;
+  const frameTop = parseFloat(frameTopRaw) || 55;
+  const frameBottomInset = 78;
   const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
 
   const centerBtnEl = container.querySelector(".agon-tag-center-btn");
   if (centerBtnEl) centerBtnEl.style.top = Math.round(centerY) + "px";
 
-  const margin = isMobile ? 3 : 4;
+  const margin = isMobile ? 3 : 10;
   const btnRadius = 24;
   const preferredAngles = isNarrow
     ? [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12]
-    : [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+    : [310, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
   // Obstacles déjà placés (bouton central inclus)
   const placed = [{ x: centerX, y: centerY, r: btnRadius }];
 
   bubbles.forEach((bubble, index) => {
-    const inlineSize = bubble.style.getPropertyValue("--agon-tag-bubble-size");
+    const inlineSize = isNarrow ? bubble.style.getPropertyValue("--agon-tag-bubble-size") : null;
     let size;
     if (inlineSize) {
       size = parseFloat(inlineSize);
     } else if (bubble.classList.contains("agon-tag-bubble-large")) {
-      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 136 : 154) : (isNarrow ? 118 : 136);
+      size = bubble.classList.contains("agon-tag-pos-1") ? 168 : 146;
     } else if (bubble.classList.contains("agon-tag-bubble-medium")) {
-      size = isNarrow ? 96 : 112;
+      size = 118;
     } else {
-      size = isNarrow ? 66 : 76;
+      size = 82;
     }
     if (!size || !Number.isFinite(size)) size = 80;
     const r = size / 2;
@@ -454,12 +454,12 @@ function renderTagTrendCloud(container, trends) {
   container.appendChild(centerBtn);
 
   requestAnimationFrame(() => {
-    applyCompactBubbleLayout(container);
-    container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
-    // Overlays de texte en premier : les badges éviteront leurs positions
-    renderLabelOverlays(container);
-    // Badges positionnés après, avec connaissance des overlays
-    positionTrendBadges(container);
+    requestAnimationFrame(() => {
+      applyCompactBubbleLayout(container);
+      container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
+      renderLabelOverlays(container);
+      positionTrendBadges(container);
+    });
   });
 }
 

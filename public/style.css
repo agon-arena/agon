@@ -494,10 +494,8 @@ html.thematic-scroll body {
 }
 
 .admin-topbar-menu-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 3000;
+  position: fixed;
+  z-index: 99999;
   display: grid;
   gap: 4px;
   width: max-content;
@@ -16660,7 +16658,7 @@ body.page-home-mobile .debate-card-agon-badge {
   body.page-home-mobile .theme-row-jump-start.is-hidden { display: none !important; }
 
   body.page-home-mobile #debates-list .theme-row-section:first-child {
-    margin-top: -40px;
+    margin-top: -16px;
   }
 
   body.page-home-mobile .theme-row-section + .theme-row-section {
@@ -16673,22 +16671,27 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 }
 
+body.page-home #debates-list .theme-row-section:first-child {
+  padding-top: 20px;
+}
+
 /* Tag trends cloud — temporary V1 */
 .agon-tag-trends-section {
   width: 100%;
   max-width: 430px;
-  margin: 0 auto;
+  margin: -80px auto 0;
   padding: 0;
   overflow-x: clip;
   box-sizing: border-box;
   background: radial-gradient(ellipse at center, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.08) 45%, rgba(255,255,255,0) 75%), #243038;
   position: relative;
+  z-index: 1;
 }
 
 
 .agon-tag-trends-caption {
   position: relative;
-  z-index: 20;
+  z-index: 135;
   margin: 4px auto 14px;
   width: 100%;
   text-align: center;
@@ -16714,13 +16717,14 @@ body.page-home-mobile .debate-card-agon-badge {
   max-width: 390px;
   height: 548px;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
+  transform: translateX(calc(50% - 195px));
   isolation: isolate;
   z-index: 130;
 }
 
 .agon-tag-trends-cloud {
-  --bubble-frame-top: 40px;
+  --bubble-frame-top: 55px;
 }
 
 .agon-tag-trends-cloud::before {
@@ -16738,6 +16742,7 @@ body.page-home-mobile .debate-card-agon-badge {
 @media (max-width: 768px) {
   .agon-tag-trends-cloud {
     --bubble-frame-top: 55px;
+    transform: translateX(-18px);
   }
 
   .agon-tag-trends-cloud::before {
@@ -16911,23 +16916,23 @@ body.page-home-mobile .debate-card-agon-badge {
 .agon-tag-pos-11 .agon-tag-bubble-flash::after  { animation-delay: 0.4s; }
 
 .agon-tag-bubble-large {
-  width: var(--agon-tag-bubble-size, 139px);
-  height: var(--agon-tag-bubble-size, 139px);
+  width: var(--agon-tag-bubble-size, 153px);
+  height: var(--agon-tag-bubble-size, 153px);
 }
 
 .agon-tag-pos-1.agon-tag-bubble-large {
-  width: var(--agon-tag-bubble-size, 160px);
-  height: var(--agon-tag-bubble-size, 160px);
+  width: var(--agon-tag-bubble-size, 176px);
+  height: var(--agon-tag-bubble-size, 176px);
 }
 
 .agon-tag-bubble-medium {
-  width: var(--agon-tag-bubble-size, 116px);
-  height: var(--agon-tag-bubble-size, 116px);
+  width: var(--agon-tag-bubble-size, 128px);
+  height: var(--agon-tag-bubble-size, 128px);
 }
 
 .agon-tag-bubble-small {
-  width: var(--agon-tag-bubble-size, 78px);
-  height: var(--agon-tag-bubble-size, 78px);
+  width: var(--agon-tag-bubble-size, 86px);
+  height: var(--agon-tag-bubble-size, 86px);
 }
 
 .agon-tag-center-btn {
@@ -17121,11 +17126,6 @@ body.page-home-mobile .debate-card-agon-badge {
   .agon-tag-pos-9  { right: 2px; }
 }
 
-@media (min-width: 769px) {
-  .agon-tag-pos-4 {
-    top: 318px !important;
-  }
-}
 .agon-tag-pos-10 { left: 110px; top: 394px; z-index: 4; } /* petite jonction bas-gauche */
 .agon-tag-pos-11 { right: 100px; top: 392px; z-index: 4; } /* petite jonction bas-droite */
 
@@ -17135,27 +17135,27 @@ body.page-home-mobile .debate-card-agon-badge {
     padding-left: 4px;
     padding-right: 4px;
     padding-bottom: 24px;
-    margin-top: 0;
+    margin-top: -96px;
   }
 
   .agon-tag-bubble-large {
-    width: var(--agon-tag-bubble-size, 118px);
-    height: var(--agon-tag-bubble-size, 118px);
+    width: var(--agon-tag-bubble-size, 132px);
+    height: var(--agon-tag-bubble-size, 132px);
   }
 
   .agon-tag-pos-1.agon-tag-bubble-large {
-    width: var(--agon-tag-bubble-size, 136px);
-    height: var(--agon-tag-bubble-size, 136px);
+    width: var(--agon-tag-bubble-size, 152px);
+    height: var(--agon-tag-bubble-size, 152px);
   }
 
   .agon-tag-bubble-medium {
-    width: var(--agon-tag-bubble-size, 96px);
-    height: var(--agon-tag-bubble-size, 96px);
+    width: var(--agon-tag-bubble-size, 108px);
+    height: var(--agon-tag-bubble-size, 108px);
   }
 
   .agon-tag-bubble-small {
-    width: var(--agon-tag-bubble-size, 66px);
-    height: var(--agon-tag-bubble-size, 66px);
+    width: var(--agon-tag-bubble-size, 74px);
+    height: var(--agon-tag-bubble-size, 74px);
   }
 
   .agon-tag-bubble-large .agon-tag-label {
