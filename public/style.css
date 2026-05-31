@@ -18395,6 +18395,12 @@ body.page-home .index-media-swipe-media {
   body.page-home-mobile .index-media-swipe-media {
     aspect-ratio: 4 / 3 !important;
   }
+  body.page-home-mobile .debate-card .debate-source-card-image-wrap {
+    aspect-ratio: 4 / 3 !important;
+  }
+  body.page-home-mobile .index-card-media-with-title .debate-card-local-image-shell {
+    aspect-ratio: 4 / 3 !important;
+  }
 }
 
 /* Uniformisation : tous les enfants remplissent la hauteur du conteneur swipe
@@ -18414,10 +18420,12 @@ body.page-home-mobile .index-card-media-with-title .debate-card-media-local-imag
   height: 100%;
 }
 
-body.page-home .index-card-media-with-title .debate-source-card-image-wrap,
-body.page-home-mobile .index-card-media-with-title .debate-source-card-image-wrap,
 body.page-home .index-card-media-with-title .debate-card-local-image-shell,
-body.page-home-mobile .index-card-media-with-title .debate-card-local-image-shell,
+body.page-home-mobile .index-card-media-with-title .debate-card-local-image-shell {
+  height: 100% !important;
+  aspect-ratio: 16 / 10 !important;
+}
+
 body.page-home .index-card-media-with-title .debate-card-youtube-shell,
 body.page-home-mobile .index-card-media-with-title .debate-card-youtube-shell,
 body.page-home .index-card-media-with-title .debate-card-local-video-shell,
