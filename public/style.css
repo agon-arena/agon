@@ -16657,6 +16657,18 @@ body.page-home-mobile .debate-card-agon-badge {
 
   body.page-home-mobile .theme-row-jump-start.is-hidden { display: none !important; }
 
+  body.page-home-mobile #debates-list {
+    width: 100vw !important;
+    position: relative !important;
+    left: calc(50% - 50vw) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  body.page-home-mobile #debates-list .theme-row-section {
+    width: 100vw !important;
+  }
+
   body.page-home-mobile #debates-list .theme-row-section:first-child {
     margin-top: -16px;
   }
@@ -16718,7 +16730,6 @@ body.page-home #debates-list .theme-row-section:first-child {
   height: 548px;
   margin: 0 auto;
   overflow: visible;
-  transform: translateX(calc(50% - 195px));
   isolation: isolate;
   z-index: 130;
 }
@@ -16742,7 +16753,6 @@ body.page-home #debates-list .theme-row-section:first-child {
 @media (max-width: 768px) {
   .agon-tag-trends-cloud {
     --bubble-frame-top: 55px;
-    transform: translateX(-18px);
   }
 
   .agon-tag-trends-cloud::before {
@@ -17110,24 +17120,35 @@ body.page-home #debates-list .theme-row-section:first-child {
   color: #374151;
 }
 
-/* ===== POSITIONS NUAGE — bulles resserrées autour du centre ===== */
-.agon-tag-pos-0  { left:  82px; top: 218px; z-index: 6; } /* grosse centre-gauche */
-.agon-tag-pos-1  { left: 178px; top: 202px; z-index: 9; } /* plus grosse : tag le plus cité */
-.agon-tag-pos-2  { left: 132px; top: 304px; z-index: 2; } /* grosse bas-centre */
-.agon-tag-pos-3  { left: 148px; top: 150px; z-index: 1; } /* moyenne haut-centre */
-.agon-tag-pos-4  { left:  72px; top: 318px; z-index: 7; } /* moyenne bas-gauche */
-.agon-tag-pos-5  { left: 226px; top: 318px; z-index: 1; } /* moyenne bas-droite */
-.agon-tag-pos-6  { left:  38px; top: 276px; z-index: 5; } /* petite jonction gauche */
-.agon-tag-pos-7  { left:  88px; top: 166px; z-index: 4; } /* petite jonction haut-gauche */
-.agon-tag-pos-8  { left: 236px; top: 164px; z-index: 0; } /* petite jonction haut-droite */
-.agon-tag-pos-9  { right:  30px; top: 270px; z-index: 4; } /* petite jonction droite */
+/* ===== POSITIONS NUAGE — z-index uniquement (left/top gérés par JS) ===== */
+.agon-tag-pos-0  { z-index: 6; }
+.agon-tag-pos-1  { z-index: 9; }
+.agon-tag-pos-2  { z-index: 2; }
+.agon-tag-pos-3  { z-index: 1; }
+.agon-tag-pos-4  { z-index: 7; }
+.agon-tag-pos-5  { z-index: 1; }
+.agon-tag-pos-6  { z-index: 5; }
+.agon-tag-pos-7  { z-index: 4; }
+.agon-tag-pos-8  { z-index: 0; }
+.agon-tag-pos-9  { z-index: 4; }
+.agon-tag-pos-10 { z-index: 4; }
+.agon-tag-pos-11 { z-index: 4; }
 
+/* Fallback CSS positions — uniquement si JS n'a pas encore tourné (mobile) */
 @media (max-width: 768px) {
-  .agon-tag-pos-9  { right: 2px; }
+  .agon-tag-pos-0  { left:  82px; top: 218px; }
+  .agon-tag-pos-1  { left: 178px; top: 202px; }
+  .agon-tag-pos-2  { left: 132px; top: 304px; }
+  .agon-tag-pos-3  { left: 148px; top: 150px; }
+  .agon-tag-pos-4  { left:  72px; top: 318px; }
+  .agon-tag-pos-5  { left: 226px; top: 318px; }
+  .agon-tag-pos-6  { left:  38px; top: 276px; }
+  .agon-tag-pos-7  { left:  88px; top: 166px; }
+  .agon-tag-pos-8  { left: 236px; top: 164px; }
+  .agon-tag-pos-9  { right:  2px; top: 270px; }
+  .agon-tag-pos-10 { left: 110px; top: 394px; }
+  .agon-tag-pos-11 { right: 100px; top: 392px; }
 }
-
-.agon-tag-pos-10 { left: 110px; top: 394px; z-index: 4; } /* petite jonction bas-gauche */
-.agon-tag-pos-11 { right: 100px; top: 392px; z-index: 4; } /* petite jonction bas-droite */
 
 @media (max-width: 390px) {
   .agon-tag-trends-section {
@@ -18186,17 +18207,8 @@ body.page-contact.in-iframe .contact-page-shell {
   }
 }
 
-@keyframes agon-card-blink {
-  0%   { opacity: 1; }
-  20%  { opacity: 0; }
-  40%  { opacity: 1; }
-  60%  { opacity: 0; }
-  80%  { opacity: 1; }
-  100% { opacity: 1; }
-}
-
 .agon-card-blink {
-  animation: agon-card-blink 0.8s ease-in-out;
+  animation: flashBlueCard 1s ease-in-out 2;
 }
 
 /* Fond bleu + angles arrondis sur toutes les cartes en page index */

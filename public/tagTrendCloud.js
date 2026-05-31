@@ -207,24 +207,22 @@ function applyCompactBubbleLayout(container) {
 
   const margin = isMobile ? 3 : 10;
   const btnRadius = 24;
-  const preferredAngles = isNarrow
-    ? [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12]
-    : [310, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+  const preferredAngles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
   // Obstacles déjà placés (bouton central inclus)
   const placed = [{ x: centerX, y: centerY, r: btnRadius }];
 
   bubbles.forEach((bubble, index) => {
-    const inlineSize = isNarrow ? bubble.style.getPropertyValue("--agon-tag-bubble-size") : null;
+    const inlineSize = bubble.style.getPropertyValue("--agon-tag-bubble-size");
     let size;
     if (inlineSize) {
       size = parseFloat(inlineSize);
     } else if (bubble.classList.contains("agon-tag-bubble-large")) {
-      size = bubble.classList.contains("agon-tag-pos-1") ? 168 : 146;
+      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 168 : 216) : (isNarrow ? 146 : 194);
     } else if (bubble.classList.contains("agon-tag-bubble-medium")) {
-      size = 118;
+      size = isNarrow ? 118 : 158;
     } else {
-      size = 82;
+      size = isNarrow ? 82 : 106;
     }
     if (!size || !Number.isFinite(size)) size = 80;
     const r = size / 2;
@@ -461,6 +459,22 @@ function renderTagTrendCloud(container, trends) {
       positionTrendBadges(container);
     });
   });
+
+  // Relance le layout si la fenêtre est redimensionnée
+  if (!container._cloudResizeObserver) {
+    let _resizeTimer = null;
+    container._cloudResizeObserver = new ResizeObserver(() => {
+      clearTimeout(_resizeTimer);
+      _resizeTimer = setTimeout(() => {
+        if (!container.querySelectorAll('.agon-tag-bubble').length) return;
+        applyCompactBubbleLayout(container);
+        container.querySelectorAll('.agon-tag-bubble').forEach(fitLabelInBubble);
+        renderLabelOverlays(container);
+        positionTrendBadges(container);
+      }, 120);
+    });
+    container._cloudResizeObserver.observe(container);
+  }
 }
 
 export { renderTagTrendCloud };
