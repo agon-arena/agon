@@ -958,42 +958,62 @@ function writeVeillePendingKeywordsMap(map) {
 
 let _cloudBubblesCache = null;
 
-function loadCloudBubbles() {
+async function loadCloudBubbles() {
   if (_cloudBubblesCache) return _cloudBubblesCache;
+
+  // Essaie Supabase en premier
   try {
-    if (!fs.existsSync(cloudBubblesPath)) {
-      fs.mkdirSync(path.dirname(cloudBubblesPath), { recursive: true });
-      fs.writeFileSync(cloudBubblesPath, JSON.stringify({ bubbles: [], lastUpdatedAt: null }, null, 2), "utf8");
+    const { data, error } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "cloud_bubbles")
+      .maybeSingle();
+    if (!error && data?.value && typeof data.value === "object") {
+      _cloudBubblesCache = data.value;
+      return _cloudBubblesCache;
     }
-    const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
-    _cloudBubblesCache = parsed && typeof parsed === "object" ? parsed : { bubbles: [], lastUpdatedAt: null };
-    return _cloudBubblesCache;
-  } catch {
-    return { bubbles: [], lastUpdatedAt: null };
-  }
+  } catch {}
+
+  // Fallback / migration one-shot : fichier JSON local
+  try {
+    if (fs.existsSync(cloudBubblesPath)) {
+      const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
+      if (parsed && typeof parsed === "object") {
+        _cloudBubblesCache = Array.isArray(parsed.bubbles) ? parsed : { bubbles: [], lastUpdatedAt: null };
+        // Tente de migrer dans Supabase silencieusement si la table existe
+        if (_cloudBubblesCache.bubbles.length) saveCloudBubbles(_cloudBubblesCache).catch(() => {});
+        return _cloudBubblesCache;
+      }
+    }
+  } catch {}
+
+  _cloudBubblesCache = { bubbles: [], lastUpdatedAt: null };
+  return _cloudBubblesCache;
 }
 
-function saveCloudBubbles(data) {
+async function saveCloudBubbles(data) {
   try {
-    fs.mkdirSync(path.dirname(cloudBubblesPath), { recursive: true });
     const safe = { bubbles: Array.isArray(data?.bubbles) ? data.bubbles : [], lastUpdatedAt: data?.lastUpdatedAt || null };
-    fs.writeFileSync(cloudBubblesPath, JSON.stringify(safe, null, 2), "utf8");
+    const { error } = await supabase
+      .from("app_config")
+      .upsert({ key: "cloud_bubbles", value: safe, updated_at: new Date().toISOString() });
+    if (error) throw error;
     _cloudBubblesCache = safe;
   } catch (e) {
     console.error("[cloud-bubbles] save error:", e.message);
   }
 }
 
-function syncCloudBubbleTagIfPresent(debateId) {
+async function syncCloudBubbleTagIfPresent(debateId) {
   const id = String(debateId || "").trim();
   if (!id) return;
-  const data = loadCloudBubbles();
+  const data = await loadCloudBubbles();
   const idx = (data.bubbles || []).findIndex(b => String(b.subjectId) === id);
   if (idx < 0) return;
   const newTag = getCloudLabelFromDebate(id, readDebateKeywordsMap());
   if (!newTag || newTag === data.bubbles[idx].tag) return;
   data.bubbles[idx] = { ...data.bubbles[idx], tag: newTag };
-  saveCloudBubbles(data);
+  await saveCloudBubbles(data);
 }
 
 const CLOUD_GENERIC_LABELS_SET = new Set([
@@ -1164,20 +1184,56 @@ let _debateTrendsCache = null;
 
 function readDebateTrendsMap() {
   if (_debateTrendsCache) return _debateTrendsCache;
+  // Fallback fichier local si le cache n'est pas encore hydraté (avant initDebateTrendsCache)
   try {
-    fs.mkdirSync(path.dirname(debateTrendsMetaPath), { recursive: true });
-    if (!fs.existsSync(debateTrendsMetaPath)) fs.writeFileSync(debateTrendsMetaPath, "{}", "utf8");
-    _debateTrendsCache = JSON.parse(fs.readFileSync(debateTrendsMetaPath, "utf8") || "{}");
-  } catch {
-    _debateTrendsCache = {};
-  }
+    if (fs.existsSync(debateTrendsMetaPath)) {
+      _debateTrendsCache = JSON.parse(fs.readFileSync(debateTrendsMetaPath, "utf8") || "{}");
+      return _debateTrendsCache;
+    }
+  } catch {}
+  _debateTrendsCache = {};
   return _debateTrendsCache;
 }
 
 function writeDebateTrendsMap(map) {
-  fs.mkdirSync(path.dirname(debateTrendsMetaPath), { recursive: true });
-  fs.writeFileSync(debateTrendsMetaPath, JSON.stringify(map, null, 2), "utf8");
   _debateTrendsCache = map;
+  // Persistance Supabase (fire-and-forget)
+  supabase.from("app_config")
+    .upsert({ key: "debate_trends", value: map, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.error("[debate-trends] save error:", error.message); });
+  // Backup fichier local
+  try {
+    fs.mkdirSync(path.dirname(debateTrendsMetaPath), { recursive: true });
+    fs.writeFileSync(debateTrendsMetaPath, JSON.stringify(map, null, 2), "utf8");
+  } catch {}
+}
+
+async function initDebateTrendsCache() {
+  try {
+    const { data, error } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "debate_trends")
+      .maybeSingle();
+    if (!error && data?.value && typeof data.value === "object") {
+      _debateTrendsCache = data.value;
+      return;
+    }
+  } catch {}
+  // Migration one-shot depuis fichier local
+  try {
+    if (fs.existsSync(debateTrendsMetaPath)) {
+      const parsed = JSON.parse(fs.readFileSync(debateTrendsMetaPath, "utf8") || "{}");
+      if (parsed && typeof parsed === "object" && Object.keys(parsed).length) {
+        _debateTrendsCache = parsed;
+        supabase.from("app_config")
+          .upsert({ key: "debate_trends", value: parsed, updated_at: new Date().toISOString() })
+          .catch(e => console.error("[debate-trends] migration error:", e.message));
+        return;
+      }
+    }
+  } catch {}
+  if (!_debateTrendsCache) _debateTrendsCache = {};
 }
 
 function setDebateTrend(debateId, trendData) {
@@ -3717,13 +3773,12 @@ app.get("/api/admin/session", requireAdmin, (req, res) => {
 });
 
 
-function buildAdminTagOccurrenceStats(debates = []) {
+function buildAdminTagOccurrenceStats(debates = [], cloudData = { bubbles: [] }) {
   const now = new Date();
   const enrichedItems = (Array.isArray(debates) ? debates : []).map((debate) => ({
     ...debate,
     keywords: getDebateKeywords(debate?.id)
   }));
-  const cloudData = loadCloudBubbles();
   const bubbleTags = (Array.isArray(cloudData.bubbles) ? cloudData.bubbles : []).map((b) => ({
     tag: b.tag,
     normalizedTag: normalizeTag(b.tag),
@@ -3797,17 +3852,17 @@ function buildAdminTagOccurrenceStats(debates = []) {
 
 app.get("/api/admin/tag-occurrences", requireAdmin, async (req, res) => {
   try {
-    const { data: debates, error } = await supabase
-      .from("debates")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [{ data: debates, error }, cloudData] = await Promise.all([
+      supabase.from("debates").select("*").order("created_at", { ascending: false }),
+      loadCloudBubbles()
+    ]);
 
     if (error) {
       console.error(error);
       return sendServerError(res, "Erreur lecture tags.");
     }
 
-    return res.json(buildAdminTagOccurrenceStats(debates || []));
+    return res.json(buildAdminTagOccurrenceStats(debates || [], cloudData));
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture tags.");
@@ -3840,7 +3895,7 @@ app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), (req, r
     const current = getDebateKeywords(debateId);
     if (!current.map(normalizeTag).includes(normalizeTag(keyword))) {
       setDebateKeywords(debateId, [...current, keyword]);
-      syncCloudBubbleTagIfPresent(debateId);
+      syncCloudBubbleTagIfPresent(debateId).catch(console.error);
     }
     return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
   } catch (error) {
@@ -3862,7 +3917,7 @@ app.put("/api/admin/debate/:id/keywords/primary", requireAdmin, express.json(), 
     if (idx <= 0) return res.json({ success: true, debateId, keywords: current });
     const reordered = [current[idx], ...current.slice(0, idx), ...current.slice(idx + 1)];
     setDebateKeywords(debateId, reordered);
-    syncCloudBubbleTagIfPresent(debateId);
+    syncCloudBubbleTagIfPresent(debateId).catch(console.error);
     return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
   } catch (error) {
     console.error(error);
@@ -3879,7 +3934,7 @@ app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) =
     }
 
     const keywords = removeDebateKeyword(debateId, keyword);
-    syncCloudBubbleTagIfPresent(debateId);
+    syncCloudBubbleTagIfPresent(debateId).catch(console.error);
     return res.json({ success: true, debateId, removedKeyword: keyword, keywords });
   } catch (error) {
     console.error(error);
@@ -3888,7 +3943,7 @@ app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) =
 });
 
 
-app.post("/api/admin/tags/rename", requireAdmin, express.json(), (req, res) => {
+app.post("/api/admin/tags/rename", requireAdmin, express.json(), async (req, res) => {
   try {
     const oldTag = String(req.body?.oldTag || "").trim();
     const newTag = String(req.body?.newTag || "").trim();
@@ -3912,12 +3967,12 @@ app.post("/api/admin/tags/rename", requireAdmin, express.json(), (req, res) => {
     }
     writeDebateKeywordsMap(map);
 
-    // Mise à jour cloud-bubbles.json
-    const cloudData = loadCloudBubbles();
+    // Mise à jour bulles
+    const cloudData = await loadCloudBubbles();
     for (const bubble of cloudData.bubbles || []) {
       if (normalizeTag(bubble.tag) === oldKey) bubble.tag = newTag;
     }
-    saveCloudBubbles(cloudData);
+    await saveCloudBubbles(cloudData);
 
     return res.json({ success: true, oldTag, newTag, updatedDebates });
   } catch (error) {
@@ -3926,7 +3981,7 @@ app.post("/api/admin/tags/rename", requireAdmin, express.json(), (req, res) => {
   }
 });
 
-app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), (req, res) => {
+app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), async (req, res) => {
   try {
     const tag = String(req.body?.tag || "").trim();
     if (!normalizeTag(tag)) return res.status(400).json({ error: "Tag manquant." });
@@ -3942,10 +3997,10 @@ app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), (req, res
     writeDebateKeywordsMap(map);
 
     // Supprime des bulles
-    const cloudData = loadCloudBubbles();
+    const cloudData = await loadCloudBubbles();
     const before = (cloudData.bubbles || []).length;
     cloudData.bubbles = (cloudData.bubbles || []).filter((b) => normalizeTag(b.tag) !== tagKey);
-    saveCloudBubbles(cloudData);
+    await saveCloudBubbles(cloudData);
 
     return res.json({ success: true, tag, updatedDebates, bubblesRemoved: before - cloudData.bubbles.length });
   } catch (error) {
@@ -6410,9 +6465,9 @@ app.post("/api/admin/veille/check-similar", async (req, res) => {
   }
 });
 
-app.get("/api/cloud-bubbles", (req, res) => {
+app.get("/api/cloud-bubbles", async (req, res) => {
   try {
-    const data = loadCloudBubbles();
+    const data = await loadCloudBubbles();
     res.json({ ok: true, bubbles: data.bubbles || [], lastUpdatedAt: data.lastUpdatedAt || null });
   } catch {
     res.json({ ok: true, bubbles: [], lastUpdatedAt: null });
@@ -6421,7 +6476,7 @@ app.get("/api/cloud-bubbles", (req, res) => {
 
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    const existing = loadCloudBubbles();
+    const existing = await loadCloudBubbles();
     const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
     _debateKeywordsCache = null;
     const keywordsMap = readDebateKeywordsMap();
@@ -6431,11 +6486,22 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
 
     const { data: newDebates, error } = await supabase
       .from("debates")
-      .select("id, source_url, media_extras, created_at, source_published_at")
+      .select("id, question, source_url, media_extras, created_at, source_published_at")
       .gt("created_at", lastUpdateISO)
       .order("created_at", { ascending: true });
 
     if (error) throw new Error(error.message);
+
+    // Pré-charge les questions des débats actuellement en bulle pour la comparaison IA
+    const existingBubbleIds = bubbles.map(b => b.subjectId).filter(Boolean);
+    const bubbleDebateMap = new Map();
+    if (existingBubbleIds.length) {
+      const { data: bubbleDebates } = await supabase
+        .from("debates")
+        .select("id, question, source_url, media_extras, created_at, source_published_at")
+        .in("id", existingBubbleIds);
+      for (const d of (bubbleDebates || [])) bubbleDebateMap.set(String(d.id), d);
+    }
 
     const mapToCandidate = (debate) => {
       const label = getCloudLabelFromDebate(debate.id, keywordsMap);
@@ -6468,11 +6534,59 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
       const nextBubble = { ...candidate, trend: debateTrendValue, enteredCloudAt: now };
       const matchedId = trendEntry?.matchedSubjectId ? String(trendEntry.matchedSubjectId).trim() : null;
       const matchedBubbleIndex = matchedId ? bubbles.findIndex(b => String(b.subjectId) === matchedId) : -1;
+      // Fallback 1 : même tag normalisé → même sujet, pas de doublon
+      const sameTagIndex = matchedBubbleIndex < 0
+        ? bubbles.findIndex(b => normalizeTag(b.tag) === normalizeTag(candidate.tag))
+        : -1;
+      // Fallback 2 : comparaison IA ciblée contre les bulles actuelles
+      let aiBubbleIndex = -1;
+      if (matchedBubbleIndex < 0 && sameTagIndex < 0 && bubbles.length > 0) {
+        const bubbleSubjects = bubbles.map(b => {
+          const d = bubbleDebateMap.get(String(b.subjectId));
+          return {
+            id: String(b.subjectId),
+            question: d?.question || b.tag,
+            resume: "",
+            tags: keywordsMap[String(b.subjectId)] || [b.tag],
+            sourceCount: b.count || 0,
+            created_at: b.debateDate || null
+          };
+        });
+        const aiMatch = await findSimilarRecentSubjectForTrend(
+          {
+            id: String(debate.id),
+            question: String(debate.question || ""),
+            resume: "",
+            tags: keywordsMap[String(debate.id)] || [],
+            sourceCount: candidate.count,
+            created_at: debate.created_at
+          },
+          bubbleSubjects
+        );
+        if (aiMatch) {
+          aiBubbleIndex = bubbles.findIndex(b => String(b.subjectId) === String(aiMatch.id));
+          if (aiBubbleIndex >= 0) {
+            console.log(`[update-cloud] IA match bulle: "${debate.question?.slice(0,50)}" → bulle "${bubbles[aiBubbleIndex].tag}" (id=${aiMatch.id})`);
+          }
+        }
+      }
 
       if (matchedBubbleIndex >= 0) {
-        // Remplace la bulle qui correspond au match IA — pas de doublon
+        // Remplace la bulle qui correspond au match trend — pas de doublon
         bubbles[matchedBubbleIndex] = { ...bubbles[matchedBubbleIndex], ...nextBubble };
         updated++;
+      } else if (sameTagIndex >= 0) {
+        // Même tag déjà présent : garde le débat avec le plus de sources
+        if (nextBubble.count >= bubbles[sameTagIndex].count) {
+          bubbles[sameTagIndex] = { ...bubbles[sameTagIndex], ...nextBubble };
+          updated++;
+        }
+      } else if (aiBubbleIndex >= 0) {
+        // Même sujet détecté par IA : remplace si plus de sources
+        if (nextBubble.count >= bubbles[aiBubbleIndex].count) {
+          bubbles[aiBubbleIndex] = { ...bubbles[aiBubbleIndex], ...nextBubble };
+          updated++;
+        }
       } else if (bubbles.length < 12) {
         bubbles.push(nextBubble);
         added++;
@@ -6523,7 +6637,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     }));
 
     const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
-    saveCloudBubbles(newData);
+    await saveCloudBubbles(newData);
 
     res.json({ ok: true, count: bubbles.length, newAdded: added, updated, updatedAt: newData.lastUpdatedAt });
   } catch (e) {
@@ -7487,6 +7601,7 @@ app.get("/ping", (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
+  initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
   try {
     // Migration : push des story_id locaux vers Supabase
     const localLinks = readDebateStoryLinks();
