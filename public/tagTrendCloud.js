@@ -13,19 +13,35 @@ function getBubbleSizeClass(index, trendItem = null) {
 
 const MAX_TAG_TREND_BUBBLES = 12;
 
-function getBubbleVisualSize(index, trendItem = null) {
+// Source unique de vérité pour la taille d'une bulle en pixels, avant facteur d'échelle global.
+// Utilisée à la fois pour l'affichage visuel (--agon-tag-bubble-size) et pour le placement.
+function computeBubblePxSize(index, trendItem, isMobile) {
   const weight = Number(trendItem?.sizeWeight);
-  if (!Number.isFinite(weight)) return "";
+  if (Number.isFinite(weight)) {
+    const clamped = Math.max(0, Math.min(1, weight));
+    const amplified = Math.pow(clamped, 1.75);
+    const minSize = isMobile ? 58 : 70;
+    const maxSize = index === 0
+      ? (isMobile ? 155 : 185)
+      : (isMobile ? 132 : 162);
+    return Math.round(minSize + ((maxSize - minSize) * amplified));
+  }
+  // Fallback aligné sur les tailles par défaut des classes CSS
+  const sizeClass = getBubbleSizeClass(index);
+  if (sizeClass === "agon-tag-bubble-large") return index === 1 ? (isMobile ? 153 : 176) : (isMobile ? 128 : 153);
+  if (sizeClass === "agon-tag-bubble-medium") return isMobile ? 110 : 128;
+  return isMobile ? 72 : 86;
+}
 
-  const clamped = Math.max(0, Math.min(1, weight));
-  const amplified = Math.pow(clamped, 1.75);
-  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  const minSize = isMobile ? 64 : 80;
-  const maxSize = index === 0
-    ? (isMobile ? 170 : 220)
-    : (isMobile ? 150 : 200);
-
-  return Math.round(minSize + ((maxSize - minSize) * amplified)) + "px";
+// Facteur d'échelle uniforme pour que toutes les bulles tiennent dans la zone utile.
+// Retourne 1.0 si elles tiennent déjà, sinon réduit proportionnellement (min 0.45).
+function computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset) {
+  const usableH = Math.max(0, containerH - frameTop - frameBottomInset);
+  const usableArea = containerW * usableH * 0.70;
+  if (usableArea <= 0) return 1;
+  const totalBubbleArea = baseSizes.reduce((sum, s) => sum + Math.PI * (s / 2) * (s / 2), 0);
+  if (totalBubbleArea <= usableArea) return 1;
+  return Math.max(0.45, Math.sqrt(usableArea / totalBubbleArea));
 }
 
 function getTrendMeta(trend) {
@@ -63,7 +79,6 @@ function fitLabelInBubble(bubble) {
   const lengthFactor = charCount >= 22 ? 0.72 : charCount >= 16 ? 0.82 : charCount >= 11 ? 0.92 : 1;
   const wordFactor = wordCount >= 4 ? 0.27 : wordCount === 3 ? 0.32 : wordCount === 2 ? 0.38 : 0.46;
 
-  // Le badge est dans le flux, juste au-dessus du texte, au centre de la bulle.
   label.style.paddingTop = "0px";
   label.style.paddingBottom = "0px";
   label.style.lineHeight = wordCount >= 2 ? "1.08" : "1.03";
@@ -196,16 +211,28 @@ function applyCompactBubbleLayout(container) {
   const containerH = Math.round(container.getBoundingClientRect().height) || container.clientHeight || 548;
   const centerX = containerW / 2;
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  const isNarrow = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
   const frameTop = parseFloat(frameTopRaw) || 55;
-  const frameBottomInset = 78;
+  const frameBottomInset = isMobile ? 78 : 23;
   const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
 
   const centerBtnEl = container.querySelector(".agon-tag-center-btn");
   if (centerBtnEl) centerBtnEl.style.top = Math.round(centerY) + "px";
 
-  const margin = isMobile ? 3 : 10;
+  // Lire les tailles de base stockées au moment du rendu
+  const baseSizes = bubbles.map(b => parseFloat(b.dataset.bubbleBaseSize) || 80);
+
+  // Calculer le facteur d'échelle global pour que toutes les bulles rentrent
+  const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
+
+  // Appliquer les tailles mises à l'échelle : même valeur pour l'affichage et le placement
+  const scaledSizes = baseSizes.map((base, i) => {
+    const scaled = Math.max(48, Math.round(base * autoScale));
+    bubbles[i].style.setProperty("--agon-tag-bubble-size", scaled + "px");
+    return scaled;
+  });
+
+  const margin = isMobile ? 4 : 6;
   const btnRadius = 24;
   const preferredAngles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
@@ -213,22 +240,27 @@ function applyCompactBubbleLayout(container) {
   const placed = [{ x: centerX, y: centerY, r: btnRadius }];
 
   bubbles.forEach((bubble, index) => {
-    const inlineSize = bubble.style.getPropertyValue("--agon-tag-bubble-size");
-    let size;
-    if (inlineSize) {
-      size = parseFloat(inlineSize);
-    } else if (bubble.classList.contains("agon-tag-bubble-large")) {
-      size = bubble.classList.contains("agon-tag-pos-1") ? (isNarrow ? 168 : 216) : (isNarrow ? 146 : 194);
-    } else if (bubble.classList.contains("agon-tag-bubble-medium")) {
-      size = isNarrow ? 118 : 158;
-    } else {
-      size = isNarrow ? 82 : 106;
-    }
-    if (!size || !Number.isFinite(size)) size = 80;
+    const size = scaledSizes[index];
     const r = size / 2;
     const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
-    const minX = r + margin, maxX = containerW - r - margin;
-    const minY = r + margin, maxY = containerH - r - margin;
+
+    // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
+    // pour que la bulle entière reste dans la zone utile du conteneur
+    const minX = r + margin;
+    const maxX = containerW - r - margin;
+    const minY = frameTop + r + margin;
+    const maxY = containerH - frameBottomInset - r - margin;
+
+    if (minX > maxX || minY > maxY) {
+      // Zone trop petite pour cette bulle : la centrer et passer à la suivante
+      const cx = centerX;
+      const cy = Math.min(Math.max(centerY, minY > maxY ? (minY + maxY) / 2 : minY), maxY > minY ? maxY : centerY);
+      placed.push({ x: cx, y: cy, r });
+      bubble.style.left = Math.round(cx - r) + "px";
+      bubble.style.top  = Math.round(cy - r) + "px";
+      bubble.style.right = "auto";
+      return;
+    }
 
     let fx = null, fy = null;
     const maxDist = Math.hypot(containerW, containerH);
@@ -253,8 +285,9 @@ function applyCompactBubbleLayout(container) {
     }
 
     if (fx === null) {
-      fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r)));
-      fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r)));
+      // Dernier recours : angle préféré, strictement borné dans la zone utile
+      fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
+      fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
     }
 
     placed.push({ x: fx, y: fy, r });
@@ -402,6 +435,7 @@ function renderTagTrendCloud(container, trends) {
 
   container.innerHTML = "";
 
+  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   trends.slice(0, MAX_TAG_TREND_BUBBLES).forEach((trendItem, index) => {
@@ -416,10 +450,13 @@ function renderTagTrendCloud(container, trends) {
       getBubbleSizeClass(index, trendItem),
       `agon-tag-pos-${POS_ORDER[index] ?? index}`
     ].join(" ");
-    const visualSize = getBubbleVisualSize(index, trendItem);
-    if (visualSize) {
-      bubble.style.setProperty("--agon-tag-bubble-size", visualSize);
-    }
+
+    // Taille de base calculée (sans facteur d'échelle) — stockée en data-attribute
+    // pour que applyCompactBubbleLayout puisse la relire et calculer l'échelle globale.
+    const basePxSize = computeBubblePxSize(index, trendItem, isMobile);
+    bubble.dataset.bubbleBaseSize = basePxSize;
+    bubble.style.setProperty("--agon-tag-bubble-size", basePxSize + "px");
+
     bubble.type = "button";
 
     const label = document.createElement("span");

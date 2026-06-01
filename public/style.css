@@ -17084,7 +17084,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   transform: none;
   z-index: 50;
   margin-bottom: 3px;
-  border: 1px solid currentColor;
+  border: 1.5px solid currentColor;
   border-radius: 999px;
   padding: 1px 4px;
   font-size: 9px;
@@ -17092,6 +17092,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   line-height: 1.1;
   background: #fff;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
   animation: agonTrendPulse 2.4s ease-in-out infinite;
 }
 

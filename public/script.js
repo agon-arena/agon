@@ -15701,7 +15701,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260531-resize");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-bounded-layout");
 
 
 function syncBubbleFrameTop() {

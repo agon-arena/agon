@@ -12,3 +12,8 @@ database.db
 data/external-preview-cache/
 data/veille-pending.json
 data/debate-source-links.json
+data/cloud-bubbles.json
+data/debate-keywords.json
+data/debate-trends.json
+data/debate-episode-nav.json
+data/debate-shared-links.json
