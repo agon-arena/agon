@@ -3921,6 +3921,34 @@ app.post("/api/admin/tags/rename", requireAdmin, express.json(), (req, res) => {
   }
 });
 
+app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), (req, res) => {
+  try {
+    const tag = String(req.body?.tag || "").trim();
+    if (!normalizeTag(tag)) return res.status(400).json({ error: "Tag manquant." });
+    const tagKey = normalizeTag(tag);
+
+    // Supprime de tous les débats
+    const map = readDebateKeywordsMap();
+    let updatedDebates = 0;
+    for (const [debateId, keywords] of Object.entries(map)) {
+      const filtered = keywords.filter((k) => normalizeTag(k) !== tagKey);
+      if (filtered.length !== keywords.length) { map[debateId] = filtered; updatedDebates++; }
+    }
+    writeDebateKeywordsMap(map);
+
+    // Supprime des bulles
+    const cloudData = loadCloudBubbles();
+    const before = (cloudData.bubbles || []).length;
+    cloudData.bubbles = (cloudData.bubbles || []).filter((b) => normalizeTag(b.tag) !== tagKey);
+    saveCloudBubbles(cloudData);
+
+    return res.json({ success: true, tag, updatedDebates, bubblesRemoved: before - cloudData.bubbles.length });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur suppression définitive du tag.");
+  }
+});
+
 app.post("/api/admin/push/test-latest", requireAdmin, async (req, res) => {
   try {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {

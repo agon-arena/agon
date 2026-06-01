@@ -6436,7 +6436,7 @@ function startIndexSourceAutoPlay(root) {
     });
 
     setInterval(function() {
-      if (paused) return;
+      if (paused || document.hidden) return;
       const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
       if (nextBtn) nextBtn.click();
     }, 2000);
@@ -14359,6 +14359,15 @@ function renderIndexActiveFilterTags() {
     `);
   }
 
+  if (currentBubbleTag) {
+    tags.push(`
+      <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('bubble')" aria-label="Retirer le filtre ${escapeAttribute(currentBubbleTag)}">
+        <span>${escapeHtml(currentBubbleTag)}</span>
+        <span class="index-active-filter-tag-close" aria-hidden="true">×</span>
+      </button>
+    `);
+  }
+
   getCurrentCategoryFilters().forEach((category) => {
     tags.push(`
       <button type="button" class="index-active-filter-tag index-active-filter-tag-theme" onclick='removeIndexActiveFilterTag("theme", ${JSON.stringify(category)})' aria-label="Retirer la thématique ${escapeAttribute(category)}">
@@ -14474,11 +14483,40 @@ function handleBubbleTagClick(bubble) {
     if (match) targetDebateId = String(match.id);
   }
 
-  // Cherche la carte UNIQUEMENT dans le bandeau "À la une"
+  // Tag secondaire → appliquer comme filtre actif
+  if (_tagCloudSecondaryMode) {
+    currentBubbleTag = tag;
+    _restoreMainTagCloud();
+    applyIndexFilters();
+    const firstSection = document.querySelector('.theme-row-section');
+    const topbarS = document.querySelector('.topbar');
+    const topbarHS = topbarS ? topbarS.offsetHeight : 60;
+    if (firstSection) {
+      const top = firstSection.getBoundingClientRect().top + window.scrollY - topbarHS - 8;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+    return;
+  }
+
+  // Tag principal avec filtre secondaire actif → effacer le filtre + scroll uniquement (sans cloud secondaire)
+  let skipSecondaryCloud = false;
+  if (currentBubbleTag) {
+    currentBubbleTag = null;
+    skipSecondaryCloud = true;
+    applyIndexFilters();
+  }
+
+  // Tag principal → scroll vers la carte + afficher les tags secondaires
   const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
-  let card = (targetDebateId && alaUneSection)
-    ? alaUneSection.querySelector(`.debate-card[data-debate-id="${targetDebateId}"]`)
-    : null;
+  let card = null;
+  if (targetDebateId) {
+    card = alaUneSection
+      ? alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`)
+      : null;
+    if (!card) {
+      card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`);
+    }
+  }
 
   // Force-charge depuis _carouselPendingBatches si besoin (clé "À la une")
   if (!card && targetDebateId && alaUneSection) {
@@ -14540,20 +14578,21 @@ function handleBubbleTagClick(bubble) {
       setTimeout(() => {
         card.classList.add('agon-card-blink');
         card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
-      }, 700);
+        // Rebuild cloud après le scroll pour ne pas interférer
+        if (targetDebateId && !skipSecondaryCloud) _showSecondaryTagsInCloud(tag, targetDebateId);
+      }, 800);
     });
-  }
-
-  if (targetDebateId) {
-    _showSecondaryTagsInCloud(tag, targetDebateId);
+  } else {
+    // Pas de carte : rebuild cloud immédiatement
+    if (targetDebateId && !skipSecondaryCloud) _showSecondaryTagsInCloud(tag, targetDebateId);
   }
 }
 
 function showAgonOnlyFromTagCloud() {
   if (_tagCloudSecondaryMode) {
     _restoreMainTagCloud();
-    return;
   }
+  currentBubbleTag = null;
   clearActiveBubbles();
   currentIndexSearchQuery = "";
   setCurrentCategoryFilters([]);
@@ -14604,6 +14643,14 @@ function removeIndexActiveFilterTag(kind, value = "") {
 
   if (kind === "type") {
     setTypeFilter("all");
+    return;
+  }
+
+  if (kind === "bubble") {
+    currentBubbleTag = null;
+    visitedDebatesVisible = 5;
+    otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
+    applyIndexFilters();
     return;
   }
 
@@ -14830,6 +14877,7 @@ function getFilteredDebatesForIndex(baseDebates) {
       if (activeSubjectId && String(debate?.id || "").trim() === activeSubjectId) return true;
       const rawTags = typeof extractRawTagsFromItem === "function" ? extractRawTagsFromItem(debate).map(normalizeTag) : [];
       if (rawTags.includes(normalizedBubble)) return true;
+      if (!query) return false;
       const text = [debate.question, debate.category, debate.option_a, debate.option_b]
         .join(' ').toLowerCase();
       return text.includes(query);
@@ -15408,8 +15456,9 @@ function initThematicRowDragScroll() {
     }, { capture: true });
 
     // Empêche le clic accidentel sur une carte après un drag (>8px)
+    // Exception : les éléments interactifs (boutons, inputs, context) restent toujours cliquables
     row.addEventListener("click", (e) => {
-      if (moved > 8 || touchMoved > 8) {
+      if ((moved > 8 || touchMoved > 8) && !shouldIgnoreDragTarget(e.target)) {
         e.preventDefault();
         e.stopPropagation();
       }
@@ -15546,7 +15595,7 @@ function buildIndexThematicSectionsHtml(debates) {
     // ── À la une : toutes les publications, les plus récentes en tête ──
     if (allDebates.length) {
       const sortedAll = [...allDebates].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une", 24);
+      const inner = _buildCarouselInner(sortedAll, "À la une", 12);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }

@@ -439,8 +439,9 @@
         '<td><div class="at-raw-preview" title="' + escapeHtml((tag.rawTags || []).map((r) => r.tag).join(', ')) + '">' + (raw || '<span class="at-muted">—</span>') + '</div></td>' +
         '<td>' + (tag.debates || []).length + '</td>' +
         '<td><div class="at-row-acts">' +
-          '<button type="button" class="at-ibtn at-ibtn-rename" data-action="open-rename" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" data-tag-name="' + escapeHtml(tag.tag) + '" title="Renommer">✎</button>' +
-          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Exclure des bulles">×</button>' +
+          '<button type="button" class="at-ibtn at-ibtn-rename" data-action="rename-inline" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" data-tag-name="' + escapeHtml(tag.tag) + '" title="Renommer">✎</button>' +
+          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-detected-tag" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" title="Exclure des bulles">✕ bulles</button>' +
+          '<button type="button" class="at-ibtn at-ibtn-danger" data-action="delete-tag-everywhere" data-tag-key="' + escapeHtml(tag.normalizedTag) + '" data-tag-name="' + escapeHtml(tag.tag) + '" title="Supprimer définitivement partout" style="background:#7f1d1d;border-color:#7f1d1d;">🗑 tout</button>' +
         '</div></td>';
       tr.addEventListener('click', (event) => {
         if (event.target.closest('button')) return;
@@ -508,6 +509,13 @@
       renderTable();
       return;
     }
+    if (action === 'rename-inline') {
+      const tagName = button.dataset.tagName || '';
+      const newName = prompt('Nouveau nom pour "' + tagName + '" :', tagName);
+      if (!newName || newName.trim() === tagName) return;
+      renameTag(tagName, newName.trim()).catch((e) => showToast(e.message || 'Erreur renommage.', true));
+      return;
+    }
     if (action === 'open-rename') {
       const key = button.dataset.tagKey || '';
       const form = document.getElementById('rename-form-' + key);
@@ -546,6 +554,18 @@
     const tag = (tagData.tags || []).find((item) => item.normalizedTag === (button.dataset.tagKey || ''));
     if (!tag) return;
     if (action === 'delete-detected-tag') deleteDetectedTag(tag).catch((e) => showToast(e.message || 'Erreur suppression tag.', true));
+    if (action === 'delete-tag-everywhere') {
+      const tagName = button.dataset.tagName || tag.tag;
+      if (!confirm('Supprimer DÉFINITIVEMENT le tag "' + tagName + '" de toutes les arènes et des bulles ? Cette action est irréversible.')) return;
+      adminFetchJson('/api/admin/tags/delete-all', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: tagName })
+      }).then((data) => {
+        showToast('Tag supprimé de ' + (data.updatedDebates || 0) + ' arène(s) et ' + (data.bubblesRemoved || 0) + ' bulle(s).');
+        loadTags();
+      }).catch((e) => showToast(e.message || 'Erreur suppression.', true));
+    }
   });
 
   document.getElementById('tags-body').addEventListener('keydown', (event) => {

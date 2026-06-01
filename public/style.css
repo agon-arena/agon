@@ -688,7 +688,7 @@ main.create-page {
   padding: 16px 16px 8px;
   border-radius: 14px;
   border: 1px solid #111827;
-  box-shadow: inset 0 0 0 2px #111;
+  box-shadow: inset 0 0 0 1px rgba(17,24,39,0.7);
   overflow: visible;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
@@ -697,7 +697,7 @@ main.create-page {
 
 .debate-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
   border-color: #cbd5e1;
 }
 
@@ -763,8 +763,8 @@ main.create-page {
   position: relative;
   border-color: rgba(44, 62, 80, 0.62);
   box-shadow:
-    inset 0 0 0 1.5px rgba(44, 62, 80, 0.48),
-    0 8px 18px rgba(44, 62, 80, 0.07);
+    inset 0 0 0 1px rgba(44, 62, 80, 0.4),
+    0 4px 10px rgba(44, 62, 80, 0.06);
 }
 
 .debate-card-youth::before {
@@ -1630,20 +1630,20 @@ font-family: "Barlow Condensed", sans-serif;
   display:flex;
   flex-direction:column;
   gap:1px;
-  font-size:12px;
+  font-size:13px;
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   margin-top:14px;
   margin-bottom:4px;
 }
 .pos-a{
-  color:#3a4f5e;
-  font-weight:500;
+  color:#6e8d9e;
+  font-weight:700;
   line-height:1.1;
 }
 
 .pos-b{
-  color:var(--color-b-border-dark);
-  font-weight:500;
+  color:var(--color-b);
+  font-weight:700;
   line-height:1.1;
 }
 
@@ -2463,7 +2463,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   outline: 4px solid rgba(255,255,255,0.96);
   outline-offset: 3px;
   box-shadow: 0 0 0 3px rgba(36,48,56,0.72), 0 0 26px rgba(36,48,56,0.7), 0 0 44px rgba(255,255,255,0.62);
-  animation: selectedPositionGlow 1.5s ease-in-out infinite alternate;
+  animation: selectedPositionGlow 3s ease-in-out infinite alternate;
   transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
 }
 
@@ -15935,6 +15935,13 @@ html.thematic-scroll .theme-row-section {
   scroll-snap-type: none;
 }
 
+.theme-horizontal-row button,
+.theme-horizontal-row .debate-card-context-toggle,
+.theme-horizontal-row .debate-card-entry-button,
+.theme-horizontal-row .debate-card-options-btn {
+  cursor: pointer;
+}
+
 /* Piste flex */
 .theme-horizontal-inner {
   display: grid;
@@ -16680,6 +16687,8 @@ body.page-home-mobile .debate-card-agon-badge {
 
   body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
     margin-top: -80px;
+    position: relative;
+    z-index: 2;
   }
 }
 
@@ -16885,7 +16894,6 @@ body.page-home #debates-list .theme-row-section:first-child {
   opacity: 0;
   pointer-events: none;
   mix-blend-mode: normal;
-  filter: blur(0.3px);
   animation: agonBubbleFlash 5.8s ease-in-out infinite;
 }
 
@@ -17074,7 +17082,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   top: auto;
   left: auto;
   transform: none;
-  z-index: 10;
+  z-index: 50;
   margin-bottom: 3px;
   border: 1px solid currentColor;
   border-radius: 999px;
@@ -17106,6 +17114,13 @@ body.page-home #debates-list .theme-row-section:first-child {
   margin-left: auto;
   margin-right: auto;
   transform: none;
+}
+
+/* Le badge trend doit être au-dessus des overlays ::before/::after de la bulle (z-index:2)
+   et du flash (z-index:4) — la règle générique > * force z-index:1 sur ce badge */
+.agon-tag-bubble .agon-tag-trend {
+  position: relative;
+  z-index: 6;
 }
 
 .agon-tag-trend-up {
@@ -18207,8 +18222,13 @@ body.page-contact.in-iframe .contact-page-shell {
   }
 }
 
+@keyframes agon-card-highlight {
+  0%, 100% { outline: 0px solid rgba(174,192,204,0); box-shadow: inset 0 0 0 2px #111; }
+  50% { outline: 3px solid rgba(174,192,204,0.9); box-shadow: 0 0 18px rgba(174,192,204,0.55), inset 0 0 0 2px #111; }
+}
+
 .agon-card-blink {
-  animation: flashBlueCard 1s ease-in-out 2;
+  animation: agon-card-highlight 0.8s ease-in-out 2;
 }
 
 /* Fond bleu + angles arrondis sur toutes les cartes en page index */
