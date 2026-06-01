@@ -11984,6 +11984,7 @@ function initAdminTopbarMenu() {
   });
 
   document.addEventListener("click", (event) => {
+    if (!event.isTrusted) return;
     if (!menu.contains(event.target)) close();
   });
 

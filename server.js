@@ -890,6 +890,11 @@ async function recalculateStoryEpisodeNavigation(storyId) {
   }
 
   writeDebateEpisodeNavMap(navMap);
+
+  for (const debate of orderedDebates) {
+    clearDebateDetailResponseCache(debate.id);
+  }
+  clearDebatesApiResponseCache();
 }
 
 let _veillePendingStoriesCache = null;
