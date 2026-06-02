@@ -191,14 +191,70 @@ function browserCanUsePushNotifications() {
     && "PushManager" in window;
 }
 
-function shouldShowPushInvite() {
+function browserHasNotificationSurface() {
+  return typeof window !== "undefined"
+    && "Notification" in window
+    && "serviceWorker" in navigator;
+}
+
+function ensurePushMenuItemElement() {
+  let item = document.getElementById("push-menu-item");
+  if (item) return item;
+
+  const menu = document.getElementById("home-topbar-menu");
+  if (!menu) return null;
+
+  item = document.createElement("button");
+  item.type = "button";
+  item.className = "home-topbar-menu-item";
+  item.id = "push-menu-item";
+  item.style.display = "none";
+  item.setAttribute("onclick", "handlePushMenuClick()");
+  item.innerHTML = '<i id="push-menu-icon" class="fa-regular fa-bell"></i><span id="push-menu-label">Activer les alertes</span>';
+
+  const notificationsLink = document.getElementById("home-topbar-notifications-link")
+    || Array.from(menu.querySelectorAll(".home-topbar-menu-item")).find((link) => {
+      const text = (link.textContent || "").trim().toLowerCase();
+      return text.includes("notification");
+    });
+  if (notificationsLink && notificationsLink.parentNode === menu) {
+    notificationsLink.insertAdjacentElement("afterend", item);
+  } else {
+    menu.appendChild(item);
+  }
+
+  return item;
+}
+
+function ensurePushDeniedModal() {
+  let modal = document.getElementById("push-denied-modal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "push-denied-modal";
+  modal.style.cssText = "display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;";
+  modal.setAttribute("onclick", "closePushDeniedModal()");
+  modal.innerHTML = `
+    <div style="background:#1e2d38; border:1px solid #3a4a55; border-radius:16px; padding:24px 20px; max-width:340px; width:90%; margin:auto;" onclick="event.stopPropagation()">
+      <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
+      <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
+      <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
+      <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+      <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function shouldShowPushInvite({ ignoreCooldown = false } = {}) {
   if (!browserCanUsePushNotifications() || !isMobilePushInviteSurface()) return false;
   if (Notification.permission === "denied") return false;
   if (lsGet(PUSH_SUBSCRIBED_KEY) === "1") return false;
   if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
 
   const lastShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
-  if (lastShownAt && Date.now() - lastShownAt < PUSH_INVITE_COOLDOWN_MS) {
+  if (!ignoreCooldown && lastShownAt && Date.now() - lastShownAt < PUSH_INVITE_COOLDOWN_MS) {
     return false;
   }
 
@@ -351,8 +407,8 @@ async function enablePushNotificationsFromInvite() {
   }
 }
 
-function showPushInvite(reason = "action") {
-  if (pushInviteToastEl || !shouldShowPushInvite()) return;
+function showPushInvite(reason = "action", options = {}) {
+  if (pushInviteToastEl || !shouldShowPushInvite(options)) return;
 
   ensurePushInviteStyles();
   lsSet(PUSH_INVITE_LAST_SHOWN_KEY, String(Date.now()));
@@ -399,7 +455,7 @@ function showPushInvite(reason = "action") {
 function showPushInviteAfterAction(reason = "action") {
   window.setTimeout(() => {
     try {
-      showPushInvite(reason);
+      showPushInvite(reason, { ignoreCooldown: true });
     } catch (error) {
       console.error(error);
     }
@@ -26645,25 +26701,61 @@ if (loginButton) {
 
 
 function initPushMenuItem() {
-  const item = document.getElementById("push-menu-item");
-  if (!item || !browserCanUsePushNotifications()) return;
-  const perm = Notification.permission;
-  if (perm === "granted") return;
+  const item = ensurePushMenuItemElement();
+  if (!item) return;
+  const icon = document.getElementById("push-menu-icon");
+  const label = document.getElementById("push-menu-label");
+
   item.style.display = "";
+
+  if (!browserHasNotificationSurface()) {
+    if (icon) icon.className = "fa-regular fa-bell";
+    if (label) label.textContent = "Installer pour les alertes";
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === "granted") {
+    if (icon) icon.className = "fa-regular fa-bell";
+    if (label) {
+      label.textContent = lsGet(PUSH_SUBSCRIBED_KEY) === "1"
+        ? "Alertes activées"
+        : "Réactiver les alertes";
+    }
+    return;
+  }
+
+  if (!browserCanUsePushNotifications()) {
+    if (icon) icon.className = "fa-regular fa-bell";
+    if (label) label.textContent = "Installer pour les alertes";
+    return;
+  }
+
   if (perm === "denied") {
-    const icon = document.getElementById("push-menu-icon");
-    const label = document.getElementById("push-menu-label");
     if (icon) icon.className = "fa-regular fa-bell-slash";
     if (label) label.textContent = "Notifications bloquées";
+    return;
   }
+
+  if (icon) icon.className = "fa-regular fa-bell";
+  if (label) label.textContent = "Activer les alertes";
 }
 
 async function handlePushMenuClick() {
   closeHomeTopbarMenu();
-  if (typeof Notification === "undefined") return;
+
+  if (!browserHasNotificationSurface() || !browserCanUsePushNotifications()) {
+    showReplacementSuccessMessage(
+      "Alertes non disponibles ici",
+      "Sur iPhone, les push web fonctionnent surtout après installation d’agôn sur l’écran d’accueil. Sur ordinateur, ouvre le site en HTTPS ou localhost.",
+      null,
+      "🔔"
+    );
+    return;
+  }
 
   if (Notification.permission === "denied") {
-    const modal = document.getElementById("push-denied-modal");
+    const modal = ensurePushDeniedModal();
     if (modal) modal.style.display = "flex";
     return;
   }
@@ -26684,7 +26776,11 @@ async function handlePushMenuClick() {
 
   if (Notification.permission === "granted") {
     const btn = document.getElementById("push-menu-item");
-    if (btn) btn.style.display = "none";
+    const icon = document.getElementById("push-menu-icon");
+    const label = document.getElementById("push-menu-label");
+    if (btn) btn.style.display = "";
+    if (icon) icon.className = "fa-regular fa-bell";
+    if (label) label.textContent = "Alertes activées";
     showReplacementSuccessMessage("Notifications activées", "Tu recevras désormais les alertes en temps réel.", null, "🔔");
   }
 }
