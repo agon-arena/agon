@@ -6494,131 +6494,44 @@ app.get("/api/cloud-bubbles", async (req, res) => {
 
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    const existing = await loadCloudBubbles();
-    const lastUpdateISO = existing.lastUpdatedAt || new Date(0).toISOString();
     _debateKeywordsCache = null;
     const keywordsMap = readDebateKeywordsMap();
     const now = new Date().toISOString();
-    let bubbles = Array.isArray(existing.bubbles) ? existing.bubbles.filter(b => b?.subjectId && b?.tag) : [];
-    bubbles = bubbles.slice(-10);
 
-    const { data: newDebates, error } = await supabase
+    const { data: allDebates, error } = await supabase
       .from("debates")
       .select("id, question, source_url, media_extras, created_at, source_published_at")
-      .gt("created_at", lastUpdateISO)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
 
-    // Pré-charge les questions des débats actuellement en bulle pour la comparaison IA
-    const existingBubbleIds = bubbles.map(b => b.subjectId).filter(Boolean);
-    const bubbleDebateMap = new Map();
-    if (existingBubbleIds.length) {
-      const { data: bubbleDebates } = await supabase
-        .from("debates")
-        .select("id, question, source_url, media_extras, created_at, source_published_at")
-        .in("id", existingBubbleIds);
-      for (const d of (bubbleDebates || [])) bubbleDebateMap.set(String(d.id), d);
-    }
-
-    const mapToCandidate = (debate) => {
+    // Construit tous les candidats valides (label + sources), dédoublonnés par tag normalisé
+    const seenTags = new Set();
+    const candidates = [];
+    for (const debate of (allDebates || [])) {
       const label = getCloudLabelFromDebate(debate.id, keywordsMap);
-      if (!label) return null;
+      if (!label) continue;
       const sourceCount = countCloudSources(debate);
-      if (sourceCount <= 0) return null;
+      if (sourceCount <= 0) continue;
+      const normTag = normalizeTag(label);
+      if (seenTags.has(normTag)) continue;
+      seenTags.add(normTag);
       const debateDate = debate.source_published_at || debate.created_at || now;
-      return { tag: label, subjectId: String(debate.id), count: sourceCount, debateDate };
-    };
-
-    let added = 0;
-    let updated = 0;
-
-    for (const debate of (newDebates || [])) {
-      const candidate = mapToCandidate(debate);
-      if (!candidate) continue;
-      const existingIndex = bubbles.findIndex(b => String(b.subjectId) === candidate.subjectId);
-      if (existingIndex >= 0) {
-        bubbles[existingIndex] = {
-          ...bubbles[existingIndex],
-          ...candidate,
-          enteredCloudAt: bubbles[existingIndex].enteredCloudAt || now
-        };
-        updated++;
-        continue;
-      }
-      // Utiliser le même trend que le badge carte (debate-trends.json) pour cohérence visuelle
       const trendEntry = getDebateTrend(debate.id);
-      const debateTrendValue = Number(trendEntry?.trend ?? 0);
-      const nextBubble = { ...candidate, trend: debateTrendValue, enteredCloudAt: now };
-      const matchedId = trendEntry?.matchedSubjectId ? String(trendEntry.matchedSubjectId).trim() : null;
-      const matchedBubbleIndex = matchedId ? bubbles.findIndex(b => String(b.subjectId) === matchedId) : -1;
-      // Fallback 1 : même tag normalisé → même sujet, pas de doublon
-      const sameTagIndex = matchedBubbleIndex < 0
-        ? bubbles.findIndex(b => normalizeTag(b.tag) === normalizeTag(candidate.tag))
-        : -1;
-      // Fallback 2 : comparaison IA ciblée contre les bulles actuelles
-      let aiBubbleIndex = -1;
-      if (matchedBubbleIndex < 0 && sameTagIndex < 0 && bubbles.length > 0) {
-        const bubbleSubjects = bubbles.map(b => {
-          const d = bubbleDebateMap.get(String(b.subjectId));
-          return {
-            id: String(b.subjectId),
-            question: d?.question || b.tag,
-            resume: "",
-            tags: keywordsMap[String(b.subjectId)] || [b.tag],
-            sourceCount: b.count || 0,
-            created_at: b.debateDate || null
-          };
-        });
-        const aiMatch = await findSimilarRecentSubjectForTrend(
-          {
-            id: String(debate.id),
-            question: String(debate.question || ""),
-            resume: "",
-            tags: keywordsMap[String(debate.id)] || [],
-            sourceCount: candidate.count,
-            created_at: debate.created_at
-          },
-          bubbleSubjects
-        );
-        if (aiMatch) {
-          aiBubbleIndex = bubbles.findIndex(b => String(b.subjectId) === String(aiMatch.id));
-          if (aiBubbleIndex >= 0) {
-            console.log(`[update-cloud] IA match bulle: "${debate.question?.slice(0,50)}" → bulle "${bubbles[aiBubbleIndex].tag}" (id=${aiMatch.id})`);
-          }
-        }
-      }
-
-      if (matchedBubbleIndex >= 0) {
-        // Remplace la bulle qui correspond au match trend — pas de doublon
-        bubbles[matchedBubbleIndex] = { ...bubbles[matchedBubbleIndex], ...nextBubble };
-        updated++;
-      } else if (sameTagIndex >= 0) {
-        // Même tag déjà présent : garde le débat avec le plus de sources
-        if (nextBubble.count >= bubbles[sameTagIndex].count) {
-          bubbles[sameTagIndex] = { ...bubbles[sameTagIndex], ...nextBubble };
-          updated++;
-        }
-      } else if (aiBubbleIndex >= 0) {
-        // Même sujet détecté par IA : remplace si plus de sources
-        if (nextBubble.count >= bubbles[aiBubbleIndex].count) {
-          bubbles[aiBubbleIndex] = { ...bubbles[aiBubbleIndex], ...nextBubble };
-          updated++;
-        }
-      } else if (bubbles.length < 10) {
-        bubbles.push(nextBubble);
-        added++;
-      } else {
-        let oldestIndex = 0;
-        for (let i = 1; i < bubbles.length; i++) {
-          const currentTime = new Date(bubbles[i].enteredCloudAt || bubbles[i].debateDate || 0).getTime() || 0;
-          const oldestTime = new Date(bubbles[oldestIndex].enteredCloudAt || bubbles[oldestIndex].debateDate || 0).getTime() || 0;
-          if (currentTime < oldestTime) oldestIndex = i;
-        }
-        bubbles[oldestIndex] = nextBubble;
-        added++;
-      }
+      candidates.push({
+        tag: label,
+        subjectId: String(debate.id),
+        count: sourceCount,
+        debateDate,
+        trend: Number(trendEntry?.trend ?? 0),
+        enteredCloudAt: now
+      });
+      if (candidates.length >= 10) break;
     }
+
+    let bubbles = candidates;
+    const added = candidates.length;
+    const updated = 0;
 
     const ids = bubbles.map(b => b.subjectId).filter(Boolean);
     const debateMap = new Map();

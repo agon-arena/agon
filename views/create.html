@@ -8,8 +8,11 @@
 <title>Ouvrir une nouvelle arène</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/faviconiconemobile.png">
+<link rel="apple-touch-icon" href="/favicon.png">
 <meta name="theme-color" content="#243038">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agôn">
 <style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
 <script id="agon-idle-home-guard">
 (function(){
@@ -115,6 +118,7 @@
     body { background-color: #243038; }
     body.in-iframe .create-back-link,
     body.in-iframe .topbar-back-arrow { display: none !important; }
+    body.in-iframe .app-floating-refresh-btn { display: none !important; }
   </style>
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>

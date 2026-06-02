@@ -3212,7 +3212,7 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
-      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#e5edf3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser" onclick="document.getElementById('debate-iframe-modal-frame').src=document.getElementById('debate-iframe-modal-frame').src"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
@@ -3663,6 +3663,7 @@ function _showEpisodeNavNotFound() {
 }
 
 function openDebateIframeModal(url, options = {}) {
+  closeHomeTopbarMenu();
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
   window.__agonDebateModalOpenedFromNotifications = location.pathname === "/notifications";
@@ -10456,7 +10457,7 @@ function showVoteWarning(titleOrMessage, message = "") {
   overlay.innerHTML = `
     <div class="replacement-success-box warning-box">
       <div class="replacement-success-icon warning-icon-wrap" aria-hidden="true">
-        <span class="warning-icon-symbol">🔄🗳️</span>
+        <span class="warning-icon-symbol">🔄<i class="fa-solid fa-check-to-slot"></i></span>
       </div>
       <div class="replacement-success-title">${escapeHtml(title)}</div>
       <div class="replacement-success-text">${escapeHtml(text)}</div>
@@ -12053,6 +12054,15 @@ function attachAdminButtons() {
         });
         updateCloudBtn.textContent = "✓ " + (res.count || 0) + " bulle(s) mises à jour";
         setTimeout(() => { updateCloudBtn.textContent = "⟳ Mettre à jour les bulles"; updateCloudBtn.disabled = false; }, 3000);
+        try {
+          const cloudRes = await fetchJSON(API + "/cloud-bubbles");
+          const newTrends = Array.isArray(cloudRes?.bubbles) ? cloudRes.bubbles : [];
+          window.AGON_TAG_TRENDS = newTrends;
+          if (window._tagTrendCloudModule && newTrends.length) {
+            const container = document.querySelector("#agon-tag-trends-cloud");
+            if (container) window._tagTrendCloudModule.renderTagTrendCloud(container, newTrends);
+          }
+        } catch {}
       } catch (e) {
         updateCloudBtn.textContent = "⚠ Erreur";
         setTimeout(() => { updateCloudBtn.textContent = "⟳ Mettre à jour les bulles"; updateCloudBtn.disabled = false; }, 3000);
@@ -12074,7 +12084,7 @@ async function adminBroadcastDaily() {
   const btn = document.getElementById("admin-broadcast-daily-btn");
   if (btn) { btn.disabled = true; }
   try {
-    const res = await fetchJSON(API + "/admin/push/broadcast-daily", { method: "POST" });
+    const res = await fetchJSON(API + "/admin/push/broadcast-daily", { method: "POST", headers: { "x-admin-token": getAdminToken() } });
     const sent = (res.results || []).filter(r => r.status === "sent").length;
     showReplacementSuccessMessage(
       "Push envoyé",
@@ -12100,11 +12110,13 @@ function initAdminTopbarMenu() {
   const close = () => {
     panel.hidden = true;
     toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("admin-menu-is-open");
   };
 
   const open = () => {
     panel.hidden = false;
     toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("admin-menu-is-open");
     const rect = toggle.getBoundingClientRect();
     panel.style.top = (rect.bottom + 8) + 'px';
     panel.style.right = (window.innerWidth - rect.right) + 'px';
@@ -12194,11 +12206,35 @@ function setStoredUnreadNotificationCount(unreadCount) {
   updateNotificationBadgeElement(badge, safeCount);
   updateNotificationBadgeElement(compactBadge, safeCount);
   updateNotificationBadgeElement(bottomBadge, safeCount);
+
+  if ("setAppBadge" in navigator) {
+    if (safeCount > 0) {
+      navigator.setAppBadge(safeCount).catch(() => {});
+    } else {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }
 }
 function decrementStoredUnreadNotificationCount(step = 1) {
   const current = getStoredUnreadNotificationCount();
   setStoredUnreadNotificationCount(Math.max(0, current - Math.max(1, Number(step || 1))));
 }
+const NOTIF_READ_LS_KEY = "agon_read_notif_ids";
+function getLocallyReadNotifIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_LS_KEY) || "[]")); } catch { return new Set(); }
+}
+function saveLocallyReadNotifId(id) {
+  try {
+    const ids = getLocallyReadNotifIds();
+    ids.add(String(id));
+    const arr = Array.from(ids).slice(-200);
+    localStorage.setItem(NOTIF_READ_LS_KEY, JSON.stringify(arr));
+  } catch {}
+}
+function isNotifLocallyRead(id) {
+  return getLocallyReadNotifIds().has(String(id));
+}
+
 function markNotificationElementAsReadLocally(element) {
   if (!element) return false;
 
@@ -12206,6 +12242,8 @@ function markNotificationElementAsReadLocally(element) {
   element.classList.remove("notification-item-unread");
   element.classList.add("notification-item-read-local");
   element.setAttribute("data-read-local", "true");
+  const notifId = element.getAttribute("data-notif-id");
+  if (notifId) saveLocallyReadNotifId(notifId);
   return wasUnread;
 }
 function markAllNotificationElementsAsReadLocally() {
@@ -12331,8 +12369,9 @@ if (notification.type === "analysis_ready") {
 title = getNotificationDisplayTitle(notification, title);
   return `
  <a
-  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : "notification-item-read-local"}"
+  class="notification-item ${(Number(notification.is_read) === 0 && !isNotifLocallyRead(notification.id)) ? "notification-item-unread" : "notification-item-read-local"}"
   href="${link}"
+  data-notif-id="${notification.id}"
   onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
         <div class="notification-top">
@@ -15723,7 +15762,7 @@ function buildIndexThematicSectionsHtml(debates) {
       const inner = _buildCarouselInner(themeDebates, theme);
       if (!inner) return;
       const themeTitleHtml = theme === "Philosophie - sciences sociales"
-        ? "Philosophie\nsciences sociales"
+        ? "Philosophie<span class='theme-philo-sep'> - </span><span class='theme-philo-br'><br></span>sciences sociales"
         : escapeHtml(theme);
       sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
@@ -25366,8 +25405,9 @@ if (notification.type === "analysis_ready") {
       title = getNotificationDisplayTitle(notification, title);
      return `
  <a
-  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : "notification-item-read-local"}"
+  class="notification-item ${(Number(notification.is_read) === 0 && !isNotifLocallyRead(notification.id)) ? "notification-item-unread" : "notification-item-read-local"}"
   href="${link}"
+  data-notif-id="${notification.id}"
   onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
           <div class="notification-top">
@@ -26519,7 +26559,7 @@ function ensureHomeTopbarContactLink() {
   link.href = "/contact";
   link.className = "home-topbar-menu-item";
   link.id = "home-topbar-contact-link";
-  link.setAttribute("onclick", "event.preventDefault(); openDebateIframeModal('/contact')");
+  link.setAttribute("onclick", "event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')");
   link.innerHTML = '<i class="fa-regular fa-envelope"></i><span>Contact</span>';
   const notifications = document.getElementById("home-topbar-notifications-link");
   if (notifications && notifications.parentNode === menu) {
@@ -26536,7 +26576,7 @@ function ensureHomeTopbarAboutLink() {
   link.href = "/about";
   link.className = "home-topbar-menu-item";
   link.id = "home-topbar-about-link";
-  link.setAttribute("onclick", "event.preventDefault(); openDebateIframeModal('/about')");
+  link.setAttribute("onclick", "event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')");
   link.innerHTML = '<i class="fa-regular fa-circle-question"></i><span>À propos</span>';
   const contact = document.getElementById("home-topbar-contact-link") || menu.querySelector('[href="/contact"]');
   if (contact && contact.parentNode === menu) {

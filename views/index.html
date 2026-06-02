@@ -29,8 +29,11 @@
 
   <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/favicon.png">
   <meta name="theme-color" content="#243038">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agôn">
 <style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
 <script id="agon-idle-home-guard">
 (function(){
@@ -266,11 +269,11 @@
           onclick="event.stopPropagation()"
           aria-label="Menu du bandeau"
         >
-          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link" onclick="event.preventDefault(); openDebateIframeModal('/create')">
+          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/create')">
             <i class="fa-solid fa-plus"></i>
             <span>Ouvrir une arène</span>
           </a>
-          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
+          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/notifications')">
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
           </a>
@@ -278,11 +281,11 @@
             <i id="push-menu-icon" class="fa-regular fa-bell"></i>
             <span id="push-menu-label">Activer les alertes</span>
           </button>
-          <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); openDebateIframeModal('/about')">
+          <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')">
             <i class="fa-regular fa-circle-question"></i>
             <span>À propos</span>
           </a>
-          <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
+          <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')">
             <i class="fa-regular fa-envelope"></i>
             <span>Contact</span>
           </a>
@@ -1230,7 +1233,7 @@
         <h4 class="install-modal-platform"><i class="fa-brands fa-apple"></i> Sur iPhone</h4>
         <ol class="install-modal-steps">
           <li><span class="install-modal-step-icon">🌐</span><span>Ouvre cette page dans <strong>Safari</strong>.</span></li>
-          <li><span class="install-modal-step-icon">📤</span><span>Appuie sur <strong>Partager</strong>.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-solid fa-arrow-up-from-bracket" style="font-size:15px;color:#111827;"></i></span><span>Appuie sur <strong>Partager</strong>.</span></li>
           <li><span class="install-modal-step-icon">📱</span><span>Choisis <strong>Ajouter à l’écran d’accueil</strong>.</span></li>
           <li><span class="install-modal-step-icon">✨</span><span>Ouvre Agôn depuis la nouvelle icône.</span></li>
         </ol>
@@ -1254,7 +1257,7 @@
         <h4 class="install-modal-platform"><i class="fa-brands fa-apple"></i> Sur Safari (Mac)</h4>
         <p class="install-modal-text">Depuis le menu :</p>
         <ol class="install-modal-steps">
-          <li><span class="install-modal-step-icon">📤</span><span>Clique sur le bouton <strong>Partager</strong>.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-solid fa-arrow-up-from-bracket" style="font-size:15px;color:#111827;"></i></span><span>Clique sur le bouton <strong>Partager</strong>.</span></li>
           <li><span class="install-modal-step-icon">✨</span><span>Choisis <strong>Ajouter au Dock</strong>.</span></li>
         </ol>
       </div>
