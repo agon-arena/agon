@@ -92,7 +92,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.css?v=20260602" />
+<link rel="stylesheet" href="/style.css?v=20260602-voices-panel-vote-icon" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -919,7 +919,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script>window.__VEILLE_MEDIAS__ = __VEILLE_MEDIAS_JSON__;</script>
-<script src="/script.js?v=20260602-push-menu-visible"></script>
+<script src="/script.js?v=20260602-voices-panel-vote-icon"></script>
 <script src="/ai-analysis-animation.js?v=20260529-sablier-preload"></script>
 <script src="/admin-debate-analysis.js?v=20260529-ai-trigger-bright"></script>
 <script>
@@ -1140,14 +1140,17 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 <!-- Badge voix utilisées + panneau -->
 <div id="voices-float-badge" style="position:fixed;bottom:16px;right:16px;z-index:900;background:rgba(26,39,47,0.94);color:#e5edf3;font-size:18px;font-weight:700;padding:7px 14px;border-radius:999px;border:1.5px solid #111827;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);letter-spacing:0.03em;cursor:pointer;display:none;user-select:none;box-shadow:0 8px 24px rgba(0,0,0,0.22);">0/5</div>
 
-<div id="voices-panel-overlay" style="display:none;position:fixed;inset:0;z-index:901;background:rgba(8,12,16,0.34);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);" onclick="closeVoicesPanel()"></div>
-<div id="voices-panel" style="display:none;position:fixed;top:76px;right:16px;z-index:902;width:min(480px,calc(100vw - 24px));max-height:calc(100vh - 170px);background:#1f2b33;border:1px solid rgba(255,255,255,0.10);border-radius:18px;box-shadow:0 18px 42px rgba(0,0,0,0.34);overflow:hidden;flex-direction:column;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 9px;border-bottom:1px solid rgba(255,255,255,0.07);gap:10px;">
-    <span style="color:#f3f4f6;font-size:13px;font-weight:700;letter-spacing:0.01em;">Mes voix attribuées</span>
-    <span id="voices-panel-count" style="color:#94a3b8;font-size:12px;font-weight:600;">0 / 5</span>
-    <button onclick="closeVoicesPanel()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);color:#94a3b8;font-size:18px;cursor:pointer;padding:5px 9px;line-height:1;border-radius:10px;font-weight:700;">✕</button>
+<div id="voices-panel-overlay" class="voices-panel-overlay" style="display:none;" onclick="closeVoicesPanel()"></div>
+<div id="voices-panel" class="voices-panel" style="display:none;">
+  <div class="voices-panel-header">
+    <span class="voices-panel-title-wrap">
+      <span class="voices-panel-vote-icon" aria-hidden="true"><i class="fa-solid fa-check-to-slot"></i></span>
+      <span class="voices-panel-title">Mes voix attribuées</span>
+    </span>
+    <span id="voices-panel-count" class="voices-panel-count">0 / 5</span>
+    <button class="voices-panel-close" onclick="closeVoicesPanel()" type="button" aria-label="Fermer">✕</button>
   </div>
-  <div id="voices-panel-body" style="overflow-y:auto;padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;"></div>
+  <div id="voices-panel-body" class="voices-panel-body"></div>
 </div>
 
 <script>
@@ -1434,7 +1437,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     });
 
     if(voted.length === 0){
-      panelBody.innerHTML = '<p style="color:#6b7280;font-size:13px;text-align:center;margin:8px 0;">Aucune voix attribuée pour l\'instant.</p>';
+      panelBody.innerHTML = '<p class="voices-panel-empty">Aucune voix attribuée pour l\'instant.</p>';
     } else {
       var sideA = voted.filter(function(v){ return v.side === 'A'; });
       var sideB = voted.filter(function(v){ return v.side === 'B'; });
@@ -1442,17 +1445,17 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       var debId = getDebateId();
       function renderGroup(items, label, color, borderColor){
         if(!items.length) return '';
-        return '<div style="margin-bottom:8px;">'
-          + '<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px;padding-left:2px;">'+label+'</div>'
+        return '<div class="voices-panel-group" style="--voices-panel-color:'+color+';--voices-panel-border:'+borderColor+';">'
+          + '<div class="voices-panel-group-label">'+label+'</div>'
           + items.map(function(v){
               var disabled = v.count <= 0 ? 'disabled' : '';
-              var bodyHtml = v.body ? '<div id="vp-body-'+v.argId+'" style="display:none;padding:7px 11px 9px;color:#a0b0bb;font-size:12px;line-height:1.45;border-top:1px solid rgba(255,255,255,0.06);">'+v.body+'</div>' : '';
-              var cursor = v.body ? 'cursor:pointer;' : '';
-              var chevron = v.body ? '<span id="vp-chev-'+v.argId+'" style="color:#6b7280;font-size:10px;flex-shrink:0;">▸</span>' : '';
-              return '<div style="background:rgba(255,255,255,0.035);border:1px solid '+borderColor+';border-radius:12px;overflow:hidden;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">'
-                + '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;'+cursor+'" '+(v.body ? 'onclick="vpToggle(\''+v.argId+'\')"' : '')+'>'
+              var bodyHtml = v.body ? '<div id="vp-body-'+v.argId+'" class="voices-panel-item-body">'+v.body+'</div>' : '';
+              var toggleClass = v.body ? ' voices-panel-item-row-clickable' : '';
+              var chevron = v.body ? '<span id="vp-chev-'+v.argId+'" class="voices-panel-chevron">▸</span>' : '';
+              return '<div class="voices-panel-item">'
+                + '<div class="voices-panel-item-row'+toggleClass+'" '+(v.body ? 'onclick="vpToggle(\''+v.argId+'\')"' : '')+'>'
                 +   chevron
-                +   '<span style="color:#f3f4f6;font-size:12px;font-weight:600;line-height:1.35;flex:1;">'+v.title+'</span>'
+                +   '<span class="voices-panel-item-title">'+v.title+'</span>'
                 +   '<div class="voice-stepper" onclick="event.stopPropagation()">'
                 +     '<button class="voice-stepper-btn voice-stepper-btn-minus" type="button" data-voice-arg-id="'+v.argId+'" data-voice-action="minus" '+disabled+' onclick="unvote(\''+debId+'\',\''+v.argId+'\',false)" title="Retirer une voix">−</button>'
                 +     '<div class="voice-stepper-center"><div class="voice-stepper-value">'+v.count+'</div><div class="voice-stepper-label">Mes voix</div></div>'

@@ -15,7 +15,8 @@ self.addEventListener("push", (event) => {
     payload = {};
   }
 
-  const title = payload.title || "agôn";
+  const rawTitle = String(payload.title || "").trim();
+  const title = rawTitle.replace(/^from\s+ag[oô]n\s*:?\s*/i, "").trim() || "Agôn";
   const options = {
     body: payload.body || "Nouvelle activité sur agôn.",
     icon: payload.icon || "/icons/icon-192.png",

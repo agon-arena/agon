@@ -4079,7 +4079,7 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT
     }, {
-      title: "agôn",
+      title: "Agôn",
       body: "Les questions du jour sont disponibles.",
       url: "/",
       icon: "/icons/icon-192.png",

@@ -12204,6 +12204,8 @@ function markNotificationElementAsReadLocally(element) {
 
   const wasUnread = element.classList.contains("notification-item-unread");
   element.classList.remove("notification-item-unread");
+  element.classList.add("notification-item-read-local");
+  element.setAttribute("data-read-local", "true");
   return wasUnread;
 }
 function markAllNotificationElementsAsReadLocally() {
@@ -12329,7 +12331,7 @@ if (notification.type === "analysis_ready") {
 title = getNotificationDisplayTitle(notification, title);
   return `
  <a
-  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
+  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : "notification-item-read-local"}"
   href="${link}"
   onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
@@ -25364,7 +25366,7 @@ if (notification.type === "analysis_ready") {
       title = getNotificationDisplayTitle(notification, title);
      return `
  <a
-  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : ""}"
+  class="notification-item ${Number(notification.is_read) === 0 ? "notification-item-unread" : "notification-item-read-local"}"
   href="${link}"
   onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
 >
@@ -26746,10 +26748,11 @@ async function handlePushMenuClick() {
 
   if (!browserHasNotificationSurface() || !browserCanUsePushNotifications()) {
     showReplacementSuccessMessage(
-      "Alertes non disponibles ici",
-      "Sur iPhone, les push web fonctionnent surtout après installation d’agôn sur l’écran d’accueil. Sur ordinateur, ouvre le site en HTTPS ou localhost.",
+      "Installe Agôn pour les alertes",
+      "Sur iPhone, installe d’abord l’icône Agôn.\n\n📤 1. Appuie sur Partager dans Safari.\n📱 2. Choisis “Ajouter à l’écran d’accueil”.\n✨ 3. Ouvre Agôn depuis la nouvelle icône.\n\n🔔 Reviens ensuite ici pour activer les alertes.",
       null,
-      "🔔"
+      '<img src="/appagon.png" alt="" class="push-install-app-icon">',
+      "push-install-help-icon"
     );
     return;
   }

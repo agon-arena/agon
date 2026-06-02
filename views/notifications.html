@@ -74,7 +74,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.css?v=20260602" />
+<link rel="stylesheet" href="/style.css?v=20260602-voices-panel-vote-icon" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -163,6 +163,18 @@
     .page-notifications .notification-item-unread:hover,
     .page-notifications-mobile .notification-item-unread:hover {
       background: #1a3456;
+    }
+    .page-notifications .notification-item-read-local,
+    .page-notifications-mobile .notification-item-read-local {
+      background: #2e3d47;
+      border-color: #3a4a55;
+      border-left-color: transparent;
+      font-weight: 500;
+      opacity: 0.72;
+    }
+    .page-notifications .notification-item-read-local:hover,
+    .page-notifications-mobile .notification-item-read-local:hover {
+      background: #344853;
     }
 
     /* Si la modale iframe débat existe encore pendant la transition,
@@ -416,7 +428,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.js?v=20260602-push-menu-visible"></script>
+	<script src="/script.js?v=20260602-voices-panel-vote-icon"></script>
 <script>
 (function() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
