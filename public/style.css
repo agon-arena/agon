@@ -926,6 +926,8 @@ main.create-page {
 }
 
 .debate-card-context {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
@@ -1038,6 +1040,8 @@ font-family: "Barlow Condensed", sans-serif;
 }
 
 .debate-card-context-toggle {
+  position: relative;
+  z-index: 3;
   padding: 0;
   border: none;
   background: transparent;
@@ -9523,6 +9527,48 @@ body.page-home.page-home-mobile {
   letter-spacing: 0.08em;
 }
 
+@media (max-width: 768px) {
+  #index-explorer-menu {
+    bottom: calc(100% + 8px);
+    width: min(238px, calc(100vw - 18px));
+    max-height: min(430px, calc(100vh - 96px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    gap: 3px;
+    padding: 5px;
+    border-radius: 14px;
+    scrollbar-width: none;
+  }
+
+  #index-explorer-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  #index-explorer-menu button {
+    min-height: 0;
+    gap: 7px;
+    padding: 5px 8px !important;
+    border-radius: 9px;
+    font-size: 12px !important;
+    line-height: 1.05;
+  }
+
+  #index-explorer-menu button i {
+    width: 15px;
+    font-size: 12px !important;
+  }
+
+  .index-explorer-menu-divider {
+    margin: 1px 0;
+  }
+
+  .index-explorer-menu-label {
+    padding: 3px 8px 1px;
+    font-size: 8px;
+    line-height: 1;
+  }
+}
+
 .home-bottom-share-copy span {
   color: #374151;
 }
@@ -16368,6 +16414,12 @@ html.thematic-scroll .theme-row-section {
   cursor: pointer;
 }
 
+.theme-horizontal-row .debate-card-context,
+.theme-horizontal-row .debate-card-context-toggle {
+  cursor: pointer !important;
+  pointer-events: auto;
+}
+
 /* Piste flex */
 .theme-horizontal-inner {
   display: grid;
@@ -16403,6 +16455,7 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 
 /* Carte centrale devient blanche (desktop + mobile) */
 .theme-horizontal-inner > .debate-card.index-card-active,
+.theme-horizontal-inner > .debate-card.index-card-context-open,
 .theme-horizontal-inner > .debate-card:has([data-index-context-toggle][aria-expanded="true"]) {
   background: #ffffff;
 }
@@ -16671,7 +16724,30 @@ body.page-home-mobile .debate-card-options-wrap {
 body.page-home .debate-card-footer-actions,
 body.page-home-mobile .debate-card-footer-actions {
   position: relative !important;
-  z-index: 25 !important;
+  z-index: 35 !important;
+}
+
+body.page-home .debate-card-context,
+body.page-home-mobile .debate-card-context {
+  position: relative !important;
+  z-index: auto !important;
+}
+
+body.page-home .debate-card-context-toggle,
+body.page-home-mobile .debate-card-context-toggle {
+  position: relative !important;
+  z-index: 45 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+body.page-home .debate-card-entry-button,
+body.page-home-mobile .debate-card-entry-button,
+body.page-home .debate-card-options-wrap,
+body.page-home-mobile .debate-card-options-wrap {
+  position: relative !important;
+  z-index: 36 !important;
+  pointer-events: auto !important;
 }
 
 
@@ -16730,7 +16806,7 @@ body.page-home-mobile .debate-card-context {
 body.page-home .debate-card-context-toggle,
 body.page-home-mobile .debate-card-context-toggle {
   position: relative !important;
-  z-index: 9 !important;
+  z-index: 45 !important;
   margin: 4px 0 0 !important;
   line-height: 1 !important;
 }
@@ -17948,6 +18024,53 @@ body.page-home-mobile .theme-row-title-text {
   letter-spacing: 0 !important;
 }
 
+@media (max-width: 768px) {
+  body.page-home-mobile .theme-row-title {
+    white-space: normal !important;
+    flex-wrap: nowrap !important;
+  }
+
+  body.page-home-mobile .theme-row-title-text {
+    display: inline-block;
+    white-space: normal !important;
+    line-height: 0.98;
+  }
+
+  body.page-home-mobile .theme-row-title-text .theme-philo-sep {
+    display: none !important;
+  }
+
+  body.page-home-mobile .theme-row-title-text .theme-philo-br {
+    display: inline !important;
+  }
+
+  body.page-home-mobile .theme-row-title-text .theme-title-mobile-line {
+    display: block !important;
+  }
+
+  body.page-home-mobile .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-row-title-text,
+  body.page-home-mobile .theme-row-section[data-theme="Médias - divertissements"] .theme-row-title-text,
+  body.page-home .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-row-title-text,
+  body.page-home .theme-row-section[data-theme="Médias - divertissements"] .theme-row-title-text {
+    display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    white-space: normal !important;
+    line-height: 0.95 !important;
+  }
+
+  body.page-home-mobile .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-title-mobile-line,
+  body.page-home-mobile .theme-row-section[data-theme="Médias - divertissements"] .theme-title-mobile-line,
+  body.page-home .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-title-mobile-line,
+  body.page-home .theme-row-section[data-theme="Médias - divertissements"] .theme-title-mobile-line {
+    display: block !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
+
 
 body.page-home .home-bottom-nav-item,
 body.page-home .home-bottom-nav-item i,
@@ -18970,3 +19093,190 @@ body.page-home-mobile .theme-horizontal-row {
     will-change: auto !important;
   }
 }
+
+/* --- Jauge politique --- */
+.political-gauge-wrap {
+  text-align: center;
+  margin: 16px auto 8px;
+  max-width: 480px;
+  padding: 0 16px;
+}
+.political-gauge-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(90deg, #d96060 0%, #d7d2c9 50%, #5f8fce 100%);
+  border: 1px solid rgba(25, 25, 24, 0.28);
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  padding: 8px 16px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.political-gauge-btn:hover {
+  border-color: rgba(20, 20, 18, 0.45);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  transform: translateY(-1px);
+}
+.political-gauge-btn:active {
+  transform: translateY(0);
+}
+.political-gauge-btn-open {
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14), inset 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.political-gauge-btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  color: #1f2327;
+  font-size: 1.15rem;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(30, 30, 28, 0.12);
+}
+.political-gauge-panel {
+  margin-top: 12px;
+  padding: 16px 16px 14px;
+  background: linear-gradient(180deg, #fbfbfa 0%, #f1f0ec 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(35, 35, 32, 0.14);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+.political-gauge-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 4px;
+}
+.political-gauge-subtitle {
+  font-size: 0.88rem;
+  color: #777;
+  margin: 0 0 12px;
+}
+.political-gauge-meter {
+  position: relative;
+  width: min(100%, 330px);
+  aspect-ratio: 2 / 1;
+  margin: 4px auto 10px;
+  overflow: hidden;
+}
+.political-gauge-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 330px 330px 0 0;
+  overflow: hidden;
+  background: linear-gradient(90deg, #d96060 0%, #e8c3b8 48%, #ddd8cf 50%, #b8cbe4 52%, #5f8fce 100%);
+  box-shadow: inset 0 4px 10px rgba(255, 255, 255, 0.55), inset 0 -8px 16px rgba(0, 0, 0, 0.18);
+}
+.political-gauge-arc::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -2px;
+  height: 74%;
+  border-radius: 260px 260px 0 0;
+  background: linear-gradient(180deg, #fbfbfa 0%, #f1f0ec 100%);
+  box-shadow: inset 0 5px 12px rgba(0, 0, 0, 0.06);
+}
+.political-gauge-arc-left,
+.political-gauge-arc-right,
+.political-gauge-arc-center,
+.political-gauge-tick {
+  position: absolute;
+  bottom: 10px;
+  width: 2px;
+  height: 12px;
+  background: rgba(40, 40, 38, 0.45);
+  z-index: 1;
+  transform-origin: bottom center;
+}
+.political-gauge-arc-left {
+  left: 18%;
+  transform: rotate(-28deg);
+}
+.political-gauge-arc-center {
+  left: 50%;
+  height: 16px;
+}
+.political-gauge-arc-right {
+  right: 18%;
+  transform: rotate(28deg);
+}
+.political-gauge-tick {
+  width: 1px;
+  height: 8px;
+  background: rgba(40, 40, 38, 0.26);
+}
+.political-gauge-tick-1 {
+  left: 30%;
+  transform: rotate(-18deg);
+}
+.political-gauge-tick-2 {
+  left: 40%;
+  transform: rotate(-8deg);
+}
+.political-gauge-tick-3 {
+  right: 40%;
+  transform: rotate(8deg);
+}
+.political-gauge-tick-4 {
+  right: 30%;
+  transform: rotate(18deg);
+}
+.political-gauge-needle {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 5px;
+  height: 78%;
+  border-radius: 999px 999px 2px 2px;
+  background: linear-gradient(180deg, #191a1c 0%, #34363a 60%, #111214 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.28);
+  transform: translateX(-50%) rotate(var(--gauge-angle));
+  transform-origin: 50% calc(100% - 4px);
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 3;
+}
+.political-gauge-needle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #191a1c;
+  transform: translateX(-50%);
+}
+.political-gauge-pivot {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #d7d4ce 36%, #272725 38%, #0f1011 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  transform: translateX(-50%);
+  z-index: 4;
+}
+.political-gauge-labels {
+  display: flex;
+  justify-content: center;
+  gap: 76px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.12;
+  color: #555;
+}
+.political-gauge-label-left { color: #b94141; }
+.political-gauge-label-right { color: #3f6fa8; }

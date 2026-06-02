@@ -440,7 +440,7 @@ function positionTrendBadges(container) {
   });
 }
 
-function renderTagTrendCloud(container, trends) {
+function renderTagTrendCloud(container, trends, onReady) {
   if (!container) return;
 
   if (!Array.isArray(trends) || !trends.length) {
@@ -506,12 +506,16 @@ function renderTagTrendCloud(container, trends) {
   });
   container.appendChild(centerBtn);
 
+  container.style.visibility = "hidden";
+
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       applyCompactBubbleLayout(container);
       container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
       renderLabelOverlays(container);
       positionTrendBadges(container);
+      container.style.visibility = "";
+      if (onReady) onReady();
     });
   });
 

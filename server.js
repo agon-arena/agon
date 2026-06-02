@@ -628,6 +628,9 @@ function setVeillePendingLinkedDebate(id, debateId) {
   }
 
   writeVeillePendingLinksMap(map);
+  supabase.from("veille_pending").update({ pending_linked_debate_id: canonicalDebateId || null }).eq("id", Number(pendingId))
+    .then(({ error }) => { if (error) console.error("[veille_pending links sync]", pendingId, error.message); })
+    .catch(() => {});
 }
 
 function clearVeillePendingLinkedDebate(id) {
@@ -638,6 +641,8 @@ function clearVeillePendingLinkedDebate(id) {
   if (!map[pendingId]) return;
   delete map[pendingId];
   writeVeillePendingLinksMap(map);
+  supabase.from("veille_pending").update({ pending_linked_debate_id: null }).eq("id", Number(pendingId))
+    .catch(() => {});
 }
 
 const _storiesStore = makeJsonStore(storiesMetaPath, []);
@@ -849,6 +854,9 @@ function setVeillePendingStorySelection(id, value) {
     map[pendingId] = value;
   }
   writeVeillePendingStoriesMap(map);
+  supabase.from("veille_pending").update({ pending_story_selection: value || null }).eq("id", Number(pendingId))
+    .then(({ error }) => { if (error) console.error("[veille_pending stories sync]", pendingId, error.message); })
+    .catch(() => {});
 }
 
 function clearVeillePendingStorySelection(id) {
@@ -857,9 +865,7 @@ function clearVeillePendingStorySelection(id) {
 
 const _veillePendingKeywordsStore = makeJsonStore(veillePendingKeywordsMetaPath);
 function readVeillePendingKeywordsMap() { return _veillePendingKeywordsStore.read(); }
-function writeVeillePendingKeywordsMap(map) { _veillePendingKeywordsStore.write(map);
-  _veillePendingKeywordsCache = map || {};
-}
+function writeVeillePendingKeywordsMap(map) { _veillePendingKeywordsStore.write(map); }
 
 let _cloudBubblesCache = null;
 
@@ -1004,6 +1010,9 @@ function setVeillePendingKeywords(id, keywords) {
     map[pendingId] = normalized;
   }
   writeVeillePendingKeywordsMap(map);
+  supabase.from("veille_pending").update({ pending_keywords: normalized }).eq("id", Number(pendingId))
+    .then(({ error }) => { if (error) console.error("[veille_pending keywords sync]", pendingId, error.message); })
+    .catch(() => {});
 }
 
 function clearVeillePendingKeywords(id) {
@@ -6129,9 +6138,9 @@ async function deleteVeillePending(id) {
 
 app.post("/api/veille/receive", async (req, res) => {
   console.log("[veille/receive] payload reçu:", JSON.stringify(req.body || {}, null, 2));
-  const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords } = req.body || {};
+  const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords, politicalOrientation } = req.body || {};
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
-  const safeQuestion = String(question || "").trim().slice(0, 98);
+  const safeQuestion = String(question || "").trim().slice(0, 110);
   const pendingId = Date.now();
   const { error } = await supabase.from("veille_pending").insert({
     id: pendingId,
@@ -6141,7 +6150,8 @@ app.post("/api/veille/receive", async (req, res) => {
     theme: theme || null,
     resume: resume || null,
     sources: sources || null,
-    links: links || []
+    links: links || [],
+    political_orientation: politicalOrientation || null
   });
   if (error) { console.error("veille receive:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
   const normalizedStorySelection = normalizeStorySelection(storySelection);
@@ -6464,7 +6474,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
     return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
   }
 
-  const question = String(req.body?.question || "").trim().slice(0, 98);
+  const question = String(req.body?.question || "").trim().slice(0, 110);
   const positionA = String(req.body?.positionA || "").trim();
   const positionB = String(req.body?.positionB || "").trim();
   const resume = String(req.body?.resume || "").trim().slice(0, 1800);
@@ -6522,7 +6532,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
       : keywords;
     return res.json({
       ok: true,
-      question: String(parsed?.question || question).trim().slice(0, 98),
+      question: String(parsed?.question || question).trim().slice(0, 110),
       positionA: String(parsed?.positionA || positionA).trim(),
       positionB: String(parsed?.positionB || positionB).trim(),
       resume: String(parsed?.resume || resume).trim().slice(0, 1800),
@@ -6567,16 +6577,18 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
 app.post("/api/admin/veille/publish", async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
-    const safeQuestion = String(question || "").trim().slice(0, 98);
+    const safeQuestion = String(question || "").trim().slice(0, 110);
     let pendingResume = "";
+    let pendingPoliticalOrientation = null;
     if (id) {
       const { data: pendingRow, error: pendingError } = await supabase
         .from("veille_pending")
-        .select("resume")
+        .select("resume, political_orientation")
         .eq("id", Number(id))
         .maybeSingle();
       if (pendingError) throw new Error(pendingError.message);
       pendingResume = String(pendingRow?.resume || "").trim();
+      pendingPoliticalOrientation = pendingRow?.political_orientation || null;
     }
 
     const linksMeta = Array.isArray(links) ? links : [];
@@ -6647,7 +6659,8 @@ app.post("/api/admin/veille/publish", async (req, res) => {
       source_url: sourceUrl,
       type: debateType,
       creator_key: AGON_ADMIN_CREATOR_KEY,
-      created_at: nowIso()
+      created_at: nowIso(),
+      political_orientation: pendingPoliticalOrientation || null
     }).select("id").single();
     if (error) {
       console.error("[veille publish] insert error", {
@@ -7518,6 +7531,31 @@ app.listen(PORT, "0.0.0.0", async () => {
     }
   } catch (e) {
     console.error("[Agôn] Erreur hydratation stories:", e.message);
+  }
+  // Hydratation veille_pending depuis Supabase si les JSON locaux sont vides
+  try {
+    const localKw = readVeillePendingKeywordsMap();
+    const localSt = readVeillePendingStoriesMap();
+    const localLk = readVeillePendingLinksMap();
+    if (!Object.keys(localKw).length && !Object.keys(localSt).length && !Object.keys(localLk).length) {
+      const { data: rows } = await supabase.from("veille_pending")
+        .select("id, pending_keywords, pending_story_selection, pending_linked_debate_id")
+        .or("pending_keywords.neq.[], pending_story_selection.not.is.null, pending_linked_debate_id.not.is.null");
+      if (rows && rows.length) {
+        const kw = {}, st = {}, lk = {};
+        for (const row of rows) {
+          if (Array.isArray(row.pending_keywords) && row.pending_keywords.length) kw[String(row.id)] = row.pending_keywords;
+          if (row.pending_story_selection) st[String(row.id)] = row.pending_story_selection;
+          if (row.pending_linked_debate_id) lk[String(row.id)] = row.pending_linked_debate_id;
+        }
+        if (Object.keys(kw).length) writeVeillePendingKeywordsMap(kw);
+        if (Object.keys(st).length) writeVeillePendingStoriesMap(st);
+        if (Object.keys(lk).length) writeVeillePendingLinksMap(lk);
+        console.log(`[Agôn] Veille pending hydraté depuis Supabase : ${rows.length} items.`);
+      }
+    }
+  } catch (e) {
+    console.error("[Agôn] Erreur hydratation veille_pending:", e.message);
   }
   try {
     // Migration : push des story_id locaux vers Supabase

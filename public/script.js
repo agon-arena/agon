@@ -3978,6 +3978,8 @@ function closeDebateIframeModal() {
     return;
   }
 
+  showDebateIframeParentLoadingOverlay("Chargement en cours");
+
   try {
     frame?.contentWindow?.postMessage({ type: "agon:pause-page-media" }, "*");
   } catch (error) {}
@@ -4043,6 +4045,8 @@ function closeDebateIframeModal() {
   }
 
   syncIndexUrlWithOpenIframeModal("");
+
+  setTimeout(() => hideDebateIframeParentLoadingOverlay(), 450);
 }
 
 function isTopLevelDebatePage() {
@@ -12287,6 +12291,10 @@ function markNotificationElementAsReadLocally(element) {
 function markAllNotificationElementsAsReadLocally() {
   document.querySelectorAll(".notification-item.notification-item-unread").forEach((element) => {
     element.classList.remove("notification-item-unread");
+    element.classList.add("notification-item-read-local");
+    element.setAttribute("data-read-local", "true");
+    const notifId = element.getAttribute("data-notif-id");
+    if (notifId) saveLocallyReadNotifId(notifId);
   });
 }
 let notificationsLoadInFlight = null;
@@ -12303,7 +12311,7 @@ async function loadNotifications() {
     try {
       const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
 const previousCount = Number(localStorage.getItem("notif_count") || 0);
-const unreadCount = notifications.filter((n) => Number(n.is_read) === 0).length;
+const unreadCount = notifications.filter((n) => Number(n.is_read) === 0 && !isNotifLocallyRead(n.id)).length;
 
 if (unreadCount > previousCount) {
   const bell = document.getElementById("notifications-bell-bottom")
@@ -14121,6 +14129,7 @@ function renderIndexContextExpandedText(text) {
 function closeIndexContextPreview(button) {
   if (!button || button.getAttribute('aria-expanded') !== 'true') return;
   const card = button.closest('[data-index-context-card]');
+  const article = button.closest('article.debate-card');
   const textEl = card?.querySelector('[data-index-context-text]');
   const metaEl = card?.querySelector('.debate-card-context-extra');
   const shortText = textEl?.getAttribute('data-short-text') || '';
@@ -14130,6 +14139,7 @@ function closeIndexContextPreview(button) {
     textEl.setAttribute('data-expanded', 'false');
   }
   if (metaEl) metaEl.classList.remove('is-open');
+  if (article) article.classList.remove('index-card-context-open');
   button.innerHTML = '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', 'false');
 }
@@ -14139,6 +14149,28 @@ function closeAllOpenContextPreviews(exceptCard) {
     const card = btn.closest('.debate-card');
     if (card && card !== exceptCard) closeIndexContextPreview(btn);
   });
+}
+
+function closeOpenContextPreviewsInRow(row, exceptCard = null) {
+  if (!row) return false;
+  let closedAny = false;
+  row.querySelectorAll('[data-index-context-toggle][aria-expanded="true"]').forEach((btn) => {
+    const card = btn.closest('.debate-card');
+    if (card && card !== exceptCard) {
+      closeIndexContextPreview(btn);
+      closedAny = true;
+    }
+  });
+  return closedAny;
+}
+
+function scrollToIndexRowAfterContextClose(row) {
+  if (!row) return;
+  const section = row.closest('.theme-row-section') || row;
+  setTimeout(() => {
+    const top = section.getBoundingClientRect().top + window.scrollY - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }, 180);
 }
 
 function syncIndexContextPreviewLayout(button, shouldReveal) {
@@ -14162,6 +14194,7 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
 
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
+  const article = button?.closest('article.debate-card');
   const textEl = card?.querySelector('[data-index-context-text]');
   const metaEl = card?.querySelector('.debate-card-context-extra');
   if (!button || (!textEl && !metaEl)) return;
@@ -14184,6 +14217,10 @@ function toggleIndexContextPreview(button) {
 
   if (metaEl) {
     metaEl.classList.toggle('is-open', nextExpanded);
+  }
+
+  if (article) {
+    article.classList.toggle('index-card-context-open', nextExpanded);
   }
 
   button.innerHTML = nextExpanded
@@ -15440,6 +15477,14 @@ function applyThematicTitleTwoLines() {
     const textEl = el.querySelector('.theme-row-title-text') || el;
     const text = (textEl.dataset.originalTitle !== undefined ? textEl.dataset.originalTitle : textEl.textContent).trim();
     if (textEl.dataset.originalTitle === undefined) textEl.dataset.originalTitle = text;
+    if (text === "Philosophie - sciences sociales") {
+      textEl.innerHTML = "<span class='theme-title-mobile-line'>Philosophie</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>sciences sociales</span>";
+      return;
+    }
+    if (text === "Médias - divertissements") {
+      textEl.innerHTML = "<span class='theme-title-mobile-line'>Médias</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>divertissements</span>";
+      return;
+    }
     textEl.textContent = text;
   });
 }
@@ -15472,22 +15517,16 @@ function initThematicRowDragScroll() {
       if (_scrollRaf) return;
       _scrollRaf = requestAnimationFrame(() => {
         _scrollRaf = null;
+        const closedOpenContext = closeOpenContextPreviewsInRow(row);
+        if (closedOpenContext) {
+          scrollToIndexRowAfterContextClose(row);
+        }
         if (!_isMobileCache) {
           const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
           updateCarouselCardHighlight(row);
           applyCarouselScaleEffects(row);
           const newActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
-          if (newActive && newActive !== prevActive) {
-            const hadOpen = !!document.querySelector('[data-index-context-toggle][aria-expanded="true"]');
-            closeAllOpenContextPreviews(newActive);
-            if (hadOpen) {
-              const section = row.closest('.theme-row-section') || row;
-              setTimeout(() => {
-                const top = section.getBoundingClientRect().top + window.scrollY - 8;
-                window.scrollTo({ top, behavior: 'smooth' });
-              }, 250);
-            }
-          }
+          if (newActive && newActive !== prevActive) {}
           syncIndexThemeRowHeight(row);
         }
         updateIndexThemeRowSwipeButtons(row);
@@ -15805,9 +15844,9 @@ function buildIndexThematicSectionsHtml(debates) {
       const inner = _buildCarouselInner(themeDebates, theme);
       if (!inner) return;
       const themeTitleHtml = theme === "Philosophie - sciences sociales"
-        ? "Philosophie<span class='theme-philo-sep'> - </span><span class='theme-philo-br'><br></span>sciences sociales"
+        ? "<span class='theme-title-mobile-line'>Philosophie</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>sciences sociales</span>"
         : theme === "Médias - divertissements"
-        ? "Médias<span class='theme-philo-sep'> - </span><span class='theme-philo-br'><br></span>divertissements"
+        ? "<span class='theme-title-mobile-line'>Médias</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>divertissements</span>"
         : escapeHtml(theme);
       sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
@@ -15925,6 +15964,24 @@ function syncBubbleFrameTop() {
   window.addEventListener('resize', syncBubbleFrameTop, { passive: true });
 })();
 
+function showBubbleCloudLoadingSpinner() {
+  const section = document.querySelector("#agon-tag-trends-section");
+  if (!section || document.getElementById("agon-cloud-loading-spinner")) return;
+  section.hidden = false;
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const frameTop = 55;
+  const frameBottom = isMobile ? 78 : 23;
+  const spinner = document.createElement("div");
+  spinner.id = "agon-cloud-loading-spinner";
+  spinner.style.cssText = `position:absolute;top:${frameTop}px;left:30px;right:30px;bottom:${frameBottom}px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:200;`;
+  spinner.innerHTML = '<img src="/sablier.png" alt="" style="width:120px;height:120px;object-fit:contain;animation:pageArrivalLogoSpin 1s linear infinite;">';
+  section.appendChild(spinner);
+}
+
+function hideBubbleCloudLoadingSpinner() {
+  document.getElementById("agon-cloud-loading-spinner")?.remove();
+}
+
 function updateIndexTagTrends(items) {
   window.AGON_TAG_TRENDS = [];
   const trendsSection = document.querySelector("#agon-tag-trends-section");
@@ -15935,6 +15992,13 @@ function updateIndexTagTrends(items) {
     if (cloudContainer) cloudContainer.innerHTML = "";
     return;
   }
+
+  // Les bulles sont déjà affichées : le cloud vient d'un endpoint indépendant
+  // et ne change pas au rythme des refreshs de la liste — évite le flash de
+  // disparition/réapparition causé par le double render (cache → API).
+  if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
+
+  showBubbleCloudLoadingSpinner();
 
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
@@ -15947,6 +16011,7 @@ function updateIndexTagTrends(items) {
       } catch {}
 
       if (!tagTrends.length) {
+        hideBubbleCloudLoadingSpinner();
         if (trendsSection) trendsSection.hidden = true;
         if (cloudContainer) cloudContainer.innerHTML = "";
         return;
@@ -15954,7 +16019,7 @@ function updateIndexTagTrends(items) {
 
       window.AGON_TAG_TRENDS = tagTrends;
       window._tagTrendCloudModule = cloudModule;
-      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends);
+      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, hideBubbleCloudLoadingSpinner);
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
         if (currentBubbleTag) {
@@ -15977,6 +16042,7 @@ function updateIndexTagTrends(items) {
       });
     })
     .catch((error) => {
+      hideBubbleCloudLoadingSpinner();
       console.warn("[Agôn] Tag trends indisponibles:", error);
     });
 }
@@ -21130,6 +21196,10 @@ if (isOpenDebate(data.debate) || currentDebateViewMode === "list") {
   renderArgs("arguments-b", data.optionB, id, data.commentsByArgument || {});
 }
 
+if (typeof initPoliticalGauge === "function") {
+  initPoliticalGauge(data.debate, data.optionA || [], data.optionB || []);
+}
+
 requestAnimationFrame(() => {
   requestAnimationFrame(() => {
     syncVoiceGuidanceState(id);
@@ -25354,7 +25424,7 @@ async function loadNotificationsPage() {
       const notifications = await fetchJSON(
         API + "/notifications?userKey=" + encodeURIComponent(getKey())
       );
-const unread = notifications.filter(n => !n.is_read).length;
+const unread = notifications.filter(n => !n.is_read && !isNotifLocallyRead(n.id)).length;
 
 const previous = getStoredUnreadNotificationCount();
 
@@ -26764,10 +26834,25 @@ const notificationsLink = document.getElementById("home-topbar-notifications-lin
     }
   });
 
+  // Ghost click fix: on some mobile browsers, a synthetic click fires ~300ms after
+  // touchend, which would toggle the menu closed immediately after opening.
+  // preventDefault on touchstart tells the browser not to generate that click,
+  // and touchend manually triggers the toggle instead.
+  const toggleEl = document.getElementById("home-topbar-menu-toggle");
+  if (toggleEl) {
+    toggleEl.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+    }, { passive: false });
+    toggleEl.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      toggleHomeTopbarMenu(e);
+    }, { passive: false });
+  }
+
   window.addEventListener("resize", positionHomeTopbarMenu);
   window.addEventListener("scroll", positionHomeTopbarMenu, { passive: true });
 
- 
+
 }
 
 const loginButton = document.getElementById("home-topbar-login-button");
@@ -26965,5 +27050,29 @@ window.addEventListener('pageshow', (event) => {
   });
   window.addEventListener('pageshow', function() {
     guard.markVisible();
+  });
+})();
+
+// Rechargement automatique après 5 min d'absence (toutes pages).
+(function() {
+  var IDLE_RELOAD_KEY = "agon_idle_reload_hidden_at";
+  var IDLE_RELOAD_THRESHOLD = 5 * 60 * 1000;
+
+  function onHidden() {
+    sessionStorage.setItem(IDLE_RELOAD_KEY, String(Date.now()));
+  }
+
+  function onVisible() {
+    var hiddenAt = Number(sessionStorage.getItem(IDLE_RELOAD_KEY) || 0);
+    sessionStorage.removeItem(IDLE_RELOAD_KEY);
+    if (!hiddenAt || Date.now() - hiddenAt <= IDLE_RELOAD_THRESHOLD) return;
+    if (window.__agonDebateModalOpen) return;
+    try { showPageArrivalLoadingOverlay(); } catch (e) {}
+    location.reload();
+  }
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) onHidden();
+    else onVisible();
   });
 })();
