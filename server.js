@@ -6482,7 +6482,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
     const keywordsMap = readDebateKeywordsMap();
     const now = new Date().toISOString();
     let bubbles = Array.isArray(existing.bubbles) ? existing.bubbles.filter(b => b?.subjectId && b?.tag) : [];
-    bubbles = bubbles.slice(-12);
+    bubbles = bubbles.slice(-10);
 
     const { data: newDebates, error } = await supabase
       .from("debates")
@@ -6587,7 +6587,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
           bubbles[aiBubbleIndex] = { ...bubbles[aiBubbleIndex], ...nextBubble };
           updated++;
         }
-      } else if (bubbles.length < 12) {
+      } else if (bubbles.length < 10) {
         bubbles.push(nextBubble);
         added++;
       } else {
@@ -6628,7 +6628,7 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
         };
       })
       .filter(bubble => bubble.tag && bubble.subjectId && bubble.count > 0)
-      .slice(-12);
+      .slice(-10);
 
     const maxCount = bubbles.reduce((max, bubble) => Math.max(max, bubble.count || 0), 0);
     bubbles = bubbles.map((bubble) => ({

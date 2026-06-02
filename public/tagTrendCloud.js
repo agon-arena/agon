@@ -11,7 +11,7 @@ function getBubbleSizeClass(index, trendItem = null) {
   return "agon-tag-bubble-small";
 }
 
-const MAX_TAG_TREND_BUBBLES = 12;
+const MAX_TAG_TREND_BUBBLES = 10;
 
 // Source unique de vérité pour la taille d'une bulle en pixels, avant facteur d'échelle global.
 // Utilisée à la fois pour l'affichage visuel (--agon-tag-bubble-size) et pour le placement.
@@ -278,16 +278,34 @@ function applyCompactBubbleLayout(container) {
         if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
         let valid = true;
         for (const p of placed) {
-          if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 10) { valid = false; break; }
+          if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4) { valid = false; break; }
         }
         if (valid) { fx = cx; fy = cy; }
       }
     }
 
     if (fx === null) {
-      // Dernier recours : angle préféré, strictement borné dans la zone utile
-      fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
-      fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
+      // Fallback : scan coarser, pick position with minimum total overlap
+      let bestOverlap = Infinity;
+      for (let dist2 = btnRadius + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
+        const steps2 = Math.max(24, Math.round(2 * Math.PI * dist2 / 10));
+        for (let step2 = 0; step2 < steps2; step2++) {
+          const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
+          const cx2 = centerX + Math.cos(angle2) * dist2;
+          const cy2 = centerY + Math.sin(angle2) * dist2;
+          if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
+          let totalOverlap = 0;
+          for (const p of placed) {
+            const gap = Math.hypot(cx2 - p.x, cy2 - p.y) - (r + p.r);
+            if (gap < 0) totalOverlap -= gap;
+          }
+          if (totalOverlap < bestOverlap) { bestOverlap = totalOverlap; fx = cx2; fy = cy2; }
+        }
+      }
+      if (fx === null) {
+        fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
+        fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
+      }
     }
 
     placed.push({ x: fx, y: fy, r });

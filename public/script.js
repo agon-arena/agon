@@ -43,17 +43,39 @@ registerServiceWorker();
 
   observe(document);
 
-  new MutationObserver((mutations) => {
-    mutations.forEach(({ addedNodes }) => {
-      addedNodes.forEach(node => {
-        if (node.nodeType !== 1) return;
-        SELECTORS.forEach(sel => {
-          if (node.matches?.(sel)) observer.observe(node);
-          node.querySelectorAll?.(sel).forEach(el => observer.observe(el));
-        });
+  let _mutTimer = null;
+  const _pendingNodes = [];
+  const _flushMutations = () => {
+    _mutTimer = null;
+    const nodes = _pendingNodes.splice(0);
+    nodes.forEach(node => {
+      SELECTORS.forEach(sel => {
+        if (node.matches?.(sel)) observer.observe(node);
+        node.querySelectorAll?.(sel).forEach(el => observer.observe(el));
       });
     });
-  }).observe(document.body, { childList: true, subtree: true });
+  };
+  new MutationObserver((mutations) => {
+    mutations.forEach(({ addedNodes }) => {
+      addedNodes.forEach(node => { if (node.nodeType === 1) _pendingNodes.push(node); });
+    });
+    if (!_mutTimer) _mutTimer = setTimeout(_flushMutations, 200);
+  }).observe(document.body, { childList: true, subtree: false });
+
+  // Observer ciblé sur les conteneurs de cartes (contenu dynamique)
+  const _carouselObserver = new MutationObserver((mutations) => {
+    mutations.forEach(({ addedNodes }) => {
+      addedNodes.forEach(node => { if (node.nodeType === 1) _pendingNodes.push(node); });
+    });
+    if (!_mutTimer) _mutTimer = setTimeout(_flushMutations, 200);
+  });
+  const _observeCarousels = () => {
+    document.querySelectorAll('.theme-horizontal-inner, .debates-section').forEach(el => {
+      _carouselObserver.observe(el, { childList: true, subtree: true });
+    });
+  };
+  _observeCarousels();
+  setTimeout(_observeCarousels, 2000);
 
   // Stoppe toutes les animations quand la page passe en arrière-plan (onglet caché, écran éteint)
   document.addEventListener('visibilitychange', () => {
@@ -14461,11 +14483,20 @@ function handleBubbleTagClick(bubble) {
     : label.textContent.trim();
   if (!tag) return;
 
-  // Trouve l'ID du débat associé au tag (dans les trends principaux ou secondaires selon le mode)
+  // Toggle : si déjà active, désactiver et sortir
+  if (bubble.classList.contains('agon-tag-bubble-active')) {
+    bubble.classList.remove('agon-tag-bubble-active');
+    return;
+  }
+
+  // Activer visuellement la bulle cliquée (noir/blanc)
+  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
+    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
+  bubble.classList.add('agon-tag-bubble-active');
+
+  // Trouve l'ID du débat associé au tag
   let targetDebateId = null;
-  const trendsToSearch = _tagCloudSecondaryMode
-    ? (_tagCloudSecondaryTrends || [])
-    : (Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : []);
+  const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
 
   if (window._tagTrendsModule && trendsToSearch.length) {
     const { normalizeTag } = window._tagTrendsModule;
@@ -14484,30 +14515,7 @@ function handleBubbleTagClick(bubble) {
     if (match) targetDebateId = String(match.id);
   }
 
-  // Tag secondaire → appliquer comme filtre actif
-  if (_tagCloudSecondaryMode) {
-    currentBubbleTag = tag;
-    _restoreMainTagCloud();
-    applyIndexFilters();
-    const firstSection = document.querySelector('.theme-row-section');
-    const topbarS = document.querySelector('.topbar');
-    const topbarHS = topbarS ? topbarS.offsetHeight : 60;
-    if (firstSection) {
-      const top = firstSection.getBoundingClientRect().top + window.scrollY - topbarHS - 8;
-      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-    }
-    return;
-  }
-
-  // Tag principal avec filtre secondaire actif → effacer le filtre + scroll uniquement (sans cloud secondaire)
-  let skipSecondaryCloud = false;
-  if (currentBubbleTag) {
-    currentBubbleTag = null;
-    skipSecondaryCloud = true;
-    applyIndexFilters();
-  }
-
-  // Tag principal → scroll vers la carte + afficher les tags secondaires
+  // Tag principal → scroll vers la carte
   const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
   let card = null;
   if (targetDebateId) {
@@ -14519,54 +14527,18 @@ function handleBubbleTagClick(bubble) {
     }
   }
 
-  // Force-charge depuis _carouselPendingBatches si besoin (clé "À la une")
-  if (!card && targetDebateId && alaUneSection) {
-    const alaUneKey = 'À la une';
-    const pending = _carouselPendingBatches.get(alaUneKey);
-    if (pending && pending.some(d => String(d.id) === targetDebateId)) {
-      const sentinel = alaUneSection.querySelector('.carousel-load-sentinel');
-      if (sentinel) {
-        const inner = sentinel.parentNode;
-        const row = inner ? inner.closest('.theme-horizontal-row') : null;
-        const allPending = pending.splice(0, pending.length);
-        const html = allPending.map(d => {
-          try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
-          catch (e) { return ''; }
-        }).join('');
-        if (html) {
-          const tmp = document.createElement('div');
-          tmp.innerHTML = html;
-          while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
-          initIndexCardShareMenus(inner);
-          initIndexMediaSwipeEnhancements(inner);
-          initIndexYouTubeObserver(inner);
-          initIndexLocalVideoObserver(inner);
-          initIndexXObserver(inner);
-          initIndexInstagramObserver(inner);
-          initIndexOpenGraphImageObserver(inner);
-          initIndexEmbedUnloadObserver(inner);
-          observeIndexCardsMissingSourcePreview(inner);
-          refreshAdminUI();
-          if (row) requestAnimationFrame(() => syncIndexThemeRowHeight(row));
-        }
-        sentinel.remove();
-        card = alaUneSection.querySelector(`.debate-card[data-debate-id="${targetDebateId}"]`);
-      }
-    }
-  }
-
   // Scroll vers la carte dans "À la une"
   const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
   const topbar = document.querySelector('.topbar');
   const topbarH = topbar ? topbar.offsetHeight : 60;
 
-  // 1. Scroll vertical vers "À la une"
+  // 1. Scroll vertical vers "À la une" (immédiat)
   if (scrollTarget) {
     const top = scrollTarget.getBoundingClientRect().top + window.scrollY - topbarH - 8;
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
-  // 2. Scroll horizontal du carousel vers la carte (le vrai conteneur scrollable est .theme-horizontal-row)
+  // 2. Scroll horizontal vers la carte si elle est dans les 10 premières
   if (card) {
     requestAnimationFrame(() => {
       const scrollRow = card.closest('.theme-horizontal-row');
@@ -14579,13 +14551,8 @@ function handleBubbleTagClick(bubble) {
       setTimeout(() => {
         card.classList.add('agon-card-blink');
         card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
-        // Rebuild cloud après le scroll pour ne pas interférer
-        if (targetDebateId && !skipSecondaryCloud) _showSecondaryTagsInCloud(tag, targetDebateId);
-      }, 800);
+      }, 600);
     });
-  } else {
-    // Pas de carte : rebuild cloud immédiatement
-    if (targetDebateId && !skipSecondaryCloud) _showSecondaryTagsInCloud(tag, targetDebateId);
   }
 }
 
@@ -15292,36 +15259,50 @@ function initThematicRowDragScroll() {
   document.querySelectorAll(".theme-horizontal-row:not([data-drag-bound])").forEach((row) => {
     row.dataset.dragBound = "1";
 
+    const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+    let _isMobileCache = isMobile();
     let scrollEndTimer = null;
+    let _scrollRaf = null;
     row.addEventListener("scroll", () => {
-      const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
-      updateCarouselCardHighlight(row);
-      applyCarouselScaleEffects(row);
-      syncIndexThemeRowHeight(row);
-      updateIndexThemeRowSwipeButtons(row);
-
-      const newActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
-      if (newActive && newActive !== prevActive) {
-        const hadOpen = !!document.querySelector('[data-index-context-toggle][aria-expanded="true"]');
-        closeAllOpenContextPreviews(newActive);
-        if (hadOpen) {
-          const section = row.closest('.theme-row-section') || row;
-          setTimeout(() => {
-            const top = section.getBoundingClientRect().top + window.scrollY - 8;
-            window.scrollTo({ top, behavior: 'smooth' });
-          }, 250);
+      if (_scrollRaf) return;
+      _scrollRaf = requestAnimationFrame(() => {
+        _scrollRaf = null;
+        if (!_isMobileCache) {
+          const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
+          updateCarouselCardHighlight(row);
+          applyCarouselScaleEffects(row);
+          const newActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
+          if (newActive && newActive !== prevActive) {
+            const hadOpen = !!document.querySelector('[data-index-context-toggle][aria-expanded="true"]');
+            closeAllOpenContextPreviews(newActive);
+            if (hadOpen) {
+              const section = row.closest('.theme-row-section') || row;
+              setTimeout(() => {
+                const top = section.getBoundingClientRect().top + window.scrollY - 8;
+                window.scrollTo({ top, behavior: 'smooth' });
+              }, 250);
+            }
+          }
+          syncIndexThemeRowHeight(row);
         }
-      }
-
-      // Update final après arrêt du scroll (momentum mobile)
-      clearTimeout(scrollEndTimer);
-      scrollEndTimer = setTimeout(() => {
-        updateCarouselCardHighlight(row);
-        applyCarouselScaleEffects(row);
-        syncIndexThemeRowHeight(row);
         updateIndexThemeRowSwipeButtons(row);
-      }, 80);
+
+        // Update final après arrêt du scroll
+        clearTimeout(scrollEndTimer);
+        scrollEndTimer = setTimeout(() => {
+          if (_isMobileCache) {
+            syncIndexThemeRowHeight(row);
+            updateIndexThemeRowSwipeButtons(row);
+          } else {
+            updateCarouselCardHighlight(row);
+            applyCarouselScaleEffects(row);
+            syncIndexThemeRowHeight(row);
+            updateIndexThemeRowSwipeButtons(row);
+          }
+        }, 120);
+      });
     }, { passive: true });
+    window.matchMedia("(max-width: 768px)").addEventListener("change", e => { _isMobileCache = e.matches; });
     updateCarouselCardHighlight(row);
     applyCarouselScaleEffects(row);
     syncIndexThemeRowHeight(row);
@@ -15596,7 +15577,7 @@ function buildIndexThematicSectionsHtml(debates) {
     // ── À la une : toutes les publications, les plus récentes en tête ──
     if (allDebates.length) {
       const sortedAll = [...allDebates].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une", 12);
+      const inner = _buildCarouselInner(sortedAll, "À la une", 10);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
@@ -15702,7 +15683,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-bounded-layout");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-max10");
 
 
 function syncBubbleFrameTop() {

@@ -939,7 +939,7 @@ main.create-page {
 font-family: "Barlow Condensed", sans-serif;
   color: #1f2937 !important;
   line-height: 1.25;
-  font-size: 18px !important;
+  font-size: 17px !important;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
@@ -4488,7 +4488,7 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
   border: 2px solid var(--color-b) !important;
   background: var(--color-b-bg) !important;
   box-shadow: 0 0 0 4px rgba(174,192,204,0.16);
-  animation: flashBlueCard 1s ease-in-out 2;
+  animation: flashBlueCard 2s ease-out 1;
 }
 
 .comment-card.voice-title-highlight .comment-like-button,
@@ -6379,6 +6379,7 @@ body.page-debate .topbar::after {
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 10px;
+    margin-top: 20px;
   }
 
   .page-home-mobile .debate-card-entry-button {
@@ -7098,18 +7099,9 @@ body.page-debate .topbar::after {
 }
 
 @keyframes flashBlueCard {
-  0% {
-    background-color: rgba(174,192,204,0.08);
-    box-shadow: 0 0 0 0 rgba(174,192,204,0);
-  }
-  50% {
-    background-color: rgba(174,192,204,0.28);
-    box-shadow: 0 0 0 4px rgba(174,192,204,0.25);
-  }
-  100% {
-    background-color: rgba(174,192,204,0.08);
-    box-shadow: 0 0 0 0 rgba(174,192,204,0);
-  }
+  0%   { background-color: #243038; }
+  40%  { background-color: #3d5a6e; }
+  100% { background-color: #243038; }
 }
 
 @keyframes notificationThumbPulseRed {
@@ -7145,7 +7137,7 @@ body.page-debate .topbar::after {
 .argument-card.flash-blue,
 .argument-card.argument-card-b.flash-blue,
 #arguments-b .argument-card.flash-blue {
-  animation: flashBlueCard 1s ease-in-out 2;
+  animation: flashBlueCard 2s ease-out 1;
 }
 
 @media (max-width: 768px) {
@@ -9813,7 +9805,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   height: 46px;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1.5px solid #111827;
   background: rgba(26, 39, 47, 0.84);
   color: #e5edf3;
   display: inline-flex;
@@ -12556,7 +12548,7 @@ body.page-debate .debate-episode-link:hover {
 
 .theme-horizontal-inner > .debate-card.index-card-episode-flash,
 .debate-card.index-card-episode-flash {
-  animation: flashBlueCard 1s ease-in-out 2;
+  animation: flashBlueCard 2s ease-in-out 1;
   filter: none !important;
 }
 
@@ -12564,7 +12556,7 @@ body.page-debate .debate-episode-link:hover {
 .debate-card.index-card-episode-flash .index-card-title-banner,
 .debate-card.index-card-episode-flash .debate-card-context,
 .debate-card.index-card-episode-flash .debate-card-bottom-entry {
-  animation: flashBlueCard 1s ease-in-out 2;
+  animation: none;
 }
 
 @media (max-width: 768px) {
@@ -13192,9 +13184,9 @@ body.page-debate .my-argument-chip-stepper-btn-guided {
   100% { background-color: var(--color-a-bg); box-shadow: 0 0 0 0 rgba(81,103,118,0); }
 }
 @keyframes flashBlueCard {
-  0%   { background-color: var(--color-b-bg); box-shadow: 0 0 0 0 rgba(174,192,204,0); }
-  50%  { background-color: var(--color-b); box-shadow: 0 0 0 4px rgba(174,192,204,0.35); }
-  100% { background-color: var(--color-b-bg); box-shadow: 0 0 0 0 rgba(174,192,204,0); }
+  0%   { background-color: #243038; }
+  40%  { background-color: #3d5a6e; }
+  100% { background-color: #243038; }
 }
 
 /* Vue switch card */
@@ -16204,13 +16196,26 @@ body.page-home-mobile .debate-card-footer-left {
   top: -9px !important;
 }
 
+body.page-home .debate-card-actions,
+body.page-home-mobile .debate-card-actions {
+  margin-top: 20px !important;
+  padding-bottom: 18px !important;
+}
+
 body.page-home .debate-card-footer-actions,
 body.page-home-mobile .debate-card-footer-actions {
-  margin-left: -5px !important;
-  margin-right: -5px !important;
   margin-bottom: -22px !important;
   top: -6px !important;
   z-index: 6 !important;
+}
+
+@media (max-width: 768px) {
+  body.page-home .debate-card-footer-actions,
+  body.page-home-mobile .debate-card-footer-actions {
+    margin-left: -12px !important;
+    margin-right: -12px !important;
+    width: calc(100% + 24px) !important;
+  }
 }
 
 body.page-home .debate-card-options-btn,
@@ -16274,6 +16279,8 @@ body.page-home-mobile .debate-card-context {
   z-index: auto !important;
   padding-top: 3px !important;
   padding-bottom: 3px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
   gap: 0 !important;
   border-radius: 0 !important;
 }
@@ -16442,6 +16449,15 @@ body.page-home-mobile .debate-card-agon-badge {
     justify-content: space-between !important;
     flex-wrap: wrap !important;
     gap: 10px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: calc(100% - 22px) !important;
+  }
+  body.page-home .theme-horizontal-inner > .debate-card .debate-card-footer-actions .debate-card-entry-button {
+    margin-left: auto !important;
+  }
+  body.page-home .theme-horizontal-inner > .debate-card .debate-card-footer-actions .debate-card-options-wrap {
+    margin-left: -9px !important;
   }
 
   body.page-home .theme-row-swipe-button {
@@ -16961,9 +16977,9 @@ body.page-home #debates-list .theme-row-section:first-child {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #111827;
+  background: #1A1F24;
   color: #ffffff;
-  border: 2px solid #000000;
+  border: 2px solid #1A1F24;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -17231,8 +17247,8 @@ body.page-home #debates-list .theme-row-section:first-child {
 }
 
 .agon-tag-bubble.agon-tag-bubble-active {
-  background: #05070a !important;
-  border-color: #05070a !important;
+  background: #1A1F24 !important;
+  border-color: #1A1F24 !important;
   color: #ffffff !important;
   cursor: pointer;
 }
@@ -18246,8 +18262,8 @@ body.page-home-mobile .debate-card::after {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 32px;
-  background: linear-gradient(to bottom, transparent, rgba(28,32,36,0.65));
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, rgba(28,32,36,0.45));
   pointer-events: none;
   z-index: 1;
   border-radius: 0 0 14px 14px;
@@ -18262,8 +18278,8 @@ body.page-home-mobile .debate-card::before {
   border: 2px solid #111827;
   border-radius: 14px;
   background:
-    linear-gradient(to right, rgba(28,32,36,0.55) 0%, transparent 18%),
-    linear-gradient(to left, rgba(28,32,36,0.55) 0%, transparent 18%);
+    linear-gradient(to right, rgba(28,32,36,0.35) 0%, transparent 18%),
+    linear-gradient(to left, rgba(28,32,36,0.35) 0%, transparent 18%);
   pointer-events: none;
   z-index: 15;
   box-sizing: border-box;
@@ -18385,11 +18401,18 @@ body.page-home-mobile .index-card-media-with-title .debate-card-local-image {
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
-  body.page-home .debate-card-entry-button {
-    margin-right: 16px !important;
+  body.page-home .debate-card-footer-actions,
+  body.page-home-mobile .debate-card-footer-actions {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
+    gap: 10px !important;
   }
-  body.page-home .debate-card-options-wrap {
-    margin-left: -12px !important;
+  body.page-home .debate-card-entry-button,
+  body.page-home-mobile .debate-card-entry-button {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 }
 
@@ -18481,4 +18504,23 @@ body.page-home .theme-horizontal-row,
 body.page-home-mobile .theme-horizontal-row {
   overflow-x: auto;
   overflow-y: clip;
+}
+
+/* ── Optimisations performance mobile ── */
+@media (max-width: 768px) {
+  .debate-card,
+  .home-bottom-nav,
+  .app-floating-refresh-btn,
+  .topbar,
+  .toast,
+  .share-modal,
+  .index-share-dropdown {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .debate-card,
+  .debate-card:hover,
+  .debate-card:focus-within {
+    will-change: auto !important;
+  }
 }
