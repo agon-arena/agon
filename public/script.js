@@ -3257,6 +3257,11 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:open-notifications-in-parent-modal") {
+      openNotificationsInDebateIframeModal();
+      return;
+    }
+
     if (e.data.type === "agon:debate-iframe-ready") {
       const readyPathname = String(e.data.pathname || "/debate");
       const readyHref = String(e.data.href || "").trim();
@@ -3681,6 +3686,16 @@ function _showEpisodeNavNotFound() {
 }
 
 function openDebateIframeModal(url, options = {}) {
+  if (window.self !== window.top) {
+    try {
+      let iframeUrlPathname = url;
+      try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
+      if (iframeUrlPathname === "/notifications") {
+        window.parent.postMessage({ type: "agon:open-notifications-in-parent-modal" }, "*");
+      }
+    } catch (e) {}
+    return;
+  }
   closeHomeTopbarMenu();
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);

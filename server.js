@@ -642,7 +642,27 @@ function clearVeillePendingLinkedDebate(id) {
 
 const _storiesStore = makeJsonStore(storiesMetaPath, []);
 function readStories() { return _storiesStore.read(); }
-function writeStories(stories) { _storiesStore.write(stories); }
+function writeStories(stories) {
+  const safe = Array.isArray(stories) ? stories : [];
+  _storiesStore.write(safe);
+  if (safe.length) {
+    supabase.from("stories").upsert(safe.map(s => ({
+      story_id:             String(s.story_id || "").trim(),
+      story_title:          String(s.story_title || "").trim(),
+      main_actors:          Array.isArray(s.main_actors) ? s.main_actors : [],
+      central_tension:      String(s.central_tension || "").trim(),
+      keywords:             Array.isArray(s.keywords) ? s.keywords : [],
+      status:               String(s.status || "active").trim(),
+      first_episode_id:     s.first_episode_id ? String(s.first_episode_id) : null,
+      latest_episode_id:    s.latest_episode_id ? String(s.latest_episode_id) : null,
+      latest_episode_title: String(s.latest_episode_title || "").trim(),
+      created_at:           s.created_at || new Date().toISOString(),
+      updated_at:           s.updated_at || new Date().toISOString(),
+    })).filter(s => s.story_id), { onConflict: "story_id" })
+      .then(({ error }) => { if (error) console.error("[stories sync]", error.message); })
+      .catch(() => {});
+  }
+}
 
 function slugifyStoryTitle(value) {
   return String(value || "")
@@ -1053,32 +1073,13 @@ function removeDebateKeyword(debateId, keyword) {
   return nextKeywords;
 }
 
-let _debateTrendsCache = null;
-
-function readDebateTrendsMap() {
-  if (_debateTrendsCache) return _debateTrendsCache;
-  // Fallback fichier local si le cache n'est pas encore hydraté (avant initDebateTrendsCache)
-  try {
-    if (fs.existsSync(debateTrendsMetaPath)) {
-      _debateTrendsCache = JSON.parse(fs.readFileSync(debateTrendsMetaPath, "utf8") || "{}");
-      return _debateTrendsCache;
-    }
-  } catch {}
-  _debateTrendsCache = {};
-  return _debateTrendsCache;
-}
-
+const _debateTrendsStore = makeJsonStore(debateTrendsMetaPath);
+function readDebateTrendsMap() { return _debateTrendsStore.read(); }
 function writeDebateTrendsMap(map) {
-  _debateTrendsCache = map;
-  // Persistance Supabase (fire-and-forget)
+  _debateTrendsStore.write(map);
   supabase.from("app_config")
     .upsert({ key: "debate_trends", value: map, updated_at: new Date().toISOString() })
     .then(({ error }) => { if (error) console.error("[debate-trends] save error:", error.message); });
-  // Backup fichier local
-  try {
-    fs.mkdirSync(path.dirname(debateTrendsMetaPath), { recursive: true });
-    fs.writeFileSync(debateTrendsMetaPath, JSON.stringify(map, null, 2), "utf8");
-  } catch {}
 }
 
 async function initDebateTrendsCache() {
@@ -1089,24 +1090,17 @@ async function initDebateTrendsCache() {
       .eq("key", "debate_trends")
       .maybeSingle();
     if (!error && data?.value && typeof data.value === "object") {
-      _debateTrendsCache = data.value;
+      _debateTrendsStore.write(data.value);
       return;
     }
   } catch {}
-  // Migration one-shot depuis fichier local
-  try {
-    if (fs.existsSync(debateTrendsMetaPath)) {
-      const parsed = JSON.parse(fs.readFileSync(debateTrendsMetaPath, "utf8") || "{}");
-      if (parsed && typeof parsed === "object" && Object.keys(parsed).length) {
-        _debateTrendsCache = parsed;
-        supabase.from("app_config")
-          .upsert({ key: "debate_trends", value: parsed, updated_at: new Date().toISOString() })
-          .catch(e => console.error("[debate-trends] migration error:", e.message));
-        return;
-      }
-    }
-  } catch {}
-  if (!_debateTrendsCache) _debateTrendsCache = {};
+  // Migration one-shot depuis fichier local vers Supabase
+  const local = _debateTrendsStore.read();
+  if (Object.keys(local).length) {
+    supabase.from("app_config")
+      .upsert({ key: "debate_trends", value: local, updated_at: new Date().toISOString() })
+      .catch(e => console.error("[debate-trends] migration error:", e.message));
+  }
 }
 
 function setDebateTrend(debateId, trendData) {
@@ -7511,6 +7505,19 @@ app.listen(PORT, "0.0.0.0", async () => {
     }
   } catch (e) {
     console.error("[Agôn] Erreur hydratation episode_nav:", e.message);
+  }
+  // Hydratation stories depuis Supabase si le JSON local est vide
+  try {
+    const localStories = readStories();
+    if (!localStories.length) {
+      const { data: rows } = await supabase.from("stories").select("*").order("updated_at", { ascending: false });
+      if (rows && rows.length) {
+        _storiesStore.write(rows);
+        console.log(`[Agôn] Stories hydratées depuis Supabase : ${rows.length} stories.`);
+      }
+    }
+  } catch (e) {
+    console.error("[Agôn] Erreur hydratation stories:", e.message);
   }
   try {
     // Migration : push des story_id locaux vers Supabase
