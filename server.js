@@ -17,6 +17,7 @@ const {
   normalizeTag,
   extractRawTagsFromItem
 } = require("./lib/tagTrends");
+const { makeJsonStore } = require("./lib/json-store");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -472,31 +473,9 @@ const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BU
 const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json");
 const debateTrendsMetaPath = path.join(__dirname, "data", "debate-trends.json");
 
-function ensureDebateContentStorage() {
-  fs.mkdirSync(path.dirname(debateContentMetaPath), { recursive: true });
-  if (!fs.existsSync(debateContentMetaPath)) {
-    fs.writeFileSync(debateContentMetaPath, "{}", "utf8");
-  }
-}
-
-let _debateContentMapCache = null;
-
-function readDebateContentMap() {
-  if (_debateContentMapCache) return _debateContentMapCache;
-  ensureDebateContentStorage();
-  try {
-    _debateContentMapCache = JSON.parse(fs.readFileSync(debateContentMetaPath, "utf8") || "{}");
-    return _debateContentMapCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeDebateContentMap(map) {
-  ensureDebateContentStorage();
-  fs.writeFileSync(debateContentMetaPath, JSON.stringify(map, null, 2), "utf8");
-  _debateContentMapCache = map;
-}
+const _debateContentStore = makeJsonStore(debateContentMetaPath);
+function readDebateContentMap() { return _debateContentStore.read(); }
+function writeDebateContentMap(map) { _debateContentStore.write(map); }
 
 function normalizeDebateContent(value) {
   return String(value || "").trim().slice(0, 1800);
@@ -552,24 +531,9 @@ function normalizeKeywordList(values, max = 10, maxLength = 28) {
   return list.slice(0, max);
 }
 
-let _sharedDebateLinksMapCache = null;
-
-function readSharedDebateLinksMap() {
-  if (_sharedDebateLinksMapCache) return _sharedDebateLinksMapCache;
-  ensureJsonMetaStorage(sharedDebateLinksMetaPath);
-  try {
-    _sharedDebateLinksMapCache = JSON.parse(fs.readFileSync(sharedDebateLinksMetaPath, "utf8") || "{}");
-    return _sharedDebateLinksMapCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeSharedDebateLinksMap(map) {
-  ensureJsonMetaStorage(sharedDebateLinksMetaPath);
-  fs.writeFileSync(sharedDebateLinksMetaPath, JSON.stringify(map, null, 2), "utf8");
-  _sharedDebateLinksMapCache = map;
-}
+const _sharedDebateLinksStore = makeJsonStore(sharedDebateLinksMetaPath);
+function readSharedDebateLinksMap() { return _sharedDebateLinksStore.read(); }
+function writeSharedDebateLinksMap(map) { _sharedDebateLinksStore.write(map); }
 
 function resolveSharedDebateId(debateId) {
   const initialId = String(debateId || "").trim();
@@ -641,24 +605,9 @@ function removeDebateSharedLink(debateId) {
   if (changed) writeSharedDebateLinksMap(map);
 }
 
-let _veillePendingLinksMapCache = null;
-
-function readVeillePendingLinksMap() {
-  if (_veillePendingLinksMapCache) return _veillePendingLinksMapCache;
-  ensureJsonMetaStorage(veillePendingLinksMetaPath);
-  try {
-    _veillePendingLinksMapCache = JSON.parse(fs.readFileSync(veillePendingLinksMetaPath, "utf8") || "{}");
-    return _veillePendingLinksMapCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeVeillePendingLinksMap(map) {
-  ensureJsonMetaStorage(veillePendingLinksMetaPath);
-  fs.writeFileSync(veillePendingLinksMetaPath, JSON.stringify(map, null, 2), "utf8");
-  _veillePendingLinksMapCache = map;
-}
+const _veillePendingLinksStore = makeJsonStore(veillePendingLinksMetaPath);
+function readVeillePendingLinksMap() { return _veillePendingLinksStore.read(); }
+function writeVeillePendingLinksMap(map) { _veillePendingLinksStore.write(map); }
 
 function getVeillePendingLinkedDebate(id) {
   const map = readVeillePendingLinksMap();
@@ -691,25 +640,9 @@ function clearVeillePendingLinkedDebate(id) {
   writeVeillePendingLinksMap(map);
 }
 
-let _storiesCache = null;
-
-function readStories() {
-  if (_storiesCache) return _storiesCache;
-  ensureJsonMetaStorage(storiesMetaPath);
-  try {
-    const parsed = JSON.parse(fs.readFileSync(storiesMetaPath, "utf8") || "[]");
-    _storiesCache = Array.isArray(parsed) ? parsed : [];
-    return _storiesCache;
-  } catch (error) {
-    return [];
-  }
-}
-
-function writeStories(stories) {
-  ensureJsonMetaStorage(storiesMetaPath);
-  fs.writeFileSync(storiesMetaPath, JSON.stringify(Array.isArray(stories) ? stories : [], null, 2), "utf8");
-  _storiesCache = Array.isArray(stories) ? stories : [];
-}
+const _storiesStore = makeJsonStore(storiesMetaPath, []);
+function readStories() { return _storiesStore.read(); }
+function writeStories(stories) { _storiesStore.write(stories); }
 
 function slugifyStoryTitle(value) {
   return String(value || "")
@@ -725,24 +658,9 @@ function createStoryId(title) {
   return `${slugifyStoryTitle(title)}-${Date.now().toString(36)}`;
 }
 
-let _debateStoryLinksCache = null;
-
-function readDebateStoryLinks() {
-  if (_debateStoryLinksCache) return _debateStoryLinksCache;
-  ensureJsonMetaStorage(debateStoryLinksMetaPath);
-  try {
-    _debateStoryLinksCache = JSON.parse(fs.readFileSync(debateStoryLinksMetaPath, "utf8") || "{}");
-    return _debateStoryLinksCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeDebateStoryLinks(map) {
-  ensureJsonMetaStorage(debateStoryLinksMetaPath);
-  fs.writeFileSync(debateStoryLinksMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
-  _debateStoryLinksCache = map || {};
-}
+const _debateStoryLinksStore = makeJsonStore(debateStoryLinksMetaPath);
+function readDebateStoryLinks() { return _debateStoryLinksStore.read(); }
+function writeDebateStoryLinks(map) { _debateStoryLinksStore.write(map); }
 
 function getDebateStoryId(debateId) {
   const map = readDebateStoryLinks();
@@ -767,24 +685,9 @@ function removeDebateStoryId(debateId) {
   setDebateStoryId(debateId, "");
 }
 
-let _debateEpisodeNavCache = null;
-
-function readDebateEpisodeNavMap() {
-  if (_debateEpisodeNavCache) return _debateEpisodeNavCache;
-  ensureJsonMetaStorage(debateEpisodeNavMetaPath);
-  try {
-    _debateEpisodeNavCache = JSON.parse(fs.readFileSync(debateEpisodeNavMetaPath, "utf8") || "{}");
-    return _debateEpisodeNavCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeDebateEpisodeNavMap(map) {
-  ensureJsonMetaStorage(debateEpisodeNavMetaPath);
-  fs.writeFileSync(debateEpisodeNavMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
-  _debateEpisodeNavCache = map || {};
-}
+const _debateEpisodeNavStore = makeJsonStore(debateEpisodeNavMetaPath);
+function readDebateEpisodeNavMap() { return _debateEpisodeNavStore.read(); }
+function writeDebateEpisodeNavMap(map) { _debateEpisodeNavStore.write(map); }
 
 function getDebateEpisodeNav(debateId) {
   const map = readDebateEpisodeNavMap();
@@ -802,6 +705,9 @@ function setDebateEpisodeNav(debateId, nav) {
     map[debateKey] = nav;
   }
   writeDebateEpisodeNavMap(map);
+  supabase.from("debates").update({ episode_nav: nav || null }).eq("id", debateKey)
+    .then(({ error }) => { if (error) console.error("[episode_nav sync]", debateKey, error.message); })
+    .catch(() => {});
 }
 
 function removeDebateEpisodeNav(debateId) {
@@ -890,30 +796,23 @@ async function recalculateStoryEpisodeNavigation(storyId) {
 
   writeDebateEpisodeNavMap(navMap);
 
+  // Sync Supabase (fire-and-forget)
+  Promise.all(
+    orderedDebates.map(debate =>
+      supabase.from("debates").update({ episode_nav: navMap[String(debate.id)] || null }).eq("id", debate.id)
+        .then(({ error }) => { if (error) console.error("[episode_nav sync]", debate.id, error.message); })
+    )
+  ).catch(() => {});
+
   for (const debate of orderedDebates) {
     clearDebateDetailResponseCache(debate.id);
   }
   clearDebatesApiResponseCache();
 }
 
-let _veillePendingStoriesCache = null;
-
-function readVeillePendingStoriesMap() {
-  if (_veillePendingStoriesCache) return _veillePendingStoriesCache;
-  ensureJsonMetaStorage(veillePendingStoriesMetaPath);
-  try {
-    _veillePendingStoriesCache = JSON.parse(fs.readFileSync(veillePendingStoriesMetaPath, "utf8") || "{}");
-    return _veillePendingStoriesCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeVeillePendingStoriesMap(map) {
-  ensureJsonMetaStorage(veillePendingStoriesMetaPath);
-  fs.writeFileSync(veillePendingStoriesMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
-  _veillePendingStoriesCache = map || {};
-}
+const _veillePendingStoriesStore = makeJsonStore(veillePendingStoriesMetaPath);
+function readVeillePendingStoriesMap() { return _veillePendingStoriesStore.read(); }
+function writeVeillePendingStoriesMap(map) { _veillePendingStoriesStore.write(map); }
 
 function getVeillePendingStorySelection(id) {
   const map = readVeillePendingStoriesMap();
@@ -936,22 +835,9 @@ function clearVeillePendingStorySelection(id) {
   setVeillePendingStorySelection(id, null);
 }
 
-let _veillePendingKeywordsCache = null;
-
-function readVeillePendingKeywordsMap() {
-  if (_veillePendingKeywordsCache) return _veillePendingKeywordsCache;
-  ensureJsonMetaStorage(veillePendingKeywordsMetaPath);
-  try {
-    _veillePendingKeywordsCache = JSON.parse(fs.readFileSync(veillePendingKeywordsMetaPath, "utf8") || "{}");
-    return _veillePendingKeywordsCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeVeillePendingKeywordsMap(map) {
-  ensureJsonMetaStorage(veillePendingKeywordsMetaPath);
-  fs.writeFileSync(veillePendingKeywordsMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
+const _veillePendingKeywordsStore = makeJsonStore(veillePendingKeywordsMetaPath);
+function readVeillePendingKeywordsMap() { return _veillePendingKeywordsStore.read(); }
+function writeVeillePendingKeywordsMap(map) { _veillePendingKeywordsStore.write(map);
   _veillePendingKeywordsCache = map || {};
 }
 
@@ -1104,24 +990,9 @@ function clearVeillePendingKeywords(id) {
   setVeillePendingKeywords(id, []);
 }
 
-let _debateKeywordsCache = null;
-
-function readDebateKeywordsMap() {
-  if (_debateKeywordsCache) return _debateKeywordsCache;
-  ensureJsonMetaStorage(debateKeywordsMetaPath);
-  try {
-    _debateKeywordsCache = JSON.parse(fs.readFileSync(debateKeywordsMetaPath, "utf8") || "{}");
-    return _debateKeywordsCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeDebateKeywordsMap(map) {
-  ensureJsonMetaStorage(debateKeywordsMetaPath);
-  fs.writeFileSync(debateKeywordsMetaPath, JSON.stringify(map || {}, null, 2), "utf8");
-  _debateKeywordsCache = map || {};
-}
+const _debateKeywordsStore = makeJsonStore(debateKeywordsMetaPath);
+function readDebateKeywordsMap() { return _debateKeywordsStore.read(); }
+function writeDebateKeywordsMap(map) { _debateKeywordsStore.write(map); }
 
 function getDebateKeywords(debateId) {
   const map = readDebateKeywordsMap();
@@ -1166,6 +1037,9 @@ function setDebateKeywords(debateId, keywords) {
     map[debateKey] = normalized;
   }
   writeDebateKeywordsMap(map);
+  supabase.from("debates").update({ keywords: normalized }).eq("id", debateKey)
+    .then(({ error }) => { if (error) console.error("[keywords sync]", debateKey, error.message); })
+    .catch(() => {});
 }
 
 function removeDebateKeyword(debateId, keyword) {
@@ -1335,24 +1209,9 @@ function ensureDebateAssetsStorage() {
   }
 }
 
-let _debateAssetsMapCache = null;
-
-function readDebateAssetsMap() {
-  if (_debateAssetsMapCache) return _debateAssetsMapCache;
-  ensureDebateAssetsStorage();
-  try {
-    _debateAssetsMapCache = JSON.parse(fs.readFileSync(debateAssetsMetaPath, "utf8") || "{}");
-    return _debateAssetsMapCache;
-  } catch (error) {
-    return {};
-  }
-}
-
-function writeDebateAssetsMap(map) {
-  ensureDebateAssetsStorage();
-  fs.writeFileSync(debateAssetsMetaPath, JSON.stringify(map, null, 2), "utf8");
-  _debateAssetsMapCache = map;
-}
+const _debateAssetsStore = makeJsonStore(debateAssetsMetaPath);
+function readDebateAssetsMap() { return _debateAssetsStore.read(); }
+function writeDebateAssetsMap(map) { _debateAssetsStore.write(map); }
 
 function getDebateAssetsEntry(debateId) {
   const map = readDebateAssetsMap();
@@ -2314,6 +2173,21 @@ function ensureExternalPreviewCacheDir() {
   } catch (error) {
     console.error("Erreur création dossier cache previews externes:", error);
     return false;
+  }
+}
+
+function purgeExternalPreviewCacheDir(maxFiles = 500) {
+  try {
+    if (!fs.existsSync(EXTERNAL_PREVIEW_CACHE_DIR)) return;
+    const files = fs.readdirSync(EXTERNAL_PREVIEW_CACHE_DIR)
+      .map(f => ({ name: f, mtime: fs.statSync(path.join(EXTERNAL_PREVIEW_CACHE_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (files.length <= maxFiles) return;
+    const toDelete = files.slice(maxFiles);
+    for (const f of toDelete) fs.unlinkSync(path.join(EXTERNAL_PREVIEW_CACHE_DIR, f.name));
+    console.log(`[preview-cache] purge : ${toDelete.length} fichiers supprimés, ${maxFiles} conservés.`);
+  } catch (e) {
+    console.error("[preview-cache] erreur purge:", e.message);
   }
 }
 
@@ -3974,17 +3848,19 @@ app.post("/api/admin/tags/rename", requireAdmin, express.json(), async (req, res
       return res.status(400).json({ error: "Le nouveau nom est identique." });
     }
 
-    // Mise à jour debate-keywords.json
     const map = readDebateKeywordsMap();
     let updatedDebates = 0;
+    const supabaseUpdates = [];
     for (const [debateId, keywords] of Object.entries(map)) {
       const updated = keywords.map((k) => normalizeTag(k) === oldKey ? newTag : k);
       if (updated.some((k, i) => k !== keywords[i])) {
         map[debateId] = updated;
         updatedDebates++;
+        supabaseUpdates.push(supabase.from("debates").update({ keywords: updated }).eq("id", debateId));
       }
     }
     writeDebateKeywordsMap(map);
+    if (supabaseUpdates.length) Promise.all(supabaseUpdates).catch(() => {});
 
     // Mise à jour bulles
     const cloudData = await loadCloudBubbles();
@@ -4006,14 +3882,19 @@ app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), async (re
     if (!normalizeTag(tag)) return res.status(400).json({ error: "Tag manquant." });
     const tagKey = normalizeTag(tag);
 
-    // Supprime de tous les débats
     const map = readDebateKeywordsMap();
     let updatedDebates = 0;
+    const supabaseDeletes = [];
     for (const [debateId, keywords] of Object.entries(map)) {
       const filtered = keywords.filter((k) => normalizeTag(k) !== tagKey);
-      if (filtered.length !== keywords.length) { map[debateId] = filtered; updatedDebates++; }
+      if (filtered.length !== keywords.length) {
+        map[debateId] = filtered;
+        updatedDebates++;
+        supabaseDeletes.push(supabase.from("debates").update({ keywords: filtered }).eq("id", debateId));
+      }
     }
     writeDebateKeywordsMap(map);
+    if (supabaseDeletes.length) Promise.all(supabaseDeletes).catch(() => {});
 
     // Supprime des bulles
     const cloudData = await loadCloudBubbles();
@@ -6493,7 +6374,7 @@ app.get("/api/cloud-bubbles", async (req, res) => {
 
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    _debateKeywordsCache = null;
+    _debateKeywordsStore.invalidate();
     const keywordsMap = readDebateKeywordsMap();
     const now = new Date().toISOString();
 
@@ -7591,7 +7472,46 @@ app.get("/ping", (req, res) => res.json({ ok: true }));
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
+  purgeExternalPreviewCacheDir(500);
   initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
+  // Hydratation keywords depuis Supabase si le JSON local est vide (après redéploiement)
+  try {
+    const localKeywords = readDebateKeywordsMap();
+    if (!Object.keys(localKeywords).length) {
+      const { data: rows } = await supabase.from("debates").select("id, keywords").not("keywords", "is", null);
+      if (rows && rows.length) {
+        const hydrated = {};
+        for (const row of rows) {
+          if (Array.isArray(row.keywords) && row.keywords.length) hydrated[String(row.id)] = row.keywords;
+        }
+        if (Object.keys(hydrated).length) {
+          writeDebateKeywordsMap(hydrated);
+          console.log(`[Agôn] Keywords hydratés depuis Supabase : ${Object.keys(hydrated).length} débats.`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[Agôn] Erreur hydratation keywords:", e.message);
+  }
+  // Hydratation episode_nav depuis Supabase si le JSON local est vide
+  try {
+    const localNav = readDebateEpisodeNavMap();
+    if (!Object.keys(localNav).length) {
+      const { data: rows } = await supabase.from("debates").select("id, episode_nav").not("episode_nav", "is", null);
+      if (rows && rows.length) {
+        const hydrated = {};
+        for (const row of rows) {
+          if (row.episode_nav && typeof row.episode_nav === "object") hydrated[String(row.id)] = row.episode_nav;
+        }
+        if (Object.keys(hydrated).length) {
+          writeDebateEpisodeNavMap(hydrated);
+          console.log(`[Agôn] Episode nav hydraté depuis Supabase : ${Object.keys(hydrated).length} débats.`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[Agôn] Erreur hydratation episode_nav:", e.message);
+  }
   try {
     // Migration : push des story_id locaux vers Supabase
     const localLinks = readDebateStoryLinks();

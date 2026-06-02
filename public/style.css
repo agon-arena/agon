@@ -8605,7 +8605,8 @@ padding:4px 14px 12px 14px;
 
 .debate-card-ideas-count,
 .debate-card-comments-count,
-.debate-card-votes-count {
+.debate-card-votes-count,
+.debate-card-stats-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -13999,6 +14000,7 @@ body.page-debate .similar-debates-results .debate-card-counts-row {
 body.page-debate .similar-debates-results .debate-card-ideas-count,
 body.page-debate .similar-debates-results .debate-card-comments-count,
 body.page-debate .similar-debates-results .debate-card-votes-count,
+body.page-debate .similar-debates-results .debate-card-stats-badge,
 body.page-debate .similar-debates-results .debate-date,
 body.page-debate .similar-debates-results .debate-last-argument {
   display: inline-flex !important;
@@ -15795,7 +15797,8 @@ body.voices-panel-open {
 }
 .debate-card-context-extra .debate-card-ideas-count,
 .debate-card-context-extra .debate-card-comments-count,
-.debate-card-context-extra .debate-card-votes-count {
+.debate-card-context-extra .debate-card-votes-count,
+.debate-card-context-extra .debate-card-stats-badge {
   font-size: 11px;
   font-weight: 500;
 }
@@ -15821,7 +15824,8 @@ body.voices-panel-open {
   }
   .debate-card-context-extra .debate-card-ideas-count,
   .debate-card-context-extra .debate-card-comments-count,
-  .debate-card-context-extra .debate-card-votes-count {
+  .debate-card-context-extra .debate-card-votes-count,
+  .debate-card-context-extra .debate-card-stats-badge {
     font-size: 9px !important;
   }
   .debate-card-context-extra .debate-date,
@@ -18203,11 +18207,13 @@ body.page-home-mobile .debate-card-counts-row {
 body.page-home .debate-card-ideas-count,
 body.page-home .debate-card-comments-count,
 body.page-home .debate-card-votes-count,
+body.page-home .debate-card-stats-badge,
 body.page-home .debate-date,
 body.page-home .debate-last-argument,
 body.page-home-mobile .debate-card-ideas-count,
 body.page-home-mobile .debate-card-comments-count,
 body.page-home-mobile .debate-card-votes-count,
+body.page-home-mobile .debate-card-stats-badge,
 body.page-home-mobile .debate-date,
 body.page-home-mobile .debate-last-argument {
   display: inline-flex !important;
@@ -18768,6 +18774,8 @@ body.page-home .debate-card .debate-card-comments-count,
 body.page-home-mobile .debate-card .debate-card-comments-count,
 body.page-home .debate-card .debate-card-votes-count,
 body.page-home-mobile .debate-card .debate-card-votes-count,
+body.page-home .debate-card .debate-card-stats-badge,
+body.page-home-mobile .debate-card .debate-card-stats-badge,
 body.page-home .debate-card .debate-date,
 body.page-home-mobile .debate-card .debate-date,
 body.page-home .debate-card .debate-last-argument,

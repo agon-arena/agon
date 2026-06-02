@@ -4917,13 +4917,13 @@ function buildIndexCardMetaHtml(debate, options = {}) {
   const voteCount = d.vote_count || (Number(d.votes_a || 0) + Number(d.votes_b || 0));
   const ideaCount = d.argument_count || 0;
   const commentCount = d.comment_count || 0;
-  const hasIdeas = ideaCount >= 1;
-  const hasComments = commentCount >= 1;
-  const countsHtml = (hasIdeas || hasComments) ? `
+  const statParts = [];
+  if (ideaCount >= 1) statParts.push(`${ideaCount} idée${ideaCount >= 2 ? 's' : ''}`);
+  if (commentCount >= 1) statParts.push(`${commentCount} commentaire${commentCount > 1 ? 's' : ''}`);
+  if (voteCount > 0) statParts.push(`${voteCount} voix`);
+  const countsHtml = statParts.length > 0 ? `
     <div class="debate-card-counts-row">
-      ${hasIdeas ? `<p class="debate-card-ideas-count">${ideaCount} idée${ideaCount >= 2 ? 's' : ''}</p>` : ''}
-      ${hasComments ? `<p class="debate-card-comments-count"${!hasIdeas ? ' style="margin-left:0;"' : ''}>${commentCount} commentaire${commentCount > 1 ? 's' : ''}</p>` : ''}
-      ${voteCount > 0 ? `<p class="debate-card-votes-count">${voteCount} voix</p>` : ''}
+      <p class="debate-card-stats-badge">${statParts.join(' · ')}</p>
     </div>
   ` : '';
   return `
