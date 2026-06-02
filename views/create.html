@@ -75,7 +75,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.css?v=20260601m">
+<link rel="stylesheet" href="/style.css?v=20260602">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -307,6 +307,11 @@
             <span aria-hidden="true">🔍</span>
             <span>Veille</span>
           </a>
+
+          <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            <span>Questions du jour</span>
+          </button>
         </div>
       </div>
     </div>
@@ -531,6 +536,16 @@
 
   </main>
 
+<button
+  type="button"
+  class="app-floating-refresh-btn"
+  onclick="window.location.reload()"
+  title="Actualiser"
+  aria-label="Actualiser la page"
+>
+  <i class="fa-solid fa-rotate-right"></i>
+</button>
+
   <div id="create-publish-overlay" class="create-publish-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#ffffff; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
     <div class="create-publish-overlay-inner" style="width:min(100%, 600px); margin:0 auto; padding:0; box-sizing:border-box; text-align:center; display:flex; flex-direction:column; gap:18px; align-items:center; justify-content:center;">
       <div class="create-publish-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
@@ -686,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.js?v=20260601m"></script>
+<script src="/script.js?v=20260602"></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

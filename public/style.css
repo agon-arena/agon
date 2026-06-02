@@ -1,3 +1,7 @@
+img, video, a, button {
+  touch-action: manipulation;
+}
+
 :root {
   --color-a:          #516776;
   --color-a-bg:       #a0c6d4;
@@ -9247,7 +9251,7 @@ body.page-home.page-home-mobile {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 135;
+  z-index: 145;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -9806,7 +9810,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   padding: 0;
   border-radius: 999px;
   border: 1.5px solid #111827;
-  background: rgba(26, 39, 47, 0.84);
+  background: rgba(26, 39, 47, 0.94);
   color: #e5edf3;
   display: inline-flex;
   align-items: center;
@@ -9820,7 +9824,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 
 .app-floating-refresh-btn:hover,
 .app-floating-refresh-btn:focus-visible {
-  background: rgba(17, 24, 39, 0.92);
+  background: rgba(17, 24, 39, 0.98);
   color: #ffffff;
   outline: none;
   transform: translateX(-50%) translateY(-1px);
@@ -9832,7 +9836,49 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 }
 
 .index-floating-refresh-btn {
-  z-index: 10000;
+  z-index: 150;
+}
+
+.index-floating-scroll-up {
+  left: calc(50% - 54px);
+}
+
+.index-floating-scroll-down {
+  left: calc(50% + 54px);
+}
+
+@media (min-width: 769px) {
+  .index-floating-refresh-btn {
+    width: 56px;
+    height: 56px;
+  }
+
+  .index-floating-refresh-btn i {
+    font-size: 22px;
+  }
+
+  .index-floating-scroll-up {
+    left: calc(50% - 150px);
+  }
+
+  .index-floating-scroll-down {
+    left: calc(50% + 150px);
+  }
+}
+
+@media (max-width: 768px) {
+  .index-floating-scroll-up {
+    left: 25%;
+  }
+
+  .index-floating-scroll-down {
+    left: 75%;
+  }
+}
+
+body:has(#index-explorer-menu.home-bottom-share-menu-open) .index-floating-refresh-btn,
+body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-refresh-btn {
+  z-index: 130;
 }
 
 .topbar-app-icon {
@@ -15145,8 +15191,15 @@ body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
 }
 
 body.debate-embedded-frame .debate-floating-refresh-btn {
-  display: none !important;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
+
+@media (min-width: 769px) {
+  body.debate-embedded-frame .app-floating-refresh-btn {
+    display: none !important;
+  }
+}
+
 
 /* Desktop : badge au-dessus de la nav bar */
 @media (min-width: 769px) {
@@ -15793,6 +15846,13 @@ html.thematic-scroll .theme-row-section {
  * exactement à la distance entre le bord gauche/droit du container centré
  * et le bord du viewport.
  */
+@media (max-width: 768px) {
+  .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-row-title,
+  .theme-row-section[data-theme="Philosophie - sciences sociales"] .theme-row-title-text {
+    white-space: pre-line !important;
+  }
+}
+
 .theme-row-title {
   position: relative;
   z-index: 0;
@@ -16283,6 +16343,14 @@ body.page-home-mobile .debate-card-context {
   padding-right: 6px !important;
   gap: 0 !important;
   border-radius: 0 !important;
+}
+
+@media (min-width: 769px) {
+  body.page-home .debate-card-context,
+  body.page-home-mobile .debate-card-context {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
 }
 
 body.page-home .debate-card-context-toggle,

@@ -3051,19 +3051,49 @@ function ensureDebateIframeModal() {
       align-items: center;
       justify-content: center;
       padding: 10px 20px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(26,39,47,0.85);
-      color: #a0b0bb;
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
+      border-radius: 999px;
+      border: 1.5px solid #111827;
+      background: rgba(26,39,47,0.94);
+      color: #e5edf3;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
       cursor: pointer;
       user-select: none;
       transition: background 0.15s, color 0.15s;
     }
     #debate-iframe-modal-close:hover {
-      background: rgba(26,39,47,1);
-      color: #e0e8ee;
+      background: rgba(17,24,39,0.98);
+      color: #ffffff;
+    }
+    @media (max-width: 768px) {
+      #debate-iframe-modal-refresh { display: none !important; }
+    }
+    #debate-iframe-modal-refresh {
+      position: fixed;
+      bottom: calc(5vh + 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1.5px solid #111827;
+      background: rgba(26,39,47,0.94);
+      color: #e5edf3;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    #debate-iframe-modal-refresh:hover {
+      background: rgba(17,24,39,0.98);
+      color: #ffffff;
     }
     #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close {
       filter: blur(4px);
@@ -3127,6 +3157,7 @@ function ensureDebateIframeModal() {
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
       <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#a0b0bb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser" onclick="document.getElementById('debate-iframe-modal-frame').src=document.getElementById('debate-iframe-modal-frame').src"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
@@ -11973,9 +12004,33 @@ function attachAdminButtons() {
     });
   }
 
+  const broadcastDailyBtn = document.getElementById("admin-broadcast-daily-btn");
+  if (broadcastDailyBtn) {
+    broadcastDailyBtn.addEventListener("click", adminBroadcastDaily);
+  }
+
   initAdminTopbarMenu();
   refreshAdminUI();
   verifyAdminSession();
+}
+
+async function adminBroadcastDaily() {
+  const btn = document.getElementById("admin-broadcast-daily-btn");
+  if (btn) { btn.disabled = true; }
+  try {
+    const res = await fetchJSON(API + "/admin/push/broadcast-daily", { method: "POST" });
+    const sent = (res.results || []).filter(r => r.status === "sent").length;
+    showReplacementSuccessMessage(
+      "Push envoyé",
+      `Notification envoyée à ${sent} / ${res.total} abonné(s).`,
+      null,
+      "🔔"
+    );
+  } catch (e) {
+    alert("Erreur lors de l'envoi du push.");
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 function initAdminTopbarMenu() {
@@ -12203,6 +12258,16 @@ if (notification.type === "majority_lost") {
   icon = "😬";
   title = "Votre camp vient de perdre la majorité";
   subtitle = "Ouvrir le débat";
+}
+if (notification.type === "analysis_scheduled") {
+  icon = '<img src="/sablier2.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
+  title = "L'arbitrage IA démarre dans 24h";
+  subtitle = "Ouvrir le débat";
+}
+if (notification.type === "analysis_ready") {
+  icon = "⚖️";
+  title = "L'arbitrage IA est disponible";
+  subtitle = "Voir l'analyse";
 }
 
 title = getNotificationDisplayTitle(notification, title);
@@ -15599,7 +15664,10 @@ function buildIndexThematicSectionsHtml(debates) {
       if (!themeDebates.length) return;
       const inner = _buildCarouselInner(themeDebates, theme);
       if (!inner) return;
-      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${escapeHtml(theme)}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+      const themeTitleHtml = theme === "Philosophie - sciences sociales"
+        ? "Philosophie\nsciences sociales"
+        : escapeHtml(theme);
+      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
 
     const uncategorized = allDebates
@@ -17455,7 +17523,7 @@ function ensureCreatedDebateFloatingCloseButton() {
         padding: 10px 20px;
         border-radius: 12px;
         border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(26,39,47,0.85);
+        background: rgba(26,39,47,0.94);
         color: #a0b0bb;
         backdrop-filter: blur(6px);
         -webkit-backdrop-filter: blur(6px);
@@ -25227,6 +25295,16 @@ if (notification.type === "majority_lost") {
   title = "Votre camp vient de perdre la majorité";
   subtitle = "Ouvrir le débat";
 }
+if (notification.type === "analysis_scheduled") {
+  icon = '<img src="/sablier2.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
+  title = "L'arbitrage IA démarre dans 24h";
+  subtitle = "Ouvrir le débat";
+}
+if (notification.type === "analysis_ready") {
+  icon = "⚖️";
+  title = "L'arbitrage IA est disponible";
+  subtitle = "Voir l'analyse";
+}
       title = getNotificationDisplayTitle(notification, title);
      return `
  <a
@@ -26261,6 +26339,37 @@ function toggleIndexExplorerMenu(event) {
   }
 }
 
+function scrollToAdjacentSection(direction) {
+  const sections = Array.from(document.querySelectorAll('.theme-row-section'));
+  if (!sections.length) return;
+
+  // Hauteur de la topbar sticky (seul élément fixe à compenser)
+  const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
+
+  // Position absolue de chaque bandeau thématique dans le document
+  const ys = sections.map(s => {
+    const bandeau = s.querySelector('.theme-row-title') || s;
+    return bandeau.getBoundingClientRect().top + window.scrollY;
+  });
+
+  // Haut de la zone visible (sous la topbar)
+  const viewTop = window.scrollY + topbarH;
+
+  // Section courante = la dernière dont le bandeau est passé en haut
+  let cur = 0;
+  for (let i = 0; i < ys.length; i++) {
+    if (ys[i] <= viewTop) cur = i;
+  }
+
+  const next = direction === 'up' ? Math.max(0, cur - 1) : cur + 1;
+  if (next >= sections.length) return;
+
+  // Scroller pour que le bandeau arrive en haut de la zone visible
+  window.scrollTo({ top: Math.max(0, ys[next] - topbarH + 85), behavior: 'smooth' });
+}
+
+window.scrollToAdjacentSection = scrollToAdjacentSection;
+
 function scrollToTheme(theme) {
   closeIndexExplorerMenu();
   const section = document.querySelector(`.theme-row-section[data-theme="${CSS.escape(theme)}"]`);
@@ -26535,16 +26644,70 @@ if (loginButton) {
 }
 
 
+function initPushMenuItem() {
+  const item = document.getElementById("push-menu-item");
+  if (!item || !browserCanUsePushNotifications()) return;
+  const perm = Notification.permission;
+  if (perm === "granted") return;
+  item.style.display = "";
+  if (perm === "denied") {
+    const icon = document.getElementById("push-menu-icon");
+    const label = document.getElementById("push-menu-label");
+    if (icon) icon.className = "fa-regular fa-bell-slash";
+    if (label) label.textContent = "Notifications bloquées";
+  }
+}
+
+async function handlePushMenuClick() {
+  closeHomeTopbarMenu();
+  if (typeof Notification === "undefined") return;
+
+  if (Notification.permission === "denied") {
+    const modal = document.getElementById("push-denied-modal");
+    if (modal) modal.style.display = "flex";
+    return;
+  }
+
+  try {
+    const keyResponse = await fetch(API + "/push/public-key");
+    const keyData = keyResponse.ok ? await keyResponse.json() : null;
+    if (!keyData?.available) {
+      showReplacementSuccessMessage("Notifications indisponibles", "Les notifications push ne sont pas encore activées sur ce serveur.", null, "🔔");
+      return;
+    }
+  } catch {
+    showReplacementSuccessMessage("Erreur", "Impossible de contacter le serveur.", null, "⚠️");
+    return;
+  }
+
+  await enablePushNotificationsFromInvite();
+
+  if (Notification.permission === "granted") {
+    const btn = document.getElementById("push-menu-item");
+    if (btn) btn.style.display = "none";
+    showReplacementSuccessMessage("Notifications activées", "Tu recevras désormais les alertes en temps réel.", null, "🔔");
+  }
+}
+
+function closePushDeniedModal() {
+  const modal = document.getElementById("push-denied-modal");
+  if (modal) modal.style.display = "none";
+}
+
+window.handlePushMenuClick = handlePushMenuClick;
+window.closePushDeniedModal = closePushDeniedModal;
 window.toggleHomeTopbarMenu = toggleHomeTopbarMenu;
 window.closeHomeTopbarMenu = closeHomeTopbarMenu;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
+  document.addEventListener("DOMContentLoaded", initPushMenuItem);
   document.addEventListener("DOMContentLoaded", initDebateNotificationIframeTriggers);
   document.addEventListener("DOMContentLoaded", initDebateBottomExplorerLink);
   document.addEventListener("DOMContentLoaded", initDebateTopExplorerLink);
 } else {
   initHomeTopbarMenu();
+  initPushMenuItem();
   initDebateNotificationIframeTriggers();
   initDebateBottomExplorerLink();
   initDebateTopExplorerLink();

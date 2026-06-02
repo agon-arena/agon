@@ -100,7 +100,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260601m">
+  <link rel="stylesheet" href="/style.css?v=20260602">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -266,25 +266,30 @@
           onclick="event.stopPropagation()"
           aria-label="Menu du bandeau"
         >
-         <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link" onclick="event.preventDefault(); openDebateIframeModal('/create')">
-  <i class="fa-solid fa-plus"></i>
-  <span>Ouvrir une arène</span>
-</a>
-
-<a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
-  <i class="fa-regular fa-bell"></i>
-  <span>Notifications</span>
-</a>
-<a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
-  <i class="fa-regular fa-envelope"></i>
-  <span>Contact</span>
-</a>
-<a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); openDebateIframeModal('/about')">
-  <i class="fa-regular fa-circle-question"></i>
-  <span>À propos</span>
-</a>
-
-
+          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link" onclick="event.preventDefault(); openDebateIframeModal('/create')">
+            <i class="fa-solid fa-plus"></i>
+            <span>Ouvrir une arène</span>
+          </a>
+          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
+            <i class="fa-regular fa-bell"></i>
+            <span>Notifications</span>
+          </a>
+          <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
+            <i id="push-menu-icon" class="fa-regular fa-bell"></i>
+            <span id="push-menu-label">Activer les alertes</span>
+          </button>
+          <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); openDebateIframeModal('/about')">
+            <i class="fa-regular fa-circle-question"></i>
+            <span>À propos</span>
+          </a>
+          <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
+            <i class="fa-regular fa-envelope"></i>
+            <span>Contact</span>
+          </a>
+          <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <span>Installer l'application</span>
+          </button>
 
           <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-login-button">
             <i class="fa-regular fa-user"></i>
@@ -357,6 +362,11 @@
           <button type="button" id="admin-update-cloud-btn" class="admin-topbar-menu-item" data-admin style="display:none;">
             <span aria-hidden="true">⟳</span>
             <span>Mettre à jour les bulles</span>
+          </button>
+
+          <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            <span>Questions du jour</span>
           </button>
         </div>
       </div>
@@ -474,12 +484,32 @@
 
 <button
   type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
+  onclick="(function(){var now=Date.now();if(window._lastScrollUp&&now-window._lastScrollUp<400){window.scrollTo({top:0,behavior:'smooth'});window._lastScrollUp=0;}else{scrollToAdjacentSection('up');window._lastScrollUp=now;}})()"
+  title="Défiler vers le haut"
+  aria-label="Défiler vers le haut"
+>
+  <i class="fa-solid fa-chevron-up"></i>
+</button>
+
+<button
+  type="button"
   class="app-floating-refresh-btn index-floating-refresh-btn"
   onclick="(function(){sessionStorage.removeItem('agon_startup_seen');sessionStorage.setItem('agon_scroll_top','1');var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
   <i class="fa-solid fa-rotate-right"></i>
+</button>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
+  onclick="scrollToAdjacentSection('down')"
+  title="Défiler vers le bas"
+  aria-label="Défiler vers le bas"
+>
+  <i class="fa-solid fa-chevron-down"></i>
 </button>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
@@ -790,7 +820,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260601m" defer></script>
+<script src="/script.js?v=20260602" defer></script>
 <script src="/index-ai-badge.js" defer></script>
 
 
@@ -1312,5 +1342,15 @@
   window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
 })();
 </script>
+
+<div id="push-denied-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;" onclick="closePushDeniedModal()">
+  <div style="background:#1e2d38; border:1px solid #3a4a55; border-radius:16px; padding:24px 20px; max-width:340px; width:90%; margin:auto;" onclick="event.stopPropagation()">
+    <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
+    <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
+    <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
+    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+    <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
+  </div>
+</div>
 </body>
 </html>

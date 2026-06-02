@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/faviconiconemobile.png">
 <meta name="theme-color" content="#243038">
-<link rel="stylesheet" href="/style.css?v=20260407-1" />
+<link rel="stylesheet" href="/style.css?v=20260602" />
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
@@ -59,11 +59,45 @@
 
     <div class="topbar-actions">
       <a href="/" class="back-link">← Retour aux débats</a>
-      <span id="admin-badge" class="admin-badge" style="display:none;">Mode admin activé</span>
+      <div class="admin-controls-row" data-admin style="display:none;">
+        <div class="admin-topbar-menu" id="admin-topbar-menu">
+          <button
+            id="admin-topbar-menu-toggle"
+            class="button button-secondary admin-topbar-menu-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+          >
+            <i class="fa-solid fa-gear" aria-hidden="true"></i>
+            <span>Admin</span>
+            <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+          </button>
+          <div class="admin-topbar-menu-panel" id="admin-topbar-menu-panel" hidden>
+            <button id="admin-logout-btn" class="admin-topbar-menu-item admin-topbar-menu-item-danger" type="button">
+              Quitter le mode admin
+            </button>
+            <a class="admin-topbar-menu-item" href="/admin-tags" data-admin style="display:none;">
+              <i class="fa-solid fa-tags" aria-hidden="true"></i>
+              <span>Tags</span>
+            </a>
+            <a class="admin-topbar-menu-item" href="/admin-stories" onclick="event.preventDefault(); openDebateIframeModal('/admin-stories')" data-admin style="display:none;">
+              <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+              <span>Histoires associées</span>
+            </a>
+            <a class="admin-topbar-menu-item" href="/admin/veille" target="_blank" rel="noopener" data-admin style="display:none;">
+              <span aria-hidden="true">📥</span>
+              <span>Sujets en attente</span>
+            </a>
+            <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
+              <i class="fa-solid fa-bell" aria-hidden="true"></i>
+              <span>Questions du jour</span>
+            </button>
+          </div>
+        </div>
+      </div>
       <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
         <i class="fa-solid fa-gear"></i>
       </button>
-      <button id="admin-logout-btn" class="button admin-exit-btn" type="button" style="display:none;">Quitter le mode admin</button>
     </div>
 
   </div>
@@ -76,10 +110,7 @@
     <h3 style="color:#ffffff;">Signalements</h3>
   </div>
   <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-    <a class="button button-small" href="/admin-tags" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-      <i class="fa-solid fa-tags"></i> Tags
-    </a>
-    <button class="delete-button" type="button" onclick="deleteAllReports()">
+<button class="delete-button" type="button" onclick="deleteAllReports()">
       <i class="fa-solid fa-trash"></i> Supprimer les signalements
     </button>
     <button class="delete-button" type="button" onclick="deleteAllReportedTargets()" style="background:#7f1d1d; border-color:#991b1b;">
@@ -101,7 +132,7 @@
   </section>
 </main>
 
-<script src="/script.js?v=20260518-categories-v29"></script>
+<script src="/script.js?v=20260602"></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

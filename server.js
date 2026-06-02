@@ -8,8 +8,8 @@ const { createCanvas, loadImage } = require("canvas");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
-const { queueCommentNotificationEvents } = require("./lib/notification-events");
-const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents } = require("./lib/push-sender");
+const { createNotificationEventSafe } = require("./lib/notification-events");
+const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents, broadcastPush } = require("./lib/push-sender");
 const {
   getExcludedTags,
   replaceExcludedTags,
@@ -3076,6 +3076,25 @@ function quoteNotificationContent(value, maxLength = 90) {
   return label ? `« ${label} »` : "";
 }
 
+async function _sendPushNow(userKey, { type, message, debate_id = null, argument_id = null, comment_id = null }) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+  const event = await createNotificationEventSafe(supabase, {
+    eventType: type,
+    actorLegacyKey: null,
+    recipientLegacyKey: userKey,
+    debateId: debate_id,
+    argumentId: argument_id,
+    commentId: comment_id,
+    payload: { message }
+  });
+  if (!event?.id) return;
+  await sendNotificationEventPushById(supabase, {
+    publicKey: VAPID_PUBLIC_KEY,
+    privateKey: VAPID_PRIVATE_KEY,
+    subject: VAPID_SUBJECT
+  }, event.id);
+}
+
 async function createNotification({
   user_key,
   type,
@@ -3098,6 +3117,7 @@ async function createNotification({
   });
 
   clearNotificationsApiResponseCache();
+  _sendPushNow(user_key, { type, message, debate_id, argument_id, comment_id }).catch(console.error);
 }
 
 // Map<argumentId (string), {authorKey, debateId, side, wasMajorityAtPost}>
@@ -3385,15 +3405,15 @@ app.get("/debates/:id", async (req, res) => {
 });
 
 app.get("/create", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/create.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/create.html"));
 });
 
 app.get("/notifications", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/notifications.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
 app.get("/contact", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/contact.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/contact.html"));
 });
 
 app.post("/api/contact", async (req, res) => {
@@ -3489,15 +3509,15 @@ app.get("/debate", async (req, res) => {
 });
 
 app.get("/admin-reports", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/admin-reports.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/admin-reports.html"));
 });
 
 app.get("/admin-tags", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/admin-tags.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/admin-tags.html"));
 });
 
 app.get("/admin-stories", (req, res) => {
-  res.sendFile(path.join(__dirname, "views/admin-stories.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/admin-stories.html"));
 });
 
 /* =========================
@@ -4045,6 +4065,31 @@ app.post("/api/admin/push/process-pending", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur traitement push.");
+  }
+});
+
+app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
+  try {
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(503).json({ error: "Configuration VAPID incomplète." });
+    }
+
+    const result = await broadcastPush(supabase, {
+      publicKey: VAPID_PUBLIC_KEY,
+      privateKey: VAPID_PRIVATE_KEY,
+      subject: VAPID_SUBJECT
+    }, {
+      title: "agôn",
+      body: "Les questions du jour sont disponibles.",
+      url: "/",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png"
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur envoi broadcast push.");
   }
 });
 
@@ -5933,7 +5978,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       argumentRow.author_key &&
       argumentRow.author_key !== (authorKey || null)
     ) {
-      await supabase.from("notifications").insert({
+      await createNotification({
         user_key: argumentRow.author_key,
         type: "comment_on_argument",
         debate_id: argumentRow.debate_id || null,
@@ -5943,11 +5988,8 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
           ? `Votre idée ${quoteNotificationContent(argumentRow.title)} a reçu un commentaire : ${quoteNotificationContent(shortPreview, 110)}`
           : shortPreview
             ? `Nouveau commentaire : ${shortPreview}`
-            : "Nouveau commentaire sur votre argument",
-        is_read: 0,
-        created_at: nowIso()
+            : "Nouveau commentaire sur votre argument"
       });
-      clearNotificationsApiResponseCache();
     }
 
     let parentCommentRow = null;
@@ -5959,7 +6001,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
         parentCommentRow.author_key &&
         parentCommentRow.author_key !== (authorKey || null)
       ) {
-        await supabase.from("notifications").insert({
+        await createNotification({
           user_key: parentCommentRow.author_key,
           type: "reply_to_comment",
           debate_id: argumentRow?.debate_id || null,
@@ -5969,39 +6011,14 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
             ? `Votre commentaire ${quoteNotificationContent(parentCommentRow.content, 110)} a reçu une réponse : ${quoteNotificationContent(shortPreview, 110)}`
             : shortPreview
               ? `Réponse à votre commentaire : ${shortPreview}`
-              : "Quelqu’un a répondu à votre commentaire",
-          is_read: 0,
-          created_at: nowIso()
+              : "Quelqu’un a répondu à votre commentaire"
         });
-        clearNotificationsApiResponseCache();
       }
     }
 
     invalidateSharedDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     res.json(row);
     if (argumentRow?.debate_id) _scheduleAnalysisIfNeeded(argumentRow.debate_id).catch(console.error);
-    queueCommentNotificationEvents(supabase, {
-      authorKey,
-      argumentRow,
-      parentCommentRow,
-      argumentId: argument_id,
-      commentId: newCommentId,
-      replyToCommentId: reply_to_comment_id || null,
-      shortPreview,
-      stance: safeStance
-    }).then((createdEvents) => {
-      if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return null;
-
-      return Promise.all((createdEvents || []).map((event) => {
-        return sendNotificationEventPushById(supabase, {
-          publicKey: VAPID_PUBLIC_KEY,
-          privateKey: VAPID_PRIVATE_KEY,
-          subject: VAPID_SUBJECT
-        }, event.id);
-      }));
-    }).catch((pushError) => {
-      console.error(pushError);
-    });
     return;
   } catch (error) {
     console.error(error);
@@ -7138,8 +7155,12 @@ async function _generateAndSaveAnalysis(debateId) {
       ai_analysis_generated_at: new Date().toISOString()
     }).eq("id", debateId);
 
-    if (saveError) console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde :`, saveError.message);
-    else console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
+    if (saveError) {
+      console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde :`, saveError.message);
+    } else {
+      console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
+      _notifyParticipantsAnalysisReady(debateId, payload.question).catch(console.error);
+    }
 
     return raw;
   } catch (err) {
@@ -7150,13 +7171,77 @@ async function _generateAndSaveAnalysis(debateId) {
 }
 
 // Vérifie si le seuil est atteint et programme l'analyse si besoin
+async function _notifyParticipants(debateId, { type, message }) {
+  const { data: argRows } = await supabase
+    .from("arguments")
+    .select("id, author_key")
+    .eq("debate_id", debateId);
+
+  const ids = (argRows || []).map((a) => a.id).filter(Boolean);
+  const userKeys = new Set();
+
+  for (const a of (argRows || [])) {
+    if (a.author_key) userKeys.add(a.author_key);
+  }
+
+  if (ids.length) {
+    const [{ data: votes }, { data: commentAuthors }] = await Promise.all([
+      supabase.from("votes").select("voter_key").in("argument_id", ids),
+      supabase.from("comments").select("author_key").in("argument_id", ids)
+    ]);
+    for (const v of (votes || [])) {
+      if (v.voter_key) userKeys.add(v.voter_key);
+    }
+    for (const c of (commentAuthors || [])) {
+      if (c.author_key) userKeys.add(c.author_key);
+    }
+  }
+
+  if (userKeys.size === 0) return;
+
+  const now = nowIso();
+  await supabase.from("notifications").insert(
+    [...userKeys].map((user_key) => ({
+      user_key,
+      type,
+      debate_id: debateId,
+      argument_id: null,
+      comment_id: null,
+      message,
+      is_read: 0,
+      created_at: now
+    }))
+  );
+  clearNotificationsApiResponseCache();
+
+  for (const user_key of userKeys) {
+    _sendPushNow(user_key, { type, message, debate_id: debateId }).catch(console.error);
+  }
+}
+
+function _notifyParticipantsAnalysisScheduled(debateId, question, argIds) {
+  const questionLabel = quoteNotificationContent(question || "ce débat");
+  return _notifyParticipants(debateId, {
+    type: "analysis_scheduled",
+    message: `L'arbitrage IA de ${questionLabel} débutera dans 24h.`
+  });
+}
+
+function _notifyParticipantsAnalysisReady(debateId, question) {
+  const questionLabel = quoteNotificationContent(question || "ce débat");
+  return _notifyParticipants(debateId, {
+    type: "analysis_ready",
+    message: `L'arbitrage IA de ${questionLabel} est disponible.`
+  });
+}
+
 // — 1re analyse à 10 pts, puis re-déclenchement tous les 5 pts supplémentaires
 async function _scheduleAnalysisIfNeeded(debateId) {
   if (!debateId) return;
 
   const { data: debate } = await supabase
     .from("debates")
-    .select("ai_analysis_status, ai_analysis, ai_analysis_last_score")
+    .select("ai_analysis_status, ai_analysis, ai_analysis_last_score, question")
     .eq("id", debateId)
     .single();
 
@@ -7202,6 +7287,7 @@ async function _scheduleAnalysisIfNeeded(debateId) {
       ai_analysis_last_score:   score
     }).eq("id", debateId);
     console.log(`[auto-analysis] débat ${debateId} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
+    _notifyParticipantsAnalysisScheduled(debateId, debate.question, argIds).catch(console.error);
   }
 }
 

@@ -74,7 +74,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.css?v=20260522-admin-topbar-dropdown" />
+<link rel="stylesheet" href="/style.css?v=20260602" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -215,16 +215,40 @@
     </div>
 
     <div class="admin-controls-row" data-admin style="display:none;">
-      <span id="admin-badge" class="admin-badge">Mode admin activé</span>
-
-      <button id="admin-logout-btn" class="button admin-exit-btn" type="button">
-        Quitter le mode admin
-      </button>
-
-      <a class="button button-secondary admin-reports-button" href="/admin-reports">
-        Signalements
-        <span id="reports-count" class="notifications-count" style="display:none;"></span>
-      </a>
+      <div class="admin-topbar-menu" id="admin-topbar-menu">
+        <button
+          id="admin-topbar-menu-toggle"
+          class="button button-secondary admin-topbar-menu-toggle"
+          type="button"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
+          <i class="fa-solid fa-gear" aria-hidden="true"></i>
+          <span>Admin</span>
+          <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div class="admin-topbar-menu-panel" id="admin-topbar-menu-panel" hidden>
+          <button id="admin-logout-btn" class="admin-topbar-menu-item admin-topbar-menu-item-danger" type="button">
+            Quitter le mode admin
+          </button>
+          <a class="admin-topbar-menu-item admin-reports-button" href="/admin-reports" data-admin style="display:none;">
+            Signalements
+            <span id="reports-count" class="notifications-count" style="display:none;"></span>
+          </a>
+          <a class="admin-topbar-menu-item admin-tags-button" href="/admin-tags" data-admin style="display:none;">
+            <i class="fa-solid fa-tags" aria-hidden="true"></i>
+            <span>Tags</span>
+          </a>
+          <a class="admin-topbar-menu-item" href="/admin/veille" target="_blank" rel="noopener" data-admin style="display:none;">
+            <span aria-hidden="true">📥</span>
+            <span>Sujets en attente</span>
+          </a>
+          <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            <span>Questions du jour</span>
+          </button>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -246,9 +270,30 @@
   </button>
 </div>
 
+    <div id="push-denied-banner" style="display:none; background:#1e2d38; border:1px solid #3a4a55; border-left:4px solid #f59e0b; border-radius:12px; padding:16px 18px; margin-bottom:16px;">
+      <div style="display:flex; align-items:flex-start; gap:12px;">
+        <span style="font-size:22px; flex-shrink:0;">🔕</span>
+        <div>
+          <p style="margin:0 0 6px; font-weight:700; color:#e8e8e8; font-size:15px;">Les notifications sont bloquées</p>
+          <p style="margin:0 0 10px; color:#a0b0bb; font-size:13px; line-height:1.5;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Pour les réactiver, clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur, puis autorise les notifications pour ce site.</p>
+          <p style="margin:0; color:#7a8a94; font-size:12px;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+        </div>
+      </div>
+    </div>
+
     <section id="notifications-page-list" class="notifications-page-list"></section>
   </section>
 </main>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn"
+  onclick="window.location.reload()"
+  title="Actualiser"
+  aria-label="Actualiser la page"
+>
+  <i class="fa-solid fa-rotate-right"></i>
+</button>
 
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
@@ -371,8 +416,15 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-<script src="/script.js?v=20260522-admin-topbar-dropdown"></script>
+<script src="/script.js?v=20260602"></script>
 <script>
+(function() {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+    var banner = document.getElementById('push-denied-banner');
+    if (banner) banner.style.display = 'block';
+  }
+})();
+
 (function() {
   function notifyParentIframePageContext() {
     if (window.self === window.top) return;

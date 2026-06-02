@@ -92,7 +92,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.css?v=20260601m" />
+<link rel="stylesheet" href="/style.css?v=20260602" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -214,6 +214,11 @@
             <span aria-hidden="true">🔍</span>
             <span>Veille</span>
           </a>
+
+          <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            <span>Questions du jour</span>
+          </button>
         </div>
       </div>
     </div>
@@ -910,7 +915,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script>window.__VEILLE_MEDIAS__ = __VEILLE_MEDIAS_JSON__;</script>
-<script src="/script.js?v=20260601m"></script>
+<script src="/script.js?v=20260602"></script>
 <script src="/ai-analysis-animation.js?v=20260529-sablier-preload"></script>
 <script src="/admin-debate-analysis.js?v=20260529-ai-trigger-bright"></script>
 <script>
@@ -1129,7 +1134,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 </script>
 
 <!-- Badge voix utilisées + panneau -->
-<div id="voices-float-badge" style="position:fixed;bottom:16px;right:16px;z-index:900;background:rgba(26,39,47,0.82);color:#cbd5e1;font-size:18px;font-weight:700;padding:7px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.10);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);letter-spacing:0.03em;cursor:pointer;display:none;user-select:none;box-shadow:0 8px 24px rgba(0,0,0,0.22);">0/5</div>
+<div id="voices-float-badge" style="position:fixed;bottom:16px;right:16px;z-index:900;background:rgba(26,39,47,0.94);color:#e5edf3;font-size:18px;font-weight:700;padding:7px 14px;border-radius:999px;border:1.5px solid #111827;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);letter-spacing:0.03em;cursor:pointer;display:none;user-select:none;box-shadow:0 8px 24px rgba(0,0,0,0.22);">0/5</div>
 
 <div id="voices-panel-overlay" style="display:none;position:fixed;inset:0;z-index:901;background:rgba(8,12,16,0.34);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);" onclick="closeVoicesPanel()"></div>
 <div id="voices-panel" style="display:none;position:fixed;top:76px;right:16px;z-index:902;width:min(480px,calc(100vw - 24px));max-height:calc(100vh - 170px);background:#1f2b33;border:1px solid rgba(255,255,255,0.10);border-radius:18px;box-shadow:0 18px 42px rgba(0,0,0,0.34);overflow:hidden;flex-direction:column;">
