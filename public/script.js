@@ -3016,6 +3016,15 @@ function initIframePageContextBridge() {
       const parsedUrl = new URL(href, window.location.origin);
 
       if (parsedUrl.origin === window.location.origin && parsedUrl.pathname === "/debate" && parsedUrl.searchParams.has("id")) {
+        const notifEl = link.classList.contains("notification-item") ? link : link.closest(".notification-item");
+        if (notifEl) {
+          const wasUnread = markNotificationElementAsReadLocally(notifEl);
+          if (wasUnread) {
+            try { window.parent.postMessage({ type: "agon:notif-read-decrement" }, "*"); } catch {}
+          }
+          const notifId = notifEl.getAttribute("data-notif-id");
+          if (notifId) fireAndForgetMarkOneNotificationAsRead(notifId);
+        }
         event.preventDefault();
         event.stopPropagation();
         window.parent.postMessage({
@@ -3282,6 +3291,11 @@ function ensureDebateIframeModal() {
 
     if (e.data.type === "agon:notif-read-decrement") {
       decrementStoredUnreadNotificationCount(1);
+      return;
+    }
+
+    if (e.data.type === "agon:notif-reset-count") {
+      setStoredUnreadNotificationCount(Number(e.data.count) || 0);
       return;
     }
 
@@ -12162,6 +12176,11 @@ async function resetNotifications() {
       })
     });
 
+    if (window.self !== window.top) {
+      try { window.parent.postMessage({ type: "agon:notif-reset-count", count: 0 }, "*"); } catch {}
+    } else {
+      setStoredUnreadNotificationCount(0);
+    }
     await loadNotifications();
     await loadNotificationsPage();
   } catch (error) {
@@ -12422,9 +12441,10 @@ async function handleNotificationClick(event, notificationId, link, element = nu
 
   const wasUnread = markNotificationElementAsReadLocally(element);
   if (wasUnread) {
-    decrementStoredUnreadNotificationCount(1);
     if (window.self !== window.top) {
       try { window.parent.postMessage({ type: "agon:notif-read-decrement" }, "*"); } catch {}
+    } else {
+      decrementStoredUnreadNotificationCount(1);
     }
   }
 

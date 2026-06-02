@@ -49,7 +49,6 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org
 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public", { maxAge: 0, setHeaders: (res) => res.setHeader("Cache-Control", "no-store") }));
-app.use("/migration-export", express.static("/var/data"));
 
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
 // ATTENTION : basé sur req.ip. Si l'app est derrière un proxy (Render, Heroku,
@@ -6725,15 +6724,6 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || getVeillePendingStorySelection(id));
     const resolvedContent = normalizeDebateContent(String(resume || "").trim() || pendingResume || String(question || "").trim());
     const resolvedKeywords = normalizeKeywordList(Array.isArray(keywords) ? keywords : getVeillePendingKeywords(id));
-
-    console.warn("[veille publish] debug lengths", {
-      pendingId: id ? Number(id) : null,
-      linkedDebateId: canonicalLinkedDebateId || null,
-      questionLength: safeQuestion.length,
-      resumeLength: String(resume || "").trim().length,
-      pendingResumeLength: pendingResume.length,
-      resolvedContentLength: resolvedContent.length
-    });
 
     if (!String(resume || "").trim() && pendingResume) {
       console.warn(`[veille publish] resume manquant dans la requete, fallback sur veille_pending pour ${id}.`);
