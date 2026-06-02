@@ -5043,9 +5043,10 @@ app.get("/api/debates", async (req, res) => {
       });
     }
 
+    const MAX_DEBATES_RESPONSE = 300;
     const pagedRows = hasPaginationLimit || safeOffset > 0
       ? rows.slice(safeOffset, hasPaginationLimit ? safeOffset + rawLimit : undefined)
-      : rows;
+      : rows.slice(0, MAX_DEBATES_RESPONSE);
 
     const urlsToWarm = [];
     const rowsWithSourcePreview = pagedRows.map((row) => {
