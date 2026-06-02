@@ -8595,44 +8595,52 @@ padding:4px 14px 12px 14px;
   margin: 0;
 }
 
-.debate-card-ideas-count {
-  font-size: 13px;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
-  color: #374151;
-  font-weight: 600;
-}
-
 .debate-card-counts-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 0;
 }
 
-.debate-card-comments-count {
-  font-size: 13px;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
-  color: #374151;
-  font-weight: 600;
-}
-
-.debate-card-comments-count::before {
-  content: "•";
-  margin-right: 8px;
-  color: #9ca3af;
-}
-
+.debate-card-ideas-count,
+.debate-card-comments-count,
 .debate-card-votes-count {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  margin: 0 0 0 -1px;
+  padding: 2px 8px;
+  border-radius: 0;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(17,24,39,0.14);
   color: #374151;
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 
+.debate-card-counts-row > *:first-child {
+  margin-left: 0;
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+}
+
+.debate-card-counts-row > *:last-child {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+}
+
+.debate-card-counts-row > *:only-child {
+  border-radius: 999px;
+}
+
+.debate-card-comments-count::before,
 .debate-card-votes-count::before {
-  content: "•";
-  margin-right: 8px;
-  color: #9ca3af;
+  content: none;
 }
 
 .debate-card-entry-cta {
@@ -12639,7 +12647,7 @@ body.page-debate .debate-episode-link:hover {
 
 .index-card-episode-nav {
   width: 100%;
-  margin-top: 14px;
+  margin-top: 6px;
 }
 
 .index-card-episode-divider {
@@ -12672,8 +12680,14 @@ body.page-debate .debate-episode-link:hover {
 
 .theme-horizontal-inner > .debate-card.index-card-episode-flash,
 .debate-card.index-card-episode-flash {
-  animation: flashBlueCard 2s ease-in-out 1;
+  animation: indexCardBgFlash 2s ease-in-out 1;
   filter: none !important;
+}
+
+@keyframes indexCardBgFlash {
+  0%   { box-shadow: 0 0 7px rgba(5,7,10,0.22), inset 0 0 0 1000px rgba(61,90,110,0); }
+  40%  { box-shadow: 0 0 7px rgba(5,7,10,0.22), inset 0 0 0 1000px rgba(61,90,110,0.38); }
+  100% { box-shadow: 0 0 7px rgba(5,7,10,0.22), inset 0 0 0 1000px rgba(61,90,110,0); }
 }
 
 .debate-card.index-card-episode-flash .debate-card-link,

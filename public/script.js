@@ -3280,6 +3280,11 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:notif-read-decrement") {
+      decrementStoredUnreadNotificationCount(1);
+      return;
+    }
+
     if (e.data.type === "agon:notification-target-ready") {
       window.__agonIframeCurrentPathname = String(e.data.pathname || "/debate");
       if (debateIframeParentLoadingFallbackTimer) {
@@ -3570,6 +3575,7 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   } catch (error) {}
 }
 
+
 async function scrollToIndexDebateCard(url) {
   const match = String(url || "").match(/[?&]id=([^&]+)/);
   const debateId = match ? decodeURIComponent(match[1]) : String(url || "").split("/").pop();
@@ -3615,15 +3621,13 @@ async function scrollToIndexDebateCard(url) {
   otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
   applyIndexFilters();
 
-  // Attendre que la carte apparaisse dans le DOM (max ~2,25 s)
-  let attempts = 0;
-  const tryScroll = () => {
-    const card = document.querySelector(selector);
-    if (card) { _doScrollToEpisodeCard(card); return; }
-    if (++attempts < 15) { setTimeout(tryScroll, 150); }
-    else { _showEpisodeNavNotFound(); }
-  };
-  tryScroll();
+  // Carte visible → scroll. Pas visible → ouvre directement la modal.
+  const cardAfterFilter = document.querySelector(selector);
+  if (cardAfterFilter) {
+    _doScrollToEpisodeCard(cardAfterFilter);
+  } else {
+    openDebateIframeModal(url);
+  }
 }
 
 function _doScrollToEpisodeCard(card) {
@@ -12415,20 +12419,24 @@ function shouldOpenNotificationTargetInIframeModal(link) {
 
 async function handleNotificationClick(event, notificationId, link, element = null) {
   event.preventDefault();
-  setActionLoading(element);
 
   const wasUnread = markNotificationElementAsReadLocally(element);
   if (wasUnread) {
     decrementStoredUnreadNotificationCount(1);
+    if (window.self !== window.top) {
+      try { window.parent.postMessage({ type: "agon:notif-read-decrement" }, "*"); } catch {}
+    }
+  }
+
+  if (element) {
+    element.style.pointerEvents = "none";
   }
 
   fireAndForgetMarkOneNotificationAsRead(notificationId);
 
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
   if (shouldOpenNotificationTargetInIframeModal(link)) {
-    // Le debate-iframe-parent-loading-overlay gère le chargement visuel.
-    // On stocke seulement l'état (utile à la page de débat dans l'iframe)
-    // sans afficher page-arrival-loading-overlay, qui serait visible
-    // par transparence derrière le voile flou.
     setNotificationTransitionState({
       active: true,
       link: String(link || ""),
@@ -15763,6 +15771,8 @@ function buildIndexThematicSectionsHtml(debates) {
       if (!inner) return;
       const themeTitleHtml = theme === "Philosophie - sciences sociales"
         ? "Philosophie<span class='theme-philo-sep'> - </span><span class='theme-philo-br'><br></span>sciences sociales"
+        : theme === "Médias - divertissements"
+        ? "Médias<span class='theme-philo-sep'> - </span><span class='theme-philo-br'><br></span>divertissements"
         : escapeHtml(theme);
       sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
