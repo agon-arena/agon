@@ -149,6 +149,10 @@
       <i class="fa-regular fa-bell"></i>
       <span>Notifications</span>
     </a>
+    <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
+      <i id="push-menu-icon" class="fa-regular fa-bell"></i>
+      <span id="push-menu-label">Activer les alertes</span>
+    </button>
 <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
   <i class="fa-regular fa-envelope"></i>
   <span>Contact</span>
@@ -2635,5 +2639,14 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   });
 })();
 </script>
+<div id="push-denied-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;" onclick="closePushDeniedModal()">
+  <div style="background:#1e2d38; border:1px solid #3a4a55; border-radius:16px; padding:24px 20px; max-width:340px; width:90%; margin:auto;" onclick="event.stopPropagation()">
+    <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
+    <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
+    <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
+    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+    <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
+  </div>
+</div>
 </body>
 </html>
