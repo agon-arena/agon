@@ -6194,7 +6194,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     if (id) {
       const { data: pr, error: pendingError } = await supabase
         .from("veille_pending")
-        .select("resume, political_orientation, pending_linked_debate_id, pending_story_selection, pending_keywords")
+        .select("*")
         .eq("id", Number(id))
         .maybeSingle();
       if (pendingError) throw new Error(pendingError.message);
