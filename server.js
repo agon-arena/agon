@@ -17,7 +17,6 @@ const {
   normalizeTag,
   extractRawTagsFromItem
 } = require("./lib/tagTrends");
-const { makeJsonStore } = require("./lib/json-store");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -484,61 +483,22 @@ const debateImagesDir = path.join(__dirname, "public", "debate-images");
 const debateVideosDir = path.join(__dirname, "public", "debate-videos");
 const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
 const sharedDebateLinksMetaPath = path.join(__dirname, "data", "debate-shared-links.json");
-const veillePendingLinksMetaPath = path.join(__dirname, "data", "veille-pending-links.json");
 const storiesMetaPath = path.join(__dirname, "data", "stories.json");
-const debateStoryLinksMetaPath = path.join(__dirname, "data", "debate-story-links.json");
-const veillePendingStoriesMetaPath = path.join(__dirname, "data", "veille-pending-stories.json");
-const veillePendingKeywordsMetaPath = path.join(__dirname, "data", "veille-pending-keywords.json");
 const debateKeywordsMetaPath = path.join(__dirname, "data", "debate-keywords.json");
 const cloudBubblesPath = path.join(__dirname, "data", "cloud-bubbles.json");
 const tagExclusionsMetaPath = path.join(__dirname, "data", "tag-exclusions.json");
 const publicTagExclusionsMetaPath = path.join(__dirname, "public", "tag-exclusions.json");
-const debateEpisodeNavMetaPath = path.join(__dirname, "data", "debate-episode-nav.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
 
 const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json");
 const debateTrendsMetaPath = path.join(__dirname, "data", "debate-trends.json");
 
-const _debateContentStore = makeJsonStore(debateContentMetaPath);
-function readDebateContentMap() { return _debateContentStore.read(); }
-function writeDebateContentMap(map) { _debateContentStore.write(map); }
 
 function normalizeDebateContent(value) {
   return String(value || "").trim().slice(0, 1800);
 }
 
-function getDebateStoredContent(debateId) {
-  const map = readDebateContentMap();
-  return normalizeDebateContent(map?.[String(debateId)] || "");
-}
-
-function setDebateStoredContent(debateId, content) {
-  const map = readDebateContentMap();
-  const debateKey = String(debateId);
-  const safeContent = normalizeDebateContent(content);
-
-  if (!safeContent) {
-    delete map[debateKey];
-  } else {
-    map[debateKey] = safeContent;
-  }
-
-  writeDebateContentMap(map);
-}
-
-function removeDebateStoredContent(debateId) {
-  const map = readDebateContentMap();
-  delete map[String(debateId)];
-  writeDebateContentMap(map);
-}
-
-function ensureJsonMetaStorage(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, "{}", "utf8");
-  }
-}
 
 function normalizeKeywordList(values, max = 10, maxLength = 28) {
   const seen = new Set();
@@ -558,15 +518,28 @@ function normalizeKeywordList(values, max = 10, maxLength = 28) {
   return list.slice(0, max);
 }
 
-const _sharedDebateLinksStore = makeJsonStore(sharedDebateLinksMetaPath);
-function readSharedDebateLinksMap() { return _sharedDebateLinksStore.read(); }
-function writeSharedDebateLinksMap(map) { _sharedDebateLinksStore.write(map); }
+let _sharedLinksCache = null;
+
+function _getSharedLinksMap() {
+  if (_sharedLinksCache === null) {
+    try { _sharedLinksCache = JSON.parse(fs.readFileSync(sharedDebateLinksMetaPath, "utf8")); } catch { _sharedLinksCache = {}; }
+  }
+  return _sharedLinksCache;
+}
+
+function _persistSharedLinksMap(map) {
+  _sharedLinksCache = map;
+  supabase.from("app_config")
+    .upsert({ key: "shared_debate_links", value: map, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.error("[shared_debate_links] save error:", error.message); })
+    .catch(() => {});
+}
 
 function resolveSharedDebateId(debateId) {
   const initialId = String(debateId || "").trim();
   if (!initialId) return "";
 
-  const map = readSharedDebateLinksMap();
+  const map = _getSharedLinksMap();
   let currentId = initialId;
   const visited = new Set([currentId]);
 
@@ -584,7 +557,7 @@ function getDebateIdsInSharedSpace(debateId) {
   const canonicalId = resolveSharedDebateId(debateId);
   if (!canonicalId) return [];
 
-  const map = readSharedDebateLinksMap();
+  const map = _getSharedLinksMap();
   const ids = new Set([canonicalId]);
 
   for (const candidateId of Object.keys(map)) {
@@ -604,9 +577,9 @@ function linkDebateToSharedSpace(sourceDebateId, targetDebateId) {
     return canonicalTargetId;
   }
 
-  const map = readSharedDebateLinksMap();
+  const map = _getSharedLinksMap();
   map[sourceId] = canonicalTargetId;
-  writeSharedDebateLinksMap(map);
+  _persistSharedLinksMap(map);
   return canonicalTargetId;
 }
 
@@ -614,7 +587,7 @@ function removeDebateSharedLink(debateId) {
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return;
 
-  const map = readSharedDebateLinksMap();
+  const map = _getSharedLinksMap();
   let changed = false;
 
   if (map[debateKey]) {
@@ -629,32 +602,15 @@ function removeDebateSharedLink(debateId) {
     }
   }
 
-  if (changed) writeSharedDebateLinksMap(map);
+  if (changed) _persistSharedLinksMap(map);
 }
 
-const _veillePendingLinksStore = makeJsonStore(veillePendingLinksMetaPath);
-function readVeillePendingLinksMap() { return _veillePendingLinksStore.read(); }
-function writeVeillePendingLinksMap(map) { _veillePendingLinksStore.write(map); }
 
-function getVeillePendingLinkedDebate(id) {
-  const map = readVeillePendingLinksMap();
-  return String(map?.[String(id)] || "").trim();
-}
 
 function setVeillePendingLinkedDebate(id, debateId) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
-
-  const map = readVeillePendingLinksMap();
   const canonicalDebateId = resolveSharedDebateId(debateId);
-
-  if (!canonicalDebateId) {
-    delete map[pendingId];
-  } else {
-    map[pendingId] = canonicalDebateId;
-  }
-
-  writeVeillePendingLinksMap(map);
   supabase.from("veille_pending").update({ pending_linked_debate_id: canonicalDebateId || null }).eq("id", Number(pendingId))
     .then(({ error }) => { if (error) console.error("[veille_pending links sync]", pendingId, error.message); })
     .catch(() => {});
@@ -663,37 +619,28 @@ function setVeillePendingLinkedDebate(id, debateId) {
 function clearVeillePendingLinkedDebate(id) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
-
-  const map = readVeillePendingLinksMap();
-  if (!map[pendingId]) return;
-  delete map[pendingId];
-  writeVeillePendingLinksMap(map);
   supabase.from("veille_pending").update({ pending_linked_debate_id: null }).eq("id", Number(pendingId))
     .catch(() => {});
 }
 
-const _storiesStore = makeJsonStore(storiesMetaPath, []);
-function readStories() { return _storiesStore.read(); }
-function writeStories(stories) {
-  const safe = Array.isArray(stories) ? stories : [];
-  _storiesStore.write(safe);
-  if (safe.length) {
-    supabase.from("stories").upsert(safe.map(s => ({
-      story_id:             String(s.story_id || "").trim(),
-      story_title:          String(s.story_title || "").trim(),
-      main_actors:          Array.isArray(s.main_actors) ? s.main_actors : [],
-      central_tension:      String(s.central_tension || "").trim(),
-      keywords:             Array.isArray(s.keywords) ? s.keywords : [],
-      status:               String(s.status || "active").trim(),
-      first_episode_id:     s.first_episode_id ? String(s.first_episode_id) : null,
-      latest_episode_id:    s.latest_episode_id ? String(s.latest_episode_id) : null,
-      latest_episode_title: String(s.latest_episode_title || "").trim(),
-      created_at:           s.created_at || new Date().toISOString(),
-      updated_at:           s.updated_at || new Date().toISOString(),
-    })).filter(s => s.story_id), { onConflict: "story_id" })
-      .then(({ error }) => { if (error) console.error("[stories sync]", error.message); })
-      .catch(() => {});
-  }
+
+async function upsertStory(story) {
+  const safe = {
+    story_id:             String(story.story_id || "").trim(),
+    story_title:          String(story.story_title || "").trim(),
+    main_actors:          Array.isArray(story.main_actors) ? story.main_actors : [],
+    central_tension:      String(story.central_tension || "").trim(),
+    keywords:             Array.isArray(story.keywords) ? story.keywords : [],
+    status:               String(story.status || "active").trim(),
+    first_episode_id:     story.first_episode_id ? String(story.first_episode_id) : null,
+    latest_episode_id:    story.latest_episode_id ? String(story.latest_episode_id) : null,
+    latest_episode_title: String(story.latest_episode_title || "").trim(),
+    created_at:           story.created_at || new Date().toISOString(),
+    updated_at:           story.updated_at || new Date().toISOString()
+  };
+  const { error } = await supabase.from("stories").upsert(safe, { onConflict: "story_id" });
+  if (error) console.error("[stories upsert]", error.message);
+  return safe;
 }
 
 function slugifyStoryTitle(value) {
@@ -710,25 +657,11 @@ function createStoryId(title) {
   return `${slugifyStoryTitle(title)}-${Date.now().toString(36)}`;
 }
 
-const _debateStoryLinksStore = makeJsonStore(debateStoryLinksMetaPath);
-function readDebateStoryLinks() { return _debateStoryLinksStore.read(); }
-function writeDebateStoryLinks(map) { _debateStoryLinksStore.write(map); }
 
-function getDebateStoryId(debateId) {
-  const map = readDebateStoryLinks();
-  return String(map?.[String(debateId)] || "").trim();
-}
 
 function setDebateStoryId(debateId, storyId) {
-  const map = readDebateStoryLinks();
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return;
-  if (!storyId) {
-    delete map[debateKey];
-  } else {
-    map[debateKey] = String(storyId).trim();
-  }
-  writeDebateStoryLinks(map);
   supabase.from("debates").update({ story_id: storyId || null }).eq("id", debateKey)
     .then(() => {}).catch(e => console.error("[story_id sync Supabase]", e));
 }
@@ -737,26 +670,11 @@ function removeDebateStoryId(debateId) {
   setDebateStoryId(debateId, "");
 }
 
-const _debateEpisodeNavStore = makeJsonStore(debateEpisodeNavMetaPath);
-function readDebateEpisodeNavMap() { return _debateEpisodeNavStore.read(); }
-function writeDebateEpisodeNavMap(map) { _debateEpisodeNavStore.write(map); }
 
-function getDebateEpisodeNav(debateId) {
-  const map = readDebateEpisodeNavMap();
-  const entry = map?.[String(debateId)];
-  return entry && typeof entry === "object" ? entry : {};
-}
 
 function setDebateEpisodeNav(debateId, nav) {
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return;
-  const map = readDebateEpisodeNavMap();
-  if (!nav || typeof nav !== "object") {
-    delete map[debateKey];
-  } else {
-    map[debateKey] = nav;
-  }
-  writeDebateEpisodeNavMap(map);
   supabase.from("debates").update({ episode_nav: nav || null }).eq("id", debateKey)
     .then(({ error }) => { if (error) console.error("[episode_nav sync]", debateKey, error.message); })
     .catch(() => {});
@@ -804,21 +722,15 @@ async function recalculateStoryEpisodeNavigation(storyId) {
   const targetStoryId = String(storyId || "").trim();
   if (!targetStoryId) return;
 
-  const navMap = readDebateEpisodeNavMap();
-
   const { data: debates, error } = await supabase
     .from("debates")
     .select("id,question,created_at,source_published_at,media_extras")
     .eq("story_id", targetStoryId);
 
   if (error) throw new Error(error.message);
+  if (!debates || !debates.length) return;
 
-  if (!debates || !debates.length) {
-    writeDebateEpisodeNavMap(navMap);
-    return;
-  }
-
-  const orderedDebates = (debates || [])
+  const orderedDebates = debates
     .map((debate) => ({
       ...debate,
       _episodeSortDate: resolveDebateEpisodeSortDate(debate),
@@ -831,12 +743,10 @@ async function recalculateStoryEpisodeNavigation(storyId) {
       return a._episodeInsertionOrder - b._episodeInsertionOrder;
     });
 
-  for (let index = 0; index < orderedDebates.length; index += 1) {
-    const debate = orderedDebates[index];
+  await Promise.all(orderedDebates.map((debate, index) => {
     const previous = orderedDebates[index - 1] || null;
     const next = orderedDebates[index + 1] || null;
-
-    navMap[String(debate.id)] = {
+    const nav = {
       previous_episode_id: previous ? previous.id : null,
       previous_episode_title: previous ? previous.question || "" : null,
       previous_episode_url: previous ? `/debate?id=${encodeURIComponent(previous.id)}` : null,
@@ -844,43 +754,19 @@ async function recalculateStoryEpisodeNavigation(storyId) {
       next_episode_title: next ? next.question || "" : null,
       next_episode_url: next ? `/debate?id=${encodeURIComponent(next.id)}` : null
     };
-  }
+    return supabase.from("debates").update({ episode_nav: nav }).eq("id", debate.id)
+      .then(({ error: e }) => { if (e) console.error("[episode_nav sync]", debate.id, e.message); });
+  }));
 
-  writeDebateEpisodeNavMap(navMap);
-
-  // Sync Supabase (fire-and-forget)
-  Promise.all(
-    orderedDebates.map(debate =>
-      supabase.from("debates").update({ episode_nav: navMap[String(debate.id)] || null }).eq("id", debate.id)
-        .then(({ error }) => { if (error) console.error("[episode_nav sync]", debate.id, error.message); })
-    )
-  ).catch(() => {});
-
-  for (const debate of orderedDebates) {
-    clearDebateDetailResponseCache(debate.id);
-  }
+  for (const debate of orderedDebates) clearDebateDetailResponseCache(debate.id);
   clearDebatesApiResponseCache();
 }
 
-const _veillePendingStoriesStore = makeJsonStore(veillePendingStoriesMetaPath);
-function readVeillePendingStoriesMap() { return _veillePendingStoriesStore.read(); }
-function writeVeillePendingStoriesMap(map) { _veillePendingStoriesStore.write(map); }
 
-function getVeillePendingStorySelection(id) {
-  const map = readVeillePendingStoriesMap();
-  return map?.[String(id)] || null;
-}
 
 function setVeillePendingStorySelection(id, value) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
-  const map = readVeillePendingStoriesMap();
-  if (!value) {
-    delete map[pendingId];
-  } else {
-    map[pendingId] = value;
-  }
-  writeVeillePendingStoriesMap(map);
   supabase.from("veille_pending").update({ pending_story_selection: value || null }).eq("id", Number(pendingId))
     .then(({ error }) => { if (error) console.error("[veille_pending stories sync]", pendingId, error.message); })
     .catch(() => {});
@@ -890,9 +776,7 @@ function clearVeillePendingStorySelection(id) {
   setVeillePendingStorySelection(id, null);
 }
 
-const _veillePendingKeywordsStore = makeJsonStore(veillePendingKeywordsMetaPath);
-function readVeillePendingKeywordsMap() { return _veillePendingKeywordsStore.read(); }
-function writeVeillePendingKeywordsMap(map) { _veillePendingKeywordsStore.write(map); }
+
 
 let _cloudBubblesCache = null;
 
@@ -948,7 +832,8 @@ async function syncCloudBubbleTagIfPresent(debateId) {
   const data = await loadCloudBubbles();
   const idx = (data.bubbles || []).findIndex(b => String(b.subjectId) === id);
   if (idx < 0) return;
-  const newTag = getCloudLabelFromDebate(id, readDebateKeywordsMap());
+  const { data: row } = await supabase.from("debates").select("keywords").eq("id", id).maybeSingle();
+  const newTag = getCloudLabelFromDebate(id, { [id]: row?.keywords || [] });
   if (!newTag || newTag === data.bubbles[idx].tag) return;
   data.bubbles[idx] = { ...data.bubbles[idx], tag: newTag };
   await saveCloudBubbles(data);
@@ -1021,22 +906,10 @@ function countCloudSources(debate) {
   return sources.size;
 }
 
-function getVeillePendingKeywords(id) {
-  const map = readVeillePendingKeywordsMap();
-  return normalizeKeywordList(map?.[String(id)] || [], 10, 60);
-}
-
 function setVeillePendingKeywords(id, keywords) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
-  const map = readVeillePendingKeywordsMap();
   const normalized = normalizeKeywordList(keywords, 10, 60);
-  if (!normalized.length) {
-    delete map[pendingId];
-  } else {
-    map[pendingId] = normalized;
-  }
-  writeVeillePendingKeywordsMap(map);
   supabase.from("veille_pending").update({ pending_keywords: normalized }).eq("id", Number(pendingId))
     .then(({ error }) => { if (error) console.error("[veille_pending keywords sync]", pendingId, error.message); })
     .catch(() => {});
@@ -1046,73 +919,57 @@ function clearVeillePendingKeywords(id) {
   setVeillePendingKeywords(id, []);
 }
 
-const _debateKeywordsStore = makeJsonStore(debateKeywordsMetaPath);
-function readDebateKeywordsMap() { return _debateKeywordsStore.read(); }
-function writeDebateKeywordsMap(map) { _debateKeywordsStore.write(map); }
-
-function getDebateKeywords(debateId) {
-  const map = readDebateKeywordsMap();
-  return normalizeKeywordList(map?.[String(debateId)] || [], 10, 60);
-}
-
 
 function writeTagExclusionFiles(tags) {
   const normalizedTags = normalizeExcludedTags(tags);
-  fs.mkdirSync(path.dirname(tagExclusionsMetaPath), { recursive: true });
   fs.mkdirSync(path.dirname(publicTagExclusionsMetaPath), { recursive: true });
-  fs.writeFileSync(tagExclusionsMetaPath, JSON.stringify(normalizedTags, null, 2), "utf8");
   fs.writeFileSync(publicTagExclusionsMetaPath, JSON.stringify(normalizedTags, null, 2), "utf8");
   replaceExcludedTags(normalizedTags);
+  supabase.from("app_config")
+    .upsert({ key: "tag_exclusions", value: normalizedTags, updated_at: new Date().toISOString() })
+    .then(({ error }) => { if (error) console.error("[tag_exclusions] save error:", error.message); })
+    .catch(() => {});
   return getExcludedTags();
 }
 
 function readTagExclusionsForAdmin() {
   try {
-    if (fs.existsSync(tagExclusionsMetaPath)) {
-      const parsed = JSON.parse(fs.readFileSync(tagExclusionsMetaPath, "utf8") || "[]");
-      return writeTagExclusionFiles(parsed);
+    if (fs.existsSync(publicTagExclusionsMetaPath)) {
+      const parsed = JSON.parse(fs.readFileSync(publicTagExclusionsMetaPath, "utf8") || "[]");
+      return normalizeExcludedTags(parsed);
     }
   } catch (error) {
     console.error("Erreur lecture exclusions tags:", error);
   }
-
-  return writeTagExclusionFiles(getExcludedTags());
+  return getExcludedTags();
 }
 
-readTagExclusionsForAdmin();
 
-
-function setDebateKeywords(debateId, keywords) {
+async function setDebateKeywords(debateId, keywords) {
   const debateKey = String(debateId || "").trim();
-  if (!debateKey) return;
-  const map = readDebateKeywordsMap();
+  if (!debateKey) return [];
   const normalized = normalizeKeywordList(keywords, 10, 60);
-  if (!normalized.length) {
-    delete map[debateKey];
-  } else {
-    map[debateKey] = normalized;
-  }
-  writeDebateKeywordsMap(map);
   supabase.from("debates").update({ keywords: normalized }).eq("id", debateKey)
     .then(({ error }) => { if (error) console.error("[keywords sync]", debateKey, error.message); })
     .catch(() => {});
+  return normalized;
 }
 
-function removeDebateKeyword(debateId, keyword) {
+async function removeDebateKeyword(debateId, keyword) {
   const debateKey = String(debateId || "").trim();
   const keywordKey = normalizeTag(keyword);
   if (!debateKey || !keywordKey) return [];
-
-  const currentKeywords = getDebateKeywords(debateKey);
-  const nextKeywords = currentKeywords.filter((item) => normalizeTag(item) !== keywordKey);
-  setDebateKeywords(debateKey, nextKeywords);
-  return nextKeywords;
+  const { data: row } = await supabase.from("debates").select("keywords").eq("id", debateKey).maybeSingle();
+  const current = normalizeKeywordList(row?.keywords || [], 10, 60);
+  const next = current.filter((item) => normalizeTag(item) !== keywordKey);
+  return setDebateKeywords(debateKey, next);
 }
 
-const _debateTrendsStore = makeJsonStore(debateTrendsMetaPath);
-function readDebateTrendsMap() { return _debateTrendsStore.read(); }
+let _debateTrendsCache = null;
+
+function readDebateTrendsMap() { return _debateTrendsCache || {}; }
 function writeDebateTrendsMap(map) {
-  _debateTrendsStore.write(map);
+  _debateTrendsCache = map;
   supabase.from("app_config")
     .upsert({ key: "debate_trends", value: map, updated_at: new Date().toISOString() })
     .then(({ error }) => { if (error) console.error("[debate-trends] save error:", error.message); });
@@ -1126,17 +983,20 @@ async function initDebateTrendsCache() {
       .eq("key", "debate_trends")
       .maybeSingle();
     if (!error && data?.value && typeof data.value === "object") {
-      _debateTrendsStore.write(data.value);
+      _debateTrendsCache = data.value;
       return;
     }
   } catch {}
   // Migration one-shot depuis fichier local vers Supabase
-  const local = _debateTrendsStore.read();
-  if (Object.keys(local).length) {
-    supabase.from("app_config")
-      .upsert({ key: "debate_trends", value: local, updated_at: new Date().toISOString() })
-      .catch(e => console.error("[debate-trends] migration error:", e.message));
-  }
+  try {
+    const local = _readJsonFile(debateTrendsMetaPath, {});
+    if (Object.keys(local).length) {
+      _debateTrendsCache = local;
+      supabase.from("app_config")
+        .upsert({ key: "debate_trends", value: local, updated_at: new Date().toISOString() })
+        .catch(e => console.error("[debate-trends] migration error:", e.message));
+    }
+  } catch {}
 }
 
 function setDebateTrend(debateId, trendData) {
@@ -1184,27 +1044,25 @@ function normalizeStorySelection(value) {
   return normalized;
 }
 
-function saveStoryForDebateSelection(selection, debatePayload) {
+async function saveStoryForDebateSelection(selection, debatePayload) {
   const normalized = normalizeStorySelection(selection);
   if (!normalized) return null;
 
-  const stories = readStories();
   const now = nowIso();
   const debateId = String(debatePayload?.debateId || "").trim() || null;
   const latestTitle = String(debatePayload?.question || "").trim();
 
   if (normalized.selectionMode === "existing" && normalized.matchedStoryId) {
-    const story = stories.find((item) => String(item.story_id) === normalized.matchedStoryId);
-    if (!story) {
-      throw new Error("Histoire existante introuvable au moment de la publication.");
-    }
+    const { data: story, error } = await supabase.from("stories").select("*").eq("story_id", normalized.matchedStoryId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!story) throw new Error("Histoire existante introuvable au moment de la publication.");
 
-    story.updated_at = now;
-    if (debateId && !story.first_episode_id) story.first_episode_id = debateId;
-    if (debateId) story.latest_episode_id = debateId;
-    if (latestTitle) story.latest_episode_title = latestTitle;
-    writeStories(stories);
-    return story;
+    const updates = { updated_at: now };
+    if (debateId && !story.first_episode_id) updates.first_episode_id = debateId;
+    if (debateId) updates.latest_episode_id = debateId;
+    if (latestTitle) updates.latest_episode_title = latestTitle;
+    await supabase.from("stories").update(updates).eq("story_id", normalized.matchedStoryId);
+    return { ...story, ...updates };
   }
 
   if (normalized.selectionMode === "new" && normalized.newStory) {
@@ -1221,73 +1079,12 @@ function saveStoryForDebateSelection(selection, debatePayload) {
       latest_episode_id: debateId,
       latest_episode_title: latestTitle
     };
-    stories.unshift(story);
-    writeStories(stories);
-    return story;
+    return upsertStory(story);
   }
 
   return null;
 }
 
-function ensureDebateAssetsStorage() {
-  fs.mkdirSync(debateImagesDir, { recursive: true });
-  fs.mkdirSync(debateVideosDir, { recursive: true });
-  fs.mkdirSync(path.dirname(debateAssetsMetaPath), { recursive: true });
-
-  if (!fs.existsSync(debateAssetsMetaPath)) {
-    fs.writeFileSync(debateAssetsMetaPath, "{}", "utf8");
-  }
-}
-
-const _debateAssetsStore = makeJsonStore(debateAssetsMetaPath);
-function readDebateAssetsMap() { return _debateAssetsStore.read(); }
-function writeDebateAssetsMap(map) { _debateAssetsStore.write(map); }
-
-function getDebateAssetsEntry(debateId) {
-  const map = readDebateAssetsMap();
-  const entry = map?.[String(debateId)];
-  return entry && typeof entry === "object" ? entry : {};
-}
-
-function updateDebateAssetsEntry(debateId, partial) {
-  const map = readDebateAssetsMap();
-  const debateKey = String(debateId);
-  const previous = map?.[debateKey] && typeof map[debateKey] === "object" ? map[debateKey] : {};
-  const next = {
-    ...previous,
-    ...partial
-  };
-
-  if (!String(next.image_url || "").trim()) {
-    delete next.image_url;
-  }
-
-  if (!String(next.video_url || "").trim()) {
-    delete next.video_url;
-  }
-
-  if (!Object.keys(next).length) {
-    delete map[debateKey];
-  } else {
-    map[debateKey] = next;
-  }
-
-  writeDebateAssetsMap(map);
-}
-
-function removeDebateAssetsEntry(debateId) {
-  const map = readDebateAssetsMap();
-  delete map[String(debateId)];
-  writeDebateAssetsMap(map);
-}
-
-function getDebateStoredImageUrl(debateId) {
-  return String(getDebateAssetsEntry(debateId).image_url || "").trim();
-}
-
-function getDebateStoredVideoUrl(debateId) {
-  return String(getDebateAssetsEntry(debateId).video_url || "").trim();
-}
 
 function getImageExtensionFromMimeType(mimeType) {
   const normalized = String(mimeType || "").toLowerCase();
@@ -1365,11 +1162,11 @@ function getDebateDbMediaUrl(debate, key) {
 }
 
 function getResolvedDebateImageUrl(debate) {
-  return getDebateDbMediaUrl(debate, "image_url") || getDebateStoredImageUrl(debate?.id);
+  return getDebateDbMediaUrl(debate, "image_url");
 }
 
 function getResolvedDebateVideoUrl(debate) {
-  return getDebateDbMediaUrl(debate, "video_url") || getDebateStoredVideoUrl(debate?.id);
+  return getDebateDbMediaUrl(debate, "video_url");
 }
 
 function isStoragePublicUrl(publicUrl) {
@@ -1444,36 +1241,12 @@ async function persistDebateMediaUrls(debateId, media = {}) {
   const imageUrl = String(media.image_url || "").trim();
   const videoUrl = String(media.video_url || "").trim();
 
-  updateDebateAssetsEntry(debateId, {
-    image_url: imageUrl,
-    video_url: videoUrl
-  });
-
   const { error } = await supabase
     .from("debates")
-    .update({
-      image_url: imageUrl,
-      video_url: videoUrl
-    })
+    .update({ image_url: imageUrl, video_url: videoUrl })
     .eq("id", debateId);
 
-  if (error) {
-    const message = String(error.message || "");
-    const details = String(error.details || "");
-    const hint = String(error.hint || "");
-    const combined = `${message} ${details} ${hint}`.toLowerCase();
-
-    if (
-      combined.includes("image_url") ||
-      combined.includes("video_url") ||
-      combined.includes("column")
-    ) {
-      console.warn("Colonnes image_url/video_url absentes dans debates : fallback local conservé.");
-      return;
-    }
-
-    throw error;
-  }
+  if (error) throw error;
 }
 
 async function saveUploadedDebateImage(debateId, imageUpload, options = {}) {
@@ -1575,14 +1348,8 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
 
 function enrichDebateWithStoredImage(debate) {
   if (!debate) return debate;
-  const normalizedDbContent = normalizeDebateContent(debate.content || "");
-  const normalizedStoredContent = getDebateStoredContent(debate?.id);
-  const resolvedContent = normalizedStoredContent.length > normalizedDbContent.length
-    ? normalizedStoredContent
-    : normalizedDbContent;
-  const storyId = debate?.story_id ?? getDebateStoryId(debate?.id);
-  const episodeNav = getDebateEpisodeNav(debate?.id);
-
+  const resolvedContent = normalizeDebateContent(debate.content || "");
+  const episodeNav = debate?.episode_nav && typeof debate.episode_nav === "object" ? debate.episode_nav : {};
   const trendData = getDebateTrend(debate?.id);
   const trendScore = trendData !== null ? (trendData.trend ?? 0) : 0;
 
@@ -1591,8 +1358,8 @@ function enrichDebateWithStoredImage(debate) {
     image_url: getResolvedDebateImageUrl(debate),
     video_url: getResolvedDebateVideoUrl(debate),
     content: resolvedContent,
-    keywords: getDebateKeywords(debate?.id),
-    story_id: storyId || null,
+    keywords: Array.isArray(debate?.keywords) ? debate.keywords : [],
+    story_id: debate?.story_id || null,
     trend: trendScore,
     previous_episode_id: episodeNav.previous_episode_id || null,
     previous_episode_title: episodeNav.previous_episode_title || null,
@@ -3704,7 +3471,7 @@ function buildAdminTagOccurrenceStats(debates = [], cloudData = { bubbles: [] })
   const now = new Date();
   const enrichedItems = (Array.isArray(debates) ? debates : []).map((debate) => ({
     ...debate,
-    keywords: getDebateKeywords(debate?.id)
+    keywords: Array.isArray(debate?.keywords) ? debate.keywords : []
   }));
   const bubbleTags = (Array.isArray(cloudData.bubbles) ? cloudData.bubbles : []).map((b) => ({
     tag: b.tag,
@@ -3717,7 +3484,7 @@ function buildAdminTagOccurrenceStats(debates = [], cloudData = { bubbles: [] })
 
   enrichedItems.forEach((debate) => {
     const rawTags = extractRawTagsFromItem(debate);
-    const keywordTags = getDebateKeywords(debate?.id);
+    const keywordTags = Array.isArray(debate?.keywords) ? debate.keywords : [];
     const seenKeys = new Set();
 
     rawTags.forEach((rawTag) => {
@@ -3812,55 +3579,55 @@ app.post("/api/admin/detected-tags/exclude", requireAdmin, (req, res) => {
   }
 });
 
-app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), (req, res) => {
+app.post("/api/admin/debate/:id/keywords", requireAdmin, express.json(), async (req, res) => {
   try {
     const debateId = String(req.params.id || "").trim();
     const keyword = String(req.body?.keyword || "").trim();
     if (!debateId || !normalizeTag(keyword)) {
       return res.status(400).json({ error: "Arène ou tag manquant." });
     }
-    const current = getDebateKeywords(debateId);
-    if (!current.map(normalizeTag).includes(normalizeTag(keyword))) {
-      setDebateKeywords(debateId, [...current, keyword]);
-      syncCloudBubbleTagIfPresent(debateId).catch(console.error);
-    }
-    return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
+    const { data: row } = await supabase.from("debates").select("keywords").eq("id", debateId).maybeSingle();
+    const current = normalizeKeywordList(row?.keywords || [], 10, 60);
+    const needsAdd = !current.map(normalizeTag).includes(normalizeTag(keyword));
+    const keywords = needsAdd ? await setDebateKeywords(debateId, [...current, keyword]) : current;
+    if (needsAdd) syncCloudBubbleTagIfPresent(debateId).catch(console.error);
+    return res.json({ success: true, debateId, keywords });
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur ajout tag.");
   }
 });
 
-app.put("/api/admin/debate/:id/keywords/primary", requireAdmin, express.json(), (req, res) => {
+app.put("/api/admin/debate/:id/keywords/primary", requireAdmin, express.json(), async (req, res) => {
   try {
     const debateId = String(req.params.id || "").trim();
     const primary = String(req.body?.primary || "").trim();
     if (!debateId || !normalizeTag(primary)) {
       return res.status(400).json({ error: "Arène ou tag manquant." });
     }
-    const current = getDebateKeywords(debateId);
+    const { data: row } = await supabase.from("debates").select("keywords").eq("id", debateId).maybeSingle();
+    const current = normalizeKeywordList(row?.keywords || [], 10, 60);
     const primaryKey = normalizeTag(primary);
     const idx = current.findIndex((k) => normalizeTag(k) === primaryKey);
     if (idx <= 0) return res.json({ success: true, debateId, keywords: current });
     const reordered = [current[idx], ...current.slice(0, idx), ...current.slice(idx + 1)];
-    setDebateKeywords(debateId, reordered);
+    const keywords = await setDebateKeywords(debateId, reordered);
     syncCloudBubbleTagIfPresent(debateId).catch(console.error);
-    return res.json({ success: true, debateId, keywords: getDebateKeywords(debateId) });
+    return res.json({ success: true, debateId, keywords });
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur promotion tag.");
   }
 });
 
-app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, (req, res) => {
+app.delete("/api/admin/debate/:id/keywords/:keyword", requireAdmin, async (req, res) => {
   try {
     const debateId = String(req.params.id || "").trim();
     const keyword = decodeURIComponent(String(req.params.keyword || "")).trim();
     if (!debateId || !normalizeTag(keyword)) {
       return res.status(400).json({ error: "Arène ou tag manquant." });
     }
-
-    const keywords = removeDebateKeyword(debateId, keyword);
+    const keywords = await removeDebateKeyword(debateId, keyword);
     syncCloudBubbleTagIfPresent(debateId).catch(console.error);
     return res.json({ success: true, debateId, removedKeyword: keyword, keywords });
   } catch (error) {
@@ -3882,19 +3649,18 @@ app.post("/api/admin/tags/rename", requireAdmin, express.json(), async (req, res
       return res.status(400).json({ error: "Le nouveau nom est identique." });
     }
 
-    const map = readDebateKeywordsMap();
+    const { data: allDebates } = await supabase.from("debates").select("id, keywords").not("keywords", "is", null);
     let updatedDebates = 0;
     const supabaseUpdates = [];
-    for (const [debateId, keywords] of Object.entries(map)) {
-      const updated = keywords.map((k) => normalizeTag(k) === oldKey ? newTag : k);
-      if (updated.some((k, i) => k !== keywords[i])) {
-        map[debateId] = updated;
+    for (const row of (allDebates || [])) {
+      if (!Array.isArray(row.keywords)) continue;
+      const updated = row.keywords.map((k) => normalizeTag(k) === oldKey ? newTag : k);
+      if (updated.some((k, i) => k !== row.keywords[i])) {
         updatedDebates++;
-        supabaseUpdates.push(supabase.from("debates").update({ keywords: updated }).eq("id", debateId));
+        supabaseUpdates.push(supabase.from("debates").update({ keywords: updated }).eq("id", row.id));
       }
     }
-    writeDebateKeywordsMap(map);
-    if (supabaseUpdates.length) Promise.all(supabaseUpdates).catch(() => {});
+    if (supabaseUpdates.length) await Promise.all(supabaseUpdates);
 
     // Mise à jour bulles
     const cloudData = await loadCloudBubbles();
@@ -3916,19 +3682,18 @@ app.delete("/api/admin/tags/delete-all", requireAdmin, express.json(), async (re
     if (!normalizeTag(tag)) return res.status(400).json({ error: "Tag manquant." });
     const tagKey = normalizeTag(tag);
 
-    const map = readDebateKeywordsMap();
+    const { data: allDebates } = await supabase.from("debates").select("id, keywords").not("keywords", "is", null);
     let updatedDebates = 0;
     const supabaseDeletes = [];
-    for (const [debateId, keywords] of Object.entries(map)) {
-      const filtered = keywords.filter((k) => normalizeTag(k) !== tagKey);
-      if (filtered.length !== keywords.length) {
-        map[debateId] = filtered;
+    for (const row of (allDebates || [])) {
+      if (!Array.isArray(row.keywords)) continue;
+      const filtered = row.keywords.filter((k) => normalizeTag(k) !== tagKey);
+      if (filtered.length !== row.keywords.length) {
         updatedDebates++;
-        supabaseDeletes.push(supabase.from("debates").update({ keywords: filtered }).eq("id", debateId));
+        supabaseDeletes.push(supabase.from("debates").update({ keywords: filtered }).eq("id", row.id));
       }
     }
-    writeDebateKeywordsMap(map);
-    if (supabaseDeletes.length) Promise.all(supabaseDeletes).catch(() => {});
+    if (supabaseDeletes.length) await Promise.all(supabaseDeletes);
 
     // Supprime des bulles
     const cloudData = await loadCloudBubbles();
@@ -4268,8 +4033,6 @@ app.delete("/api/admin/reports/delete-all-targets", requireAdmin, async (req, re
 
       if (debateRow.image_url) await deleteStoredMediaAsset(debateRow.image_url, debateImagesDir);
       if (debateRow.video_url) await deleteStoredMediaAsset(debateRow.video_url, debateVideosDir);
-      removeDebateAssetsEntry(debateId);
-      removeDebateStoredContent(debateId);
     }
 
     // Supprime les arguments signalés restants (pas déjà supprimés via un débat)
@@ -4327,20 +4090,6 @@ app.delete("/api/admin/reports/by-target", requireAdmin, async (req, res) => {
       console.error(error);
       return sendServerError(res, "Erreur suppression signalement.");
     }
-
-    const storedImageUrl = getDebateStoredImageUrl(debateId);
-    const storedVideoUrl = getDebateStoredVideoUrl(debateId);
-
-    if (storedImageUrl) {
-      deleteLocalMediaFile(storedImageUrl, debateImagesDir);
-    }
-
-    if (storedVideoUrl) {
-      deleteLocalMediaFile(storedVideoUrl, debateVideosDir);
-    }
-
-    removeDebateAssetsEntry(debateId);
-    removeDebateStoredContent(debateId);
 
     res.json({ success: true });
   } catch (error) {
@@ -4536,7 +4285,7 @@ app.put("/api/admin/debate/:id", async (req, res) => {
 
     const { data: currentRow } = await supabase
       .from("debates")
-      .select("image_url, video_url, source_url, source_published_at, media_extras, creator_key")
+      .select("image_url, video_url, source_url, source_published_at, media_extras, creator_key, story_id")
       .eq("id", req.params.id)
       .single();
 
@@ -4601,9 +4350,8 @@ app.put("/api/admin/debate/:id", async (req, res) => {
       }
     }
 
-    setDebateStoredContent(req.params.id, normalizedContent);
     if ('story_id' in (req.body || {})) {
-      const previousStoryId = getDebateStoryId(req.params.id);
+      const previousStoryId = currentRow?.story_id || null;
       setDebateStoryId(req.params.id, story_id || "");
       const newStoryId = String(story_id || "").trim();
       if (newStoryId) await recalculateStoryEpisodeNavigation(newStoryId);
@@ -5111,31 +4859,16 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
       return res.status(500).json({ error: "Erreur création débat." });
     }
 
-    setDebateStoredContent(data.id, normalizedContent);
-
     if (image_upload) {
       try {
         const storedImageUrl = await saveUploadedDebateImage(data.id, image_upload);
-        await persistDebateMediaUrls(data.id, {
-          image_url: storedImageUrl,
-          video_url: ""
-        });
+        await persistDebateMediaUrls(data.id, { image_url: storedImageUrl, video_url: "" });
       } catch (imageError) {
         console.error(imageError);
         return res.status(400).json({ error: "Erreur enregistrement image." });
       }
-    } else {
-      await persistDebateMediaUrls(data.id, {
-        image_url: "",
-        video_url: normalizedResourceMode !== "video" ? "" : getDebateStoredVideoUrl(data.id)
-      });
-    }
-
-    if (normalizedResourceMode !== "video") {
-      await persistDebateMediaUrls(data.id, {
-        image_url: image_upload ? getDebateStoredImageUrl(data.id) : "",
-        video_url: ""
-      });
+    } else if (normalizedResourceMode !== "video") {
+      await persistDebateMediaUrls(data.id, { image_url: "", video_url: "" });
     }
 
     clearDebatesApiResponseCache();
@@ -5537,7 +5270,7 @@ app.delete("/api/debates/:id", async (req, res) => {
     await supabase.from("notifications").delete().eq("debate_id", debateId);
     const storedImageUrl = debateRow.image_url;
     const storedVideoUrl = debateRow.video_url;
-    const linkedStoryId = getDebateStoryId(debateId);
+    const linkedStoryId = debateRow.story_id || null;
 
     const { error: deleteErr } = await supabase.from("debates").delete().eq("id", debateId);
 
@@ -5558,8 +5291,6 @@ app.delete("/api/debates/:id", async (req, res) => {
     removeDebateSharedLink(debateId);
     removeDebateStoryId(debateId);
     removeDebateEpisodeNav(debateId);
-    removeDebateAssetsEntry(debateId);
-    removeDebateStoredContent(debateId);
 
     invalidateSharedDebateCaches(debateId);
     if (linkedStoryId) {
@@ -6152,10 +5883,10 @@ async function loadVeillePending() {
     resume: r.resume,
     sources: r.sources,
     links: r.links || [],
-    keywords: getVeillePendingKeywords(r.id),
+    keywords: normalizeKeywordList(r.pending_keywords || [], 10, 60),
     addedAt: r.added_at,
-    linkedDebateId: getVeillePendingLinkedDebate(r.id),
-    storySelection: getVeillePendingStorySelection(r.id)
+    linkedDebateId: String(r.pending_linked_debate_id || "").trim(),
+    storySelection: r.pending_story_selection || null
   }));
 }
 
@@ -6195,10 +5926,9 @@ app.post("/api/veille/receive", async (req, res) => {
 
 app.get("/api/veille/stories", async (req, res) => {
   try {
-    const stories = readStories()
-      .filter((story) => String(story.status || "active").trim().toLowerCase() !== "archived")
-      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
-    res.json({ stories });
+    const { data, error } = await supabase.from("stories").select("*").neq("status", "archived").order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    res.json({ stories: data || [] });
   } catch (error) {
     res.status(500).json({ stories: [], error: error.message });
   }
@@ -6209,7 +5939,8 @@ app.get("/api/veille/stories/:storyId/debates", async (req, res) => {
   if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
 
   try {
-    const story = readStories().find((item) => String(item.story_id || "").trim() === storyId);
+    const { data: story, error: storyErr } = await supabase.from("stories").select("*").eq("story_id", storyId).maybeSingle();
+    if (storyErr) throw new Error(storyErr.message);
     if (!story) {
       return res.status(404).json({ ok: false, error: "Histoire introuvable." });
     }
@@ -6254,9 +5985,8 @@ app.delete("/api/veille/stories/:storyId/debates/:debateId", requireAdmin, async
   }
 
   try {
-    const previousStoryId = getDebateStoryId(debateId) || storyId;
-    setDebateStoryId(debateId, "");
-    await supabase.from("debates").update({ story_id: null }).eq("id", debateId);
+    const previousStoryId = storyId;
+    await supabase.from("debates").update({ story_id: null, episode_nav: null }).eq("id", debateId);
     if (previousStoryId) await recalculateStoryEpisodeNavigation(previousStoryId);
     invalidateDebateCaches(debateId);
     res.json({ ok: true, debate_id: debateId, removed_story_id: storyId });
@@ -6272,10 +6002,9 @@ app.post("/api/veille/stories", requireAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: "Titre d’histoire requis." });
     }
 
-    const stories = readStories();
-    const duplicate = stories.find((item) => String(item.story_title || "").trim().toLowerCase() === title.toLowerCase());
-    if (duplicate) {
-      return res.json({ ok: true, story: duplicate, created: false, duplicate: true });
+    const { data: existing } = await supabase.from("stories").select("*").ilike("story_title", title).maybeSingle();
+    if (existing) {
+      return res.json({ ok: true, story: existing, created: false, duplicate: true });
     }
 
     const story = {
@@ -6292,9 +6021,8 @@ app.post("/api/veille/stories", requireAdmin, async (req, res) => {
       latest_episode_title: ""
     };
 
-    stories.unshift(story);
-    writeStories(stories);
-    res.json({ ok: true, story, created: true });
+    const saved = await upsertStory(story);
+    res.json({ ok: true, story: saved, created: true });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message || "Erreur création histoire" });
   }
@@ -6305,19 +6033,17 @@ app.put("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
 
   try {
-    const stories = readStories();
-    const story = stories.find((item) => String(item.story_id || "").trim() === storyId);
-    if (!story) {
-      return res.status(404).json({ ok: false, error: "Histoire introuvable." });
-    }
+    const { data: story, error: findErr } = await supabase.from("stories").select("*").eq("story_id", storyId).maybeSingle();
+    if (findErr) throw new Error(findErr.message);
+    if (!story) return res.status(404).json({ ok: false, error: "Histoire introuvable." });
 
     const nextTitle = String(req.body?.story_title || "").trim();
+    const updates = { updated_at: nowIso() };
+    if (nextTitle) updates.story_title = nextTitle;
 
-    if (nextTitle) story.story_title = nextTitle;
-    story.updated_at = nowIso();
-
-    writeStories(stories);
-    res.json({ ok: true, story });
+    const { error: updateErr } = await supabase.from("stories").update(updates).eq("story_id", storyId);
+    if (updateErr) throw new Error(updateErr.message);
+    res.json({ ok: true, story: { ...story, ...updates } });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -6328,27 +6054,11 @@ app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   if (!storyId) return res.status(400).json({ ok: false, error: "storyId requis" });
 
   try {
-    const stories = readStories();
-    const nextStories = stories.filter((item) => String(item.story_id || "").trim() !== storyId);
-    writeStories(nextStories);
+    const { data: affectedRows } = await supabase.from("debates").select("id").eq("story_id", storyId);
+    const affectedDebateIds = (affectedRows || []).map(r => String(r.id));
 
-    const storyLinks = readDebateStoryLinks();
-    const affectedDebateIds = Object.entries(storyLinks)
-      .filter(([, linkedStoryId]) => String(linkedStoryId || "").trim() === storyId)
-      .map(([debateId]) => String(debateId));
-
-    affectedDebateIds.forEach((debateId) => {
-      delete storyLinks[debateId];
-    });
-    writeDebateStoryLinks(storyLinks);
-
-    await supabase.from("debates").update({ story_id: null }).eq("story_id", storyId);
-
-    const navMap = readDebateEpisodeNavMap();
-    affectedDebateIds.forEach((debateId) => {
-      delete navMap[debateId];
-    });
-    writeDebateEpisodeNavMap(navMap);
+    await supabase.from("debates").update({ story_id: null, episode_nav: null }).eq("story_id", storyId);
+    await supabase.from("stories").delete().eq("story_id", storyId);
 
     res.json({ ok: true, removed_story_id: storyId, affectedDebateIds });
   } catch (error) {
@@ -6409,16 +6119,17 @@ app.get("/api/cloud-bubbles", async (req, res) => {
 
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    _debateKeywordsStore.invalidate();
-    const keywordsMap = readDebateKeywordsMap();
     const now = new Date().toISOString();
 
     const { data: allDebates, error } = await supabase
       .from("debates")
-      .select("id, question, source_url, media_extras, created_at, source_published_at")
+      .select("id, question, source_url, media_extras, created_at, source_published_at, keywords")
       .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
+
+    const keywordsMap = {};
+    for (const d of (allDebates || [])) if (Array.isArray(d.keywords) && d.keywords.length) keywordsMap[d.id] = d.keywords;
 
     // Construit tous les candidats valides (label + sources), dédoublonnés par tag normalisé
     const seenTags = new Set();
@@ -6609,18 +6320,18 @@ app.post("/api/admin/veille/publish", async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
     const safeQuestion = String(question || "").trim().slice(0, 110);
-    let pendingResume = "";
-    let pendingPoliticalOrientation = null;
+    let pendingRow = null;
     if (id) {
-      const { data: pendingRow, error: pendingError } = await supabase
+      const { data: pr, error: pendingError } = await supabase
         .from("veille_pending")
-        .select("resume, political_orientation")
+        .select("resume, political_orientation, pending_linked_debate_id, pending_story_selection, pending_keywords")
         .eq("id", Number(id))
         .maybeSingle();
       if (pendingError) throw new Error(pendingError.message);
-      pendingResume = String(pendingRow?.resume || "").trim();
-      pendingPoliticalOrientation = pendingRow?.political_orientation || null;
+      pendingRow = pr;
     }
+    const pendingResume = String(pendingRow?.resume || "").trim();
+    const pendingPoliticalOrientation = pendingRow?.political_orientation || null;
 
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
@@ -6637,11 +6348,11 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     const normalizedPositionA = String(positionA || "").trim();
     const normalizedPositionB = String(positionB || "").trim();
     const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
-    const requestedLinkedDebateId = String(linkedDebateId || getVeillePendingLinkedDebate(id) || "").trim();
+    const requestedLinkedDebateId = String(linkedDebateId || pendingRow?.pending_linked_debate_id || "").trim();
     const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
-    const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || getVeillePendingStorySelection(id));
+    const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || pendingRow?.pending_story_selection);
     const resolvedContent = normalizeDebateContent(String(resume || "").trim() || pendingResume || String(question || "").trim());
-    const resolvedKeywords = normalizeKeywordList(Array.isArray(keywords) ? keywords : getVeillePendingKeywords(id));
+    const resolvedKeywords = normalizeKeywordList(Array.isArray(keywords) ? keywords : (pendingRow?.pending_keywords || []));
 
     if (!String(resume || "").trim() && pendingResume) {
       console.warn(`[veille publish] resume manquant dans la requete, fallback sur veille_pending pour ${id}.`);
@@ -6759,7 +6470,7 @@ const previousSourceCount = previousSourceKeys.size;
       id: String(d.id),
       question: String(d.question || ""),
       resume: String(d.content || "").slice(0, 200),
-      tags: getDebateKeywords(d.id),
+      tags: normalizeKeywordList(d.keywords || [], 10, 60),
       sourceCount: previousSourceCount,
       created_at: d.created_at
     };
@@ -6831,7 +6542,6 @@ const previousSourceCount = previousSourceKeys.size;
         await recalculateStoryEpisodeNavigation(finalStory.story_id);
       }
     }
-    if (resume) setDebateStoredContent(data.id, resume);
     if (sourceUrl) {
       try { await getExternalLinkPreview(sourceUrl); } catch {}
     }
@@ -7512,99 +7222,124 @@ app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   purgeExternalPreviewCacheDir(500);
   initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
-  // Hydratation keywords depuis Supabase si le JSON local est vide (après redéploiement)
+  const _readJsonFile = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return fallback; } };
+  // Migration one-shot debate-content.json → debates.content
   try {
-    const localKeywords = readDebateKeywordsMap();
-    if (!Object.keys(localKeywords).length) {
-      const { data: rows } = await supabase.from("debates").select("id, keywords").not("keywords", "is", null);
-      if (rows && rows.length) {
-        const hydrated = {};
-        for (const row of rows) {
-          if (Array.isArray(row.keywords) && row.keywords.length) hydrated[String(row.id)] = row.keywords;
-        }
-        if (Object.keys(hydrated).length) {
-          writeDebateKeywordsMap(hydrated);
-          console.log(`[Agôn] Keywords hydratés depuis Supabase : ${Object.keys(hydrated).length} débats.`);
-        }
+    const localContent = _readJsonFile(debateContentMetaPath, {});
+    const entries = Object.entries(localContent).filter(([, v]) => v);
+    if (entries.length) {
+      const { data: dbRows } = await supabase.from("debates")
+        .select("id, content")
+        .in("id", entries.map(([id]) => id));
+      const dbMap = {};
+      for (const row of (dbRows || [])) dbMap[String(row.id)] = String(row.content || "");
+      const toMigrate = entries.filter(([id, content]) => content.length > (dbMap[id] || "").length);
+      if (toMigrate.length) {
+        await Promise.all(toMigrate.map(([id, content]) =>
+          supabase.from("debates").update({ content }).eq("id", id).catch(() => {})
+        ));
+        console.log(`[Agôn] Content migré vers Supabase : ${toMigrate.length} débats.`);
       }
     }
   } catch (e) {
-    console.error("[Agôn] Erreur hydratation keywords:", e.message);
+    console.error("[Agôn] Erreur migration debate-content:", e.message);
   }
-  // Hydratation episode_nav depuis Supabase si le JSON local est vide
+  // Migration one-shot debate-assets.json → debates.image_url / video_url
   try {
-    const localNav = readDebateEpisodeNavMap();
-    if (!Object.keys(localNav).length) {
-      const { data: rows } = await supabase.from("debates").select("id, episode_nav").not("episode_nav", "is", null);
-      if (rows && rows.length) {
-        const hydrated = {};
-        for (const row of rows) {
-          if (row.episode_nav && typeof row.episode_nav === "object") hydrated[String(row.id)] = row.episode_nav;
-        }
-        if (Object.keys(hydrated).length) {
-          writeDebateEpisodeNavMap(hydrated);
-          console.log(`[Agôn] Episode nav hydraté depuis Supabase : ${Object.keys(hydrated).length} débats.`);
-        }
+    const localAssets = _readJsonFile(debateAssetsMetaPath, {});
+    const entries = Object.entries(localAssets).filter(([, v]) => v && typeof v === "object" && (v.image_url || v.video_url));
+    if (entries.length) {
+      const { data: dbRows } = await supabase.from("debates")
+        .select("id, image_url, video_url")
+        .in("id", entries.map(([id]) => id));
+      const dbMap = {};
+      for (const row of (dbRows || [])) dbMap[String(row.id)] = row;
+      const toMigrate = entries.filter(([id, v]) => {
+        const db = dbMap[id] || {};
+        return (v.image_url && !db.image_url) || (v.video_url && !db.video_url);
+      });
+      if (toMigrate.length) {
+        await Promise.all(toMigrate.map(([id, v]) => {
+          const db = dbMap[id] || {};
+          return supabase.from("debates").update({
+            image_url: db.image_url || v.image_url || "",
+            video_url: db.video_url || v.video_url || ""
+          }).eq("id", id).catch(() => {});
+        }));
+        console.log(`[Agôn] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
       }
     }
   } catch (e) {
-    console.error("[Agôn] Erreur hydratation episode_nav:", e.message);
+    console.error("[Agôn] Erreur migration debate-assets:", e.message);
   }
-  // Hydratation stories depuis Supabase si le JSON local est vide
+  // Migration one-shot debate-keywords.json → debates.keywords
   try {
-    const localStories = readStories();
-    if (!localStories.length) {
-      const { data: rows } = await supabase.from("stories").select("*").order("updated_at", { ascending: false });
-      if (rows && rows.length) {
-        _storiesStore.write(rows);
-        console.log(`[Agôn] Stories hydratées depuis Supabase : ${rows.length} stories.`);
+    const localKeywords = _readJsonFile(debateKeywordsMetaPath, {});
+    const entries = Object.entries(localKeywords).filter(([, v]) => Array.isArray(v) && v.length);
+    if (entries.length) {
+      const { data: dbRows } = await supabase.from("debates").select("id, keywords").in("id", entries.map(([id]) => id));
+      const dbMap = {};
+      for (const row of (dbRows || [])) dbMap[String(row.id)] = row.keywords;
+      const toMigrate = entries.filter(([id, v]) => !(dbMap[id] && dbMap[id].length));
+      if (toMigrate.length) {
+        await Promise.all(toMigrate.map(([id, keywords]) =>
+          supabase.from("debates").update({ keywords }).eq("id", id).catch(() => {})
+        ));
+        console.log(`[Agôn] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
       }
     }
   } catch (e) {
-    console.error("[Agôn] Erreur hydratation stories:", e.message);
+    console.error("[Agôn] Erreur migration keywords:", e.message);
   }
-  // Hydratation veille_pending depuis Supabase si les JSON locaux sont vides
+  // Migration one-shot stories.json → table stories
   try {
-    const localKw = readVeillePendingKeywordsMap();
-    const localSt = readVeillePendingStoriesMap();
-    const localLk = readVeillePendingLinksMap();
-    if (!Object.keys(localKw).length && !Object.keys(localSt).length && !Object.keys(localLk).length) {
-      const { data: rows } = await supabase.from("veille_pending")
-        .select("id, pending_keywords, pending_story_selection, pending_linked_debate_id")
-        .or("pending_keywords.neq.[], pending_story_selection.not.is.null, pending_linked_debate_id.not.is.null");
-      if (rows && rows.length) {
-        const kw = {}, st = {}, lk = {};
-        for (const row of rows) {
-          if (Array.isArray(row.pending_keywords) && row.pending_keywords.length) kw[String(row.id)] = row.pending_keywords;
-          if (row.pending_story_selection) st[String(row.id)] = row.pending_story_selection;
-          if (row.pending_linked_debate_id) lk[String(row.id)] = row.pending_linked_debate_id;
-        }
-        if (Object.keys(kw).length) writeVeillePendingKeywordsMap(kw);
-        if (Object.keys(st).length) writeVeillePendingStoriesMap(st);
-        if (Object.keys(lk).length) writeVeillePendingLinksMap(lk);
-        console.log(`[Agôn] Veille pending hydraté depuis Supabase : ${rows.length} items.`);
+    const localStories = _readJsonFile(storiesMetaPath, []);
+    if (Array.isArray(localStories) && localStories.length) {
+      const { data: existing } = await supabase.from("stories").select("story_id");
+      const existingIds = new Set((existing || []).map(r => r.story_id));
+      const toMigrate = localStories.filter(s => s.story_id && !existingIds.has(s.story_id));
+      if (toMigrate.length) {
+        await Promise.all(toMigrate.map(s => upsertStory(s)));
+        console.log(`[Agôn] Stories migrées vers Supabase : ${toMigrate.length} stories.`);
       }
     }
   } catch (e) {
-    console.error("[Agôn] Erreur hydratation veille_pending:", e.message);
+    console.error("[Agôn] Erreur migration stories:", e.message);
   }
+  // Chargement tag_exclusions depuis Supabase → public/tag-exclusions.json + mémoire
   try {
-    // Migration : push des story_id locaux vers Supabase
-    const localLinks = readDebateStoryLinks();
-    const localEntries = Object.entries(localLinks).filter(([, v]) => v);
-    if (localEntries.length) {
-      await Promise.all(localEntries.map(([id, story_id]) =>
-        supabase.from("debates").update({ story_id }).eq("id", id).then(() => {}).catch(e => console.error(e))
-      ));
-      console.log(`[Agôn] ${localEntries.length} story_id migrés vers Supabase.`);
+    const { data, error } = await supabase.from("app_config").select("value").eq("key", "tag_exclusions").maybeSingle();
+    if (!error && Array.isArray(data?.value)) {
+      writeTagExclusionFiles(data.value);
+      console.log(`[Agôn] Tag exclusions chargés depuis Supabase : ${data.value.length} tags.`);
+    } else if (fs.existsSync(tagExclusionsMetaPath)) {
+      const parsed = JSON.parse(fs.readFileSync(tagExclusionsMetaPath, "utf8") || "[]");
+      if (parsed.length) writeTagExclusionFiles(parsed);
     }
-    // Recalcul depuis Supabase
-    const { data: storyRows } = await supabase.from("debates").select("story_id").not("story_id", "is", null);
-    const storyIds = [...new Set((storyRows || []).map(d => d.story_id).filter(Boolean))];
-    await Promise.all(storyIds.map(id => recalculateStoryEpisodeNavigation(id)));
-    if (storyIds.length) console.log(`[Agôn] Episode nav recalculé pour ${storyIds.length} histoire(s).`);
   } catch (e) {
-    console.error("[Agôn] Erreur initialisation story nav:", e);
+    console.error("[Agôn] Erreur chargement tag_exclusions:", e.message);
+  }
+  // Chargement shared_debate_links depuis Supabase → cache mémoire
+  try {
+    const { data, error } = await supabase.from("app_config").select("value").eq("key", "shared_debate_links").maybeSingle();
+    if (!error && data?.value && typeof data.value === "object") {
+      _sharedLinksCache = data.value;
+      console.log(`[Agôn] Shared debate links chargés depuis Supabase : ${Object.keys(data.value).length} liens.`);
+    } else {
+      const local = _readJsonFile(sharedDebateLinksMetaPath, {});
+      if (Object.keys(local).length) {
+        _sharedLinksCache = local;
+        supabase.from("app_config")
+          .upsert({ key: "shared_debate_links", value: local, updated_at: new Date().toISOString() })
+          .catch(() => {});
+        console.log(`[Agôn] Shared debate links migrés vers Supabase : ${Object.keys(local).length} liens.`);
+      } else {
+        _sharedLinksCache = {};
+      }
+    }
+  } catch (e) {
+    console.error("[Agôn] Erreur chargement shared_debate_links:", e.message);
+    _sharedLinksCache = _getSharedLinksMap();
   }
 
   // Pré-chauffe du cache /api/debates au démarrage
