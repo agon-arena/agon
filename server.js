@@ -608,7 +608,7 @@ function clearVeillePendingLinkedDebate(id) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
   supabase.from("veille_pending").update({ pending_linked_debate_id: null }).eq("id", Number(pendingId))
-    .catch(() => {});
+    .then(() => {}).catch(() => {});
 }
 
 
@@ -982,7 +982,7 @@ async function initDebateTrendsCache() {
       _debateTrendsCache = local;
       supabase.from("app_config")
         .upsert({ key: "debate_trends", value: local, updated_at: new Date().toISOString() })
-        .catch(e => console.error("[debate-trends] migration error:", e.message));
+        .then(() => {}).catch(e => console.error("[debate-trends] migration error:", e.message));
     }
   } catch {}
 }
@@ -7106,7 +7106,7 @@ app.listen(PORT, "0.0.0.0", async () => {
       const toMigrate = entries.filter(([id, content]) => content.length > (dbMap[id] || "").length);
       if (toMigrate.length) {
         await Promise.all(toMigrate.map(([id, content]) =>
-          supabase.from("debates").update({ content }).eq("id", id).catch(() => {})
+          supabase.from("debates").update({ content }).eq("id", id).then(() => {}).catch(() => {})
         ));
         console.log(`[Agôn] Content migré vers Supabase : ${toMigrate.length} débats.`);
       }
@@ -7134,7 +7134,7 @@ app.listen(PORT, "0.0.0.0", async () => {
           return supabase.from("debates").update({
             image_url: db.image_url || v.image_url || "",
             video_url: db.video_url || v.video_url || ""
-          }).eq("id", id).catch(() => {});
+          }).eq("id", id).then(() => {}).catch(() => {});
         }));
         console.log(`[Agôn] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
       }
@@ -7153,7 +7153,7 @@ app.listen(PORT, "0.0.0.0", async () => {
       const toMigrate = entries.filter(([id, v]) => !(dbMap[id] && dbMap[id].length));
       if (toMigrate.length) {
         await Promise.all(toMigrate.map(([id, keywords]) =>
-          supabase.from("debates").update({ keywords }).eq("id", id).catch(() => {})
+          supabase.from("debates").update({ keywords }).eq("id", id).then(() => {}).catch(() => {})
         ));
         console.log(`[Agôn] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
       }
@@ -7201,7 +7201,7 @@ app.listen(PORT, "0.0.0.0", async () => {
         _sharedLinksCache = local;
         supabase.from("app_config")
           .upsert({ key: "shared_debate_links", value: local, updated_at: new Date().toISOString() })
-          .catch(() => {});
+          .then(() => {}).catch(() => {});
         console.log(`[Agôn] Shared debate links migrés vers Supabase : ${Object.keys(local).length} liens.`);
       } else {
         _sharedLinksCache = {};
