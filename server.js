@@ -4,7 +4,7 @@ const compression = require("compression");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { createCanvas, loadImage } = require("canvas");
+const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
@@ -371,18 +371,6 @@ function cleanPreviewText(value, maxLength = 240) {
   const text = decodeHtmlEntities(String(value ?? "").replace(/\s+/g, " ").trim());
   if (!text) return "";
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-}
-
-function normalizeOgCanvasText(value) {
-  return decodeHtmlEntities(String(value ?? ""))
-    .normalize("NFC")
-    .replace(/[‘’′]/g, "'")
-    .replace(/[“”″]/g, '"')
-    .replace(/[–—−]/g, "-")
-    .replace(/…/g, "...")
-    .replace(/ /g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function resolvePreviewUrl(rawUrl, baseUrl) {
@@ -2175,52 +2163,6 @@ async function getExternalLinkPreview(sourceUrl) {
   return previewPromise;
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = String(text || "").split(" ");
-  let line = "";
-  let currentY = y;
-
-  for (let n = 0; n < words.length; n++) {
-    const testLine = line + words[n] + " ";
-    const metrics = ctx.measureText(testLine);
-    const testWidth = metrics.width;
-
-    if (testWidth > maxWidth && n > 0) {
-      ctx.fillText(line, x, currentY);
-      line = words[n] + " ";
-      currentY += lineHeight;
-    } else {
-      line = testLine;
-    }
-  }
-
-  ctx.fillText(line, x, currentY);
-}
-
-function wrapTextCentered(ctx, text, centerX, y, maxWidth, lineHeight) {
-  const words = String(text || "").split(" ");
-  let line = "";
-  let currentY = y;
-
-  for (let n = 0; n < words.length; n++) {
-    const testLine = line + words[n] + " ";
-    const metrics = ctx.measureText(testLine);
-    const testWidth = metrics.width;
-
-    if (testWidth > maxWidth && n > 0) {
-      const lineWidth = ctx.measureText(line).width;
-      ctx.fillText(line, centerX - lineWidth / 2, currentY);
-      line = words[n] + " ";
-      currentY += lineHeight;
-    } else {
-      line = testLine;
-    }
-  }
-
-  const lineWidth = ctx.measureText(line).width;
-  ctx.fillText(line, centerX - lineWidth / 2, currentY);
-}
-
 function computeDebatePercents(args) {
   let votesA = 0;
   let votesB = 0;
@@ -3193,6 +3135,17 @@ app.get("/admin-stories", (req, res) => {
    OPEN GRAPH SHARE ROUTES
 ========================= */
 
+const OG_WORKER_PATH = path.join(__dirname, "lib", "og-image-worker.js");
+
+function generateOgImageInWorker(payload) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(OG_WORKER_PATH, { workerData: payload });
+    worker.once("message", resolve);
+    worker.once("error", reject);
+    worker.once("exit", code => { if (code !== 0) reject(new Error(`OG worker exited with code ${code}`)); });
+  });
+}
+
 app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -3211,99 +3164,19 @@ app.get("/debate/:id", async (req, res) => {
 
     if (!debate) {
       return res.status(404).send("Débat introuvable.");
-    }    const { percentA, percentB } = computeDebatePercents(args);
-    const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
-
-    const canvas = createCanvas(1200, 630);
-    const ctx = canvas.getContext("2d");
-    const logoPath = path.join(__dirname, "public/logo2.jpeg");
-    const logo = await loadImage(logoPath);
-
-    const cardWidth = 1200;
-    const cardHeight = 630;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, cardWidth, cardHeight);
-
-    const logoWidth = 220;
-    const logoHeight = 220;
-    const logoX = (cardWidth - logoWidth) / 2;
-    const logoY = 28;
-
-    ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
-
-    ctx.fillStyle = "#111111";
-    ctx.font = "bold 42px Arial";
-    wrapTextCentered(ctx, normalizeOgCanvasText(debate.question || "Débat sur agôn"), cardWidth / 2, 250, 920, 52);
-
-    if (isOpen) {
-      ctx.fillStyle = "#4b5563";
-      ctx.font = "28px Arial";
-      ctx.textAlign = "center";
-      wrapTextCentered(ctx, normalizeOgCanvasText("Découvrez les idées partagées sur agôn - l'arène des idées"), cardWidth / 2, 380, 860, 38);
-
-      ctx.fillStyle = "#6b7280";
-      ctx.font = "24px Arial";
-      ctx.fillText("Participez et ajoutez votre réponse", cardWidth / 2, 540);
-      ctx.textAlign = "left";
-    } else {
-      const barX = 140;
-      const barY = 340;
-      const barWidth = 920;
-      const barHeight = 26;
-
-      const fillA = Math.round((barWidth * percentA) / 100);
-      const fillB = barWidth - fillA;
-
-      ctx.font = "bold 32px Arial";
-
-      ctx.fillStyle = "#0f766e";
-      ctx.fillText(`${percentA}%`, 140, 315);
-
-      ctx.fillStyle = "#b91c1c";
-      const textB = `${percentB}%`;
-      const textBWidth = ctx.measureText(textB).width;
-      ctx.fillText(textB, 1060 - textBWidth, 315);
-
-      ctx.fillStyle = "#e5e7eb";
-      ctx.fillRect(barX, barY, barWidth, barHeight);
-
-      ctx.fillStyle = "#0f766e";
-      ctx.fillRect(barX, barY, fillA, barHeight);
-
-      ctx.fillStyle = "#b91c1c";
-      ctx.fillRect(barX + fillA, barY, fillB, barHeight);
-
-      ctx.strokeStyle = "#d1d5db";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-      ctx.fillStyle = "#111111";
-      ctx.font = "bold 28px Arial";
-
-      wrapText(ctx, normalizeOgCanvasText(debate.option_a || ""), 140, 430, 380, 38);
-      wrapText(ctx, normalizeOgCanvasText(debate.option_b || ""), 680, 430, 380, 38);
-
-      ctx.strokeStyle = "#e5e7eb";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(600, 405);
-      ctx.lineTo(600, 530);
-      ctx.stroke();
-
-      ctx.fillStyle = "#4b5563";
-      ctx.font = "28px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(normalizeOgCanvasText("Comparez les arguments sur agôn - l'arène des idées"), cardWidth / 2, 590);
-      ctx.textAlign = "left";
     }
 
-    const pngBuffer = await new Promise((resolve, reject) => {
-      const chunks = [];
-      const stream = canvas.createPNGStream();
-      stream.on("data", (chunk) => chunks.push(chunk));
-      stream.on("end", () => resolve(Buffer.concat(chunks)));
-      stream.on("error", reject);
+    const { percentA, percentB } = computeDebatePercents(args);
+    const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
+
+    const pngBuffer = await generateOgImageInWorker({
+      question: debate.question || "",
+      option_a: debate.option_a || "",
+      option_b: debate.option_b || "",
+      isOpen,
+      percentA,
+      percentB,
+      logoPath: path.join(__dirname, "public/logo2.jpeg")
     });
 
     _cacheSet(ogImageCache, String(id), { buffer: pngBuffer, expiresAt: Date.now() + OG_IMAGE_CACHE_TTL_MS }, OG_IMAGE_CACHE_MAX);
