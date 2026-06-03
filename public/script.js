@@ -14767,8 +14767,11 @@ function handleBubbleTagClick(bubble) {
     const cardRect = card.getBoundingClientRect();
     const cardCenter = scrollRow.scrollLeft + (cardRect.left - rowRect.left) + cardRect.width / 2;
     scrollRow.scrollTo({ left: Math.max(0, cardCenter - rowRect.width / 2), behavior: 'smooth' });
-    card.classList.add('agon-card-blink');
-    card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
+    const flashEl = document.createElement('div');
+    flashEl.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:rgba(255,255,255,0.45);pointer-events:none;z-index:20;animation:agon-card-highlight 0.8s ease-in-out 2;';
+    card.style.position = 'relative';
+    card.appendChild(flashEl);
+    flashEl.addEventListener('animationend', () => flashEl.remove(), { once: true });
   });
 }
 
@@ -15886,7 +15889,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-max10");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260603-auto-scale-no-overlap");
 
 
 function syncBubbleFrameTop() {

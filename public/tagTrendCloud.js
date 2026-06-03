@@ -222,95 +222,113 @@ function applyCompactBubbleLayout(container) {
   // Lire les tailles de base stockées au moment du rendu
   const baseSizes = bubbles.map(b => parseFloat(b.dataset.bubbleBaseSize) || 80);
 
-  // Calculer le facteur d'échelle global pour que toutes les bulles rentrent
-  const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
-
-  // Appliquer les tailles mises à l'échelle : même valeur pour l'affichage et le placement
-  const scaledSizes = baseSizes.map((base, i) => {
-    const scaled = Math.max(48, Math.round(base * autoScale));
-    bubbles[i].style.setProperty("--agon-tag-bubble-size", scaled + "px");
-    return scaled;
-  });
-
   const margin = isMobile ? 4 : 6;
   const btnRadius = 24;
+  const breatheScale = 1.065;
+  const collisionGap = isMobile ? 4 : 6;
   const preferredAngles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
 
-  // Obstacles déjà placés (bouton central inclus)
-  const placed = [{ x: centerX, y: centerY, r: btnRadius }];
+  // Calculer le facteur d'échelle global pour que toutes les bulles rentrent.
+  // Puis réessayer plus petit si le placement réel garde un chevauchement.
+  const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
+  const minScale = isMobile ? 0.36 : 0.40;
 
-  bubbles.forEach((bubble, index) => {
-    const size = scaledSizes[index];
-    const r = size / 2;
-    const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
-
-    // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
-    // pour que la bulle entière reste dans la zone utile du conteneur
-    const minX = r + margin;
-    const maxX = containerW - r - margin;
-    const minY = frameTop + r + margin;
-    const maxY = containerH - frameBottomInset - r - margin;
-
-    if (minX > maxX || minY > maxY) {
-      // Zone trop petite pour cette bulle : la centrer et passer à la suivante
-      const cx = centerX;
-      const cy = Math.min(Math.max(centerY, minY > maxY ? (minY + maxY) / 2 : minY), maxY > minY ? maxY : centerY);
-      placed.push({ x: cx, y: cy, r });
-      bubble.style.left = Math.round(cx - r) + "px";
-      bubble.style.top  = Math.round(cy - r) + "px";
-      bubble.style.right = "auto";
-      return;
-    }
-
-    let fx = null, fy = null;
+  function buildLayout(scale) {
+    const scaledSizes = baseSizes.map((base) => Math.max(isMobile ? 42 : 46, Math.round(base * scale)));
     const maxDist = Math.hypot(containerW, containerH);
+    const placed = [{ x: centerX, y: centerY, r: btnRadius + collisionGap }];
+    const positions = [];
+    let maxOverlap = 0;
 
-    // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
-    for (let dist = btnRadius + r; dist <= maxDist && fx === null; dist += 3) {
-      const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
-      for (let step = 0; step < steps && fx === null; step++) {
-        const dAngle = step % 2 === 0
-          ? (step / 2) * (2 * Math.PI / steps)
-          : -Math.ceil(step / 2) * (2 * Math.PI / steps);
-        const angle = prefAngle + dAngle;
-        const cx = centerX + Math.cos(angle) * dist;
-        const cy = centerY + Math.sin(angle) * dist;
-        if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
-        let valid = true;
-        for (const p of placed) {
-          if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4) { valid = false; break; }
-        }
-        if (valid) { fx = cx; fy = cy; }
-      }
-    }
+    bubbles.forEach((bubble, index) => {
+      const size = scaledSizes[index];
+      const r = size / 2;
+      const collisionR = r * breatheScale + collisionGap;
+      const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
 
-    if (fx === null) {
-      // Fallback : scan coarser, pick position with minimum total overlap
-      let bestOverlap = Infinity;
-      for (let dist2 = btnRadius + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
-        const steps2 = Math.max(24, Math.round(2 * Math.PI * dist2 / 10));
-        for (let step2 = 0; step2 < steps2; step2++) {
-          const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
-          const cx2 = centerX + Math.cos(angle2) * dist2;
-          const cy2 = centerY + Math.sin(angle2) * dist2;
-          if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
-          let totalOverlap = 0;
-          for (const p of placed) {
-            const gap = Math.hypot(cx2 - p.x, cy2 - p.y) - (r + p.r);
-            if (gap < 0) totalOverlap -= gap;
+      // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
+      // pour que la bulle entière reste dans la zone utile du conteneur, même en respiration.
+      const minX = collisionR + margin;
+      const maxX = containerW - collisionR - margin;
+      const minY = frameTop + collisionR + margin;
+      const maxY = containerH - frameBottomInset - collisionR - margin;
+
+      let fx = null, fy = null;
+
+      if (minX <= maxX && minY <= maxY) {
+        // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
+        for (let dist = btnRadius + collisionR; dist <= maxDist && fx === null; dist += 3) {
+          const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
+          for (let step = 0; step < steps && fx === null; step++) {
+            const dAngle = step % 2 === 0
+              ? (step / 2) * (2 * Math.PI / steps)
+              : -Math.ceil(step / 2) * (2 * Math.PI / steps);
+            const angle = prefAngle + dAngle;
+            const cx = centerX + Math.cos(angle) * dist;
+            const cy = centerY + Math.sin(angle) * dist;
+            if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
+            let valid = true;
+            for (const p of placed) {
+              if (Math.hypot(cx - p.x, cy - p.y) < collisionR + p.r) { valid = false; break; }
+            }
+            if (valid) { fx = cx; fy = cy; }
           }
-          if (totalOverlap < bestOverlap) { bestOverlap = totalOverlap; fx = cx2; fy = cy2; }
         }
       }
-      if (fx === null) {
-        fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
-        fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
-      }
-    }
 
-    placed.push({ x: fx, y: fy, r });
-    bubble.style.left = Math.round(fx - r) + "px";
-    bubble.style.top  = Math.round(fy - r) + "px";
+      if (fx === null && minX <= maxX && minY <= maxY) {
+        // Fallback : scan plus large, choisir la position qui minimise le chevauchement.
+        // Si ce fallback sert, le layout sera probablement réduit puis retenté.
+        let bestOverlap = Infinity;
+        for (let dist2 = btnRadius + collisionR; dist2 <= maxDist * 0.9 && bestOverlap > 0; dist2 += 8) {
+          const steps2 = Math.max(36, Math.round(2 * Math.PI * dist2 / 10));
+          for (let step2 = 0; step2 < steps2; step2++) {
+            const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
+            const cx2 = centerX + Math.cos(angle2) * dist2;
+            const cy2 = centerY + Math.sin(angle2) * dist2;
+            if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
+            let totalOverlap = 0;
+            for (const p of placed) {
+              const gap = Math.hypot(cx2 - p.x, cy2 - p.y) - (collisionR + p.r);
+              if (gap < 0) totalOverlap -= gap;
+            }
+            if (totalOverlap < bestOverlap) { bestOverlap = totalOverlap; fx = cx2; fy = cy2; }
+          }
+        }
+      }
+
+      if (fx === null) {
+        const safeMinX = Math.min(minX, centerX);
+        const safeMaxX = Math.max(maxX, centerX);
+        const safeMinY = Math.min(minY, centerY);
+        const safeMaxY = Math.max(maxY, centerY);
+        fx = Math.min(safeMaxX, Math.max(safeMinX, centerX + Math.cos(prefAngle) * (btnRadius + collisionR + 20)));
+        fy = Math.min(safeMaxY, Math.max(safeMinY, centerY + Math.sin(prefAngle) * (btnRadius + collisionR + 20)));
+      }
+
+      for (const p of placed) {
+        const overlap = (collisionR + p.r) - Math.hypot(fx - p.x, fy - p.y);
+        if (overlap > maxOverlap) maxOverlap = overlap;
+      }
+      placed.push({ x: fx, y: fy, r: collisionR });
+      positions.push({ size, r, x: fx, y: fy });
+    });
+
+    return { positions, maxOverlap };
+  }
+
+  let scale = autoScale;
+  let layout = buildLayout(scale);
+  for (let attempt = 0; attempt < 12 && layout.maxOverlap > 0.75 && scale > minScale; attempt += 1) {
+    scale = Math.max(minScale, scale * 0.92);
+    layout = buildLayout(scale);
+  }
+
+  layout.positions.forEach((position, index) => {
+    const bubble = bubbles[index];
+    bubble.style.setProperty("--agon-tag-bubble-size", position.size + "px");
+    bubble.style.left = Math.round(position.x - position.r) + "px";
+    bubble.style.top  = Math.round(position.y - position.r) + "px";
     bubble.style.right = "auto";
   });
 }
