@@ -116,6 +116,23 @@ const VEILLE_MEDIAS_PATH = (process.env.VEILLE_MEDIAS_PATH || path.join(__dirnam
 const VEILLE_YOUTUBE_PATH = (process.env.VEILLE_YOUTUBE_PATH || path.join(__dirname, "..", "bot veille", "youtube-chaines.json")).trim();
 
 function readVeilleMedias() {
+  function extractYouTubeChannelId(item) {
+    const rss = String(item?.rss || "").trim();
+    const url = String(item?.url || "").trim();
+    const candidates = [rss, url];
+    for (const candidate of candidates) {
+      const match = candidate.match(/(?:channel_id=|\/channel\/)(UC[\w-]+)/i);
+      if (match?.[1]) return match[1];
+    }
+    return "";
+  }
+
+  function extractYouTubeHandle(item) {
+    const url = String(item?.url || "").trim();
+    const match = url.match(/youtube\.com\/@([^/?#]+)/i);
+    return match?.[1] ? `@${match[1]}` : "";
+  }
+
   const raw = fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8");
   const data = JSON.parse(raw);
   const pressItems = (Array.isArray(data) ? data : [])
@@ -141,7 +158,11 @@ function readVeilleMedias() {
       .map((item) => ({
         nom: String(item?.nom || "").trim(),
         orientation: String(item?.orientation || "").trim(),
-        domain: "youtube.com"
+        domain: "youtube.com",
+        url: String(item?.url || "").trim(),
+        rss: String(item?.rss || "").trim(),
+        channelId: extractYouTubeChannelId(item),
+        handle: extractYouTubeHandle(item)
       }))
       .filter((item) => item.nom);
   } catch (_) {}
@@ -152,6 +173,12 @@ function readVeilleMedias() {
 function replaceMetaPlaceholders(template, meta) {
   let mediasJson = "[]";
   try { mediasJson = JSON.stringify(readVeilleMedias()); } catch (_) {}
+  const mediasJsonForScript = mediasJson
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
   return String(template || "")
     .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
@@ -159,7 +186,7 @@ function replaceMetaPlaceholders(template, meta) {
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
     .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"))
     .replaceAll("__VEILLE_URL__", VEILLE_URL)
-    .replaceAll("__VEILLE_MEDIAS_JSON__", mediasJson);
+    .replaceAll("__VEILLE_MEDIAS_JSON__", mediasJsonForScript);
 }
 
 function buildIndexMeta(req) {

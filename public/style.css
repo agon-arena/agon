@@ -2,6 +2,11 @@ img, video, a, button {
   touch-action: manipulation;
 }
 
+html,
+body {
+  touch-action: pan-x pan-y;
+}
+
 :root {
   --color-a:          #516776;
   --color-a-bg:       #a0c6d4;
@@ -5331,6 +5336,7 @@ body.page-debate .topbar::after {
 
   .debate-title-row {
     min-height: auto;
+    padding-left: 0;
     padding-right: 0;
   }
 
@@ -11968,6 +11974,7 @@ body.page-debate .debate-hero h1 {
   line-height: 1.06 !important;
   letter-spacing: 0 !important;
   text-align: center !important;
+  text-indent: 0 !important;
 }
 
 body.page-debate .debate-title-share-wrap.debate-title-share-wrap--left,
@@ -17331,6 +17338,32 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 @media (max-width: 768px) {
   .agon-cloud-spinner { width: 290px; height: 290px; }
+}
+
+#agon-cloud-loading-spinner {
+  position: absolute;
+  top: var(--bubble-frame-top, 55px);
+  left: 30px;
+  right: 30px;
+  bottom: 23px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 200;
+}
+
+#agon-cloud-loading-spinner img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  transform-origin: center center;
+}
+
+@media (max-width: 768px) {
+  #agon-cloud-loading-spinner {
+    bottom: 78px;
+  }
 }
 
 @media (min-width: 769px) {

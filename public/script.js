@@ -5173,8 +5173,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     <div class="index-card-episode-nav">
       <div class="index-card-episode-divider"></div>
       <div class="debate-card-episode-toggle-row">
-        <span class="episode-toggle-side episode-toggle-left">${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : ''}</span>
-        <span class="episode-toggle-side episode-toggle-right">${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); scrollToIndexDebateCard('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : ''}</span>
+        <span class="episode-toggle-side episode-toggle-left">${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : ''}</span>
+        <span class="episode-toggle-side episode-toggle-right">${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : ''}</span>
       </div>
     </div>
   ` : "";
@@ -14745,6 +14745,31 @@ function handleBubbleTagClick(bubble) {
   document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
     .forEach(b => b.classList.remove('agon-tag-bubble-active'));
   bubble.classList.add('agon-tag-bubble-active');
+
+  let targetDebateId = "";
+  const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
+  if (window._tagTrendsModule && trendsToSearch.length) {
+    const { normalizeTag } = window._tagTrendsModule;
+    const normalizedTag = normalizeTag(tag);
+    const activeTrend = trendsToSearch.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedTag);
+    targetDebateId = String(activeTrend?.subjectId || "").trim();
+  }
+
+  if (!targetDebateId || !alaUneSection) return;
+
+  const card = alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`);
+  if (!card) return;
+
+  requestAnimationFrame(() => {
+    const scrollRow = card.closest('.theme-horizontal-row');
+    if (!scrollRow) return;
+    const rowRect = scrollRow.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const cardCenter = scrollRow.scrollLeft + (cardRect.left - rowRect.left) + cardRect.width / 2;
+    scrollRow.scrollTo({ left: Math.max(0, cardCenter - rowRect.width / 2), behavior: 'smooth' });
+    card.classList.add('agon-card-blink');
+    card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
+  });
 }
 
 function showAgonOnlyFromTagCloud() {
@@ -15895,16 +15920,13 @@ function syncBubbleFrameTop() {
 
 function showBubbleCloudLoadingSpinner() {
   const section = document.querySelector("#agon-tag-trends-section");
-  if (!section || document.getElementById("agon-cloud-loading-spinner")) return;
+  const cloud = document.querySelector("#agon-tag-trends-cloud");
+  if (!section || !cloud || document.getElementById("agon-cloud-loading-spinner")) return;
   section.hidden = false;
-  const isMobile = window.matchMedia("(max-width: 768px)").matches;
-  const frameTop = 55;
-  const frameBottom = isMobile ? 78 : 23;
   const spinner = document.createElement("div");
   spinner.id = "agon-cloud-loading-spinner";
-  spinner.style.cssText = `position:absolute;top:${frameTop}px;left:30px;right:30px;bottom:${frameBottom}px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:200;`;
-  spinner.innerHTML = '<img src="/sablier.png" alt="" style="width:120px;height:120px;object-fit:contain;animation:pageArrivalLogoSpin 1s linear infinite;">';
-  section.appendChild(spinner);
+  spinner.innerHTML = '<img src="/sablier.png" alt="" style="animation:pageArrivalLogoSpin 1s linear infinite;">';
+  cloud.appendChild(spinner);
 }
 
 function hideBubbleCloudLoadingSpinner() {
@@ -19927,17 +19949,46 @@ function initDebateMediaHistory(debate) {
     return 'neutral';
   }
 
+  function normalizeMediaIdentity(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/^@/, '')
+      .replace(/\b(?:youtube|officiel|chaine|channel|tv)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function addYouTubeOrientationKey(map, key, orientation) {
+    const normalized = normalizeMediaIdentity(key);
+    if (normalized && orientation) map[normalized] = orientation;
+  }
+
   const veilleMediasMap = {};
   const veilleYouTubeChannelMap = {};
   try {
+    if (!Array.isArray(window.__VEILLE_MEDIAS__)) {
+      const veilleMediasScript = document.getElementById('veille-medias-json');
+      window.__VEILLE_MEDIAS__ = veilleMediasScript?.textContent
+        ? JSON.parse(veilleMediasScript.textContent)
+        : [];
+    }
     (window.__VEILLE_MEDIAS__ || []).forEach(function(m) {
       if (!m.orientation) return;
       if (m.domain === 'youtube.com') {
-        if (m.nom) veilleYouTubeChannelMap[String(m.nom).toLowerCase().trim()] = m.orientation;
+        addYouTubeOrientationKey(veilleYouTubeChannelMap, m.nom, m.orientation);
+        addYouTubeOrientationKey(veilleYouTubeChannelMap, m.handle, m.orientation);
+        addYouTubeOrientationKey(veilleYouTubeChannelMap, m.channelId, m.orientation);
+        try {
+          const parsed = new URL(String(m.url || ""));
+          addYouTubeOrientationKey(veilleYouTubeChannelMap, parsed.pathname, m.orientation);
+        } catch (_) {}
       } else {
         if (m.domain) veilleMediasMap[m.domain] = m.orientation;
         // Les noms des médias presse servent aussi de fallback pour les chaînes YouTube
-        if (m.nom) veilleYouTubeChannelMap[String(m.nom).toLowerCase().trim()] = m.orientation;
+        addYouTubeOrientationKey(veilleYouTubeChannelMap, m.nom, m.orientation);
       }
     });
   } catch (_) {}
@@ -19945,10 +19996,10 @@ function initDebateMediaHistory(debate) {
   function getSourceOrientation(url, author) {
     const hostname = getSourceHostname(url);
     // YouTube : cherche par nom de chaîne (author) dans les médias bot veille
-    if ((hostname === 'youtube.com' || hostname === 'youtu.be') && author) {
-      const key = String(author).toLowerCase().trim();
+    if (['youtube.com', 'm.youtube.com', 'youtu.be', 'youtube-nocookie.com'].includes(hostname) && author) {
+      const key = normalizeMediaIdentity(author);
       const matchedName = Object.keys(veilleYouTubeChannelMap)
-        .find((n) => key === n || key.includes(n) || n.includes(key));
+        .find((n) => key === n || (n.length >= 4 && key.includes(n)) || (key.length >= 4 && n.includes(key)));
       if (matchedName) return getOrientationGroupFromBotLabel(veilleYouTubeChannelMap[matchedName]);
     }
     // Presse : cherche par domaine

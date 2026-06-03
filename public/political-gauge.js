@@ -32,8 +32,8 @@
     panel.hidden = true;
     panel.innerHTML = `
       <p class="political-gauge-title">Orientation des idées publiées</p>
-      <p class="political-gauge-subtitle">Ce Cadran d’orientation politique indique la répartition des idées selon l’axe politique de l’arène.</p>
-      <div class="political-gauge-meter" aria-label="Cadran d’orientation politique gauche droite">
+      <p class="political-gauge-subtitle">Ce Baromètre d’orientation politique indique la répartition des idées selon l’axe politique de l’arène.</p>
+      <div class="political-gauge-meter" aria-label="Baromètre d’orientation politique gauche droite">
         <div class="political-gauge-arc">
           <span class="political-gauge-arc-left"></span>
           <span class="political-gauge-arc-right"></span>
