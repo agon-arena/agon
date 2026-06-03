@@ -1824,15 +1824,25 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
   return merged;
 }
 
+// Éviction LRU minimal : supprime l'entrée la plus ancienne quand le cap est atteint
+function _cacheSet(map, key, value, maxSize) {
+  if (map.size >= maxSize && !map.has(key)) map.delete(map.keys().next().value);
+  map.set(key, value);
+}
+
 const externalPreviewCache = new Map();
 const externalPreviewInFlightRequests = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
+const EXTERNAL_PREVIEW_CACHE_MAX = 300;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEBATES_API_CACHE_MAX = 50;
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
+const DEBATE_DETAIL_CACHE_MAX = 500;
 const notificationsApiResponseCache = new Map();
 const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
+const NOTIFICATIONS_API_CACHE_MAX = 200;
 
 function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular" } = {}) {
   const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
@@ -1857,10 +1867,7 @@ function getCachedDebatesApiResponse(key) {
 }
 
 function setCachedDebatesApiResponse(key, value, ttlMs = DEBATES_API_CACHE_TTL_MS) {
-  debatesApiResponseCache.set(String(key || ""), {
-    value,
-    expiresAt: Date.now() + ttlMs
-  });
+  _cacheSet(debatesApiResponseCache, String(key || ""), { value, expiresAt: Date.now() + ttlMs }, DEBATES_API_CACHE_MAX);
 }
 
 function clearDebatesApiResponseCache() {
@@ -1887,11 +1894,7 @@ function getCachedDebateDetailResponse(debateId) {
 function setCachedDebateDetailResponse(debateId, value) {
   const key = getDebateDetailCacheKey(debateId);
   if (!key) return;
-
-  debateDetailResponseCache.set(key, {
-    value,
-    expiresAt: Date.now() + DEBATE_DETAIL_CACHE_TTL_MS
-  });
+  _cacheSet(debateDetailResponseCache, key, { value, expiresAt: Date.now() + DEBATE_DETAIL_CACHE_TTL_MS }, DEBATE_DETAIL_CACHE_MAX);
 }
 
 function clearDebateDetailResponseCache(debateId = null) {
@@ -1904,6 +1907,8 @@ function clearDebateDetailResponseCache(debateId = null) {
 }
 
 const ogImageCache = new Map();
+const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min (les votes évoluent)
+const OG_IMAGE_CACHE_MAX = 200;                // ~200 × ~150 KB ≈ 30 MB max
 
 function invalidateDebateCaches(debateId = null, { clearList = true } = {}) {
   if (clearList) clearDebatesApiResponseCache();
@@ -1950,11 +1955,7 @@ function getCachedNotificationsApiResponse(userKey) {
 function setCachedNotificationsApiResponse(userKey, value) {
   const key = getNotificationsApiCacheKey(userKey);
   if (!key) return;
-
-  notificationsApiResponseCache.set(key, {
-    value,
-    expiresAt: Date.now() + NOTIFICATIONS_API_CACHE_TTL_MS
-  });
+  _cacheSet(notificationsApiResponseCache, key, { value, expiresAt: Date.now() + NOTIFICATIONS_API_CACHE_TTL_MS }, NOTIFICATIONS_API_CACHE_MAX);
 }
 
 function clearNotificationsApiResponseCache() {
@@ -2054,13 +2055,7 @@ function getCachedPreview(url) {
 }
 
 function setCachedPreview(url, value, ttlMs = 1000 * 60 * 30) {
-  if (externalPreviewCache.size >= 300) {
-    externalPreviewCache.delete(externalPreviewCache.keys().next().value);
-  }
-  externalPreviewCache.set(url, {
-    value,
-    expiresAt: Date.now() + ttlMs
-  });
+  _cacheSet(externalPreviewCache, url, { value, expiresAt: Date.now() + ttlMs }, EXTERNAL_PREVIEW_CACHE_MAX);
 }
 
 function getCachedExternalLinkPreview(sourceUrl) {
@@ -3202,10 +3197,11 @@ app.get("/debate/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    const cached = ogImageCache.get(String(id));
-    if (cached) {
+    const cachedEntry = ogImageCache.get(String(id));
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
       res.setHeader("Content-Type", "image/png");
-      return res.send(cached);
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      return res.send(cachedEntry.buffer);
     }
 
     const [debate, args] = await Promise.all([
@@ -3310,9 +3306,10 @@ app.get("/debate/:id", async (req, res) => {
       stream.on("error", reject);
     });
 
-    ogImageCache.set(String(id), pngBuffer);
+    _cacheSet(ogImageCache, String(id), { buffer: pngBuffer, expiresAt: Date.now() + OG_IMAGE_CACHE_TTL_MS }, OG_IMAGE_CACHE_MAX);
 
     res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=1800");
     res.send(pngBuffer);
   } catch (error) {
     console.error(error);
