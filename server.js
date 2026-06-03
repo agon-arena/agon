@@ -6402,7 +6402,7 @@ const previousSourceCount = previousSourceKeys.size;
       removeDebateSharedLink(data.id);
     }
     if (pendingStorySelection) {
-      const finalStory = saveStoryForDebateSelection(pendingStorySelection, {
+      const finalStory = await saveStoryForDebateSelection(pendingStorySelection, {
         debateId: data.id,
         question,
         resume
