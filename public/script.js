@@ -14725,12 +14725,6 @@ function handleBubbleTagClick(bubble) {
     : label.textContent.trim();
   if (!tag) return;
 
-  // Toggle : si déjà active, désactiver et sortir
-  if (bubble.classList.contains('agon-tag-bubble-active')) {
-    bubble.classList.remove('agon-tag-bubble-active');
-    return;
-  }
-
   const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
   const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
   const topbar = document.querySelector('.topbar');
@@ -15889,7 +15883,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260603-auto-scale-no-overlap");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-max10");
 
 
 function syncBubbleFrameTop() {
