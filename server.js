@@ -3302,13 +3302,17 @@ app.post("/api/contact", async (req, res) => {
   try {
     const { Resend } = require("resend");
     const resend = new Resend(apiKey);
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: "agôn <onboarding@resend.dev>",
       to: "kevinbruyat@live.fr",
       reply_to: email,
       subject: `Contact agôn — ${name}`,
       text: `Nom : ${name}\nEmail : ${email}\n\n${message}`
     });
+    if (result.error) {
+      console.error("Resend error:", result.error);
+      return res.status(500).json({ error: "Erreur envoi." });
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error("Resend error:", e);

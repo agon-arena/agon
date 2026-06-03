@@ -94,7 +94,7 @@ registerServiceWorker();
   }
   sessionStorage.setItem(SEEN_KEY, "1");
   window.scrollTo(0, 0);
-  try { history.scrollRestoration = 'auto'; } catch (_) {}
+  try { history.scrollRestoration = 'manual'; } catch (_) {}
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
 
@@ -14731,103 +14731,32 @@ function handleBubbleTagClick(bubble) {
     return;
   }
 
-  // Activer visuellement la bulle cliquée (noir/blanc)
-  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
-    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
-  bubble.classList.add('agon-tag-bubble-active');
-
-  // Trouve l'ID du débat associé au tag
-  let targetDebateId = null;
-  const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
-
-  if (window._tagTrendsModule && trendsToSearch.length) {
-    const { normalizeTag } = window._tagTrendsModule;
-    const norm = normalizeTag(tag);
-    const hit = trendsToSearch.find(item => normalizeTag(item?.tag || item?.subjectTitle || '') === norm);
-    if (hit?.subjectId) targetDebateId = String(hit.subjectId).trim();
-  }
-
-  // Fallback texte sur debatesCache
-  if (!targetDebateId && Array.isArray(debatesCache) && debatesCache.length) {
-    const tagLower = tag.toLowerCase();
-    const match = debatesCache.find(d => {
-      const text = [d.question, d.category, d.option_a, d.option_b].join(' ').toLowerCase();
-      return text.includes(tagLower);
-    });
-    if (match) targetDebateId = String(match.id);
-  }
-
-  // Tag principal → scroll vers la carte
   const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
-  let card = null;
-  if (targetDebateId) {
-    card = alaUneSection
-      ? alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`)
-      : null;
-    if (!card) {
-      card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`);
-    }
-  }
-
-  // Scroll vers la carte dans "À la une"
   const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
   const topbar = document.querySelector('.topbar');
   const topbarH = topbar ? topbar.offsetHeight : 60;
 
-  // 1. Scroll vertical vers "À la une" (immédiat)
   if (scrollTarget) {
-    const top = scrollTarget.getBoundingClientRect().top + window.scrollY - topbarH - 8;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    const top = scrollTarget.getBoundingClientRect().top + window.scrollY - topbarH + 85;
+    fastWindowScrollTo(Math.max(0, top));
   }
 
-  // 2. Scroll horizontal vers la carte si elle est dans les 10 premières
-  if (card) {
-    requestAnimationFrame(() => {
-      const scrollRow = card.closest('.theme-horizontal-row');
-      if (scrollRow) {
-        const rowRect = scrollRow.getBoundingClientRect();
-        const cardRect = card.getBoundingClientRect();
-        const cardCenter = scrollRow.scrollLeft + (cardRect.left - rowRect.left) + cardRect.width / 2;
-        scrollRow.scrollTo({ left: cardCenter - rowRect.width / 2, behavior: 'smooth' });
-      }
-      setTimeout(() => {
-        card.classList.add('agon-card-blink');
-        card.addEventListener('animationend', () => card.classList.remove('agon-card-blink'), { once: true });
-      }, 600);
-    });
-  }
+  // Activer visuellement la bulle cliquée (noir/blanc)
+  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
+    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
+  bubble.classList.add('agon-tag-bubble-active');
 }
 
 function showAgonOnlyFromTagCloud() {
   if (_tagCloudSecondaryMode) {
     _restoreMainTagCloud();
   }
-  currentBubbleTag = null;
-  clearActiveBubbles();
-  currentIndexSearchQuery = "";
-  setCurrentCategoryFilters([]);
 
-  const input = document.getElementById("debate-search");
-  if (input) input.value = "";
-
-  const select = document.getElementById("filter-theme");
-  if (select) select.value = "all";
-
-  const previousTypeFilter = String(currentTypeFilter || "");
-  currentTypeFilter = "agon";
-  visitedDebatesVisible = 5;
-  otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
-  applyIndexFilters();
-
-  if (previousTypeFilter === "agon") {
-    syncIndexTypeFilterButtons();
-    syncIndexShortcutFilterButtons();
-  }
-
-  const firstBand = document.querySelector(".theme-row-section");
-  if (firstBand) {
-    firstBand.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const firstBand = document.querySelector(".theme-row-section--a-la-une") || document.querySelector(".theme-row-section");
+  if (!firstBand) return;
+  const topbarH = document.querySelector(".topbar")?.offsetHeight || 0;
+  const top = firstBand.getBoundingClientRect().top + window.scrollY - topbarH + 85;
+  fastWindowScrollTo(Math.max(0, top), 420);
 }
 
 window.addEventListener("agon:tag-trends-show-agon", showAgonOnlyFromTagCloud);
@@ -26568,13 +26497,17 @@ function scrollToAdjacentSection(direction) {
   // Haut de la zone visible (sous la topbar)
   const viewTop = window.scrollY + topbarH;
 
-  // Section courante = la dernière dont le bandeau est passé en haut
-  let cur = 0;
+  // Section courante = la dernière dont le bandeau est passé en haut (-1 si aucune)
+  let cur = -1;
   for (let i = 0; i < ys.length; i++) {
     if (ys[i] <= viewTop) cur = i;
   }
 
-  const next = direction === 'up' ? Math.max(0, cur - 1) : cur + 1;
+  const next = direction === 'up' ? cur - 1 : cur + 1;
+  if (next < 0) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   if (next >= sections.length) return;
 
   // Scroller pour que le bandeau arrive en haut de la zone visible
@@ -26583,13 +26516,41 @@ function scrollToAdjacentSection(direction) {
 
 window.scrollToAdjacentSection = scrollToAdjacentSection;
 
+function fastWindowScrollTo(targetTop, duration = 420, onComplete = null) {
+  const startTop = window.scrollY || document.documentElement.scrollTop || 0;
+  const endTop = Math.max(0, Number(targetTop) || 0);
+  const distance = endTop - startTop;
+  if (Math.abs(distance) < 2) {
+    if (typeof onComplete === "function") onComplete();
+    return;
+  }
+  const startTime = performance.now();
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+  function step(now) {
+    const progress = Math.min(1, (now - startTime) / duration);
+    window.scrollTo(0, startTop + distance * easeOut(progress));
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else if (typeof onComplete === "function") {
+      onComplete();
+    }
+  }
+
+  requestAnimationFrame(step);
+}
+
 function scrollToTheme(theme) {
-  closeIndexExplorerMenu();
   const section = document.querySelector(`.theme-row-section[data-theme="${CSS.escape(theme)}"]`);
   if (!section) return;
   const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
-  const top = section.getBoundingClientRect().top + window.scrollY - topbarH - 8;
-  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  const top = section.getBoundingClientRect().top + window.scrollY - topbarH + 85;
+  if (theme === 'À la une') {
+    fastWindowScrollTo(Math.max(0, top));
+  } else {
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+  closeIndexExplorerMenu();
 }
 
 document.addEventListener('click', (e) => {
@@ -26747,6 +26708,10 @@ function syncHomeTopbarMenuOpenState(isOpen) {
   const trigger = document.getElementById("home-topbar-menu-toggle");
   const backdrop = document.getElementById("home-topbar-menu-backdrop");
 
+  if (isOpen) {
+    window.__homeTopbarMenuOpenedAt = Date.now();
+  }
+
   if (menu) {
     menu.classList.toggle("home-topbar-menu-open", !!isOpen);
   }
@@ -26822,6 +26787,8 @@ function initHomeTopbarMenu() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest(".home-topbar-menu-wrap")) return;
+    // Ignore ghost clicks fired within 400ms of the menu opening (mobile synthetic click)
+    if (Date.now() - (window.__homeTopbarMenuOpenedAt || 0) < 400) return;
     closeHomeTopbarMenu();
   });
 const createLink = document.getElementById("home-topbar-create-link");

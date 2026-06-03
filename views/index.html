@@ -183,7 +183,7 @@
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
-<script>(function(){if(sessionStorage.getItem('agon_scroll_top')){sessionStorage.removeItem('agon_scroll_top');try{history.scrollRestoration='manual';}catch(_){}window.scrollTo(0,0);}})()</script>
+<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}t();window.addEventListener('pageshow',t,true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);})()</script>
 
 <div id="agon-startup-loader" class="agon-startup-loader">
   <div class="agon-startup-loader-inner">
@@ -823,7 +823,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260602-mobile-theme-title-lines5" defer></script>
+<script src="/script.js?v=20260603-refresh-starts-top" defer></script>
 <script src="/index-ai-badge.js" defer></script>
 
 
