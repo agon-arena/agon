@@ -1677,11 +1677,39 @@ function handleHeadingDoubleClick(side) {
   setDebateColumnFocus(currentFocus === side ? "split" : side);
 }
 
+window.handleArgumentDoubleClick = handleArgumentDoubleClick;
+window.handleHeadingDoubleClick = handleHeadingDoubleClick;
+window.setDebateColumnFocus = setDebateColumnFocus;
+
+function initArgumentDoubleClickFocus() {
+  if (document.body?.dataset.argumentDoubleClickFocusBound === "true") return;
+  if (document.body) document.body.dataset.argumentDoubleClickFocusBound = "true";
+
+  document.addEventListener("dblclick", (event) => {
+    if (currentDebateViewMode !== "columns") return;
+    if (!isColumnFocusScrollContext()) return;
+    const card = event.target?.closest?.(".debate-columns .argument-card");
+    if (!card) return;
+    if (event.target?.closest?.("a, button, input, textarea, select, option, label, form, iframe, video, audio, [contenteditable='true']")) return;
+
+    const side = card.closest(".column-a") ? "a" : card.closest(".column-b") ? "b" : "";
+    if (!side) return;
+    const argumentId = String(card.id || "").replace(/^argument-/, "");
+    handleArgumentDoubleClick(event, side, argumentId);
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initArgumentDoubleClickFocus);
+} else {
+  initArgumentDoubleClickFocus();
+}
+
 function shouldIgnoreDesktopColumnFocusClick(target) {
   if (!target) return false;
 
   return !!target.closest(
-    'a, button, input, textarea, select, option, label, form, summary, details, iframe, video, audio, [contenteditable="true"], .sort-dropdown, .sort-menu, .share-icon-button, .home-topbar-menu, .home-topbar-menu-toggle, .position-argument-button, .form-close-btn, .argument-action-button, .comment-action-button, .voice-button, .vote-button, .comment-form, .argument-form, .comment-card-menu, .argument-card-menu'
+    'a, button, input, textarea, select, option, label, form, summary, details, iframe, video, audio, [contenteditable="true"], .argument-card, .comment-card, .comment-reply-card, .sort-dropdown, .sort-menu, .share-icon-button, .home-topbar-menu, .home-topbar-menu-toggle, .position-argument-button, .form-close-btn, .argument-action-button, .comment-action-button, .voice-button, .vote-button, .comment-form, .argument-form, .comment-card-menu, .argument-card-menu'
   );
 }
 
@@ -1862,6 +1890,8 @@ function changeArgumentsSort(mode) {
   const menu = document.getElementById("sort-menu");
   if (menu) {
     menu.classList.remove("sort-menu-visible");
+    const refreshBtn = document.querySelector(".app-floating-refresh-btn");
+    if (refreshBtn) refreshBtn.style.display = "";
   }
 
   updateSortButtonLabel();
@@ -1891,6 +1921,8 @@ function toggleSortMenu() {
   if (!menu) return;
 
   menu.classList.toggle("sort-menu-visible");
+  const refreshBtn = document.querySelector(".app-floating-refresh-btn");
+  if (refreshBtn) refreshBtn.style.display = menu.classList.contains("sort-menu-visible") ? "none" : "";
 }
 
 function updateSortButtonLabel() {
@@ -14716,14 +14748,52 @@ function _restoreMainTagCloud() {
   window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || []);
 }
 
+function hydrateLazyCarouselCards(inner, row) {
+  initIndexCardShareMenus(inner);
+  initIndexMediaSwipeEnhancements(inner);
+  initIndexYouTubeObserver(inner);
+  initIndexLocalVideoObserver(inner);
+  initIndexXObserver(inner);
+  initIndexInstagramObserver(inner);
+  initIndexOpenGraphImageObserver(inner);
+  initIndexEmbedUnloadObserver(inner);
+  observeIndexCardsMissingSourcePreview(inner);
+  refreshAdminUI();
+  requestAnimationFrame(() => syncIndexThemeRowHeight(row));
+}
+
+function appendCarouselBatchBeforeSentinel(row, sentinel, batch) {
+  const html = batch.map((d) => {
+    try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
+    catch (e) { return ""; }
+  }).join("");
+
+  if (!html) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const inner = sentinel.parentNode;
+  while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
+  hydrateLazyCarouselCards(inner, row);
+}
+
 function handleBubbleTagClick(bubble) {
   const label = bubble.querySelector('.agon-tag-label');
   if (!label) return;
   const words = label.querySelectorAll('.agon-tag-word');
-  const tag = words.length
+  const tag = String(bubble.dataset.tag || "").trim() || (words.length
     ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
-    : label.textContent.trim();
+    : label.textContent.trim());
   if (!tag) return;
+
+  const wasActive = bubble.classList.contains('agon-tag-bubble-active');
+
+  // Activer visuellement la bulle cliquée (noir/blanc)
+  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
+    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
+  document.querySelectorAll('.agon-tag-label-overlay.agon-tag-label-overlay-active')
+    .forEach(overlay => overlay.classList.remove('agon-tag-label-overlay-active'));
+
+  if (wasActive) return;
 
   const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
   const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
@@ -14735,14 +14805,16 @@ function handleBubbleTagClick(bubble) {
     fastWindowScrollTo(Math.max(0, top));
   }
 
-  // Activer visuellement la bulle cliquée (noir/blanc)
-  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
-    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
   bubble.classList.add('agon-tag-bubble-active');
+  document.querySelectorAll('.agon-tag-label-overlay').forEach(overlay => {
+    if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
+      overlay.classList.add('agon-tag-label-overlay-active');
+    }
+  });
 
-  let targetDebateId = "";
+  let targetDebateId = String(bubble.dataset.subjectId || "").trim();
   const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
-  if (window._tagTrendsModule && trendsToSearch.length) {
+  if (!targetDebateId && window._tagTrendsModule && trendsToSearch.length) {
     const { normalizeTag } = window._tagTrendsModule;
     const normalizedTag = normalizeTag(tag);
     const activeTrend = trendsToSearch.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedTag);
@@ -14776,6 +14848,11 @@ function showAgonOnlyFromTagCloud() {
 
   const firstBand = document.querySelector(".theme-row-section--a-la-une") || document.querySelector(".theme-row-section");
   if (!firstBand) return;
+  const row = firstBand.querySelector?.(".theme-horizontal-row");
+  if (row) {
+    row.scrollTo({ left: 0, behavior: "smooth" });
+    window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 420);
+  }
   const topbarH = document.querySelector(".topbar")?.offsetHeight || 0;
   const top = firstBand.getBoundingClientRect().top + window.scrollY - topbarH + 85;
   fastWindowScrollTo(Math.max(0, top), 420);
@@ -15778,10 +15855,15 @@ function buildIndexThematicSectionsHtml(debates) {
       }
     }
 
-    // ── Arènes sous tension : activité 24h (idées × 1 + commentaires × 0,5) ──
+    // ── Arènes sous tension : activité récente en priorité, puis dernières arènes actives ──
     const tensionDebates = allDebates
-      .filter((d) => (d.tension_score || 0) > 0)
-      .sort((a, b) => (b.tension_score || 0) - (a.tension_score || 0));
+      .filter((d) => (d.argument_count || 0) > 0 || (d.comment_count || 0) > 0)
+      .sort((a, b) => {
+        const scoreDiff = (b.tension_score || 0) - (a.tension_score || 0);
+        if (scoreDiff) return scoreDiff;
+        return new Date(b.last_activity_at || b.last_argument_at || b.created_at || 0)
+          - new Date(a.last_activity_at || a.last_argument_at || a.created_at || 0);
+      });
     if (tensionDebates.length) {
       const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension");
       if (inner) {
@@ -15840,29 +15922,7 @@ function initCarouselLazyLoad() {
       if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
 
       const batch = pending.splice(0, _CAROUSEL_BATCH);
-      const html = batch.map((d) => {
-        try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
-        catch (e) { return ""; }
-      }).join("");
-
-      if (html) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        const inner = sentinel.parentNode;
-        while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
-        initIndexCardShareMenus(inner);
-        initIndexMediaSwipeEnhancements(inner);
-        initIndexYouTubeObserver(inner);
-        initIndexLocalVideoObserver(inner);
-        initIndexXObserver(inner);
-        initIndexInstagramObserver(inner);
-        initIndexOpenGraphImageObserver(inner);
-        initIndexEmbedUnloadObserver(inner);
-        observeIndexCardsMissingSourcePreview(inner);
-        refreshAdminUI();
-        // Resynchronise la hauteur du row après l'ajout du nouveau lot de cartes
-        requestAnimationFrame(() => syncIndexThemeRowHeight(row));
-      }
+      appendCarouselBatchBeforeSentinel(row, sentinel, batch);
 
       if (!pending.length) {
         row.removeEventListener('scroll', onScroll);
@@ -15883,7 +15943,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260601-max10");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260603-bubble-target");
 
 
 function syncBubbleFrameTop() {
@@ -19142,7 +19202,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
       </button>
     </div>
 
-    <div class="similar-debates-results">
+    <div class="similar-debates-results page-home-mobile">
       ${matches
         .slice(0, Math.max(SIMILAR_DEBATES_BATCH_SIZE, similarDebatesVisibleCount))
         .map(({ debate }) => buildIndexLikeDebateCardHtml(debate, { showSwipeHotspots: false }))
@@ -19165,6 +19225,8 @@ function renderBottomSimilarDebates(currentDebate, debates) {
         : ""
     }
   `;
+
+  document.body.classList.add("page-home-mobile");
 
   initIndexCardShareMenus(container);
 
@@ -24838,19 +24900,7 @@ function initDebateTitleAutoHide() {
       return;
     }
 
-    if (delta < -HIDE_THRESHOLD) {
-      document.body.classList.add("debate-title-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
-
-    if (delta > SHOW_THRESHOLD) {
-      document.body.classList.remove("debate-title-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
+    document.body.classList.remove("debate-title-hidden");
 
     lastScrollY = currentScrollY;
     ticking = false;
@@ -25535,6 +25585,8 @@ document.addEventListener("click", function(event) {
 
   if (!dropdown.contains(event.target)) {
     menu.classList.remove("sort-menu-visible");
+    const refreshBtn = document.querySelector(".app-floating-refresh-btn");
+    if (refreshBtn) refreshBtn.style.display = "";
   }
 });
 
@@ -26235,6 +26287,7 @@ window.stopIdeaVoiceDictationFromButton = stopIdeaVoiceDictationFromButton;
 window.openArgumentComposer = openArgumentComposer;
 window.vote = vote;
 window.unvote = unvote;
+window.handleArgumentDoubleClick = handleArgumentDoubleClick;
 window.handleHeadingDoubleClick = handleHeadingDoubleClick;
 window.voteComment = voteComment;
 window.editDebate = editDebate;window.toggleCurrentDebateAdminEditPanel = toggleCurrentDebateAdminEditPanel;window.editArgument = editArgument;

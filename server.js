@@ -894,6 +894,101 @@ function countCloudSources(debate) {
   return sources.size;
 }
 
+async function rebuildCloudBubbles() {
+  const now = new Date().toISOString();
+
+  const { data: allDebates, error } = await supabase
+    .from("debates")
+    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const keywordsMap = {};
+  for (const d of (allDebates || [])) {
+    if (Array.isArray(d.keywords) && d.keywords.length) keywordsMap[d.id] = d.keywords;
+  }
+
+  const seenTags = new Set();
+  const candidates = [];
+  for (const debate of (allDebates || [])) {
+    const label = getCloudLabelFromDebate(debate.id, keywordsMap);
+    if (!label) continue;
+    const sourceCount = countCloudSources(debate);
+    if (sourceCount <= 0) continue;
+    const normTag = normalizeTag(label);
+    if (seenTags.has(normTag)) continue;
+    seenTags.add(normTag);
+    const debateDate = debate.source_published_at || debate.created_at || now;
+    const trendEntry = getDebateTrend(debate.id);
+    candidates.push({
+      tag: label,
+      subjectId: String(debate.id),
+      count: sourceCount,
+      debateDate,
+      trend: Number(trendEntry?.trend ?? 0),
+      enteredCloudAt: now
+    });
+    if (candidates.length >= 10) break;
+  }
+
+  let bubbles = candidates;
+  const added = candidates.length;
+  const updated = 0;
+
+  const ids = bubbles.map(b => b.subjectId).filter(Boolean);
+  const debateMap = new Map();
+  if (ids.length) {
+    const { data: currentDebates, error: currentError } = await supabase
+      .from("debates")
+      .select("id, source_url, media_extras, created_at, source_published_at")
+      .in("id", ids);
+    if (currentError) throw new Error(currentError.message);
+    for (const debate of (currentDebates || [])) debateMap.set(String(debate.id), debate);
+  }
+
+  bubbles = bubbles
+    .map((bubble) => {
+      const debate = debateMap.get(String(bubble.subjectId));
+      const refreshedCount = debate ? countCloudSources(debate) : Number(bubble.count || 0);
+      const tag = getCloudLabelFromDebate(bubble.subjectId, keywordsMap) || bubble.tag;
+      return {
+        tag,
+        subjectId: String(bubble.subjectId),
+        count: refreshedCount,
+        debateDate: debate ? (debate.source_published_at || debate.created_at || bubble.debateDate || null) : (bubble.debateDate || null),
+        trend: Number(getDebateTrend(bubble.subjectId)?.trend ?? bubble.trend ?? 0),
+        enteredCloudAt: bubble.enteredCloudAt || now
+      };
+    })
+    .filter(bubble => bubble.tag && bubble.subjectId && bubble.count > 0)
+    .slice(-10);
+
+  const maxCount = bubbles.reduce((max, bubble) => Math.max(max, bubble.count || 0), 0);
+  bubbles = bubbles.map((bubble) => ({
+    ...bubble,
+    sizeWeight: maxCount > 0 ? bubble.count / maxCount : 0
+  }));
+
+  const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
+  await saveCloudBubbles(newData);
+
+  return { ok: true, count: bubbles.length, newAdded: added, updated, updatedAt: newData.lastUpdatedAt };
+}
+
+async function rebuildCloudBubblesAfterPublish(reason, debateId = null) {
+  try {
+    return await rebuildCloudBubbles();
+  } catch (error) {
+    console.error("[cloud-bubbles] auto update failed", {
+      reason,
+      debateId: debateId ? String(debateId) : null,
+      error: error.message
+    });
+    return null;
+  }
+}
+
 function setVeillePendingKeywords(id, keywords) {
   const pendingId = String(id || "").trim();
   if (!pendingId) return;
@@ -937,9 +1032,8 @@ async function setDebateKeywords(debateId, keywords) {
   const debateKey = String(debateId || "").trim();
   if (!debateKey) return [];
   const normalized = normalizeKeywordList(keywords, 10, 60);
-  supabase.from("debates").update({ keywords: normalized }).eq("id", debateKey)
-    .then(({ error }) => { if (error) console.error("[keywords sync]", debateKey, error.message); })
-    .catch(() => {});
+  const { error } = await supabase.from("debates").update({ keywords: normalized }).eq("id", debateKey);
+  if (error) console.error("[keywords sync]", debateKey, error.message);
   return normalized;
 }
 
@@ -4742,6 +4836,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     }
 
     clearDebatesApiResponseCache();
+    await rebuildCloudBubblesAfterPublish("create-debate", data.id);
     res.json({ id: data.id });
   } catch (error) {
     console.error(error);
@@ -5989,84 +6084,8 @@ app.get("/api/cloud-bubbles", async (req, res) => {
 
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    const now = new Date().toISOString();
-
-    const { data: allDebates, error } = await supabase
-      .from("debates")
-      .select("id, question, source_url, media_extras, created_at, source_published_at, keywords")
-      .order("created_at", { ascending: false });
-
-    if (error) throw new Error(error.message);
-
-    const keywordsMap = {};
-    for (const d of (allDebates || [])) if (Array.isArray(d.keywords) && d.keywords.length) keywordsMap[d.id] = d.keywords;
-
-    // Construit tous les candidats valides (label + sources), dédoublonnés par tag normalisé
-    const seenTags = new Set();
-    const candidates = [];
-    for (const debate of (allDebates || [])) {
-      const label = getCloudLabelFromDebate(debate.id, keywordsMap);
-      if (!label) continue;
-      const sourceCount = countCloudSources(debate);
-      if (sourceCount <= 0) continue;
-      const normTag = normalizeTag(label);
-      if (seenTags.has(normTag)) continue;
-      seenTags.add(normTag);
-      const debateDate = debate.source_published_at || debate.created_at || now;
-      const trendEntry = getDebateTrend(debate.id);
-      candidates.push({
-        tag: label,
-        subjectId: String(debate.id),
-        count: sourceCount,
-        debateDate,
-        trend: Number(trendEntry?.trend ?? 0),
-        enteredCloudAt: now
-      });
-      if (candidates.length >= 10) break;
-    }
-
-    let bubbles = candidates;
-    const added = candidates.length;
-    const updated = 0;
-
-    const ids = bubbles.map(b => b.subjectId).filter(Boolean);
-    const debateMap = new Map();
-    if (ids.length) {
-      const { data: currentDebates, error: currentError } = await supabase
-        .from("debates")
-        .select("id, source_url, media_extras, created_at, source_published_at")
-        .in("id", ids);
-      if (currentError) throw new Error(currentError.message);
-      for (const debate of (currentDebates || [])) debateMap.set(String(debate.id), debate);
-    }
-
-    bubbles = bubbles
-      .map((bubble) => {
-        const debate = debateMap.get(String(bubble.subjectId));
-        const refreshedCount = debate ? countCloudSources(debate) : Number(bubble.count || 0);
-        const tag = getCloudLabelFromDebate(bubble.subjectId, keywordsMap) || bubble.tag;
-        return {
-          tag,
-          subjectId: String(bubble.subjectId),
-          count: refreshedCount,
-          debateDate: debate ? (debate.source_published_at || debate.created_at || bubble.debateDate || null) : (bubble.debateDate || null),
-          trend: Number(getDebateTrend(bubble.subjectId)?.trend ?? bubble.trend ?? 0),
-          enteredCloudAt: bubble.enteredCloudAt || now
-        };
-      })
-      .filter(bubble => bubble.tag && bubble.subjectId && bubble.count > 0)
-      .slice(-10);
-
-    const maxCount = bubbles.reduce((max, bubble) => Math.max(max, bubble.count || 0), 0);
-    bubbles = bubbles.map((bubble) => ({
-      ...bubble,
-      sizeWeight: maxCount > 0 ? bubble.count / maxCount : 0
-    }));
-
-    const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
-    await saveCloudBubbles(newData);
-
-    res.json({ ok: true, count: bubbles.length, newAdded: added, updated, updatedAt: newData.lastUpdatedAt });
+    const result = await rebuildCloudBubbles();
+    res.json(result);
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -6289,7 +6308,7 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     if (allExtras.length) {
       await supabase.from("debates").update({ media_extras: allExtras }).eq("id", data.id);
     }
-    setDebateKeywords(data.id, resolvedKeywords);
+    await setDebateKeywords(data.id, resolvedKeywords);
 
 
 
@@ -6417,6 +6436,7 @@ const previousSourceCount = previousSourceKeys.size;
     }
     if (id) await deleteVeillePending(Number(id));
     invalidateSharedDebateCaches(canonicalLinkedDebateId || data.id);
+    await rebuildCloudBubblesAfterPublish("veille-publish", data.id);
     res.json({ ok: true, debateId: data.id });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

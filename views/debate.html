@@ -96,7 +96,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.css?v=20260603-mobile-filter-centering" />
+<link rel="stylesheet" href="/style.css?v=20260603-form-panel-covers-refresh" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -575,6 +575,7 @@
         autocomplete="url"
       />
       <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
+      <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
     </div>
 
@@ -688,10 +689,11 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
           autocomplete="url"
         />
         <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
+        <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
       </div>
 
-<button type="submit" class="button">Publier l'idée</button>
+<button type="submit" class="button">Publier l’idée</button>
     </form>
 
     <div id="arguments-a" class="arguments-list"></div>
@@ -759,10 +761,11 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
           autocomplete="url"
         />
         <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
+        <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
       </div>
 
-<button type="submit" class="button">Publier l'idée</button>
+<button type="submit" class="button">Publier l’idée</button>
     </form>
 
     <div id="arguments-b" class="arguments-list"></div>
@@ -925,7 +928,57 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.js?v=20260603-bubble-click-always-scroll"></script>
+<script src="/script.js?v=20260603-similar-cards"></script>
+<script>
+(function () {
+  function isInteractive(target) {
+    return !!target?.closest?.("a, button, input, textarea, select, option, label, form, iframe, video, audio, [contenteditable='true']");
+  }
+
+  function applyIdeaColumnFocus(side) {
+    var columns = document.querySelector(".debate-columns");
+    var columnA = document.getElementById("column-a");
+    var columnB = document.getElementById("column-b");
+    var headingA = document.querySelector(".debate-headings .position-a");
+    var headingB = document.querySelector(".debate-headings .position-b");
+    if (!columns) return;
+
+    var current = columns.classList.contains("focus-a") ? "a" : columns.classList.contains("focus-b") ? "b" : "split";
+    var next = current === side ? "split" : side;
+
+    columns.classList.remove("focus-a", "focus-b");
+    if (headingA) headingA.classList.remove("position-focus-active", "position-focus-a");
+    if (headingB) headingB.classList.remove("position-focus-active", "position-focus-b");
+
+    if (next === "a") {
+      columns.classList.add("focus-a");
+      if (columnA) columnA.style.display = "";
+      if (columnB) columnB.style.display = "none";
+      if (headingA) headingA.classList.add("position-focus-active", "position-focus-a");
+    } else if (next === "b") {
+      columns.classList.add("focus-b");
+      if (columnA) columnA.style.display = "none";
+      if (columnB) columnB.style.display = "";
+      if (headingB) headingB.classList.add("position-focus-active", "position-focus-b");
+    } else {
+      if (columnA) columnA.style.display = "";
+      if (columnB) columnB.style.display = "";
+    }
+
+    try { localStorage.setItem("debate_column_focus", next); } catch (_) {}
+  }
+
+  document.addEventListener("dblclick", function (event) {
+    var card = event.target?.closest?.(".debate-columns .argument-card");
+    if (!card || isInteractive(event.target)) return;
+    var side = card.closest(".column-a") ? "a" : card.closest(".column-b") ? "b" : "";
+    if (!side) return;
+    event.preventDefault();
+    event.stopPropagation();
+    applyIdeaColumnFocus(side);
+  }, true);
+})();
+</script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260529-sablier-preload"></script>
 <script src="/admin-debate-analysis.js?v=20260529-ai-trigger-bright"></script>
@@ -1119,29 +1172,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 };
 
 
-// Scroll jusqu'au bloc titre à l'ouverture du formulaire d'idée
-(function(){
-  var _origOpen = null;
-  function patchOpenArgumentComposer(){
-    if(typeof window.openArgumentComposer !== 'function') {
-      setTimeout(patchOpenArgumentComposer, 100);
-      return;
-    }
-    _origOpen = window.openArgumentComposer;
-    window.openArgumentComposer = function(side){
-      _origOpen(side);
-      setTimeout(function(){
-        var form = document.getElementById('form-list');
-        var titleBlock = document.querySelector('.debate-hero-top');
-        if(!form || !titleBlock) return;
-        // Scroller pour que le haut du formulaire soit juste sous le bloc titre
-        var y = form.offsetTop - titleBlock.offsetHeight;
-        window.scrollTo({ top: y, behavior: 'smooth' });
-      }, 60);
-    };
-  }
-  patchOpenArgumentComposer();
-})();
 </script>
 
 <!-- Badge voix utilisées + panneau -->

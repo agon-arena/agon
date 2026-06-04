@@ -225,94 +225,127 @@ function applyCompactBubbleLayout(container) {
   // Calculer le facteur d'échelle global pour que toutes les bulles rentrent
   const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
 
-  // Appliquer les tailles mises à l'échelle : même valeur pour l'affichage et le placement
-  const scaledSizes = baseSizes.map((base, i) => {
-    const scaled = Math.max(48, Math.round(base * autoScale));
-    bubbles[i].style.setProperty("--agon-tag-bubble-size", scaled + "px");
-    return scaled;
-  });
-
   const margin = isMobile ? 4 : 6;
   const btnRadius = 24;
   const preferredAngles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
+  const maxAllowedOverlap = 4;
 
-  // Obstacles déjà placés (bouton central inclus)
-  const placed = [{ x: centerX, y: centerY, r: btnRadius }];
-
-  bubbles.forEach((bubble, index) => {
-    const size = scaledSizes[index];
-    const r = size / 2;
-    const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
-
-    // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
-    // pour que la bulle entière reste dans la zone utile du conteneur
-    const minX = r + margin;
-    const maxX = containerW - r - margin;
-    const minY = frameTop + r + margin;
-    const maxY = containerH - frameBottomInset - r - margin;
-
-    if (minX > maxX || minY > maxY) {
-      // Zone trop petite pour cette bulle : la centrer et passer à la suivante
-      const cx = centerX;
-      const cy = Math.min(Math.max(centerY, minY > maxY ? (minY + maxY) / 2 : minY), maxY > minY ? maxY : centerY);
-      placed.push({ x: cx, y: cy, r });
-      bubble.style.left = Math.round(cx - r) + "px";
-      bubble.style.top  = Math.round(cy - r) + "px";
-      bubble.style.right = "auto";
-      return;
-    }
-
-    let fx = null, fy = null;
-    const maxDist = Math.hypot(containerW, containerH);
-
-    // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
-    for (let dist = btnRadius + r; dist <= maxDist && fx === null; dist += 3) {
-      const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
-      for (let step = 0; step < steps && fx === null; step++) {
-        const dAngle = step % 2 === 0
-          ? (step / 2) * (2 * Math.PI / steps)
-          : -Math.ceil(step / 2) * (2 * Math.PI / steps);
-        const angle = prefAngle + dAngle;
-        const cx = centerX + Math.cos(angle) * dist;
-        const cy = centerY + Math.sin(angle) * dist;
-        if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
-        let valid = true;
-        for (const p of placed) {
-          if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4) { valid = false; break; }
-        }
-        if (valid) { fx = cx; fy = cy; }
+  function measureMaxBubbleOverlap(placedBubbles) {
+    let maxOverlap = 0;
+    for (let i = 0; i < placedBubbles.length; i += 1) {
+      for (let j = i + 1; j < placedBubbles.length; j += 1) {
+        const a = placedBubbles[i];
+        const b = placedBubbles[j];
+        const gap = Math.hypot(a.x - b.x, a.y - b.y) - (a.r + b.r);
+        if (gap < 0) maxOverlap = Math.max(maxOverlap, -gap);
       }
     }
+    return maxOverlap;
+  }
 
-    if (fx === null) {
-      // Fallback : scan coarser, pick position with minimum total overlap
-      let bestOverlap = Infinity;
-      for (let dist2 = btnRadius + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
-        const steps2 = Math.max(24, Math.round(2 * Math.PI * dist2 / 10));
-        for (let step2 = 0; step2 < steps2; step2++) {
-          const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
-          const cx2 = centerX + Math.cos(angle2) * dist2;
-          const cy2 = centerY + Math.sin(angle2) * dist2;
-          if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
-          let totalOverlap = 0;
+  function placeBubblesWithScale(scale) {
+    // Appliquer les tailles mises à l'échelle : même valeur pour l'affichage et le placement
+    const scaledSizes = baseSizes.map((base, i) => {
+      const scaled = Math.max(48, Math.round(base * scale));
+      bubbles[i].style.setProperty("--agon-tag-bubble-size", scaled + "px");
+      return scaled;
+    });
+
+    // Obstacles déjà placés (bouton central inclus)
+    const placed = [{ x: centerX, y: centerY, r: btnRadius }];
+    const placedBubbles = [];
+    const placementItems = bubbles
+      .map((bubble, index) => ({ bubble, index, size: scaledSizes[index] }))
+      .sort((a, b) => (b.size - a.size) || (a.index - b.index));
+
+    placementItems.forEach(({ bubble, index, size }) => {
+      const r = size / 2;
+      const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
+
+      // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
+      // pour que la bulle entière reste dans la zone utile du conteneur
+      const minX = r + margin;
+      const maxX = containerW - r - margin;
+      const minY = frameTop + r + margin;
+      const maxY = containerH - frameBottomInset - r - margin;
+
+      if (minX > maxX || minY > maxY) {
+        // Zone trop petite pour cette bulle : la centrer et passer à la suivante
+        const cx = centerX;
+        const cy = Math.min(Math.max(centerY, minY > maxY ? (minY + maxY) / 2 : minY), maxY > minY ? maxY : centerY);
+        placed.push({ x: cx, y: cy, r });
+        placedBubbles.push({ x: cx, y: cy, r });
+        bubble.style.left = Math.round(cx - r) + "px";
+        bubble.style.top  = Math.round(cy - r) + "px";
+        bubble.style.right = "auto";
+        return;
+      }
+
+      let fx = null, fy = null;
+      const maxDist = Math.hypot(containerW, containerH);
+
+      // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
+      for (let dist = btnRadius + r; dist <= maxDist && fx === null; dist += 3) {
+        const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
+        for (let step = 0; step < steps && fx === null; step++) {
+          const dAngle = step % 2 === 0
+            ? (step / 2) * (2 * Math.PI / steps)
+            : -Math.ceil(step / 2) * (2 * Math.PI / steps);
+          const angle = prefAngle + dAngle;
+          const cx = centerX + Math.cos(angle) * dist;
+          const cy = centerY + Math.sin(angle) * dist;
+          if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
+          let valid = true;
           for (const p of placed) {
-            const gap = Math.hypot(cx2 - p.x, cy2 - p.y) - (r + p.r);
-            if (gap < 0) totalOverlap -= gap;
+            if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4) { valid = false; break; }
           }
-          if (totalOverlap < bestOverlap) { bestOverlap = totalOverlap; fx = cx2; fy = cy2; }
+          if (valid) { fx = cx; fy = cy; }
         }
       }
-      if (fx === null) {
-        fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
-        fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
-      }
-    }
 
-    placed.push({ x: fx, y: fy, r });
-    bubble.style.left = Math.round(fx - r) + "px";
-    bubble.style.top  = Math.round(fy - r) + "px";
-    bubble.style.right = "auto";
-  });
+      if (fx === null) {
+        // Fallback : scan coarser, pick position with minimum total overlap
+        let bestOverlap = Infinity;
+        for (let dist2 = btnRadius + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
+          const steps2 = Math.max(24, Math.round(2 * Math.PI * dist2 / 10));
+          for (let step2 = 0; step2 < steps2; step2++) {
+            const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
+            const cx2 = centerX + Math.cos(angle2) * dist2;
+            const cy2 = centerY + Math.sin(angle2) * dist2;
+            if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
+            let totalOverlap = 0;
+            for (const p of placed) {
+              const gap = Math.hypot(cx2 - p.x, cy2 - p.y) - (r + p.r);
+              if (gap < 0) totalOverlap -= gap;
+            }
+            if (totalOverlap < bestOverlap) { bestOverlap = totalOverlap; fx = cx2; fy = cy2; }
+          }
+        }
+        if (fx === null) {
+          fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
+          fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
+        }
+      }
+
+      placed.push({ x: fx, y: fy, r });
+      placedBubbles.push({ x: fx, y: fy, r });
+      bubble.style.left = Math.round(fx - r) + "px";
+      bubble.style.top  = Math.round(fy - r) + "px";
+      bubble.style.right = "auto";
+    });
+
+    return measureMaxBubbleOverlap(placedBubbles);
+  }
+
+  let scale = autoScale;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const maxOverlap = placeBubblesWithScale(scale);
+    if (maxOverlap <= maxAllowedOverlap) break;
+
+    const nextScale = Math.max(0.45, scale * 0.94);
+    if (nextScale === scale) break;
+    scale = nextScale;
+  }
 }
 
 function positionTrendBadges(container) {
@@ -352,6 +385,11 @@ function positionTrendBadges(container) {
     return al < br && ar > bl && at < bb && ab > bt;
   }
 
+  function getOverlapArea(al, at, ar, ab, bl, bt, br, bb) {
+    if (!rectsOverlap(al, at, ar, ab, bl, bt, br, bb)) return 0;
+    return (Math.min(ar, br) - Math.max(al, bl)) * (Math.min(ab, bb) - Math.max(at, bt));
+  }
+
   allBubbles.forEach((bubble, idx) => {
     const trend = bubble.querySelector(".agon-tag-trend");
     if (!trend) return;
@@ -363,26 +401,41 @@ function positionTrendBadges(container) {
     trend.style.left = "0px";
     trend.style.top  = "0px";
     trend.style.right = "auto";
+    trend.style.zIndex = "30";
 
     const tw = trend.offsetWidth  || 32;
     const th = trend.offsetHeight || 14;
 
-    // Centre du badge à ~85 % du rayon depuis le centre de la bulle
-    const d = Math.max(geo.r * 0.72, geo.r - th / 2 - 4);
+    const allowedBubbleOverlap = 6;
+    const preferredOutsideDistance = Math.max(
+      geo.r + th / 2 - allowedBubbleOverlap,
+      geo.r * 0.82
+    );
+    const maxOutsideDistance = geo.r + th * 2.4 + 28;
+    const distanceCandidates = [];
+    for (let d = preferredOutsideDistance; d <= maxOutsideDistance; d += 3) {
+      distanceCandidates.push(d);
+    }
+    distanceCandidates.push(maxOutsideDistance);
+    const angleCandidates = Array.from(new Set([
+      ...ANGLES,
+      ...Array.from({ length: 24 }, (_, i) => -180 + i * 15)
+    ]));
 
-    function scoreAngle(angleDeg) {
+    function scoreCandidate(angleDeg, distance) {
       const rad = angleDeg * Math.PI / 180;
-      const cx = geo.cx + Math.cos(rad) * d;
-      const cy = geo.cy + Math.sin(rad) * d;
+      const cx = geo.cx + Math.cos(rad) * distance;
+      const cy = geo.cy + Math.sin(rad) * distance;
       const l = cx - tw / 2, t = cy - th / 2;
       const r = l + tw,      b = t + th;
 
-      if (l < 1 || t < 1 || r > cW - 1 || b > cH - 1) return -9999;
+      if (l < 1 || t < 1 || r > cW - 1 || b > cH - 1) return null;
 
       let s = 0;
 
       // Préférer le sommet (-90°)
-      s -= Math.abs(angleDeg + 90) * 2;
+      s -= Math.max(0, distance - preferredOutsideDistance) * 12;
+      s -= Math.abs(angleDeg + 90) * 0.8;
 
       // Pénalité : badge profond dans une autre bulle
       for (let i = 0; i < bubbleGeo.length; i++) {
@@ -394,44 +447,47 @@ function positionTrendBadges(container) {
         else if (dist < ob.r)  s -= 60 * (ob.r - dist);
       }
 
-      // Pénalité : chevauchement avec overlay de texte (z-index 40 > badge z-index 10)
+      let textOverlapArea = 0;
+
+      // Blocage lisibilité : un badge ne doit pas recouvrir le texte d'une bulle.
       for (const or of overlayRects) {
-        if (rectsOverlap(l, t, r, b, or.l, or.t, or.r, or.b)) {
-          const ow = Math.min(r, or.r) - Math.max(l, or.l);
-          const oh = Math.min(b, or.b) - Math.max(t, or.t);
-          s -= ow * oh * 10;
-        }
+        textOverlapArea += getOverlapArea(l, t, r, b, or.l, or.t, or.r, or.b);
       }
 
       // Pénalité : chevauchement avec badge déjà placé
       for (const pb of placed) {
-        if (rectsOverlap(l, t, r, b, pb.l, pb.t, pb.r, pb.b)) {
-          const ow = Math.min(r, pb.r) - Math.max(l, pb.l);
-          const oh = Math.min(b, pb.b) - Math.max(t, pb.t);
-          s -= ow * oh * 15;
-        }
+        s -= getOverlapArea(l, t, r, b, pb.l, pb.t, pb.r, pb.b) * 15;
       }
 
       // Blocage absolu : bouton central
       if (cbtnR && rectsOverlap(l, t, r, b, cbtnR.l, cbtnR.t, cbtnR.r, cbtnR.b)) {
-        return -9999;
+        return null;
       }
 
-      return s;
+      return { score: s, textOverlapArea, l, t, r, b };
     }
 
-    let bestAngle = ANGLES[0];
-    let bestScore = -Infinity;
-    for (const a of ANGLES) {
-      const s = scoreAngle(a);
-      if (s > bestScore) { bestScore = s; bestAngle = a; }
+    let bestReadable = null;
+    for (const distance of distanceCandidates) {
+      for (const angle of angleCandidates) {
+        const candidate = scoreCandidate(angle, distance);
+        if (!candidate) continue;
+        if (candidate.textOverlapArea > 0) continue;
+        if (!bestReadable || candidate.score > bestReadable.score) {
+          bestReadable = candidate;
+        }
+      }
     }
 
-    const rad = bestAngle * Math.PI / 180;
-    const finalCx = geo.cx + Math.cos(rad) * d;
-    const finalCy = geo.cy + Math.sin(rad) * d;
-    const finalL = Math.round(finalCx - tw / 2);
-    const finalT = Math.round(finalCy - th / 2);
+    const best = bestReadable;
+    if (!best) {
+      trend.style.display = "none";
+      return;
+    }
+
+    trend.style.display = "";
+    const finalL = Math.round(best.l);
+    const finalT = Math.round(best.t);
 
     trend.style.left = finalL + "px";
     trend.style.top  = finalT + "px";
@@ -473,6 +529,8 @@ function renderTagTrendCloud(container, trends, onReady) {
     // pour que applyCompactBubbleLayout puisse la relire et calculer l'échelle globale.
     const basePxSize = computeBubblePxSize(index, trendItem, isMobile);
     bubble.dataset.bubbleBaseSize = basePxSize;
+    bubble.dataset.tag = tag;
+    bubble.dataset.subjectId = String(trendItem?.subjectId || "").trim();
     bubble.style.setProperty("--agon-tag-bubble-size", basePxSize + "px");
 
     bubble.type = "button";
