@@ -499,7 +499,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn index-floating-refresh-btn"
-  onclick="(function(){sessionStorage.removeItem('agon_startup_seen');sessionStorage.setItem('agon_scroll_top','1');var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
+  onclick="(function(){sessionStorage.removeItem('agon_startup_seen');var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
@@ -824,7 +824,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260603-idea-dblclick-focus" defer></script>
+<script src="/script.js?v=20260604-fix-similar-iframe-close" defer></script>
 <script src="/index-ai-badge.js" defer></script>
 
 

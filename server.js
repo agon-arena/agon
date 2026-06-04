@@ -190,7 +190,8 @@ function replaceMetaPlaceholders(template, meta) {
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve des sources, des objections et de la contradiction pour faire émerger les positions les plus robustes.",
+    title: "Agôn | L’arène des idées",
+    description: "Agôn est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve pour faire émerger les positions les plus robustes.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/logo2.jpeg"),
     imageAlt: "Agôn — l'arène des idées"
@@ -6506,9 +6507,15 @@ app.get("/api/debates/:id/analysis", async (req, res) => {
   const fullAnalysis = data.ai_analysis || null;
   let raw = null;
   if (fullAnalysis) {
-    const marker = "\n%%AGON_SCORING%%\n";
-    const idx = fullAnalysis.indexOf(marker);
-    if (idx !== -1) raw = fullAnalysis.slice(idx + marker.length).trim();
+    if (fullAnalysis.trimStart().startsWith("{")) {
+      // Nouveau format : JSON direct
+      raw = fullAnalysis;
+    } else {
+      // Ancien format : extrait le bloc scoring après le marqueur
+      const marker = "\n%%AGON_SCORING%%\n";
+      const idx = fullAnalysis.indexOf(marker);
+      if (idx !== -1) raw = fullAnalysis.slice(idx + marker.length).trim();
+    }
   }
   return res.json({
     raw:         raw,
@@ -6532,16 +6539,25 @@ async function _fetchDebatePayload(debateId) {
     comments = rows || [];
   }
 
+  const mapArg = (a) => ({
+    id:         String(a.id),
+    text:       (a.body || a.title || "").trim(),
+    source_url: (a.source_url || "").trim(),
+    votes:      Number(a.votes || 0)
+  });
+
   return {
     question:   debate.question  || "",
     positionA:  debate.option_a  || "",
     positionB:  debate.option_b  || "",
     content:    debate.content   || "",
-    argumentsA: (args || []).filter((a) => a.side === "A").map((a) => ({ text: a.body || a.title || "" })),
-    argumentsB: (args || []).filter((a) => a.side === "B").map((a) => ({ text: a.body || a.title || "" })),
+    argumentsA: (args || []).filter((a) => a.side === "A").map(mapArg),
+    argumentsB: (args || []).filter((a) => a.side === "B").map(mapArg),
     comments:   comments.map((c) => ({ text: c.content || "", stance: c.stance || "" }))
   };
 }
+
+const { generateAnalysisJson } = require('./lib/debate-analysis');
 
 // Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin)
 async function _generateAndSaveAnalysis(debateId) {
@@ -6551,25 +6567,9 @@ async function _generateAndSaveAnalysis(debateId) {
   await supabase.from("debates").update({ ai_analysis_status: "generating" }).eq("id", debateId);
 
   try {
-    const payload  = await _fetchDebatePayload(debateId);
-    const prompt1  = _buildAnalysisPrompt1(payload);
-    const analysis = await _callOpenAI(apiKey, [{ role: "user", content: prompt1 }]);
-    if (!analysis) throw new Error("Réponse vide (analyse).");
-
-    const verdict = await _callOpenAI(apiKey, [
-      { role: "user",      content: prompt1  },
-      { role: "assistant", content: analysis },
-      { role: "user",      content: _PROMPT2 }
-    ]);
-    if (!verdict) throw new Error("Réponse vide (verdict).");
-
-    const hasPositions = String(payload.positionA || "").trim() && String(payload.positionB || "").trim();
-    let scoring = "";
-    if (hasPositions) {
-      scoring = await _callOpenAI(apiKey, [{ role: "user", content: _buildPrompt3(payload) }]);
-    }
-
-    const raw = analysis + "\n\n---\n\n" + verdict + (scoring ? "\n%%AGON_SCORING%%\n" + scoring : "");
+    const payload = await _fetchDebatePayload(debateId);
+    const result  = await generateAnalysisJson(payload, (messages) => _callOpenAI(apiKey, messages));
+    const raw     = JSON.stringify(result);
 
     const { error: saveError } = await supabase.from("debates").update({
       ai_analysis:              raw,
@@ -6731,349 +6731,7 @@ setInterval(async () => {
   }
 }, 15 * 60 * 1000).unref();
 
-function _buildAnalysisPrompt1(payload) {
-  const fmtArgs = (args) => Array.isArray(args) && args.length
-    ? args.map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
-    : "(aucun)";
-
-  const fmtComments = (comments) => Array.isArray(comments) && comments.length
-    ? comments.map((c, i) => {
-        const stance = c.stance ? ` [${c.stance}]` : "";
-        return `${i + 1}.${stance} ${String(c.text || "").trim()}`;
-      }).join("\n")
-    : "(aucun)";
-
-  const isOpen = !String(payload.positionA || "").trim() && !String(payload.positionB || "").trim();
-
-  return `Tu es un analyste critique de débats publics pour Agôn.
-
-Analyse le débat fourni à partir des données disponibles :
-question, positions, contexte, sources, arguments, commentaires, soutiens ou votes s'ils existent.
-
-Ta mission :
-- résumer le débat ;
-- expliquer le vrai enjeu ;
-- expliquer pourquoi le sujet divise ;
-- analyser les sources disponibles ;
-- identifier les meilleurs arguments ;
-- identifier les arguments fragiles ;
-- repérer les angles morts ;
-- lister les points à vérifier.
-
-Règles :
-- N'invente aucun fait, chiffre, source ou citation.
-- Si une information manque, dis-le clairement.
-- Ne juge pas les personnes, seulement les arguments.
-- Ne donne pas encore de gagnant.
-- Distingue faits, interprétations, valeurs et émotions.
-- Explique pourquoi un argument est fort ou faible.
-- Ne cherche pas un compromis artificiel.
-- Reste clair, direct et accessible.
-
----
-
-Question : ${String(payload.question || "").trim()}
-${isOpen ? "" : `Position A : ${String(payload.positionA || "").trim()}
-Position B : ${String(payload.positionB || "").trim()}`}
-Contexte : ${String(payload.content || "").trim().slice(0, 800)}
-
-Arguments ${isOpen ? "" : "du camp A"} :
-${fmtArgs(payload.argumentsA)}
-${isOpen ? "" : `
-Arguments du camp B :
-${fmtArgs(payload.argumentsB)}`}
-
-Commentaires des participants :
-${fmtComments(payload.comments)}
-
----
-
-${isOpen
-  ? `Structure obligatoire :
-
-## Synthèse du débat
-## Ce qui est vraiment en jeu
-## Pourquoi le sujet divise
-## Analyse des sources
-## Principales lignes d'argumentation
-## Meilleurs arguments du débat
-## Arguments séduisants mais fragiles
-## Points absents ou à approfondir
-## Points à vérifier`
-
-  : `Structure obligatoire :
-
-## Synthèse du débat
-## Ce qui est vraiment en jeu
-## Pourquoi le sujet divise
-## Analyse des sources
-## Analyse des arguments du camp A
-## Analyse des arguments du camp B
-## Meilleurs arguments du débat
-## Arguments séduisants mais fragiles
-## Points absents ou à approfondir
-## Points à vérifier`}`;
-}
-
-const _PROMPT2 = `Tu es un arbitre argumentatif pour Agôn.
-
-À partir de l'analyse critique précédente, désigne le camp qui gagne argumentativement dans l'état actuel du débat.
-
-Important :
-Tu ne dois pas dire qui a raison absolument.
-Tu dois dire quelle position est la mieux défendue dans ce débat.
-
-Critères de victoire :
-Une position gagne si elle :
-- répond mieux à la question ;
-- présente les arguments les plus solides ;
-- utilise mieux les sources disponibles ;
-- répond mieux aux objections ;
-- a moins d'angles morts importants ;
-- évite mieux les exagérations ou caricatures.
-
-Règles :
-- Le verdict est obligatoire sauf si les données sont vraiment insuffisantes.
-- Tu peux choisir : camp A, camp B, égalité, impossible à déterminer.
-- Ne choisis "égalité" que si les deux positions sont réellement proches.
-- Ne choisis "impossible à déterminer" que si les données ne permettent vraiment pas de trancher.
-- Formule le verdict comme provisoire et dépendant des données disponibles.
-- Ne méprise jamais le camp perdant.
-
-Structure obligatoire :
-
-## Verdict argumentatif
-Gagnant : camp A / camp B / égalité / impossible à déterminer
-
-Confiance : faible / moyenne / forte
-
-Pourquoi ce camp l'emporte :
-Explique clairement le facteur décisif.
-
-Faiblesse principale du camp perdant :
-Explique sans mépris.
-
-Ce qui pourrait changer le verdict :
-Indique quelle information, source ou réponse à une objection pourrait faire évoluer l'analyse.
-
-Phrase finale :
-Résume en une phrase ce que le lecteur doit retenir.`;
-
-function _buildPrompt3(payload) {
-  const fmtArgs = (args) => Array.isArray(args) && args.length
-    ? args.map((a, i) => `${i + 1}. ${String(a.text || "").trim()}`).join("\n")
-    : "(aucun)";
-
-  const fmtComments = (comments) => Array.isArray(comments) && comments.length
-    ? comments.map((c, i) => {
-        const stance = c.stance ? ` [${c.stance}]` : "";
-        return `${i + 1}.${stance} ${String(c.text || "").trim()}`;
-      }).join("\n")
-    : "(aucun)";
-
-  const question   = String(payload.question  || "").trim();
-  const positionA  = String(payload.positionA || "").trim();
-  const positionB  = String(payload.positionB || "").trim();
-  const argumentsA = fmtArgs(payload.argumentsA);
-  const argumentsB = fmtArgs(payload.argumentsB);
-  const comments   = fmtComments(payload.comments);
-  const sources    = String(payload.content   || "").trim().slice(0, 600) || "(aucun)";
-
-  return `Tu dois produire une analyse très synthétique du débat, sous forme de rapport visuel et lisible rapidement.
-
-Objectif :
-Afficher immédiatement quelle position gagne argumentativement, puis comparer les deux positions avec des scores en pourcentage et des barres combinées.
-
-Important :
-Tu ne dois jamais écrire "Camp A" ou "Camp B" dans le rapport final.
-Tu dois utiliser les intitulés réels des positions du débat.
-
-Données du débat :
-Question : ${question}
-Position A : ${positionA}
-Position B : ${positionB}
-
-Arguments / idées de la position A :
-${argumentsA}
-
-Arguments / idées de la position B :
-${argumentsB}
-
-Commentaires / réactions éventuelles :
-${comments}
-
-Sources éventuelles :
-${sources}
-
----
-
-FORMAT DE SORTIE OBLIGATOIRE
-
-# Verdict argumentatif
-
-## Position gagnante : [intitulé court de la position gagnante]
-
-**Score global : X % / Y %**
-**Confiance : faible / moyenne / forte**
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte : partie gauche pour la position A, partie droite pour la position B]
-
-[Explication brève en 2 phrases maximum.]
-
----
-
-## Barres d'évaluation
-
-### Réponse à la question
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte]
-
-| Lecture rapide |
-|---|
-| [Une phrase courte expliquant le score.] |
-
----
-
-### Solidité argumentative
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte]
-
-| Lecture rapide |
-|---|
-| [Une phrase courte expliquant le score.] |
-
----
-
-### Sources / faits vérifiables
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte]
-
-| Lecture rapide |
-|---|
-| [Une phrase courte expliquant le score.] |
-
----
-
-### Prise en compte des objections
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte]
-
-| Lecture rapide |
-|---|
-| [Une phrase courte expliquant le score.] |
-
----
-
-### Force de conviction
-
-[intitulé court position A] X % | [intitulé court position B] Y %
-
-[barre combinée en texte]
-
-| Lecture rapide |
-|---|
-| [Une phrase courte expliquant le score.] |
-
----
-
-## Lecture des sources
-
-| Position | Usage des sources | Limite principale |
-|---|---|---|
-| [Position A courte] | [Usage des sources par cette position] | [Limite principale] |
-| [Position B courte] | [Usage des sources par cette position] | [Limite principale] |
-
----
-
-## Ce qui manque pour trancher mieux
-
-| Donnée manquante | Pourquoi ça compte |
-|---|---|
-| [Donnée 1] | [Explication courte] |
-| [Donnée 2] | [Explication courte] |
-| [Donnée 3] | [Explication courte] |
-
----
-
-## Phrase finale
-
-[Une phrase claire, éditoriale, qui résume le verdict sans exagérer.]
-
----
-
-RÈGLES SUR LES SCORES
-
-- Les scores ne mesurent pas la vérité absolue.
-- Les scores mesurent uniquement la force argumentative observée dans le débat.
-- Chaque score doit toujours opposer les deux positions et faire exactement 100 % au total.
-- Pour chaque critère, il faut une seule barre combinée, pas deux barres séparées.
-- Le score global doit être cohérent avec les scores par critère.
-- La position gagnante doit être cohérente avec le score global.
-- Si le débat est équilibré, utilise des scores proches de 50/50 : 51/49, 52/48, 53/47.
-- Si une position domine légèrement, utilise 55/45 ou 60/40.
-- Si une position domine nettement, utilise 65/35 ou 70/30.
-- Ne jamais utiliser de score extrême sauf domination écrasante.
-- Si aucune position ne domine clairement, indique une victoire très courte ou une égalité argumentative.
-
-RÈGLES SUR LES BARRES
-
-Utilise une barre texte de 20 caractères.
-La partie ████ (gauche) représente TOUJOURS la position A.
-La partie ░░░░ (droite) représente TOUJOURS la position B.
-Cette règle est absolue : ne jamais inverser, même si la position B domine.
-
-Exemples où A domine :
-A = 60 %, B = 40 % → ████████████░░░░░░░░
-A = 65 %, B = 35 % → █████████████░░░░░░░
-A = 55 %, B = 45 % → ███████████░░░░░░░░░
-
-Exemples où B domine (A reste à gauche, B à droite) :
-A = 40 %, B = 60 % → ████████░░░░░░░░░░░░
-A = 35 %, B = 65 % → ███████░░░░░░░░░░░░░
-A = 45 %, B = 55 % → █████████░░░░░░░░░░░
-
-Exemple équilibré :
-A = 50 %, B = 50 % → ██████████░░░░░░░░░░
-
-La barre doit toujours correspondre approximativement au score annoncé.
-La ligne de score au-dessus de la barre suit le même ordre : [A] X % | [B] Y %
-
-RÈGLES SUR LES POSITIONS
-
-- Utilise les intitulés réels des positions.
-- Si les intitulés sont trop longs, crée une version courte et fidèle.
-- Ne modifie jamais le sens des positions.
-- Ne parle pas de "camp A" ou "camp B" dans le rapport final.
-- Tu peux parler de "position A" et "position B" uniquement dans ton raisonnement interne, jamais dans la sortie finale.
-
-RÈGLES SUR LES SOURCES
-
-- Ne jamais inventer de source.
-- Si aucune source solide n'est fournie, le dire clairement.
-- Le critère "Sources / faits vérifiables" évalue la qualité, la pertinence et l'usage des sources, pas seulement leur nombre.
-- Une position avec peu de sources mais bien utilisées peut obtenir un meilleur score qu'une position avec beaucoup de sources faibles ou hors sujet.
-- Si les deux positions manquent de sources, les scores doivent rester proches.
-- Ne jamais affirmer qu'un point est prouvé si le débat ne fournit pas d'éléments vérifiables.
-
-STYLE
-
-- Ton clair, synthétique, direct.
-- Pas de long développement.
-- Pas de formulation scolaire lourde.
-- Pas de conclusion molle.
-- L'analyse doit être lisible en moins d'une minute.
-- Le verdict doit rester prudent si les données du débat sont faibles.`;
-}
+// (anciens prompts _buildAnalysisPrompt1 / _PROMPT2 / _buildPrompt3 déplacés dans lib/debate-analysis.js)
 
 async function _callOpenAI(apiKey, messages) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {

@@ -87,6 +87,8 @@ registerServiceWorker();
   const loader = document.getElementById("agon-startup-loader");
   if (!loader) return;
 
+  try { history.scrollRestoration = 'manual'; } catch (_) {}
+
   const SEEN_KEY = "agon_startup_seen";
   if (sessionStorage.getItem(SEEN_KEY)) {
     if (loader.parentNode) loader.parentNode.removeChild(loader);
@@ -94,7 +96,6 @@ registerServiceWorker();
   }
   sessionStorage.setItem(SEEN_KEY, "1");
   window.scrollTo(0, 0);
-  try { history.scrollRestoration = 'manual'; } catch (_) {}
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
 
@@ -3586,8 +3587,7 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   const isOnListPage =
     pathname === "/" ||
     pathname === "/debates" ||
-    pathname.startsWith("/debates/") ||
-    pathname === "/debate";
+    pathname.startsWith("/debates/");
   if (!isOnListPage) return;
 
   const normalizedModalUrl = String(modalUrl || "").trim();
@@ -3740,13 +3740,19 @@ function openDebateIframeModal(url, options = {}) {
     existingModal.classList.remove("argument-form-open-in-child");
   }
 
-  // Sauvegarde la position de scroll et verrouille le re-rendu de la liste
-  _debateModalSavedScrollY = Math.round(window.scrollY || 0);
   const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
-  _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
+  const modalAlreadyOpen = window.__agonDebateModalOpen === true;
+
+  // Si le modal est déjà ouvert (navigation A → arène similaire B), on préserve
+  // la position de scroll d'origine et la liste en attente de re-rendu.
+  if (!modalAlreadyOpen) {
+    _debateModalSavedScrollY = Math.round(window.scrollY || 0);
+    _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
+    window.__agonDebateModalPendingDebates = null;
+    cleanupIndexInfiniteScrollObserver();
+  }
+
   window.__agonDebateModalOpen = true;
-  window.__agonDebateModalPendingDebates = null;
-  cleanupIndexInfiniteScrollObserver();
 
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
@@ -3762,7 +3768,7 @@ function openDebateIframeModal(url, options = {}) {
   syncDebateIframeModalPageClass(iframeUrlPathname);
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
-  suspendIndexEmbedsForDebateModal();
+  if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
   frame.src = url;
   modal.classList.add("open");
 
@@ -5933,7 +5939,9 @@ function removeFailedIndexSourceFromSwipe(imageShell) {
   const nextPreview = String(nextItem?.type || '').trim() === 'source'
     ? getResolvedIndexSourcePreview(String(nextItem.url || '').trim(), debate)
     : null;
-  const nextHtml = renderIndexMediaItemHtml(nextItem, debate, nextPreview);
+  const nextHtml = renderIndexMediaItemHtml(nextItem, debate, nextPreview, {
+    showSourceBadgeWithoutImage: swipeShell.dataset.showSourceBadgeWithoutImage === '1'
+  });
   if (!nextHtml) {
     swipeShell.remove();
     return true;
@@ -6510,7 +6518,7 @@ async function getIndexSourcePreviewData(sourceUrl, options = {}) {
   return pending;
 }
 
-function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
+function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null, options = {}) {
   const safeDebateId = String(debate?.id || "").trim();
   if (!item) return "";
 
@@ -6561,7 +6569,11 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null) {
     return buildIndexInstagramEmbedHtml(itemUrl, sourcePreview, safeDebateId);
   }
 
-  return buildSourcePreviewCardHtml(sourcePreview, itemUrl, { debateId: safeDebateId, badgeLabel: sourceLabel });
+  return buildSourcePreviewCardHtml(sourcePreview, itemUrl, {
+    debateId: safeDebateId,
+    badgeLabel: sourceLabel,
+    showSourceBadgeWithoutImage: options.showSourceBadgeWithoutImage === true
+  });
 }
 
 function startIndexSourceAutoPlay(root) {
@@ -6685,7 +6697,10 @@ function initIndexMediaSwipeEnhancements(root) {
 
       // Rendu immédiat avec la preview en cache (ou null) — pas d'attente réseau
       const cachedPreview = isSource ? getResolvedIndexSourcePreview(nextItem.url, debate) : null;
-      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, cachedPreview);
+      const renderOptions = {
+        showSourceBadgeWithoutImage: shell.dataset.showSourceBadgeWithoutImage === '1'
+      };
+      inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, cachedPreview, renderOptions);
 
       // Fetch asynchrone de la preview : met à jour uniquement si la carte est toujours visible
       if (isSource && !cachedPreview) {
@@ -6693,7 +6708,7 @@ function initIndexMediaSwipeEnhancements(root) {
         getIndexSourcePreviewData(nextItem.url).then(freshPreview => {
           if (!freshPreview) return;
           if (Number(shell.dataset.currentIndex) !== indexAtRender) return;
-          inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, freshPreview);
+          inner.innerHTML = renderIndexMediaItemHtml(nextItem, debate, freshPreview, renderOptions);
           if (typeof initIndexXObserver === "function") initIndexXObserver(inner);
           if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(inner);
           if (typeof initIndexOpenGraphImageObserver === "function") initIndexOpenGraphImageObserver(inner);
@@ -6918,7 +6933,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
     ? getResolvedIndexSourcePreview(String(currentItem.url || "").trim(), debate)
     : null;
-  const baseHtml = renderIndexMediaItemHtml(currentItem, debate, currentSourcePreview);
+  const baseHtml = renderIndexMediaItemHtml(currentItem, debate, currentSourcePreview, options);
   if (!baseHtml) return "";
 
   if (mediaItems.length < 2) {
@@ -6943,6 +6958,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
       data-current-index="${escapeAttribute(String(initialIndex))}"
       data-current-source-url="${escapeAttribute(currentSourceUrl)}"
       data-current-source-preview="${escapeAttribute(JSON.stringify(sourcePreview || null))}"
+      data-show-source-badge-without-image="${options.showSourceBadgeWithoutImage === true ? '1' : '0'}"
     >
       <div class="index-media-swipe-media">
         <div class="index-media-swipe-content" data-index-media-swipe-content>
@@ -6983,9 +6999,13 @@ const pendingIndexSourcePreviewHydrations = new Set();
 function getIndexDebateById(debateId) {
   const targetId = String(debateId || '').trim();
   if (!targetId) return null;
-  return Array.isArray(debatesCache)
-    ? debatesCache.find((debate) => String(debate?.id || '').trim() === targetId) || null
-    : null;
+  const collections = [debatesCache, visitedDebatesCache, otherDebatesCache, similarDebatesCache];
+  for (const collection of collections) {
+    if (!Array.isArray(collection)) continue;
+    const debate = collection.find((item) => String(item?.id || '').trim() === targetId);
+    if (debate) return debate;
+  }
+  return null;
 }
 
 function getIndexHydratableSourceUrls(debate) {
@@ -7044,7 +7064,10 @@ function rerenderIndexCardMedia(debateId) {
   const card = document.querySelector(`.debate-card[data-debate-id="${CSS.escape(String(debateId || '').trim())}"]`);
   if (!card) return false;
 
-  const mediaHtml = buildIndexSwipeableMediaHtml(debate);
+  const mediaOptions = card.closest('.similar-debates-results')
+    ? { showSwipeHotspots: false, showSourceBadgeWithoutImage: true }
+    : {};
+  const mediaHtml = buildIndexSwipeableMediaHtml(debate, mediaOptions);
 
   const existingWrapper = card.querySelector(':scope > .index-card-media-with-title');
   if (existingWrapper) {
@@ -9198,6 +9221,8 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
   const badgeLabel = String(options?.badgeLabel || '').trim() || domain;
+  const showSourceBadgeWithoutImage = options?.showSourceBadgeWithoutImage === true;
+  const showImageArea = !!(image || showSourceBadgeWithoutImage || (!debateId && !debateHref));
 
   let cardTag, cardAttributes, openSourceHtml;
 
@@ -9228,15 +9253,17 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     <${cardTag}
       ${cardAttributes}
     >
-      ${(image || (!debateId && !debateHref)) ? `
+      ${showImageArea ? `
       <div
         class="debate-source-card-image-wrap"
         ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"` : ''}
         style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
       >
+        ${image ? `
         <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
           ${buildIndexOpenGraphImageLoadingHtml()}
         </div>
+        ` : ''}
         ${image ? `
         <img
           class="debate-source-card-image"
@@ -9245,8 +9272,8 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
           decoding="async"
           style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
         >
-        <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
         ` : ''}
+        <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
       </div>
       ` : ``}
      <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
@@ -15335,6 +15362,13 @@ function jumpToStartOfCarousel(button) {
   const row = section?.querySelector?.(".theme-horizontal-row");
   if (!row) return;
   row.scrollTo({ left: 0, behavior: 'smooth' });
+  const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
+  const rect = row.getBoundingClientRect();
+  const targetOffset = rect.top + window.scrollY - topbarH - 8;
+  const sectionRect = section.getBoundingClientRect();
+  if (sectionRect.top < topbarH || sectionRect.bottom > window.innerHeight * 0.6) {
+    window.scrollTo({ top: targetOffset, behavior: 'smooth' });
+  }
   window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 400);
 }
 
@@ -15962,17 +15996,23 @@ function syncBubbleFrameTop() {
 }
 
 (function initBubbleFrameSync() {
+  let _frameTimer = null;
+  function debouncedSync() {
+    clearTimeout(_frameTimer);
+    _frameTimer = setTimeout(syncBubbleFrameTop, 120);
+  }
+
   const debatesSection = document.querySelector('.debates-section');
   if (debatesSection) {
-    new ResizeObserver(syncBubbleFrameTop).observe(debatesSection);
+    new ResizeObserver(debouncedSync).observe(debatesSection);
   }
 
   const cloud = document.getElementById('agon-tag-trends-cloud');
   if (cloud) {
-    new ResizeObserver(syncBubbleFrameTop).observe(cloud);
+    new ResizeObserver(debouncedSync).observe(cloud);
   }
 
-  window.addEventListener('resize', syncBubbleFrameTop, { passive: true });
+  window.addEventListener('resize', debouncedSync, { passive: true });
 })();
 
 function showBubbleCloudLoadingSpinner() {
@@ -16263,7 +16303,7 @@ function setTypeFilter(type) {
 async function waitForInitialIndexFeedStability() {
   await new Promise((resolve) => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(resolve);
+      requestAnimationFrame(() => setTimeout(resolve, 100));
     });
   });
 }
@@ -16652,7 +16692,7 @@ async function initIndex() {
     pageArrivalLoadingOverlayReady = true;
     hidePageArrivalLoadingOverlay();
     window.dispatchEvent(new Event("agon:feed-ready"));
-    alert(error.message);
+    console.error('[Agôn] initIndex error:', error);
   }
 }
 
@@ -19205,7 +19245,10 @@ function renderBottomSimilarDebates(currentDebate, debates) {
     <div class="similar-debates-results page-home-mobile">
       ${matches
         .slice(0, Math.max(SIMILAR_DEBATES_BATCH_SIZE, similarDebatesVisibleCount))
-        .map(({ debate }) => buildIndexLikeDebateCardHtml(debate, { showSwipeHotspots: false }))
+        .map(({ debate }) => buildIndexLikeDebateCardHtml(debate, {
+          showSwipeHotspots: false,
+          showSourceBadgeWithoutImage: true
+        }))
         .join("")}
     </div>
 
@@ -19236,6 +19279,7 @@ function renderBottomSimilarDebates(currentDebate, debates) {
   if (typeof initIndexXObserver === "function") initIndexXObserver(container);
   if (typeof initIndexInstagramObserver === "function") initIndexInstagramObserver(container);
   if (typeof initIndexOpenGraphImageObserver === "function") initIndexOpenGraphImageObserver(container);
+  if (typeof observeIndexCardsMissingSourcePreview === "function") observeIndexCardsMissingSourcePreview(container);
 
   if (isMobileDebatePage) {
     return;
@@ -25391,7 +25435,10 @@ scheduleMobileIndexCardHighlightUpdate();
   initIndexReturnNavigation();
   applyCreateBackLinks();
 
-  if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) initIndex();
+  if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) {
+    showBubbleCloudLoadingSpinner();
+    initIndex();
+  }
   if (location.pathname === "/create") initCreate();
 
   if (document.body.classList.contains('is-standalone')) {
@@ -27124,7 +27171,7 @@ window.addEventListener('pageshow', (event) => {
 // Rechargement automatique après 5 min d'absence (toutes pages).
 (function() {
   var IDLE_RELOAD_KEY = "agon_idle_reload_hidden_at";
-  var IDLE_RELOAD_THRESHOLD = 5 * 60 * 1000;
+  var IDLE_RELOAD_THRESHOLD = 30 * 60 * 1000;
 
   function onHidden() {
     sessionStorage.setItem(IDLE_RELOAD_KEY, String(Date.now()));
@@ -27142,5 +27189,74 @@ window.addEventListener('pageshow', (event) => {
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) onHidden();
     else onVisible();
+  });
+})();
+
+// Bandeau "nouvelles publications" (style réseaux sociaux).
+(function() {
+  var p = location.pathname;
+  if (p !== '/' && p !== '/debates') return;
+
+  var POLL_INTERVAL = 2 * 60 * 1000;
+  var latestSeenAt = null;
+  var bannerEl = null;
+  var pollTimer = null;
+  var bannerShown = false;
+
+  function getNewestCreatedAt(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    return list.reduce(function(max, d) {
+      return d.created_at && (!max || d.created_at > max) ? d.created_at : max;
+    }, null);
+  }
+
+  function createBanner() {
+    bannerEl = document.createElement('button');
+    bannerEl.type = 'button';
+    bannerEl.className = 'agon-new-debates-banner';
+    document.body.appendChild(bannerEl);
+    bannerEl.addEventListener('click', function() {
+      bannerEl.classList.remove('visible');
+      sessionStorage.removeItem('agon_startup_seen');
+      var overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
+      document.body.appendChild(overlay);
+      setTimeout(function() { window.location.reload(); }, 60);
+    });
+  }
+
+  function showBanner(count) {
+    if (!bannerEl) createBanner();
+    var label = count <= 1 ? 'Nouvelle publication' : count + ' nouvelles publications';
+    bannerEl.innerHTML = '<i class="fa-solid fa-arrow-up"></i> ' + label;
+    bannerEl.classList.add('visible');
+    bannerShown = true;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function poll() {
+    if (document.hidden || bannerShown || !latestSeenAt) return;
+    // Synchroniser avec le background refresh qui peut avoir mis à jour debatesCache
+    var currentNewest = getNewestCreatedAt(debatesCache);
+    if (currentNewest && currentNewest > latestSeenAt) latestSeenAt = currentNewest;
+    fetch('/api/debates?sort=recent&limit=10&_=' + Date.now(), { cache: 'no-store' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!Array.isArray(data)) return;
+        var ref = latestSeenAt;
+        var newer = data.filter(function(d) { return d.created_at && d.created_at > ref; });
+        if (newer.length > 0) showBanner(newer.length);
+      })
+      .catch(function() {});
+  }
+
+  window.addEventListener('agon:feed-ready', function() {
+    latestSeenAt = getNewestCreatedAt(debatesCache);
+    if (!latestSeenAt) return;
+    pollTimer = setInterval(poll, POLL_INTERVAL);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && !bannerShown) poll();
   });
 })();

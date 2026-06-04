@@ -48,7 +48,7 @@
         padding: 11px 28px; border-radius: 999px; border: 3px solid #111;
         background: linear-gradient(120deg, #fff 15%, #b0b0b0 50%, #fff 85%);
         background-size: 300% 100%;
-        color: #111; font-size: 14px; font-weight: 700; letter-spacing: .03em;
+        font-size: 14px; font-weight: 700; letter-spacing: .03em;
         cursor: pointer;
         animation: adaShine 1.8s ease-in-out infinite;
         transition: filter .2s, transform .15s;
@@ -112,7 +112,7 @@
         background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
         background-size: 300% 100%;
         border: 3px solid #111;
-        font-size: 10px; font-weight: 600; color: #111;
+        font-size: 11px; font-weight: 600; color: #111;
         white-space: nowrap;
         animation: adaBadgeShine 2.4s ease-in-out infinite;
       }
@@ -127,13 +127,19 @@
         background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
         background-size: 300% 100%;
         border: 3px solid #111;
-        font-size: 10px; font-weight: 600; color: #111;
+        font-size: 11px; font-weight: 600; color: #111;
         white-space: nowrap;
         animation: adaBadgeShine 2.4s ease-in-out infinite;
       }
+      @media (min-width: 769px) {
+        .ada-countdown-badge,
+        .ada-countdown-ready {
+          font-size: 14px;
+        }
+      }
       #debate-ai-countdown-slot {
         display: flex; justify-content: center;
-        margin-top: 6px;
+        margin-top: 1px;
       }
 
       /* ── Report container ── */
@@ -177,6 +183,9 @@
       .ada-conf-forte   { background: rgba(34,197,94,.25);   border: 1px solid rgba(34,197,94,.4);   color: #86efac; }
       .ada-verdict-expl {
         font-size: 14px; line-height: 1.65; opacity: .85; margin-bottom: 14px;
+      }
+      .ada-verdict-note {
+        font-size: 13px; opacity: .8; line-height: 1.55; margin-bottom: 10px;
       }
       .ada-verdict-prudence {
         font-size: 13px; opacity: .65; font-style: italic; line-height: 1.55;
@@ -592,6 +601,33 @@
         background: #243038;
         color: #f3f6f4;
       }
+      /* ── New-format argument cards ── */
+      .ada-arg-card { border: 1px solid #e0e7ff; border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; background: #fafbff; }
+      .ada-arg-excluded { opacity: .6; }
+      .ada-arg-excluded-label { margin-left: auto; font-size: 10px; font-weight: 600; color: #9ca3af; letter-spacing: .04em; text-transform: uppercase; }
+      .ada-arg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      .ada-arg-score { font-size: 20px; font-weight: 900; line-height: 1; }
+      .ada-arg-score small { font-size: 11px; font-weight: 600; opacity: .6; }
+      .ada-arg-cat { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+      .ada-cat-excellent { color: #4338ca; background: #ede9fe; }
+      .ada-cat-bon       { color: #15803d; background: #dcfce7; }
+      .ada-cat-moyen     { color: #b45309; background: #fef9c3; }
+      .ada-cat-faible    { color: #b91c1c; background: #fee2e2; }
+      .ada-arg-text { font-size: 14px; color: #374151; margin-bottom: 7px; font-style: italic; line-height: 1.5; }
+      .ada-arg-breakdown { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+      .ada-arg-expl { font-size: 13px; color: #374151; line-height: 1.55; margin-bottom: 6px; }
+      .ada-arg-list { margin: 4px 0 4px 16px; padding: 0; font-size: 13px; line-height: 1.5; }
+      .ada-arg-strengths li { color: #15803d; }
+      .ada-arg-weaknesses li { color: #b91c1c; }
+      .ada-arg-source { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 6px; }
+      .ada-arg-source-ok   { background: #f0fdf4; color: #15803d; }
+      .ada-arg-source-none { background: #f9fafb; color: #9ca3af; }
+      .ada-camp-section { margin-bottom: 28px; }
+      .ada-camp-stats { font-size: 12px; color: #6b7280; margin: -6px 0 12px; }
+      .ada-dup-section { border-top: 1px dashed #c7d2fe; padding-top: 10px; margin-top: 10px; }
+      .ada-dup-title { font-size: 11px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+      .ada-dup-group { font-size: 12px; color: #374151; margin-bottom: 4px; padding: 4px 10px; background: #ede9fe; border-radius: 6px; }
+
       @media (prefers-reduced-motion: reduce) {
         .ada-trigger-btn,
         .ada-countdown-badge,
@@ -641,6 +677,123 @@
     return esc(s)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>');
+  }
+
+  // ── New-format renderer (version 2 JSON) ────────────────────────────
+
+  function renderNewAnalysis(d) {
+    const CAT_CSS = { excellent: 'ada-cat-excellent', bon: 'ada-cat-bon', moyen: 'ada-cat-moyen', faible: 'ada-cat-faible' };
+    const CAT_LABEL = { excellent: 'excellent', bon: 'bon', moyen: 'moyen', faible: 'faible' };
+
+    function catBadge(cat, score) {
+      const cls = CAT_CSS[cat] || 'ada-cat-faible';
+      return `<span class="ada-arg-score ${cls}">${score}<small>/100</small></span><span class="ada-arg-cat ${cls}">${CAT_LABEL[cat] || cat}</span>`;
+    }
+
+    function argCard(a) {
+      const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
+      const strengthsHtml = (a.strengths || []).length
+        ? '<ul class="ada-arg-list ada-arg-strengths">' + a.strengths.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
+      const weaknessesHtml = (a.weaknesses || []).length
+        ? '<ul class="ada-arg-list ada-arg-weaknesses">' + a.weaknesses.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
+      const sourceHtml = a.has_url_source
+        ? `<div class="ada-arg-source ada-arg-source-ok">Source : ${esc(a.source_level || '')} — ${esc(a.source_explanation || '')}</div>`
+        : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`;
+      const excluded = a.category === 'faible' || a.category === 'moyen';
+      return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}">
+        <div class="ada-arg-header">${catBadge(a.category, a.final_score)}${excluded ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
+        <div class="ada-arg-text">${esc(a.argumentText)}</div>
+        <div class="ada-arg-breakdown">Fond : ${scoreOut}/80 · Sources : ${a.source_score || 0}/20</div>
+        ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
+        ${strengthsHtml}${weaknessesHtml}
+        ${sourceHtml}
+      </div>`;
+    }
+
+    function dupGroups(groups) {
+      if (!groups || !groups.length) return '';
+      return '<div class="ada-dup-section"><div class="ada-dup-title">♊ Doublons regroupés</div>' +
+        groups.map(g => `<div class="ada-dup-group">${esc(g.sharedIdea || '')} — ${(g.mergedArgumentIds || []).length} arguments fusionnés</div>`).join('') +
+        '</div>';
+    }
+
+    function campSection(camp, campData) {
+      const args = campData.effectiveArguments || [];
+      if (!args.length) return `<div class="ada-empty">Aucun argument pour ${esc(campData.label)}.</div>`;
+      const qe = campData.goodExcellentCount || 0;
+      const avg = campData.weightedAverage || 0;
+      return `<div class="ada-camp-section">
+        <div class="ada-section-h2"><span class="ada-section-icon">${camp === 'A' ? '🔵' : '🔴'}</span> ${esc(campData.label)}</div>
+        <div class="ada-camp-stats">${qe} argument${qe > 1 ? 's' : ''} bon${qe > 1 ? 's' : ''}/excellent${qe > 1 ? 's' : ''} · moyenne pondérée : ${avg}/100</div>
+        ${args.map(argCard).join('')}
+        ${dupGroups(campData.duplicateGroups)}
+      </div>`;
+    }
+
+    let out = '<div class="ada-scoring-report"><div class="ada-report">';
+
+    // Verdict card
+    const v = d.verdict;
+    if (v && !d.isOpen) {
+      const confCls = v.confidence === 'forte' ? 'ada-conf-forte' : v.confidence === 'moyenne' ? 'ada-conf-moyenne' : 'ada-conf-faible';
+      out += `<div class="ada-verdict-card">
+        <div class="ada-verdict-eyebrow">⚖️ Verdict argumentatif</div>
+        <div class="ada-verdict-winner">${esc(v.winnerLabel)}</div>
+        <div class="ada-verdict-scores-row">
+          <span class="ada-verdict-score-a">${v.scoreA}</span>
+          <span class="ada-verdict-vs">vs</span>
+          <span class="ada-verdict-score-b">${v.scoreB}</span>
+        </div>
+        <div class="ada-verdict-confidence ${confCls}">Confiance : ${esc(v.confidence)}</div>
+        ${v.winner !== 'egalite' && v.winner !== 'indeterminate'
+          ? renderCombinedBar(d.positionA, v.scoreA, d.positionB, v.scoreB) : ''}
+        ${v.caveat ? `<div class="ada-verdict-expl">${esc(v.caveat)}</div>` : ''}
+        ${v.note   ? `<div class="ada-verdict-note">${esc(v.note)}</div>`   : ''}
+        <div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans ce débat, pas une vérité définitive.</div>
+      </div>`;
+    }
+
+    // Camp sections
+    out += campSection('A', d.camps.A);
+    if (!d.isOpen && d.camps.B) out += campSection('B', d.camps.B);
+
+    // Scoring report (critères + conclusion)
+    const sr = d.scoringReport;
+    if (sr && (sr.criteria || sr.conclusion)) {
+      if (sr.criteria && sr.criteria.length) {
+        out += '<div class="ada-section-h2"><span class="ada-section-icon">📊</span> Évaluation par critère</div>';
+        for (const c of sr.criteria) {
+          const sA = Math.min(100, Math.max(0, Number(c.scoreA) || 0));
+          const sB = Math.min(100, Math.max(0, Number(c.scoreB) || 0));
+          out += '<div class="ada-criterion-card">' +
+            '<div class="ada-criterion-header">' +
+              '<span class="ada-criterion-icon">' + _criterionIcon(c.name) + '</span>' +
+              '<span class="ada-criterion-title">' + esc(c.name) + '</span>' +
+            '</div>' +
+            renderCombinedBar(d.positionA, sA, d.positionB, sB) +
+          '</div>';
+        }
+      }
+      if (sr.conclusion) {
+        out += '<div class="ada-finale">' +
+          '<span class="ada-finale-label">✍️ Conclusion</span>' +
+          md(sr.conclusion) +
+        '</div>';
+      }
+    }
+
+    out += '</div></div>';
+    return out;
+  }
+
+  function _criterionIcon(name) {
+    const n = String(name || '').toLowerCase();
+    if (n.includes('question'))    return '📊';
+    if (n.includes('solidit'))     return '🧠';
+    if (n.includes('source'))      return '🔍';
+    if (n.includes('objection'))   return '🛡️';
+    if (n.includes('conviction'))  return '🎯';
+    return '📊';
   }
 
   // ── Render helpers ──────────────────────────────────────────────────
@@ -916,6 +1069,13 @@
     return date + ' à ' + time;
   }
 
+  function scrollToAnalysisElement(element) {
+    if (!element) return;
+    const offset = window.matchMedia('(max-width: 768px)').matches ? 160 : 24;
+    const top = element.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
   // ── Fetch stored analysis ────────────────────────────────────────────
   async function openReport(debateId) {
     const panel    = document.getElementById('ada-panel');
@@ -923,7 +1083,7 @@
     const useAnim  = typeof showAiAnalysisAnimation === 'function';
 
     panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToAnalysisElement(panel);
     body.innerHTML = '';
     if (useAnim) showAiAnalysisAnimation();
     else body.innerHTML = '<span class="ada-loading">Chargement…</span>';
@@ -939,7 +1099,11 @@
           const header = json.generatedAt
             ? `<div class="ada-date">Analyse générée le ${esc(fmtDate(json.generatedAt))}</div>`
             : '';
-          body.innerHTML = header + renderScoringReport(json.raw);
+          let parsed = null;
+          try { parsed = JSON.parse(json.raw); } catch (_) {}
+          body.innerHTML = header + (parsed && parsed.version === 2
+            ? renderNewAnalysis(parsed)
+            : renderScoringReport(json.raw));
         };
       } else if (json.status === 'scheduled' || json.status === 'generating') {
         applyContent = () => { body.innerHTML = '<span class="ada-empty">Analyse IA en préparation — disponible prochainement.</span>'; };
@@ -978,8 +1142,12 @@
         return;
       }
       const now = new Date().toISOString();
+      let parsedRegen = null;
+      try { parsedRegen = JSON.parse(json.raw || ''); } catch (_) {}
       body.innerHTML = `<div class="ada-date">Analyse générée le ${esc(fmtDate(now))}</div>` +
-        renderScoringReport(json.raw || '');
+        (parsedRegen && parsedRegen.version === 2
+          ? renderNewAnalysis(parsedRegen)
+          : renderScoringReport(json.raw || ''));
     } catch (err) {
       body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`;
     } finally {
@@ -1001,7 +1169,7 @@
         slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse">✨ Analyse IA disponible</span>';
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
-          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          scrollToAnalysisElement(target);
           setTimeout(() => {
             const triggerBtn = document.getElementById('ada-trigger-btn');
             if (triggerBtn) triggerBtn.click();

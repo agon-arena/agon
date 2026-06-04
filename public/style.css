@@ -8981,6 +8981,12 @@ body.page-home-mobile .debate-source-card-image-domain-badge {
   z-index: 5;
 }
 
+body.page-debate .similar-debates-results .debate-source-card-image-domain-badge {
+  bottom: 30px;
+  display: inline-block;
+  z-index: 5;
+}
+
 .index-media-swipe-shell {
   position: relative;
   contain: layout;
@@ -9972,6 +9978,50 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 
 .index-floating-refresh-btn {
   z-index: 150;
+}
+
+.agon-new-debates-banner {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  z-index: 210;
+  background: rgba(26, 39, 47, 0.96);
+  color: #e5edf3;
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 0.35s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.25s ease;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.agon-new-debates-banner.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agon-new-debates-banner:hover,
+.agon-new-debates-banner:focus-visible {
+  background: rgba(17, 24, 39, 0.99);
+  color: #ffffff;
+  outline: none;
+}
+
+.agon-new-debates-banner i {
+  font-size: 12px;
 }
 
 .index-floating-scroll-up {
@@ -13705,6 +13755,7 @@ body.page-debate .debate-topbar-notification-link .notifications-count {
 body.page-debate .debate-hero-outer {
   margin-top: 2px;
   overflow: visible;
+  z-index: 170 !important;
   max-height: 420px;
   opacity: 1;
   transform: translateY(0);
@@ -14155,6 +14206,9 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
 }
 
 /* Bouton tri + menu tri */
+body.page-debate .sort-dropdown {
+  z-index: 160;
+}
 body.page-debate .sort-button {
   background: #2e3d47 !important;
   border-color: #3a4a55 !important;
@@ -14170,6 +14224,7 @@ body.page-debate .sort-button:hover {
 body.page-debate .sort-menu {
   background: #2e3d47 !important;
   border-color: #3a4a55 !important;
+  z-index: 160;
 }
 body.page-debate .sort-menu button {
   color: #e8e8e8 !important;
@@ -18474,7 +18529,7 @@ body.page-debate .debate-side-focus-btn-right {
 
 @media (max-width: 768px) {
   body.page-debate .debate-top-sticky-actions {
-    grid-template-columns: minmax(58px, 1fr) auto minmax(58px, 1fr) !important;
+    grid-template-columns: minmax(56px, 1fr) auto minmax(56px, 1fr) !important;
     gap: 6px !important;
   }
 
@@ -18489,6 +18544,7 @@ body.page-debate .debate-side-focus-btn-right {
     height: 28px !important;
     max-height: 28px !important;
     min-height: 28px !important;
+    min-width: 94px !important;
     padding-top: 4px !important;
     padding-bottom: 4px !important;
     font-size: 11px !important;

@@ -581,16 +581,18 @@ function updatePendingNumbers() {
   });
 }
 
+var _sortPendingAsc = false;
 function sortPendingBySources() {
   const list = document.getElementById('list');
   if (!list) return;
+  _sortPendingAsc = !_sortPendingAsc;
   const items = [].slice.call(list.querySelectorAll('.pending-item'));
   items
     .map(function(item, index) {
       return { item: item, index: index, sourceCount: Number(item.dataset.sourceCount) || 0 };
     })
     .sort(function(a, b) {
-      if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
+      if (b.sourceCount !== a.sourceCount) return _sortPendingAsc ? a.sourceCount - b.sourceCount : b.sourceCount - a.sourceCount;
       return a.index - b.index;
     })
     .forEach(function(entry) {
@@ -598,7 +600,10 @@ function sortPendingBySources() {
     });
   updatePendingNumbers();
   const btn = document.getElementById('sort-pending-btn');
-  if (btn) btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+    btn.textContent = _sortPendingAsc ? 'Classer ↑' : 'Classer ↓';
+  }
 }
 
 function collectStorySelection(item) {
