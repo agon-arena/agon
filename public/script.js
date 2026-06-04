@@ -31,7 +31,20 @@ registerServiceWorker();
 
 (function initOffscreenAnimationPause() {
   const PAUSE_CLASS = 'agon-anim-paused';
-  const SELECTORS = ['#agon-tag-trends-section', '.scroll-arrows', '.ranking-gain-box', '.debate-card-trend-badge'];
+  const SELECTORS = [
+    '#agon-tag-trends-section',
+    '#agon-cloud-loading-spinner',
+    '.agon-cloud-loading',
+    '.scroll-arrows',
+    '.ranking-gain-box',
+    '.debate-card-trend-badge',
+    '.debate-card-new-badge',
+    '.ai-card-badge-inner',
+    '.theme-carousel-next-hint',
+    '.theme-carousel-prev-hint',
+    '.index-social-loading-placeholder',
+    '.index-social-loading-placeholder-box'
+  ];
 
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(e => e.target.classList.toggle(PAUSE_CLASS, !e.isIntersecting));
@@ -3290,6 +3303,13 @@ function ensureDebateIframeModal() {
       return;
     }
 
+    if (e.data.type === "agon:open-page-in-parent-modal") {
+      const nextUrl = String(e.data.url || "").trim();
+      if (!nextUrl) return;
+      openDebateIframeModal(nextUrl);
+      return;
+    }
+
     if (e.data.type === "agon:open-notifications-in-parent-modal") {
       openNotificationsInDebateIframeModal();
       return;
@@ -3724,6 +3744,8 @@ function openDebateIframeModal(url, options = {}) {
       try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
       if (iframeUrlPathname === "/notifications") {
         window.parent.postMessage({ type: "agon:open-notifications-in-parent-modal" }, "*");
+      } else {
+        window.parent.postMessage({ type: "agon:open-page-in-parent-modal", url }, "*");
       }
     } catch (e) {}
     return;
@@ -5200,6 +5222,65 @@ function buildIndexCardShareActionsHtml(debate) {
   `;
 }
 
+function getIndexTrendBadgeMeta(rawTrend) {
+  const value = Number.isFinite(Number(rawTrend)) ? Math.round(Number(rawTrend)) : 0;
+  if (value > 0) return { className: "debate-card-trend-badge-up", label: `▲ +${value}%` };
+  if (value < 0) return { className: "debate-card-trend-badge-down", label: `▼ ${value}%` };
+  return { className: "debate-card-trend-badge-neutral", label: "= 0%" };
+}
+
+function getIndexBubbleTrendForDebateId(debateId) {
+  const id = String(debateId || "").trim();
+  if (!id || !Array.isArray(window.AGON_TAG_TRENDS)) return null;
+  return window.AGON_TAG_TRENDS.find((item) => String(item?.subjectId || "").trim() === id) || null;
+}
+
+function getIndexCardTrendBadgeHtml(debate) {
+  const bubbleTrend = getIndexBubbleTrendForDebateId(debate?.id);
+  const shouldShowFromDebateTrend = Number(debate?.trend ?? 0) > 0;
+  if (!bubbleTrend && !shouldShowFromDebateTrend) return "";
+
+  const trendValue = bubbleTrend ? bubbleTrend.trend : debate.trend;
+  const meta = getIndexTrendBadgeMeta(trendValue);
+  const sourceClass = bubbleTrend ? "debate-card-trend-badge-from-bubble" : "debate-card-trend-badge-from-debate";
+  return `<div class="debate-card-trend-badge ${meta.className} ${sourceClass}">${escapeHtml(meta.label)}</div>`;
+}
+
+function syncIndexBubbleTrendBadges(root = document) {
+  const scope = root?.querySelectorAll ? root : document;
+  const bubbleTrends = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
+  const bubbleTrendByDebateId = new Map(
+    bubbleTrends
+      .map((item) => [String(item?.subjectId || "").trim(), item])
+      .filter(([id]) => id)
+  );
+
+  scope.querySelectorAll(".debate-card[data-debate-id]").forEach((card) => {
+    const debateId = String(card.dataset.debateId || "").trim();
+    const bubbleTrend = bubbleTrendByDebateId.get(debateId);
+    const existing = card.querySelector(":scope > .debate-card-trend-badge");
+
+    if (!bubbleTrend) {
+      if (existing?.classList.contains("debate-card-trend-badge-from-bubble")) existing.remove();
+      return;
+    }
+
+    const meta = getIndexTrendBadgeMeta(bubbleTrend.trend);
+    const className = `debate-card-trend-badge ${meta.className} debate-card-trend-badge-from-bubble`;
+
+    if (existing) {
+      existing.className = className;
+      existing.textContent = meta.label;
+      return;
+    }
+
+    const badge = document.createElement("div");
+    badge.className = className;
+    badge.textContent = meta.label;
+    card.insertBefore(badge, card.firstChild);
+  });
+}
+
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
@@ -5236,10 +5317,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const shareHtml = buildIndexCardShareActionsHtml(d);
   const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml);
   const isNewDebate = isDebateNew(d);
-  const isTrending = (d.trend ?? 0) > 0;
-  const trendValue = Math.round(d.trend ?? 0);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-  const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : "";
+  const agonBadgeHtml = getIndexCardTrendBadgeHtml(d);
   const shortDate = formatShortDate(d.created_at);
   const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
@@ -6851,11 +6930,12 @@ function initMediaSwipeAutoScroll(scope = document) {
     let timer = null;
     let resumeTimer = null;
     let paused = false;
+    let isInView = false;
 
     const videoSelector = 'video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell, [data-index-local-video-shell], [data-index-youtube-shell]';
 
     const advance = () => {
-      if (paused) return;
+      if (paused || document.hidden || !isInView || !shell.isConnected) return;
       // Ne pas avancer si une vidéo a été lancée par l'utilisateur dans cette carte
       if (shell.querySelector('[data-index-local-video-shell][data-user-started="true"], [data-index-youtube-shell][data-user-started="true"]')) {
         stopPermanently();
@@ -6865,18 +6945,26 @@ function initMediaSwipeAutoScroll(scope = document) {
       if (nextBtn) nextBtn.click();
     };
 
-    const start = () => { if (!timer) timer = setInterval(advance, DELAY); };
+    const start = () => {
+      if (document.hidden || !isInView || !shell.isConnected) return;
+      if (!timer) timer = setInterval(advance, DELAY);
+    };
+
+    const stopTimer = () => {
+      clearInterval(timer);
+      timer = null;
+    };
 
     const pause = () => {
       paused = true;
-      clearInterval(timer); timer = null;
+      stopTimer();
       clearTimeout(resumeTimer);
       resumeTimer = setTimeout(() => { paused = false; start(); }, RESUME_AFTER);
     };
 
     const stopPermanently = () => {
       paused = true;
-      clearInterval(timer); timer = null;
+      stopTimer();
       clearTimeout(resumeTimer);
     };
 
@@ -6910,11 +6998,17 @@ function initMediaSwipeAutoScroll(scope = document) {
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((e) => {
-        if (e.isIntersecting) start();
-        else { clearInterval(timer); timer = null; }
+        isInView = e.isIntersecting;
+        if (isInView) start();
+        else stopTimer();
       });
     }, { threshold: 0.3 });
     observer.observe(shell);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopTimer();
+      else start();
+    }, { passive: true });
   });
 }
 
@@ -12154,6 +12248,7 @@ function attachAdminButtons() {
           const cloudRes = await fetchJSON(API + "/cloud-bubbles");
           const newTrends = Array.isArray(cloudRes?.bubbles) ? cloudRes.bubbles : [];
           window.AGON_TAG_TRENDS = newTrends;
+          syncIndexBubbleTrendBadges();
           if (window._tagTrendCloudModule && newTrends.length) {
             const container = document.querySelector("#agon-tag-trends-cloud");
             if (container) window._tagTrendCloudModule.renderTagTrendCloud(container, newTrends);
@@ -13086,18 +13181,35 @@ function syncAdminEditCardTopBadges(card, debate) {
   if (!topRow) return;
 
   const isNewDebate = isDebateNew(debate);
-  const isTrending = (debate.trend ?? 0) > 0;
-  const trendValue = Math.round(debate.trend ?? 0);
   const newBadgeHtml = isNewDebate ? '<div class="debate-card-new-badge">Nouveau</div>' : '';
-  const agonBadgeHtml = isTrending ? `<div class="debate-card-trend-badge">▲ +${trendValue}%</div>` : '';
   const existingWrap = topRow.querySelector('.debate-card-top-badges');
 
-  if (!newBadgeHtml && !agonBadgeHtml) {
+  // Badge tendance : haut-gauche (position absolute sur la card, pas dans top-badges)
+  const existingTrendBadge = card.querySelector('.debate-card-trend-badge');
+  const bubbleTrend = getIndexBubbleTrendForDebateId(debate?.id);
+  const shouldShowFromDebateTrend = Number(debate?.trend ?? 0) > 0;
+  if (bubbleTrend || shouldShowFromDebateTrend) {
+    const meta = getIndexTrendBadgeMeta(bubbleTrend ? bubbleTrend.trend : debate.trend);
+    const className = `debate-card-trend-badge ${meta.className} ${bubbleTrend ? 'debate-card-trend-badge-from-bubble' : 'debate-card-trend-badge-from-debate'}`;
+    if (existingTrendBadge) {
+      existingTrendBadge.className = className;
+      existingTrendBadge.textContent = meta.label;
+    } else {
+      const tb = document.createElement('div');
+      tb.className = className;
+      tb.textContent = meta.label;
+      card.insertBefore(tb, card.firstChild);
+    }
+  } else {
+    existingTrendBadge?.remove();
+  }
+
+  if (!newBadgeHtml) {
     existingWrap?.remove();
     return;
   }
 
-  const badgesHtml = `${newBadgeHtml}${agonBadgeHtml}`;
+  const badgesHtml = newBadgeHtml;
   if (existingWrap) {
     existingWrap.innerHTML = badgesHtml;
     return;
@@ -14785,6 +14897,7 @@ function hydrateLazyCarouselCards(inner, row) {
   initIndexOpenGraphImageObserver(inner);
   initIndexEmbedUnloadObserver(inner);
   observeIndexCardsMissingSourcePreview(inner);
+  syncIndexBubbleTrendBadges(inner);
   refreshAdminUI();
   requestAnimationFrame(() => syncIndexThemeRowHeight(row));
 }
@@ -15977,7 +16090,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260603-bubble-target");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260604-neutral-trend-equals");
 
 
 function syncBubbleFrameTop() {
@@ -16031,11 +16144,11 @@ function hideBubbleCloudLoadingSpinner() {
 }
 
 function updateIndexTagTrends(items) {
-  window.AGON_TAG_TRENDS = [];
   const trendsSection = document.querySelector("#agon-tag-trends-section");
   const cloudContainer = document.querySelector("#agon-tag-trends-cloud");
 
   if (!Array.isArray(items) || !items.length) {
+    window.AGON_TAG_TRENDS = [];
     if (trendsSection) trendsSection.hidden = true;
     if (cloudContainer) cloudContainer.innerHTML = "";
     return;
@@ -16044,7 +16157,10 @@ function updateIndexTagTrends(items) {
   // Les bulles sont déjà affichées : le cloud vient d'un endpoint indépendant
   // et ne change pas au rythme des refreshs de la liste — évite le flash de
   // disparition/réapparition causé par le double render (cache → API).
-  if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
+  if (cloudContainer?.querySelector(".agon-tag-bubble")) {
+    syncIndexBubbleTrendBadges();
+    return;
+  }
 
   showBubbleCloudLoadingSpinner();
 
@@ -16059,6 +16175,7 @@ function updateIndexTagTrends(items) {
       } catch {}
 
       if (!tagTrends.length) {
+        window.AGON_TAG_TRENDS = [];
         hideBubbleCloudLoadingSpinner();
         if (trendsSection) trendsSection.hidden = true;
         if (cloudContainer) cloudContainer.innerHTML = "";
@@ -16067,6 +16184,7 @@ function updateIndexTagTrends(items) {
 
       window.AGON_TAG_TRENDS = tagTrends;
       window._tagTrendCloudModule = cloudModule;
+      syncIndexBubbleTrendBadges();
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, hideBubbleCloudLoadingSpinner);
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
@@ -16178,6 +16296,7 @@ function renderDebatesList(debates) {
   initIndexOpenGraphImageObserver(document);
   initIndexEmbedUnloadObserver(document);
   observeIndexCardsMissingSourcePreview(document);
+  syncIndexBubbleTrendBadges(document);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
 }
 
@@ -22686,6 +22805,7 @@ async function submitArgument(debateId, side) {
         side: apiSide,
         title,
         body,
+        source_url: sourceUrl || "",
         authorKey: getKey(),
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,
@@ -22833,6 +22953,7 @@ async function submitListArgument(debateId) {
         side,
         title,
         body,
+        source_url: sourceUrl || "",
         authorKey: getKey(),
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,

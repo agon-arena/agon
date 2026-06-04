@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <script src="/no-zoom.js?v=20260603"></script>
+  <script src="/no-zoom.js?v=20260603" defer></script>
 
 <title>__META_TITLE__</title>
 <meta name="description" content="__META_DESCRIPTION__">
@@ -149,7 +149,7 @@
       <span>Ouvrir une arène</span>
     </a>
 
-    <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
+    <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/notifications')">
       <i class="fa-regular fa-bell"></i>
       <span>Notifications</span>
     </a>
@@ -157,11 +157,11 @@
       <i id="push-menu-icon" class="fa-regular fa-bell"></i>
       <span id="push-menu-label">Activer les alertes</span>
     </button>
-<a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
+<a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')">
   <i class="fa-regular fa-envelope"></i>
   <span>Contact</span>
 </a>
-<a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); openDebateIframeModal('/about')">
+<a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')">
   <i class="fa-regular fa-circle-question"></i>
   <span>À propos</span>
 </a>
@@ -249,42 +249,6 @@
 
  
 <div class="debate-hero-outer">
-<div class="scroll-arrows-wrap">
-<div class="scroll-arrows scroll-arrows-left" id="scroll-hint-l">
-  <svg class="arr1" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr2" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr3" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr4" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr5" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr6" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr7" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr8" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr9" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr10" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr11" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr12" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr13" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr14" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr15" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</div>
-<div class="scroll-arrows scroll-arrows-right" id="scroll-hint-r">
-  <svg class="arr1" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr2" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr3" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr4" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr5" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr6" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr7" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr8" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr9" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr10" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr11" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr12" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr13" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr14" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  <svg class="arr15" width="8" height="5" viewBox="0 0 10 6"><polyline points="1,1 5,5 9,1" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
-</div>
-</div>
 <div class="debate-hero-top">
 
     <div>
@@ -928,7 +892,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.js?v=20260604-fix-similar-iframe-close"></script>
+	<script src="/script.js?v=20260604-topbar-about-modal-fix"></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -981,7 +945,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260529-sablier-preload"></script>
-<script src="/admin-debate-analysis.js?v=20260604-ai-trigger-dead-color-removed"></script>
+<script src="/admin-debate-analysis.js?v=20260604-ai-section-title-contrast"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

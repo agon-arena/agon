@@ -50,9 +50,8 @@
       .aala-sablier {
         position: absolute; top: 50%; left: 50%;
         width: 86px; height: 86px;
-        transform: translate(-50%, -50%);
         z-index: 3;
-        animation: aala-pulse 2.2s ease-in-out infinite;
+        animation: aala-spin-pulse 5s linear infinite;
         pointer-events: none;
       }
 
@@ -105,9 +104,16 @@
         pointer-events: none;
       }
 
-      @keyframes aala-pulse {
-        0%, 100% { transform: translate(-50%, -50%) scale(1); }
-        50%       { transform: translate(-50%, -50%) scale(1.08); }
+      @keyframes aala-spin-pulse {
+        0%    { transform: translate(-50%, -50%) rotate(0deg)   scale(1);    }
+        12.5% { transform: translate(-50%, -50%) rotate(45deg)  scale(1.08); }
+        25%   { transform: translate(-50%, -50%) rotate(90deg)  scale(1);    }
+        37.5% { transform: translate(-50%, -50%) rotate(135deg) scale(1.08); }
+        50%   { transform: translate(-50%, -50%) rotate(180deg) scale(1);    }
+        62.5% { transform: translate(-50%, -50%) rotate(225deg) scale(1.08); }
+        75%   { transform: translate(-50%, -50%) rotate(270deg) scale(1);    }
+        87.5% { transform: translate(-50%, -50%) rotate(315deg) scale(1.08); }
+        100%  { transform: translate(-50%, -50%) rotate(360deg) scale(1);    }
       }
 
       /* Spirale depuis les coins (rayon 650px → 0) */
@@ -160,7 +166,7 @@
       '<div class="aala-brain aala-near aala-near-1">🧠</div>' +
       '<div class="aala-brain aala-near aala-near-2">🧠</div>' +
       '<div class="aala-brain aala-near aala-near-3">🧠</div>' +
-      '<div class="aala-label">Analyse en cours…</div>';
+      '';
     overlay.insertBefore(sablier, overlay.querySelector('.aala-label'));
     return overlay;
   }

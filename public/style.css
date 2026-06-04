@@ -903,6 +903,18 @@ main.create-page {
   animation: agonTrendPulse 2.4s ease-in-out infinite;
 }
 
+.debate-card-trend-badge-up {
+  color: #137333;
+}
+
+.debate-card-trend-badge-down {
+  color: #c5221f;
+}
+
+.debate-card-trend-badge-neutral {
+  color: #374151;
+}
+
 .debate-card-date-badge {
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 10px;
@@ -2476,7 +2488,7 @@ body.debate-topbar-hidden .debate-compact-bell {
   outline: 4px solid rgba(255,255,255,0.96);
   outline-offset: 3px;
   box-shadow: 0 0 0 3px rgba(36,48,56,0.72), 0 0 26px rgba(36,48,56,0.7), 0 0 44px rgba(255,255,255,0.62);
-  animation: selectedPositionGlow 3s ease-in-out infinite alternate;
+  animation: selectedPositionGlow 3s ease-in-out 4 alternate forwards;
   transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
 }
 
@@ -4305,7 +4317,7 @@ body.page-debate #score-b {
   outline-offset:3px;
   box-shadow:0 0 0 3px rgba(81,103,118,0.8), 0 0 30px rgba(81,103,118,0.78), 0 0 52px rgba(255,255,255,0.68);
   transform:none;
-  animation:selectedPositionGlow 1.5s ease-in-out infinite alternate;
+  animation:selectedPositionGlow 1.5s ease-in-out 5 alternate forwards;
   position:relative;
   z-index:1;
 }
@@ -4318,7 +4330,7 @@ body.page-debate #score-b {
   outline-offset:3px;
   box-shadow:0 0 0 3px rgba(36,48,56,0.72), 0 0 30px rgba(174,192,204,0.9), 0 0 52px rgba(255,255,255,0.72);
   transform:none;
-  animation:selectedPositionGlow 1.5s ease-in-out infinite alternate;
+  animation:selectedPositionGlow 1.5s ease-in-out 5 alternate forwards;
 }
 
 @media (max-width: 768px){
@@ -15722,70 +15734,7 @@ body.voices-panel-open {
   }
 }
 
-.scroll-arrows-wrap {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-}
-.scroll-arrows {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.6s ease;
-  width: 10px;
-}
-.scroll-arrows-left  { left: -8px; }
-.scroll-arrows-right { right: -8px; }
-.scroll-arrows.visible { opacity: 1; }
-
-@keyframes arrowFall {
-  0%   { opacity: 0; transform: translateY(-3px); }
-  35%  { opacity: 1; }
-  75%  { opacity: 1; }
-  100% { opacity: 0; transform: translateY(3px); }
-}
-.scroll-arrows.visible .arr1 { animation: arrowFall 1.6s ease-in-out infinite 0.0s; }
-.scroll-arrows.visible .arr2 { animation: arrowFall 1.6s ease-in-out infinite 0.15s; }
-.scroll-arrows.visible .arr3 { animation: arrowFall 1.6s ease-in-out infinite 0.3s; }
-.scroll-arrows.visible .arr4 { animation: arrowFall 1.6s ease-in-out infinite 0.45s; }
-.scroll-arrows.visible .arr5 { animation: arrowFall 1.6s ease-in-out infinite 0.6s; }
-.scroll-arrows.visible .arr6 { animation: arrowFall 1.6s ease-in-out infinite 0.75s; }
-.scroll-arrows.visible .arr7 { animation: arrowFall 1.6s ease-in-out infinite 0.9s; }
-.scroll-arrows.visible .arr8 { animation: arrowFall 1.6s ease-in-out infinite 1.05s; }
-.scroll-arrows.visible .arr9 { animation: arrowFall 1.6s ease-in-out infinite 1.2s; }
-.scroll-arrows.visible .arr10 { animation: arrowFall 1.6s ease-in-out infinite 1.35s; }
-.scroll-arrows.visible .arr11 { animation: arrowFall 1.6s ease-in-out infinite 1.5s; }
-.scroll-arrows.visible .arr12 { animation: arrowFall 1.6s ease-in-out infinite 1.65s; }
-.scroll-arrows.visible .arr13 { animation: arrowFall 1.6s ease-in-out infinite 1.8s; }
-.scroll-arrows.visible .arr14 { animation: arrowFall 1.6s ease-in-out infinite 1.95s; }
-.scroll-arrows.visible .arr15 { animation: arrowFall 1.6s ease-in-out infinite 2.1s; }
-.scroll-arrows svg { display: block; opacity: 0; }
-
-@media (max-width: 768px) {
-  .scroll-arrows.visible .arr1 { animation: arrowFall 2.1s ease-in-out infinite 0.0s; }
-  .scroll-arrows.visible .arr2 { animation: arrowFall 2.1s ease-in-out infinite 0.2s; }
-  .scroll-arrows.visible .arr3 { animation: arrowFall 2.1s ease-in-out infinite 0.4s; }
-  .scroll-arrows.visible .arr4 { animation: arrowFall 2.1s ease-in-out infinite 0.6s; }
-  .scroll-arrows.visible .arr5 { animation: arrowFall 2.1s ease-in-out infinite 0.8s; }
-  .scroll-arrows.visible .arr6 { animation: arrowFall 2.1s ease-in-out infinite 1.0s; }
-  .scroll-arrows.visible .arr7 { animation: arrowFall 2.1s ease-in-out infinite 1.2s; }
-  .scroll-arrows.visible .arr8 { animation: arrowFall 2.1s ease-in-out infinite 1.4s; }
-  .scroll-arrows.visible .arr9 { animation: arrowFall 2.1s ease-in-out infinite 1.6s; }
-  .scroll-arrows.visible .arr10 { animation: arrowFall 2.1s ease-in-out infinite 1.8s; }
-  .scroll-arrows.visible .arr11 { animation: arrowFall 2.1s ease-in-out infinite 2.0s; }
-  .scroll-arrows.visible .arr12 { animation: arrowFall 2.1s ease-in-out infinite 2.2s; }
-  .scroll-arrows.visible .arr13 { animation: arrowFall 2.1s ease-in-out infinite 2.4s; }
-  .scroll-arrows.visible .arr14 { animation: arrowFall 2.1s ease-in-out infinite 2.6s; }
-  .scroll-arrows.visible .arr15 { animation: arrowFall 2.1s ease-in-out infinite 2.8s; }
-
+.scroll-arrows-wrap { display: none; }
   #voices-float-badge {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -15808,6 +15757,10 @@ body.voices-panel-open {
 
 /* H2 original masqué quand le bandeau est présent */
 .debate-card.has-title-banner .debate-card-link h2 {
+  display: none;
+}
+
+body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   display: none;
 }
 
@@ -16100,6 +16053,21 @@ body.page-home-mobile .debate-card .debate-source-card-image-wrap {
   aspect-ratio: 16 / 10 !important;
 }
 
+@media (min-width: 769px) {
+  body.page-home .index-card-media-with-title .debate-source-card-image-domain-badge {
+    top: auto !important;
+    bottom: 30px !important;
+    left: 12px !important;
+    right: auto !important;
+    max-width: calc(100% - 24px) !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.15 !important;
+    z-index: 12 !important;
+  }
+}
+
 @media (max-width: 768px) {
   .debate-card-context-text {
     line-height: 1.1 !important;
@@ -16348,9 +16316,9 @@ html.thematic-scroll .theme-row-section {
 
 .theme-horizontal-row {
   position: relative;
-  padding: 1px 0 3px 0;
+  padding: 4px 0 3px 0;
   overflow-x: auto;
-  overflow-y: clip;
+  overflow-y: visible;
   transition: height 0.25s ease;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -16668,7 +16636,7 @@ body.page-home-mobile .debate-card-entry-button {
   flex-direction: column !important;
   gap: 1px !important;
   padding: 4px 8px !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
   line-height: 1.05 !important;
   white-space: normal !important;
   min-width: 0 !important;
@@ -16868,6 +16836,7 @@ body.page-home-mobile .debate-card-top-badges {
 body.page-home .debate-card-trend-badge,
 body.page-home-mobile .debate-card-trend-badge {
   top: 8px !important;
+  left: 10px !important;
 }
 
 body.page-home .debate-card-agon-badge,
@@ -16905,7 +16874,7 @@ body.page-home-mobile .debate-card-agon-badge {
 
   body.page-home .debate-card-trend-badge {
     top: 0 !important;
-    left: 8px !important;
+    left: 10px !important;
   }
 
   body.page-home .theme-row-title {
@@ -19315,3 +19284,25 @@ body.page-home-mobile .theme-horizontal-row {
 }
 .political-gauge-label-left { color: #b94141; }
 .political-gauge-label-right { color: #3f6fa8; }
+
+/* ── Bouton "Ajouter une idée" — style badge analyse IA ── */
+@keyframes debateAddBtnShine {
+  0%   { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
+  50%  { filter: drop-shadow(0 0 12px rgba(0,0,0,.5)); transform: scale(1.05); background-position:   0% 0; }
+  100% { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
+}
+body.page-debate .debate-top-add-button,
+body.page-debate .position-argument-button {
+  background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%) !important;
+  background-size: 300% 100% !important;
+  border: 3px solid #111 !important;
+  border-radius: 999px !important;
+  color: #111 !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+body.page-debate .debate-top-add-button {
+  animation: debateAddBtnShine 2.4s ease-in-out 4 forwards !important;
+}

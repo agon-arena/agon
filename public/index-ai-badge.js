@@ -26,7 +26,7 @@
         transform: translateX(-50%);
         z-index: 50;
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 7px; border-radius: 999px;
+        padding: 2px 6px; border-radius: 999px;
         font-size: 9px; font-weight: 600; color: #111;
         white-space: nowrap; cursor: default;
         background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
@@ -58,17 +58,42 @@
   }
 
   function startCountdown(inner, targetMs) {
-    function tick() {
+    var timer = null;
+    var done = false;
+
+    function cleanup() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      document.removeEventListener('visibilitychange', tick);
+    }
+
+    function render() {
       var secs = Math.max(0, Math.round((targetMs - Date.now()) / 1000));
       if (secs <= 0) {
+        done = true;
+        cleanup();
         inner.className = 'ai-card-badge-inner';
-        inner.textContent = '✦ Analyse et arbitrage IA';
-      } else {
-        inner.textContent = 'IA : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        inner.innerHTML = '<img src="/sablier2.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
+        return;
       }
+      inner.textContent = 'IA : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     }
-    tick();
-    setInterval(tick, 1000);
+
+    function tick() {
+      if (!inner.isConnected) {
+        cleanup();
+        return;
+      }
+      if (document.hidden || !inner.classList.contains('is-visible')) return;
+      render();
+    }
+
+    render();
+    if (done) return;
+    timer = setInterval(tick, 1000);
+    document.addEventListener('visibilitychange', tick, { passive: true });
   }
 
   function injectBadges() {
@@ -83,7 +108,7 @@
 
       if (entry.status === 'ready') {
         inner.className = 'ai-card-badge-inner';
-        inner.textContent = '✦ Analyse et arbitrage IA';
+        inner.innerHTML = '<img src="/sablier2.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
       } else if (entry.scheduledAt) {
         inner.className = 'ai-card-badge-inner ai-card-badge-countdown';
         startCountdown(inner, new Date(entry.scheduledAt).getTime());

@@ -67,32 +67,32 @@
 
       /* ── Panel shell ── */
       .ada-panel {
-        margin-top: 10px; border: 1px solid #c7d2fe; border-radius: 12px;
-        background: #f5f3ff; overflow: hidden; display: none; width: 100%;
+        margin-top: 10px; border: 1px solid rgba(36,48,56,.16); border-radius: 12px;
+        background: #eef3f0; overflow: hidden; display: none; width: 100%;
       }
       .ada-panel-header {
         display: flex; align-items: center; justify-content: space-between;
-        padding: 9px 14px; background: #e0e7ff; border-bottom: 1px solid #c7d2fe;
+        padding: 9px 14px; background: #dfe8e6; border-bottom: 1px solid rgba(36,48,56,.16);
       }
-      .ada-panel-title { font-size: 13px; font-weight: 700; color: #3730a3; }
+      .ada-panel-title { font-size: 13px; font-weight: 700; color: #243038; }
       .ada-close-btn {
-        background: none; border: none; font-size: 14px; color: #6366f1;
+        background: none; border: none; font-size: 14px; color: #4d6268;
         cursor: pointer; line-height: 1; padding: 2px 4px;
       }
-      .ada-close-btn:hover { color: #1e1b4b; }
+      .ada-close-btn:hover { color: #243038; }
       .ada-body {
-        padding: 14px 14px 18px; font-size: 15px; line-height: 1.7; color: #1e1b4b;
+        padding: 14px 14px 18px; font-size: 15px; line-height: 1.7; color: #243038;
       }
       .ada-panel-footer {
-        padding: 8px 14px; border-top: 1px solid #c7d2fe; background: #e0e7ff;
+        padding: 8px 14px; border-top: 1px solid rgba(36,48,56,.16); background: #dfe8e6;
         display: flex; justify-content: flex-end;
       }
       .ada-regen-btn {
         font-size: 11px; padding: 4px 10px; border-radius: 6px;
-        border: 1px solid #6366f1; background: #fff; color: #4338ca;
+        border: 1px solid #4d6268; background: #fff; color: #243038;
         cursor: pointer; font-weight: 600;
       }
-      .ada-regen-btn:hover { background: #6366f1; color: #fff; }
+      .ada-regen-btn:hover { background: #243038; color: #f3f6f4; }
       .ada-regen-btn:disabled { opacity: .55; cursor: default; }
 
       /* ── Meta ── */
@@ -101,7 +101,7 @@
         margin-bottom: 14px; padding-bottom: 10px;
         border-bottom: 1px solid #e5e7eb;
       }
-      .ada-loading { color: #6366f1; font-style: italic; }
+      .ada-loading { color: #4d6268; font-style: italic; }
       .ada-error   { color: #b91c1c; }
       .ada-empty   { color: #6b7280; font-style: italic; }
 
@@ -122,12 +122,12 @@
         100% { filter: drop-shadow(0 0 3px rgba(0,0,0,.2));  transform: scale(1);    background-position: 100% 0; }
       }
       .ada-countdown-ready {
-        display: inline-flex; align-items: center; gap: 4px;
-        margin: 4px auto 0; padding: 3px 12px; border-radius: 999px;
+        display: inline-flex; align-items: center; gap: 3px;
+        margin: 4px auto 0; padding: 2px 9px; border-radius: 999px;
         background: linear-gradient(120deg, #fff 25%, #c8c8c8 50%, #fff 75%);
         background-size: 300% 100%;
-        border: 3px solid #111;
-        font-size: 11px; font-weight: 600; color: #111;
+        border: 2px solid #111;
+        font-size: 10px; font-weight: 600; color: #111;
         white-space: nowrap;
         animation: adaBadgeShine 2.4s ease-in-out infinite;
       }
@@ -148,10 +148,10 @@
 
       /* ── Verdict card ── */
       .ada-verdict-card {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        background: linear-gradient(135deg, #243038 0%, #31424a 100%);
         border-radius: 14px; padding: 20px 20px 16px;
         margin: 4px 0 22px;
-        color: #fff; box-shadow: 0 4px 24px rgba(99,102,241,.3);
+        color: #fff; box-shadow: 0 4px 24px rgba(36,48,56,.28);
       }
       .ada-verdict-eyebrow {
         font-size: 10px; font-weight: 700; letter-spacing: .12em;
@@ -159,13 +159,13 @@
       }
       .ada-verdict-winner {
         font-size: 19px; font-weight: 800; line-height: 1.35;
-        margin: 0 0 14px; color: #e0e7ff;
+        margin: 0 0 14px; color: #f3f6f4;
       }
       .ada-verdict-scores-row {
         display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px;
       }
       .ada-verdict-score-a {
-        font-size: 30px; font-weight: 900; color: #818cf8; line-height: 1;
+        font-size: 30px; font-weight: 900; color: #f4d18a; line-height: 1;
       }
       .ada-verdict-score-b {
         font-size: 30px; font-weight: 900; opacity: .45; line-height: 1;
@@ -198,65 +198,65 @@
         display: flex; justify-content: space-between;
         font-size: 11px; font-weight: 700; margin-bottom: 5px;
       }
-      .ada-combined-bar-label-a { color: #6366f1; }
-      .ada-combined-bar-label-b { color: #6b7280; text-align: right; }
-      .ada-verdict-card .ada-combined-bar-label-a { color: #a5b4fc; }
-      .ada-verdict-card .ada-combined-bar-label-b { color: rgba(255,255,255,.45); }
+      .ada-combined-bar-label-a { color: #516776; }
+      .ada-combined-bar-label-b { color: #AEC0CC; text-align: right; }
+      .ada-verdict-card .ada-combined-bar-label-a { color: #a0c6d4; }
+      .ada-verdict-card .ada-combined-bar-label-b { color: #AEC0CC; }
       .ada-combined-bar-track {
         height: 12px; border-radius: 6px; overflow: hidden;
         display: flex; background: #e5e7eb;
       }
       .ada-verdict-card .ada-combined-bar-track { background: rgba(255,255,255,.15); }
       .ada-combined-bar-seg-a {
-        height: 100%; background: linear-gradient(90deg, #4338ca, #6366f1);
+        height: 100%; background: linear-gradient(90deg, #516776, #a0c6d4);
         border-radius: 6px 0 0 6px; min-width: 2px;
         transition: width .6s ease;
       }
       .ada-verdict-card .ada-combined-bar-seg-a {
-        background: linear-gradient(90deg, #818cf8, #a5b4fc);
+        background: linear-gradient(90deg, #516776, #a0c6d4);
       }
       .ada-combined-bar-seg-b {
-        height: 100%; background: #d1d5db; border-radius: 0 6px 6px 0; flex: 1;
+        height: 100%; background: #AEC0CC; border-radius: 0 6px 6px 0; flex: 1;
       }
-      .ada-verdict-card .ada-combined-bar-seg-b { background: rgba(255,255,255,.2); }
+      .ada-verdict-card .ada-combined-bar-seg-b { background: #AEC0CC; }
 
       /* ── Section header ── */
       .ada-section-h2 {
         display: flex; align-items: center; gap: 8px;
-        font-size: 15px; font-weight: 800; color: #1e1b4b;
+        font-size: 15px; font-weight: 800; color: #243038;
         margin: 24px 0 12px; padding-bottom: 7px;
-        border-bottom: 2px solid #e0e7ff;
+        border-bottom: 2px solid rgba(36,48,56,.14);
       }
       .ada-section-icon { font-size: 15px; line-height: 1; }
 
       /* ── Criterion card ── */
       .ada-criterion-card {
-        border: 1px solid #e0e7ff; border-radius: 10px;
+        border: 1px solid rgba(36,48,56,.12); border-radius: 10px;
         padding: 13px 15px; margin: 0 0 10px;
-        background: #fafbff;
+        background: rgba(255,255,255,.66);
       }
       .ada-criterion-header {
         display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
       }
       .ada-criterion-icon { font-size: 15px; line-height: 1; }
-      .ada-criterion-title { font-size: 14px; font-weight: 700; color: #312e81; }
+      .ada-criterion-title { font-size: 14px; font-weight: 700; color: #243038; }
       .ada-criterion-arrow {
         font-size: 14px; line-height: 1.6; color: #374151; margin-top: 8px;
       }
-      .ada-criterion-arrow::before { content: '→ '; color: #6366f1; font-weight: 700; }
+      .ada-criterion-arrow::before { content: '→ '; color: #4d6268; font-weight: 700; }
 
       /* ── Responsive card tables ── */
       .ada-card-table { width: 100%; margin: 0 0 4px; }
       .ada-card-table-row {
         display: grid; gap: 8px; padding: 10px 0;
-        border-bottom: 1px solid #ede9fe; font-size: 14px; line-height: 1.55;
-        color: #1e1b4b;
+        border-bottom: 1px solid rgba(36,48,56,.1); font-size: 14px; line-height: 1.55;
+        color: #243038;
       }
       .ada-card-table-row:last-child { border-bottom: none; }
       .ada-card-table-head {
-        font-size: 11px; font-weight: 700; color: #6366f1;
+        font-size: 11px; font-weight: 700; color: #5a4a2f;
         letter-spacing: .06em; text-transform: uppercase;
-        padding-bottom: 6px; border-bottom: 1px solid #e0e7ff;
+        padding-bottom: 6px; border-bottom: 1px solid rgba(36,48,56,.12);
         margin-bottom: 2px;
       }
       .ada-card-table-3col .ada-card-table-row { grid-template-columns: 1fr 2fr 2fr; }
@@ -268,70 +268,78 @@
         .ada-card-table-2col .ada-card-table-row { grid-template-columns: 1fr; gap: 3px; }
         .ada-card-table-3col .ada-card-table-head,
         .ada-card-table-2col .ada-card-table-head { display: none; }
-        .ada-card-table-row > *:first-child { font-weight: 700; color: #3730a3; }
+        .ada-card-table-row > *:first-child { font-weight: 700; color: #243038; }
       }
 
       /* ── Phrase finale ── */
       .ada-finale {
         margin: 20px 0 8px;
         padding: 14px 16px;
-        background: #f0f4ff;
-        border-left: 4px solid #6366f1;
+        background: #eef3f0;
+        border-left: 4px solid #5a4a2f;
         border-radius: 0 10px 10px 0;
-        font-size: 15px; line-height: 1.7; color: #1e1b4b; font-style: italic;
+        font-size: 15px; line-height: 1.7; color: #243038; font-style: italic;
       }
       .ada-finale-label {
         font-style: normal; font-weight: 700; font-size: 10px;
-        color: #6366f1; letter-spacing: .08em; text-transform: uppercase;
+        color: #5a4a2f; letter-spacing: .08em; text-transform: uppercase;
         display: block; margin-bottom: 6px;
       }
 
       /* ── Visual refresh: calmer palette, richer hierarchy ── */
       .ada-wrap {
-        margin: 18px auto 8px;
+        margin: 14px auto 6px;
         width: min(100%, 920px);
       }
       .ada-trigger-btn {
         position: relative;
         overflow: hidden;
-        border: 1px solid rgba(232,232,232,.28);
-        background: linear-gradient(135deg, #243038, #31424a);
+        min-height: 31px;
+        padding: 6px 18px;
+        border: 1px solid rgba(244,198,107,.55);
+        border-radius: 999px;
+        background: linear-gradient(120deg, #1a272e 0%, #2d4250 40%, #f4d18a 50%, #2d4250 60%, #1a272e 100%);
+        background-size: 300% 100%;
         color: #f3f6f4;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .04em;
         box-shadow:
-          0 12px 30px rgba(0,0,0,.26),
-          0 0 0 3px rgba(244,198,107,.08),
-          0 0 22px rgba(244,198,107,.18),
-          inset 0 1px 0 rgba(255,255,255,.28);
-        letter-spacing: .02em;
-        animation: adaBreath 3.2s ease-in-out infinite;
+          0 0 0 2px rgba(244,198,107,.35),
+          0 6px 22px rgba(0,0,0,.35),
+          0 0 28px rgba(244,198,107,.28);
+        animation: adaTriggerShine 2.2s ease-in-out infinite;
+      }
+      @keyframes adaTriggerShine {
+        0%   { background-position: 100% 0; box-shadow: 0 0 0 2px rgba(244,198,107,.25), 0 6px 18px rgba(0,0,0,.3), 0 0 18px rgba(244,198,107,.18); }
+        50%  { background-position:   0% 0; box-shadow: 0 0 0 3px rgba(244,198,107,.65), 0 8px 26px rgba(0,0,0,.38), 0 0 40px rgba(244,198,107,.55); }
+        100% { background-position: 100% 0; box-shadow: 0 0 0 2px rgba(244,198,107,.25), 0 6px 18px rgba(0,0,0,.3), 0 0 18px rgba(244,198,107,.18); }
       }
       .ada-trigger-btn::before {
         content: '';
         position: absolute;
-        inset: -70% auto -70% -42%;
-        width: 42%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,.95), rgba(244,198,107,.72), transparent);
-        transform: rotate(19deg) translateX(-170%);
-        animation: adaTriggerGlint 2.35s ease-in-out infinite;
+        inset: -60% auto -60% -30%;
+        width: 35%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), rgba(244,198,107,.7), transparent);
+        transform: rotate(18deg) translateX(-200%);
+        animation: adaTriggerGlint 2.2s ease-in-out infinite;
         pointer-events: none;
       }
       .ada-trigger-btn::after {
         content: '';
         position: absolute;
-        inset: 3px;
+        inset: 2px;
         border-radius: inherit;
-        border: 1px solid rgba(244,198,107,.38);
-        box-shadow: inset 0 0 14px rgba(244,198,107,.14);
-        opacity: .9;
+        border: 1px solid rgba(244,198,107,.45);
         pointer-events: none;
       }
       .ada-trigger-btn:hover {
         filter: none;
         transform: translateY(-2px);
         box-shadow:
-          0 16px 38px rgba(0,0,0,.32),
-          0 0 0 5px rgba(244,198,107,.16),
-          0 0 34px rgba(244,198,107,.36);
+          0 0 0 3px rgba(244,198,107,.55),
+          0 10px 30px rgba(0,0,0,.4),
+          0 0 50px rgba(244,198,107,.6);
       }
       @keyframes adaTriggerGlint {
         0%, 20% { transform: rotate(19deg) translateX(-190%); opacity: 0; }
@@ -343,15 +351,16 @@
         50% { transform: translateY(-1px) scale(1.025); }
       }
       .ada-panel {
-        border: 1px solid rgba(232,232,232,.18);
-        border-radius: 16px;
-        background: linear-gradient(180deg, #eef3f0 0%, #dfe8e6 100%);
-        box-shadow: 0 24px 70px rgba(0,0,0,.28);
+        border: 1px solid rgba(36,48,56,.18);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.56) 0%, rgba(238,243,240,.88) 28%, #dfe8e6 100%);
+        box-shadow: 0 24px 70px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.5);
       }
       .ada-panel-header {
         background: linear-gradient(135deg, #243038 0%, #31424a 72%, #5a4a2f 100%);
         border-bottom: 1px solid rgba(244,198,107,.34);
-        padding: 12px 16px;
+        padding: 11px 15px;
       }
       .ada-panel-title {
         color: #f3f6f4;
@@ -363,7 +372,13 @@
       }
       .ada-close-btn {
         color: #f4d18a;
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border-radius: 999px;
+        font-size: 13px;
         transition: background .18s ease, color .18s ease, transform .18s ease;
       }
       .ada-close-btn:hover {
@@ -373,14 +388,17 @@
       }
       .ada-body {
         color: #18252c;
-        font-size: 20px;
+        font-size: 18px;
         line-height: 1.58;
-        padding: 18px clamp(14px, 3vw, 24px) 24px;
+        padding: 16px clamp(14px, 2.6vw, 24px) 22px;
       }
       .ada-date {
-        color: #4d6268;
+        color: #f3f6f4;
         text-align: center;
         border-bottom: 1px solid rgba(36,48,56,.18);
+        margin-bottom: 10px;
+        padding-bottom: 7px;
+        font-size: 14px;
       }
       .ada-date::before {
         content: '🕰️ ';
@@ -388,6 +406,14 @@
       }
       .ada-scoring-report {
         animation: adaReportRise .42s ease both;
+      }
+      .ada-report {
+        max-width: 820px;
+        width: 100%;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
       }
       @keyframes adaReportRise {
         from { opacity: 0; transform: translateY(10px); }
@@ -398,11 +424,12 @@
         overflow: hidden;
         text-align: center;
         background:
-          radial-gradient(circle at 20% 0%, rgba(244,198,107,.24), transparent 34%),
           linear-gradient(135deg, #243038 0%, #31424a 54%, #1b252b 100%);
-        border: 1px solid rgba(244,198,107,.24);
-        border-radius: 16px;
-        box-shadow: 0 18px 44px rgba(17,24,29,.35);
+        border: 1px solid rgba(244,198,107,.34);
+        border-radius: 18px;
+        padding: 18px 18px 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 14px 34px rgba(17,24,29,.32);
       }
       .ada-verdict-card::after {
         content: '';
@@ -420,10 +447,18 @@
       .ada-verdict-eyebrow {
         color: #f4d18a;
         opacity: 1;
+        margin-bottom: 6px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .08em;
+        text-transform: uppercase;
       }
       .ada-verdict-winner {
         color: #f3f6f4;
-        font-size: clamp(20px, 3vw, 28px);
+        font-size: clamp(22px, 3vw, 30px);
+        line-height: 1.16;
+        font-weight: 850;
+        margin-bottom: 8px;
       }
       .ada-verdict-scores-row {
         justify-content: center;
@@ -446,11 +481,31 @@
       .ada-conf-moyenne { color: #f4d18a; }
       .ada-conf-forte { color: #a7f3d0; }
       .ada-verdict-expl {
-        font-size: 18px;
+        font-size: 17px;
+        line-height: 1.55;
+        max-width: 680px;
+        margin-top: 8px;
+        margin-left: auto;
+        margin-right: auto;
       }
       .ada-verdict-expl,
       .ada-verdict-prudence {
         color: rgba(243,246,244,.86);
+      }
+      .ada-verdict-note {
+        color: rgba(243,246,244,.74);
+        font-size: 15px;
+        line-height: 1.48;
+        max-width: 680px;
+        margin-top: 6px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .ada-verdict-prudence {
+        font-size: 14px;
+        line-height: 1.42;
+        padding-top: 8px;
+        margin-top: 8px;
       }
       .ada-combined-bar-label-a,
       .ada-combined-bar-label-b,
@@ -458,14 +513,26 @@
       .ada-verdict-card .ada-combined-bar-label-b {
         color: #243038;
       }
+      .ada-combined-bar-label-a {
+        color: var(--color-a, #516776);
+      }
+      .ada-combined-bar-label-b {
+        color: var(--color-b, #AEC0CC);
+      }
       .ada-combined-bar-labels {
-        font-size: 14px;
+        font-size: 18px;
         line-height: 1.25;
-        gap: 12px;
+        gap: 10px;
       }
       .ada-verdict-card .ada-combined-bar-label-a,
       .ada-verdict-card .ada-combined-bar-label-b {
         color: rgba(243,246,244,.82);
+      }
+      .ada-verdict-card .ada-combined-bar-label-a {
+        color: #a0c6d4;
+      }
+      .ada-verdict-card .ada-combined-bar-label-b {
+        color: #AEC0CC;
       }
       .ada-combined-bar-track {
         height: 14px;
@@ -475,15 +542,15 @@
       }
       .ada-combined-bar-seg-a {
         border-radius: 999px 0 0 999px;
-        background: linear-gradient(90deg, #243038, #4d6268);
+        background: linear-gradient(90deg, var(--color-a, #516776), #a0c6d4);
         animation: adaBarGrow .7s ease-out both;
       }
       .ada-verdict-card .ada-combined-bar-seg-a {
-        background: linear-gradient(90deg, #f4d18a, #f7faf8);
+        background: linear-gradient(90deg, var(--color-a, #516776), #a0c6d4);
       }
       .ada-combined-bar-seg-b {
         border-radius: 0 999px 999px 0;
-        background: rgba(36,48,56,.22);
+        background: var(--color-b, #AEC0CC);
       }
       @keyframes adaBarGrow {
         from { width: 0; }
@@ -491,24 +558,56 @@
       .ada-section-h2 {
         justify-content: center;
         text-align: center;
-        color: #243038;
-        border-bottom: 1px solid rgba(36,48,56,.18);
-        margin-top: 28px;
-        letter-spacing: .02em;
+        color: #f3f6f4;
+        border: none;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #243038 0%, #31424a 100%);
+        margin: 22px auto 12px;
+        padding: 9px 22px;
+        width: fit-content;
+        max-width: 100%;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        font-size: 12px;
+        font-weight: 900;
+        box-shadow: 0 6px 18px rgba(36,48,56,.22);
       }
       .ada-section-icon {
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,.12));
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
+      }
+      .ada-camp-title {
+        border: 0;
+        border-radius: 6px;
+        color: #f3f6f4;
+        margin: 4px 0;
+        width: 100%;
+        box-sizing: border-box;
+        box-shadow: 0 7px 18px rgba(36,48,56,.12);
+        text-transform: none;
+        letter-spacing: .01em;
+        font-size: 16px;
+      }
+      .ada-camp-title-a {
+        background: linear-gradient(135deg, #516776, #6f8d9d);
+      }
+      .ada-camp-title-b {
+        background: linear-gradient(135deg, #AEC0CC, #d5e0e6);
+        color: #243038;
+      }
+      .ada-camp-title .ada-section-icon {
+        display: none;
       }
       .ada-criterion-card {
-        background: rgba(255,255,255,.62);
+        background: linear-gradient(180deg, rgba(255,255,255,.76), rgba(247,250,248,.68));
         border: 1px solid rgba(36,48,56,.12);
         border-radius: 14px;
-        box-shadow: 0 10px 24px rgba(36,48,56,.08);
+        padding: 12px 14px;
+        box-shadow: 0 7px 18px rgba(36,48,56,.07);
         transition: transform .18s ease, box-shadow .18s ease;
       }
       .ada-criterion-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(36,48,56,.12);
+        box-shadow: 0 10px 22px rgba(36,48,56,.1);
       }
       .ada-criterion-header {
         justify-content: center;
@@ -516,37 +615,65 @@
       }
       .ada-criterion-title {
         color: #243038;
+        font-size: 17px;
+        font-weight: 850;
+        letter-spacing: .02em;
       }
       .ada-criterion-arrow {
         text-align: center;
         color: #283941;
-        font-size: 18px;
+        font-size: 16px;
+        line-height: 1.5;
+        background: rgba(36,48,56,.05);
+        border-radius: 12px;
+        padding: 8px 10px;
       }
       .ada-criterion-arrow::before {
         content: '💡 ';
         color: #5a4a2f;
       }
+      .ada-card-table {
+        overflow: hidden;
+        border: 1px solid rgba(36,48,56,.12);
+        border-radius: 14px;
+        background: rgba(255,255,255,.5);
+        box-shadow: 0 8px 18px rgba(36,48,56,.06);
+      }
       .ada-card-table-row {
         color: #22323a;
         border-bottom: 1px solid rgba(36,48,56,.12);
-        font-size: 18px;
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 9px 12px;
       }
       .ada-card-table-head {
         color: #5a4a2f;
         border-bottom: 1px solid rgba(36,48,56,.18);
+        background: rgba(244,198,107,.12);
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        padding: 8px 12px;
       }
       .ada-finale {
         text-align: center;
-        background: linear-gradient(135deg, rgba(244,198,107,.18), rgba(255,255,255,.62));
+        background: linear-gradient(135deg, rgba(244,198,107,.22), rgba(255,255,255,.72));
         border-left: 0;
         border: 1px solid rgba(90,74,47,.22);
-        border-radius: 14px;
+        border-radius: 16px;
         color: #243038;
         box-shadow: 0 10px 26px rgba(36,48,56,.1);
-        font-size: 20px;
+        font-size: 18px;
+        line-height: 1.55;
+        padding: 14px 16px;
       }
       .ada-finale-label {
+        display: block;
+        margin-bottom: 5px;
         color: #5a4a2f;
+        font-size: 12px;
+        letter-spacing: .08em;
       }
       .ada-loading,
       .ada-empty {
@@ -595,38 +722,224 @@
       .ada-regen-btn {
         border-color: rgba(36,48,56,.3);
         color: #243038;
-        border-radius: 999px;
+        border-radius: 8px;
+        padding: 4px 9px;
+        font-size: 11px;
+        box-shadow: none;
       }
       .ada-regen-btn:hover {
         background: #243038;
         color: #f3f6f4;
       }
+      /* ── Verdict gauge ── */
+      .ada-gauge-meter {
+        position: relative; width: min(100%, 290px); aspect-ratio: 2/1;
+        margin: 8px auto 1px; overflow: hidden;
+      }
+      .ada-gauge-arc {
+        position: absolute; inset: 0;
+        border-radius: 290px 290px 0 0; overflow: hidden;
+        background: linear-gradient(90deg, #516776 0%, #a0c6d4 44%, rgba(255,255,255,.24) 50%, #e8f3f7 56%, #AEC0CC 100%);
+        box-shadow: inset 0 4px 10px rgba(255,255,255,.18), inset 0 -8px 18px rgba(0,0,0,.35);
+      }
+      .ada-gauge-arc::after {
+        content: ''; position: absolute;
+        left: 12%; right: 12%; bottom: -2px; height: 74%;
+        border-radius: 260px 260px 0 0;
+        background: linear-gradient(180deg, #2e3f48 0%, #243038 100%);
+        box-shadow: inset 0 4px 12px rgba(0,0,0,.25);
+      }
+      .ada-gauge-tick {
+        position: absolute; bottom: 10px; width: 1px; height: 8px;
+        background: rgba(255,255,255,.28); z-index: 1; transform-origin: bottom center;
+      }
+      .ada-gauge-tick-center { width: 2px; height: 13px; background: rgba(255,255,255,.45); }
+      .ada-gauge-needle {
+        position: absolute; left: 50%; bottom: 4px;
+        width: 4px; height: 76%;
+        border-radius: 999px 999px 2px 2px;
+        background: linear-gradient(180deg, #f7faf8 0%, #AEC0CC 54%, #516776 100%);
+        box-shadow: 0 2px 8px rgba(0,0,0,.45);
+        transform: translateX(-50%) rotate(var(--ada-gauge-angle, 0deg));
+        transform-origin: 50% calc(100% - 4px);
+        transition: transform .65s cubic-bezier(.2,.8,.2,1);
+        z-index: 3;
+      }
+      .ada-gauge-needle::before {
+        content: ''; position: absolute; left: 50%; top: -6px;
+        width: 0; height: 0;
+        border-left: 6px solid transparent; border-right: 6px solid transparent;
+        border-bottom: 11px solid #f7faf8;
+        transform: translateX(-50%);
+      }
+      .ada-gauge-pivot {
+        position: absolute; left: 50%; bottom: 0;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, rgba(255,255,255,.92) 0%, #AEC0CC 36%, #516776 38%, #243038 100%);
+        box-shadow: 0 2px 8px rgba(0,0,0,.45);
+        transform: translateX(-50%); z-index: 4;
+      }
+      .ada-gauge-labels {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: start;
+        gap: 12px;
+        margin: 5px 0 10px;
+        padding: 9px 0 0;
+        border-top: 1px solid rgba(243,246,244,.16);
+      }
+      .ada-gauge-label-a { color: #a0c6d4; text-align: left; }
+      .ada-gauge-label-b { color: #AEC0CC; text-align: right; }
+      .ada-gauge-label-a,
+      .ada-gauge-label-b {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.28;
+      }
+      .ada-gauge-position-text {
+        display: block;
+      }
+      .ada-gauge-label-divider {
+        width: 1px;
+        min-height: 44px;
+        margin-top: 1px;
+        background: linear-gradient(180deg, transparent, rgba(243,246,244,.34), transparent);
+      }
+      .ada-gauge-score {
+        display: block;
+        margin-top: 4px;
+        color: #f3f6f4;
+        font-size: 22px;
+        font-weight: 900;
+        line-height: 1;
+      }
+      .ada-gauge-score small { font-size: 12px; font-weight: 650; opacity: .55; }
+
       /* ── New-format argument cards ── */
-      .ada-arg-card { border: 1px solid #e0e7ff; border-radius: 10px; padding: 12px 14px; margin: 0 0 10px; background: #fafbff; }
+      .ada-arg-card { border: 1px solid rgba(36,48,56,.12); border-radius: 12px; padding: 10px 12px; margin: 0 0 8px; background: rgba(255,255,255,.66); box-shadow: 0 5px 14px rgba(36,48,56,.05); }
       .ada-arg-excluded { opacity: .6; }
       .ada-arg-excluded-label { margin-left: auto; font-size: 10px; font-weight: 600; color: #9ca3af; letter-spacing: .04em; text-transform: uppercase; }
-      .ada-arg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .ada-arg-score { font-size: 20px; font-weight: 900; line-height: 1; }
-      .ada-arg-score small { font-size: 11px; font-weight: 600; opacity: .6; }
-      .ada-arg-cat { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
-      .ada-cat-excellent { color: #4338ca; background: #ede9fe; }
+      .ada-arg-header { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+      .ada-arg-score { font-size: 20px; font-weight: 900; line-height: 1; color: #243038; }
+      .ada-arg-score small { font-size: 11px; font-weight: 650; opacity: .58; }
+      .ada-arg-cat { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 999px; }
+      .ada-cat-excellent { color: #243038; background: #dfe8e6; }
       .ada-cat-bon       { color: #15803d; background: #dcfce7; }
       .ada-cat-moyen     { color: #b45309; background: #fef9c3; }
       .ada-cat-faible    { color: #b91c1c; background: #fee2e2; }
-      .ada-arg-text { font-size: 14px; color: #374151; margin-bottom: 7px; font-style: italic; line-height: 1.5; }
-      .ada-arg-breakdown { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
-      .ada-arg-expl { font-size: 13px; color: #374151; line-height: 1.55; margin-bottom: 6px; }
-      .ada-arg-list { margin: 4px 0 4px 16px; padding: 0; font-size: 13px; line-height: 1.5; }
+      .ada-arg-text { font-size: 17px; color: #243038; margin-bottom: 6px; font-style: italic; line-height: 1.48; }
+      .ada-arg-breakdown { font-size: 13px; color: #64747a; margin-bottom: 5px; }
+      .ada-arg-expl { font-size: 15px; color: #37484f; line-height: 1.5; margin-bottom: 5px; }
+      .ada-arg-list { margin: 4px 0 4px 18px; padding: 0; font-size: 15px; line-height: 1.48; }
       .ada-arg-strengths li { color: #15803d; }
       .ada-arg-weaknesses li { color: #b91c1c; }
-      .ada-arg-source { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 6px; }
+      .ada-arg-source { font-size: 13px; margin-top: 5px; padding: 5px 8px; border-radius: 7px; }
       .ada-arg-source-ok   { background: #f0fdf4; color: #15803d; }
       .ada-arg-source-none { background: #f9fafb; color: #9ca3af; }
-      .ada-camp-section { margin-bottom: 28px; }
-      .ada-camp-stats { font-size: 12px; color: #6b7280; margin: -6px 0 12px; }
-      .ada-dup-section { border-top: 1px dashed #c7d2fe; padding-top: 10px; margin-top: 10px; }
-      .ada-dup-title { font-size: 11px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-      .ada-dup-group { font-size: 12px; color: #374151; margin-bottom: 4px; padding: 4px 10px; background: #ede9fe; border-radius: 6px; }
+      .ada-camp-section { margin-bottom: 8px; }
+      .ada-camp-stats { font-size: 13px; color: #64747a; margin: -4px 0 8px; text-align: center; }
+      .ada-args-details {
+        margin-top: 6px;
+      }
+      .ada-args-summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: fit-content;
+        max-width: 100%;
+        margin: 0 auto 8px;
+        padding: 6px 10px;
+        border: 1px solid rgba(36,48,56,.16);
+        border-radius: 9px;
+        background: rgba(255,255,255,.62);
+        color: #243038;
+        font-size: 14px;
+        font-weight: 750;
+        cursor: pointer;
+        box-shadow: 0 3px 8px rgba(36,48,56,.05);
+      }
+      .ada-args-summary::-webkit-details-marker {
+        display: none;
+      }
+      .ada-args-summary::after {
+        content: '⌄';
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: rgba(36,48,56,.1);
+        color: #243038;
+        font-size: 12px;
+        line-height: 1;
+        transition: transform .18s ease;
+      }
+      .ada-args-details[open] .ada-args-summary::after {
+        transform: rotate(180deg);
+      }
+      .ada-args-list {
+        animation: adaReportRise .28s ease both;
+        margin: 0;
+        padding: 0;
+      }
+      .ada-args-details > :not(summary) {
+        margin-left: 0;
+        padding-left: 0;
+      }
+      .ada-arg-card.ada-arg-extra-hidden {
+        display: none;
+      }
+      .ada-load-more-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 2px 0 8px;
+      }
+      .ada-load-more-btn {
+        border: 1px solid rgba(36,48,56,.14);
+        border-radius: 999px;
+        background: rgba(255,255,255,.48);
+        color: #4d6268;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 750;
+        line-height: 1;
+        padding: 6px 11px;
+        transition: background .16s ease, color .16s ease, border-color .16s ease;
+      }
+      .ada-load-more-btn:hover {
+        background: rgba(255,255,255,.72);
+        border-color: rgba(36,48,56,.24);
+        color: #243038;
+      }
+      .ada-load-more-btn.is-collapse {
+        color: #64747a;
+      }
+      .ada-summary-details {
+        margin-top: 6px;
+      }
+      .ada-summary-list {
+        animation: adaReportRise .28s ease both;
+      }
+      .ada-summary-card { border: 1px solid rgba(36,48,56,.12); border-radius: 12px; padding: 10px 12px; margin: 0 0 8px; background: rgba(255,255,255,.66); box-shadow: 0 5px 14px rgba(36,48,56,.05); }
+      .ada-summary-label { font-size: 14px; font-weight: 850; color: #243038; margin-bottom: 5px; }
+      .ada-summary-section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin: 6px 0 3px; }
+      .ada-summary-strengths-title { color: #15803d; }
+      .ada-summary-weaknesses-title { color: #b91c1c; }
+      .ada-dup-section {
+        margin: 7px 0 6px;
+        padding: 8px 10px;
+        border: 1px dashed rgba(90,74,47,.34);
+        border-radius: 10px;
+        background: rgba(244,198,107,.12);
+      }
+      .ada-dup-title { font-size: 12px; font-weight: 800; color: #5a4a2f; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+      .ada-dup-group { font-size: 13px; color: #374151; margin-bottom: 4px; padding: 5px 8px; background: rgba(255,255,255,.58); border-radius: 7px; }
 
       @media (prefers-reduced-motion: reduce) {
         .ada-trigger-btn,
@@ -645,28 +958,124 @@
         }
       }
       @media (min-width: 769px) {
+        /* ── Mise en page camps ── */
+        .ada-camp-title {
+          width: fit-content; min-width: 200px; max-width: 80%;
+          margin: 4px auto; padding: 10px 28px;
+        }
+        /* ── Corps du panel ── */
+        .ada-body               { font-size: 22px; }
+        .ada-date               { font-size: 16px; }
+        /* ── Cartes arguments ── */
+        .ada-arg-text           { font-size: 21px; }
+        .ada-arg-breakdown      { font-size: 17px; }
+        .ada-arg-expl           { font-size: 19px; }
+        .ada-arg-list           { font-size: 18px; }
+        .ada-arg-source         { font-size: 16px; }
+        .ada-arg-score          { font-size: 28px; }
+        .ada-arg-score small    { font-size: 15px; }
+        .ada-arg-cat            { font-size: 15px; }
+        .ada-arg-excluded-label { font-size: 13px; }
+        /* ── Stats de camp ── */
+        .ada-camp-stats         { font-size: 17px; }
+        /* ── Critères ── */
+        .ada-criterion-title    { font-size: 18px; }
+        .ada-criterion-arrow    { font-size: 19px; }
+        .ada-combined-bar-labels { font-size: 18px; }
+        /* ── Verdict (sauf winner déjà grand) ── */
+        .ada-verdict-winner     { font-size: clamp(24px, 3.2vw, 32px); }
+        .ada-verdict-eyebrow    { font-size: 13px; }
+        .ada-verdict-confidence { font-size: 13px; padding: 5px 14px; }
+        .ada-verdict-expl       { font-size: 18px; }
+        .ada-verdict-note       { font-size: 17px; }
+        .ada-verdict-prudence   { font-size: 15px; }
+        /* ── Jauge ── */
+        .ada-gauge-label-a,
+        .ada-gauge-label-b      { font-size: 16px; }
+        .ada-gauge-score        { font-size: 30px; }
+        .ada-gauge-score small  { font-size: 15px; }
+        /* ── Synthèse & doublons ── */
+        .ada-summary-label           { font-size: 18px; }
+        .ada-summary-section-title   { font-size: 13px; }
+        .ada-dup-group               { font-size: 17px; }
+        /* ── Menus déroulants ── */
+        .ada-args-summary       { font-size: 14px; }
+        /* ── Conclusion & finale ── */
+        .ada-finale             { font-size: 21px; }
+        /* ── Modal barème ── */
+        .ada-bareme-modal       { font-size: 18px; }
+        .ada-bareme-modal h2    { font-size: 23px; }
+        .ada-bareme-modal h3    { font-size: 15px; }
+      }
+      @media (max-width: 560px) {
+        .ada-card-table-row > *:first-child {
+          color: #243038;
+        }
         .ada-body {
-          font-size: 21px;
+          font-size: 16px;
+          padding: 14px 12px 18px;
+        }
+        .ada-arg-text {
+          font-size: 16px;
         }
         .ada-verdict-expl,
         .ada-criterion-arrow,
-        .ada-card-table-row {
-          font-size: 19px;
-        }
-        .ada-combined-bar-labels {
-          font-size: 16px;
-        }
-        .ada-verdict-winner {
-          font-size: clamp(24px, 3.3vw, 32px);
-        }
         .ada-finale {
-          font-size: 21px;
+          font-size: 15px;
         }
       }
     `;
     const el = document.createElement('style');
     el.textContent = css;
     document.head.appendChild(el);
+
+    // ── CSS modal barème ──
+    const mCss = document.createElement('style');
+    mCss.textContent = `
+      .ada-bareme-overlay {
+        position: fixed; inset: 0; z-index: 400000;
+        background: rgba(18,24,28,.72); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        animation: adaFadeIn .2s ease;
+      }
+      @keyframes adaFadeIn { from { opacity:0 } to { opacity:1 } }
+      .ada-bareme-modal {
+        background: #f4f7f5;
+        border-radius: 16px;
+        max-width: 680px; width: 100%;
+        max-height: 88vh;
+        overflow-y: auto;
+        padding: 28px 28px 32px;
+        box-shadow: 0 24px 60px rgba(18,24,28,.38);
+        position: relative;
+        font-size: 15px; line-height: 1.7; color: #243038;
+      }
+      .ada-bareme-close {
+        position: sticky; top: 0; float: right;
+        background: #243038; color: #f3f6f4;
+        border: none; border-radius: 999px;
+        width: 32px; height: 32px; font-size: 18px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        margin: -4px -4px 12px 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      }
+      .ada-bareme-modal h2 { font-size: 18px; font-weight: 900; margin: 0 0 12px; color: #243038; }
+      .ada-bareme-modal h3 { font-size: 14px; font-weight: 800; margin: 20px 0 8px; color: #243038; text-transform: uppercase; letter-spacing: .04em; }
+      .ada-bareme-modal p  { margin: 0 0 10px; }
+      .ada-bareme-modal ul { margin: 6px 0 10px 18px; padding: 0; }
+      .ada-bareme-modal li { margin-bottom: 6px; }
+      .ada-bareme-modal strong { font-weight: 800; }
+      .ada-bareme-modal .ada-bareme-rule {
+        background: rgba(36,48,56,.06); border-radius: 10px;
+        padding: 10px 14px; margin: 6px 0 10px;
+        font-size: 14px; line-height: 1.6;
+      }
+      @media (max-width: 560px) {
+        .ada-bareme-modal { padding: 20px 16px 24px; font-size: 14px; }
+      }
+    `;
+    document.head.appendChild(mCss);
   }
 
   function esc(s) {
@@ -690,7 +1099,28 @@
       return `<span class="ada-arg-score ${cls}">${score}<small>/100</small></span><span class="ada-arg-cat ${cls}">${CAT_LABEL[cat] || cat}</span>`;
     }
 
-    function argCard(a) {
+    function duplicateGroupsForArgument(groups, argumentId) {
+      const targetId = String(argumentId || '').trim();
+      if (!targetId || !Array.isArray(groups)) return [];
+      return groups.filter((group) => {
+        const representativeId = String(group?.representativeArgumentId || '').trim();
+        if (representativeId === targetId) return true;
+        const mergedIds = Array.isArray(group?.mergedArgumentIds) ? group.mergedArgumentIds : [];
+        return mergedIds.some((id) => String(id || '').trim() === targetId);
+      });
+    }
+
+    function dupGroups(groups) {
+      if (!groups || !groups.length) return '';
+      return '<div class="ada-dup-section"><div class="ada-dup-title">♊ Doublons regroupés</div>' +
+        groups.map((group) => {
+          const mergedCount = Array.isArray(group?.mergedArgumentIds) ? group.mergedArgumentIds.length : 0;
+          return `<div class="ada-dup-group">${esc(group?.sharedIdea || '')} — ${mergedCount} argument${mergedCount > 1 ? 's' : ''} fusionné${mergedCount > 1 ? 's' : ''}</div>`;
+        }).join('') +
+        '</div>';
+    }
+
+    function argCard(a, duplicateGroups = [], isExtraHidden = false) {
       const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
       const strengthsHtml = (a.strengths || []).length
         ? '<ul class="ada-arg-list ada-arg-strengths">' + a.strengths.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
@@ -700,9 +1130,10 @@
         ? `<div class="ada-arg-source ada-arg-source-ok">Source : ${esc(a.source_level || '')} — ${esc(a.source_explanation || '')}</div>`
         : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`;
       const excluded = a.category === 'faible' || a.category === 'moyen';
-      return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}">
+      return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}${isExtraHidden ? ' ada-arg-extra-hidden' : ''}">
         <div class="ada-arg-header">${catBadge(a.category, a.final_score)}${excluded ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
-        <div class="ada-arg-text">${esc(a.argumentText)}</div>
+        <div class="ada-arg-text">"${esc(a.argumentText)}"</div>
+        ${dupGroups(duplicateGroups)}
         <div class="ada-arg-breakdown">Fond : ${scoreOut}/80 · Sources : ${a.source_score || 0}/20</div>
         ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
         ${strengthsHtml}${weaknessesHtml}
@@ -710,23 +1141,27 @@
       </div>`;
     }
 
-    function dupGroups(groups) {
-      if (!groups || !groups.length) return '';
-      return '<div class="ada-dup-section"><div class="ada-dup-title">♊ Doublons regroupés</div>' +
-        groups.map(g => `<div class="ada-dup-group">${esc(g.sharedIdea || '')} — ${(g.mergedArgumentIds || []).length} arguments fusionnés</div>`).join('') +
-        '</div>';
-    }
-
     function campSection(camp, campData) {
       const args = campData.effectiveArguments || [];
       if (!args.length) return `<div class="ada-empty">Aucun argument pour ${esc(campData.label)}.</div>`;
       const qe = campData.goodExcellentCount || 0;
       const avg = campData.weightedAverage || 0;
+      const duplicateGroups = Array.isArray(campData.duplicateGroups) ? campData.duplicateGroups : [];
+      const visibleLimit = 5;
+      const hasMoreArgs = args.length > visibleLimit;
       return `<div class="ada-camp-section">
-        <div class="ada-section-h2"><span class="ada-section-icon">${camp === 'A' ? '🔵' : '🔴'}</span> ${esc(campData.label)}</div>
+        <div class="ada-section-h2 ada-camp-title ada-camp-title-${camp.toLowerCase()}"><span class="ada-section-icon" aria-hidden="true"></span>${esc(campData.label)}</div>
         <div class="ada-camp-stats">${qe} argument${qe > 1 ? 's' : ''} bon${qe > 1 ? 's' : ''}/excellent${qe > 1 ? 's' : ''} · moyenne pondérée : ${avg}/100</div>
-        ${args.map(argCard).join('')}
-        ${dupGroups(campData.duplicateGroups)}
+        <details class="ada-args-details">
+          <summary class="ada-args-summary">Voir les arguments analysés (${args.length})</summary>
+          <div class="ada-args-list">
+            ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit)).join('')}
+            <div class="ada-load-more-wrap">
+              ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'arguments</button>' : ''}
+              <button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button>
+            </div>
+          </div>
+        </details>
       </div>`;
     }
 
@@ -736,42 +1171,76 @@
     const v = d.verdict;
     if (v && !d.isOpen) {
       const confCls = v.confidence === 'forte' ? 'ada-conf-forte' : v.confidence === 'moyenne' ? 'ada-conf-moyenne' : 'ada-conf-faible';
-      out += `<div class="ada-verdict-card">
-        <div class="ada-verdict-eyebrow">⚖️ Verdict argumentatif</div>
-        <div class="ada-verdict-winner">${esc(v.winnerLabel)}</div>
-        <div class="ada-verdict-scores-row">
-          <span class="ada-verdict-score-a">${v.scoreA}</span>
-          <span class="ada-verdict-vs">vs</span>
-          <span class="ada-verdict-score-b">${v.scoreB}</span>
-        </div>
-        <div class="ada-verdict-confidence ${confCls}">Confiance : ${esc(v.confidence)}</div>
-        ${v.winner !== 'egalite' && v.winner !== 'indeterminate'
-          ? renderCombinedBar(d.positionA, v.scoreA, d.positionB, v.scoreB) : ''}
-        ${v.caveat ? `<div class="ada-verdict-expl">${esc(v.caveat)}</div>` : ''}
-        ${v.note   ? `<div class="ada-verdict-note">${esc(v.note)}</div>`   : ''}
-        <div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans ce débat, pas une vérité définitive.</div>
-      </div>`;
+      out += '<div class="ada-verdict-card">' +
+        '<div class="ada-verdict-eyebrow">⚖️ Verdict argumentatif</div>' +
+        renderVerdictGauge(v, d.positionA, d.positionB) +
+        '<div class="ada-verdict-winner">' + esc(v.winnerLabel) + '</div>' +
+        '<div class="ada-verdict-confidence ' + confCls + '">Confiance : ' + esc(v.confidence) + '</div>' +
+        (v.caveat ? '<div class="ada-verdict-expl">'  + esc(v.caveat) + '</div>' : '') +
+        (v.note   ? '<div class="ada-verdict-note">'  + esc(v.note)   + '</div>' : '') +
+        '<div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans cette arène, pas une vérité définitive.</div>' +
+        '<div class="ada-verdict-prudence" style="margin-top:5px;">Le barème d\'évaluation détaillé est disponible <span class="ada-bareme-link" data-ada-bareme="1" style="text-decoration:underline;cursor:pointer;opacity:.85;">en cliquant ici</span>.</div>' +
+      '</div>';
+    }
+
+    // Scoring report (critères)
+    const sr = d.scoringReport;
+    if (sr && sr.criteria && sr.criteria.length) {
+      out += '<div class="ada-section-h2"><span class="ada-section-icon">📊</span> Évaluation par critère</div>';
+      for (const c of sr.criteria) {
+        const sA = Math.min(100, Math.max(0, Number(c.scoreA) || 0));
+        const sB = Math.min(100, Math.max(0, Number(c.scoreB) || 0));
+        out += '<details class="ada-args-details">' +
+          '<summary class="ada-args-summary">' +
+            '<span>' + _criterionIcon(c.name) + '</span> ' + esc(c.name) +
+          '</summary>' +
+          '<div class="ada-args-list">' +
+            '<div class="ada-criterion-card">' +
+              renderCombinedBar(d.positionA, sA, d.positionB, sB) +
+              (c.explanation ? '<div class="ada-criterion-arrow">' + md(c.explanation) + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+        '</details>';
+      }
     }
 
     // Camp sections
+    out += '<div class="ada-section-h2"><span class="ada-section-icon">🧠</span> Évaluation individuelle des idées</div>';
     out += campSection('A', d.camps.A);
     if (!d.isOpen && d.camps.B) out += campSection('B', d.camps.B);
 
-    // Scoring report (critères + conclusion)
-    const sr = d.scoringReport;
-    if (sr && (sr.criteria || sr.conclusion)) {
-      if (sr.criteria && sr.criteria.length) {
-        out += '<div class="ada-section-h2"><span class="ada-section-icon">📊</span> Évaluation par critère</div>';
-        for (const c of sr.criteria) {
-          const sA = Math.min(100, Math.max(0, Number(c.scoreA) || 0));
-          const sB = Math.min(100, Math.max(0, Number(c.scoreB) || 0));
-          out += '<div class="ada-criterion-card">' +
-            '<div class="ada-criterion-header">' +
-              '<span class="ada-criterion-icon">' + _criterionIcon(c.name) + '</span>' +
-              '<span class="ada-criterion-title">' + esc(c.name) + '</span>' +
-            '</div>' +
-            renderCombinedBar(d.positionA, sA, d.positionB, sB) +
-          '</div>';
+    // Bottom sections (synthèse + conclusion)
+    if (sr) {
+      const cs = sr.campSummaries;
+      if (cs && (cs.A || cs.B)) {
+        let summaryOut = '';
+        ['A', 'B'].forEach(function(side) {
+          const camp = cs[side];
+          if (!camp) return;
+          const hasContent = (camp.strengths && camp.strengths.length) || (camp.weaknesses && camp.weaknesses.length);
+          if (!hasContent) return;
+          summaryOut += '<div class="ada-summary-card">' +
+            '<div class="ada-summary-label">' + esc(camp.label) + '</div>';
+          if (camp.strengths && camp.strengths.length) {
+            summaryOut += '<div class="ada-summary-section-title ada-summary-strengths-title">Points forts</div>' +
+              '<ul class="ada-arg-list ada-arg-strengths">' +
+              camp.strengths.map(function(s){ return '<li>' + md(s) + '</li>'; }).join('') +
+              '</ul>';
+          }
+          if (camp.weaknesses && camp.weaknesses.length) {
+            summaryOut += '<div class="ada-summary-section-title ada-summary-weaknesses-title">Points faibles</div>' +
+              '<ul class="ada-arg-list ada-arg-weaknesses">' +
+              camp.weaknesses.map(function(w){ return '<li>' + md(w) + '</li>'; }).join('') +
+              '</ul>';
+          }
+          summaryOut += '</div>';
+        });
+        if (summaryOut) {
+          out += '<div class="ada-section-h2"><span class="ada-section-icon">📋</span> Synthèse par camp</div>' +
+            '<details class="ada-summary-details">' +
+              '<summary class="ada-args-summary ada-summary-toggle">Voir la synthèse par camp</summary>' +
+              '<div class="ada-summary-list">' + summaryOut + '</div>' +
+            '</details>';
         }
       }
       if (sr.conclusion) {
@@ -786,13 +1255,49 @@
     return out;
   }
 
+  function renderVerdictGauge(v, posA, posB) {
+    const sA = Number(v.scoreA) || 0;
+    const sB = Number(v.scoreB) || 0;
+    const total = sA + sB;
+    const pctA  = total === 0 ? 50 : sA / total * 100;
+    const pctB  = total === 0 ? 50 : 100 - pctA;
+    const angle = Math.round(((pctB - pctA) / 100) * 74);
+    const label = (s) => esc(s);
+    const ticks = [
+      { side: 'left', pct: '18%',  deg: -28 },
+      { side: 'left', pct: '30%',  deg: -18 },
+      { side: 'left', pct: '40%',  deg:  -8 },
+      { side: 'left', pct: '50%',  deg:   0, center: true },
+      { side: 'right', pct: '40%', deg:   8 },
+      { side: 'right', pct: '30%', deg:  18 },
+      { side: 'right', pct: '18%', deg:  28 },
+    ].map(t => {
+      const pos = t.side === 'left' ? `left:${t.pct}` : `right:${t.pct}`;
+      const rot = t.deg !== 0 ? `;transform:rotate(${t.deg}deg)` : '';
+      const cls = t.center ? ' ada-gauge-tick-center' : '';
+      return `<span class="ada-gauge-tick${cls}" style="${pos}${rot}"></span>`;
+    }).join('');
+    return (
+      '<div class="ada-gauge-meter">' +
+        '<div class="ada-gauge-arc">' + ticks + '</div>' +
+        '<div class="ada-gauge-needle" style="--ada-gauge-angle:' + angle + 'deg"></div>' +
+        '<div class="ada-gauge-pivot"></div>' +
+      '</div>' +
+      '<div class="ada-gauge-labels">' +
+        '<div class="ada-gauge-label-a"><span class="ada-gauge-position-text">' + label(posA) + '</span><span class="ada-gauge-score">' + sA + '<small>/100</small></span></div>' +
+        '<span class="ada-gauge-label-divider" aria-hidden="true"></span>' +
+        '<div class="ada-gauge-label-b"><span class="ada-gauge-position-text">' + label(posB) + '</span><span class="ada-gauge-score">' + sB + '<small>/100</small></span></div>' +
+      '</div>'
+    );
+  }
+
   function _criterionIcon(name) {
     const n = String(name || '').toLowerCase();
-    if (n.includes('question'))    return '📊';
-    if (n.includes('solidit'))     return '🧠';
-    if (n.includes('source'))      return '🔍';
-    if (n.includes('objection'))   return '🛡️';
-    if (n.includes('conviction'))  return '🎯';
+    if (n.includes('pertinence'))             return '🎯';
+    if (n.includes('clart'))                  return '💡';
+    if (n.includes('raisonnement'))           return '🧠';
+    if (n.includes('nuance') || n.includes('objection')) return '🛡️';
+    if (n.includes('ton'))                    return '🤝';
     return '📊';
   }
 
@@ -892,7 +1397,7 @@
         (vConfiance ? '<div class="ada-verdict-confidence ' + confCls + '">Confiance : ' + esc(vConfiance) + '</div>' : '') +
         (vLabelA && vLabelB ? renderCombinedBar(vLabelA, vScoreA, vLabelB, vScoreB) : '') +
         (vExplLines.length ? '<div class="ada-verdict-expl">' + vExplLines.map(md).join(' ') + '</div>' : '') +
-        '<div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans ce débat, pas une vérité définitive.</div>' +
+        '<div class="ada-verdict-prudence">Ce résultat est provisoire : il évalue la robustesse des arguments présents dans cette arène, pas une vérité définitive.</div>' +
       '</div>';
     }
 
@@ -1076,6 +1581,34 @@
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
+  function bindLoadMoreArguments(root) {
+    if (!root || root.dataset.adaLoadMoreBound === '1') return;
+    root.dataset.adaLoadMoreBound = '1';
+    root.addEventListener('click', function (event) {
+      const btn = event.target.closest('.ada-load-more-btn');
+      if (!btn || !root.contains(btn)) return;
+      const list = btn.closest('.ada-args-list');
+      if (!list) return;
+      const isExpanded = btn.dataset.adaExpanded === '1';
+      if (isExpanded) {
+        list.querySelectorAll('.ada-arg-card:nth-of-type(n+6)').forEach(function (card) {
+          card.classList.add('ada-arg-extra-hidden');
+        });
+        btn.dataset.adaExpanded = '0';
+        btn.classList.remove('is-collapse');
+        btn.textContent = 'Charger plus d\'arguments';
+        scrollToAnalysisElement(btn.closest('.ada-args-details') || list);
+        return;
+      }
+      list.querySelectorAll('.ada-arg-extra-hidden').forEach(function (card) {
+        card.classList.remove('ada-arg-extra-hidden');
+      });
+      btn.dataset.adaExpanded = '1';
+      btn.classList.add('is-collapse');
+      btn.textContent = 'Masquer les arguments';
+    });
+  }
+
   // ── Fetch stored analysis ────────────────────────────────────────────
   async function openReport(debateId) {
     const panel    = document.getElementById('ada-panel');
@@ -1104,13 +1637,14 @@
           body.innerHTML = header + (parsed && parsed.version === 2
             ? renderNewAnalysis(parsed)
             : renderScoringReport(json.raw));
+          bindLoadMoreArguments(body);
         };
       } else if (json.status === 'scheduled' || json.status === 'generating') {
         applyContent = () => { body.innerHTML = '<span class="ada-empty">Analyse IA en préparation — disponible prochainement.</span>'; };
       } else if (json.status === 'failed') {
         applyContent = () => { body.innerHTML = '<span class="ada-error">La génération de l\'analyse a échoué.</span>'; };
       } else {
-        applyContent = () => { body.innerHTML = '<span class="ada-empty">Aucune analyse disponible pour ce débat.</span>'; };
+        applyContent = () => { body.innerHTML = '<span class="ada-empty">Aucune analyse disponible pour cette arène.</span>'; };
       }
     } catch (err) {
       applyContent = () => { body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`; };
@@ -1148,6 +1682,7 @@
         (parsedRegen && parsedRegen.version === 2
           ? renderNewAnalysis(parsedRegen)
           : renderScoringReport(json.raw || ''));
+      bindLoadMoreArguments(body);
     } catch (err) {
       body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`;
     } finally {
@@ -1166,7 +1701,7 @@
       if (!r.ok) return;
 
       if (json.raw || json.status === 'ready') {
-        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse">✨ Analyse IA disponible</span>';
+        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse"><img src="/sablier2.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           scrollToAnalysisElement(target);
@@ -1189,7 +1724,7 @@
         const tick = () => {
           const secs = Math.max(0, Math.round((target - Date.now()) / 1000));
           if (secs <= 0) {
-            slot.innerHTML = '<span class="ada-countdown-ready">✨ Analyse IA disponible</span>';
+            slot.innerHTML = '<span class="ada-countdown-ready"><img src="/sablier2.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
           } else {
             badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
             setTimeout(tick, 1000);
@@ -1201,11 +1736,111 @@
   }
 
   // ── Init ─────────────────────────────────────────────────────────────
+  function _openBaremeModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ada-bareme-overlay';
+    overlay.innerHTML = `<div class="ada-bareme-modal">
+      <button class="ada-bareme-close" aria-label="Fermer">✕</button>
+      <h2>Comment Agôn évalue les arguments ?</h2>
+      <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les arguments les plus solides.</p>
+
+      <h3>1. Les doublons sont regroupés</h3>
+      <p>Avant la notation, Agôn repère les arguments qui défendent la même idée avec la même justification principale. Quand plusieurs arguments sont de vrais doublons, ils sont regroupés. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
+
+      <h3>2. Chaque argument distinct est noté sur 100</h3>
+      <p>Chaque argument conservé reçoit une note de solidité argumentative sur 100. Cette note repose sur plusieurs critères :</p>
+      <ul>
+        <li><strong>Pertinence par rapport à la question de l'arène : 20 points</strong><br>L'argument répond-il vraiment à la question posée ?</li>
+        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'argument est-il logique, cohérent et bien construit ?</li>
+        <li><strong>Appui factuel ou exemple concret : 20 points</strong><br>L'argument s'appuie-t-il sur des faits, des exemples, des données ou une source identifiable ?</li>
+        <li><strong>Nuance et prise en compte de la complexité : 15 points</strong><br>L'argument évite-t-il les simplifications abusives ? Reconnaît-il les limites ou les tensions du sujet ?</li>
+        <li><strong>Clarté de l'expression : 15 points</strong><br>L'argument est-il compréhensible, bien formulé et suffisamment précis ?</li>
+        <li><strong>Ton et respect de l'arène : 5 points</strong><br>L'argument reste-t-il compatible avec une arène constructive, sans insulte ni attaque gratuite ?</li>
+      </ul>
+      <div class="ada-bareme-rule"><strong>Total : 100 points.</strong></div>
+
+      <h3>3. Les arguments sont classés par niveau</h3>
+      <ul>
+        <li><strong>0 à 49 : argument faible</strong> — peu pertinent, confus, très fragile ou essentiellement émotionnel.</li>
+        <li><strong>50 à 69 : argument moyen</strong> — contient une idée compréhensible, mais incomplet, peu étayé ou trop approximatif.</li>
+        <li><strong>70 à 84 : bon argument</strong> — clair, pertinent et raisonnablement solide.</li>
+        <li><strong>85 à 100 : excellent argument</strong> — très solide, bien construit, nuancé et bien appuyé.</li>
+      </ul>
+
+      <h3>4. Les sources sont prises en compte séparément</h3>
+      <p>Quand un argument contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable, pertinente et bien liée à l'argument peut renforcer son évaluation. Mais une source ne suffit pas à rendre un argument excellent : un argument mal raisonné reste pénalisé, même avec un lien. À l'inverse, un argument sans URL peut être bon s'il est clair, logique et pertinent.</p>
+
+      <h3>5. Seuls les bons et excellents arguments comptent pour le verdict</h3>
+      <p>Les arguments faibles et moyens peuvent apparaître dans l'analyse, mais ils ne participent pas au calcul du verdict final.</p>
+      <div class="ada-bareme-rule">
+        bon argument = coefficient 1<br>
+        excellent argument = coefficient 2<br>
+        argument faible ou moyen = coefficient 0
+      </div>
+
+      <h3>6. Agôn calcule le score de chaque camp</h3>
+      <p>Pour chaque camp, Agôn calcule une moyenne pondérée des bons et excellents arguments. Les excellents comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage argumentatif.</p>
+
+      <h3>7. Une réserve est ajoutée si l'arène est déséquilibrée</h3>
+      <p>Si un camp a plus du double d'arguments solides que l'autre, le résultat est affiché avec prudence. Un camp peut avoir un excellent argument isolé face à de nombreux bons arguments dans l'autre camp — Agôn signale alors que le résultat doit être interprété prudemment.</p>
+
+      <h3>8. Ce que signifie le verdict</h3>
+      <p>Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les arguments distincts les plus solides selon le barème d'Agôn.</p>
+
+      <h3>En résumé</h3>
+      <p>Agôn valorise la qualité argumentative plutôt que la quantité brute. Les répétitions sont regroupées, chaque argument est noté selon un barème transparent, les arguments faibles ne pèsent pas dans le verdict, et les excellents arguments sont davantage valorisés. Lorsque la comparaison entre les camps est trop déséquilibrée, Agôn l'indique clairement.</p>
+    </div>`;
+
+    const panelCloseBtn = document.getElementById('ada-close-btn');
+    if (panelCloseBtn) panelCloseBtn.style.visibility = 'hidden';
+
+    // Masquer la flèche de fermeture iframe dans le document parent
+    const _syncParent = (open) => {
+      if (window.parent !== window) {
+        try { window.parent.postMessage({ type: 'agon:argument-form-visibility', open }, '*'); } catch (_) {}
+      }
+    };
+    _syncParent(true);
+
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      if (panelCloseBtn) panelCloseBtn.style.visibility = '';
+      _syncParent(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    overlay.querySelector('.ada-bareme-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+  }
+
   async function init() {
     const debateId = getDebateId();
     if (!debateId) return;
 
     injectStyles();
+
+    // Délégation clic sur le lien barème (présent dans le rapport dynamique)
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-ada-bareme]')) _openBaremeModal();
+      if (e.target.closest('[data-ada-close-panel]')) {
+        const details = e.target.closest('details');
+        if (details) {
+          details.removeAttribute('open');
+          details.open = false;
+          const section = details.closest('.ada-camp-section');
+          const target = section
+            ? section.parentElement.querySelector('.ada-section-h2')
+            : details;
+          const el = target || details;
+          const isMobile = window.matchMedia('(max-width: 768px)').matches;
+          const offset = isMobile ? 120 : 0;
+          const top = el.getBoundingClientRect().top + window.scrollY - offset;
+          window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+      }
+    });
 
     initCountdown(debateId);
 
@@ -1220,7 +1855,7 @@
 
       slot.innerHTML = `
         <div class="ada-wrap">
-          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✨ Analyse et arbitrage IA</button>
+          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
           <div id="ada-panel" class="ada-panel">
             <div class="ada-panel-header">
               <span class="ada-panel-title">Analyse et arbitrage IA</span>
@@ -1234,6 +1869,7 @@
       document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
       document.getElementById('ada-close-btn').addEventListener('click', () => {
         document.getElementById('ada-panel').style.display = 'none';
+        document.querySelectorAll('#ada-panel details').forEach(d => { d.removeAttribute('open'); d.open = false; });
       });
       document.getElementById('ada-regen-btn').addEventListener('click', () => regenerate(debateId));
       observeAnimated();
@@ -1248,7 +1884,7 @@
 
     slot.innerHTML = `
       <div class="ada-wrap">
-        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn">✨ Analyse et arbitrage IA</button>
+        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
         <div id="ada-panel" class="ada-panel">
           <div class="ada-panel-header">
             <span class="ada-panel-title">Analyse et arbitrage IA</span>
@@ -1261,6 +1897,7 @@
     document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
     document.getElementById('ada-close-btn').addEventListener('click', () => {
       document.getElementById('ada-panel').style.display = 'none';
+      document.querySelectorAll('#ada-panel details').forEach(d => { d.removeAttribute('open'); d.open = false; });
     });
     observeAnimated();
   }

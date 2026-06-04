@@ -114,59 +114,61 @@ const VEILLE_URL = (process.env.VEILLE_URL || "http://localhost:3000/mixte").tri
 const VEILLE_MEDIAS_PATH = (process.env.VEILLE_MEDIAS_PATH || path.join(__dirname, "..", "bot veille", "medias.json")).trim();
 const VEILLE_YOUTUBE_PATH = (process.env.VEILLE_YOUTUBE_PATH || path.join(__dirname, "..", "bot veille", "youtube-chaines.json")).trim();
 
-function readVeilleMedias() {
+let _veilleMediasCache = null;
+
+function _processMediasRows(items) {
   function extractYouTubeChannelId(item) {
-    const rss = String(item?.rss || "").trim();
-    const url = String(item?.url || "").trim();
-    const candidates = [rss, url];
-    for (const candidate of candidates) {
-      const match = candidate.match(/(?:channel_id=|\/channel\/)(UC[\w-]+)/i);
-      if (match?.[1]) return match[1];
+    const candidates = [String(item?.rss || ""), String(item?.url || "")];
+    for (const c of candidates) {
+      const m = c.match(/(?:channel_id=|\/channel\/)(UC[\w-]+)/i);
+      if (m?.[1]) return m[1];
     }
     return "";
   }
-
   function extractYouTubeHandle(item) {
-    const url = String(item?.url || "").trim();
-    const match = url.match(/youtube\.com\/@([^/?#]+)/i);
-    return match?.[1] ? `@${match[1]}` : "";
+    const m = String(item?.url || "").match(/youtube\.com\/@([^/?#]+)/i);
+    return m?.[1] ? `@${m[1]}` : "";
   }
-
-  const raw = fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8");
-  const data = JSON.parse(raw);
-  const pressItems = (Array.isArray(data) ? data : [])
-    .map((item) => {
-      let domain = "";
-      try {
-        const rss = String(item?.rss || "").trim();
-        if (rss) domain = new URL(rss).hostname.replace(/^www\./, "").toLowerCase();
-      } catch (_) {}
+  return (Array.isArray(items) ? items : [])
+    .filter(item => String(item?.nom || "").trim())
+    .map(item => {
+      const isYt = item.type === "youtube" || String(item?.url || "").includes("youtube.com");
+      let domain = isYt ? "youtube.com" : "";
+      if (!isYt) {
+        try { domain = new URL(String(item?.rss || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
+      }
       return {
-        nom: String(item?.nom || item?.name || "").trim(),
+        nom:         String(item?.nom || item?.name || "").trim(),
         orientation: String(item?.orientation || "").trim(),
-        domain
+        domain,
+        ...(isYt ? {
+          url:       String(item?.url || "").trim(),
+          rss:       String(item?.rss || "").trim(),
+          channelId: extractYouTubeChannelId(item),
+          handle:    extractYouTubeHandle(item)
+        } : {})
       };
-    })
-    .filter((item) => item.nom);
+    });
+}
 
-  let youtubeItems = [];
+async function _loadVeilleMediasFromSupabase() {
   try {
-    const rawYt = fs.readFileSync(VEILLE_YOUTUBE_PATH, "utf8");
-    const dataYt = JSON.parse(rawYt);
-    youtubeItems = (Array.isArray(dataYt) ? dataYt : [])
-      .map((item) => ({
-        nom: String(item?.nom || "").trim(),
-        orientation: String(item?.orientation || "").trim(),
-        domain: "youtube.com",
-        url: String(item?.url || "").trim(),
-        rss: String(item?.rss || "").trim(),
-        channelId: extractYouTubeChannelId(item),
-        handle: extractYouTubeHandle(item)
-      }))
-      .filter((item) => item.nom);
-  } catch (_) {}
+    const { data, error } = await supabase.from("veille_medias").select("*").order("nom");
+    if (error || !data?.length) return false;
+    _veilleMediasCache = _processMediasRows(data);
+    return true;
+  } catch (_) { return false; }
+}
 
-  return [...pressItems, ...youtubeItems];
+function readVeilleMedias() {
+  if (_veilleMediasCache !== null) return _veilleMediasCache;
+  // Fallback fichiers locaux (dev)
+  try {
+    const press = JSON.parse(fs.readFileSync(VEILLE_MEDIAS_PATH, "utf8"));
+    let yt = [];
+    try { yt = JSON.parse(fs.readFileSync(VEILLE_YOUTUBE_PATH, "utf8")).map(i => ({ ...i, type: "youtube" })); } catch (_) {}
+    return _processMediasRows([...press, ...yt]);
+  } catch (_) { return []; }
 }
 
 function replaceMetaPlaceholders(template, meta) {
@@ -3146,8 +3148,9 @@ app.post("/api/contact", async (req, res) => {
   }
 });
 
-app.get("/api/about/medias", (req, res) => {
+app.get("/api/about/medias", async (req, res) => {
   try {
+    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
     res.setHeader("Cache-Control", "no-store");
     res.json({ medias: readVeilleMedias() });
   } catch (error) {
@@ -3156,8 +3159,9 @@ app.get("/api/about/medias", (req, res) => {
   }
 });
 
-app.get("/about", (req, res) => {
+app.get("/about", async (req, res) => {
   try {
+    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
     const template = fs.readFileSync(path.join(__dirname, "views/about.html"), "utf8");
     const items = readVeilleMedias();
     const listHtml = items.length
@@ -5276,7 +5280,7 @@ app.delete("/api/debates/:id", async (req, res) => {
 
 app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
   try {
-    const { debate_id, side, title, body, authorKey } = req.body || {};
+    const { debate_id, side, title, body, authorKey, source_url } = req.body || {};
     const requestedDebateId = debate_id;
     const sharedDebateId = resolveSharedDebateId(debate_id) || debate_id;
 
@@ -5287,6 +5291,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         side,
         title,
         body,
+        source_url: String(source_url || "").trim(),
         author_key: authorKey || null,
         votes: 0,
         created_at: nowIso()
@@ -6539,10 +6544,15 @@ async function _fetchDebatePayload(debateId) {
     comments = rows || [];
   }
 
+  const _extractUrl = (b) => {
+    const m = String(b || "").match(/↗\s*Source\s*:\s*(https?:\/\/\S+)/i)
+           || String(b || "").match(/🔗\s*Lien\s*:\s*(https?:\/\/\S+)/i);
+    return m ? String(m[1]).replace(/[),.;]+$/, "").trim() : "";
+  };
   const mapArg = (a) => ({
     id:         String(a.id),
     text:       (a.body || a.title || "").trim(),
-    source_url: (a.source_url || "").trim(),
+    source_url: (a.source_url || "").trim() || _extractUrl(a.body),
     votes:      Number(a.votes || 0)
   });
 
@@ -6770,6 +6780,7 @@ app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   purgeExternalPreviewCacheDir(500);
   initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
+  _loadVeilleMediasFromSupabase().then(ok => console.log(`[veille-medias] cache ${ok ? "chargé depuis Supabase" : "fichier local (fallback)"}`)).catch(console.error);
   const _readJsonFile = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return fallback; } };
   // Migration one-shot debate-content.json → debates.content
   try {
