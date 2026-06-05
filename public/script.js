@@ -152,9 +152,7 @@ registerServiceWorker();
     // Pause sur le logo avant les messages
     await wait(900);
 
-    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 700);
-    await playStartupLine(loader.querySelector('.agon-startup-line-2'), 700);
-    await playStartupLine(loader.querySelector('.agon-startup-line-3'), 1200);
+    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 2800);
 
     introSequenceDone = true;
     tryHide();
@@ -14413,6 +14411,7 @@ function closeIndexContextPreview(button) {
   if (article) article.classList.remove('index-card-context-open');
   button.innerHTML = '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', 'false');
+  updateIndexRowContextOpenState(article?.closest?.('.theme-horizontal-row'));
 }
 
 function closeAllOpenContextPreviews(exceptCard) {
@@ -14444,6 +14443,43 @@ function scrollToIndexRowAfterContextClose(row) {
   }, 180);
 }
 
+function updateIndexRowContextOpenState(row) {
+  if (!row) return;
+  row.classList.toggle('index-row-context-open', !!row.querySelector('[data-index-context-toggle][aria-expanded="true"]'));
+}
+
+function reserveIndexRowHeightForContextOpen(article, metaEl) {
+  const row = article?.closest?.('.theme-horizontal-row');
+  if (!row) return;
+
+  updateIndexRowContextOpenState(row);
+  if (!article.classList.contains('index-card-context-open')) return;
+
+  const rowRect = row.getBoundingClientRect();
+  const articleRect = article.getBoundingClientRect();
+  const rowStyle = getComputedStyle(row);
+  const bottomPadding = parseFloat(rowStyle.paddingBottom) || 0;
+  const articleTop = Math.max(0, articleRect.top - rowRect.top);
+  let targetArticleHeight = articleRect.height || article.offsetHeight || 0;
+
+  if (metaEl) {
+    const metaStyle = getComputedStyle(metaEl);
+    const maxHeightValue = parseFloat(metaStyle.maxHeight);
+    const maxVisibleHeight = Number.isFinite(maxHeightValue) && maxHeightValue > 0 ? maxHeightValue : Infinity;
+    const targetMetaHeight = Math.min(metaEl.scrollHeight || 0, maxVisibleHeight);
+    const currentMetaHeight = metaEl.getBoundingClientRect().height || 0;
+    if (targetMetaHeight > currentMetaHeight) {
+      targetArticleHeight += targetMetaHeight - currentMetaHeight;
+    }
+  }
+
+  const neededHeight = Math.ceil(articleTop + targetArticleHeight + bottomPadding + 10);
+  const currentHeight = parseFloat(row.style.height || '0') || rowRect.height || 0;
+  if (neededHeight > currentHeight) {
+    row.style.height = `${neededHeight}px`;
+  }
+}
+
 function syncIndexContextPreviewLayout(button, shouldReveal) {
   const article = button?.closest('article.debate-card');
   if (!article) return;
@@ -14451,6 +14487,11 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
   const row = article.closest('.theme-horizontal-row');
   if (row) {
     updateCarouselCardHighlight(row);
+    if (shouldReveal) {
+      reserveIndexRowHeightForContextOpen(article, article.querySelector('.debate-card-context-extra'));
+    } else {
+      updateIndexRowContextOpenState(row);
+    }
     const neededHeight = Math.ceil((article.offsetHeight || article.getBoundingClientRect().height || 0) + 10);
     const currentHeight = parseFloat(row.style.height || '0') || 0;
     if (neededHeight > currentHeight) {
@@ -14522,6 +14563,11 @@ function toggleIndexContextPreview(button) {
     ? 'Voir moins'
     : '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+  if (nextExpanded) {
+    reserveIndexRowHeightForContextOpen(article, metaEl);
+  } else {
+    updateIndexRowContextOpenState(article?.closest?.('.theme-horizontal-row'));
+  }
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -15734,6 +15780,9 @@ function syncIndexThemeRowHeight(row) {
   const nextHeight = Math.ceil(Math.max(visualBottom, fallbackHeight) + bottomPadding + 2);
 
   if (nextHeight > 0) {
+    const currentHeight = parseFloat(row.style.height || '0') || 0;
+    const isMobileRow = window.matchMedia("(max-width: 768px)").matches;
+    if (isMobileRow && currentHeight && Math.abs(nextHeight - currentHeight) < 3) return;
     row.style.height = `${nextHeight}px`;
   }
 }
@@ -15873,7 +15922,9 @@ function initThematicRowDragScroll() {
         if (closedOpenContext) {
           scrollToIndexRowAfterContextClose(row);
         }
-        if (!_isMobileCache) {
+        if (_isMobileCache) {
+          syncIndexThemeRowHeight(row);
+        } else {
           const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
           updateCarouselCardHighlight(row);
           applyCarouselScaleEffects(row);
