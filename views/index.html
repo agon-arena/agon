@@ -107,7 +107,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260605-mobile-row-fluidity">
+  <link rel="stylesheet" href="/style.css?v=20260605-carousel-vertical-lock">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -370,7 +370,7 @@
 
           <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="adminBroadcastDaily()">
             <i class="fa-solid fa-bell" aria-hidden="true"></i>
-            <span>Questions du jour</span>
+            <span>Arènes du jour</span>
           </button>
         </div>
       </div>
@@ -824,7 +824,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260605-mobile-row-fluidity" defer></script>
+<script src="/script.js?v=20260605-carousel-no-vertical-update" defer></script>
 <script src="/index-ai-badge.js?v=20260605-light-assets" defer></script>
 
 
@@ -1316,6 +1316,7 @@
   var _timer = null;
   var _toast = null;
   var _wasOffline = false;
+  var _recoveryMode = false;
 
   function showToast() {
     if (_toast) return;
@@ -1331,12 +1332,19 @@
 
   function checkPing() {
     fetch('/ping', { cache: 'no-store' })
-      .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
+      .then(function(r) {
+        if (!r.ok) return;
+        clearInterval(_timer);
+        _timer = null;
+        hideToast();
+        if (_recoveryMode) window.location.reload();
+      })
       .catch(function() {});
   }
 
-  function startPolling() {
+  function startPolling(recoveryMode) {
     if (_timer) return;
+    _recoveryMode = recoveryMode === true;
     showToast();
     _timer = setInterval(function() {
       if (document.hidden) return;
@@ -1347,12 +1355,12 @@
   /* Cas 1 : page chargée en erreur (contenu vide ou body très court) */
   window.addEventListener('load', function() {
     var hasContent = document.getElementById('debates-list') || document.querySelector('.debate-card') || document.querySelector('main');
-    if (!hasContent) startPolling();
+    if (!hasContent) startPolling(true);
   });
 
   /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
   window.addEventListener('offline', function() { _wasOffline = true; });
-  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
+  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; hideToast(); } });
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && _timer) checkPing();
   });

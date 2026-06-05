@@ -8171,7 +8171,6 @@ function initMobileIndexCardHighlight() {
   }
 
   window.addEventListener('scroll', scheduleMobileIndexCardHighlightUpdate, { passive: true });
-  window.addEventListener('scroll', updateAllCarouselHighlights, { passive: true });
   window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
   window.addEventListener('resize', updateAllCarouselHighlights);
   window.addEventListener('resize', applyThematicTitleTwoLines);
@@ -15106,22 +15105,17 @@ function handleBubbleTagClick(bubble) {
 
   if (wasActive) return;
 
-  const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
-  const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
-  const topbar = document.querySelector('.topbar');
-  const topbarH = topbar ? topbar.offsetHeight : 60;
-
-  if (scrollTarget) {
-    const top = scrollTarget.getBoundingClientRect().top + window.scrollY - topbarH + 85;
-    fastWindowScrollTo(Math.max(0, top));
-  }
-
   bubble.classList.add('agon-tag-bubble-active');
   document.querySelectorAll('.agon-tag-label-overlay').forEach(overlay => {
     if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
       overlay.classList.add('agon-tag-label-overlay-active');
     }
   });
+
+  const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
+  const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
+  const topbar = document.querySelector('.topbar');
+  const topbarH = topbar ? topbar.offsetHeight : 60;
 
   let targetDebateId = String(bubble.dataset.subjectId || "").trim();
   const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
@@ -15132,24 +15126,34 @@ function handleBubbleTagClick(bubble) {
     targetDebateId = String(activeTrend?.subjectId || "").trim();
   }
 
-  if (!targetDebateId || !alaUneSection) return;
+  const card = targetDebateId && alaUneSection
+    ? alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`)
+    : null;
 
-  const card = alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`);
-  if (!card) return;
-
-  requestAnimationFrame(() => {
+  const centerTargetCard = () => requestAnimationFrame(() => {
+    if (!card || !card.isConnected) return;
     const scrollRow = card.closest('.theme-horizontal-row');
     if (!scrollRow) return;
     const rowRect = scrollRow.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
     const cardCenter = scrollRow.scrollLeft + (cardRect.left - rowRect.left) + cardRect.width / 2;
     scrollRow.scrollTo({ left: Math.max(0, cardCenter - rowRect.width / 2), behavior: 'smooth' });
-    const flashEl = document.createElement('div');
-    flashEl.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:rgba(255,255,255,0.45);pointer-events:none;z-index:20;animation:agon-card-highlight 0.8s ease-in-out 2;';
-    card.style.position = 'relative';
-    card.appendChild(flashEl);
-    flashEl.addEventListener('animationend', () => flashEl.remove(), { once: true });
+    window.setTimeout(() => {
+      if (!card.isConnected) return;
+      const flashEl = document.createElement('div');
+      flashEl.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:rgba(255,255,255,0.45);pointer-events:none;z-index:20;animation:agon-card-highlight 0.8s ease-in-out 2;';
+      card.style.position = 'relative';
+      card.appendChild(flashEl);
+      flashEl.addEventListener('animationend', () => flashEl.remove(), { once: true });
+    }, 300);
   });
+
+  if (scrollTarget) {
+    const top = scrollTarget.getBoundingClientRect().top + window.scrollY - topbarH + 85;
+    fastWindowScrollTo(Math.max(0, top), 420, centerTargetCard);
+  } else {
+    centerTargetCard();
+  }
 }
 
 function showAgonOnlyFromTagCloud() {
@@ -15872,7 +15876,6 @@ function updateAllCarouselHighlights() {
   document.querySelectorAll(".theme-horizontal-row[data-drag-bound]").forEach(updateCarouselCardHighlight);
 }
 
-
 function applyThematicTitleTwoLines() {
   document.querySelectorAll('.theme-row-title').forEach(el => {
     const textEl = el.querySelector('.theme-row-title-text') || el;
@@ -16146,10 +16149,12 @@ function initThematicRowDragScroll() {
       touchStartY = touch.clientY;
       touchStartScrollLeft = getRowOffset();
       touchMoved = 0;
+      moved = 0;
       isTouchDragging = true;
       touchIsHorizontal = false;
+      lastTouchX = touch.clientX;
+      lastTouchTime = Date.now();
       currentCardIndex = getCurrentCardIndex();
-      row.classList.add("is-dragging");
     }, { passive: true, capture: true });
 
     let lastTouchX = 0;
@@ -16160,15 +16165,22 @@ function initThematicRowDragScroll() {
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartX;
       const dy = touch.clientY - touchStartY;
-      if (!touchIsHorizontal && Math.abs(dy) > Math.abs(dx) + 4) {
-        isTouchDragging = false;
-        row.classList.remove("is-dragging");
-        return;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (!touchIsHorizontal) {
+        if (absDy > 6 && absDy > absDx * 1.1) {
+          isTouchDragging = false;
+          touchIsHorizontal = false;
+          touchMoved = 0;
+          row.classList.remove("is-dragging");
+          return;
+        }
+        if (absDx < 10 || absDx < absDy * 1.25) return;
+        touchIsHorizontal = true;
+        row.classList.add("is-dragging");
       }
-      if (Math.abs(dx) > 4) touchIsHorizontal = true;
-      if (!touchIsHorizontal) return;
       e.preventDefault();
-      touchMoved = Math.abs(dx);
+      touchMoved = absDx;
       moved = touchMoved;
       lastTouchX = touch.clientX;
       lastTouchTime = Date.now();
@@ -16177,9 +16189,11 @@ function initThematicRowDragScroll() {
 
     const endTouchDrag = (e) => {
       if (!isTouchDragging) return;
+      const shouldSnapCarousel = touchIsHorizontal;
       isTouchDragging = false;
       touchIsHorizontal = false;
       row.classList.remove("is-dragging");
+      if (!shouldSnapCarousel) return;
       const endX = (e && e.changedTouches && e.changedTouches[0])
         ? e.changedTouches[0].clientX : lastTouchX;
       const dx = endX - touchStartX;
@@ -16194,10 +16208,11 @@ function initThematicRowDragScroll() {
 
     row.addEventListener("touchend", endTouchDrag, { passive: true, capture: true });
     row.addEventListener("touchcancel", () => {
+      const shouldSnapCarousel = isTouchDragging && touchIsHorizontal;
       isTouchDragging = false;
       touchIsHorizontal = false;
       row.classList.remove("is-dragging");
-      scrollToCard(currentCardIndex);
+      if (shouldSnapCarousel) scrollToCard(currentCardIndex);
     }, { passive: true, capture: true });
   });
 }

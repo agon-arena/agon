@@ -2576,6 +2576,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var _timer = null;
   var _toast = null;
   var _wasOffline = false;
+  var _recoveryMode = false;
 
   function showToast() {
     if (_toast) return;
@@ -2591,12 +2592,19 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
   function checkPing() {
     fetch('/ping', { cache: 'no-store' })
-      .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
+      .then(function(r) {
+        if (!r.ok) return;
+        clearInterval(_timer);
+        _timer = null;
+        hideToast();
+        if (_recoveryMode) window.location.reload();
+      })
       .catch(function() {});
   }
 
-  function startPolling() {
+  function startPolling(recoveryMode) {
     if (_timer) return;
+    _recoveryMode = recoveryMode === true;
     showToast();
     _timer = setInterval(function() {
       if (document.hidden) return;
@@ -2607,12 +2615,12 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   /* Cas 1 : page chargée en erreur (contenu vide) */
   window.addEventListener('load', function() {
     var hasContent = document.getElementById('debate-question') || document.querySelector('.debate-card') || document.querySelector('h1');
-    if (!hasContent) startPolling();
+    if (!hasContent) startPolling(true);
   });
 
   /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
   window.addEventListener('offline', function() { _wasOffline = true; });
-  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
+  window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; hideToast(); } });
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && _timer) {
       checkPing();

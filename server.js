@@ -3728,7 +3728,7 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       subject: VAPID_SUBJECT
     }, {
       title: "L'arène des idées",
-      body: "Les questions du jour sont disponibles.",
+      body: "Les arènes du jour sont ouvertes.",
       url: "/",
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png"

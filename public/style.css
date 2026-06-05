@@ -16346,9 +16346,14 @@ html.thematic-scroll .theme-row-section {
   body.page-home-mobile .theme-horizontal-row {
     width: 100vw !important;
     max-width: 100vw !important;
+    overflow-y: hidden !important;
     transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     scroll-snap-type: x mandatory;
     scroll-padding-left: 1px;
+  }
+
+  body.page-home-mobile .theme-horizontal-row.index-row-context-open {
+    overflow-y: visible !important;
   }
 
   body.page-home-mobile .theme-horizontal-inner {
@@ -17702,8 +17707,8 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 
 @keyframes agonBubbleBreathe {
-  0%, 100% { transform: scale(1.022); }
-  50%       { transform: scale(1.082); }
+  0%, 100% { transform: scale(1.035); }
+  50%       { transform: scale(1.095); }
 }
 
 @keyframes agonBubbleFlash {
