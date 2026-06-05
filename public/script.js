@@ -6436,6 +6436,11 @@ function shouldIncludeIndexMediaItem(item, debate = null, options = {}) {
   return true;
 }
 
+function isIndexSocialEmbedMediaItem(item) {
+  const itemUrl = String(item?.url || "").trim();
+  return !!itemUrl && (isXStatusUrl(itemUrl) || isInstagramPostUrl(itemUrl));
+}
+
 function getIndexDebateMediaItems(debate, options = {}) {
   const currentItem = getIndexDebateCurrentMediaItem(debate);
   const extras = Array.isArray(debate?.media_extras) ? debate.media_extras : [];
@@ -6945,6 +6950,8 @@ function initMediaSwipeAutoScroll(scope = document) {
     if (!Array.isArray(mediaItems) || mediaItems.length < 2) return;
     if (shell.dataset.mediaAutoScrollBound) return;
     shell.dataset.mediaAutoScrollBound = "1";
+    const containsSocialEmbed = mediaItems.some(isIndexSocialEmbedMediaItem);
+    const shouldDisableMobileAutoScroll = () => containsSocialEmbed && window.matchMedia("(max-width: 768px)").matches;
 
     let timer = null;
     let resumeTimer = null;
@@ -6954,6 +6961,10 @@ function initMediaSwipeAutoScroll(scope = document) {
     const videoSelector = 'video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell, [data-index-local-video-shell], [data-index-youtube-shell]';
 
     const advance = () => {
+      if (shouldDisableMobileAutoScroll()) {
+        stopTimer();
+        return;
+      }
       if (paused || document.hidden || !isInView || !shell.isConnected) return;
       // Ne pas avancer si une vidéo a été lancée par l'utilisateur dans cette carte
       if (shell.querySelector('[data-index-local-video-shell][data-user-started="true"], [data-index-youtube-shell][data-user-started="true"]')) {
@@ -6965,6 +6976,7 @@ function initMediaSwipeAutoScroll(scope = document) {
     };
 
     const start = () => {
+      if (shouldDisableMobileAutoScroll()) return;
       if (document.hidden || !isInView || !shell.isConnected) return;
       if (!timer) timer = setInterval(advance, DELAY);
     };
@@ -8766,6 +8778,7 @@ async function renderIndexXShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
   if (shell.dataset.rendering === 'true') return;
+  if (!isElementNearViewport(shell, 260)) return;
 
   bindIndexXTabletRefresh();
 
@@ -8922,6 +8935,19 @@ function initIndexEmbedUnloadObserver(root = document) {
         } else if (shell.hasAttribute('data-index-instagram-shell')) {
           unloadIndexInstagramShell(shell);
         } else if (shell.hasAttribute('data-index-og-image-shell')) {
+          if (shell.dataset.keepAliveUntil && Date.now() < Number(shell.dataset.keepAliveUntil)) return;
+          if (window.matchMedia("(max-width: 768px)").matches) {
+            if (shell.dataset.mobileUnloadTimer) return;
+            shell.dataset.mobileUnloadTimer = String(window.setTimeout(() => {
+              delete shell.dataset.mobileUnloadTimer;
+              if (shell.dataset.keepAliveUntil && Date.now() < Number(shell.dataset.keepAliveUntil)) return;
+              const rect = shell.getBoundingClientRect();
+              const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+              if (rect.bottom >= -120 && rect.top <= viewportHeight + 120) return;
+              unloadIndexOpenGraphImageShell(shell);
+            }, 3500));
+            return;
+          }
           unloadIndexOpenGraphImageShell(shell);
         }
       });
@@ -9148,6 +9174,7 @@ async function renderIndexInstagramShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
   if (shell.dataset.rendering === 'true') return;
+  if (!isElementNearViewport(shell, 260)) return;
 
   const embedPermalink = String(shell.dataset.instagramPermalink || '').trim();
   const sourceUrl = String(shell.dataset.sourceUrl || '').trim();
@@ -14382,8 +14409,26 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
     const target = section?.querySelector('.theme-row-title') || article;
     const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
     const targetTop = target.getBoundingClientRect().top + window.scrollY - topbarH + 8;
-    window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+    const runScroll = () => {
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+    };
+    if (window.matchMedia("(max-width: 768px)").matches) {
+      runScroll();
+    } else {
+      setTimeout(runScroll, 80);
+    }
   }
+}
+
+function keepIndexCardSourceImagesAlive(article, durationMs = 5000) {
+  if (!article) return;
+  const until = String(Date.now() + durationMs);
+  article.querySelectorAll('[data-index-og-image-shell]').forEach((shell) => {
+    shell.dataset.keepAliveUntil = until;
+    if (shell.dataset.rendered !== 'true' && typeof renderIndexOpenGraphImageShell === 'function') {
+      renderIndexOpenGraphImageShell(shell);
+    }
+  });
 }
 
 function toggleIndexContextPreview(button) {
@@ -14394,7 +14439,9 @@ function toggleIndexContextPreview(button) {
   if (!button || (!textEl && !metaEl)) return;
 
   const nextExpanded = button.getAttribute('aria-expanded') !== 'true';
-
+  if (window.matchMedia("(max-width: 768px)").matches) {
+    keepIndexCardSourceImagesAlive(article, nextExpanded ? 5000 : 6500);
+  }
 
   if (textEl) {
     const nextText = nextExpanded

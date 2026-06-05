@@ -1441,7 +1441,7 @@ font-family: "Barlow Condensed", sans-serif;
 .index-share-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
   border-radius: 999px;
@@ -15766,13 +15766,21 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
 
 /* Section cachée du "Voir plus" */
 .debate-card-context-extra {
-  display: none !important;
+  display: block !important;
   width: 100%;
   justify-self: stretch;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-3px);
+  transition: max-height 0.34s ease, opacity 0.24s ease, transform 0.26s ease;
 }
 .debate-card-context-extra.is-open {
   display: block !important;
   width: 100%;
+  max-height: 420px;
+  opacity: 1;
+  transform: translateY(0);
 }
 .debate-card-context-extra .debate-card-actions {
   margin-top: 8px;
@@ -16319,7 +16327,7 @@ html.thematic-scroll .theme-row-section {
   padding: 4px 0 3px 0;
   overflow-x: auto;
   overflow-y: visible;
-  transition: height 0.25s ease;
+  transition: height 0.36s cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-width: none;
   -ms-overflow-style: none;
   cursor: grab;
@@ -16380,7 +16388,7 @@ html.thematic-scroll .theme-row-section {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
   width: 100%;
   margin: 5px auto 12px;
   min-height: 10px;
