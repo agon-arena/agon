@@ -16892,7 +16892,7 @@ body.page-home .debate-card-date-badge,
 body.page-home-mobile .debate-card-date-badge {
   color: #000000 !important;
   margin-top: 0 !important;
-  transform: translateY(6px) !important;
+  transform: translateY(3px) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -17339,6 +17339,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   z-index: -1;
   pointer-events: none;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  visibility: visible;
 }
 
 @media (max-width: 768px) {

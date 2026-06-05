@@ -16244,7 +16244,7 @@ function syncBubbleFrameTop() {
   let _frameTimer = null;
   function debouncedSync() {
     clearTimeout(_frameTimer);
-    _frameTimer = setTimeout(syncBubbleFrameTop, 120);
+    _frameTimer = setTimeout(syncBubbleFrameTop, 32);
   }
 
   const debatesSection = document.querySelector('.debates-section');
@@ -16258,6 +16258,8 @@ function syncBubbleFrameTop() {
   }
 
   window.addEventListener('resize', debouncedSync, { passive: true });
+
+  requestAnimationFrame(syncBubbleFrameTop);
 })();
 
 function showBubbleCloudLoadingSpinner() {
@@ -16317,7 +16319,7 @@ function updateIndexTagTrends(items) {
       window.AGON_TAG_TRENDS = tagTrends;
       window._tagTrendCloudModule = cloudModule;
       syncIndexBubbleTrendBadges();
-      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, hideBubbleCloudLoadingSpinner);
+      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => setTimeout(hideBubbleCloudLoadingSpinner, 150));
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
         if (currentBubbleTag) {
@@ -16430,6 +16432,7 @@ function renderDebatesList(debates) {
   observeIndexCardsMissingSourcePreview(document);
   syncIndexBubbleTrendBadges(document);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
+  requestAnimationFrame(syncBubbleFrameTop);
 }
 
 function appendDebatesToList(debates) {
