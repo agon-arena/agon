@@ -17,18 +17,6 @@ function registerServiceWorker() {
 
 registerServiceWorker();
 
-(function initStartupLogoFont() {
-  const show = () => {
-    const logo = document.querySelector('.agon-startup-logo');
-    if (logo) logo.classList.add('font-ready');
-  };
-  const fallback = setTimeout(show, 800);
-  document.fonts.load('700 44px Oswald').then(() => {
-    clearTimeout(fallback);
-    show();
-  }).catch(show);
-})();
-
 (function initOffscreenAnimationPause() {
   const PAUSE_CLASS = 'agon-anim-paused';
   const SELECTORS = [
@@ -102,12 +90,6 @@ registerServiceWorker();
 
   try { history.scrollRestoration = 'manual'; } catch (_) {}
 
-  const SEEN_KEY = "agon_startup_seen";
-  if (sessionStorage.getItem(SEEN_KEY)) {
-    if (loader.parentNode) loader.parentNode.removeChild(loader);
-    return;
-  }
-  sessionStorage.setItem(SEEN_KEY, "1");
   window.scrollTo(0, 0);
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
@@ -156,9 +138,8 @@ registerServiceWorker();
     }, 500);
   }
 
-  // Condition contenu : feed prêt ou window.load (premier événement reçu)
+  // Condition contenu : le feed index doit avoir rendu ses cartes.
   window.addEventListener('agon:feed-ready', function() { contentReady = true; tryHide(); }, { once: true });
-  window.addEventListener('load', function() { contentReady = true; tryHide(); }, { once: true });
 
   // Filet de sécurité absolu
   setTimeout(function() {
@@ -168,23 +149,11 @@ registerServiceWorker();
   }, 10000);
 
   async function runIntroSequence() {
-    const logo = loader.querySelector('.agon-startup-logo');
-
-    // Attendre que la police du logo soit chargée (ou fallback 900ms)
-    await new Promise(function(resolve) {
-      if (!logo || logo.classList.contains('font-ready')) { resolve(); return; }
-      const obs = new MutationObserver(function() {
-        if (logo.classList.contains('font-ready')) { obs.disconnect(); resolve(); }
-      });
-      obs.observe(logo, { attributes: true, attributeFilter: ['class'] });
-      setTimeout(function() { obs.disconnect(); resolve(); }, 900);
-    });
-
     // Pause sur le logo avant les messages
     await wait(900);
 
     await playStartupLine(loader.querySelector('.agon-startup-line-1'), 700);
-    await playStartupLine(loader.querySelector('.agon-startup-line-2'), 900);
+    await playStartupLine(loader.querySelector('.agon-startup-line-2'), 700);
     await playStartupLine(loader.querySelector('.agon-startup-line-3'), 1200);
 
     introSequenceDone = true;
@@ -1172,7 +1141,9 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
   setTimeout(() => {
     updatePageArrivalLoadingOverlayBounds();
   }, 120);
-  overlay.classList.add("page-arrival-loading-overlay-visible");
+  requestAnimationFrame(() => {
+    overlay.classList.add("page-arrival-loading-overlay-visible");
+  });
 
   if (location.pathname === "/debate") {
     setPageArrivalControlsLocked(true);
@@ -15743,18 +15714,8 @@ function updateCarouselCardHighlight(row) {
     syncIndexThemeRowHeight(row);
   }
 
-  // Flou proportionnel à la partie invisible de chaque carte
   if (window.innerWidth >= 769) {
-    const sl = row.scrollLeft;
-    const vr = sl + row.clientWidth;
-    cards.forEach(card => {
-      const cl = card.offsetLeft;
-      const cr = cl + card.offsetWidth;
-      const visibleW = Math.max(0, Math.min(cr, vr) - Math.max(cl, sl));
-      const ratio = visibleW / card.offsetWidth;
-      const blur = ratio >= 0.98 ? 0 : (1 - ratio) * 4;
-      card.style.filter = blur > 0.2 ? `blur(${blur.toFixed(1)}px)` : '';
-    });
+    cards.forEach(card => { card.style.filter = ''; });
   }
 
   const { next, prev } = ensureCarouselHints(row);
@@ -16262,6 +16223,10 @@ function syncBubbleFrameTop() {
   requestAnimationFrame(syncBubbleFrameTop);
 })();
 
+const _bubbleSpinnerImg = new Image();
+_bubbleSpinnerImg.src = '/sablier.png';
+if (typeof _bubbleSpinnerImg.decode === 'function') _bubbleSpinnerImg.decode().catch(() => {});
+
 function showBubbleCloudLoadingSpinner() {
   const section = document.querySelector("#agon-tag-trends-section");
   const cloud = document.querySelector("#agon-tag-trends-cloud");
@@ -16269,7 +16234,11 @@ function showBubbleCloudLoadingSpinner() {
   section.hidden = false;
   const spinner = document.createElement("div");
   spinner.id = "agon-cloud-loading-spinner";
-  spinner.innerHTML = '<img src="/sablier.png" alt="" style="animation:pageArrivalLogoSpin 1s linear infinite;">';
+  const img = document.createElement('img');
+  img.src = '/sablier.png';
+  img.alt = '';
+  img.style.cssText = 'animation:pageArrivalLogoSpin 1s linear infinite;';
+  spinner.appendChild(img);
   cloud.appendChild(spinner);
 }
 
@@ -16319,6 +16288,7 @@ function updateIndexTagTrends(items) {
       window.AGON_TAG_TRENDS = tagTrends;
       window._tagTrendCloudModule = cloudModule;
       syncIndexBubbleTrendBadges();
+      if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => setTimeout(hideBubbleCloudLoadingSpinner, 150));
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
@@ -16557,7 +16527,11 @@ function setTypeFilter(type) {
 async function waitForInitialIndexFeedStability() {
   await new Promise((resolve) => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => setTimeout(resolve, 100));
+      requestAnimationFrame(() => {
+        // La classe visible a été ajoutée dans le RAF précédent.
+        // On attend fade-in (180ms) + temps visible minimum (320ms) = 500ms.
+        setTimeout(resolve, 500);
+      });
     });
   });
 }
@@ -27465,7 +27439,6 @@ window.addEventListener('pageshow', (event) => {
     document.body.appendChild(bannerEl);
     bannerEl.addEventListener('click', function() {
       bannerEl.classList.remove('visible');
-      sessionStorage.removeItem('agon_startup_seen');
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
       document.body.appendChild(overlay);

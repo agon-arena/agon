@@ -29,6 +29,8 @@
   <link rel="preconnect" href="https://www.instagram.com">
 
   <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="preload" href="/sablier.png" as="image">
+  <link rel="preload" href="/sablier2.png" as="image">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="192x192" href="/favicon.png">
   <meta name="theme-color" content="#243038">
@@ -104,7 +106,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260605-frame-always-visible">
+  <link rel="stylesheet" href="/style.css?v=20260605-carousel-blur-veil">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -499,7 +501,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn index-floating-refresh-btn"
-  onclick="(function(){sessionStorage.removeItem('agon_startup_seen');var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
+  onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
@@ -824,7 +826,7 @@
 })();
 </script>
 
-<script src="/script.js?v=20260605-bubble-frame-sync-fix" defer></script>
+<script src="/script.js?v=20260605-carousel-blur-veil" defer></script>
 <script src="/index-ai-badge.js?v=20260604-index-offscreen-animation-pause" defer></script>
 
 

@@ -101,11 +101,6 @@ html.thematic-scroll body {
   letter-spacing: -0.04em;
   line-height: 1;
   color: #ffffff;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.agon-startup-logo.font-ready {
   opacity: 1;
 }
 
@@ -16571,13 +16566,31 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     min-width: 0;
     padding: 8px 10px 6px;
     gap: 4px;
-    transition: filter 0.2s ease, transform 0.18s ease, background-color 0.3s ease;
+    transition: transform 0.18s ease, background-color 0.3s ease;
     transform-origin: top center;
-    filter: blur(1.5px);
   }
-  .theme-horizontal-inner > .debate-card.index-card-active,
-  .theme-horizontal-inner > .debate-card:has(.debate-card-admin-edit.is-open) {
-    filter: none;
+
+  .theme-horizontal-row::before,
+  .theme-horizontal-row::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: clamp(48px, 7vw, 96px);
+    pointer-events: none;
+    z-index: 90;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+
+  .theme-horizontal-row::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0));
+  }
+
+  .theme-horizontal-row::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0));
   }
 
   /* Masquer uniquement le footer */
