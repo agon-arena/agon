@@ -285,6 +285,28 @@
         color: #5a4a2f; letter-spacing: .08em; text-transform: uppercase;
         display: block; margin-bottom: 6px;
       }
+      .ada-paste-excluded-notice {
+        margin: 0 0 14px;
+        padding: 9px 14px;
+        background: #f5f0e8;
+        border-left: 3px solid #b08d57;
+        border-radius: 0 8px 8px 0;
+        font-size: 13px; line-height: 1.5; color: #6b5426;
+      }
+      .ada-camp-weak-count {
+        font-size: 12px;
+        color: #b91c1c;
+        margin-top: 3px;
+        margin-bottom: 2px;
+        opacity: 0.85;
+      }
+      .ada-camp-paste-excluded {
+        font-size: 12px;
+        color: #b08d57;
+        margin-top: 2px;
+        margin-bottom: 6px;
+        opacity: 0.9;
+      }
 
       /* ── Visual refresh: calmer palette, richer hierarchy ── */
       .ada-wrap {
@@ -1141,23 +1163,27 @@
       </div>`;
     }
 
-    function campSection(camp, campData) {
+    function campSection(camp, campData, pasteExcluded) {
       const args = campData.effectiveArguments || [];
-      if (!args.length) return `<div class="ada-empty">Aucun argument pour ${esc(campData.label)}.</div>`;
+      if (!args.length) return `<div class="ada-empty">Aucune idée pour ${esc(campData.label)}.</div>`;
       const qe = campData.goodExcellentCount || 0;
       const avg = campData.weightedAverage || 0;
+      const pe = Number(pasteExcluded || 0);
+      const wk = args.filter(a => a.category === 'faible').length;
       const duplicateGroups = Array.isArray(campData.duplicateGroups) ? campData.duplicateGroups : [];
       const visibleLimit = 5;
       const hasMoreArgs = args.length > visibleLimit;
       return `<div class="ada-camp-section">
         <div class="ada-section-h2 ada-camp-title ada-camp-title-${camp.toLowerCase()}"><span class="ada-section-icon" aria-hidden="true"></span>${esc(campData.label)}</div>
-        <div class="ada-camp-stats">${qe} argument${qe > 1 ? 's' : ''} bon${qe > 1 ? 's' : ''}/excellent${qe > 1 ? 's' : ''} · moyenne pondérée : ${avg}/100</div>
+        <div class="ada-camp-stats">${qe} idée${qe > 1 ? 's' : ''} bonne${qe > 1 ? 's' : ''}/excellente${qe > 1 ? 's' : ''} · moyenne pondérée : ${avg}/100</div>
+        ${wk > 0 ? `<div class="ada-camp-weak-count">${wk} idée${wk > 1 ? 's' : ''} faible${wk > 1 ? 's' : ''} détectée${wk > 1 ? 's' : ''}</div>` : ''}
+        ${pe > 0 ? `<div class="ada-camp-paste-excluded">${pe} idée${pe > 1 ? 's' : ''} copié-collée${pe > 1 ? 's' : ''} exclue${pe > 1 ? 's' : ''} de l'analyse</div>` : ''}
         <details class="ada-args-details">
-          <summary class="ada-args-summary">Voir les arguments analysés (${args.length})</summary>
+          <summary class="ada-args-summary">Voir les idées analysées (${args.length})</summary>
           <div class="ada-args-list">
             ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit)).join('')}
             <div class="ada-load-more-wrap">
-              ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'arguments</button>' : ''}
+              ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'idées</button>' : ''}
               <button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button>
             </div>
           </div>
@@ -1205,9 +1231,10 @@
     }
 
     // Camp sections
+    const b = d.budget;
     out += '<div class="ada-section-h2"><span class="ada-section-icon">🧠</span> Évaluation individuelle des idées</div>';
-    out += campSection('A', d.camps.A);
-    if (!d.isOpen && d.camps.B) out += campSection('B', d.camps.B);
+    out += campSection('A', d.camps.A, b && b.pasteExcludedA);
+    if (!d.isOpen && d.camps.B) out += campSection('B', d.camps.B, b && b.pasteExcludedB);
 
     // Bottom sections (synthèse + conclusion)
     if (sr) {
@@ -1741,54 +1768,54 @@
     overlay.className = 'ada-bareme-overlay';
     overlay.innerHTML = `<div class="ada-bareme-modal">
       <button class="ada-bareme-close" aria-label="Fermer">✕</button>
-      <h2>Comment Agôn évalue les arguments ?</h2>
-      <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les arguments les plus solides.</p>
+      <h2>Comment Agôn évalue les idées ?</h2>
+      <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides.</p>
 
       <h3>1. Les doublons sont regroupés</h3>
-      <p>Avant la notation, Agôn repère les arguments qui défendent la même idée avec la même justification principale. Quand plusieurs arguments sont de vrais doublons, ils sont regroupés. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
+      <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
 
-      <h3>2. Chaque argument distinct est noté sur 100</h3>
-      <p>Chaque argument conservé reçoit une note de solidité argumentative sur 100. Cette note repose sur plusieurs critères :</p>
+      <h3>2. Chaque idée distincte est notée sur 100</h3>
+      <p>Chaque idée conservée reçoit une note de solidité sur 100. Cette note repose sur plusieurs critères :</p>
       <ul>
-        <li><strong>Pertinence par rapport à la question de l'arène : 20 points</strong><br>L'argument répond-il vraiment à la question posée ?</li>
-        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'argument est-il logique, cohérent et bien construit ?</li>
-        <li><strong>Appui factuel ou exemple concret : 20 points</strong><br>L'argument s'appuie-t-il sur des faits, des exemples, des données ou une source identifiable ?</li>
-        <li><strong>Nuance et prise en compte de la complexité : 15 points</strong><br>L'argument évite-t-il les simplifications abusives ? Reconnaît-il les limites ou les tensions du sujet ?</li>
-        <li><strong>Clarté de l'expression : 15 points</strong><br>L'argument est-il compréhensible, bien formulé et suffisamment précis ?</li>
-        <li><strong>Ton et respect de l'arène : 5 points</strong><br>L'argument reste-t-il compatible avec une arène constructive, sans insulte ni attaque gratuite ?</li>
+        <li><strong>Pertinence par rapport à la question de l'arène : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
+        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'idée est-elle logique, cohérente et bien construite ?</li>
+        <li><strong>Appui factuel ou exemple concret : 20 points</strong><br>L'idée s'appuie-t-elle sur des faits, des exemples, des données ou une source identifiable ?</li>
+        <li><strong>Nuance et prise en compte de la complexité : 15 points</strong><br>L'idée évite-t-elle les simplifications abusives ? Reconnaît-elle les limites ou les tensions du sujet ?</li>
+        <li><strong>Clarté de l'expression : 15 points</strong><br>L'idée est-elle compréhensible, bien formulée et suffisamment précise ?</li>
+        <li><strong>Ton et respect de l'arène : 5 points</strong><br>L'idée reste-t-elle compatible avec une arène constructive, sans insulte ni attaque gratuite ?</li>
       </ul>
       <div class="ada-bareme-rule"><strong>Total : 100 points.</strong></div>
 
-      <h3>3. Les arguments sont classés par niveau</h3>
+      <h3>3. Les idées sont classées par niveau</h3>
       <ul>
-        <li><strong>0 à 49 : argument faible</strong> — peu pertinent, confus, très fragile ou essentiellement émotionnel.</li>
-        <li><strong>50 à 69 : argument moyen</strong> — contient une idée compréhensible, mais incomplet, peu étayé ou trop approximatif.</li>
-        <li><strong>70 à 84 : bon argument</strong> — clair, pertinent et raisonnablement solide.</li>
-        <li><strong>85 à 100 : excellent argument</strong> — très solide, bien construit, nuancé et bien appuyé.</li>
+        <li><strong>0 à 49 : idée faible</strong> — peu pertinente, confuse, très fragile ou essentiellement émotionnelle.</li>
+        <li><strong>50 à 69 : idée moyenne</strong> — contient une idée compréhensible, mais incomplète, peu étayée ou trop approximative.</li>
+        <li><strong>70 à 84 : bonne idée</strong> — claire, pertinente et raisonnablement solide.</li>
+        <li><strong>85 à 100 : excellente idée</strong> — très solide, bien construite, nuancée et bien appuyée.</li>
       </ul>
 
       <h3>4. Les sources sont prises en compte séparément</h3>
-      <p>Quand un argument contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable, pertinente et bien liée à l'argument peut renforcer son évaluation. Mais une source ne suffit pas à rendre un argument excellent : un argument mal raisonné reste pénalisé, même avec un lien. À l'inverse, un argument sans URL peut être bon s'il est clair, logique et pertinent.</p>
+      <p>Quand une idée contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable, pertinente et bien liée à l'idée peut renforcer son évaluation. Mais une source ne suffit pas à rendre une idée excellente : une idée mal raisonnée reste pénalisée, même avec un lien. À l'inverse, une idée sans URL peut être bonne si elle est claire, logique et pertinente.</p>
 
-      <h3>5. Seuls les bons et excellents arguments comptent pour le verdict</h3>
-      <p>Les arguments faibles et moyens peuvent apparaître dans l'analyse, mais ils ne participent pas au calcul du verdict final.</p>
+      <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
+      <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>
       <div class="ada-bareme-rule">
-        bon argument = coefficient 1<br>
-        excellent argument = coefficient 2<br>
-        argument faible ou moyen = coefficient 0
+        bonne idée = coefficient 1<br>
+        excellente idée = coefficient 2<br>
+        idée faible ou moyenne = coefficient 0
       </div>
 
       <h3>6. Agôn calcule le score de chaque camp</h3>
-      <p>Pour chaque camp, Agôn calcule une moyenne pondérée des bons et excellents arguments. Les excellents comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage argumentatif.</p>
+      <p>Pour chaque camp, Agôn calcule une moyenne pondérée des bonnes et excellentes idées. Les excellentes comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage.</p>
 
       <h3>7. Une réserve est ajoutée si l'arène est déséquilibrée</h3>
-      <p>Si un camp a plus du double d'arguments solides que l'autre, le résultat est affiché avec prudence. Un camp peut avoir un excellent argument isolé face à de nombreux bons arguments dans l'autre camp — Agôn signale alors que le résultat doit être interprété prudemment.</p>
+      <p>Si un camp a plus du double d'idées solides que l'autre, le résultat est affiché avec prudence. Un camp peut avoir une excellente idée isolée face à de nombreuses bonnes idées dans l'autre camp — Agôn signale alors que le résultat doit être interprété prudemment.</p>
 
       <h3>8. Ce que signifie le verdict</h3>
-      <p>Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les arguments distincts les plus solides selon le barème d'Agôn.</p>
+      <p>Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les idées distinctes les plus solides selon le barème d'Agôn.</p>
 
       <h3>En résumé</h3>
-      <p>Agôn valorise la qualité argumentative plutôt que la quantité brute. Les répétitions sont regroupées, chaque argument est noté selon un barème transparent, les arguments faibles ne pèsent pas dans le verdict, et les excellents arguments sont davantage valorisés. Lorsque la comparaison entre les camps est trop déséquilibrée, Agôn l'indique clairement.</p>
+      <p>Agôn valorise la qualité des idées plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, les idées faibles ne pèsent pas dans le verdict, et les excellentes idées sont davantage valorisées. Lorsque la comparaison entre les camps est trop déséquilibrée, Agôn l'indique clairement.</p>
     </div>`;
 
     const panelCloseBtn = document.getElementById('ada-close-btn');
@@ -1829,15 +1856,21 @@
         if (details) {
           details.removeAttribute('open');
           details.open = false;
-          const section = details.closest('.ada-camp-section');
-          const target = section
-            ? section.parentElement.querySelector('.ada-section-h2')
-            : details;
-          const el = target || details;
+          const target = details.querySelector('summary') || details;
           const isMobile = window.matchMedia('(max-width: 768px)').matches;
-          const offset = isMobile ? 120 : 0;
-          const top = el.getBoundingClientRect().top + window.scrollY - offset;
-          window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          const offset = isMobile ? 420 : 320;
+          const targetTop = Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset);
+          const startTop = window.scrollY;
+          const distance = targetTop - startTop;
+          const duration = isMobile ? 900 : 700;
+          const startTime = performance.now();
+          const ease = t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          (function step(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            window.scrollTo(0, startTop + distance * ease(progress));
+            if (progress < 1) requestAnimationFrame(step);
+          })(startTime);
         }
       }
     });

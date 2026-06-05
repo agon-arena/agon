@@ -13,7 +13,7 @@
     if (_sablierPromise) return _sablierPromise;
     _sablierImg = new Image();
     _sablierImg.decoding = 'sync';
-    _sablierImg.src = '/sablier.png';
+    _sablierImg.src = '/sablier3.png';
     _sablierPromise = new Promise(function (resolve) {
       function done() {
         if (_sablierImg && typeof _sablierImg.decode === 'function') {
@@ -49,10 +49,11 @@
       /* Sablier centré, toujours au-dessus */
       .aala-sablier {
         position: absolute; top: 50%; left: 50%;
-        width: 86px; height: 86px;
+        width: 140px; height: 140px;
         z-index: 3;
         animation: aala-spin-pulse 5s linear infinite;
         pointer-events: none;
+        filter: drop-shadow(0 0 24px rgba(255,255,255,0.75)) drop-shadow(0 0 55px rgba(180,210,255,0.55));
       }
 
       /* Cerveaux positionnés au centre de l'overlay */
@@ -150,7 +151,7 @@
   function buildOverlay() {
     var sablier = _sablierImg || document.createElement('img');
     sablier.className = 'aala-sablier';
-    sablier.src = '/sablier.png';
+    sablier.src = '/sablier3.png';
     sablier.alt = '';
     sablier.decoding = 'sync';
 

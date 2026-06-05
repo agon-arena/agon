@@ -5280,7 +5280,7 @@ app.delete("/api/debates/:id", async (req, res) => {
 
 app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
   try {
-    const { debate_id, side, title, body, authorKey, source_url } = req.body || {};
+    const { debate_id, side, title, body, authorKey, source_url, pasteRatio, pastedChars, manualWritingBadge, usedMicrophone } = req.body || {};
     const requestedDebateId = debate_id;
     const sharedDebateId = resolveSharedDebateId(debate_id) || debate_id;
 
@@ -5294,7 +5294,11 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         source_url: String(source_url || "").trim(),
         author_key: authorKey || null,
         votes: 0,
-        created_at: nowIso()
+        created_at: nowIso(),
+        paste_ratio: Math.max(0, Math.min(100, Math.round(Number(pasteRatio || 0)))),
+        pasted_chars: Math.max(0, Math.round(Number(pastedChars || 0))),
+        manual_writing_badge: manualWritingBadge === true || manualWritingBadge === "true",
+        used_microphone: usedMicrophone === true || usedMicrophone === "true"
       })
       .select("id")
       .single();

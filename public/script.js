@@ -15565,6 +15565,24 @@ function syncIndexCarouselDots(row) {
   if (Number(dots.dataset.count || "0") !== dotCount) {
     dots.dataset.count = String(dotCount);
     dots.innerHTML = Array.from({ length: dotCount }, () => '<span class="theme-carousel-dot"></span>').join("");
+    if (dotCount >= 4) {
+      const dotEls = dots.querySelectorAll(".theme-carousel-dot");
+      dotEls[dotCount - 1]?.classList.add("theme-carousel-dot--fade-2", "theme-carousel-dot--pill");
+      dotEls[dotCount - 2]?.classList.add("theme-carousel-dot--fade-1");
+    }
+    dots.querySelectorAll(".theme-carousel-dot").forEach((dot, index) => {
+      dot.addEventListener("click", () => {
+        const currentCards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+        if (!currentCards.length) return;
+        const targetCardIndex = dotCount <= 1 ? 0
+          : Math.round(index * (currentCards.length - 1) / (dotCount - 1));
+        const targetCard = currentCards[Math.min(targetCardIndex, currentCards.length - 1)];
+        if (!targetCard) return;
+        const targetLeft = targetCard.offsetLeft - (row.clientWidth - targetCard.offsetWidth) / 2;
+        row.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+        window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 260);
+      });
+    });
   }
 
   const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
@@ -25130,14 +25148,6 @@ function initDebateTopbarAutoHide() {
     if (delta > HIDE_THRESHOLD) {
       topbar.classList.add("topbar-hidden");
       document.body.classList.add("debate-topbar-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
-
-    if (delta < -SHOW_THRESHOLD) {
-      topbar.classList.remove("topbar-hidden");
-      document.body.classList.remove("debate-topbar-hidden");
       lastScrollY = currentScrollY;
       ticking = false;
       return;
