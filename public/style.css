@@ -710,6 +710,10 @@ main.create-page {
   border-color: #cbd5e1;
 }
 
+.theme-horizontal-inner .debate-card {
+  transform: translateZ(0);
+}
+
 .theme-horizontal-inner .debate-card:hover,
 .theme-horizontal-inner .debate-card:focus-within {
   transform: none;

@@ -53,7 +53,20 @@
         z-index: 3;
         animation: aala-spin-pulse 5s linear infinite;
         pointer-events: none;
-        filter: drop-shadow(0 0 24px rgba(255,255,255,0.75)) drop-shadow(0 0 55px rgba(180,210,255,0.55));
+        filter:
+          drop-shadow(0 0 6px rgba(255,255,255,0.95))
+          drop-shadow(0 0 16px rgba(255,255,255,0.75))
+          drop-shadow(0 0 32px rgba(200,220,255,0.55))
+          drop-shadow(0 0 55px rgba(180,210,255,0.35))
+          drop-shadow(0 0 80px rgba(160,195,255,0.18));
+      }
+      @media (max-width: 768px) {
+        .aala-sablier {
+          filter:
+            drop-shadow(0 0 5px rgba(255,255,255,0.9))
+            drop-shadow(0 0 14px rgba(255,255,255,0.65))
+            drop-shadow(0 0 26px rgba(200,220,255,0.4));
+        }
       }
 
       /* Cerveaux positionnés au centre de l'overlay */
@@ -68,8 +81,8 @@
 
       /* ── Anneau extérieur : part du coin de l'écran ── */
       .aala-far {
-        margin-top: -22px; margin-left: -22px;
-        width: 44px; height: 44px; font-size: 38px;
+        margin-top: -34px; margin-left: -34px;
+        width: 68px; height: 68px; font-size: 58px;
         animation: aala-spiral-far 9s linear infinite;
       }
       .aala-far-1 { animation-delay:  0s; }
@@ -78,8 +91,8 @@
 
       /* ── Anneau intermédiaire ── */
       .aala-mid {
-        margin-top: -17px; margin-left: -17px;
-        width: 34px; height: 34px; font-size: 28px;
+        margin-top: -26px; margin-left: -26px;
+        width: 52px; height: 52px; font-size: 44px;
         animation: aala-spiral-mid 7s linear infinite;
       }
       .aala-mid-1 { animation-delay: -0.5s; }
@@ -88,8 +101,8 @@
 
       /* ── Anneau intérieur ── */
       .aala-near {
-        margin-top: -12px; margin-left: -12px;
-        width: 24px; height: 24px; font-size: 20px;
+        margin-top: -19px; margin-left: -19px;
+        width: 38px; height: 38px; font-size: 32px;
         animation: aala-spiral-near 5s linear infinite;
       }
       .aala-near-1 { animation-delay: -0.25s; }
