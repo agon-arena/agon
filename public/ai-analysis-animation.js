@@ -13,7 +13,7 @@
     if (_sablierPromise) return _sablierPromise;
     _sablierImg = new Image();
     _sablierImg.decoding = 'sync';
-    _sablierImg.src = '/sablier3.png';
+    _sablierImg.src = '/sablier3-256.png';
     _sablierPromise = new Promise(function (resolve) {
       function done() {
         if (_sablierImg && typeof _sablierImg.decode === 'function') {
@@ -164,7 +164,7 @@
   function buildOverlay() {
     var sablier = _sablierImg || document.createElement('img');
     sablier.className = 'aala-sablier';
-    sablier.src = '/sablier3.png';
+    sablier.src = '/sablier3-256.png';
     sablier.alt = '';
     sablier.decoding = 'sync';
 

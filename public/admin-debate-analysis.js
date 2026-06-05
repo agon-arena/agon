@@ -1728,7 +1728,7 @@
       if (!r.ok) return;
 
       if (json.raw || json.status === 'ready') {
-        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse"><img src="/sablier2.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
+        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
         slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           scrollToAnalysisElement(target);
@@ -1751,7 +1751,7 @@
         const tick = () => {
           const secs = Math.max(0, Math.round((target - Date.now()) / 1000));
           if (secs <= 0) {
-            slot.innerHTML = '<span class="ada-countdown-ready"><img src="/sablier2.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
+            slot.innerHTML = '<span class="ada-countdown-ready"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
           } else {
             badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
             setTimeout(tick, 1000);
@@ -1888,7 +1888,7 @@
 
       slot.innerHTML = `
         <div class="ada-wrap">
-          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
+          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
           <div id="ada-panel" class="ada-panel">
             <div class="ada-panel-header">
               <span class="ada-panel-title">Analyse et arbitrage IA</span>
@@ -1917,7 +1917,7 @@
 
     slot.innerHTML = `
       <div class="ada-wrap">
-        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
+        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
         <div id="ada-panel" class="ada-panel">
           <div class="ada-panel-header">
             <span class="ada-panel-title">Analyse et arbitrage IA</span>

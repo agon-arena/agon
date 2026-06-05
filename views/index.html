@@ -28,11 +28,11 @@
   <link rel="preconnect" href="https://syndication.twitter.com">
   <link rel="preconnect" href="https://www.instagram.com">
 
-  <link rel="icon" href="/favicon.png" type="image/png">
-  <link rel="preload" href="/sablier.png" as="image">
-  <link rel="preload" href="/sablier2.png" as="image">
+  <link rel="icon" href="/favicon-64.png" type="image/png">
+  <link rel="preload" href="/sablier-96.png" as="image">
+  <link rel="preload" href="/sablier2-64.png" as="image">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="192x192" href="/favicon.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icon-192-optimized.png">
   <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -106,7 +106,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.css?v=20260605-carousel-blur-veil">
+  <link rel="stylesheet" href="/style.css?v=20260605-light-assets">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -319,7 +319,7 @@
       <i class="fa-solid fa-power-off"></i>
     </button>
 
-    <img src="/appagon.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
     <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
@@ -826,8 +826,8 @@
 })();
 </script>
 
-<script src="/script.js?v=20260605-carousel-blur-veil" defer></script>
-<script src="/index-ai-badge.js?v=20260604-index-offscreen-animation-pause" defer></script>
+<script src="/script.js?v=20260605-light-assets" defer></script>
+<script src="/index-ai-badge.js?v=20260605-light-assets" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
@@ -1083,7 +1083,7 @@
   new MutationObserver(function(){
     if (_scanRaf) return;
     _scanRaf = requestAnimationFrame(function(){ _scanRaf = null; scan(); });
-  }).observe(document.body, { childList:true, subtree:true });
+  }).observe(document.getElementById('debates-list') || document.querySelector('main') || document.body, { childList:true, subtree:true });
 })();</script>
 
 <script>
@@ -1202,7 +1202,7 @@
     _scanCardsRaf = requestAnimationFrame(function(){ _scanCardsRaf = null; scanCards(); });
   }
   document.addEventListener('agon:index-meta-updated', scheduleScanCards);
-  new MutationObserver(scheduleScanCards).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(scheduleScanCards).observe(document.getElementById('debates-list') || document.querySelector('main') || document.body, { childList: true, subtree: true });
 })();
 </script>
 
@@ -1214,7 +1214,7 @@
     </button>
 
     <div class="install-modal-brand">
-      <img src="/appagon.png" alt="" class="install-modal-app-icon">
+      <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
     </div>
 
     <h3 class="install-modal-title">Installer l’icône Agôn</h3>
@@ -1331,13 +1331,18 @@
     if (_toast) { _toast.remove(); _toast = null; }
   }
 
+  function checkPing() {
+    fetch('/ping', { cache: 'no-store' })
+      .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
+      .catch(function() {});
+  }
+
   function startPolling() {
     if (_timer) return;
     showToast();
     _timer = setInterval(function() {
-      fetch('/ping', { cache: 'no-store' })
-        .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
-        .catch(function() {});
+      if (document.hidden) return;
+      checkPing();
     }, POLL_INTERVAL);
   }
 
@@ -1350,6 +1355,9 @@
   /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
   window.addEventListener('offline', function() { _wasOffline = true; });
   window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && _timer) checkPing();
+  });
 })();
 </script>
 

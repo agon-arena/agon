@@ -10817,7 +10817,7 @@ body.home-topbar-menu-is-open .topbar-social {
 .load-more-spinner {
   width: 18px;
   height: 18px;
-  background: url('/sablier.png') center / contain no-repeat;
+  background: url('/sablier-96.png') center / contain no-repeat;
   animation: loadMoreSpin 0.8s linear infinite;
   flex: 0 0 auto;
 }
@@ -16446,6 +16446,11 @@ html.thematic-scroll .theme-row-section {
   .theme-carousel-dot {
     width: 12px;
     height: 12px;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.34);
+  }
+
+  .theme-carousel-dot.is-active {
+    box-shadow: 0 0 0 2px rgba(36, 48, 56, 0.32);
   }
 }
 
@@ -16570,27 +16575,45 @@ html.thematic-scroll body.page-home-mobile #debates-list {
     transform-origin: top center;
   }
 
-  .theme-horizontal-row::before,
-  .theme-horizontal-row::after {
+  .theme-row-section::before,
+  .theme-row-section::after {
     content: "";
     position: absolute;
     top: 0;
-    bottom: 0;
-    width: clamp(48px, 7vw, 96px);
+    bottom: 18px;
+    width: clamp(86px, 10vw, 150px);
     pointer-events: none;
     z-index: 90;
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    opacity: 1;
+    transition: opacity 0.16s ease;
   }
 
-  .theme-horizontal-row::before {
-    left: 0;
-    background: linear-gradient(to right, rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0));
+  .theme-row-section::before {
+    left: calc(50% - 50vw);
+    background: linear-gradient(
+      to right,
+      rgba(36, 48, 56, 0.78) 0%,
+      rgba(36, 48, 56, 0.52) 30%,
+      rgba(36, 48, 56, 0.20) 68%,
+      rgba(36, 48, 56, 0) 100%
+    );
   }
 
-  .theme-horizontal-row::after {
-    right: 0;
-    background: linear-gradient(to left, rgba(36, 48, 56, 0.12), rgba(36, 48, 56, 0));
+  .theme-row-section::after {
+    right: calc(50% - 50vw);
+    background: linear-gradient(
+      to left,
+      rgba(36, 48, 56, 0.78) 0%,
+      rgba(36, 48, 56, 0.52) 30%,
+      rgba(36, 48, 56, 0.20) 68%,
+      rgba(36, 48, 56, 0) 100%
+    );
+  }
+
+  .theme-row-section.theme-row-at-start::before,
+  .theme-row-section:not(.theme-row-can-scroll)::before,
+  .theme-row-section:not(.theme-row-can-scroll)::after {
+    opacity: 0;
   }
 
   /* Masquer uniquement le footer */
@@ -17927,8 +17950,45 @@ body.page-home #debates-list .theme-row-section:first-child {
   line-height: 1;
 }
 
+.index-social-load-btn,
+.idea-social-load-btn {
+  display: none;
+}
+
 
 @media (max-width: 768px) {
+  .page-home-mobile .index-social-load-btn,
+  body.page-debate .idea-social-load-btn {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 11;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 7px 13px;
+    border: 1px solid rgba(255, 255, 255, 0.56);
+    border-radius: 999px;
+    background: rgba(17, 24, 39, 0.86);
+    color: #ffffff;
+    font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+    white-space: nowrap;
+  }
+
+  body.page-debate .idea-social-load-btn {
+    z-index: 5;
+  }
+
   .page-home-mobile .debate-card-media-x .index-social-click-veil,
   .page-home-mobile .debate-card-media-x .index-social-open-debate-btn,
   .page-home-mobile .debate-card-media-instagram .index-social-click-veil,
@@ -17985,7 +18045,7 @@ body.page-home #debates-list .theme-row-section:first-child {
     display: block;
     width: 48px;
     height: 48px;
-    background: url('/sablier.png') center / contain no-repeat;
+    background: url('/sablier-96.png') center / contain no-repeat;
     opacity: 0.85;
     will-change: transform;
     animation: indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;

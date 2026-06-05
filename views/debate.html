@@ -19,12 +19,12 @@
 <meta name="twitter:title" content="__META_TITLE__">
 <meta name="twitter:description" content="__META_DESCRIPTION__">
 <meta name="twitter:image" content="__META_IMAGE__">
-<link rel="icon" type="image/png" href="/favicon.png">
-<link rel="preload" href="/sablier.png" as="image">
-<link rel="preload" href="/sablier2.png" as="image">
-<link rel="preload" href="/sablier3.png" as="image">
+<link rel="icon" type="image/png" href="/favicon-64.png">
+<link rel="preload" href="/sablier-96.png" as="image">
+<link rel="preload" href="/sablier2-64.png" as="image">
+<link rel="preload" href="/sablier3-256.png" as="image">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="192x192" href="/favicon.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icon-192-optimized.png">
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -99,7 +99,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.css?v=20260604-similar-source-badge-position" />
+<link rel="stylesheet" href="/style.css?v=20260605-light-assets" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -542,7 +542,7 @@
         autocomplete="url"
       />
       <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
-      <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
+      <small class="argument-url-ia-hint"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
     </div>
 
@@ -656,7 +656,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
           autocomplete="url"
         />
         <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
-        <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
+        <small class="argument-url-ia-hint"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
       </div>
 
@@ -728,7 +728,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
           autocomplete="url"
         />
         <small>Ajoutez une source, un article, une vidéo ou tout autre lien utile. L’aperçu se comportera comme une source d’arène quand c’est possible.</small>
-        <small class="argument-url-ia-hint"><img src="/sablier2.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
+        <small class="argument-url-ia-hint"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:4px;"> Les sources ajoutées ici seront analysées par l’IA lors de l’analyse des idées de l’arène.</small>
       <div class="argument-url-preview" data-idea-url-preview aria-live="polite"></div>
       </div>
 
@@ -895,7 +895,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.js?v=20260605-topbar-no-reshown-on-scroll-up"></script>
+	<script src="/script.js?v=20260605-light-assets"></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -947,8 +947,8 @@ document.addEventListener('keydown', function(e) {
 })();
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
-<script src="/ai-analysis-animation.js?v=20260605-sablier3"></script>
-<script src="/admin-debate-analysis.js?v=20260605-arguments-to-idees"></script>
+<script src="/ai-analysis-animation.js?v=20260605-light-assets"></script>
+<script src="/admin-debate-analysis.js?v=20260605-light-assets"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
@@ -978,8 +978,9 @@ document.addEventListener('keydown', function(e) {
   document.addEventListener('DOMContentLoaded', function(){
     normalizeCommentStanceLabels();
 
+    var observerRoot = document.querySelector('.debate-columns') || document.body;
     var observer = new MutationObserver(scheduleCommentStanceRefresh);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(observerRoot, { childList: true, subtree: true });
 
     setTimeout(normalizeCommentStanceLabels, 250);
     setTimeout(normalizeCommentStanceLabels, 900);
@@ -1027,12 +1028,21 @@ document.addEventListener('keydown', function(e) {
     document.documentElement.style.setProperty('--debate-embedded-top-offset', topOffset + 'px');
   }
 
+  var embeddedDebateTopOffsetRaf = null;
+  function queueEmbeddedDebateTopOffsetUpdate(){
+    if (embeddedDebateTopOffsetRaf) return;
+    embeddedDebateTopOffsetRaf = requestAnimationFrame(function(){
+      embeddedDebateTopOffsetRaf = null;
+      updateEmbeddedDebateTopOffset();
+    });
+  }
+
   updateEmbeddedDebateTopOffset();
-  window.addEventListener('resize', updateEmbeddedDebateTopOffset, { passive: true });
-  window.addEventListener('orientationchange', updateEmbeddedDebateTopOffset, { passive: true });
+  window.addEventListener('resize', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
+  window.addEventListener('orientationchange', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateEmbeddedDebateTopOffset);
-    window.visualViewport.addEventListener('scroll', updateEmbeddedDebateTopOffset);
+    window.visualViewport.addEventListener('resize', queueEmbeddedDebateTopOffsetUpdate);
+    window.visualViewport.addEventListener('scroll', queueEmbeddedDebateTopOffsetUpdate);
   }
 
   function escapeHTML(value){
@@ -1115,8 +1125,9 @@ document.addEventListener('keydown', function(e) {
   document.addEventListener('DOMContentLoaded', function(){
     refreshArgumentPositionLabels();
 
+    var observerRoot = document.querySelector('.debate-columns') || document.body;
     var observer = new MutationObserver(scheduleRefresh);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(observerRoot, { childList: true, subtree: true });
 
     ['title-a', 'title-b'].forEach(function(id){
       var el = document.getElementById(id);
@@ -2549,7 +2560,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       wireSubmitHandlers();
       scheduleTransform();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.querySelector('main.debate-page') || document.querySelector('.debate-columns') || document.body, { childList: true, subtree: true });
 
     setTimeout(transformIdeaSources, 250);
     setTimeout(transformIdeaSources, 900);
@@ -2578,13 +2589,18 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     if (_toast) { _toast.remove(); _toast = null; }
   }
 
+  function checkPing() {
+    fetch('/ping', { cache: 'no-store' })
+      .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
+      .catch(function() {});
+  }
+
   function startPolling() {
     if (_timer) return;
     showToast();
     _timer = setInterval(function() {
-      fetch('/ping', { cache: 'no-store' })
-        .then(function(r) { if (r.ok) { clearInterval(_timer); _timer = null; hideToast(); window.location.reload(); } })
-        .catch(function() {});
+      if (document.hidden) return;
+      checkPing();
     }, POLL_INTERVAL);
   }
 
@@ -2597,6 +2613,11 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   /* Cas 2 : retour en ligne après vraie coupure réseau (on ne déclenche que si offline a bien été détecté) */
   window.addEventListener('offline', function() { _wasOffline = true; });
   window.addEventListener('online', function() { if (_wasOffline) { _wasOffline = false; startPolling(); } });
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && _timer) {
+      checkPing();
+    }
+  });
 })();
 </script>
 
@@ -2604,7 +2625,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
   <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
     <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
-      <img src="/favicon.png" alt="agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
+      <img src="/favicon-64.png" alt="agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
       <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
       <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers agôn</button>
     </div>

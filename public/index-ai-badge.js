@@ -75,7 +75,7 @@
         done = true;
         cleanup();
         inner.className = 'ai-card-badge-inner';
-        inner.innerHTML = '<img src="/sablier2.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
+        inner.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
         return;
       }
       inner.textContent = 'IA : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -108,7 +108,7 @@
 
       if (entry.status === 'ready') {
         inner.className = 'ai-card-badge-inner';
-        inner.innerHTML = '<img src="/sablier2.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
+        inner.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:15px;height:15px;vertical-align:middle;margin-right:4px;">Analyse et arbitrage IA';
       } else if (entry.scheduledAt) {
         inner.className = 'ai-card-badge-inner ai-card-badge-countdown';
         startCountdown(inner, new Date(entry.scheduledAt).getTime());

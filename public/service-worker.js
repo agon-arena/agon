@@ -19,8 +19,8 @@ self.addEventListener("push", (event) => {
   const title = rawTitle.replace(/^from\s+ag[oô]n\s*:?\s*/i, "").trim() || "L'arène des idées";
   const options = {
     body: payload.body || "Nouvelle activité sur agôn.",
-    icon: payload.icon || "/icons/icon-192.png",
-    badge: payload.badge || "/icons/icon-192.png",
+    icon: payload.icon || "/icon-192-optimized.png",
+    badge: payload.badge || "/icon-192-optimized.png",
     data: {
       url: payload.url || "/"
     }

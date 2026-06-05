@@ -1055,14 +1055,14 @@ function clearCreatedDebateContext() {
 
 function getPageArrivalLoadingImageSrc() {
   if (isNotificationToDebateLoadingTransition()) {
-    return "/sablier.png";
+    return "/sablier-96.png";
   }
 
   if (isCreateToDebateOverlayContext()) {
-    return "/sablier.png";
+    return "/sablier-96.png";
   }
 
-  return "/sablier.png";
+  return "/sablier-96.png";
 }
 
 function applyPageArrivalLoadingVisuals() {
@@ -1082,12 +1082,12 @@ function applyPageArrivalLoadingVisuals() {
   if (loadingImage) {
     const desiredSrc = getPageArrivalLoadingImageSrc();
     if (!loadingImage.dataset.defaultSrc) {
-      loadingImage.dataset.defaultSrc = "/sablier.png";
+      loadingImage.dataset.defaultSrc = "/sablier-96.png";
     }
     loadingImage.onerror = () => {
       if (loadingImage.dataset.fallbackApplied === "true") return;
       loadingImage.dataset.fallbackApplied = "true";
-      loadingImage.src = loadingImage.dataset.defaultSrc || "/sablier.png";
+      loadingImage.src = loadingImage.dataset.defaultSrc || "/sablier-96.png";
     };
     loadingImage.dataset.fallbackApplied = "false";
     loadingImage.src = desiredSrc;
@@ -1120,7 +1120,7 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
         <div class="page-arrival-loading-title" id="page-arrival-loading-title"></div>
       </div>
     `;
@@ -2816,7 +2816,7 @@ function updateDebateIframeParentLoadingOverlayBounds() {
 }
 
 function getDebateIframeParentLoadingImageSrc() {
-  return "/sablier.png";
+  return "/sablier-96.png";
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
@@ -2832,7 +2832,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
       <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
-        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier.png" alt=""></div>
+        <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
         <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
       </div>
     `;
@@ -2848,7 +2848,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   if (image) {
     image.onerror = () => {
       image.onerror = null;
-      image.src = "/sablier.png";
+      image.src = "/sablier-96.png";
     };
     image.src = getDebateIframeParentLoadingImageSrc();
   }
@@ -4966,7 +4966,7 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/fondchargement.png';"
+            onerror="this.onerror=null; this.src='/fondchargement-256.png';"
           >
         </div>
       ` : ""}
@@ -5858,7 +5858,7 @@ function buildAgonEmbedLoadingOverlayHtml(label = 'Chargement…') {
   return `
     <div class="agon-embed-loading-overlay" data-agon-embed-loading aria-hidden="true">
       <div class="agon-embed-loading-box">
-        <img src="/sablier.png" alt="">
+        <img src="/sablier-96.png" alt="">
         <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
       </div>
     </div>
@@ -5891,7 +5891,7 @@ function setDebateSourcePreviewLoadingElement(sourceLoading, isVisible, label = 
   ensureAgonEmbedLoadingStyles();
   sourceLoading.innerHTML = `
     <span class="agon-embed-loading-box" style="min-width:0; padding:8px 10px; border-radius:12px; flex-direction:row; gap:8px;">
-      <img src="/sablier.png" alt="" style="width:24px; height:24px;">
+      <img src="/sablier-96.png" alt="" style="width:24px; height:24px;">
       <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
     </span>
   `;
@@ -5942,8 +5942,8 @@ function renderIndexOpenGraphImageShell(shell) {
     img.style.display = 'block';
     img.style.opacity = '0';
     if (loading) loading.style.display = '';
-    if (img.getAttribute('src') !== '/fondchargement.png') {
-      img.src = '/fondchargement.png';
+    if (img.getAttribute('src') !== '/fondchargement-256.png') {
+      img.src = '/fondchargement-256.png';
     } else {
       finish();
     }
@@ -6134,10 +6134,14 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:0;"
       >
         <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">
-          <img src="/sablier.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;">
+          <img src="/sablier-96.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;">
         </div>
         <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:100%; margin:0;"></div>
         <div data-index-x-fallback style="display:block;">${buildXIndexSourceCardHtml(sourceUrl, preview, debateId)}</div>
+        <button type="button" class="index-social-load-btn" onclick="event.preventDefault(); event.stopPropagation(); requestIndexSocialEmbedLoad(this)" aria-label="Charger le post X">
+          <span class="index-social-open-debate-btn-icon">𝕏</span>
+          <span>Charger le post</span>
+        </button>
         <div class="index-social-click-veil" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"></div>
         <button type="button" class="index-social-open-debate-btn" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)" aria-label="Ouvrir le débat">
           <span class="index-social-open-debate-btn-icon">𝕏</span>
@@ -6171,7 +6175,7 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/fondchargement.png';"
+            onerror="this.onerror=null; this.src='/fondchargement-256.png';"
           >
         </div>
       ` : ""}
@@ -6209,6 +6213,10 @@ function buildIndexInstagramEmbedHtml(sourceUrl, preview = null, debateId = "") 
         <div data-index-instagram-loading style="position:absolute; inset:0; z-index:2; display:none;"></div>
         <div data-index-instagram-embed onclick="event.stopPropagation()" style="display:none; justify-content:center;"></div>
         <div data-index-instagram-fallback style="display:block;">${buildIndexInstagramFallbackHtml(sourceUrl, preview, debateId)}</div>
+        <button type="button" class="index-social-load-btn" onclick="event.preventDefault(); event.stopPropagation(); requestIndexSocialEmbedLoad(this)" aria-label="Charger le post Instagram">
+          <span class="index-social-open-debate-btn-icon">◉</span>
+          <span>Charger le post</span>
+        </button>
         <div class="index-social-click-veil" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)"></div>
         <button type="button" class="index-social-open-debate-btn" onclick="event.stopPropagation(); openIndexDebateFromMedia('${escapeAttribute(String(debateId || ''))}', event)" aria-label="Ouvrir le débat">
           <span class="index-social-open-debate-btn-icon">◉</span>
@@ -7023,7 +7031,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
       scheduleIndexSourcePreviewHydration(String(debate?.id || "").trim());
       return buildIndexSourcePreviewLoadingCardHtml(String(debate?.id || "").trim());
     }
-    return buildIndexLocalImageCardHtml("/fondchargement.png", String(debate?.id || "").trim());
+    return buildIndexLocalImageCardHtml("/fondchargement-256.png", String(debate?.id || "").trim());
   }
 
   const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
@@ -8745,10 +8753,32 @@ function bindIndexXTabletRefresh() {
   indexXTabletRefreshBound = true;
 }
 
+function shouldDeferSocialEmbedUntilTap(shell) {
+  return !!(
+    shell
+    && window.matchMedia("(max-width: 768px)").matches
+    && shell.dataset.socialLoadRequested !== 'true'
+  );
+}
+
+function requestIndexSocialEmbedLoad(trigger) {
+  const shell = trigger?.closest?.('[data-index-x-shell], [data-index-instagram-shell]');
+  if (!shell) return;
+  shell.dataset.socialLoadRequested = 'true';
+  const loadButton = shell.querySelector('.index-social-load-btn');
+  if (loadButton) loadButton.style.display = 'none';
+  if (shell.hasAttribute('data-index-instagram-shell')) {
+    renderIndexInstagramShell(shell);
+  } else {
+    renderIndexXShell(shell);
+  }
+}
+
 async function renderIndexXShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
   if (shell.dataset.rendering === 'true') return;
+  if (shouldDeferSocialEmbedUntilTap(shell)) return;
   if (!isElementNearViewport(shell, 260)) return;
 
   bindIndexXTabletRefresh();
@@ -8894,9 +8924,15 @@ function unloadIndexInstagramShell(shell) {
   window.indexInstagramEmbedState?.observer?.observe(shell);
 }
 
+function getSocialEmbedUnloadRootMargin() {
+  return window.matchMedia("(max-width: 768px)").matches
+    ? '650px 0px 650px 0px'
+    : '1500px 0px 1500px 0px';
+}
+
 function initIndexEmbedUnloadObserver(root = document) {
-  if (!window.__indexEmbedUnloadObserver) {
-    window.__indexEmbedUnloadObserver = new IntersectionObserver((entries) => {
+  if (!window.__indexSocialEmbedUnloadObserver) {
+    window.__indexSocialEmbedUnloadObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) return;
         const shell = entry.target;
@@ -8905,7 +8941,21 @@ function initIndexEmbedUnloadObserver(root = document) {
           unloadIndexXShell(shell);
         } else if (shell.hasAttribute('data-index-instagram-shell')) {
           unloadIndexInstagramShell(shell);
-        } else if (shell.hasAttribute('data-index-og-image-shell')) {
+        }
+      });
+    }, {
+      rootMargin: getSocialEmbedUnloadRootMargin(),
+      threshold: 0
+    });
+  }
+
+  if (!window.__indexEmbedUnloadObserver) {
+    window.__indexEmbedUnloadObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) return;
+        const shell = entry.target;
+        if (shell.dataset.rendered !== 'true') return;
+        if (shell.hasAttribute('data-index-og-image-shell')) {
           if (shell.dataset.keepAliveUntil && Date.now() < Number(shell.dataset.keepAliveUntil)) return;
           if (window.matchMedia("(max-width: 768px)").matches) {
             if (shell.dataset.mobileUnloadTimer) return;
@@ -8928,7 +8978,13 @@ function initIndexEmbedUnloadObserver(root = document) {
     });
   }
 
-  root.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell], [data-index-og-image-shell]').forEach((shell) => {
+  root.querySelectorAll('[data-index-x-shell], [data-index-instagram-shell]').forEach((shell) => {
+    if (shell.dataset.socialUnloadObserving === '1') return;
+    shell.dataset.socialUnloadObserving = '1';
+    window.__indexSocialEmbedUnloadObserver.observe(shell);
+  });
+
+  root.querySelectorAll('[data-index-og-image-shell]').forEach((shell) => {
     if (shell.dataset.unloadObserving === '1') return;
     shell.dataset.unloadObserving = '1';
     window.__indexEmbedUnloadObserver.observe(shell);
@@ -9145,6 +9201,7 @@ async function renderIndexInstagramShell(shell) {
   if (!shell) return;
   if (shell.dataset.rendered === 'true') return;
   if (shell.dataset.rendering === 'true') return;
+  if (shouldDeferSocialEmbedUntilTap(shell)) return;
   if (!isElementNearViewport(shell, 260)) return;
 
   const embedPermalink = String(shell.dataset.instagramPermalink || '').trim();
@@ -9583,9 +9640,13 @@ function renderIdeaSourceCardHtml(url) {
     return `
       <div class="idea-source-card-wrap" data-idea-source-url="${escapeHtml(safeUrl)}"${instagramEmbedUrl ? ' data-idea-instagram-shell' : ''}>
         <div class="idea-source-card idea-source-card-social idea-source-card-instagram" style="position:relative;">
-          ${instagramEmbedUrl ? `<div data-idea-instagram-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('instagram', 'Chargement du post Instagram…', 'Le post se prépare avant affichage dans la carte.')}</div>` : ''}
+          ${instagramEmbedUrl ? `<div data-idea-instagram-loading style="position:absolute; inset:0; z-index:2; display:none; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('instagram', 'Chargement du post Instagram…', 'Le post se prépare avant affichage dans la carte.')}</div>` : ''}
           <div class="idea-source-social-header"><i class="fa-brands fa-instagram" aria-hidden="true"></i><span>Publication Instagram</span></div>
           ${instagramEmbedUrl ? `
+            <button type="button" class="idea-social-load-btn" onclick="event.preventDefault(); event.stopPropagation(); requestIdeaSocialEmbedLoad(this)" aria-label="Charger le post Instagram">
+              <i class="fa-brands fa-instagram" aria-hidden="true"></i>
+              <span>Charger le post</span>
+            </button>
             <div class="idea-source-social-embed idea-source-instagram-iframe-wrap">
               <iframe class="idea-source-iframe idea-source-instagram-iframe" data-idea-instagram-src="${escapeHtml(instagramEmbedUrl)}" title="Publication Instagram" allowtransparency="true" allowfullscreen></iframe>
             </div>
@@ -9610,8 +9671,12 @@ function renderIdeaSourceCardHtml(url) {
     return `
       <div class="idea-source-card-wrap idea-source-card-wrap-x" data-idea-source-url="${escapeHtml(safeUrl)}" data-idea-x-shell>
         <div class="idea-source-card idea-source-card-social idea-source-card-x" style="position:relative;">
-          <div data-idea-x-loading style="display:flex; position:absolute; inset:0; z-index:2; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}</div>
+          <div data-idea-x-loading style="display:none; position:absolute; inset:0; z-index:2; width:100%; height:100%; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">${buildIndexSocialLoadingPlaceholderHtml('x', 'Chargement du post X…', 'Le post arrive dès que X termine de répondre.')}</div>
           <div class="idea-source-social-header"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i><span>Publication X</span></div>
+          <button type="button" class="idea-social-load-btn" onclick="event.preventDefault(); event.stopPropagation(); requestIdeaSocialEmbedLoad(this)" aria-label="Charger le post X">
+            <i class="fa-brands fa-x-twitter" aria-hidden="true"></i>
+            <span>Charger le post</span>
+          </button>
           <div class="idea-source-social-embed idea-source-x-embed-wrap" data-idea-x-embed="1" data-idea-x-url="${escapeHtml(xEmbedUrl)}" data-idea-x-status-id="${escapeHtml(xStatusId)}">
             <blockquote class="twitter-tweet" data-dnt="true" data-theme="light"><a href="${escapeHtml(xEmbedUrl)}" target="_blank" rel="noopener noreferrer">Publication X</a></blockquote>
           </div>
@@ -9871,13 +9936,15 @@ function activateIdeaYouTubeShell(shell) {
 
 function activateIdeaInstagramShell(shell) {
   if (!shell) return;
+  if (shouldDeferSocialEmbedUntilTap(shell)) return;
   const iframe = shell.querySelector('.idea-source-instagram-iframe');
   if (!iframe) return;
   const src = String(iframe.dataset.ideaInstagramSrc || '').trim();
   if (!src) return;
+  const loadingEl = shell.querySelector('[data-idea-instagram-loading]');
+  if (loadingEl) loadingEl.style.display = 'flex';
   iframe.src = src;
   delete iframe.dataset.ideaInstagramSrc;
-  const loadingEl = shell.querySelector('[data-idea-instagram-loading]');
   if (loadingEl) {
     iframe.addEventListener('load', () => { loadingEl.style.display = 'none'; }, { once: true });
   }
@@ -9895,6 +9962,20 @@ function unloadIdeaInstagramShell(shell) {
     shell.dataset.ideaInstagramObserving = '0';
     window.__ideaInstagramObserver.observe(shell);
   }
+}
+
+function requestIdeaSocialEmbedLoad(trigger) {
+  const shell = trigger?.closest?.('[data-idea-instagram-shell], [data-idea-x-shell]');
+  if (!shell) return;
+  shell.dataset.socialLoadRequested = 'true';
+  const loadButton = shell.querySelector('.idea-social-load-btn');
+  if (loadButton) loadButton.style.display = 'none';
+  if (shell.hasAttribute('data-idea-instagram-shell')) {
+    activateIdeaInstagramShell(shell);
+    return;
+  }
+  const embed = shell.querySelector('[data-idea-x-embed="1"]');
+  if (embed) activateIdeaXEmbed(embed);
 }
 
 function initIdeaInstagramObserver(root = document) {
@@ -9929,6 +10010,7 @@ function initIdeaInstagramObserver(root = document) {
 
 async function activateIdeaXEmbed(embed) {
   if (!embed || embed.dataset.ideaXRendered === '1') return;
+  if (shouldDeferSocialEmbedUntilTap(embed.closest('[data-idea-x-shell]'))) return;
   const statusId = String(embed.dataset.ideaXStatusId || '').trim();
   const embedUrl = normalizeIdeaSourceUrl(embed.dataset.ideaXUrl || '');
   const fallbackBlockquote = embed.querySelector('blockquote.twitter-tweet');
@@ -10087,7 +10169,7 @@ function initIdeaEmbedUnloadObserver(root = document) {
         }
       });
     }, {
-      rootMargin: '1500px 0px 1500px 0px',
+      rootMargin: getSocialEmbedUnloadRootMargin(),
       threshold: 0
     });
   }
@@ -12573,7 +12655,7 @@ if (notification.type === "majority_lost") {
   subtitle = "Ouvrir le débat";
 }
 if (notification.type === "analysis_scheduled") {
-  icon = '<img src="/sablier2.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
+  icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
   title = "L'arbitrage IA démarre dans 24h";
   subtitle = "Ouvrir le débat";
 }
@@ -13489,7 +13571,7 @@ async function saveAdminCardEdit(debateId, btn) {
   const origHtml = saveBtn ? saveBtn.innerHTML : "";
   if (saveBtn) {
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Sauvegarde…';
+    saveBtn.innerHTML = '<img src="/sablier-96.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Sauvegarde…';
   }
 
   try {
@@ -13601,7 +13683,7 @@ async function saveAdminMediaExtras(debateId, btn) {
 
   const origHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Sauvegarde…';
+  btn.innerHTML = '<img src="/sablier-96.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Sauvegarde…';
   try {
     const result = await fetchJSON(API + "/admin/debate/" + debateId + "/media-extras", {
       method: "PUT",
@@ -13647,7 +13729,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
 
   const origHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> En cours…';
+  btn.innerHTML = '<img src="/sablier-96.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> En cours…';
 
   try {
     const publishTimestamp = new Date().toISOString();
@@ -13727,7 +13809,7 @@ async function bumpAdminDebate(debateId, btn) {
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Republication…';
+    btn.innerHTML = '<img src="/sablier-96.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;"> Republication…';
   }
   try {
     const bumpedAt = new Date().toISOString();
@@ -13782,7 +13864,7 @@ async function adminUploadMediaFile(input, mediaType) {
 
   if (uploadBtn) {
     uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<img src="/sablier.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;">';
+    uploadBtn.innerHTML = '<img src="/sablier-96.png" style="width:14px;height:14px;animation:createSubmitSpin 0.8s linear infinite;vertical-align:middle;">';
   }
 
   try {
@@ -15505,6 +15587,10 @@ function updateIndexThemeRowSwipeButtons(row) {
   const isAtStart = row.scrollLeft <= 8;
   const isAtEnd = row.scrollLeft >= maxScroll - 8;
 
+  section.classList.toggle("theme-row-at-start", !canScroll || isAtStart);
+  section.classList.toggle("theme-row-at-end", !canScroll || isAtEnd);
+  section.classList.toggle("theme-row-can-scroll", canScroll);
+
   if (prev) prev.classList.toggle("is-hidden", !canScroll || isAtStart);
   if (next) next.classList.toggle("is-hidden", !canScroll || isAtEnd);
   if (sidePrev) sidePrev.classList.toggle("is-hidden", !canScroll || isAtStart);
@@ -15535,6 +15621,7 @@ function syncIndexCarouselDots(row) {
 
   if (Number(dots.dataset.count || "0") !== dotCount) {
     dots.dataset.count = String(dotCount);
+    delete dots.dataset.activeIndex;
     dots.innerHTML = Array.from({ length: dotCount }, () => '<span class="theme-carousel-dot"></span>').join("");
     if (dotCount >= 4) {
       const dotEls = dots.querySelectorAll(".theme-carousel-dot");
@@ -15560,6 +15647,9 @@ function syncIndexCarouselDots(row) {
   const activeIndex = maxScroll > 8
     ? Math.round((row.scrollLeft / maxScroll) * (dotCount - 1))
     : 0;
+
+  if (dots.dataset.activeIndex === String(activeIndex)) return;
+  dots.dataset.activeIndex = String(activeIndex);
 
   dots.querySelectorAll(".theme-carousel-dot").forEach((dot, index) => {
     dot.classList.toggle("is-active", index === activeIndex);
@@ -16224,7 +16314,7 @@ function syncBubbleFrameTop() {
 })();
 
 const _bubbleSpinnerImg = new Image();
-_bubbleSpinnerImg.src = '/sablier.png';
+_bubbleSpinnerImg.src = '/sablier-96.png';
 if (typeof _bubbleSpinnerImg.decode === 'function') _bubbleSpinnerImg.decode().catch(() => {});
 
 function showBubbleCloudLoadingSpinner() {
@@ -16235,7 +16325,7 @@ function showBubbleCloudLoadingSpinner() {
   const spinner = document.createElement("div");
   spinner.id = "agon-cloud-loading-spinner";
   const img = document.createElement('img');
-  img.src = '/sablier.png';
+  img.src = '/sablier-96.png';
   img.alt = '';
   img.style.cssText = 'animation:pageArrivalLogoSpin 1s linear infinite;';
   spinner.appendChild(img);
@@ -16379,11 +16469,16 @@ function renderDebatesList(debates) {
     });
     if (!window._carouselResizeBound) {
       window._carouselResizeBound = true;
+      window._carouselResizeRaf = null;
       window.addEventListener('resize', () => {
-        document.querySelectorAll('.theme-horizontal-row').forEach((row) => {
-          applyCarouselScaleEffects(row);
-          syncIndexThemeRowHeight(row);
-          updateIndexThemeRowSwipeButtons(row);
+        if (window._carouselResizeRaf) return;
+        window._carouselResizeRaf = requestAnimationFrame(() => {
+          window._carouselResizeRaf = null;
+          document.querySelectorAll('.theme-horizontal-row').forEach((row) => {
+            applyCarouselScaleEffects(row);
+            syncIndexThemeRowHeight(row);
+            updateIndexThemeRowSwipeButtons(row);
+          });
         });
       }, { passive: true });
     }
@@ -18673,7 +18768,7 @@ form.addEventListener("submit", async e => {
   if (submitButton) {
     submitButton.disabled = true;
     submitButton.classList.add("create-submit-loading");
-    submitButton.innerHTML = '<span class="create-submit-spinner" aria-hidden="true"><img src="/sablier.png" alt=""></span><span>Publication...</span>';
+    submitButton.innerHTML = '<span class="create-submit-spinner" aria-hidden="true"><img src="/sablier-96.png" alt=""></span><span>Publication...</span>';
   }
 
   startCreatePublishSession();
@@ -25804,7 +25899,7 @@ if (notification.type === "majority_lost") {
   subtitle = "Ouvrir le débat";
 }
 if (notification.type === "analysis_scheduled") {
-  icon = '<img src="/sablier2.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
+  icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
   title = "L'arbitrage IA démarre dans 24h";
   subtitle = "Ouvrir le débat";
 }
@@ -27258,7 +27353,7 @@ async function handlePushMenuClick() {
       "Installe Agôn pour les alertes",
       "Sur iPhone, installe d’abord l’icône Agôn.\n\n📤 1. Appuie sur Partager dans Safari.\n📱 2. Choisis “Ajouter à l’écran d’accueil”.\n✨ 3. Ouvre Agôn depuis la nouvelle icône.\n\n🔔 Reviens ensuite ici pour activer les alertes.",
       null,
-      '<img src="/appagon.png" alt="" class="push-install-app-icon">',
+      '<img src="/appagon-192.png" alt="" class="push-install-app-icon">',
       "push-install-help-icon"
     );
     return;
