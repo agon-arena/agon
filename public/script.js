@@ -111,6 +111,36 @@ registerServiceWorker();
   window.scrollTo(0, 0);
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+  const waitForPaint = function() {
+    return new Promise(function(resolve) {
+      requestAnimationFrame(function() {
+        requestAnimationFrame(resolve);
+      });
+    });
+  };
+
+  const waitForLineAnimationEnd = function(line) {
+    if (!line) return Promise.resolve();
+    return new Promise(function(resolve) {
+      let done = false;
+      const finish = function() {
+        if (done) return;
+        done = true;
+        line.removeEventListener('animationend', finish);
+        resolve();
+      };
+      line.addEventListener('animationend', finish);
+      setTimeout(finish, 900);
+    });
+  };
+
+  const playStartupLine = async function(line, holdAfterAnimationMs) {
+    if (!line) return;
+    await waitForPaint();
+    line.classList.add('is-playing');
+    await waitForLineAnimationEnd(line);
+    await wait(holdAfterAnimationMs);
+  };
 
   let introSequenceDone = false;
   let contentReady = false;
@@ -153,20 +183,9 @@ registerServiceWorker();
     // Pause sur le logo avant les messages
     await wait(900);
 
-    // Message 1
-    const line1 = loader.querySelector('.agon-startup-line-1');
-    if (line1) line1.classList.add('is-playing');
-    await wait(1200);
-
-    // Message 2
-    const line2 = loader.querySelector('.agon-startup-line-2');
-    if (line2) line2.classList.add('is-playing');
-    await wait(1400);
-
-    // Message 3
-    const line3 = loader.querySelector('.agon-startup-line-3');
-    if (line3) line3.classList.add('is-playing');
-    await wait(700); // durée animation (0.5s) + marge
+    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 700);
+    await playStartupLine(loader.querySelector('.agon-startup-line-2'), 900);
+    await playStartupLine(loader.querySelector('.agon-startup-line-3'), 1200);
 
     introSequenceDone = true;
     tryHide();
@@ -14359,7 +14378,11 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
   }
 
   if (!shouldReveal) {
-    article.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const section = article.closest('.theme-row-section');
+    const target = section?.querySelector('.theme-row-title') || article;
+    const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
+    const targetTop = target.getBoundingClientRect().top + window.scrollY - topbarH + 8;
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
   }
 }
 
@@ -14914,6 +14937,7 @@ function appendCarouselBatchBeforeSentinel(row, sentinel, batch) {
   const inner = sentinel.parentNode;
   while (tmp.firstChild) inner.insertBefore(tmp.firstChild, sentinel);
   hydrateLazyCarouselCards(inner, row);
+  syncIndexCarouselDots(row);
 }
 
 function handleBubbleTagClick(bubble) {
@@ -15470,6 +15494,42 @@ function updateIndexThemeRowSwipeButtons(row) {
   if (jumpStart) jumpStart.classList.toggle("is-hidden", !canScroll || isAtStart);
 }
 
+function syncIndexCarouselDots(row) {
+  const section = row?.closest?.(".theme-row-section");
+  if (!section) return;
+
+  const cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+  const total = Math.max(cards.length, Number(row.dataset.carouselTotal || cards.length) || cards.length);
+  const dotCount = Math.min(10, total);
+  let dots = section.querySelector(":scope > .theme-carousel-dots");
+
+  if (dotCount <= 1) {
+    dots?.remove();
+    return;
+  }
+
+  if (!dots) {
+    dots = document.createElement("div");
+    dots.className = "theme-carousel-dots";
+    dots.setAttribute("aria-hidden", "true");
+    section.appendChild(dots);
+  }
+
+  if (Number(dots.dataset.count || "0") !== dotCount) {
+    dots.dataset.count = String(dotCount);
+    dots.innerHTML = Array.from({ length: dotCount }, () => '<span class="theme-carousel-dot"></span>').join("");
+  }
+
+  const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
+  const activeIndex = maxScroll > 8
+    ? Math.round((row.scrollLeft / maxScroll) * (dotCount - 1))
+    : 0;
+
+  dots.querySelectorAll(".theme-carousel-dot").forEach((dot, index) => {
+    dot.classList.toggle("is-active", index === activeIndex);
+  });
+}
+
 function jumpToStartOfCarousel(button) {
   const section = button?.closest?.(".theme-row-section");
   const row = section?.querySelector?.(".theme-horizontal-row");
@@ -15705,6 +15765,7 @@ function initThematicRowDragScroll() {
           syncIndexThemeRowHeight(row);
         }
         updateIndexThemeRowSwipeButtons(row);
+        syncIndexCarouselDots(row);
 
         // Update final après arrêt du scroll
         clearTimeout(scrollEndTimer);
@@ -15718,13 +15779,18 @@ function initThematicRowDragScroll() {
             syncIndexThemeRowHeight(row);
             updateIndexThemeRowSwipeButtons(row);
           }
+          syncIndexCarouselDots(row);
         }, 120);
       });
     }, { passive: true });
-    window.matchMedia("(max-width: 768px)").addEventListener("change", e => { _isMobileCache = e.matches; });
+    window.matchMedia("(max-width: 768px)").addEventListener("change", e => {
+      _isMobileCache = e.matches;
+      syncIndexCarouselDots(row);
+    });
     updateCarouselCardHighlight(row);
     applyCarouselScaleEffects(row);
     syncIndexThemeRowHeight(row);
+    syncIndexCarouselDots(row);
 
     // Réécoute les images et vidéos lazy qui se chargent après la première mesure
     // et pourraient modifier la hauteur des cartes (ex. image lazy dans un shell sans aspect-ratio).
@@ -15741,6 +15807,7 @@ function initThematicRowDragScroll() {
     requestAnimationFrame(() => {
       ensureCarouselHints(row);
       updateIndexThemeRowSwipeButtons(row);
+      syncIndexCarouselDots(row);
     });
 
     let isDragging = false;
@@ -15998,7 +16065,7 @@ function buildIndexThematicSectionsHtml(debates) {
       const sortedAll = [...allDebates].sort(byDate);
       const inner = _buildCarouselInner(sortedAll, "À la une", 10);
       if (inner) {
-        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${Math.min(sortedAll.length, 10)}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 
@@ -16014,7 +16081,7 @@ function buildIndexThematicSectionsHtml(debates) {
     if (tensionDebates.length) {
       const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension");
       if (inner) {
-        sections.push(`<section class="theme-row-section theme-row-section--tension" data-theme="Arènes sous tension"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Arènes sous tension</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+        sections.push(`<section class="theme-row-section theme-row-section--tension" data-theme="Arènes sous tension"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Arènes sous tension</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${tensionDebates.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 
@@ -16028,7 +16095,7 @@ function buildIndexThematicSectionsHtml(debates) {
         : theme === "Médias - divertissements"
         ? "<span class='theme-title-mobile-line'>Médias</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>divertissements</span>"
         : escapeHtml(theme);
-      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+      sections.push(`<section class="theme-row-section" data-theme="${escapeAttribute(theme)}"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">${themeTitleHtml}</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${themeDebates.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
     });
 
     const uncategorized = allDebates
@@ -16038,7 +16105,7 @@ function buildIndexThematicSectionsHtml(debates) {
     if (uncategorized.length) {
       const inner = _buildCarouselInner(uncategorized, "sans-categorie");
       if (inner) {
-        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+        sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${uncategorized.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 

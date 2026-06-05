@@ -16376,6 +16376,47 @@ html.thematic-scroll .theme-row-section {
   scroll-snap-type: none;
 }
 
+.theme-carousel-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 5px auto 12px;
+  min-height: 10px;
+  pointer-events: none;
+}
+
+.theme-carousel-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(36, 48, 56, 0.28);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+  opacity: 0.76;
+  transform: scale(1);
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.theme-carousel-dot.is-active {
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 0 0 1px rgba(36, 48, 56, 0.2);
+  opacity: 1;
+  transform: scale(1.35);
+}
+
+@media (min-width: 769px) {
+  .theme-carousel-dots {
+    margin-top: 3px;
+    margin-bottom: 12px;
+  }
+
+  .theme-carousel-dot {
+    width: 7px;
+    height: 7px;
+  }
+}
+
 .theme-horizontal-row button,
 .theme-horizontal-row .debate-card-context-toggle,
 .theme-horizontal-row .debate-card-entry-button,
