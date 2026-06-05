@@ -5318,9 +5318,10 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const includeDeleteButton = options.includeDeleteButton === true;
   const categoryBadgesHtml = buildIndexCardCategoryBadgesHtml(d.category);
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
+  const isCommunityCard = !isAgonGeneratedDebate(d) && !!d.creator_key;
 
   return `
-    <article class="debate-card${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+    <article class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
       <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">

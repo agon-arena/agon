@@ -19459,3 +19459,157 @@ body.page-debate .position-argument-button {
 body.page-debate .debate-top-add-button {
   animation: debateAddBtnShine 2.4s ease-in-out 4 forwards !important;
 }
+
+/* ── Cartes créées par la communauté (hors admin) : couleurs inversées ── */
+.debate-card.debate-card--community,
+body.page-home .debate-card.debate-card--community,
+body.page-home-mobile .debate-card.debate-card--community {
+  background: #2c2c2e !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+}
+
+.debate-card.debate-card--community:hover,
+body.page-home .debate-card.debate-card--community:hover,
+body.page-home-mobile .debate-card.debate-card--community:hover {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.debate-card.debate-card--community h2 {
+  color: #ffffff !important;
+}
+
+body.page-home .debate-card.debate-card--community:not(.has-title-banner) h2,
+body.page-home-mobile .debate-card.debate-card--community:not(.has-title-banner) h2 {
+  background: linear-gradient(160deg, #3a3a3c 0%, #2c2c2e 100%) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.debate-card.debate-card--community p {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.debate-card.debate-card--community .debate-card-entry-button {
+  background: #c9c9c7 !important;
+  color: #243038 !important;
+}
+
+.debate-card.debate-card--community .debate-card-entry-button:hover,
+.debate-card.debate-card--community .debate-card-entry-button:focus-visible {
+  background: #ffffff !important;
+}
+
+.debate-card.debate-card--community .debate-card-stats-badge,
+.debate-card.debate-card--community .debate-card-ideas-count,
+.debate-card.debate-card--community .debate-card-comments-count,
+.debate-card.debate-card--community .debate-card-votes-count,
+body.page-home .debate-card.debate-card--community .debate-card-stats-badge,
+body.page-home .debate-card.debate-card--community .debate-card-ideas-count,
+body.page-home .debate-card.debate-card--community .debate-card-comments-count,
+body.page-home .debate-card.debate-card--community .debate-card-votes-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-stats-badge,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-ideas-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-comments-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-votes-count {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.debate-card.debate-card--community .debate-card-options-btn {
+  background: #c9c9c7 !important;
+  border-color: #c9c9c7 !important;
+  color: #243038 !important;
+}
+
+.debate-card.debate-card--community .debate-card-options-btn:hover,
+.debate-card.debate-card--community .debate-card-options-btn[aria-expanded="true"] {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #243038 !important;
+}
+
+.debate-card.debate-card--community .debate-card-date-badge {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.debate-card.debate-card--community .debate-card-trend-badge {
+  background: rgba(36, 48, 56, 0.85) !important;
+  border-color: currentColor !important;
+}
+
+.debate-card.debate-card--community .debate-card-entry-cta {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.debate-card.debate-card--community .debate-card-context,
+body.page-home .debate-card.debate-card--community .debate-card-context,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-context {
+  background: linear-gradient(160deg, #343438 0%, #2c2c2e 100%) !important;
+  border: none !important;
+}
+
+.debate-card.debate-card--community .debate-card-context-text,
+.debate-card.debate-card--community .debate-card-context-text p,
+.debate-card.debate-card--community .debate-card-context-text span {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.debate-card.debate-card--community .debate-card-context-toggle {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.debate-card.debate-card--community .debate-card-source,
+body.page-home .debate-card.debate-card--community .debate-card-source,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-source {
+  background: linear-gradient(160deg, #343438 0%, #2c2c2e 100%) !important;
+  border: none !important;
+}
+
+.debate-card.debate-card--community .debate-card-source-badge {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+
+.debate-card.debate-card--community .debate-card-source-title {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.debate-card.debate-card--community .debate-card-source-description {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* ── Community : bandeau titre (has-title-banner) ── */
+.debate-card.debate-card--community .index-card-title-banner,
+body.page-home .debate-card.debate-card--community .index-card-title-banner,
+body.page-home-mobile .debate-card.debate-card--community .index-card-title-banner {
+  background: linear-gradient(160deg, #3a3a3c 0%, #2c2c2e 100%) !important;
+}
+
+.debate-card.debate-card--community .index-card-media-with-title::before {
+  background: linear-gradient(to top, transparent, #2c2c2e) !important;
+}
+
+.debate-card.debate-card--community .index-card-media-with-title::after {
+  background: linear-gradient(to bottom, transparent, #2c2c2e) !important;
+}
+
+.debate-card.debate-card--community .index-card-title-banner-text {
+  text-shadow: none !important;
+  color: #ffffff !important;
+}
+
+/* ── Community : neutralise les overlays ::before et ::after conçus pour le fond bleu ── */
+body.page-home .debate-card.debate-card--community::before,
+body.page-home-mobile .debate-card.debate-card--community::before {
+  background: none !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+body.page-home .debate-card.debate-card--community::after,
+body.page-home-mobile .debate-card.debate-card--community::after {
+  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.5)) !important;
+}
