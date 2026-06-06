@@ -14487,7 +14487,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       data-index-context-card
       role="button"
       tabindex="0"
-      onclick="(function(e){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
+      onclick="(function(e){ const article = e.currentTarget.closest('.debate-card'); if(article && article.classList.contains('index-card-context-open')) return; const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
       onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
@@ -15328,6 +15328,8 @@ function showAgonOnlyFromTagCloud() {
   if (_tagCloudSecondaryMode) {
     _restoreMainTagCloud();
   }
+
+  clearActiveBubbles();
 
   const firstBand = document.querySelector(".theme-row-section--a-la-une") || document.querySelector(".theme-row-section");
   if (!firstBand) return;
@@ -16423,15 +16425,18 @@ function buildIndexThematicSectionsHtml(debates) {
     _carouselPendingBatches.clear();
     const allDebates = Array.isArray(debates) ? debates : [];
     const sections = [];
+    const isMobile = window.innerWidth <= 768;
+    const carouselInitial = isMobile ? 2 : _CAROUSEL_INITIAL;
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
-    // ── À la une : toutes les publications, les plus récentes en tête ──
-    if (allDebates.length) {
-      const sortedAll = [...allDebates].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une", 10);
+    // ── À la une : toujours les 20 premières, jamais filtrées par bulle ──
+    const alaUneSource = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : allDebates;
+    if (alaUneSource.length) {
+      const sortedAll = [...alaUneSource].sort(byDate);
+      const inner = _buildCarouselInner(sortedAll, "À la une", 20);
       if (inner) {
-        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${Math.min(sortedAll.length, 10)}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
+        sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${Math.min(sortedAll.length, 20)}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
     }
 
@@ -16445,7 +16450,7 @@ function buildIndexThematicSectionsHtml(debates) {
           - new Date(a.last_activity_at || a.last_argument_at || a.created_at || 0);
       });
     if (tensionDebates.length) {
-      const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension");
+      const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension", carouselInitial);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--tension" data-theme="Arènes sous tension"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Arènes sous tension</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${tensionDebates.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
@@ -16454,7 +16459,7 @@ function buildIndexThematicSectionsHtml(debates) {
     DEBATE_CATEGORY_OPTIONS.forEach((theme) => {
       const themeDebates = allDebates.filter((d) => debateHasCategory(d.category, theme)).sort(byDate);
       if (!themeDebates.length) return;
-      const inner = _buildCarouselInner(themeDebates, theme);
+      const inner = _buildCarouselInner(themeDebates, theme, carouselInitial);
       if (!inner) return;
       const themeTitleHtml = theme === "Philosophie - sciences sociales"
         ? "<span class='theme-title-mobile-line'>Philosophie</span><span class='theme-philo-sep'> - </span><span class='theme-title-mobile-line'>sciences sociales</span>"
@@ -16469,7 +16474,7 @@ function buildIndexThematicSectionsHtml(debates) {
       .sort(byDate);
 
     if (uncategorized.length) {
-      const inner = _buildCarouselInner(uncategorized, "sans-categorie");
+      const inner = _buildCarouselInner(uncategorized, "sans-categorie", carouselInitial);
       if (inner) {
         sections.push(`<section class="theme-row-section" data-theme="sans-categorie"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Sans thématique</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${uncategorized.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
