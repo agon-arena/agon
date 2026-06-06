@@ -1,9 +1,21 @@
+const SW_VERSION = "20260606-v5";
+
 self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+// Force les pages HTML à être toujours rechargées depuis le réseau (contourne le cache iOS PWA)
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() => fetch(event.request))
+    );
+    return;
+  }
 });
 
 self.addEventListener("push", (event) => {

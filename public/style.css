@@ -9931,6 +9931,10 @@ body.page-home.page-home-mobile {
   grid-area: spacer;
 }
 
+body.is-standalone .topbar {
+  padding-top: calc(5px + env(safe-area-inset-top, 0px));
+}
+
 body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
@@ -12035,6 +12039,12 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
 /* Bloc titre débat — version plus lisible et mieux tenue */
 body.page-debate .debate-hero-outer {
   margin-top: 4px !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .debate-hero-outer {
+    margin-top: 20px !important;
+  }
 }
 
 body.page-debate .debate-hero-top {
@@ -15345,6 +15355,12 @@ body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
   body.page-debate.debate-embedded-frame.debate-topbar-hidden .debate-hero-outer {
     top: 0 !important;
     margin-top: 0 !important;
+  }
+
+  body.is-standalone.page-debate.debate-embedded-frame .debate-hero-outer,
+  body.is-standalone.page-debate.debate-embedded-frame.debate-topbar-hidden .debate-hero-outer {
+    top: 26px !important;
+    margin-top: 22px !important;
   }
 }
 

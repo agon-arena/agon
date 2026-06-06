@@ -175,6 +175,13 @@ const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
 
+// Nettoie la clé dismissed corrompue par l'ancien bug (iOS "denied" par défaut)
+try {
+  if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1" && lsGet(PUSH_SUBSCRIBED_KEY) !== "1") {
+    localStorage.removeItem(PUSH_INVITE_DISMISSED_KEY);
+  }
+} catch {}
+
 function isMobilePushInviteSurface() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
@@ -203,8 +210,19 @@ function isIOSDevice() {
 }
 
 function isStandaloneMode() {
-  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  if (window.matchMedia("(display-mode: standalone)").matches || !!window.navigator.standalone) return true;
+  if (document.body && document.body.classList.contains("is-standalone")) return true;
+  try {
+    if (window !== window.top) {
+      if (!!window.top.navigator.standalone) return true;
+      if (window.top.matchMedia("(display-mode: standalone)").matches) return true;
+      if (window.parent.document.body.classList.contains("is-standalone")) return true;
+    }
+  } catch {}
+  return false;
 }
+
+if (isStandaloneMode()) document.body.classList.add("is-standalone");
 
 function ensurePushMenuItemElement() {
   let item = document.getElementById("push-menu-item");
@@ -248,7 +266,7 @@ function ensurePushDeniedModal() {
       <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
       <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
       <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
-      <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+      <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : <strong style="color:#a0b0bb">Réglages → Agôn → Notifications → Autoriser</strong></p>
       <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
     </div>
   `;
@@ -264,10 +282,8 @@ function shouldShowPushInvite({ ignoreCooldown = false } = {}) {
 
   if (isStandaloneMode()) {
     if (!browserCanUsePushNotifications()) return false;
-    if (Notification.permission === "denied") return false;
     if (lsGet(PUSH_SUBSCRIBED_KEY) === "1") return false;
-    // cooldown toujours appliqué en standalone (pas d'ignoreCooldown)
-    if (lastShownAt && Date.now() - lastShownAt < PUSH_INVITE_COOLDOWN_MS) return false;
+    if (!ignoreCooldown && lastShownAt && Date.now() - lastShownAt < PUSH_INVITE_COOLDOWN_MS) return false;
     return true;
   }
 
@@ -286,67 +302,84 @@ function ensurePushInviteStyles() {
   const style = document.createElement("style");
   style.id = "push-invite-styles";
   style.textContent = `
-    .push-invite-toast {
+    .push-invite-overlay {
       position: fixed;
-      left: 50%;
-      top: 50%;
-      width: min( calc(100vw - 24px), 420px );
-      transform: translate(-50%, -50%);
+      inset: 0;
       z-index: 2147483000;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 10px;
+      justify-content: center;
+      padding: 20px;
       box-sizing: border-box;
-      padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 8px;
-      background: rgba(23, 31, 38, 0.96);
-      color: #fff;
-      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
     }
-    .push-invite-copy { min-width: 0; }
+    .push-invite-toast {
+      position: relative;
+      width: min(100%, 360px);
+      box-sizing: border-box;
+      padding: 28px 22px 22px;
+      border: 1px solid #dbeafe;
+      border-radius: 24px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      color: #111827;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22), 0 8px 24px rgba(59, 130, 246, 0.10);
+      text-align: center;
+    }
+    .push-invite-icon {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .push-invite-icon img {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+      box-shadow: 0 8px 20px rgba(17, 24, 39, 0.18);
+    }
+    .push-invite-copy { margin-bottom: 20px; }
     .push-invite-title {
-      margin: 0;
-      font-size: 14px;
+      margin: 0 0 8px;
+      font-size: 20px;
       line-height: 1.2;
-      font-weight: 700;
+      font-weight: 800;
+      color: #111827;
     }
     .push-invite-text {
-      margin: 3px 0 0;
-      color: rgba(255, 255, 255, 0.78);
-      font-size: 12px;
-      line-height: 1.3;
+      margin: 0;
+      color: #4b5563;
+      font-size: 13px;
+      line-height: 1.5;
     }
     .push-invite-actions {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 0 0 auto;
+      flex-direction: column;
+      gap: 10px;
     }
     .push-invite-btn {
-      min-height: 36px;
+      width: 100%;
+      min-height: 46px;
       border: 0;
-      border-radius: 8px;
-      padding: 0 12px;
+      border-radius: 999px;
+      padding: 0 16px;
       font: inherit;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
     }
     .push-invite-btn-primary {
-      background: #f4c95d;
-      color: #162027;
+      background: #111827;
+      color: #ffffff;
     }
     .push-invite-btn-secondary {
-      background: rgba(255, 255, 255, 0.10);
-      color: #fff;
+      background: #f3f4f6;
+      color: #4b5563;
+      font-weight: 600;
     }
     @media (min-width: 769px) {
-      .push-invite-toast { display: none; }
+      .push-invite-overlay { display: none; }
     }
   `;
   document.head.appendChild(style);
@@ -386,12 +419,13 @@ async function enablePushNotificationsFromInvite() {
     if (!keyData?.available || !publicKey) throw new Error("push-key-unavailable");
 
     let permission = Notification.permission;
-    if (permission === "default") {
+    if (permission !== "granted") {
       permission = await Notification.requestPermission();
     }
 
     if (permission !== "granted") {
-      if (permission === "denied") lsSet(PUSH_INVITE_DISMISSED_KEY, "1");
+      // Sur iOS standalone, "denied" est l'état par défaut avant toute vraie demande — ne pas marquer comme dismissé
+      if (permission === "denied" && !isStandaloneMode()) lsSet(PUSH_INVITE_DISMISSED_KEY, "1");
       hidePushInvite();
       return;
     }
@@ -424,6 +458,42 @@ async function enablePushNotificationsFromInvite() {
   } finally {
     pushInviteEnablePending = false;
   }
+}
+
+function openInstallModalFallback() {
+  if (document.getElementById("agon-install-modal-fallback")) {
+    document.getElementById("agon-install-modal-fallback").style.display = "flex";
+    document.body.style.overflow = "hidden";
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "agon-install-modal-fallback";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.style.display = "none"; document.body.style.overflow = ""; } });
+
+  overlay.innerHTML = `
+    <div class="install-modal" onclick="event.stopPropagation()">
+      <button class="install-modal-close" type="button" aria-label="Fermer"
+        onclick="document.getElementById('agon-install-modal-fallback').style.display='none';document.body.style.overflow='';">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="install-modal-brand">
+        <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+      </div>
+      <h3 class="install-modal-title">Installer l'icône Agôn</h3>
+      <div class="install-modal-section">
+        <ol class="install-modal-steps">
+          <li><span class="install-modal-step-icon"><i class="fa-brands fa-safari" style="font-size:17px;color:#006CFF;"></i></span><span>Ouvre cette page dans <strong>Safari</strong> (pas Chrome ni autre).</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-solid fa-ellipsis" style="font-size:15px;color:#111827;"></i></span><span>Appuie sur <strong>…</strong> en bas de Safari.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-solid fa-arrow-up-from-bracket" style="font-size:15px;color:#111827;"></i></span><span>Appuie sur <strong>Partager</strong>.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-regular fa-square-plus" style="font-size:17px;color:#111827;"></i></span><span>Choisis <strong>Ajouter à l'écran d'accueil</strong>.</span></li>
+        </ol>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = "hidden";
 }
 
 function showPushInvite(reason = "action", options = {}) {
@@ -474,7 +544,11 @@ function showPushInvite(reason = "action", options = {}) {
     primaryButton.textContent = "Voir comment";
     primaryButton.addEventListener("click", () => {
       hidePushInvite();
-      if (typeof window.openInstallModal === "function") window.openInstallModal();
+      if (typeof window.openInstallModal === "function") {
+        window.openInstallModal();
+      } else {
+        openInstallModalFallback();
+      }
     });
   } else {
     // Android → install PWA
@@ -489,22 +563,42 @@ function showPushInvite(reason = "action", options = {}) {
     });
   }
 
+  const icon = document.createElement("div");
+  icon.className = "push-invite-icon";
+  icon.innerHTML = '<img src="/appagon-192.png" alt="Agôn">';
+
   copy.append(title, text);
-  actions.append(laterButton, primaryButton);
-  toast.append(copy, actions);
-  document.body.appendChild(toast);
-  pushInviteToastEl = toast;
+  actions.append(primaryButton, laterButton);
+
+  toast.append(icon, copy, actions);
+
+  const overlay = document.createElement("div");
+  overlay.className = "push-invite-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) hidePushInvite(); });
+  overlay.appendChild(toast);
+
+  document.body.appendChild(overlay);
+  pushInviteToastEl = overlay;
 }
 
 function showPushInviteAfterAction(reason = "action") {
   window.setTimeout(() => {
     try {
+      if (window !== window.top) {
+        window.parent.postMessage({ type: "agon:push-invite-action", reason }, "*");
+        return;
+      }
       showPushInvite(reason, { ignoreCooldown: true });
-    } catch (error) {
-      console.error(error);
-    }
+    } catch {}
   }, 450);
 }
+
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "agon:push-invite-action" && window === window.top) {
+    try { showPushInvite(e.data.reason || "action", { ignoreCooldown: true }); } catch {}
+  }
+});
 
 let argumentsVisible = 6;
 
@@ -3771,7 +3865,7 @@ function _showEpisodeNavNotFound() {
     notice.className = "custom-toast";
     document.body.appendChild(notice);
   }
-  notice.textContent = "L’histoire ciblée n’a pas pu être retrouvée.";
+  notice.textContent = "L'histoire ciblée n'a pas pu être retrouvée.";
   notice.classList.add("show");
   clearTimeout(notice._hideTimer);
   notice._hideTimer = setTimeout(() => notice.classList.remove("show"), 3500);
@@ -5832,8 +5926,8 @@ function buildIndexOpenGraphImageLoadingHtml() {
           <span>Source</span>
         </div>
         <div class="index-social-loading-placeholder-spinner" aria-hidden="true"></div>
-        <div class="index-social-loading-placeholder-title">Chargement de l’image…</div>
-        <div class="index-social-loading-placeholder-subtitle">L’aperçu se prépare.</div>
+        <div class="index-social-loading-placeholder-title">Chargement de l'image…</div>
+        <div class="index-social-loading-placeholder-subtitle">L'aperçu se prépare.</div>
       </div>
     </div>
   `;
@@ -10972,7 +11066,7 @@ function getDebateShareText() {
     return [
       question,
       "",
-      "Qu’est-ce qui vous paraît le plus convaincant ?"
+      "Qu'est-ce qui vous paraît le plus convaincant ?"
     ].join("\n");
   }
 
@@ -10982,7 +11076,7 @@ function getDebateShareText() {
     `${percentA}% — ${optionA}`,
     `${percentB}% — ${optionB}`,
     "",
-    "Qu’est-ce qui vous paraît le plus convaincant ?"
+    "Qu'est-ce qui vous paraît le plus convaincant ?"
   ].join("\n");
 }
 
@@ -11062,7 +11156,7 @@ function getIdeaShareData(debateId, argument) {
     textParts.push("");
   }
 
-  textParts.push("Qu’est-ce qui vous paraît le plus convaincant ?");
+  textParts.push("Qu'est-ce qui vous paraît le plus convaincant ?");
 
   return {
     title: `${ideaTitle} — ${question}`,
@@ -11545,7 +11639,7 @@ function openQrCodeFullscreen(title, url) {
       </div>
 
       <div style="margin-top:14px; color:rgba(255,255,255,0.82); font-size:13px; line-height:1.45;">
-        Touchez l’arrière-plan ou la croix pour fermer.
+        Touchez l'arrière-plan ou la croix pour fermer.
       </div>
     </div>
   `;
@@ -11623,7 +11717,7 @@ function showQrCodeModal(title, url, helperText = "Scannez ce QR code pour ouvri
       </div>
 
       <div style="margin:-2px 0 14px; font-size:12px; color:#6b7280;">
-        Touchez le QR code pour l’agrandir.
+        Touchez le QR code pour l'agrandir.
       </div>
 
       <div style="margin:0 0 18px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb; font-size:12px; line-height:1.45; color:#4b5563; word-break:break-word;">
@@ -11799,7 +11893,7 @@ function getGlobalShareData() {
       text: [
         "Ouvrir une arène sur agôn.",
         "",
-        `Qu’est-ce qui vous paraît le plus convaincant ?`
+        `Qu'est-ce qui vous paraît le plus convaincant ?`
       ].join("\n"),
       url: `${window.location.origin}/create`
     };
@@ -11810,7 +11904,7 @@ function getGlobalShareData() {
     text: [
       "Découvrez agôn.",
       "",
-     `Qu’est-ce qui vous paraît le plus convaincant ?`
+     `Qu'est-ce qui vous paraît le plus convaincant ?`
     ].join("\n"),
     url: `${window.location.origin}/`
   };
@@ -12042,7 +12136,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
     lines.push("");
   }
 
-  lines.push("Qu’est-ce qui vous paraît le plus convaincant ?");
+  lines.push("Qu'est-ce qui vous paraît le plus convaincant ?");
   lines.push(`→ agôn ${url}`);
 
   return {
@@ -12685,7 +12779,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
 
     if (notification.type === "comment_on_argument") {
       icon = "💬";
-      title = "Quelqu’un a commenté votre idée";
+      title = "Quelqu'un a commenté votre idée";
       subtitle = "Ouvrir le commentaire";
     }
 
@@ -12713,7 +12807,7 @@ if (notification.type === "replacement_accepted") {
 }
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
-  title = "Quelqu’un a répondu à votre commentaire";
+  title = "Quelqu'un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
 if (notification.type === "majority_gained") {
@@ -17308,14 +17402,14 @@ function renderDebateEpisodeNavigation(debate) {
   if (nextUrl) {
     const nextTitle = String(debate?.next_episode_title || "Épisode suivant").trim();
     buttons.push(
-      `<a class="debate-episode-link debate-episode-link-next" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l’épisode suivant</a>`
+      `<a class="debate-episode-link debate-episode-link-next" href="${escapeHtml(nextUrl)}" title="${escapeHtml(nextTitle)}">Voir l'épisode suivant</a>`
     );
   }
 
   if (previousUrl) {
     const previousTitle = String(debate?.previous_episode_title || "Épisode précédent").trim();
     buttons.push(
-      `<a class="debate-episode-link debate-episode-link-previous" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l’épisode précédent</a>`
+      `<a class="debate-episode-link debate-episode-link-previous" href="${escapeHtml(previousUrl)}" title="${escapeHtml(previousTitle)}">Voir l'épisode précédent</a>`
     );
   }
 
@@ -17495,7 +17589,7 @@ function loadVideoMetadataFromFile(file, options = {}) {
     };
 
     video.onerror = () => {
-      safeReject(new Error("Impossible d’analyser la vidéo avant envoi."));
+      safeReject(new Error("Impossible d'analyser la vidéo avant envoi."));
     };
 
     video.src = objectUrl;
@@ -18412,7 +18506,7 @@ function setCreatePendingVideoUploadState(nextState) {
       startedAt: Number(nextState.startedAt || Date.now()) || Date.now()
     }));
   } catch (error) {
-    console.warn("[video-upload] impossible de mémoriser l’état de reprise.", error);
+    console.warn("[video-upload] impossible de mémoriser l'état de reprise.", error);
   }
 }
 
@@ -18439,7 +18533,7 @@ async function resumePendingCreateVideoUpload() {
   }
 
   startCreatePublishSession();
-  setCreatePublishProgress(96, "Reprise de la vidéo", "Vérification de l’envoi précédent…");
+  setCreatePublishProgress(96, "Reprise de la vidéo", "Vérification de l'envoi précédent…");
 
   try {
     const status = await fetchJSON(
@@ -18452,7 +18546,7 @@ async function resumePendingCreateVideoUpload() {
 
     if (status?.finalized) {
       clearCreatePendingVideoUploadState();
-      setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l’arène…");
+      setCreatePublishProgress(100, "Publication terminée", "La vidéo était déjà finalisée. Redirection vers l'arène…");
       markCreatedDebateContext(debateId, resolveCreateReturnUrl());
       window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
       return true;
@@ -18463,7 +18557,7 @@ async function resumePendingCreateVideoUpload() {
       hideCreatePublishProgress();
       showReplacementSuccessMessage(
         "Upload interrompu",
-        "La vidéo n’a pas été retrouvée dans le stockage. Il faut relancer l’envoi depuis la page de création.",
+        "La vidéo n'a pas été retrouvée dans le stockage. Il faut relancer l'envoi depuis la page de création.",
         null,
         "⚠️"
       );
@@ -18491,7 +18585,7 @@ async function resumePendingCreateVideoUpload() {
     );
 
     clearCreatePendingVideoUploadState();
-    setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l’arène. Redirection…");
+    setCreatePublishProgress(100, "Publication terminée", "La vidéo a été rattachée à l'arène. Redirection…");
     markCreatedDebateContext(debateId, resolveCreateReturnUrl());
     window.location.href = `/debate?id=${encodeURIComponent(debateId)}`;
     return true;
@@ -18504,7 +18598,7 @@ async function resumePendingCreateVideoUpload() {
     hideCreatePublishProgress();
     showReplacementSuccessMessage(
       "Reprise impossible",
-      "La vidéo a peut-être déjà été envoyée, mais sa finalisation n’a pas pu être reprise automatiquement. Recharge la page de création ou ouvre l’arène pour vérifier.",
+      "La vidéo a peut-être déjà été envoyée, mais sa finalisation n'a pas pu être reprise automatiquement. Recharge la page de création ou ouvre l'arène pour vérifier.",
       null,
       "⚠️"
     );
@@ -18533,7 +18627,7 @@ function startCreatePublishSession() {
 function cancelCreatePublishSession() {
   createPublishCancelRequested = true;
   setCreatePublishCancelState(true);
-  setCreatePublishProgress(currentCreatePublishProgressValue, "Annulation en cours", "La publication est en train d’être interrompue…");
+  setCreatePublishProgress(currentCreatePublishProgressValue, "Annulation en cours", "La publication est en train d'être interrompue…");
 
   if (createPublishAbortController) {
     createPublishAbortController.abort();
@@ -18707,11 +18801,11 @@ function updateCreateSubmitAvailability(showIncompleteMessage = false) {
   if (submitButton.classList.contains("create-submit-loading")) return;
 
   const { isValid } = getCreateValidationState();
-  const helperMessage = "Complète tous les champs requis pour créer l’arène.";
+  const helperMessage = "Complète tous les champs requis pour créer l'arène.";
 
   submitButton.disabled = false;
   submitButton.removeAttribute("aria-disabled");
-  submitButton.title = "Créer l’arène";
+  submitButton.title = "Créer l'arène";
 
   if (submitHelper) {
     const shouldShowMessage = showIncompleteMessage && !isValid;
@@ -18739,7 +18833,7 @@ function getCreateValidationError() {
   if (selectedType !== "open" && !optionA) {
     return {
       title: "Champs incomplets",
-      message: "Complète tous les champs requis pour créer l’arène.",
+      message: "Complète tous les champs requis pour créer l'arène.",
       focusElement: document.getElementById("option_a")
     };
   }
@@ -18747,7 +18841,7 @@ function getCreateValidationError() {
   if (selectedType !== "open" && !optionB) {
     return {
       title: "Champs incomplets",
-      message: "Complète tous les champs requis pour créer l’arène.",
+      message: "Complète tous les champs requis pour créer l'arène.",
       focusElement: document.getElementById("option_b")
     };
   }
@@ -18755,7 +18849,7 @@ function getCreateValidationError() {
   if (resourceMode === "source" && !sourceUrl) {
     return {
       title: "Champs incomplets",
-      message: "Complète tous les champs requis pour créer l’arène.",
+      message: "Complète tous les champs requis pour créer l'arène.",
       focusElement: document.getElementById("source_url")
     };
   }
@@ -18975,7 +19069,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Sujet manquant",
-      "Tu dois renseigner le sujet de l’arène avant de la créer.",
+      "Tu dois renseigner le sujet de l'arène avant de la créer.",
       null,
       "⚠️"
     );
@@ -18988,7 +19082,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Thématique manquante",
-      "Tu dois choisir une thématique avant de créer l’arène.",
+      "Tu dois choisir une thématique avant de créer l'arène.",
       null,
       "⚠️"
     );
@@ -19015,7 +19109,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Image manquante",
-      "Tu as choisi l’import d’image, mais aucun fichier n’a été sélectionné.",
+      "Tu as choisi l'import d'image, mais aucun fichier n'a été sélectionné.",
       null,
       "⚠️"
     );
@@ -19027,7 +19121,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Format non pris en charge",
-      "Le fichier sélectionné n’est pas une image valide.",
+      "Le fichier sélectionné n'est pas une image valide.",
       null,
       "⚠️"
     );
@@ -19039,7 +19133,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Vidéo manquante",
-      "Tu as choisi l’import vidéo, mais aucun fichier n’a été sélectionné.",
+      "Tu as choisi l'import vidéo, mais aucun fichier n'a été sélectionné.",
       null,
       "⚠️"
     );
@@ -19051,7 +19145,7 @@ form.addEventListener("submit", async e => {
     resetCreateSubmitButton();
     showReplacementSuccessMessage(
       "Format non pris en charge",
-      "Le fichier sélectionné n’est pas une vidéo valide.",
+      "Le fichier sélectionné n'est pas une vidéo valide.",
       null,
       "⚠️"
     );
@@ -19069,12 +19163,12 @@ form.addEventListener("submit", async e => {
     let image_upload = null;
 
     if (imageFile) {
-      setCreatePublishProgress(8, "Préparation de l’image", "Lecture du fichier image…");
+      setCreatePublishProgress(8, "Préparation de l'image", "Lecture du fichier image…");
       const imageDataUrl = await readFileAsDataUrl(imageFile, {
         onProgress: (progress) => {
           setCreatePublishProgress(
             mapProgressRange(progress, 8, 32),
-            "Préparation de l’image",
+            "Préparation de l'image",
             `Lecture du fichier image… ${Math.round(progress)}%`
           );
         }
@@ -19103,8 +19197,8 @@ form.addEventListener("submit", async e => {
 
     setCreatePublishProgress(
       imageFile ? 34 : 12,
-      "Création de l’arène",
-      imageFile ? "Envoi du débat et de l’image au serveur…" : "Envoi du débat au serveur…"
+      "Création de l'arène",
+      imageFile ? "Envoi du débat et de l'image au serveur…" : "Envoi du débat au serveur…"
     );
 
     const r = await createXhrRequest(API + "/debates", {
@@ -19116,7 +19210,7 @@ form.addEventListener("submit", async e => {
         if (progress >= 100) {
           setCreatePublishProgress(
             78,
-            "Création de l’arène",
+            "Création de l'arène",
             imageFile
               ? "Téléversement terminé, finalisation côté serveur…"
               : "Envoi terminé, finalisation côté serveur…"
@@ -19130,16 +19224,16 @@ form.addEventListener("submit", async e => {
 
         setCreatePublishProgress(
           mapped,
-          "Création de l’arène",
+          "Création de l'arène",
           imageFile
-            ? `Envoi du débat et de l’image au serveur… ${Math.round(progress)}%`
+            ? `Envoi du débat et de l'image au serveur… ${Math.round(progress)}%`
             : `Envoi du débat au serveur… ${Math.round(progress)}%`
         );
       },
       onUploadComplete: () => {
         setCreatePublishProgress(
           78,
-          "Création de l’arène",
+          "Création de l'arène",
           imageFile
             ? "Téléversement terminé, finalisation côté serveur…"
             : "Envoi terminé, finalisation côté serveur…"
@@ -19368,7 +19462,7 @@ form.addEventListener("submit", async e => {
     }
 
     clearCreatePendingVideoUploadState();
-    setCreatePublishProgress(100, "Publication terminée", "Redirection vers l’arène…");
+    setCreatePublishProgress(100, "Publication terminée", "Redirection vers l'arène…");
     markCreateToDebateLoadingTransition();
     markCreatedDebateContext(r.id, resolveCreateReturnUrl());
     location = "/debate?id=" + r.id;
@@ -19377,7 +19471,7 @@ form.addEventListener("submit", async e => {
       hideCreatePublishProgress();
       showReplacementSuccessMessage(
         "Publication annulée",
-        "La création de l’arène a bien été interrompue.",
+        "La création de l'arène a bien été interrompue.",
         null,
         "⚪"
       );
@@ -22337,9 +22431,9 @@ return `
     </button>
 
 <div class="comments-summary-details">
-  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l’idée</span>
-  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l’idée</span>
-  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d’amélioration</span>
+  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l'idée</span>
+  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l'idée</span>
+  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d'amélioration</span>
 </div>
   </div>
 
@@ -22391,12 +22485,12 @@ ${
       <div class="comment-stance-row">
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          ✓ Soutient l’idée
+          ✓ Soutient l'idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          ✕ Conteste l’idée
+          ✕ Conteste l'idée
         </label>
 
         <label class="comment-stance-option">
@@ -22431,7 +22525,7 @@ ${
 <textarea
   id="comment-improvement-body-${a.id}"
   class="comment-improvement-body-input"
-  placeholder="Texte proposé pour remplacer l’idée"
+  placeholder="Texte proposé pour remplacer l'idée"
   maxlength="600"
   oninput="updateCounter('comment-improvement-body-${a.id}','count-improvement-body-${a.id}',600)"
 ></textarea>
@@ -22468,9 +22562,9 @@ const likes = Number(c.likes || 0);
   ` : ""}             
 ${
   c.stance === "favorable"
-    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
+    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l'idée</div>`
     : c.stance === "defavorable"
-      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
+      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l'idée</div>`
       : c.stance === "amelioration"
         ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
         : ""
@@ -22787,9 +22881,9 @@ ${renderManualWritingBadge(a)}
             </button>
 
 <div class="comments-summary-details">
-  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l’idée</span>
-  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l’idée</span>
-  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d’amélioration</span>
+  <span class="comments-count-favorable">✓ ${favorableCommentsCount} soutien${favorableCommentsCount > 1 ? "nent" : "t"} l'idée</span>
+  <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l'idée</span>
+  <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d'amélioration</span>
 </div>
 </div>
           </div>
@@ -22840,12 +22934,12 @@ ${
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          ✓ Soutient l’idée
+          ✓ Soutient l'idée
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          ✕ Conteste l’idée
+          ✕ Conteste l'idée
         </label>
 
         <label class="comment-stance-option">
@@ -22880,7 +22974,7 @@ ${
 <textarea
   id="comment-improvement-body-${a.id}"
   class="comment-improvement-body-input"
-  placeholder="Texte proposé pour remplacer l’idée"
+  placeholder="Texte proposé pour remplacer l'idée"
   maxlength="600"
   oninput="updateCounter('comment-improvement-body-${a.id}','count-improvement-body-${a.id}',600)"
 ></textarea>
@@ -22921,9 +23015,9 @@ const likes = Number(c.likes || 0);
 
 ${
   c.stance === "favorable"
-    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
+    ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l'idée</div>`
     : c.stance === "defavorable"
-      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
+      ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l'idée</div>`
       : c.stance === "amelioration"
         ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
         : ""
@@ -24280,9 +24374,9 @@ function renderCommentRepliesPanelMarkup(debateId, argumentId, repliesByParent =
           const currentVoteValue = Number(commentLikeState[replyId] || 0);
           const likes = Number(reply?.likes || 0);
           const stanceBadge = reply.stance === "favorable"
-            ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l’idée</div>`
+            ? `<div class="comment-stance-badge comment-stance-favorable">✓ Soutient l'idée</div>`
             : reply.stance === "defavorable"
-              ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l’idée</div>`
+              ? `<div class="comment-stance-badge comment-stance-defavorable">✕ Conteste l'idée</div>`
               : reply.stance === "amelioration"
                 ? `<div class="comment-stance-badge comment-stance-amelioration">↻ Propose une amélioration</div>`
                 : `<div class="comment-reply-label">Réponse</div>`;
@@ -24571,7 +24665,7 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
       showReplacementSuccessMessage(
         "💡 Idée remplacée",
-        "Cette amélioration a dépassé l’idée originale et la remplace désormais."
+        "Cette amélioration a dépassé l'idée originale et la remplace désormais."
       );
 
       return;
@@ -24586,7 +24680,7 @@ async function voteComment(debateId, commentId, argumentId, value, button = null
 
     if (shouldWarnAboutReplacement) {
       showVoteWarning(
-        "Cette proposition d'amélioration peut remplacer l’idée :",
+        "Cette proposition d'amélioration peut remplacer l'idée :",
         "👉  si elle obtient plus de likes que l'idée n'a de voix, elle prendra sa place."
       );
     }
@@ -26025,7 +26119,7 @@ if (notification.type === "replacement_accepted") {
 
       if (notification.type === "comment_on_argument") {
         icon = "💬";
-        title = "Quelqu’un a commenté votre idée";
+        title = "Quelqu'un a commenté votre idée";
         subtitle = "Ouvrir le commentaire";
       }
 
@@ -26042,12 +26136,12 @@ if (notification.type === "like_on_comment") {
 }
 if (notification.type === "dislike_on_comment") {
   icon = "👎";
-  title = "Votre commentaire n’a pas été apprécié";
+  title = "Votre commentaire n'a pas été apprécié";
   subtitle = "Ouvrir le commentaire";
 }
 if (notification.type === "reply_to_comment") {
   icon = "↩️";
-  title = "Quelqu’un a répondu à votre commentaire";
+  title = "Quelqu'un a répondu à votre commentaire";
   subtitle = "Ouvrir la réponse";
 }
 if (notification.type === "majority_gained") {
@@ -26220,7 +26314,7 @@ function updateIdeaVoiceDictationControls(targetId = "", isActive = false) {
     if (hint) {
       hint.textContent = isTargetRow && isActive
         ? "Dictée en cours : parlez puis appuyez sur Arrêter."
-        : "Parlez : le texte s’écrit en direct.";
+        : "Parlez : le texte s'écrit en direct.";
     }
   });
 }
@@ -26329,11 +26423,11 @@ function startIdeaVoiceDictation(targetId, button) {
   recognition.onerror = (event) => {
     const errorCode = String(event?.error || "").trim();
     if (errorCode && errorCode !== "no-speech" && errorCode !== "aborted") {
-      let message = "La dictée vocale n’a pas pu démarrer correctement.";
+      let message = "La dictée vocale n'a pas pu démarrer correctement.";
       if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
-        message = "Le micro n’est pas autorisé. Autorise l’accès au micro dans le navigateur pour utiliser la dictée.";
+        message = "Le micro n'est pas autorisé. Autorise l'accès au micro dans le navigateur pour utiliser la dictée.";
       } else if (errorCode === "audio-capture") {
-        message = "Aucun micro utilisable n’a été détecté.";
+        message = "Aucun micro utilisable n'a été détecté.";
       }
 
       showReplacementSuccessMessage(
@@ -26363,7 +26457,7 @@ function startIdeaVoiceDictation(targetId, button) {
     stopIdeaVoiceDictation({ keepText: false });
     showReplacementSuccessMessage(
       "Dictée vocale indisponible",
-      "La dictée vocale n’a pas pu être démarrée sur ce navigateur.",
+      "La dictée vocale n'a pas pu être démarrée sur ce navigateur.",
       null,
       "🎙️"
     );
@@ -27455,7 +27549,7 @@ function showAccountsComingSoonMessage() {
   closeHomeTopbarMenu();
   showReplacementSuccessMessage(
     "Comptes bientôt disponibles",
-    "Super nouvelle : agôn t’intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n’est pas encore disponible. Mais promis : elle arrive bientôt.",
+    "Super nouvelle : agôn t'intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n'est pas encore disponible. Mais promis : elle arrive bientôt.",
     null,
     "✨"
   );
@@ -27491,40 +27585,48 @@ function initPushMenuItem() {
     return;
   }
 
+  // DEBUG TEMP — à supprimer
+  const _sa = isStandaloneMode();
+  const _ns = !!window.navigator.standalone;
+  const _mm = window.matchMedia("(display-mode: standalone)").matches;
+  const _bc = document.body.classList.contains("is-standalone");
+  const _pm = "PushManager" in window;
+  const _notif = "Notification" in window;
+  const _sw = "serviceWorker" in navigator;
+
   if (!browserCanUsePushNotifications()) {
     if (icon) icon.className = "fa-regular fa-bell";
-    if (label) label.textContent = "Installer pour les alertes";
+    if (label) label.textContent = `[DBG] SA:${_sa} ns:${_ns} mm:${_mm} pm:${_pm} notif:${_notif} sw:${_sw}`;
     return;
   }
 
-  if (perm === "denied") {
+  if (perm === "denied" && !isStandaloneMode()) {
     if (icon) icon.className = "fa-regular fa-bell-slash";
     if (label) label.textContent = "Notifications bloquées";
     return;
   }
 
   if (icon) icon.className = "fa-regular fa-bell";
-  if (label) label.textContent = "Activer les alertes";
+  if (label) label.textContent = `[DBG2] SA:${_sa} ns:${_ns} mm:${_mm} bc:${_bc} pm:${_pm} perm:${perm}`;
 }
 
 async function handlePushMenuClick() {
   closeHomeTopbarMenu();
 
-  if (!browserHasNotificationSurface() || !browserCanUsePushNotifications()) {
-    showReplacementSuccessMessage(
-      "Installe Agôn pour les alertes",
-      "Sur iPhone, installe d’abord l’icône Agôn.\n\n📤 1. Appuie sur Partager dans Safari.\n📱 2. Choisis “Ajouter à l’écran d’accueil”.\n✨ 3. Ouvre Agôn depuis la nouvelle icône.\n\n🔔 Reviens ensuite ici pour activer les alertes.",
-      null,
-      '<img src="/appagon-192.png" alt="" class="push-install-app-icon">',
-      "push-install-help-icon"
-    );
+  if (!isStandaloneMode() && (!browserHasNotificationSurface() || !browserCanUsePushNotifications())) {
+    showPushInvite("menu");
     return;
   }
 
   if (Notification.permission === "denied") {
-    const modal = ensurePushDeniedModal();
-    if (modal) modal.style.display = "flex";
-    return;
+    // Sur iOS, "denied" peut être un faux état avant toute demande réelle — on tente quand même
+    const tryPerm = await Notification.requestPermission().catch(() => "denied");
+    if (tryPerm !== "granted") {
+      const modal = ensurePushDeniedModal();
+      if (modal) modal.style.display = "flex";
+      return;
+    }
+    // iOS a accordé : continuer
   }
 
   try {
@@ -27562,9 +27664,10 @@ window.closePushDeniedModal = closePushDeniedModal;
 window.toggleHomeTopbarMenu = toggleHomeTopbarMenu;
 window.closeHomeTopbarMenu = closeHomeTopbarMenu;
 
-const PUSH_STANDALONE_INVITE_DONE_KEY = "pushStandaloneInviteDone";
+const PUSH_STANDALONE_INVITE_DONE_KEY = "pushStandaloneInviteDone_v2";
 
 function maybeShowPushInviteOnStandaloneOpen() {
+  if (!isStandaloneMode()) return;
   if (lsGet(PUSH_STANDALONE_INVITE_DONE_KEY) === "1") return;
   lsSet(PUSH_STANDALONE_INVITE_DONE_KEY, "1");
   window.setTimeout(() => {

@@ -107,7 +107,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.min.css?v=20260605-carousel-vertical-lock">
+  <link rel="stylesheet" href="/style.min.css?v=20260606-debug2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -824,8 +824,8 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260605-index-pagination-scale" defer></script>
-<script src="/index-ai-badge.js?v=20260605-light-assets" defer></script>
+<script src="/script.min.js?v=20260606-debug2" defer></script>
+<script src="/index-ai-badge.js?v=20260606-debug2" defer></script>
 
 
 <!-- Remplacement des icônes de partage par un bouton unique -->
@@ -1217,26 +1217,25 @@
 
     <h3 class="install-modal-title">Installer l’icône Agôn</h3>
 
-    <!-- Contenu MOBILE -->
-    <div id="install-modal-mobile">
+    <!-- Contenu MOBILE Android -->
+    <div id="install-modal-android" style="display:none;">
       <div class="install-modal-section">
-        <h4 class="install-modal-platform"><i class="fa-brands fa-android"></i> Sur Android</h4>
         <p class="install-modal-text">Clique simplement sur le bouton :</p>
         <button class="install-modal-android-btn" id="install-pwa-btn" type="button" onclick="triggerAndroidInstall()">
-          <i class="fa-solid fa-download"></i> Installer l'icône mobile
+          <i class="fa-solid fa-download"></i> Installer l’icône mobile
         </button>
-        <p class="install-modal-text install-modal-hint">Le lien d'installation sera disponible directement depuis la page.</p>
+        <p class="install-modal-text install-modal-hint">Le lien d’installation sera disponible directement depuis la page.</p>
       </div>
+    </div>
 
-      <div class="install-modal-divider"></div>
-
+    <!-- Contenu MOBILE iPhone -->
+    <div id="install-modal-iphone" style="display:none;">
       <div class="install-modal-section">
-        <h4 class="install-modal-platform"><i class="fa-brands fa-apple"></i> Sur iPhone</h4>
         <ol class="install-modal-steps">
-          <li><span class="install-modal-step-icon">🌐</span><span>Ouvre cette page dans <strong>Safari</strong>.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-brands fa-safari" style="font-size:17px;color:#006CFF;"></i></span><span>Ouvre cette page dans <strong>Safari</strong> (pas Chrome ni autre).</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-solid fa-ellipsis" style="font-size:15px;color:#111827;"></i></span><span>Appuie sur <strong>…</strong> en bas de Safari.</span></li>
           <li><span class="install-modal-step-icon"><i class="fa-solid fa-arrow-up-from-bracket" style="font-size:15px;color:#111827;"></i></span><span>Appuie sur <strong>Partager</strong>.</span></li>
-          <li><span class="install-modal-step-icon">📱</span><span>Choisis <strong>Ajouter à l’écran d’accueil</strong>.</span></li>
-          <li><span class="install-modal-step-icon">✨</span><span>Ouvre Agôn depuis la nouvelle icône.</span></li>
+          <li><span class="install-modal-step-icon"><i class="fa-regular fa-square-plus" style="font-size:17px;color:#111827;"></i></span><span>Choisis <strong>Ajouter à l’écran d’accueil</strong>.</span></li>
         </ol>
       </div>
     </div>
@@ -1281,11 +1280,28 @@
   });
 
   window.openInstallModal = function() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     var isDesktop = window.innerWidth >= 769;
-    document.getElementById('install-modal-mobile').style.display = isDesktop ? 'none' : 'block';
-    document.getElementById('install-modal-desktop').style.display = isDesktop ? 'block' : 'none';
-    var desktopBtn = document.getElementById('install-pwa-btn-desktop');
-    if (desktopBtn) desktopBtn.style.display = deferredInstallPrompt ? 'flex' : 'none';
+
+    var androidEl = document.getElementById('install-modal-android');
+    var iphoneEl = document.getElementById('install-modal-iphone');
+    var desktopEl = document.getElementById('install-modal-desktop');
+
+    if (androidEl) androidEl.style.display = 'none';
+    if (iphoneEl) iphoneEl.style.display = 'none';
+    if (desktopEl) desktopEl.style.display = 'none';
+
+    if (isDesktop) {
+      if (desktopEl) desktopEl.style.display = 'block';
+      var desktopBtn = document.getElementById('install-pwa-btn-desktop');
+      if (desktopBtn) desktopBtn.style.display = deferredInstallPrompt ? 'flex' : 'none';
+    } else if (isIOS) {
+      if (iphoneEl) iphoneEl.style.display = 'block';
+    } else {
+      if (androidEl) androidEl.style.display = 'block';
+    }
+
     document.getElementById('install-modal-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
   };
