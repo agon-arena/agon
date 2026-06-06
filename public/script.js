@@ -27568,13 +27568,16 @@ function initPushMenuItem() {
 
   item.style.display = "";
 
-  if (!browserHasNotificationSurface()) {
+  const standalone = isStandaloneMode();
+
+  if (!standalone && !browserHasNotificationSurface()) {
     if (icon) icon.className = "fa-regular fa-bell";
     if (label) label.textContent = "Installer pour les alertes";
     return;
   }
 
-  const perm = Notification.permission;
+  const perm = typeof Notification !== "undefined" ? Notification.permission : "default";
+
   if (perm === "granted") {
     if (icon) icon.className = "fa-regular fa-bell";
     if (label) {
@@ -27585,29 +27588,20 @@ function initPushMenuItem() {
     return;
   }
 
-  // DEBUG TEMP — à supprimer
-  const _sa = isStandaloneMode();
-  const _ns = !!window.navigator.standalone;
-  const _mm = window.matchMedia("(display-mode: standalone)").matches;
-  const _bc = document.body.classList.contains("is-standalone");
-  const _pm = "PushManager" in window;
-  const _notif = "Notification" in window;
-  const _sw = "serviceWorker" in navigator;
-
-  if (!browserCanUsePushNotifications()) {
+  if (!standalone && !browserCanUsePushNotifications()) {
     if (icon) icon.className = "fa-regular fa-bell";
-    if (label) label.textContent = `[DBG] SA:${_sa} ns:${_ns} mm:${_mm} pm:${_pm} notif:${_notif} sw:${_sw}`;
+    if (label) label.textContent = "Installer pour les alertes";
     return;
   }
 
-  if (perm === "denied" && !isStandaloneMode()) {
+  if (perm === "denied" && !standalone) {
     if (icon) icon.className = "fa-regular fa-bell-slash";
     if (label) label.textContent = "Notifications bloquées";
     return;
   }
 
   if (icon) icon.className = "fa-regular fa-bell";
-  if (label) label.textContent = `[DBG2] SA:${_sa} ns:${_ns} mm:${_mm} bc:${_bc} pm:${_pm} perm:${perm}`;
+  if (label) label.textContent = "Activer les alertes";
 }
 
 async function handlePushMenuClick() {
