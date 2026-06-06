@@ -345,9 +345,14 @@
         font-size: 11px; font-weight: 700; padding: 2px 9px;
         border-radius: 20px; letter-spacing: .02em;
       }
-      .ada-pop-type-weak   { background: #fff0dd; color: #9a5200; }
-      .ada-pop-type-robust { background: #e0f5ea; color: #1a6240; }
-      .ada-pop-type-both   { background: #ddeeff; color: #1a4070; }
+      .ada-pop-type-weak    { background: #fff0dd; color: #9a5200; }
+      .ada-pop-type-average { background: #fff8e0; color: #7a5a00; }
+      .ada-pop-type-robust  { background: #e0f5ea; color: #1a6240; }
+      .ada-pop-type-both    { background: #ddeeff; color: #1a4070; }
+      .ada-pop-no-gaps {
+        font-size: 13px; color: #7a8a88; font-style: italic;
+        padding: 8px 0 4px; line-height: 1.6;
+      }
       .ada-pop-gap-text {
         font-size: 13px; color: #2a3840; font-style: italic;
         line-height: 1.5; margin-bottom: 6px;
@@ -1687,15 +1692,19 @@
         '</div></div>';
     }
 
-    const TYPE_LABEL = {
-      popular_but_weak:    'Très populaire, mais moins robuste',
-      robust_but_unpopular:'Peu soutenue, mais solide',
-      popular_and_robust:  'Populaire et robuste'
-    };
+    // Type badge CSS — labels come from the server (pre-computed)
     const TYPE_CLS = {
-      popular_but_weak:    'ada-pop-type-weak',
-      robust_but_unpopular:'ada-pop-type-robust',
-      popular_and_robust:  'ada-pop-type-both'
+      popular_but_weak:           'ada-pop-type-weak',
+      popular_but_average:        'ada-pop-type-average',
+      robust_but_less_supported:  'ada-pop-type-robust',
+      aligned_popular_and_robust: 'ada-pop-type-both'
+    };
+    // Robustness display (server-side enum → display label + CSS)
+    const ROBUST_DISPLAY = {
+      excellent: { label: 'excellent',  cls: 'ada-cat-excellent' },
+      robust:    { label: 'robuste',    cls: 'ada-cat-bon'       },
+      average:   { label: 'moyen',      cls: 'ada-cat-moyen'     },
+      weak:      { label: 'faible',     cls: 'ada-cat-faible'    }
     };
 
     const isOpen = analysis && analysis.isOpen;
@@ -1742,19 +1751,21 @@
       out += '</div>';
     }
 
-    // Écarts notables
-    const gaps = Array.isArray(pop.notableGaps) ? pop.notableGaps.slice(0, 3) : [];
-    if (gaps.length) {
-      out += '<div class="ada-pop-gaps-title">Écarts notables</div>';
+    // Écarts notables — labels et catégories viennent du serveur (code déterministe)
+    const gaps = Array.isArray(pop.notableGaps) ? pop.notableGaps : [];
+    out += '<div class="ada-pop-gaps-title">Écarts notables</div>';
+    if (gaps.length === 0) {
+      out += '<div class="ada-pop-no-gaps">Aucun écart vraiment significatif entre adhésion et solidité argumentative ne ressort clairement des données disponibles.</div>';
+    } else {
       out += '<div class="ada-pop-gaps">';
       gaps.forEach(function(gap) {
-        const typeLabel = TYPE_LABEL[gap.type] || gap.type || '';
-        const typeCls   = TYPE_CLS[gap.type]   || '';
-        const catCls    = gap.category ? 'ada-cat-' + esc(gap.category) : '';
+        const typeLabel = gap.label || '';
+        const typeCls   = TYPE_CLS[gap.type] || '';
+        const robust    = ROBUST_DISPLAY[gap.robustness] || { label: gap.robustness || '', cls: '' };
         out += '<div class="ada-pop-gap">';
         out += '<div class="ada-pop-gap-header">';
         if (typeLabel) out += '<span class="ada-pop-gap-type ' + typeCls + '">' + esc(typeLabel) + '</span>';
-        if (gap.category) out += '<span class="ada-arg-cat ' + catCls + '">' + esc(gap.category) + '</span>';
+        out += '<span class="ada-arg-cat ' + robust.cls + '">' + esc(robust.label) + '</span>';
         out += '</div>';
         if (gap.argumentText) out += '<div class="ada-pop-gap-text">"' + esc(gap.argumentText) + '"</div>';
         out += '<div class="ada-pop-gap-meta">';
