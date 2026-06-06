@@ -913,8 +913,10 @@ async function rebuildCloudBubbles() {
   }
 
   const seenTags = new Set();
+  const supersededByTrend = new Set();
   const candidates = [];
   for (const debate of (allDebates || [])) {
+    if (supersededByTrend.has(String(debate.id))) continue;
     const label = getCloudLabelFromDebate(debate.id, keywordsMap);
     if (!label) continue;
     const sourceCount = countCloudSources(debate);
@@ -924,6 +926,9 @@ async function rebuildCloudBubbles() {
     seenTags.add(normTag);
     const debateDate = debate.source_published_at || debate.created_at || now;
     const trendEntry = getDebateTrend(debate.id);
+    if (trendEntry?.matchedSubjectId) {
+      supersededByTrend.add(String(trendEntry.matchedSubjectId));
+    }
     candidates.push({
       tag: label,
       subjectId: String(debate.id),
@@ -1922,6 +1927,25 @@ const EXTERNAL_PREVIEW_CACHE_MAX = 300;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEBATES_API_CACHE_MAX = 50;
+const DEBATES_LIST_SELECT_COLUMNS = [
+  "id",
+  "question",
+  "option_a",
+  "option_b",
+  "type",
+  "content",
+  "category",
+  "source_url",
+  "image_url",
+  "video_url",
+  "media_extras",
+  "keywords",
+  "story_id",
+  "episode_nav",
+  "creator_key",
+  "created_at",
+  "bumped_at"
+].join(",");
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
 const DEBATE_DETAIL_CACHE_MAX = 500;
@@ -4480,16 +4504,18 @@ app.put("/api/admin/argument/:id", requireAdmin, async (req, res) => {
 
 app.get("/api/debates", async (req, res) => {
   try {
+    const MAX_DEBATES_PAGE_SIZE = 120;
     const rawLimit = Number.parseInt(String(req.query.limit || ""), 10);
     const rawOffset = Number.parseInt(String(req.query.offset || ""), 10);
     const hasPaginationLimit = Number.isFinite(rawLimit) && rawLimit > 0;
+    const safeLimit = hasPaginationLimit ? Math.min(rawLimit, MAX_DEBATES_PAGE_SIZE) : null;
     const safeOffset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
     const requestedSort = String(req.query.sort || "popular").trim().toLowerCase();
     const sortMode = ["popular", "recent", "old", "ideas"].includes(requestedSort)
       ? requestedSort
       : "popular";
     const cacheKey = getDebatesApiCacheKey({
-      limit: hasPaginationLimit ? rawLimit : null,
+      limit: safeLimit,
       offset: safeOffset,
       sort: sortMode
     });
@@ -4500,14 +4526,18 @@ app.get("/api/debates", async (req, res) => {
       return res.json(cachedResponse);
     }
 
-    // Logique volontairement simple et robuste : on récupère la liste complète
-    // des arènes côté serveur, on calcule les compteurs nécessaires, on trie la
-    // liste complète, puis seulement après on applique limit/offset. Ainsi le
-    // tri "Plus récentes" ne porte jamais sur les 8 cartes déjà chargées côté
-    // index, mais sur toute la table Supabase.
-    const { data: debates, error } = await supabase
+    const canPageInDatabase = hasPaginationLimit && (sortMode === "recent" || sortMode === "old");
+    let debatesQuery = supabase
       .from("debates")
-      .select("*");
+      .select(DEBATES_LIST_SELECT_COLUMNS);
+
+    if (canPageInDatabase) {
+      debatesQuery = debatesQuery
+        .order("created_at", { ascending: sortMode === "old" })
+        .range(safeOffset, safeOffset + safeLimit - 1);
+    }
+
+    const { data: debates, error } = await debatesQuery;
 
     if (error) {
       console.error(error);
@@ -4524,7 +4554,7 @@ app.get("/api/debates", async (req, res) => {
 
     const { data: args, error: argsErr } = await supabase
       .from("arguments")
-      .select("id,debate_id,side,votes,created_at")
+      .select("id,debate_id,side,votes,created_at,last_voted_at")
       .in("debate_id", sharedDebateIds);
 
     if (argsErr) {
@@ -4548,18 +4578,24 @@ app.get("/api/debates", async (req, res) => {
     const argumentIds = (args || []).map((arg) => arg.id);
     const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
 
+    for (const arg of args || []) {
+      const debateKey = String(arg.debate_id || "");
+      if (!debateKey || !arg.last_voted_at) continue;
+
+      const previousLastVoteAt = lastVoteAtByDebate.get(debateKey);
+      if (!previousLastVoteAt || new Date(arg.last_voted_at) > new Date(previousLastVoteAt)) {
+        lastVoteAtByDebate.set(debateKey, arg.last_voted_at);
+      }
+    }
+
     if (argumentIds.length) {
-      const [commentsResult, votesResult] = await Promise.all([
-        supabase.from("comments").select("id,argument_id,created_at").in("argument_id", argumentIds),
-        supabase.from("votes").select("argument_id,created_at").in("argument_id", argumentIds)
-      ]);
+      const commentsResult = await supabase
+        .from("comments")
+        .select("argument_id,created_at")
+        .in("argument_id", argumentIds);
 
       if (commentsResult.error) {
         console.error(commentsResult.error);
-        return sendServerError(res, "Erreur lecture débats.");
-      }
-      if (votesResult.error) {
-        console.error(votesResult.error);
         return sendServerError(res, "Erreur lecture débats.");
       }
 
@@ -4576,16 +4612,6 @@ app.get("/api/debates", async (req, res) => {
           if (!previousLastCommentAt || new Date(comment.created_at) > new Date(previousLastCommentAt)) {
             lastCommentAtByDebate.set(debateId, comment.created_at);
           }
-        }
-      }
-
-      for (const vote of votesResult.data || []) {
-        const debateId = debateIdByArgumentId.get(String(vote.argument_id));
-        if (!debateId || !vote.created_at) continue;
-
-        const previousLastVoteAt = lastVoteAtByDebate.get(debateId);
-        if (!previousLastVoteAt || new Date(vote.created_at) > new Date(previousLastVoteAt)) {
-          lastVoteAtByDebate.set(debateId, vote.created_at);
         }
       }
     }
@@ -4720,9 +4746,14 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const MAX_DEBATES_RESPONSE = 300;
-    const pagedRows = hasPaginationLimit || safeOffset > 0
-      ? rows.slice(safeOffset, hasPaginationLimit ? safeOffset + rawLimit : undefined)
-      : rows.slice(0, MAX_DEBATES_RESPONSE);
+    let pagedRows;
+    if (canPageInDatabase) {
+      pagedRows = rows;
+    } else if (hasPaginationLimit || safeOffset > 0) {
+      pagedRows = rows.slice(safeOffset, hasPaginationLimit ? safeOffset + safeLimit : undefined);
+    } else {
+      pagedRows = rows.slice(0, MAX_DEBATES_RESPONSE);
+    }
 
     const urlsToWarm = [];
     const rowsWithSourcePreview = pagedRows.map((row) => {
@@ -4841,7 +4872,68 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     }
 
     clearDebatesApiResponseCache();
-    await rebuildCloudBubblesAfterPublish("create-debate", data.id);
+
+    setImmediate(async () => {
+      try {
+        const currentSourceCount = normalizedSourceUrl ? 1 : 0;
+        const { data: recentRows } = await supabase
+          .from("debates")
+          .select("id, question, content, source_url, media_extras, created_at")
+          .neq("id", data.id)
+          .order("created_at", { ascending: false })
+          .limit(60);
+        const recentSubjects = (recentRows || []).map((d) => {
+          const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
+          const srcExtras = extras.filter((e) => e && typeof e === "object" &&
+            String(e.type || "source").trim() === "source" &&
+            (e.url || e.source_url || e.source || e.media || e.publisher));
+          const previousSourceKeys = new Set(
+            srcExtras.map((e) => String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase()).filter(Boolean)
+          );
+          if (!previousSourceKeys.size && d.source_url) previousSourceKeys.add(String(d.source_url).trim().toLowerCase());
+          return {
+            id: String(d.id),
+            question: String(d.question || ""),
+            resume: String(d.content || "").slice(0, 200),
+            tags: [],
+            sourceCount: previousSourceKeys.size,
+            created_at: d.created_at
+          };
+        });
+        const newSubject = {
+          id: String(data.id),
+          question: String(question || ""),
+          resume: String(normalizedContent || "").slice(0, 200),
+          tags: [],
+          sourceCount: currentSourceCount
+        };
+        const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
+        let computedTrend = 0;
+        let trendEntry;
+        if (!matched) {
+          trendEntry = { trend: 0, sourceCount: currentSourceCount, matchedSubjectId: null };
+        } else {
+          const previousSourceCount = matched.sourceCount || 0;
+          if (previousSourceCount === 0 && currentSourceCount === 0) computedTrend = 0;
+          else if (previousSourceCount === 0) computedTrend = 100;
+          else computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);
+          trendEntry = {
+            trend: computedTrend,
+            sourceCount: currentSourceCount,
+            matchedSubjectId: matched.id,
+            matchedSubjectTitle: matched.question,
+            previousSourceCount: matched.sourceCount || 0,
+            reason: matched.reason || ""
+          };
+        }
+        setDebateTrend(data.id, trendEntry);
+        await rebuildCloudBubblesAfterPublish("create-debate", data.id);
+      } catch (trendErr) {
+        console.error("[trend] erreur calcul tendance (create-debate) :", trendErr.message);
+        await rebuildCloudBubblesAfterPublish("create-debate", data.id).catch(() => {});
+      }
+    });
+
     res.json({ id: data.id });
   } catch (error) {
     console.error(error);
@@ -5440,9 +5532,13 @@ app.post("/api/arguments/:id/unvote", rateLimit("votes", 60), async (req, res) =
     }
 
     const newVotes = Math.max(0, Number(argument.votes || 0) - 1);
+    const argumentVoteUpdate = {
+      votes: newVotes,
+      ...(newVotes === 0 ? { last_voted_at: null } : {})
+    };
     const { error: updateArgErr } = await supabase
       .from("arguments")
-      .update({ votes: newVotes })
+      .update(argumentVoteUpdate)
       .eq("id", id);
 
     if (updateArgErr) {
@@ -6099,6 +6195,45 @@ app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, re
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+app.post("/api/admin/link-supersession", requireAdmin, express.json(), async (req, res) => {
+  const { newDebateId, oldDebateId } = req.body || {};
+  if (!newDebateId || !oldDebateId) {
+    return res.status(400).json({ ok: false, error: "newDebateId et oldDebateId requis" });
+  }
+  const newId = String(newDebateId).trim();
+  const oldId = String(oldDebateId).trim();
+  if (newId === oldId) return res.status(400).json({ ok: false, error: "Les deux IDs sont identiques" });
+
+  const { data: debates, error } = await supabase
+    .from("debates")
+    .select("id, source_url, media_extras")
+    .in("id", [Number(newId), Number(oldId)]);
+  if (error) return res.status(500).json({ ok: false, error: error.message });
+
+  const newDebate = (debates || []).find(d => String(d.id) === newId);
+  const oldDebate = (debates || []).find(d => String(d.id) === oldId);
+  if (!newDebate) return res.status(404).json({ ok: false, error: `Débat ${newId} introuvable` });
+  if (!oldDebate) return res.status(404).json({ ok: false, error: `Débat ${oldId} introuvable` });
+
+  const currentSourceCount = countCloudSources(newDebate);
+  const previousSourceCount = countCloudSources(oldDebate);
+
+  let trend = 0;
+  if (previousSourceCount === 0 && currentSourceCount > 0) trend = 100;
+  else if (previousSourceCount > 0) trend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);
+
+  setDebateTrend(newId, {
+    trend,
+    sourceCount: currentSourceCount,
+    matchedSubjectId: oldId,
+    previousSourceCount,
+    reason: "lien manuel admin"
+  });
+
+  const rebuildResult = await rebuildCloudBubblesAfterPublish("link-supersession", newId);
+  res.json({ ok: true, trend, currentSourceCount, previousSourceCount, rebuildResult });
 });
 
 app.get("/admin/veille", (req, res) => {
@@ -6905,13 +7040,16 @@ app.listen(PORT, "0.0.0.0", async () => {
     _sharedLinksCache = _getSharedLinksMap();
   }
 
-  // Pré-chauffe du cache /api/debates au démarrage
+  // Pré-chauffe légère du cache /api/debates au démarrage.
+  // Ne jamais préchauffer la liste complète : avec des milliers d'arènes,
+  // cela annulerait la pagination côté index.
   setTimeout(async () => {
     try {
-      for (const sort of ["popular", "recent"]) {
-        const cacheKey = getDebatesApiCacheKey({ limit: null, offset: 0, sort });
+      const prewarmLimit = 60;
+      for (const sort of ["recent"]) {
+        const cacheKey = getDebatesApiCacheKey({ limit: prewarmLimit, offset: 0, sort });
         if (!getCachedDebatesApiResponse(cacheKey)) {
-          const res = await fetch(`http://localhost:${PORT}/api/debates?sort=${sort}`);
+          const res = await fetch(`http://localhost:${PORT}/api/debates?sort=${sort}&limit=${prewarmLimit}&offset=0`);
           if (res.ok) console.log(`[Agôn] Cache /api/debates?sort=${sort} préchauffé.`);
         }
       }

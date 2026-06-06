@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "npx esbuild public/script.js --minify --outfile=public/script.min.js && npx esbuild public/style.css --minify --outfile=public/style.min.css",
     "verify:safe": "node tools/verify-safe.js",
     "audit:scale": "node tools/audit-scale.js",
     "docs:inventory": "node tools/code-inventory.js",
@@ -23,5 +24,8 @@
     "express": "^4.21.2",
     "resend": "^6.12.3",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
   }
 }

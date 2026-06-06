@@ -700,6 +700,12 @@ main.create-page {
   overflow-anchor: none;
 }
 
+@media (hover: none) {
+  .debate-card {
+    transition: none;
+  }
+}
+
 .debate-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
@@ -707,7 +713,6 @@ main.create-page {
 }
 
 .theme-horizontal-inner .debate-card {
-  transform: translateZ(0);
 }
 
 .theme-horizontal-inner .debate-card:hover,
@@ -6286,7 +6291,7 @@ body.page-debate .topbar::after {
   .page-home-mobile .agon-tag-trends-caption {
     transform: translateX(-9px);
     margin-top: -47px;
-    font-size: 9px;
+    font-size: 11px;
     position: relative;
     z-index: 30;
   }
@@ -17342,7 +17347,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   width: 100%;
   text-align: center;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.02em;
