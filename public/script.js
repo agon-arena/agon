@@ -14487,7 +14487,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       data-index-context-card
       role="button"
       tabindex="0"
-      onclick="(function(e){ const article = e.currentTarget.closest('.debate-card'); if(article && article.classList.contains('index-card-context-open')) return; const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
+      onclick="(function(e){ if(e.target.closest('[data-index-context-toggle]')) return; const article = e.currentTarget.closest('.debate-card'); if(article && article.classList.contains('index-card-context-open')) return; const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
       onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
@@ -14701,6 +14701,13 @@ function toggleIndexContextPreview(button) {
   if (!button || (!textEl && !metaEl)) return;
 
   const nextExpanded = button.getAttribute('aria-expanded') !== 'true';
+
+  // Verrou anti-fermeture accidentelle : bloque la fermeture pendant 400ms après l'ouverture
+  if (!nextExpanded && article) {
+    const openedAt = Number(article.dataset.contextOpenedAt || 0);
+    if (openedAt && Date.now() - openedAt < 400) return;
+  }
+
   if (window.matchMedia("(max-width: 768px)").matches) {
     keepIndexCardSourceImagesAlive(article, nextExpanded ? 5000 : 6500);
   }
@@ -14724,6 +14731,7 @@ function toggleIndexContextPreview(button) {
 
   if (article) {
     article.classList.toggle('index-card-context-open', nextExpanded);
+    if (nextExpanded) article.dataset.contextOpenedAt = String(Date.now());
   }
 
   button.innerHTML = nextExpanded

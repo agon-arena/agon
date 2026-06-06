@@ -16534,6 +16534,13 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 .theme-horizontal-inner > .debate-card:has([data-index-context-toggle][aria-expanded="true"]) {
   background: #ffffff;
 }
+.debate-card.index-card-context-open .debate-card-context {
+  cursor: default;
+}
+.debate-card.index-card-context-open .debate-card-context-text {
+  pointer-events: none;
+  user-select: text;
+}
 .theme-horizontal-inner > .debate-card {
   transition: background-color 0.3s ease, transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
 }
