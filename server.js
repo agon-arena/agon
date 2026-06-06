@@ -6641,7 +6641,7 @@ app.get("/api/debates/:id/analysis", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
     .from("debates")
-    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at")
+    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, popularity_analysis")
     .eq("id", id)
     .single();
   if (error || !data) {
@@ -6662,10 +6662,11 @@ app.get("/api/debates/:id/analysis", async (req, res) => {
     }
   }
   return res.json({
-    raw:         raw,
-    status:      data.ai_analysis_status || "none",
-    scheduledAt: data.ai_analysis_scheduled_at || null,
-    generatedAt: data.ai_analysis_generated_at || null
+    raw:            raw,
+    popularityRaw:  data.popularity_analysis || null,
+    status:         data.ai_analysis_status || "none",
+    scheduledAt:    data.ai_analysis_scheduled_at || null,
+    generatedAt:    data.ai_analysis_generated_at || null
   });
 });
 
@@ -6706,7 +6707,8 @@ async function _fetchDebatePayload(debateId) {
   };
 }
 
-const { generateAnalysisJson } = require('./lib/debate-analysis');
+const { generateAnalysisJson }        = require('./lib/debate-analysis');
+const { generatePopularityAnalysis }  = require('./lib/popularity-analysis');
 
 // Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin)
 async function _generateAndSaveAnalysis(debateId) {
@@ -6731,6 +6733,22 @@ async function _generateAndSaveAnalysis(debateId) {
     } else {
       console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
       _notifyParticipantsAnalysisReady(debateId, payload.question).catch(console.error);
+    }
+
+    // Analyse popularité vs robustesse (colonne séparée)
+    try {
+      const popularityResult = await generatePopularityAnalysis(result, (messages) => _callOpenAI(apiKey, messages));
+      const popularityRaw    = JSON.stringify(popularityResult);
+      const { error: popErr } = await supabase.from("debates")
+        .update({ popularity_analysis: popularityRaw })
+        .eq("id", debateId);
+      if (popErr) {
+        console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde popularité :`, popErr.message);
+      } else {
+        console.log(`[auto-analysis] débat ${debateId} — analyse popularité sauvegardée.`);
+      }
+    } catch (popErr) {
+      console.error(`[auto-analysis] débat ${debateId} — analyse popularité échouée :`, popErr.message);
     }
 
     return raw;
@@ -6904,7 +6922,8 @@ app.post("/api/admin/analyze-debate", requireAdmin, express.json(), async (req, 
 
   try {
     const raw = await _generateAndSaveAnalysis(debateId);
-    return res.json({ raw });
+    const { data: popData } = await supabase.from("debates").select("popularity_analysis").eq("id", debateId).single();
+    return res.json({ raw, popularityRaw: popData?.popularity_analysis || null });
   } catch (err) {
     console.error("[analyze-debate]", err.message);
     return res.status(502).json({ error: err.message || "Erreur lors de la génération." });

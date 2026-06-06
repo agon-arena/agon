@@ -285,6 +285,90 @@
         color: #5a4a2f; letter-spacing: .08em; text-transform: uppercase;
         display: block; margin-bottom: 6px;
       }
+      /* ── Popularity vs Robustness section ── */
+      .ada-pop-section { margin-top: 4px; }
+      .ada-pop-unavailable {
+        font-size: 13px; color: #7a8a88; font-style: italic;
+        padding: 10px 0 6px;
+      }
+      .ada-pop-intro {
+        font-size: 13px; line-height: 1.65; color: #4a5a58;
+        background: #f3f6f4; border-radius: 10px; padding: 12px 14px;
+        margin-bottom: 14px; border-left: 3px solid #b0c4bc;
+      }
+      .ada-pop-finding {
+        margin-bottom: 12px;
+        padding: 12px 14px;
+        background: #eef3f0;
+        border-left: 4px solid #3a6a52;
+        border-radius: 0 10px 10px 0;
+        font-size: 14px; line-height: 1.6; color: #243038;
+      }
+      .ada-pop-finding-label {
+        display: block; font-size: 10px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .1em;
+        color: #3a6a52; margin-bottom: 5px;
+      }
+      .ada-pop-summary {
+        font-size: 13px; line-height: 1.7; color: #374344;
+        margin-bottom: 14px;
+      }
+      .ada-pop-camps {
+        display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;
+      }
+      .ada-pop-camp-obs {
+        background: #f7f9f8; border-radius: 10px; padding: 10px 13px;
+        border: 1px solid #dde6e0;
+      }
+      .ada-pop-camp-obs-label {
+        display: block; font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .06em;
+        color: #5a6a68; margin-bottom: 4px;
+      }
+      .ada-pop-camp-obs-text {
+        font-size: 13px; line-height: 1.6; color: #374344;
+      }
+      .ada-pop-gaps-title {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .08em; color: #5a6a68; margin: 0 0 8px;
+      }
+      .ada-pop-gaps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+      .ada-pop-gap {
+        background: #fff; border-radius: 10px; padding: 11px 13px;
+        border: 1px solid #e0e8e4;
+      }
+      .ada-pop-gap-header {
+        display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+      .ada-pop-gap-type {
+        font-size: 11px; font-weight: 700; padding: 2px 9px;
+        border-radius: 20px; letter-spacing: .02em;
+      }
+      .ada-pop-type-weak   { background: #fff0dd; color: #9a5200; }
+      .ada-pop-type-robust { background: #e0f5ea; color: #1a6240; }
+      .ada-pop-type-both   { background: #ddeeff; color: #1a4070; }
+      .ada-pop-gap-text {
+        font-size: 13px; color: #2a3840; font-style: italic;
+        line-height: 1.5; margin-bottom: 6px;
+      }
+      .ada-pop-gap-meta {
+        display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      }
+      .ada-pop-votes {
+        font-size: 11px; font-weight: 600; color: #555; background: #eef0ee;
+        padding: 1px 7px; border-radius: 12px;
+      }
+      .ada-pop-score {
+        font-size: 11px; font-weight: 600; color: #3a5a4a; background: #e0f0e8;
+        padding: 1px 7px; border-radius: 12px;
+      }
+      .ada-pop-warning {
+        font-size: 12px; color: #7a8a88; font-style: italic;
+        line-height: 1.6; padding-top: 4px; margin-bottom: 6px;
+      }
+      /* ── / Popularity section ── */
+
       .ada-paste-excluded-notice {
         margin: 0 0 14px;
         padding: 9px 14px;
@@ -1593,6 +1677,104 @@
     return out;
   }
 
+  function renderPopularityAnalysis(pop, analysis) {
+    if (!pop || pop.version !== 2) return '';
+
+    if (pop.hasEnoughData === false) {
+      return '<div class="ada-scoring-report ada-pop-section"><div class="ada-report">' +
+        '<div class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</div>' +
+        '<div class="ada-pop-unavailable">Analyse indisponible : les données de vote ou de notation argumentative sont insuffisantes.</div>' +
+        '</div></div>';
+    }
+
+    const TYPE_LABEL = {
+      popular_but_weak:    'Très populaire, mais moins robuste',
+      robust_but_unpopular:'Peu soutenue, mais solide',
+      popular_and_robust:  'Populaire et robuste'
+    };
+    const TYPE_CLS = {
+      popular_but_weak:    'ada-pop-type-weak',
+      robust_but_unpopular:'ada-pop-type-robust',
+      popular_and_robust:  'ada-pop-type-both'
+    };
+
+    const isOpen = analysis && analysis.isOpen;
+    const labelA = analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label || (analysis && analysis.positionA) || 'Camp A';
+    const labelB = analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label || (analysis && analysis.positionB) || 'Camp B';
+
+    let out = '<div class="ada-scoring-report ada-pop-section"><div class="ada-report">';
+
+    // Header
+    out += '<div class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</div>';
+
+    // Bloc d'introduction
+    out += '<div class="ada-pop-intro">Les voix indiquent quelles idées convainquent le plus les utilisateurs. La note argumentative indique quelles idées sont les plus solides sur le plan du raisonnement. Ces deux résultats ne mesurent pas la même chose.</div>';
+
+    // Constat principal
+    if (pop.mainFinding) {
+      out += '<div class="ada-pop-finding">' +
+        '<span class="ada-pop-finding-label">Constat principal</span>' +
+        esc(pop.mainFinding) +
+      '</div>';
+    }
+
+    // Analyse générale
+    if (pop.summary) {
+      out += '<div class="ada-pop-summary">' + esc(pop.summary) + '</div>';
+    }
+
+    // Observations par camp
+    const hasObservations = pop.campAObservation || (!isOpen && pop.campBObservation);
+    if (hasObservations) {
+      out += '<div class="ada-pop-camps">';
+      if (pop.campAObservation) {
+        out += '<div class="ada-pop-camp-obs">' +
+          '<span class="ada-pop-camp-obs-label">' + esc(labelA) + '</span>' +
+          '<span class="ada-pop-camp-obs-text">' + esc(pop.campAObservation) + '</span>' +
+        '</div>';
+      }
+      if (!isOpen && pop.campBObservation) {
+        out += '<div class="ada-pop-camp-obs">' +
+          '<span class="ada-pop-camp-obs-label">' + esc(labelB) + '</span>' +
+          '<span class="ada-pop-camp-obs-text">' + esc(pop.campBObservation) + '</span>' +
+        '</div>';
+      }
+      out += '</div>';
+    }
+
+    // Écarts notables
+    const gaps = Array.isArray(pop.notableGaps) ? pop.notableGaps.slice(0, 3) : [];
+    if (gaps.length) {
+      out += '<div class="ada-pop-gaps-title">Écarts notables</div>';
+      out += '<div class="ada-pop-gaps">';
+      gaps.forEach(function(gap) {
+        const typeLabel = TYPE_LABEL[gap.type] || gap.type || '';
+        const typeCls   = TYPE_CLS[gap.type]   || '';
+        const catCls    = gap.category ? 'ada-cat-' + esc(gap.category) : '';
+        out += '<div class="ada-pop-gap">';
+        out += '<div class="ada-pop-gap-header">';
+        if (typeLabel) out += '<span class="ada-pop-gap-type ' + typeCls + '">' + esc(typeLabel) + '</span>';
+        if (gap.category) out += '<span class="ada-arg-cat ' + catCls + '">' + esc(gap.category) + '</span>';
+        out += '</div>';
+        if (gap.argumentText) out += '<div class="ada-pop-gap-text">"' + esc(gap.argumentText) + '"</div>';
+        out += '<div class="ada-pop-gap-meta">';
+        if (gap.votes !== undefined) out += '<span class="ada-pop-votes">' + gap.votes + ' voix</span>';
+        if (gap.score !== undefined)  out += '<span class="ada-pop-score">' + gap.score + '/100</span>';
+        out += '</div>';
+        out += '</div>';
+      });
+      out += '</div>';
+    }
+
+    // Phrase de prudence
+    if (pop.warning) {
+      out += '<div class="ada-pop-warning">' + esc(pop.warning) + '</div>';
+    }
+
+    out += '</div></div>';
+    return out;
+  }
+
   function fmtDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -1661,8 +1843,10 @@
             : '';
           let parsed = null;
           try { parsed = JSON.parse(json.raw); } catch (_) {}
+          let popularityParsed = null;
+          try { if (json.popularityRaw) popularityParsed = JSON.parse(json.popularityRaw); } catch (_) {}
           body.innerHTML = header + (parsed && parsed.version === 2
-            ? renderNewAnalysis(parsed)
+            ? renderNewAnalysis(parsed) + (popularityParsed ? renderPopularityAnalysis(popularityParsed, parsed) : '')
             : renderScoringReport(json.raw));
           bindLoadMoreArguments(body);
         };
@@ -1705,9 +1889,11 @@
       const now = new Date().toISOString();
       let parsedRegen = null;
       try { parsedRegen = JSON.parse(json.raw || ''); } catch (_) {}
+      let popularityRegen = null;
+      try { if (json.popularityRaw) popularityRegen = JSON.parse(json.popularityRaw); } catch (_) {}
       body.innerHTML = `<div class="ada-date">Analyse générée le ${esc(fmtDate(now))}</div>` +
         (parsedRegen && parsedRegen.version === 2
-          ? renderNewAnalysis(parsedRegen)
+          ? renderNewAnalysis(parsedRegen) + (popularityRegen ? renderPopularityAnalysis(popularityRegen, parsedRegen) : '')
           : renderScoringReport(json.raw || ''));
       bindLoadMoreArguments(body);
     } catch (err) {

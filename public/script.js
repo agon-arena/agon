@@ -14487,7 +14487,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       data-index-context-card
       role="button"
       tabindex="0"
-      onclick="(function(e){ if(e.target.closest('[data-index-context-toggle]')) return; const article = e.currentTarget.closest('.debate-card'); if(article && article.classList.contains('index-card-context-open')) return; const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
+      onclick="(function(e){ if(e.target.closest('[data-index-context-toggle]')) return; const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); e.stopPropagation(); toggleIndexContextPreview(btn); } })(event)"
       onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
@@ -14656,13 +14656,17 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
     updateCarouselCardHighlight(row);
     if (shouldReveal) {
       reserveIndexRowHeightForContextOpen(article, article.querySelector('.debate-card-context-extra'));
+      const neededHeight = Math.ceil((article.offsetHeight || article.getBoundingClientRect().height || 0) + 10);
+      const currentHeight = parseFloat(row.style.height || '0') || 0;
+      if (neededHeight > currentHeight) {
+        row.style.height = `${neededHeight}px`;
+      }
     } else {
       updateIndexRowContextOpenState(row);
-    }
-    const neededHeight = Math.ceil((article.offsetHeight || article.getBoundingClientRect().height || 0) + 10);
-    const currentHeight = parseFloat(row.style.height || '0') || 0;
-    if (neededHeight > currentHeight) {
-      row.style.height = `${neededHeight}px`;
+      // Libère immédiatement la hauteur fixe : le row suit la transition CSS de la carte (max-height 0.34s)
+      row.style.height = '';
+      // Recalcule la hauteur exacte après la fin des transitions CSS
+      setTimeout(() => syncIndexThemeRowHeight(row), 370);
     }
   }
 
@@ -14731,7 +14735,11 @@ function toggleIndexContextPreview(button) {
 
   if (article) {
     article.classList.toggle('index-card-context-open', nextExpanded);
-    if (nextExpanded) article.dataset.contextOpenedAt = String(Date.now());
+    if (nextExpanded) {
+      article.dataset.contextOpenedAt = String(Date.now());
+      const row = article.closest('.theme-horizontal-row');
+      if (row) row.dispatchEvent(new Event('index-context-opened'));
+    }
   }
 
   button.innerHTML = nextExpanded
@@ -16098,11 +16106,26 @@ function initThematicRowDragScroll() {
     let _isMobileCache = isMobile();
     let scrollEndTimer = null;
     let _scrollRaf = null;
+    let _contextOpenScrollLeft = null;
+    row.addEventListener('index-context-opened', () => {
+      _contextOpenScrollLeft = row.scrollLeft;
+    });
+
     row.addEventListener("scroll", () => {
       if (_scrollRaf) return;
       _scrollRaf = requestAnimationFrame(() => {
         _scrollRaf = null;
-        const closedOpenContext = closeOpenContextPreviewsInRow(row);
+        // Ne ferme le contexte ouvert que si on a scrollé d'au moins 40% d'une carte
+        // (évite la fermeture sur un micro-scroll accidentel lors d'un swipe vers le bas)
+        const hasOpenContext = row.classList.contains('index-row-context-open');
+        const minScrollToClose = row.clientWidth * 0.4;
+        const scrolledEnough = _contextOpenScrollLeft === null ||
+          Math.abs(row.scrollLeft - _contextOpenScrollLeft) >= minScrollToClose;
+        let closedOpenContext = false;
+        if (!hasOpenContext || scrolledEnough) {
+          closedOpenContext = closeOpenContextPreviewsInRow(row);
+          if (closedOpenContext) _contextOpenScrollLeft = null;
+        }
         if (closedOpenContext) {
           scrollToIndexRowAfterContextClose(row);
         }
@@ -16351,6 +16374,7 @@ function initThematicRowDragScroll() {
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
       if (!touchIsHorizontal) {
+        const contextOpen = row.classList.contains('index-row-context-open');
         if (absDy > 6 && absDy > absDx * 1.1) {
           isTouchDragging = false;
           touchIsHorizontal = false;
@@ -16358,7 +16382,10 @@ function initThematicRowDragScroll() {
           row.classList.remove("is-dragging");
           return;
         }
-        if (absDx < 10 || absDx < absDy * 1.25) return;
+        // Quand une carte est ouverte, exiger un geste très horizontal (3× dy)
+        // pour éviter que les swipes descendants accidentels scrollent le carousel
+        const minHorizRatio = contextOpen ? 3 : 1.25;
+        if (absDx < 10 || absDx < absDy * minHorizRatio) return;
         touchIsHorizontal = true;
         row.classList.add("is-dragging");
       }
