@@ -25,6 +25,12 @@
     isStandalone = !!(window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches);
   } catch (e) {}
   if (!isStandalone) return;
+  // Cette page peut être chargée dans l'iframe-modal de l'accueil. Dans ce cas,
+  // "agon_idle_hidden_at" est une clé sessionStorage partagée avec l'accueil/
+  // d'autres pages déjà visitées : un ancien horodatage obsolète y déclencherait
+  // une redirection immédiate vers "/" qui casse le chargement. Le garde n'a de
+  // sens que pour la page top-level.
+  if (window.self !== window.top) return;
 
   function isHomePath() {
     return location.pathname === "/" || location.pathname === "/debates";
@@ -79,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260607-final8">
+<link rel="stylesheet" href="/style.min.css?v=20260607-final15">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -706,7 +712,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260606-final7"></script>
+<script src="/script.min.js?v=20260607-final11"></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

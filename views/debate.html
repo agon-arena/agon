@@ -40,6 +40,12 @@
     isStandalone = !!(window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches);
   } catch (e) {}
   if (!isStandalone) return;
+  // Cette page peut être chargée dans l'iframe-modal de l'accueil (clic "Entrer
+  // dans l'arène"). Dans ce cas, "agon_idle_hidden_at" est une clé sessionStorage
+  // partagée avec l'accueil/d'autres débats déjà visités : un ancien horodatage
+  // obsolète y déclencherait une redirection immédiate vers "/" qui casse le
+  // chargement (loader bloqué). Le garde n'a de sens que pour la page top-level.
+  if (window.self !== window.top) return;
 
   function isHomePath() {
     return location.pathname === "/" || location.pathname === "/debates";
@@ -99,7 +105,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260607-final8" />
+<link rel="stylesheet" href="/style.min.css?v=20260607-final15" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -895,7 +901,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260606-final7"></script>
+	<script src="/script.min.js?v=20260607-final11"></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -948,7 +954,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260606-final7"></script>
-<script src="/admin-debate-analysis.js?v=20260607-21"></script>
+<script src="/admin-debate-analysis.js?v=20260607-23"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

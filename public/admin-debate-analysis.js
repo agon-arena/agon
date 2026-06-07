@@ -94,6 +94,18 @@
       }
       .ada-regen-btn:hover { background: #243038; color: #f3f6f4; }
       .ada-regen-btn:disabled { opacity: .55; cursor: default; }
+      .ada-collapse-wrap {
+        padding: 6px 14px 16px; display: flex; justify-content: center;
+      }
+      .ada-collapse-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-height: 38px; padding: 8px 18px;
+        border: 1px solid rgba(36,48,56,.18); border-radius: 999px;
+        background: transparent; color: #4d6268;
+        font-family: inherit; font-size: 13px; font-weight: 600;
+        cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+      }
+      .ada-collapse-btn:hover { background: rgba(36,48,56,.08); color: #243038; }
 
       /* ── Meta ── */
       .ada-date {
@@ -2104,6 +2116,17 @@
     const slot = document.getElementById('debate-ai-analysis-slot');
     if (!slot) return;
 
+    const closeReportPanel = () => {
+      document.getElementById('ada-panel').style.display = 'none';
+      document.querySelectorAll('#ada-panel details').forEach(d => { d.removeAttribute('open'); d.open = false; });
+      scrollToAnalysisElement(document.getElementById('ada-trigger-btn'));
+    };
+
+    const collapseFooter = `
+        <div class="ada-collapse-wrap">
+          <button type="button" id="ada-collapse-btn" class="ada-collapse-btn">Masquer l’analyse IA</button>
+        </div>`;
+
     if (isAdmin()) {
       const adminFooter = `
         <div class="ada-panel-footer">
@@ -2120,14 +2143,13 @@
             </div>
             <div id="ada-body" class="ada-body"></div>
             ${adminFooter}
+            ${collapseFooter}
           </div>
         </div>`;
 
       document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
-      document.getElementById('ada-close-btn').addEventListener('click', () => {
-        document.getElementById('ada-panel').style.display = 'none';
-        document.querySelectorAll('#ada-panel details').forEach(d => { d.removeAttribute('open'); d.open = false; });
-      });
+      document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
+      document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
       document.getElementById('ada-regen-btn').addEventListener('click', () => regenerate(debateId));
       observeAnimated();
       return;
@@ -2148,14 +2170,13 @@
             <button type="button" id="ada-close-btn" class="ada-close-btn" title="Fermer">✕</button>
           </div>
           <div id="ada-body" class="ada-body"></div>
+          ${collapseFooter}
         </div>
       </div>`;
 
     document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
-    document.getElementById('ada-close-btn').addEventListener('click', () => {
-      document.getElementById('ada-panel').style.display = 'none';
-      document.querySelectorAll('#ada-panel details').forEach(d => { d.removeAttribute('open'); d.open = false; });
-    });
+    document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
+    document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
     observeAnimated();
   }
 

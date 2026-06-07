@@ -3288,7 +3288,7 @@ body.page-debate #score-b {
 }
 
 .comments-count-amelioration{
-  color:#b45309 !important;
+  color:#b8860b !important;
   font-weight:600;
 }
 
@@ -4809,7 +4809,7 @@ body.page-debate .topbar::after {
 }
 .comment-stance-amelioration{
   background:#f3f4f6 !important;
-  color:#b45309 !important;
+  color:#b8860b !important;
   border:none !important;
 }
 
@@ -11985,8 +11985,10 @@ body.admin-edit-open::after {
 }
 
 /* Bouton fermer iframe — suppression de l'offset de l'ancienne bottom nav mobile */
+/* top verrouillé : empêche tout repositionnement JS (alignement badge, formulaire, clavier...) de déplacer le bouton */
 @media (max-width: 768px) {
   #debate-iframe-modal-close {
+    top: auto !important;
     bottom: 5vh !important;
     left: auto !important;
     right: 322px !important;
@@ -12202,7 +12204,7 @@ body.page-debate .debate-top-sticky-actions {
   color: #c5221f !important;
 }
 .comment-stance-option:has(input[type="radio"][value="amelioration"]) {
-  color: #b45309 !important;
+  color: #b8860b !important;
 }
 
 /* Base visuelle des choix de commentaire */
@@ -13186,6 +13188,9 @@ body.page-debate .comments-count-favorable {
 body.page-debate .comments-count-defavorable {
   color: #c5221f !important;
 }
+body.page-debate .comments-count-amelioration {
+  color: #b8860b !important;
+}
 body.page-debate .comment-stance-favorable,
 body.page-debate .comment-stance-defavorable {
   background: #ffffff !important;
@@ -13201,6 +13206,9 @@ body.page-debate .comment-stance-favorable {
 }
 body.page-debate .comment-stance-defavorable {
   color: #c5221f !important;
+}
+body.page-debate .comment-stance-amelioration {
+  color: #b8860b !important;
 }
 body.page-debate .comment-stance-favorable::before,
 body.page-debate .comment-stance-defavorable::before {
@@ -18979,6 +18987,57 @@ body.page-contact.in-iframe .contact-page-shell {
 
 .about-accordion-content {
   padding: 0 0 16px;
+}
+
+.about-accordion-collapse {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  margin: 14px auto 0;
+  padding: 6px 14px;
+  min-height: 36px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.about-accordion-collapse:hover {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Sous-section discrète (ex: "Liste des médias" rattachée à "Fonctionnement du feed officiel") */
+.about-accordion-sub {
+  margin-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.about-accordion-sub:last-child {
+  border-bottom: none;
+}
+
+.about-accordion-sub > summary {
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4b5563;
+}
+
+.about-accordion-sub > summary::after {
+  font-size: 16px;
+  color: #9ca3af;
+}
+
+.about-accordion-sub > .about-accordion-content {
+  padding: 0 0 4px;
 }
 
 

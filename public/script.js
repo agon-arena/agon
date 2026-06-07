@@ -2943,6 +2943,51 @@ function ensureDebateIframeParentLoadingStyles() {
       line-height: 1.4;
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
     }
+
+    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-stuck .debate-iframe-parent-loading-hourglass img {
+      animation: none;
+      opacity: 0.5;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-actions button {
+      appearance: none;
+      -webkit-appearance: none;
+      border-radius: 999px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-retry {
+      border: 1.5px solid #ffffff;
+      background: #ffffff;
+      color: #1a272f;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-retry:hover {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-dismiss {
+      border: 1.5px solid rgba(255, 255, 255, 0.7);
+      background: rgba(26, 39, 47, 0.55);
+      color: #ffffff;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-dismiss:hover {
+      background: rgba(26, 39, 47, 0.8);
+    }
   `;
 
   document.head.appendChild(style);
@@ -2974,10 +3019,21 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
       <div class="debate-iframe-parent-loading-box" role="status" aria-live="polite" aria-busy="true">
         <div class="debate-iframe-parent-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
         <div class="debate-iframe-parent-loading-title" id="debate-iframe-parent-loading-title"></div>
+        <div class="debate-iframe-parent-loading-actions" id="debate-iframe-parent-loading-actions" hidden>
+          <button type="button" class="debate-iframe-parent-loading-retry" id="debate-iframe-parent-loading-retry">Réessayer</button>
+          <button type="button" class="debate-iframe-parent-loading-dismiss" id="debate-iframe-parent-loading-dismiss">Fermer</button>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
   }
+
+  // Toute (re)mise en route d'un chargement repart d'un état propre : on efface
+  // un éventuel état "bloqué" (sablier arrêté + actions de récupération) laissé
+  // par un chargement précédent.
+  overlay.classList.remove("debate-iframe-parent-loading-stuck");
+  const actions = document.getElementById("debate-iframe-parent-loading-actions");
+  if (actions) actions.hidden = true;
 
   const title = document.getElementById("debate-iframe-parent-loading-title");
   if (title) {
@@ -3012,6 +3068,87 @@ function hideDebateIframeParentLoadingOverlay() {
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
 }
 
+// Garde-fou anti-blocage : arme un filet de sécurité unique qui, si le message
+// "prêt" de l'iframe n'arrive jamais (navigation qui échoue, redirection
+// inattendue, page qui ne répond plus...), vérifie où l'iframe a réellement
+// atterri. Si elle est bien sur la page attendue, on masque le loader
+// normalement (le message "prêt" a simplement été perdu) ; sinon on bascule
+// vers un état d'erreur clair avec une action de récupération, plutôt que de
+// révéler silencieusement un contenu cassé après un délai arbitraire.
+function armDebateIframeParentLoadingFallback(expectedPathname, onResolved) {
+  if (debateIframeParentLoadingFallbackTimer) {
+    clearTimeout(debateIframeParentLoadingFallbackTimer);
+  }
+  const expected = String(expectedPathname || "").trim();
+  debateIframeParentLoadingFallbackTimer = setTimeout(() => {
+    debateIframeParentLoadingFallbackTimer = null;
+    resolveStuckDebateIframeParentLoading(expected, onResolved);
+  }, 9000);
+}
+
+function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved) {
+  const modal = document.getElementById("debate-iframe-modal");
+  if (!modal || !modal.classList.contains("loading")) return;
+
+  const resolveAsLoaded = () => {
+    setDebateIframeModalLoadingState(false);
+    if (typeof onResolved === "function") {
+      try { onResolved(); } catch (e) {}
+    }
+  };
+
+  if (!expectedPathname) {
+    resolveAsLoaded();
+    return;
+  }
+
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  let landedPathname = "";
+  try { landedPathname = frame?.contentWindow?.location?.pathname || ""; } catch (e) {}
+
+  if (landedPathname === expectedPathname) {
+    resolveAsLoaded();
+    return;
+  }
+
+  markDebateIframeParentLoadingStuck();
+}
+
+function markDebateIframeParentLoadingStuck() {
+  const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
+  const modal = document.getElementById("debate-iframe-modal");
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  if (!overlay || !modal || !frame || !modal.classList.contains("loading")) return;
+
+  const retryUrl = frame.getAttribute("src") || "";
+
+  overlay.classList.add("debate-iframe-parent-loading-stuck");
+  const title = document.getElementById("debate-iframe-parent-loading-title");
+  if (title) title.textContent = "Le chargement prend plus de temps que prévu";
+
+  const actions = document.getElementById("debate-iframe-parent-loading-actions");
+  if (actions) actions.hidden = false;
+
+  const retryButton = document.getElementById("debate-iframe-parent-loading-retry");
+  if (retryButton) {
+    retryButton.onclick = () => {
+      let retryPathname = "";
+      try { retryPathname = new URL(retryUrl, window.location.origin).pathname; } catch (e) {}
+      setDebateIframeModalLoadingState(true, "Chargement en cours");
+      if (retryUrl && frame) {
+        frame.src = "about:blank";
+        requestAnimationFrame(() => { frame.src = retryUrl; });
+      }
+      armDebateIframeParentLoadingFallback(retryPathname);
+    };
+  }
+
+  const dismissButton = document.getElementById("debate-iframe-parent-loading-dismiss");
+  if (dismissButton) {
+    dismissButton.onclick = () => { closeDebateIframeModal(); };
+  }
+}
+
 function setDebateIframeModalCloseButtonVisible(isVisible) {
   const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!closeButton) return;
@@ -3030,9 +3167,7 @@ function resetDebateIframeModalCloseButtonBadgeAlignment() {
   if (!closeButton) return;
 
   closeButton.style.top = "";
-  closeButton.style.bottom = window.innerWidth <= 768
-    ? "calc(5vh + env(safe-area-inset-bottom, 0px))"
-    : "";
+  closeButton.style.bottom = "";
 }
 
 function applyDebateIframeModalCloseButtonBadgeAlignment() {
@@ -13094,6 +13229,7 @@ let visitedDebatesCache = [];
 let otherDebatesCache = [];
 let indexDebatesApiNextOffset = 0;
 let indexDebatesApiHasMore = false;
+let indexAllDebatesLoadInFlight = false;
 let visitedDebatesVisible = 5;
 const INDEX_OTHER_DEBATES_BATCH_SIZE = 60;
 let otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
@@ -13488,34 +13624,11 @@ function syncAdminEditCardTopBadges(card, debate) {
 }
 
 function setupIndexInfiniteScroll() {
-  const sentinel = document.getElementById("index-infinite-scroll-sentinel");
-
-  if (indexInfiniteScrollObserver && sentinel && sentinel.dataset.observing === '1') return;
-
+  // Chargement progressif au scroll désactivé : toutes les arènes du flux vertical
+  // sont récupérées directement via loadAllRemainingIndexDebatesPages(). On ne
+  // ré-attache donc plus jamais cet observateur (les carrousels horizontaux et
+  // leur propre lazy-load, eux, restent inchangés).
   cleanupIndexInfiniteScrollObserver();
-
-  if (!sentinel) return;
-
-  indexInfiniteScrollObserver = new IntersectionObserver((entries) => {
-    const entry = entries[0];
-    if (!entry?.isIntersecting) return;
-    if (indexInfiniteScrollLoading) return;
-
-    // Évite les chargements en cascade : après l'ajout d'un lot,
-    // la sentinelle peut rester dans le viewport et relancer aussitôt
-    // un nouveau lot. On garde donc le chargement automatique, mais
-    // seulement après un vrai nouveau mouvement de scroll ou un clic.
-    if (indexLastBatchCompletedAt && Date.now() - indexLastBatchCompletedAt < 900) return;
-
-    loadMoreOtherDebates();
-  }, {
-    root: null,
-    rootMargin: "0px 0px 320px 0px",
-    threshold: 0.01
-  });
-
-  sentinel.dataset.observing = '1';
-  indexInfiniteScrollObserver.observe(sentinel);
 }
 
 
@@ -16808,6 +16921,9 @@ function appendDebatesToList(debates) {
 async function loadMoreOtherDebates() {
   if (isIndexAdminEditInteractionActive()) return;
   if (indexInfiniteScrollLoading) return;
+  // Évite toute course avec loadAllRemainingIndexDebatesPages(), qui charge déjà
+  // directement toutes les arènes restantes au chargement de la page.
+  if (indexAllDebatesLoadInFlight) return;
   if (otherDebatesVisible >= otherDebatesCache.length && !indexDebatesApiHasMore) return;
 
   indexInfiniteScrollLoading = true;
@@ -17132,6 +17248,37 @@ async function fetchAndMergeNextIndexDebatesPage() {
   return safePage;
 }
 
+// Charge directement toutes les pages restantes du flux vertical (plus de chargement
+// progressif au scroll : toutes les arènes doivent être disponibles dès l'arrivée).
+// Les carrousels horizontaux et leur propre lazy-load (initCarouselLazyLoad) ne sont
+// pas concernés — seule la pagination verticale est court-circuitée ici.
+async function loadAllRemainingIndexDebatesPages() {
+  if (indexAllDebatesLoadInFlight || !indexDebatesApiHasMore) return;
+  indexAllDebatesLoadInFlight = true;
+
+  try {
+    while (indexDebatesApiHasMore) {
+      const fetchedPage = await fetchAndMergeNextIndexDebatesPage();
+      if (!Array.isArray(fetchedPage) || !fetchedPage.length) break;
+    }
+
+    if (window.__agonDebateModalOpen) return;
+
+    refreshCategoryFilterOptions(debatesCache);
+    const restoreAnchor = captureIndexScrollRestoreAnchor();
+    const fallbackScrollY = Math.max(0, Math.round(window.scrollY || 0));
+    applyIndexFilters();
+
+    requestAnimationFrame(() => {
+      restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
+    });
+  } catch (error) {
+    console.warn('Chargement complet des arènes interrompu :', error);
+  } finally {
+    indexAllDebatesLoadInFlight = false;
+  }
+}
+
 function ensureSearchMatchesInCache(query) {
   const normalizedQuery = String(query || "").trim().toLowerCase();
   if (!normalizedQuery) return Promise.resolve([]);
@@ -17324,7 +17471,11 @@ async function initIndex() {
         requestAnimationFrame(() => {
           restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
         });
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => {
+        // Plus de chargement progressif au scroll : on récupère directement
+        // toutes les arènes restantes une fois le rafraîchissement initial terminé.
+        loadAllRemainingIndexDebatesPages();
+      });
 
     } else {
       // Première visite — comportement normal
@@ -17351,6 +17502,10 @@ async function initIndex() {
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("agon:feed-ready"));
+
+      // Plus de chargement progressif au scroll : on récupère directement
+      // toutes les arènes restantes dès l'arrivée sur la page.
+      loadAllRemainingIndexDebatesPages();
 
       const searchInput = document.getElementById("debate-search");
       if (searchInput) {
@@ -25386,11 +25541,10 @@ function ensureCommentStanceMobileStyles() {
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
         background: transparent !important;
-        border-color: #111827 !important;
-        color: inherit !important;
-        outline: 3px solid rgba(255,255,255,0.98) !important;
-        outline-offset: 2px !important;
-        box-shadow: 0 0 0 2px rgba(36,48,56,0.74), 0 0 18px rgba(36,48,56,0.68) !important;
+        border-color: transparent !important;
+        outline: none !important;
+        box-shadow: none !important;
+        font-weight: 900 !important;
       }
 
       body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"] {
