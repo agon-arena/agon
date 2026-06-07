@@ -660,6 +660,7 @@ let indexPendingEmbedScrollRestoreTop = null;
 let indexUserScrollGuardBound = false;
 let indexXTabletRefreshBound = false;
 let indexFilterFeedWarmupPromise = null;
+let indexSearchFetchState = null;
 let indexPendingAdminProtectedDebatesRender = null;
 
 const DEBATE_CATEGORY_OPTIONS = [
@@ -16465,9 +16466,10 @@ function buildIndexThematicSectionsHtml(debates) {
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
-    // ── À la une : toujours les 20 premières, jamais filtrées par bulle ──
+    // ── À la une : toujours les 20 premières, jamais filtrées par bulle, mais masquée si une recherche est active ──
+    const hasActiveIndexSearch = !!getCurrentIndexSearchQuery();
     const alaUneSource = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : allDebates;
-    if (alaUneSource.length) {
+    if (!hasActiveIndexSearch && alaUneSource.length) {
       const sortedAll = [...alaUneSource].sort(byDate);
       const inner = _buildCarouselInner(sortedAll, "À la une", 20);
       if (inner) {
@@ -16879,7 +16881,7 @@ function filterDebates() {
   applyIndexFilters();
 }
 
-function applyIndexSearch() {
+async function applyIndexSearch() {
   const input = document.getElementById("debate-search");
   currentIndexSearchQuery = String(input?.value || "").trim();
   const activeBubble = document.querySelector('.agon-tag-bubble.agon-tag-bubble-active');
@@ -16897,6 +16899,16 @@ function applyIndexSearch() {
   }
 
   filterDebates();
+
+  if (currentIndexSearchQuery) {
+    const snapshot = currentIndexSearchQuery;
+    try {
+      await ensureSearchMatchesInCache(snapshot);
+    } catch (error) {
+      // Le filtrage local reste utilisable même si la recherche serveur échoue.
+    }
+    if (snapshot === currentIndexSearchQuery) filterDebates();
+  }
 }
 
 function setTypeFilter(type) {
@@ -17118,6 +17130,52 @@ async function fetchAndMergeNextIndexDebatesPage() {
   });
 
   return safePage;
+}
+
+function ensureSearchMatchesInCache(query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) return Promise.resolve([]);
+
+  if (indexSearchFetchState && indexSearchFetchState.query === normalizedQuery) {
+    return indexSearchFetchState.promise;
+  }
+
+  const promise = (async () => {
+    const params = new URLSearchParams();
+    params.set("search", normalizedQuery);
+    params.set("sort", getIndexDebatesSortQueryValue());
+    const matches = await fetchJSON(`${API}/debates?${params.toString()}`);
+    const safeMatches = Array.isArray(matches) ? matches : [];
+
+    const current = Array.isArray(debatesCache) ? debatesCache : [];
+    const seenIds = new Set(current.map((d) => String(d?.id || "").trim()).filter(Boolean));
+    const additions = safeMatches.filter((d) => {
+      const debateId = String(d?.id || "").trim();
+      if (!debateId || seenIds.has(debateId)) return false;
+      seenIds.add(debateId);
+      return true;
+    });
+
+    if (additions.length) {
+      debatesCache = [...current, ...additions];
+      saveDebatesToSessionCache(debatesCache, {
+        nextOffset: indexDebatesApiNextOffset,
+        hasMore: indexDebatesApiHasMore,
+        sortMode: getIndexDebatesSortQueryValue()
+      });
+    }
+
+    return safeMatches;
+  })();
+
+  indexSearchFetchState = { query: normalizedQuery, promise };
+  promise.catch(() => {
+    if (indexSearchFetchState && indexSearchFetchState.query === normalizedQuery) {
+      indexSearchFetchState = null;
+    }
+  });
+
+  return promise;
 }
 
 function getIndexFeedFilterSnapshot() {

@@ -285,94 +285,51 @@
         color: #5a4a2f; letter-spacing: .08em; text-transform: uppercase;
         display: block; margin-bottom: 6px;
       }
-      /* ── Popularity vs Robustness section ── */
-      .ada-pop-section { margin-top: 4px; }
-      .ada-pop-unavailable {
-        font-size: 13px; color: #7a8a88; font-style: italic;
-        padding: 10px 0 6px;
-      }
-      .ada-pop-intro {
-        font-size: 13px; line-height: 1.65; color: #4a5a58;
-        background: #f3f6f4; border-radius: 10px; padding: 12px 14px;
-        margin-bottom: 14px; border-left: 3px solid #b0c4bc;
-      }
-      .ada-pop-finding {
-        margin-bottom: 12px;
-        padding: 12px 14px;
-        background: #eef3f0;
-        border-left: 4px solid #3a6a52;
-        border-radius: 0 10px 10px 0;
-        font-size: 14px; line-height: 1.6; color: #243038;
-      }
-      .ada-pop-finding-label {
-        display: block; font-size: 10px; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .1em;
-        color: #3a6a52; margin-bottom: 5px;
-      }
-      .ada-pop-summary {
-        font-size: 13px; line-height: 1.7; color: #374344;
-        margin-bottom: 14px;
-      }
-      .ada-pop-camps {
-        display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;
-      }
-      .ada-pop-camp-obs {
-        background: #f7f9f8; border-radius: 10px; padding: 10px 13px;
-        border: 1px solid #dde6e0;
-      }
-      .ada-pop-camp-obs-label {
-        display: block; font-size: 11px; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .06em;
-        color: #5a6a68; margin-bottom: 4px;
-      }
-      .ada-pop-camp-obs-text {
-        font-size: 13px; line-height: 1.6; color: #374344;
-      }
-      .ada-pop-gaps-title {
-        font-size: 11px; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .08em; color: #5a6a68; margin: 0 0 8px;
-      }
-      .ada-pop-gaps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-      .ada-pop-gap {
-        background: #fff; border-radius: 10px; padding: 11px 13px;
-        border: 1px solid #e0e8e4;
-      }
-      .ada-pop-gap-header {
-        display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
-        margin-bottom: 6px;
-      }
-      .ada-pop-gap-type {
-        font-size: 11px; font-weight: 700; padding: 2px 9px;
-        border-radius: 20px; letter-spacing: .02em;
-      }
+      /* ── Popularity vs Robustness section — badges de type d'écart (sur .ada-arg-cat) ── */
       .ada-pop-type-weak    { background: #fff0dd; color: #9a5200; }
       .ada-pop-type-average { background: #fff8e0; color: #7a5a00; }
       .ada-pop-type-robust  { background: #e0f5ea; color: #1a6240; }
       .ada-pop-type-both    { background: #ddeeff; color: #1a4070; }
-      .ada-pop-no-gaps {
-        font-size: 13px; color: #7a8a88; font-style: italic;
-        padding: 8px 0 4px; line-height: 1.6;
+
+      /* ── Popularity vs Robustness — intro (icônes voix / cerveau au lieu de l'ampoule générique) ── */
+      .ada-criterion-arrow.ada-pop-intro::before { content: none; }
+      .ada-pop-intro-icon {
+        color: #5a4a2f;
+        margin-right: 3px;
       }
-      .ada-pop-gap-text {
-        font-size: 13px; color: #2a3840; font-style: italic;
-        line-height: 1.5; margin-bottom: 6px;
+
+      /* ── Popularity vs Robustness — cadre unique (constat + analyse par position) ── */
+      .ada-pop-summary-card {
+        margin: 20px 0 8px;
+        padding: 16px 18px;
+        background: linear-gradient(135deg, rgba(244,198,107,.22), rgba(255,255,255,.72));
+        border: 1px solid rgba(90,74,47,.22);
+        border-radius: 16px;
+        box-shadow: 0 10px 26px rgba(36,48,56,.1);
+        color: #243038;
       }
-      .ada-pop-gap-meta {
-        display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      .ada-pop-summary-card .ada-finale-label { text-align: center; }
+      .ada-pop-main-finding {
+        text-align: center;
+        font-style: italic;
+        font-size: 18px;
+        line-height: 1.55;
+        margin-bottom: 14px;
       }
-      .ada-pop-votes {
-        font-size: 11px; font-weight: 600; color: #555; background: #eef0ee;
-        padding: 1px 7px; border-radius: 12px;
+      .ada-pop-divider {
+        height: 1px;
+        margin: 0 0 14px;
+        background: rgba(90,74,47,.18);
       }
-      .ada-pop-score {
-        font-size: 11px; font-weight: 600; color: #3a5a4a; background: #e0f0e8;
-        padding: 1px 7px; border-radius: 12px;
+      .ada-pop-position-row + .ada-pop-position-row {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(90,74,47,.2);
       }
-      .ada-pop-warning {
-        font-size: 12px; color: #7a8a88; font-style: italic;
-        line-height: 1.6; padding-top: 4px; margin-bottom: 6px;
+      .ada-pop-position-text {
+        font-size: 15px;
+        line-height: 1.55;
       }
-      /* ── / Popularity section ── */
 
       .ada-paste-excluded-notice {
         margin: 0 0 14px;
@@ -383,10 +340,11 @@
         font-size: 13px; line-height: 1.5; color: #6b5426;
       }
       .ada-camp-weak-count {
-        font-size: 12px;
+        font-size: 13px;
+        text-align: center;
         color: #b91c1c;
-        margin-top: 3px;
-        margin-bottom: 2px;
+        margin-top: 0;
+        margin-bottom: 14px;
         opacity: 0.85;
       }
       .ada-camp-paste-excluded {
@@ -686,10 +644,35 @@
       .ada-section-icon {
         filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
       }
+      summary.ada-section-h2 {
+        cursor: pointer;
+        list-style: none;
+      }
+      summary.ada-section-h2::-webkit-details-marker {
+        display: none;
+      }
+      summary.ada-section-h2::after {
+        content: '⌄';
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.18);
+        color: inherit;
+        font-size: 12px;
+        line-height: 1;
+        transition: transform .18s ease;
+      }
+      details[open] > summary.ada-section-h2::after {
+        transform: rotate(180deg);
+      }
       .ada-camp-title {
         border: 0;
         border-radius: 6px;
         color: #f3f6f4;
+        text-shadow: 0 1px 2px rgba(0,0,0,.65), 0 0 4px rgba(0,0,0,.45);
         margin: 4px 0;
         width: 100%;
         box-sizing: border-box;
@@ -699,11 +682,10 @@
         font-size: 16px;
       }
       .ada-camp-title-a {
-        background: linear-gradient(135deg, #516776, #6f8d9d);
+        background: linear-gradient(135deg, rgba(81,103,118,.5), rgba(111,141,157,.5));
       }
       .ada-camp-title-b {
-        background: linear-gradient(135deg, #AEC0CC, #d5e0e6);
-        color: #243038;
+        background: linear-gradient(135deg, rgba(174,192,204,.65), rgba(213,224,230,.65));
       }
       .ada-camp-title .ada-section-icon {
         display: none;
@@ -951,9 +933,13 @@
       .ada-arg-source-ok   { background: #f0fdf4; color: #15803d; }
       .ada-arg-source-none { background: #f9fafb; color: #9ca3af; }
       .ada-camp-section { margin-bottom: 8px; }
-      .ada-camp-stats { font-size: 13px; color: #64747a; margin: -4px 0 8px; text-align: center; }
+      .ada-camp-stats { font-size: 13px; color: #64747a; margin: -4px 0 14px; text-align: center; }
+      .ada-camp-stats:has(+ .ada-camp-weak-count) { margin-bottom: 1px; }
       .ada-args-details {
         margin-top: 6px;
+      }
+      .ada-criterion-details + .ada-criterion-details {
+        margin-top: 0;
       }
       .ada-args-summary {
         list-style: none;
@@ -1089,6 +1075,7 @@
         .ada-arg-excluded-label { font-size: 13px; }
         /* ── Stats de camp ── */
         .ada-camp-stats         { font-size: 17px; }
+        .ada-camp-weak-count    { font-size: 17px; }
         /* ── Critères ── */
         .ada-criterion-title    { font-size: 18px; }
         .ada-criterion-arrow    { font-size: 19px; }
@@ -1113,6 +1100,8 @@
         .ada-args-summary       { font-size: 14px; }
         /* ── Conclusion & finale ── */
         .ada-finale             { font-size: 21px; }
+        .ada-pop-main-finding   { font-size: 21px; }
+        .ada-pop-position-text  { font-size: 16px; }
         /* ── Modal barème ── */
         .ada-bareme-modal       { font-size: 18px; }
         .ada-bareme-modal h2    { font-size: 23px; }
@@ -1131,8 +1120,15 @@
         }
         .ada-verdict-expl,
         .ada-criterion-arrow,
-        .ada-finale {
+        .ada-finale,
+        .ada-pop-main-finding {
           font-size: 15px;
+        }
+        .ada-pop-position-text {
+          font-size: 14px;
+        }
+        .ada-pop-summary-card {
+          padding: 13px 14px;
         }
       }
     `;
@@ -1201,7 +1197,7 @@
 
   // ── New-format renderer (version 2 JSON) ────────────────────────────
 
-  function renderNewAnalysis(d) {
+  function renderNewAnalysis(d, popularityHtml) {
     const CAT_CSS = { excellent: 'ada-cat-excellent', bon: 'ada-cat-bon', moyen: 'ada-cat-moyen', faible: 'ada-cat-faible' };
     const CAT_LABEL = { excellent: 'excellent', bon: 'bon', moyen: 'moyen', faible: 'faible' };
 
@@ -1301,11 +1297,11 @@
     // Scoring report (critères)
     const sr = d.scoringReport;
     if (sr && sr.criteria && sr.criteria.length) {
-      out += '<div class="ada-section-h2"><span class="ada-section-icon">📊</span> Évaluation par critère</div>';
+      let critOut = '';
       for (const c of sr.criteria) {
         const sA = Math.min(100, Math.max(0, Number(c.scoreA) || 0));
         const sB = Math.min(100, Math.max(0, Number(c.scoreB) || 0));
-        out += '<details class="ada-args-details">' +
+        critOut += '<details class="ada-args-details ada-criterion-details">' +
           '<summary class="ada-args-summary">' +
             '<span>' + _criterionIcon(c.name) + '</span> ' + esc(c.name) +
           '</summary>' +
@@ -1317,15 +1313,23 @@
           '</div>' +
         '</details>';
       }
+      out += '<details class="ada-args-details">' +
+        '<summary class="ada-section-h2"><span class="ada-section-icon">📊</span> Évaluation par critère</summary>' +
+        '<div class="ada-args-list">' + critOut + '</div>' +
+      '</details>';
     }
 
     // Camp sections
     const b = d.budget;
-    out += '<div class="ada-section-h2"><span class="ada-section-icon">🧠</span> Évaluation individuelle des idées</div>';
-    out += campSection('A', d.camps.A, b && b.pasteExcludedA);
-    if (!d.isOpen && d.camps.B) out += campSection('B', d.camps.B, b && b.pasteExcludedB);
+    out += '<details class="ada-args-details">' +
+      '<summary class="ada-section-h2"><span class="ada-section-icon">🧠</span> Évaluation individuelle des idées</summary>' +
+      '<div class="ada-args-list">' +
+        campSection('A', d.camps.A, b && b.pasteExcludedA) +
+        (!d.isOpen && d.camps.B ? campSection('B', d.camps.B, b && b.pasteExcludedB) : '') +
+      '</div>' +
+    '</details>';
 
-    // Bottom sections (synthèse + conclusion)
+    // Bottom sections (synthèse) — la conclusion est rendue après la section Popularité, tout en bas
     if (sr) {
       const cs = sr.campSummaries;
       if (cs && (cs.A || cs.B)) {
@@ -1352,22 +1356,29 @@
           summaryOut += '</div>';
         });
         if (summaryOut) {
-          out += '<div class="ada-section-h2"><span class="ada-section-icon">📋</span> Synthèse par camp</div>' +
-            '<details class="ada-summary-details">' +
-              '<summary class="ada-args-summary ada-summary-toggle">Voir la synthèse par camp</summary>' +
-              '<div class="ada-summary-list">' + summaryOut + '</div>' +
-            '</details>';
+          out += '<details class="ada-summary-details">' +
+            '<summary class="ada-section-h2"><span class="ada-section-icon">📋</span> Synthèse par camp</summary>' +
+            '<div class="ada-summary-list">' + summaryOut + '</div>' +
+          '</details>';
         }
-      }
-      if (sr.conclusion) {
-        out += '<div class="ada-finale">' +
-          '<span class="ada-finale-label">✍️ Conclusion</span>' +
-          md(sr.conclusion) +
-        '</div>';
       }
     }
 
     out += '</div></div>';
+
+    // Section Popularité vs robustesse — placée avant la conclusion pour que celle-ci reste tout en bas
+    if (popularityHtml) out += popularityHtml;
+
+    // Conclusion — toujours la toute dernière chose affichée dans le rapport
+    if (sr && sr.conclusion) {
+      out += '<div class="ada-scoring-report"><div class="ada-report">' +
+        '<div class="ada-finale">' +
+          '<span class="ada-finale-label">✍️ Conclusion</span>' +
+          md(sr.conclusion) +
+        '</div>' +
+      '</div></div>';
+    }
+
     return out;
   }
 
@@ -1686,18 +1697,20 @@
     if (!pop || pop.version !== 2) return '';
 
     if (pop.hasEnoughData === false) {
-      return '<div class="ada-scoring-report ada-pop-section"><div class="ada-report">' +
+      return '<div class="ada-scoring-report"><div class="ada-report">' +
         '<div class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</div>' +
-        '<div class="ada-pop-unavailable">Analyse indisponible : les données de vote ou de notation argumentative sont insuffisantes.</div>' +
-        '</div></div>';
+        '<div class="ada-empty">Analyse indisponible : les données de vote ou de notation argumentative sont insuffisantes.</div>' +
+      '</div></div>';
     }
 
-    // Type badge CSS — labels come from the server (pre-computed)
-    const TYPE_CLS = {
-      popular_but_weak:           'ada-pop-type-weak',
-      popular_but_average:        'ada-pop-type-average',
-      robust_but_less_supported:  'ada-pop-type-robust',
-      aligned_popular_and_robust: 'ada-pop-type-both'
+    let out = '<div class="ada-scoring-report"><div class="ada-report">';
+
+    // Badge de label d'écart — couleur dérivée du statut argumentatif (code déterministe)
+    const GAP_BADGE_CLS = {
+      weak:      'ada-pop-type-weak',
+      average:   'ada-pop-type-average',
+      robust:    'ada-pop-type-robust',
+      excellent: 'ada-pop-type-both'
     };
     // Robustness display (server-side enum → display label + CSS)
     const ROBUST_DISPLAY = {
@@ -1707,80 +1720,94 @@
       weak:      { label: 'faible',     cls: 'ada-cat-faible'    }
     };
 
+    // Carte d'écart — un item de l'une des deux listes (entièrement déterministe côté code)
+    function renderGapCard(gap) {
+      const badgeCls = GAP_BADGE_CLS[gap.robustness] || '';
+      const robust   = ROBUST_DISPLAY[gap.robustness] || { label: gap.robustness || '', cls: '' };
+      let html = '<div class="ada-arg-card">';
+      html += '<div class="ada-arg-header">';
+      if (gap.label) html += '<span class="ada-arg-cat ' + badgeCls + '">' + esc(gap.label) + '</span>';
+      html += '<span class="ada-arg-cat ' + robust.cls + '">' + esc(robust.label) + '</span>';
+      html += '</div>';
+      if (gap.argumentText) html += '<div class="ada-arg-text">"' + esc(gap.argumentText) + '"</div>';
+      const meta = [];
+      if (gap.votes !== undefined) meta.push(gap.votes + ' voix');
+      if (gap.score !== undefined) meta.push(gap.score + '/100');
+      if (meta.length) html += '<div class="ada-arg-breakdown">' + meta.join(' · ') + '</div>';
+      html += '</div>';
+      return html;
+    }
+
+    // Sous-section titrée — n'est rendue que si la liste contient au moins un élément
+    function renderGapSection(title, list) {
+      if (!list.length) return '';
+      let html = '<div class="ada-summary-section-title">' + esc(title) + '</div>';
+      list.forEach(function(gap) { html += renderGapCard(gap); });
+      return html;
+    }
+
     const isOpen = analysis && analysis.isOpen;
-    const labelA = analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label || (analysis && analysis.positionA) || 'Camp A';
-    const labelB = analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label || (analysis && analysis.positionB) || 'Camp B';
+    const labelA = (analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A';
+    const labelB = (analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label) || (analysis && analysis.positionB) || 'Camp B';
 
-    let out = '<div class="ada-scoring-report ada-pop-section"><div class="ada-report">';
+    let inner = '';
 
-    // Header
-    out += '<div class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</div>';
+    // Bloc d'introduction — même style que les explications de critère, icônes voix/cerveau au lieu de l'ampoule générique
+    inner += '<div class="ada-criterion-arrow ada-pop-intro">' +
+      '<i class="fa-solid fa-check-to-slot ada-pop-intro-icon" aria-hidden="true"></i> ' +
+      'Les voix indiquent quelles idées convainquent le plus les utilisateurs. La note argumentative indique quelles idées sont les plus solides sur le plan du raisonnement <span aria-hidden="true">🧠</span>. Ces deux résultats ne mesurent pas la même chose.<br><br>⚠️ Il est important de noter que la popularité d\'un argument ne garantit pas sa validité ou sa solidité argumentative.' +
+    '</div>';
 
-    // Bloc d'introduction
-    out += '<div class="ada-pop-intro">Les voix indiquent quelles idées convainquent le plus les utilisateurs. La note argumentative indique quelles idées sont les plus solides sur le plan du raisonnement. Ces deux résultats ne mesurent pas la même chose.</div>';
+    // Constat + analyse par position — un seul cadre commun (sous-parties distinguées par titres/séparateurs internes)
+    const hasMainFinding = !!pop.mainFinding;
+    const hasCampA       = !!pop.campAObservation;
+    const hasCampB       = !isOpen && !!pop.campBObservation;
+    const hasByPosition  = hasCampA || hasCampB;
 
-    // Constat principal
-    if (pop.mainFinding) {
-      out += '<div class="ada-pop-finding">' +
-        '<span class="ada-pop-finding-label">Constat principal</span>' +
-        esc(pop.mainFinding) +
-      '</div>';
-    }
-
-    // Analyse générale
-    if (pop.summary) {
-      out += '<div class="ada-pop-summary">' + esc(pop.summary) + '</div>';
-    }
-
-    // Observations par camp
-    const hasObservations = pop.campAObservation || (!isOpen && pop.campBObservation);
-    if (hasObservations) {
-      out += '<div class="ada-pop-camps">';
-      if (pop.campAObservation) {
-        out += '<div class="ada-pop-camp-obs">' +
-          '<span class="ada-pop-camp-obs-label">' + esc(labelA) + '</span>' +
-          '<span class="ada-pop-camp-obs-text">' + esc(pop.campAObservation) + '</span>' +
-        '</div>';
+    if (hasMainFinding || hasByPosition) {
+      let card = '';
+      if (hasMainFinding) {
+        card += '<span class="ada-finale-label">Constat principal</span>' +
+                '<div class="ada-pop-main-finding">' + esc(pop.mainFinding) + '</div>';
       }
-      if (!isOpen && pop.campBObservation) {
-        out += '<div class="ada-pop-camp-obs">' +
-          '<span class="ada-pop-camp-obs-label">' + esc(labelB) + '</span>' +
-          '<span class="ada-pop-camp-obs-text">' + esc(pop.campBObservation) + '</span>' +
-        '</div>';
+      if (hasMainFinding && hasByPosition) {
+        card += '<div class="ada-pop-divider"></div>';
       }
-      out += '</div>';
+      if (hasByPosition) {
+        if (hasCampA) {
+          card += '<div class="ada-pop-position-row">' +
+                    '<span class="ada-finale-label">' + esc(labelA) + '</span>' +
+                    '<div class="ada-pop-position-text">' + esc(pop.campAObservation) + '</div>' +
+                  '</div>';
+        }
+        if (hasCampB) {
+          card += '<div class="ada-pop-position-row">' +
+                    '<span class="ada-finale-label">' + esc(labelB) + '</span>' +
+                    '<div class="ada-pop-position-text">' + esc(pop.campBObservation) + '</div>' +
+                  '</div>';
+        }
+      }
+      inner += '<div class="ada-pop-summary-card">' + card + '</div>';
     }
 
-    // Écarts notables — labels et catégories viennent du serveur (code déterministe)
-    const gaps = Array.isArray(pop.notableGaps) ? pop.notableGaps : [];
-    out += '<div class="ada-pop-gaps-title">Écarts notables</div>';
-    if (gaps.length === 0) {
-      out += '<div class="ada-pop-no-gaps">Aucun écart vraiment significatif entre adhésion et solidité argumentative ne ressort clairement des données disponibles.</div>';
+    // Deux listes distinctes — entièrement calculées et plafonnées côté code (jamais par l'IA)
+    const popularButWeakOrAverage = Array.isArray(pop.popularButWeakOrAverage) ? pop.popularButWeakOrAverage : [];
+    const robustButUnsupported    = Array.isArray(pop.robustButUnsupported)    ? pop.robustButUnsupported    : [];
+
+    if (popularButWeakOrAverage.length === 0 && robustButUnsupported.length === 0) {
+      inner += '<div class="ada-empty">Aucun écart vraiment significatif entre adhésion et solidité argumentative ne ressort clairement des données disponibles.</div>';
     } else {
-      out += '<div class="ada-pop-gaps">';
-      gaps.forEach(function(gap) {
-        const typeLabel = gap.label || '';
-        const typeCls   = TYPE_CLS[gap.type] || '';
-        const robust    = ROBUST_DISPLAY[gap.robustness] || { label: gap.robustness || '', cls: '' };
-        out += '<div class="ada-pop-gap">';
-        out += '<div class="ada-pop-gap-header">';
-        if (typeLabel) out += '<span class="ada-pop-gap-type ' + typeCls + '">' + esc(typeLabel) + '</span>';
-        out += '<span class="ada-arg-cat ' + robust.cls + '">' + esc(robust.label) + '</span>';
-        out += '</div>';
-        if (gap.argumentText) out += '<div class="ada-pop-gap-text">"' + esc(gap.argumentText) + '"</div>';
-        out += '<div class="ada-pop-gap-meta">';
-        if (gap.votes !== undefined) out += '<span class="ada-pop-votes">' + gap.votes + ' voix</span>';
-        if (gap.score !== undefined)  out += '<span class="ada-pop-score">' + gap.score + '/100</span>';
-        out += '</div>';
-        out += '</div>';
-      });
-      out += '</div>';
+      inner += renderGapSection('Populaires, mais faibles ou moyens argumentativement', popularButWeakOrAverage);
+      inner += renderGapSection('Peu populaires, mais robustes argumentativement', robustButUnsupported);
     }
 
-    // Phrase de prudence
-    if (pop.warning) {
-      out += '<div class="ada-pop-warning">' + esc(pop.warning) + '</div>';
-    }
+    out += '<details class="ada-args-details">' +
+      '<summary class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</summary>' +
+      '<div class="ada-args-list">' +
+        inner +
+        '<div class="ada-load-more-wrap"><button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button></div>' +
+      '</div>' +
+    '</details>';
 
     out += '</div></div>';
     return out;
@@ -1857,7 +1884,7 @@
           let popularityParsed = null;
           try { if (json.popularityRaw) popularityParsed = JSON.parse(json.popularityRaw); } catch (_) {}
           body.innerHTML = header + (parsed && parsed.version === 2
-            ? renderNewAnalysis(parsed) + (popularityParsed ? renderPopularityAnalysis(popularityParsed, parsed) : '')
+            ? renderNewAnalysis(parsed, popularityParsed ? renderPopularityAnalysis(popularityParsed, parsed) : '')
             : renderScoringReport(json.raw));
           bindLoadMoreArguments(body);
         };
@@ -1904,7 +1931,7 @@
       try { if (json.popularityRaw) popularityRegen = JSON.parse(json.popularityRaw); } catch (_) {}
       body.innerHTML = `<div class="ada-date">Analyse générée le ${esc(fmtDate(now))}</div>` +
         (parsedRegen && parsedRegen.version === 2
-          ? renderNewAnalysis(parsedRegen) + (popularityRegen ? renderPopularityAnalysis(popularityRegen, parsedRegen) : '')
+          ? renderNewAnalysis(parsedRegen, popularityRegen ? renderPopularityAnalysis(popularityRegen, parsedRegen) : '')
           : renderScoringReport(json.raw || ''));
       bindLoadMoreArguments(body);
     } catch (err) {

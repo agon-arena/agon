@@ -1953,7 +1953,7 @@ const notificationsApiResponseCache = new Map();
 const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
 const NOTIFICATIONS_API_CACHE_MAX = 200;
 
-function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular" } = {}) {
+function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular", search = "" } = {}) {
   const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
     ? String(sort)
     : "popular";
@@ -1961,7 +1961,8 @@ function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular" } = 
   return JSON.stringify({
     limit: Number.isFinite(limit) && limit > 0 ? limit : null,
     offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
-    sort: normalizedSort
+    sort: normalizedSort,
+    search: String(search || "").trim().toLowerCase()
   });
 }
 
@@ -4514,10 +4515,12 @@ app.get("/api/debates", async (req, res) => {
     const sortMode = ["popular", "recent", "old", "ideas"].includes(requestedSort)
       ? requestedSort
       : "popular";
+    const searchQuery = String(req.query.search || "").trim().toLowerCase();
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
-      sort: sortMode
+      sort: sortMode,
+      search: searchQuery
     });
     const bypassCache = req.query._ || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
@@ -4526,7 +4529,7 @@ app.get("/api/debates", async (req, res) => {
       return res.json(cachedResponse);
     }
 
-    const canPageInDatabase = hasPaginationLimit && (sortMode === "recent" || sortMode === "old");
+    const canPageInDatabase = !searchQuery && hasPaginationLimit && (sortMode === "recent" || sortMode === "old");
     let debatesQuery = supabase
       .from("debates")
       .select(DEBATES_LIST_SELECT_COLUMNS);
@@ -4544,7 +4547,13 @@ app.get("/api/debates", async (req, res) => {
       return sendServerError(res, "Erreur lecture débats.");
     }
 
-    const debateRows = debates || [];
+    let debateRows = debates || [];
+    if (searchQuery) {
+      debateRows = debateRows.filter((d) => {
+        const text = [d.question, d.category, d.option_a, d.option_b].join(" ").toLowerCase();
+        return text.includes(searchQuery);
+      });
+    }
     if (!debateRows.length) {
       return res.json([]);
     }

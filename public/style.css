@@ -3278,17 +3278,17 @@ body.page-debate #score-b {
 }
 
 .comments-count-favorable{
-  color:#111827 !important;
+  color:#137333 !important;
   font-weight:600;
 }
 
 .comments-count-defavorable{
-  color:#111827 !important;
+  color:#c5221f !important;
   font-weight:600;
 }
 
 .comments-count-amelioration{
-  color:#111827 !important;
+  color:#b45309 !important;
   font-weight:600;
 }
 
@@ -3356,12 +3356,12 @@ body.page-debate #score-b {
 
 .comment-stance-favorable{
   background:#f3f4f6 !important;
-  color:#111827 !important;
+  color:#137333 !important;
 }
 
 .comment-stance-defavorable{
   background:#f3f4f6 !important;
-  color:#111827 !important;
+  color:#c5221f !important;
 }
 
 .comments-list {
@@ -4809,7 +4809,7 @@ body.page-debate .topbar::after {
 }
 .comment-stance-amelioration{
   background:#f3f4f6 !important;
-  color:#111827 !important;
+  color:#b45309 !important;
   border:none !important;
 }
 
@@ -12194,6 +12194,17 @@ body.page-debate .debate-top-sticky-actions {
   box-shadow: inset 0 0 0 3px #ffffff !important;
 }
 
+/* Couleurs des choix de position du commentaire (vert = soutient, rouge = conteste, doré = amélioration) */
+.comment-stance-option:has(input[type="radio"][value="favorable"]) {
+  color: #137333 !important;
+}
+.comment-stance-option:has(input[type="radio"][value="defavorable"]) {
+  color: #c5221f !important;
+}
+.comment-stance-option:has(input[type="radio"][value="amelioration"]) {
+  color: #b45309 !important;
+}
+
 /* Base visuelle des choix de commentaire */
 .comment-stance-option {
   padding: 5px 10px;
@@ -13170,16 +13181,15 @@ body.page-debate .argument-card-unified.argument-card-b .argument-position-label
 
 /* Compteurs de position des commentaires */
 body.page-debate .comments-count-favorable {
-  color: #111827 !important;
+  color: #137333 !important;
 }
 body.page-debate .comments-count-defavorable {
-  color: #111827 !important;
+  color: #c5221f !important;
 }
 body.page-debate .comment-stance-favorable,
 body.page-debate .comment-stance-defavorable {
   background: #ffffff !important;
   border: none !important;
-  color: #111827 !important;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -13187,10 +13197,10 @@ body.page-debate .comment-stance-defavorable {
   line-height: 1.2;
 }
 body.page-debate .comment-stance-favorable {
-  color: #111827 !important;
+  color: #137333 !important;
 }
 body.page-debate .comment-stance-defavorable {
-  color: #111827 !important;
+  color: #c5221f !important;
 }
 body.page-debate .comment-stance-favorable::before,
 body.page-debate .comment-stance-defavorable::before {
