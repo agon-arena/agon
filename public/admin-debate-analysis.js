@@ -1249,12 +1249,17 @@
         ? `<div class="ada-arg-source ada-arg-source-ok">Source : ${esc(a.source_level || '')} — ${esc(a.source_explanation || '')}</div>`
         : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`;
       const excluded = a.category === 'faible' || a.category === 'moyen';
+      // Le badge affiche la catégorie du score final (cohérente avec le nombre /100 montré
+      // juste à côté) — `a.category`, basé sur la qualité hors sources, ne sert qu'au
+      // poids dans le verdict (voir `excluded` ci-dessus) et resterait trompeur ici.
+      const badgeCategory = a.final_category || a.category;
       return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}${isExtraHidden ? ' ada-arg-extra-hidden' : ''}">
-        <div class="ada-arg-header">${catBadge(a.category, a.final_score)}${excluded ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
+        <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${excluded ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
         <div class="ada-arg-text">"${esc(a.argumentText)}"</div>
         ${dupGroups(duplicateGroups)}
-        <div class="ada-arg-breakdown">Fond : ${scoreOut}/80 · Sources : ${a.source_score || 0}/20</div>
+        <div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/80 · Appui sourcé : ${a.source_score || 0}/20</div>
         ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
+        ${a.final_score_note ? `<div class="ada-arg-expl">${esc(a.final_score_note)}</div>` : ''}
         ${strengthsHtml}${weaknessesHtml}
         ${sourceHtml}
       </div>`;
@@ -2006,6 +2011,7 @@
       <button class="ada-bareme-close" aria-label="Fermer">✕</button>
       <h2>Comment Agôn évalue les idées ?</h2>
       <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides.</p>
+      <p><strong>L'analyse IA n'évalue pas la vérité absolue d'une opinion. Elle évalue la qualité argumentative des contributions selon des critères publics — c'est une analyse contestable, pas un verdict de vérité.</strong></p>
 
       <h3>1. Les doublons sont regroupés</h3>
       <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
@@ -2032,6 +2038,7 @@
 
       <h3>4. Les sources sont prises en compte séparément</h3>
       <p>Quand une idée contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable, pertinente et bien liée à l'idée peut renforcer son évaluation. Mais une source ne suffit pas à rendre une idée excellente : une idée mal raisonnée reste pénalisée, même avec un lien. À l'inverse, une idée sans URL peut être bonne si elle est claire, logique et pertinente.</p>
+      <p>Le score final affiché (sur 100) additionne la <strong>qualité argumentative</strong> (sur 80, hors sources) et l'<strong>appui sourcé</strong> (sur 20). Une idée peut donc être excellente sur le plan du raisonnement tout en obtenant un score final plus modeste faute de source fournie : ce n'est pas une contradiction, seulement le reflet de deux dimensions distinctes — Agôn l'indique alors explicitement dans son explication.</p>
 
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>

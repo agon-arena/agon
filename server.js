@@ -6723,10 +6723,11 @@ async function _fetchDebatePayload(debateId) {
     return m ? String(m[1]).replace(/[),.;]+$/, "").trim() : "";
   };
   const mapArg = (a) => ({
-    id:         String(a.id),
-    text:       (a.body || a.title || "").trim(),
-    source_url: (a.source_url || "").trim() || _extractUrl(a.body),
-    votes:      Number(a.votes || 0)
+    id:          String(a.id),
+    text:        (a.body || a.title || "").trim(),
+    source_url:  (a.source_url || "").trim() || _extractUrl(a.body),
+    votes:       Number(a.votes || 0),
+    paste_ratio: Number(a.paste_ratio) || 0
   });
 
   return {
