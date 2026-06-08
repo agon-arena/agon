@@ -14541,8 +14541,9 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
         data-index-context-text
         data-full-text="${escapeAttribute(fullText)}"
         data-short-text="${escapeAttribute(shortText)}"
+        data-debate-open="${isOpenDebate(debate) ? '1' : '0'}"
         data-expanded="false"
-      ><div class="context-text-clamp">${renderIndexContextPreviewText(shortText, false)}</div></div>` : ""}
+      ><div class="context-text-clamp">${renderIndexContextPreviewText(shortText, false, isOpenDebate(debate))}</div></div>` : ""}
       ${needsToggle ? `
         <div class="debate-card-context-extra">
           ${scoresHtml}
@@ -14565,22 +14566,41 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
   `;
 }
 
-function renderIndexContextPreviewText(text, expanded) {
+function renderIndexContextPreviewText(text, expanded, isOpen = false) {
   const rawText = String(text || "");
   if (!rawText) return "";
   if (!expanded) {
     return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
   }
-  return renderIndexContextExpandedText(rawText);
+  return renderIndexContextExpandedText(rawText, isOpen);
 }
 
-function renderIndexContextExpandedText(text) {
+function renderIndexContextExpandedText(text, isOpen = false) {
   const rawText = String(text || "");
   if (!rawText) return "";
 
   const parts = rawText.split(/\n\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
+
+  if (isOpen) {
+    const hasOpenTail = parts.length >= 2;
+    if (!hasOpenTail) {
+      return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+    }
+    const reflectionQuestion = parts[parts.length - 1] || "";
+    const latinMotto = parts[parts.length - 2] || "";
+    const latinStart = rawText.indexOf(latinMotto);
+    const questionStart = latinStart >= 0 ? rawText.indexOf(reflectionQuestion, latinStart + latinMotto.length) : -1;
+    if (latinStart < 0 || questionStart < 0) {
+      return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+    }
+    const beforeLatin = rawText.slice(0, latinStart);
+    const betweenLatinAndQuestion = rawText.slice(latinStart + latinMotto.length, questionStart).replace(/^\n{2,}/, "\n");
+    const afterQuestion = rawText.slice(questionStart + reflectionQuestion.length).replace(/^\n{2,}/, "\n");
+    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndQuestion)}<span class="article-reflection-question">${escapeHtml(reflectionQuestion)}</span>${escapeHtmlNl(afterQuestion)}`;
+  }
+
   const signature = parts[parts.length - 1] || "";
   const question = parts[parts.length - 2] || "";
   const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
@@ -14767,7 +14787,7 @@ function toggleIndexContextPreview(button) {
       : String(textEl.getAttribute('data-short-text') || '');
     const clampSpan = textEl.querySelector('.context-text-clamp');
     if (clampSpan) {
-      clampSpan.innerHTML = renderIndexContextPreviewText(nextText, nextExpanded);
+      clampSpan.innerHTML = renderIndexContextPreviewText(nextText, nextExpanded, textEl.getAttribute('data-debate-open') === '1');
     } else {
       textEl.textContent = nextText;
     }
@@ -17497,11 +17517,25 @@ function getCreateContextText() {
   return input ? input.value.trim().slice(0, 1800) : "";
 }
 
-function renderAgonArticleContextHtml(content) {
+function renderAgonArticleContextHtml(content, isOpen = false) {
   const parts = String(content || "").split(/\n\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
   if (!parts.length) return "";
+
+  if (isOpen) {
+    const hasOpenTail = parts.length >= 2;
+    if (!hasOpenTail) {
+      return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
+    }
+    const reflectionQuestion = parts[parts.length - 1] || "";
+    const latinMotto = parts[parts.length - 2] || "";
+    const bodyParts = parts.slice(0, parts.length - 2);
+    return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
+      + `<p class="article-latin-question">${escapeHtml(latinMotto)}</p>`
+      + `<p class="article-reflection-question">${escapeHtml(reflectionQuestion)}</p>`;
+  }
+
   const signature = parts[parts.length - 1] || "";
   const question = parts[parts.length - 2] || "";
   const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
@@ -17520,7 +17554,7 @@ function renderAgonArticleContextHtml(content) {
     + `<p class="article-signature">${escapeHtml(signature)}</p>`;
 }
 
-function renderDebateContext(content) {
+function renderDebateContext(content, isOpen = false) {
   const wrap = document.getElementById("debate-context-wrap");
   const text = document.getElementById("debate-context-text");
   const nav = document.getElementById("debate-episode-nav");
@@ -17534,7 +17568,7 @@ function renderDebateContext(content) {
     return;
   }
 
-  text.innerHTML = renderAgonArticleContextHtml(safeContent);
+  text.innerHTML = renderAgonArticleContextHtml(safeContent, isOpen);
   wrap.style.display = "block";
   positionDebateContextBelowSources();
 }
@@ -21932,7 +21966,7 @@ function applyDebateCachedPreview(debate) {
   const d = debate || {};
   const questionEl = document.getElementById("debate-question");
   if (questionEl) questionEl.textContent = d.question || "";
-  renderDebateContext(d.content || "");
+  renderDebateContext(d.content || "", isOpenDebate(d));
   renderDebateEpisodeNavigation(d);
   const videoUrl = String(d.video_url || "").trim();
   const imageUrl = String(d.image_url || "").trim();
@@ -21986,7 +22020,7 @@ async function loadDebateFullData(id) {
     const data = await fetchJSON(API + "/debates/" + id);
 
   document.getElementById("debate-question").textContent = data.debate.question;
-  renderDebateContext(data.debate.content || "");
+  renderDebateContext(data.debate.content || "", isOpenDebate(data.debate));
   renderDebateEpisodeNavigation(data.debate || {});
 const debateVideoUrl = String(data.debate.video_url || "").trim();
 const debateImageUrl = String(data.debate.image_url || "").trim();
@@ -25833,7 +25867,7 @@ function applyCurrentDebateHeaderUpdate(updatedDebate) {
     questionEl.textContent = updatedDebate.question || "";
   }
 
-  renderDebateContext(updatedDebate.content || "");
+  renderDebateContext(updatedDebate.content || "", isOpenDebate(updatedDebate));
   renderDebateEpisodeNavigation(updatedDebate || {});
   renderSourceLinks(updatedDebate.source_links || []);
 

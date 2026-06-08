@@ -1047,6 +1047,14 @@ font-family: "Barlow Condensed", sans-serif;
   margin: 0;
 }
 
+.debate-card-context-text .article-reflection-question {
+  display: block;
+  font-style: italic !important;
+  text-align: left;
+  text-indent: 0;
+  margin: 0;
+}
+
 .debate-card-episode-toggle-row {
   display: flex;
   align-items: center;
@@ -12784,6 +12792,13 @@ body.page-debate .debate-context-text .article-latin-question {
 
 body.page-debate .debate-context-text .article-debate-question {
   text-align: center;
+  text-indent: 0;
+  font-style: italic;
+  margin-top: 1em;
+}
+
+body.page-debate .debate-context-text .article-reflection-question {
+  text-align: left;
   text-indent: 0;
   font-style: italic;
   margin-top: 1em;

@@ -53,6 +53,7 @@
     .article-format-preview p { margin: 0 0 0.65em; white-space: pre-line; }
     .article-format-preview .article-latin-question { text-align: center; font-weight: 700; margin-top: 1em; }
     .article-format-preview .article-debate-question { text-align: center; font-style: italic; margin-top: 1em; }
+    .article-format-preview .article-reflection-question { text-align: left; font-style: italic; margin-top: 1em; }
     .article-format-preview .article-signature { text-align: left; font-weight: 400; margin-bottom: 0; }
     .story-selection-box, .story-manual-picker { margin-top: 12px; }
     .story-selection-box { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa; }
@@ -114,10 +115,25 @@ function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function renderArticleFormatPreviewHtml(articleText) {
+function renderArticleFormatPreviewHtml(articleText, isOpen) {
   const parts = String(articleText || '').split(/\n\n+/)
     .map(function(part) { return part.trim(); })
     .filter(Boolean);
+
+  if (isOpen) {
+    const hasOpenTail = parts.length >= 2;
+    const reflectionQuestion = hasOpenTail ? (parts[parts.length - 1] || '') : '';
+    const latinMotto = hasOpenTail ? (parts[parts.length - 2] || '') : '';
+    const bodyParts = hasOpenTail ? parts.slice(0, parts.length - 2) : parts;
+    return bodyParts.map(function(part) {
+      return '<p>' + esc(part) + '</p>';
+    }).join('') +
+      (hasOpenTail
+        ? '<p class="article-latin-question">' + esc(latinMotto) + '</p>' +
+          '<p class="article-reflection-question">' + esc(reflectionQuestion) + '</p>'
+        : '');
+  }
+
   if (parts.length < 3) {
     return parts.map(function(part) {
       return '<p>' + esc(part) + '</p>';
@@ -149,21 +165,28 @@ function getResumeFieldValue(field) {
     .trim();
 }
 
-function setResumeFieldValue(field, value) {
+function isPendingItemOpen(item) {
+  if (!item) return false;
+  const positionA = item.querySelector('.f-pos-a');
+  const positionB = item.querySelector('.f-pos-b');
+  return !String(positionA && positionA.value || '').trim() && !String(positionB && positionB.value || '').trim();
+}
+
+function setResumeFieldValue(field, value, isOpen) {
   if (!field) return;
   const safeValue = String(value || '').trim();
   if ('value' in field) {
     field.value = safeValue;
     return;
   }
-  field.innerHTML = renderArticleFormatPreviewHtml(safeValue);
+  field.innerHTML = renderArticleFormatPreviewHtml(safeValue, isOpen);
 }
 
 function normalizeResumeEditor(item) {
   if (!item) return;
   const resume = item.querySelector('.f-resume');
   if (!resume || 'value' in resume) return;
-  setResumeFieldValue(resume, getResumeFieldValue(resume));
+  setResumeFieldValue(resume, getResumeFieldValue(resume), isPendingItemOpen(item));
 }
 
 function toast(msg) {
@@ -377,7 +400,7 @@ function renderItem(item) {
     '<label>Position B</label>' +
     '<input type="text" class="f-pos-b" value="' + esc(item.positionB || '') + '">' +
     '<label>Résumé (contexte)</label>' +
-    '<div class="article-format-preview f-resume" contenteditable="true" spellcheck="true" data-placeholder="Contexte de l’arène…">' + renderArticleFormatPreviewHtml(item.resume || '') + '</div>' +
+    '<div class="article-format-preview f-resume" contenteditable="true" spellcheck="true" data-placeholder="Contexte de l’arène…">' + renderArticleFormatPreviewHtml(item.resume || '', !String(item.positionA || '').trim() && !String(item.positionB || '').trim()) + '</div>' +
     '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
       '<button type="button" class="context-save-btn">Enregistrer les modifications</button>' +
@@ -423,7 +446,7 @@ function updateFieldCounter(item, selector, counterSelector, maxLength) {
   const rawValue = isResumeField ? getResumeFieldValue(field) : (field.value || '');
   const safeValue = rawValue.slice(0, maxLength);
   if (rawValue !== safeValue) {
-    if (isResumeField) setResumeFieldValue(field, safeValue);
+    if (isResumeField) setResumeFieldValue(field, safeValue, isPendingItemOpen(item));
     else field.value = safeValue;
   }
   counter.textContent = safeValue.length + ' / ' + maxLength;
@@ -440,7 +463,7 @@ function updateArticleFormatPreview(item) {
   if (!item) return;
   const resume = item.querySelector('.f-resume');
   if (!resume) return;
-  setResumeFieldValue(resume, getResumeFieldValue(resume));
+  setResumeFieldValue(resume, getResumeFieldValue(resume), isPendingItemOpen(item));
 }
 
 async function checkSimilar(item) {
@@ -706,7 +729,7 @@ async function proofread(btn) {
     if (questionField) questionField.value = String(data.question || '').slice(0, 98);
     if (positionAField) positionAField.value = String(data.positionA || '');
     if (positionBField) positionBField.value = String(data.positionB || '');
-    if (resumeField) setResumeFieldValue(resumeField, String(data.resume || '').slice(0, 1800));
+    if (resumeField) setResumeFieldValue(resumeField, String(data.resume || '').slice(0, 1800), isPendingItemOpen(item));
     if (Array.isArray(data.keywords) && data.keywords.length) {
       const keywordList = item.querySelector('.keyword-list');
       if (keywordList) {
