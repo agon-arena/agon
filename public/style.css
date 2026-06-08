@@ -11989,7 +11989,7 @@ body.admin-edit-open::after {
 @media (max-width: 768px) {
   #debate-iframe-modal-close {
     top: auto !important;
-    bottom: 5vh !important;
+    bottom: calc(32px + env(safe-area-inset-bottom, 0px)) !important;
     left: auto !important;
     right: 322px !important;
     width: 42px !important;
@@ -19307,10 +19307,17 @@ body.page-home-mobile .index-card-media-with-title .debate-card-local-image-shel
   aspect-ratio: 16 / 10 !important;
 }
 
-body.page-home .index-card-media-with-title .debate-card-youtube-shell,
-body.page-home-mobile .index-card-media-with-title .debate-card-youtube-shell,
-body.page-home .index-card-media-with-title .debate-card-local-video-shell,
-body.page-home-mobile .index-card-media-with-title .debate-card-local-video-shell {
+/* Ces deux shells ont leur propre aspect-ratio (16/9, cf. règles de base) qui leur
+   donne une hauteur intrinsèque. On ne les force en `height: 100% / aspect-ratio: unset`
+   QUE lorsqu'ils sont dans un carrousel swipe (.index-media-swipe-shell), car c'est ce
+   carrousel qui impose alors la hauteur via .index-media-swipe-media (aspect-ratio 16/10).
+   Sans ce ciblage, une carte n'ayant qu'un seul média vidéo (pas de carrousel) perdait
+   son aspect-ratio sans qu'aucun ancêtre n'en fournisse un autre : le bloc média
+   s'effondrait à 0px de hauteur et la vidéo devenait invisible sur l'index. */
+body.page-home .index-card-media-with-title .index-media-swipe-shell .debate-card-youtube-shell,
+body.page-home-mobile .index-card-media-with-title .index-media-swipe-shell .debate-card-youtube-shell,
+body.page-home .index-card-media-with-title .index-media-swipe-shell .debate-card-local-video-shell,
+body.page-home-mobile .index-card-media-with-title .index-media-swipe-shell .debate-card-local-video-shell {
   height: 100% !important;
   aspect-ratio: unset !important;
 }

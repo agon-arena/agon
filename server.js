@@ -652,8 +652,8 @@ function createStoryId(title) {
 
 function setDebateStoryId(debateId, storyId) {
   const debateKey = String(debateId || "").trim();
-  if (!debateKey) return;
-  supabase.from("debates").update({ story_id: storyId || null }).eq("id", debateKey)
+  if (!debateKey) return Promise.resolve();
+  return supabase.from("debates").update({ story_id: storyId || null }).eq("id", debateKey)
     .then(() => {}).catch(e => console.error("[story_id sync Supabase]", e));
 }
 
@@ -1214,6 +1214,15 @@ function getVideoMimeTypeFromExtension(extension) {
   }
 }
 
+// Chrome/Firefox/Edge ne savent pas lire "video/quicktime" (.mov) dans une balise <video>,
+// seul Safari le supporte nativement. Le conteneur QuickTime est assez proche de l'ISOBMFF/MP4
+// pour qu'un .mov H.264/AAC (format par défaut des exports iPhone) reste lisible une fois
+// stocké et servi en tant que .mp4 / video/mp4, sans ré-encodage. On ne touche donc qu'au
+// stockage des nouveaux imports, pas à la détection d'extension des fichiers déjà en place.
+function normalizeVideoStorageExtension(extension) {
+  return String(extension || "").toLowerCase() === "mov" ? "mp4" : extension;
+}
+
 function deleteLocalMediaFile(publicUrl, allowedDir) {
   const normalizedUrl = String(publicUrl || "").trim();
   if (!normalizedUrl || !normalizedUrl.startsWith("/")) return;
@@ -1400,11 +1409,13 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
   }
 
   const normalizedType = String(mimeType || "").trim().toLowerCase();
-  const extension = getVideoExtensionFromMimeType(normalizedType) || getVideoExtensionFromFilename(fileName);
+  const detectedExtension = getVideoExtensionFromMimeType(normalizedType) || getVideoExtensionFromFilename(fileName);
 
-  if (!extension) {
+  if (!detectedExtension) {
     throw new Error("Format vidéo non pris en charge.");
   }
+
+  const extension = normalizeVideoStorageExtension(detectedExtension);
 
   const previousVideoUrl = String(options.previousVideoUrl || "").trim();
   const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
@@ -1554,8 +1565,8 @@ function extractJsonLikeValueFromScripts(html, keys, maxLength = 500) {
   if (!wanted.length) return "";
 
   const valuePatterns = [
-    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')`, 'i'),
-    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*\{[^}]*?(?:"|')url(?:"|')\\s*:\\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)')`, 'i')
+    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*(?:"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"|'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)')`, 'i'),
+    new RegExp(`(?:"|')(${wanted.join('|')})(?:"|')\\s*:\\s*\{[^}]*?(?:"|')url(?:"|')\\s*:\\s*(?:"([^"\\\\]*(?:\\\\.[^"\\\\]*)*)"|'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)')`, 'i')
   ];
 
   for (const scriptTag of scripts) {
@@ -1719,7 +1730,14 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
     160
   );
 
+  const isYouTubeDomain = domain === "youtube.com" || domain === "youtu.be";
+
+  // Sur YouTube, "author"/"creator" en JSON-LD désigne souvent l'auteur d'un
+  // commentaire (schema.org/Comment) et non la chaîne propriétaire de la vidéo :
+  // on privilégie donc "ownerChannelName" (champ propre aux pages vidéo YouTube,
+  // fiable et non ambigu) avant la recherche générique.
   const author = cleanPreviewText(
+    (isYouTubeDomain && extractJsonLikeValueFromScripts(html, ["ownerChannelName"], 160)) ||
     getFirstMetaValue(metaTags, ["author"]) ||
     pickStructuredValue(jsonLdObjects, ["author", "creator", "contributor"]) ||
     extractJsonLikeValueFromScripts(html, ["ownerChannelName", "author", "channelName", "channel"], 160),
@@ -1890,6 +1908,10 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
       merged.siteName = preview.siteName;
     }
 
+    if (!isUsefulText(merged.author) && isUsefulText(preview.author)) {
+      merged.author = preview.author;
+    }
+
     if (!merged.domain && preview.domain) {
       merged.domain = preview.domain;
     }
@@ -1900,6 +1922,7 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
     if (!merged.title && preview.title) merged.title = preview.title;
     if (!merged.description && preview.description) merged.description = preview.description;
     if (!merged.siteName && preview.siteName) merged.siteName = preview.siteName;
+    if (!merged.author && preview.author) merged.author = preview.author;
     if (!merged.finalUrl && preview.finalUrl) merged.finalUrl = preview.finalUrl;
     if (!merged.canonicalUrl && preview.canonicalUrl) merged.canonicalUrl = preview.canonicalUrl;
   }
@@ -4346,7 +4369,7 @@ app.put("/api/admin/debate/:id", async (req, res) => {
 
     if ('story_id' in (req.body || {})) {
       const previousStoryId = currentRow?.story_id || null;
-      setDebateStoryId(req.params.id, story_id || "");
+      await setDebateStoryId(req.params.id, story_id || "");
       const newStoryId = String(story_id || "").trim();
       if (newStoryId) await recalculateStoryEpisodeNavigation(newStoryId);
       if (previousStoryId && previousStoryId !== newStoryId) await recalculateStoryEpisodeNavigation(previousStoryId);
@@ -4983,11 +5006,12 @@ app.post("/api/debates/:id/video-upload-url", async (req, res) => {
       return res.status(400).json({ error: "Vidéo trop lourde." });
     }
 
-    const extension = getVideoExtensionFromMimeType(mimeType) || getVideoExtensionFromFilename(fileName);
-    if (!extension) {
+    const detectedExtension = getVideoExtensionFromMimeType(mimeType) || getVideoExtensionFromFilename(fileName);
+    if (!detectedExtension) {
       return res.status(400).json({ error: "Format vidéo non pris en charge." });
     }
 
+    const extension = normalizeVideoStorageExtension(detectedExtension);
     const objectPath = buildDebateMediaStoragePath(debateId, "video", extension);
     const { data, error } = await supabase.storage
       .from(SUPABASE_DEBATE_MEDIA_BUCKET)
@@ -6581,7 +6605,7 @@ const previousSourceCount = previousSourceKeys.size;
         resume
       });
       if (finalStory?.story_id) {
-        setDebateStoryId(data.id, finalStory.story_id);
+        await setDebateStoryId(data.id, finalStory.story_id);
         await recalculateStoryEpisodeNavigation(finalStory.story_id);
       }
     }
