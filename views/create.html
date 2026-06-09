@@ -354,8 +354,31 @@
 
     <section class="create-card">
       <form id="create-form" class="create-form" novalidate>
+
+<div id="arena-type-choice" class="arena-type-choice">
+  <p class="arena-type-choice-intro">Quel type d'arène veux-tu ouvrir ?</p>
+  <div class="arena-type-cards">
+    <button type="button" class="arena-type-card" onclick="selectArenaType('open')">
+      <span class="arena-type-card-icon">✦</span>
+      <span class="arena-type-card-title">Arène libre</span>
+      <span class="arena-type-card-desc">Les participants proposent librement leurs idées. L'IA évalue les contributions selon le barème actif.</span>
+    </button>
+    <button type="button" class="arena-type-card" onclick="selectArenaType('debate')">
+      <span class="arena-type-card-icon">⚖</span>
+      <span class="arena-type-card-title">Arène à positions</span>
+      <span class="arena-type-card-desc">Deux positions s'affrontent. L'IA arbitre les arguments selon un barème fixe.</span>
+    </button>
+  </div>
+</div>
+
+<div id="create-form-fields" style="display:none;">
+<div class="create-type-indicator">
+  <span class="create-type-indicator-badge" id="create-type-indicator-value">—</span>
+  <button type="button" class="create-type-back-btn" onclick="backToArenaTypeChoice()">Changer de type</button>
+</div>
+
 <div class="form-group create-form-group create-form-group-primary">
-  <label for="question">Sujet de l'arène</label>
+  <label for="question">Sujet de l'arène. <span class="label-hint">Ecris ici le sujet de ton arène.</span></label>
 <textarea
   id="question"
   rows="1"
@@ -365,8 +388,7 @@
   oninput="updateCounter('question','question-count',110); autoResizeTextarea(this)"
   style="overflow:hidden; resize:none; min-height:48px; line-height:1.4; padding-top:12px; padding-bottom:12px;"
 ></textarea>
-<small id="question-count">0 / 110</small>
-<small>Ecris ici le sujet de ton arène. </small>
+<small id="question-count" style="margin-bottom: 8px;">0 / 110</small>
 
   <div id="similar-debates-box" class="similar-debates-box" style="display:none;">
     <p class="similar-debates-title">Arènes similaires déjà existantes</p>
@@ -384,50 +406,42 @@
   >
     Ajouter un texte de contexte
   </button>
-  <small>Facultatif. Ce texte apparaîtra sous le sujet de l’arène.</small>
 </div>
 
-<div id="context-text-group" class="form-group create-form-group create-context-panel" style="display:none;">
-  <label for="context_text">Texte de contexte</label>
+<div id="context-text-group" class="form-group create-form-group create-context-panel" style="display:none; margin-top: 6px;">
+  <label for="context_text">Texte de contexte. <span class="label-hint">Facultatif. Ce texte apparaîtra sous le sujet de l’arène.</span></label>
   <textarea
     id="context_text"
     maxlength="1800"
     placeholder="Ajoute ici un court texte pour donner le contexte de l’arène..."
     oninput="updateCounter('context_text','context-text-count',1800)"
   ></textarea>
-  <small id="context-text-count">0 / 1800</small>
+  <small id="context-text-count" style="margin-bottom: 8px;">0 / 1800</small>
 </div>
 
-<div class="form-group create-form-group">
-  <label>Type d’arène</label>
+<input type="radio" name="debate-type" value="open" id="type-radio-open" checked style="display:none;">
+<input type="radio" name="debate-type" value="debate" id="type-radio-debate" style="display:none;">
 
-  <div class="debate-type-toggle">
-    <label class="debate-type-option">
-      <input type="radio" name="debate-type" value="open" checked>
-      <span>Arène libre</span>
-    </label>
-
-    <label class="debate-type-option">
-      <input type="radio" name="debate-type" value="debate">
-      <span>Arène à deux positions</span>
-    </label>
+<div id="open-fields" class="create-open-fields" style="display:none; margin-top: 10px; margin-bottom: 10px;">
+  <button
+    type="button"
+    id="toggle-axis-button"
+    class="button button-secondary button-small create-context-toggle"
+    aria-expanded="false"
+    onclick="toggleEvaluationAxisField()"
+  >
+    Orienter le barème IA
+  </button>
+  <div id="evaluation-axis-group" class="form-group" style="display:none; margin-top: 6px; margin-bottom: 6px;">
+    <label for="evaluation_axis">Ce que l'IA doit valoriser. <span class="label-hint">Le barème / l'axe de notation est public et visible par tous les participants.</span></label>
+    <textarea
+      id="evaluation_axis"
+      name="evaluation_axis"
+      maxlength="280"
+      rows="2"
+      placeholder="Tu peux orienter la notation : réponses drôles, sérieuses, réalistes, originales, argumentées… ou donner ton propre barème. Par défaut, l'IA évalue surtout la pertinence, la clarté, le raisonnement, l'originalité utile et l'apport à l'arène."
+    ></textarea>
   </div>
-
-  <small>
-    L’arène libre permet d’ajouter librement des idées sous forme de liste. L’arène à deux positions organise les contributions autour de deux axes distincts. 
-  </small>
-</div>
-
-<div id="open-fields" class="create-open-fields" style="display:none;">
-  <label for="evaluation_axis">Axe d'analyse IA</label>
-  <textarea
-    id="evaluation_axis"
-    name="evaluation_axis"
-    maxlength="280"
-    rows="2"
-    placeholder="Ex. Valoriser les idées les plus originales mais réalistes."
-  ></textarea>
-  <small>Facultatif. Indique ce que l'IA doit valoriser dans les contributions : originalité, réalisme, humour, solidité, propositions concrètes… Cet axe est public et visible par tous les participants.</small>
 </div>
 
 <div id="positions-fields" class="positions-grid create-positions-grid" style="display:none;">
@@ -456,8 +470,8 @@
   </div>
 </div>
 
-<div class="form-group create-form-group">
-  <label for="category">Thématiques</label>
+<div class="form-group create-form-group create-category-group">
+  <label for="category">Thématique. <span class="label-hint">Sélectionne la thématique de ton arène.</span></label>
   <input id="category" type="hidden" value="">
   <div id="create-category-picker" class="create-category-picker">
     <button
@@ -468,7 +482,7 @@
       aria-expanded="false"
       aria-controls="create-category-panel"
     >
-      <span id="create-category-toggle-label">Choisir une ou plusieurs thématiques</span>
+      <span id="create-category-toggle-label">Choisir une thématique</span>
       <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
     </button>
 
@@ -476,7 +490,7 @@
       id="create-category-panel"
       class="create-category-panel"
       role="group"
-      aria-label="Choisir une ou plusieurs thématiques"
+      aria-label="Choisir une thématique"
       hidden
     >
       <div id="create-category-options" class="create-category-options"></div>
@@ -484,7 +498,6 @@
 
     <div id="create-category-selected" class="create-category-selected" aria-live="polite"></div>
   </div>
-  <small>Tu peux sélectionner une ou plusieurs thématiques pour la même arène.</small>
 </div>
 
 <div class="form-group create-form-group">
@@ -554,6 +567,7 @@
         </div>
         <p id="create-submit-helper" class="create-submit-helper" aria-live="assertive" role="alert"></p>
 
+</div>
       </form>
     </section>
 

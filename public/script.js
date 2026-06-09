@@ -1412,6 +1412,7 @@ function updateCreateTypeUI() {
 
   setDisplay(positionsBlock, selected === "open" ? "none" : "grid");
   if (openFields) setDisplay(openFields, selected === "open" ? "block" : "none");
+  if (selected !== "open") toggleEvaluationAxisField(false);
 
   if (optionAInput) {
     optionAInput.required = selected !== "open";
@@ -13416,13 +13417,13 @@ function syncAdminEditCategoryPickerUI(panel, categories) {
   hiddenInput.value = joinDebateCategories(normalizedCategories);
 
   if (!normalizedCategories.length) {
-    toggleLabel.textContent = 'Choisir une ou plusieurs thématiques';
+    toggleLabel.textContent = 'Choisir une thématique';
     selectedContainer.innerHTML = '';
   } else if (normalizedCategories.length === 1) {
     toggleLabel.textContent = normalizedCategories[0];
-    selectedContainer.innerHTML = normalizedCategories.map((category) => (`<span class="create-category-chip">${escapeHtml(category)}</span>`)).join('');
+    selectedContainer.innerHTML = `<span class="create-category-chip">${escapeHtml(normalizedCategories[0])}</span>`;
   } else {
-    toggleLabel.textContent = `${normalizedCategories.length} thématiques sélectionnées`;
+    toggleLabel.textContent = `${normalizedCategories.length} thématiques`;
     selectedContainer.innerHTML = normalizedCategories.map((category) => (`<span class="create-category-chip">${escapeHtml(category)}</span>`)).join('');
   }
 
@@ -13472,7 +13473,14 @@ function initAdminEditCategoryPicker(panel) {
   };
 
   optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-    input.addEventListener('change', syncFromCheckboxes);
+    input.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((other) => {
+          if (other !== e.target) other.checked = false;
+        });
+      }
+      syncFromCheckboxes();
+    });
   });
 
   toggleButton.addEventListener('click', (event) => {
@@ -14358,7 +14366,7 @@ function buildAdminEditPanelHtml(d) {
           </div>
         </div>
         <div class="admin-edit-field">
-          <label class="admin-edit-label">Thématiques</label>
+          <label class="admin-edit-label">Thématique</label>
           <input type="hidden" data-edit-field="category" data-admin-category-hidden value="${escapeAttribute(initialCategoryValue)}">
           <div class="create-category-picker" data-admin-category-picker data-open="false">
             <button
@@ -14367,10 +14375,10 @@ function buildAdminEditPanelHtml(d) {
               data-admin-category-toggle
               aria-expanded="false"
             >
-              <span data-admin-category-toggle-label>Choisir une ou plusieurs thématiques</span>
+              <span data-admin-category-toggle-label>Choisir une thématique</span>
               <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
             </button>
-            <div class="create-category-panel" data-admin-category-panel hidden aria-label="Choisir une ou plusieurs thématiques">
+            <div class="create-category-panel" data-admin-category-panel hidden aria-label="Choisir une thématique">
               <div class="create-category-options" data-admin-category-options></div>
             </div>
             <div class="create-category-selected" data-admin-category-selected aria-live="polite"></div>
@@ -17515,6 +17523,39 @@ function toggleCreateContextField(forceOpen = null) {
   button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
 }
 
+function toggleEvaluationAxisField(forceOpen = null) {
+  const group = document.getElementById("evaluation-axis-group");
+  const button = document.getElementById("toggle-axis-button");
+  if (!group || !button) return;
+  const shouldOpen = typeof forceOpen === "boolean"
+    ? forceOpen
+    : group.style.display === "none" || !group.style.display;
+  group.style.display = shouldOpen ? "block" : "none";
+  button.textContent = shouldOpen ? "Masquer le barème IA" : "Orienter le barème IA";
+  button.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+function selectArenaType(type) {
+  const choiceEl = document.getElementById('arena-type-choice');
+  const fieldsEl = document.getElementById('create-form-fields');
+  const indicatorValue = document.getElementById('create-type-indicator-value');
+  const radio = document.querySelector('input[name="debate-type"][value="' + type + '"]');
+  if (radio) radio.checked = true;
+  if (indicatorValue) {
+    indicatorValue.textContent = type === 'open' ? 'Arène libre' : 'Arène à positions';
+  }
+  if (choiceEl) choiceEl.style.display = 'none';
+  if (fieldsEl) fieldsEl.style.display = 'block';
+  updateCreateTypeUI();
+}
+
+function backToArenaTypeChoice() {
+  const choiceEl = document.getElementById('arena-type-choice');
+  const fieldsEl = document.getElementById('create-form-fields');
+  if (choiceEl) choiceEl.style.display = 'block';
+  if (fieldsEl) fieldsEl.style.display = 'none';
+}
+
 function getCreateContextText() {
   const input = document.getElementById("context_text");
   return input ? input.value.trim().slice(0, 1800) : "";
@@ -17579,20 +17620,42 @@ function renderDebateContext(content, isOpen = false) {
 function renderEvaluationAxis(debate) {
   const existing = document.getElementById('debate-evaluation-axis');
   if (existing) existing.remove();
-  if (!isOpenDebate(debate)) return;
+
+  const formAxisEl = document.getElementById('form-list-axis');
+  const isOpen = isOpenDebate(debate);
   const axis = String(debate.evaluation_axis || '').trim();
-  if (!axis) return;
+
+  const defaultOpenText = "L'IA évalue la pertinence, la clarté, la qualité du raisonnement, l'originalité utile et l'apport de chaque contribution.";
+  const defaultDebateText = "L'IA évalue la pertinence, la clarté de la thèse, la qualité du raisonnement, la nuance et la prise en compte des objections.";
+
+  // Bloc sur la page débat — toujours affiché
   const el = document.createElement('div');
   el.id = 'debate-evaluation-axis';
   el.className = 'debate-evaluation-axis';
-  el.innerHTML = '<span class="debate-evaluation-axis-label">Ce que l\'IA valorisera</span>'
-    + '<p class="debate-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
+
+  const labelText = (isOpen && axis) ? 'Ce que l\'IA valorisera' : 'Comment l\'IA évalue les contributions';
+  const bodyText = (isOpen && axis) ? axis : (isOpen ? defaultOpenText : defaultDebateText);
+
+  el.innerHTML = '<span class="debate-evaluation-axis-label">' + labelText + '</span>'
+    + '<p class="debate-evaluation-axis-text">' + escapeHtml(bodyText) + '</p>';
+
   const contextWrap = document.getElementById('debate-context-wrap');
   const hero = document.querySelector('section.debate-hero');
   if (contextWrap && hero && contextWrap.parentElement === hero) {
     contextWrap.insertAdjacentElement('afterend', el);
   } else if (hero) {
     hero.appendChild(el);
+  }
+
+  // Bloc dans le formulaire "Ajouter une idée" (uniquement arène libre avec axe personnalisé)
+  if (formAxisEl) {
+    if (isOpen && axis) {
+      formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Ce que l\'IA valorisera</span>'
+        + '<p class="form-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
+      formAxisEl.style.display = 'block';
+    } else {
+      formAxisEl.style.display = 'none';
+    }
   }
 }
 
@@ -18926,20 +18989,13 @@ function initCreateCategoryPicker() {
     const normalizedCategories = getDebateCategoryList(categories);
 
     if (!normalizedCategories.length) {
-      toggleLabel.textContent = "Choisir une ou plusieurs thématiques";
+      toggleLabel.textContent = "Choisir une thématique";
       selectedContainer.innerHTML = "";
       return;
     }
 
-    if (normalizedCategories.length === 1) {
-      toggleLabel.textContent = normalizedCategories[0];
-    } else {
-      toggleLabel.textContent = `${normalizedCategories.length} thématiques sélectionnées`;
-    }
-
-    selectedContainer.innerHTML = normalizedCategories.map((category) => (
-      `<span class="create-category-chip">${escapeHtml(category)}</span>`
-    )).join("");
+    toggleLabel.textContent = normalizedCategories[0];
+    selectedContainer.innerHTML = `<span class="create-category-chip">${escapeHtml(normalizedCategories[0])}</span>`;
   };
 
   optionsContainer.innerHTML = DEBATE_CATEGORY_OPTIONS.map((category, index) => {
@@ -18963,7 +19019,14 @@ function initCreateCategoryPicker() {
   };
 
   optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-    input.addEventListener("change", syncFromCheckboxes);
+    input.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        optionsContainer.querySelectorAll('input[type="checkbox"]').forEach((other) => {
+          if (other !== e.target) other.checked = false;
+        });
+      }
+      syncFromCheckboxes();
+    });
   });
 
   toggleButton.addEventListener("click", (event) => {
@@ -22072,6 +22135,59 @@ function buildArgumentScoreMap(analysis) {
     }
   });
   return map;
+}
+
+function showActiveRubricModal() {
+  const existing = document.getElementById('active-rubric-modal-overlay');
+  if (existing) { existing.remove(); return; }
+
+  const debate = currentDebateCache;
+  const open = debate ? isOpenDebate(debate) : false;
+  const axis = String((debate && debate.evaluation_axis) || '').trim();
+
+  let html = '<div class="rubric-modal-header">'
+    + '<span class="rubric-modal-title">⚖ Barème IA actif</span>'
+    + '<button class="rubric-modal-close" type="button" aria-label="Fermer">✕</button>'
+    + '</div>';
+
+  if (open) {
+    html += '<div class="rubric-modal-section">'
+      + '<p class="rubric-modal-text">Par défaut, l\'IA évalue les contributions selon leur pertinence, leur clarté, la qualité du raisonnement, leur originalité utile et leur apport à l\'arène.</p>'
+      + '</div>';
+    if (axis) {
+      html += '<div class="rubric-modal-section rubric-modal-axis">'
+        + '<div class="rubric-modal-section-title">Critère défini pour cette arène</div>'
+        + '<p class="rubric-modal-axis-text">' + escapeHtml(axis) + '</p>'
+        + '</div>';
+    } else {
+      html += '<div class="rubric-modal-section">'
+        + '<p class="rubric-modal-note">Aucun critère personnalisé n\'a été défini : le barème Agôn par défaut s\'applique.</p>'
+        + '</div>';
+    }
+  } else {
+    html += '<div class="rubric-modal-section">'
+      + '<p class="rubric-modal-text">L\'IA évalue les arguments selon leur pertinence par rapport à la question, la clarté de la thèse, la qualité du raisonnement, la nuance, la prise en compte des objections et la qualité du débat.</p>'
+      + '</div>';
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'active-rubric-modal-overlay';
+  overlay.className = 'arg-ai-detail-overlay';
+
+  const popup = document.createElement('div');
+  popup.className = 'arg-ai-detail-popup rubric-modal-popup';
+  popup.innerHTML = html;
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+
+  popup.querySelector('.rubric-modal-close').addEventListener('click', function(e) {
+    e.stopPropagation();
+    overlay.remove();
+  });
+  overlay.addEventListener('click', function(e) {
+    if (!popup.contains(e.target)) overlay.remove();
+  });
 }
 
 function showArgumentAiDetail(argId, triggerEl) {
