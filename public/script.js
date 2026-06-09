@@ -17576,6 +17576,26 @@ function renderDebateContext(content, isOpen = false) {
   positionDebateContextBelowSources();
 }
 
+function renderEvaluationAxis(debate) {
+  const existing = document.getElementById('debate-evaluation-axis');
+  if (existing) existing.remove();
+  if (!isOpenDebate(debate)) return;
+  const axis = String(debate.evaluation_axis || '').trim();
+  if (!axis) return;
+  const el = document.createElement('div');
+  el.id = 'debate-evaluation-axis';
+  el.className = 'debate-evaluation-axis';
+  el.innerHTML = '<span class="debate-evaluation-axis-label">Ce que l\'IA valorisera</span>'
+    + '<p class="debate-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
+  const contextWrap = document.getElementById('debate-context-wrap');
+  const hero = document.querySelector('section.debate-hero');
+  if (contextWrap && hero && contextWrap.parentElement === hero) {
+    contextWrap.insertAdjacentElement('afterend', el);
+  } else if (hero) {
+    hero.appendChild(el);
+  }
+}
+
 function positionDebateContextBelowSources() {
   const wrap = document.getElementById("debate-context-wrap");
   const hero = document.querySelector(".debate-hero");
@@ -22173,6 +22193,7 @@ async function loadDebateFullData(id) {
 
   document.getElementById("debate-question").textContent = data.debate.question;
   renderDebateContext(data.debate.content || "", isOpenDebate(data.debate));
+  renderEvaluationAxis(data.debate);
   renderDebateEpisodeNavigation(data.debate || {});
 const debateVideoUrl = String(data.debate.video_url || "").trim();
 const debateImageUrl = String(data.debate.image_url || "").trim();
