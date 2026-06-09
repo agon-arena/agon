@@ -351,20 +351,20 @@
         border-radius: 0 8px 8px 0;
         font-size: 13px; line-height: 1.5; color: #6b5426;
       }
-      .ada-camp-weak-count {
-        font-size: 13px;
+      .ada-camp-summary-stats {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        margin: 4px 0 14px;
         text-align: center;
-        color: #b91c1c;
-        margin-top: 0;
-        margin-bottom: 14px;
-        opacity: 0.85;
       }
-      .ada-camp-paste-excluded {
-        font-size: 12px;
-        color: #b08d57;
-        margin-top: 2px;
-        margin-bottom: 6px;
-        opacity: 0.9;
+      .ada-camp-summary-line {
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: #64747a;
+        margin: 0;
       }
 
       /* ── Visual refresh: calmer palette, richer hierarchy ── */
@@ -945,8 +945,6 @@
       .ada-arg-source-ok   { background: #f0fdf4; color: #15803d; }
       .ada-arg-source-none { background: #f9fafb; color: #9ca3af; }
       .ada-camp-section { margin-bottom: 8px; }
-      .ada-camp-stats { font-size: 13px; color: #64747a; margin: -4px 0 14px; text-align: center; }
-      .ada-camp-stats:has(+ .ada-camp-weak-count) { margin-bottom: 1px; }
       .ada-args-details {
         margin-top: 6px;
       }
@@ -1086,8 +1084,7 @@
         .ada-arg-cat            { font-size: 15px; }
         .ada-arg-excluded-label { font-size: 13px; }
         /* ── Stats de camp ── */
-        .ada-camp-stats         { font-size: 17px; }
-        .ada-camp-weak-count    { font-size: 17px; }
+        .ada-camp-summary-line  { font-size: 17px; }
         /* ── Critères ── */
         .ada-criterion-title    { font-size: 18px; }
         .ada-criterion-arrow    { font-size: 19px; }
@@ -1239,7 +1236,7 @@
         '</div>';
     }
 
-    function argCard(a, duplicateGroups = [], isExtraHidden = false) {
+    function argCard(a, duplicateGroups = [], isExtraHidden = false, isOpen = false) {
       const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
       const strengthsHtml = (a.strengths || []).length
         ? '<ul class="ada-arg-list ada-arg-strengths">' + a.strengths.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
@@ -1254,7 +1251,7 @@
       // poids dans le verdict (voir `excluded` ci-dessus) et resterait trompeur ici.
       const badgeCategory = a.final_category || a.category;
       return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}${isExtraHidden ? ' ada-arg-extra-hidden' : ''}">
-        <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${excluded ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
+        <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${excluded && !isOpen ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
         <div class="ada-arg-text">"${esc(a.argumentText)}"</div>
         ${dupGroups(duplicateGroups)}
         <div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/80 · Appui sourcé : ${a.source_score || 0}/20</div>
@@ -1265,25 +1262,28 @@
       </div>`;
     }
 
-    function campSection(camp, campData, pasteExcluded) {
+    function campSection(camp, campData, pasteExcluded, isOpen) {
       const args = campData.effectiveArguments || [];
       if (!args.length) return `<div class="ada-empty">Aucune idée pour ${esc(campData.label)}.</div>`;
       const qe = campData.goodExcellentCount || 0;
       const avg = campData.weightedAverage || 0;
       const pe = Number(pasteExcluded || 0);
-      const wk = args.filter(a => a.category === 'faible').length;
+      const wk = args.filter(a => a.category === 'faible' || a.category === 'moyen').length;
       const duplicateGroups = Array.isArray(campData.duplicateGroups) ? campData.duplicateGroups : [];
       const visibleLimit = 5;
       const hasMoreArgs = args.length > visibleLimit;
       return `<div class="ada-camp-section">
-        <div class="ada-section-h2 ada-camp-title ada-camp-title-${camp.toLowerCase()}"><span class="ada-section-icon" aria-hidden="true"></span>${esc(campData.label)}</div>
-        <div class="ada-camp-stats">${qe} idée${qe > 1 ? 's' : ''} bonne${qe > 1 ? 's' : ''}/excellente${qe > 1 ? 's' : ''} · moyenne pondérée : ${avg}/100</div>
-        ${wk > 0 ? `<div class="ada-camp-weak-count">${wk} idée${wk > 1 ? 's' : ''} faible${wk > 1 ? 's' : ''} détectée${wk > 1 ? 's' : ''}</div>` : ''}
-        ${pe > 0 ? `<div class="ada-camp-paste-excluded">${pe} idée${pe > 1 ? 's' : ''} copié-collée${pe > 1 ? 's' : ''} exclue${pe > 1 ? 's' : ''} de l'analyse</div>` : ''}
+        ${!isOpen ? `<div class="ada-section-h2 ada-camp-title ada-camp-title-${camp.toLowerCase()}"><span class="ada-section-icon" aria-hidden="true"></span>${esc(campData.label)}</div>` : ''}
+        <div class="ada-camp-summary-stats">
+          ${isOpen ? `<div class="ada-camp-summary-line">${args.length} idée${args.length > 1 ? 's' : ''} unique${args.length > 1 ? 's' : ''} évaluée${args.length > 1 ? 's' : ''}</div>` : ''}
+          ${!isOpen ? `<div class="ada-camp-summary-line">${qe} idée${qe > 1 ? 's' : ''} retenue${qe > 1 ? 's' : ''} (bonne/excellente) · moyenne pondérée : ${avg}/100</div>` : ''}
+          ${!isOpen && wk > 0 ? `<div class="ada-camp-summary-line">${wk} idée${wk > 1 ? 's' : ''} faible${wk > 1 ? 's' : ''} détectée${wk > 1 ? 's' : ''}</div>` : ''}
+          ${pe > 0 ? `<div class="ada-camp-summary-line">${pe} idée${pe > 1 ? 's' : ''} copié-collée${pe > 1 ? 's' : ''} exclue${pe > 1 ? 's' : ''} de l'analyse</div>` : ''}
+        </div>
         <details class="ada-args-details">
-          <summary class="ada-args-summary">Voir les idées analysées (${args.length})</summary>
+          <summary class="ada-args-summary">Voir les ${args.length} idée${args.length > 1 ? 's' : ''} évaluée${args.length > 1 ? 's' : ''}</summary>
           <div class="ada-args-list">
-            ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit)).join('')}
+            ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit, isOpen)).join('')}
             <div class="ada-load-more-wrap">
               ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'idées</button>' : ''}
               <button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button>
@@ -1341,8 +1341,8 @@
     out += '<details class="ada-args-details">' +
       '<summary class="ada-section-h2"><span class="ada-section-icon">🧠</span> Évaluation individuelle des idées</summary>' +
       '<div class="ada-args-list">' +
-        campSection('A', d.camps.A, b && b.pasteExcludedA) +
-        (!d.isOpen && d.camps.B ? campSection('B', d.camps.B, b && b.pasteExcludedB) : '') +
+        campSection('A', d.camps.A, b && b.pasteExcludedA, d.isOpen) +
+        (!d.isOpen && d.camps.B ? campSection('B', d.camps.B, b && b.pasteExcludedB, false) : '') +
       '</div>' +
     '</details>';
 
@@ -1764,8 +1764,8 @@
     }
 
     const isOpen = analysis && analysis.isOpen;
-    const labelA = (analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A';
-    const labelB = (analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label) || (analysis && analysis.positionB) || 'Camp B';
+    const labelA = isOpen ? 'Contributions' : ((analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A');
+    const labelB = isOpen ? '' : ((analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label) || (analysis && analysis.positionB) || 'Camp B');
 
     let inner = '';
 

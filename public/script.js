@@ -630,6 +630,7 @@ let pendingTopCommentScroll = null;
 
 let currentAllArguments = [];
 let currentCommentsByArgument = {};
+let currentArgumentScoreMap = {};
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let similarDebatesLoading = false;
@@ -1405,10 +1406,12 @@ function updateCreateTypeUI() {
   const selected = document.querySelector('input[name="debate-type"]:checked')?.value || "debate";
 
   const positionsBlock = document.getElementById("positions-fields");
+  const openFields     = document.getElementById("open-fields");
   const optionAInput = document.getElementById("option_a");
   const optionBInput = document.getElementById("option_b");
 
   setDisplay(positionsBlock, selected === "open" ? "none" : "grid");
+  if (openFields) setDisplay(openFields, selected === "open" ? "block" : "none");
 
   if (optionAInput) {
     optionAInput.required = selected !== "open";
@@ -19400,6 +19403,9 @@ form.addEventListener("submit", async e => {
     }
 
     const creatorKey = getKey();
+    const evaluationAxis = selectedType === "open"
+      ? (document.getElementById("evaluation_axis")?.value.trim() || "")
+      : undefined;
     const createPayload = JSON.stringify({
       question,
       category,
@@ -19410,6 +19416,7 @@ form.addEventListener("submit", async e => {
       type: selectedType,
       option_a,
       option_b,
+      ...(evaluationAxis !== undefined ? { evaluation_axis: evaluationAxis } : {}),
       creatorKey
     });
 
@@ -22015,6 +22022,151 @@ async function loadDebate(id) {
   await loadDebateFullData(id);
 }
 
+function buildArgumentScoreMap(analysis) {
+  const map = {};
+  const camps = analysis && analysis.camps;
+  if (!camps) return map;
+  ['A', 'B'].forEach(function(side) {
+    const args = (camps[side] && camps[side].effectiveArguments) || [];
+    args.forEach(function(a) {
+      if (!a || !a.argumentId) return;
+      map[String(a.argumentId)] = {
+        final_score:       a.final_score       != null ? a.final_score       : null,
+        final_category:    a.final_category    || a.category                 || null,
+        short_explanation: a.short_explanation                                || '',
+        strengths:         Array.isArray(a.strengths)  ? a.strengths         : [],
+        weaknesses:        Array.isArray(a.weaknesses) ? a.weaknesses        : []
+      };
+    });
+  });
+  // Ajouter les arguments copié-collés (paste_ratio > 50) avec score 0
+  currentAllArguments.forEach(function(a) {
+    if (Number(a.paste_ratio || 0) > 50 && !map[String(a.id)]) {
+      map[String(a.id)] = {
+        final_score:       0,
+        final_category:    'copie',
+        short_explanation: 'Copié-collé détecté — aucune valeur (on utilise son cerveau pour réfléchir, pas l\'IA).',
+        strengths:         [],
+        weaknesses:        []
+      };
+    }
+  });
+  return map;
+}
+
+function showArgumentAiDetail(argId, triggerEl) {
+  const entry = currentArgumentScoreMap[argId];
+  if (!entry) return;
+
+  const existing = document.getElementById('argument-ai-detail-popup');
+  if (existing) {
+    const sameArg = existing.dataset.forArgId === argId;
+    const existingOverlay = document.getElementById('argument-ai-detail-overlay');
+    if (existingOverlay) existingOverlay.remove(); else existing.remove();
+    if (sameArg) return;
+  }
+
+  const catLabels = { excellent: 'Excellent', bon: 'Bon', moyen: 'Moyen', faible: 'Faible', copie: 'Copié-collé' };
+  const catLabel = catLabels[entry.final_category] || '';
+  const catCls = entry.final_category ? ' arg-ai-detail-cat-' + entry.final_category : '';
+  const scoreCls = entry.final_category ? ' arg-ai-score-' + entry.final_category : '';
+  const isCopie = entry.final_category === 'copie';
+
+  let html = '<div class="arg-ai-detail-header">'
+    + '<span class="arg-ai-detail-header-label">✦ Analyse IA</span>'
+    + '<button class="arg-ai-detail-close" type="button" aria-label="Fermer">✕</button>'
+    + '</div>';
+
+  html += '<div class="arg-ai-detail-score-block">';
+  if (isCopie) {
+    html += '<div class="arg-ai-detail-copie-icon">📋</div>';
+  }
+  html += '<div class="arg-ai-detail-score' + scoreCls + '">'
+    + entry.final_score
+    + '<span class="arg-ai-detail-score-denom">/100</span>'
+    + '</div>';
+  if (catLabel) {
+    html += '<span class="arg-ai-detail-cat' + catCls + '">' + escapeHtml(catLabel) + '</span>';
+  }
+  html += '</div>';
+
+  if (entry.short_explanation) {
+    html += '<div class="arg-ai-detail-expl">' + escapeHtml(entry.short_explanation) + '</div>';
+  }
+
+  if (entry.strengths && entry.strengths.length) {
+    html += '<div class="arg-ai-detail-section">'
+      + '<div class="arg-ai-detail-section-title arg-ai-strengths-title">✦ Points forts</div>'
+      + '<ul class="arg-ai-detail-list">'
+      + entry.strengths.map(function(s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('')
+      + '</ul></div>';
+  }
+
+  if (entry.weaknesses && entry.weaknesses.length) {
+    html += '<div class="arg-ai-detail-section">'
+      + '<div class="arg-ai-detail-section-title arg-ai-weaknesses-title">⚑ Points faibles</div>'
+      + '<ul class="arg-ai-detail-list">'
+      + entry.weaknesses.map(function(s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('')
+      + '</ul></div>';
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'argument-ai-detail-overlay';
+  overlay.className = 'arg-ai-detail-overlay';
+
+  const popup = document.createElement('div');
+  popup.id = 'argument-ai-detail-popup';
+  popup.className = 'arg-ai-detail-popup';
+  popup.dataset.forArgId = argId;
+  popup.innerHTML = html;
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+
+  popup.querySelector('.arg-ai-detail-close').addEventListener('click', function(e) {
+    e.stopPropagation();
+    overlay.remove();
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (!popup.contains(e.target)) overlay.remove();
+  });
+}
+
+function renderArgumentAiScoreBadges() {
+  if (!Object.keys(currentArgumentScoreMap).length) return;
+  const articles = document.querySelectorAll(
+    'article.argument-card[id^="argument-"], article.argument-card[id^="list-argument-"]'
+  );
+  articles.forEach(function(article) {
+    const argId = article.id.replace(/^(?:list-)?argument-/, '');
+    if (!argId) return;
+    const entry = currentArgumentScoreMap[argId];
+    const existing = article.querySelector('.argument-ai-score-badge');
+    if (!entry || entry.final_score == null) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) {
+      existing.textContent = entry.final_score + '/100';
+      return;
+    }
+    const badge = document.createElement('div');
+    badge.className = 'argument-ai-score-badge';
+    badge.textContent = entry.final_score + '/100';
+    badge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showArgumentAiDetail(argId, badge);
+    });
+    const topEl = article.querySelector('.argument-top');
+    if (topEl) topEl.insertAdjacentElement('afterend', badge);
+    else {
+      const actions = article.querySelector('.argument-actions');
+      if (actions) actions.parentNode.insertBefore(badge, actions);
+    }
+  });
+}
+
 async function loadDebateFullData(id) {
   try {
     const data = await fetchJSON(API + "/debates/" + id);
@@ -22055,6 +22207,9 @@ updateDeleteDebateButtonVisibility(data.debate);
 
 currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
 currentCommentsByArgument = data.commentsByArgument || {};
+currentArgumentScoreMap = {};
+const _staleOverlay = document.getElementById('argument-ai-detail-overlay');
+if (_staleOverlay) _staleOverlay.remove();
 
 cleanVoteStateForExistingArguments(id, currentAllArguments);
 
@@ -22233,6 +22388,21 @@ currentDebateShareData = {
   percentB
 };
 currentDebateCache = data.debate;
+
+if (data.debate.ai_analysis_status === 'ready') {
+  fetch(API + '/debates/' + id + '/analysis')
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(json) {
+      if (!json || !json.raw) return;
+      try {
+        const analysis = JSON.parse(json.raw);
+        currentArgumentScoreMap = buildArgumentScoreMap(analysis);
+        renderArgumentAiScoreBadges();
+      } catch (e) {}
+    })
+    .catch(function() {});
+}
+
 renderCurrentDebateAdminEditPanel(currentDebateCache, false);
 if (Array.isArray(similarDebatesCache)) {
   renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
@@ -25771,6 +25941,7 @@ function rerenderCurrentDebateArguments() {
     if (argsB) argsB.innerHTML = "";
 
     renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, currentCommentsByArgument || {});
+    renderArgumentAiScoreBadges();
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -25788,6 +25959,7 @@ function rerenderCurrentDebateArguments() {
 
   renderArgs("arguments-a", optionAArgs, debateId, currentCommentsByArgument || {});
   renderArgs("arguments-b", optionBArgs, debateId, currentCommentsByArgument || {});
+  renderArgumentAiScoreBadges();
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {

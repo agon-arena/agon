@@ -4821,8 +4821,11 @@ app.get("/api/debates", async (req, res) => {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
+    const normalizedAxis = type === "open"
+      ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 280)
+      : null;
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
@@ -4858,6 +4861,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         type: type || "debate",
         option_a,
         option_b,
+        evaluation_axis: normalizedAxis,
         creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
         created_at: nowIso()
       })
@@ -4876,6 +4880,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             type: type || "debate",
             option_a,
             option_b,
+            evaluation_axis: normalizedAxis,
             creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
             created_at: nowIso()
           })
@@ -6731,10 +6736,11 @@ async function _fetchDebatePayload(debateId) {
   });
 
   return {
-    question:   debate.question  || "",
-    positionA:  debate.option_a  || "",
-    positionB:  debate.option_b  || "",
-    content:    debate.content   || "",
+    question:        debate.question          || "",
+    positionA:       debate.option_a          || "",
+    positionB:       debate.option_b          || "",
+    content:         debate.content           || "",
+    evaluation_axis: debate.evaluation_axis   || "",
     argumentsA: (args || []).filter((a) => a.side === "A").map(mapArg),
     argumentsB: (args || []).filter((a) => a.side === "B").map(mapArg),
     comments:   comments.map((c) => ({ text: c.content || "", stance: c.stance || "" }))
