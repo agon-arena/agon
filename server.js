@@ -2538,6 +2538,9 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
 }
 
 
+// Nombre de publications récentes comparées au nouveau sujet pour le calcul de tendance
+const TREND_RECENT_SUBJECTS_LIMIT = 30;
+
 /**
  * Compare un nouveau sujet avec les publications récentes pour détecter
  * s'il appartient à une même séquence d'actualité.
@@ -4919,7 +4922,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
           .select("id, question, content, source_url, media_extras, created_at")
           .neq("id", data.id)
           .order("created_at", { ascending: false })
-          .limit(60);
+          .limit(TREND_RECENT_SUBJECTS_LIMIT);
         const recentSubjects = (recentRows || []).map((d) => {
           const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
           const srcExtras = extras.filter((e) => e && typeof e === "object" &&
@@ -6519,7 +6522,7 @@ const currentSourceCount = currentSourceKeys.size;
     .select("id, question, content, source_url, media_extras, created_at")
     .neq("id", data.id)
     .order("created_at", { ascending: false })
-    .limit(60);
+    .limit(TREND_RECENT_SUBJECTS_LIMIT);
 
   const recentSubjects = (recentRows || []).map((d) => {
     const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
