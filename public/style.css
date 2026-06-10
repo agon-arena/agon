@@ -18291,10 +18291,10 @@ body.page-home #debates-list .theme-row-section:first-child {
   transform: none;
   z-index: 50;
   margin-bottom: 3px;
-  border: 1.5px solid currentColor;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  padding: 1px 4px;
-  font-size: 9px;
+  padding: 1px 3px;
+  font-size: 8px;
   font-weight: 700;
   line-height: 1.1;
   background: #fff;
@@ -18313,7 +18313,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 .agon-tag-bubble-small .agon-tag-trend {
   top: auto;
-  font-size: 7px;
+  font-size: 6.5px;
   margin-bottom: 2px;
 }
 

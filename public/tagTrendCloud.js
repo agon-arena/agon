@@ -437,6 +437,15 @@ function positionTrendBadges(container) {
 
     const geo = bubbleGeo[idx];
 
+    // Rect du texte du tag de cette bulle (overlay si présent, sinon label interne) :
+    // la cible de proximité du badge
+    const tagKey = String(trend.dataset.tag || bubble.dataset.tag || "").toLowerCase();
+    const ownLabelEl = [...container.querySelectorAll(".agon-tag-label-overlay")]
+      .find((o) => o.dataset.tag === tagKey) || bubble.querySelector(".agon-tag-label");
+    const ownLabelRect = ownLabelEl
+      ? rectToContainerSpace(ownLabelEl.getBoundingClientRect(), containerRect, 0)
+      : null;
+
     container.appendChild(trend);
     trend.style.position = "absolute";
     trend.style.left = "0px";
@@ -449,17 +458,14 @@ function positionTrendBadges(container) {
     const tw = trendRect.width  || trend.offsetWidth  || 32;
     const th = trendRect.height || trend.offsetHeight || 14;
 
-    const allowedBubbleOverlap = 6;
-    const preferredOutsideDistance = Math.max(
-      geo.r + th / 2 - allowedBubbleOverlap,
-      geo.r * 0.82
-    );
-    const maxOutsideDistance = geo.r + th * (isMobileTagCloud() ? 3.2 : 2.4) + (isMobileTagCloud() ? 42 : 28);
+    // Le badge doit chevaucher sa bulle : son centre ne dépasse jamais le bord
+    // de plus d'une demi-hauteur ; le blocage lisibilité protège le texte du tag.
+    const minDistance = Math.max(0, geo.r * 0.3);
+    const maxContactDistance = geo.r + th / 2;
     const distanceCandidates = [];
-    for (let d = preferredOutsideDistance; d <= maxOutsideDistance; d += 3) {
+    for (let d = maxContactDistance; d >= minDistance; d -= 3) {
       distanceCandidates.push(d);
     }
-    distanceCandidates.push(maxOutsideDistance);
     const angleCandidates = Array.from(new Set([
       ...ANGLES,
       ...Array.from({ length: isMobileTagCloud() ? 48 : 24 }, (_, i) => -180 + i * (isMobileTagCloud() ? 7.5 : 15))
@@ -475,11 +481,23 @@ function positionTrendBadges(container) {
       const bleed = isMobileTagCloud() ? 18 : 4;
       if (l < -bleed || t < -bleed || r > cW + bleed || b > cH + bleed) return null;
 
+      // Contact obligatoire : le point du badge le plus proche du centre de la
+      // bulle doit être dans le cercle (badge tangent ou à cheval sur le bord)
+      const nearestX = Math.min(Math.max(geo.cx, l), r);
+      const nearestY = Math.min(Math.max(geo.cy, t), b);
+      if (Math.hypot(nearestX - geo.cx, nearestY - geo.cy) > geo.r) return null;
+
       let s = 0;
 
-      // Préférer le sommet (-90°)
-      s -= Math.max(0, distance - preferredOutsideDistance) * 12;
-      s -= Math.abs(angleDeg + 90) * 0.8;
+      // Règle : au plus près du mot tag de la bulle, sans jamais le chevaucher
+      // (le blocage lisibilité rejette tout candidat qui recouvre un texte)
+      if (ownLabelRect) {
+        const gapX = Math.max(ownLabelRect.l - r, l - ownLabelRect.r, 0);
+        const gapY = Math.max(ownLabelRect.t - b, t - ownLabelRect.b, 0);
+        s -= Math.hypot(gapX, gapY) * 10;
+      }
+      // Léger tie-break vers le sommet (-90°)
+      s -= Math.abs(angleDeg + 90) * 0.5;
 
       // Pénalité : badge profond dans une autre bulle
       for (let i = 0; i < bubbleGeo.length; i++) {
