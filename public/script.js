@@ -2028,7 +2028,7 @@ function getArgumentsSortMode() {
 }
 
 function changeArgumentsSort(mode) {
-  const normalizedMode = ["score", "progress", "comments", "recent", "old"].includes(mode)
+  const normalizedMode = ["score", "progress", "comments", "recent", "old", "ai_score"].includes(mode)
     ? mode
     : "score";
   const previousMode = getArgumentsSortMode();
@@ -2084,7 +2084,8 @@ function updateSortButtonLabel() {
     progress: "Idées en progression",
     comments: "Commentés",
     recent: "Récents",
-    old: "Anciens"
+    old: "Anciens",
+    ai_score: "Meilleures notes IA"
   };
 
   button.textContent = `${labels[mode] || "Trier"} ▾`;
@@ -2126,6 +2127,23 @@ function sortArgumentsByMode(args, commentsByArgument = {}) {
     return movePinnedArgumentToFourthPosition(ordered);
   } else if (mode === "progress") {
     return sortArgumentsByProgress(sorted);
+  } else if (mode === "ai_score") {
+    const ordered = sorted.sort((a, b) => {
+      const scoreA = currentArgumentScoreMap[String(a.id)]?.final_score;
+      const scoreB = currentArgumentScoreMap[String(b.id)]?.final_score;
+      const hasScoreA = scoreA != null;
+      const hasScoreB = scoreB != null;
+
+      if (hasScoreA && hasScoreB) {
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Number(b.id || 0) - Number(a.id || 0);
+      }
+      if (hasScoreA) return -1;
+      if (hasScoreB) return 1;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+
+    return movePinnedArgumentToFourthPosition(ordered);
   } else {
     return sortArgumentsByScore(sorted);
   }
@@ -3425,7 +3443,8 @@ function ensureDebateIframeModal() {
       background: rgba(17,24,39,0.98);
       color: #ffffff;
     }
-    #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close {
+    #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close,
+    #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-refresh {
       filter: blur(4px);
       opacity: 0.45;
       pointer-events: none;
@@ -14669,6 +14688,25 @@ function closeIndexContextPreview(button) {
   updateIndexRowContextOpenState(article?.closest?.('.theme-horizontal-row'));
 }
 
+function getOpenIndexContextDebateIds() {
+  const ids = new Set();
+  document.querySelectorAll('[data-index-context-toggle][aria-expanded="true"]').forEach((btn) => {
+    const id = btn.getAttribute('data-debate-id');
+    if (id) ids.add(id);
+  });
+  return ids;
+}
+
+function restoreOpenIndexContextCards(container, openIds) {
+  if (!container || !openIds || !openIds.size) return;
+  openIds.forEach((id) => {
+    const btn = container.querySelector(`[data-index-context-toggle][data-debate-id="${CSS.escape(id)}"]`);
+    if (btn && btn.getAttribute('aria-expanded') !== 'true') {
+      toggleIndexContextPreview(btn);
+    }
+  });
+}
+
 function closeAllOpenContextPreviews(exceptCard) {
   document.querySelectorAll('[data-index-context-toggle][aria-expanded="true"]').forEach((btn) => {
     const card = btn.closest('.debate-card');
@@ -16805,6 +16843,8 @@ function renderDebatesList(debates) {
   }
   cleanupIndexInfiniteScrollObserver();
 
+  const previouslyOpenContextIds = getOpenIndexContextDebateIds();
+
   const safeDebates = Array.isArray(debates) ? debates : [];
   const div = document.getElementById("debates-list");
   const header = document.getElementById("other-section-header");
@@ -16883,6 +16923,7 @@ function renderDebatesList(debates) {
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
   setupIndexInfiniteScroll();
   requestAnimationFrame(syncBubbleFrameTop);
+  restoreOpenIndexContextCards(div, previouslyOpenContextIds);
 }
 
 function appendDebatesToList(debates) {
@@ -22388,6 +22429,7 @@ updateDeleteDebateButtonVisibility(data.debate);
 currentAllArguments = [...(data.optionA || []), ...(data.optionB || [])];
 currentCommentsByArgument = data.commentsByArgument || {};
 currentArgumentScoreMap = {};
+removeAiScoreSortOption();
 const _staleOverlay = document.getElementById('argument-ai-detail-overlay');
 if (_staleOverlay) _staleOverlay.remove();
 
@@ -22578,6 +22620,11 @@ if (data.debate.ai_analysis_status === 'ready') {
         const analysis = JSON.parse(json.raw);
         currentArgumentScoreMap = buildArgumentScoreMap(analysis);
         renderArgumentAiScoreBadges();
+        if (hasAnyAiScore()) {
+          ensureAiScoreSortOption();
+        } else {
+          removeAiScoreSortOption();
+        }
       } catch (e) {}
     })
     .catch(function() {});
@@ -26554,6 +26601,53 @@ function ensureProgressSortOption() {
     menu.insertBefore(progressButton, commentsButton);
   } else {
     menu.appendChild(progressButton);
+  }
+}
+
+function hasAnyAiScore() {
+  return Object.values(currentArgumentScoreMap || {}).some((entry) => entry && entry.final_score != null);
+}
+
+function ensureAiScoreSortOption() {
+  const menu = document.getElementById("sort-menu");
+  if (!menu) return;
+  if (menu.querySelector('[data-sort-mode="ai_score"]')) return;
+
+  const templateButton = menu.querySelector('button');
+  const aiScoreButton = templateButton
+    ? templateButton.cloneNode(true)
+    : document.createElement("button");
+
+  aiScoreButton.type = "button";
+  aiScoreButton.textContent = "Meilleures notes IA";
+  aiScoreButton.setAttribute("data-sort-mode", "ai_score");
+  aiScoreButton.onclick = () => changeArgumentsSort("ai_score");
+
+  if (!templateButton) {
+    aiScoreButton.style.display = "block";
+    aiScoreButton.style.width = "100%";
+  }
+
+  menu.appendChild(aiScoreButton);
+}
+
+function removeAiScoreSortOption() {
+  const menu = document.getElementById("sort-menu");
+  if (!menu) return;
+
+  const aiScoreButton = menu.querySelector('[data-sort-mode="ai_score"]');
+  if (!aiScoreButton) return;
+
+  aiScoreButton.remove();
+
+  if (getArgumentsSortMode() === "ai_score") {
+    currentArgumentsSortMode = "score";
+    updateSortButtonLabel();
+    if (Array.isArray(currentAllArguments) && currentAllArguments.length) {
+      requestAnimationFrame(() => {
+        rerenderCurrentDebateArguments();
+      });
+    }
   }
 }
 

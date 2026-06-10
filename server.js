@@ -2569,6 +2569,7 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     "",
     "Séquence = même affaire, même polémique, même réforme, même crise, même conflit EN COURS, même compétition, même dossier politique, même controverse, rebond évident du même sujet.",
     "IMPORTANT : un conflit armé, une guerre, une opération militaire récurrente = SÉQUENCE même si chaque article couvre un épisode différent (ex : nouvelles frappes dans le même conflit, nouveaux bombardements, nouvelle offensive = même séquence que les précédentes).",
+    "IMPORTANT : si le titre du nouveau sujet et celui d'une publication récente citent le même nom propre d'affaire/scandale (nom de victime, \"Affaire X\", nom d'opération, nom de réforme/loi, nom d'événement nommé), c'est un signal TRÈS FORT de même séquence — même si l'angle, l'institution ou les personnalités citées diffèrent (ex : \"Affaire Lyhanna\" et \"Affaire Lyhanna et Darmanin\" = même séquence).",
     "PAS une séquence = simple proximité thématique sans lien direct, même personnalité mais événement sans rapport, même pays mais actualité complètement différente, même institution mais affaire sans lien, mot-clé isolé commun.",
     "",
     "Nouveau sujet :",

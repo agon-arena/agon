@@ -10455,6 +10455,11 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   z-index: 150;
 }
 
+/* Passe au-dessus du menu de tri (Plus soutenues, Idées en progression, etc.) */
+body.page-debate .debate-floating-refresh-btn {
+  z-index: 201;
+}
+
 .agon-new-debates-banner {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
@@ -12697,7 +12702,9 @@ body.page-debate .debate-top-sticky-actions {
 
 small.argument-url-ia-hint,
 body.page-debate .argument-url-field small.argument-url-ia-hint {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
   color: #2e6fa3 !important;
   font-size: 12px !important;
   font-weight: 600 !important;
@@ -12857,7 +12864,7 @@ body.page-debate .argument-url-field small.argument-url-ia-hint {
 
 @media (max-width: 768px) {
   .argument-url-field {
-    gap: 5px;
+    gap: 0;
   }
 
   .argument-url-field small,
@@ -12865,6 +12872,21 @@ body.page-debate .argument-url-field small.argument-url-ia-hint {
   .idea-source-description,
   .idea-source-open-link {
     font-size: 12px;
+  }
+
+  /* Harmonise l'interlignage entre les deux textes : même line-height,
+     et on supprime les marges/écarts qui créaient un blanc supplémentaire
+     entre les deux blocs (différent de l'interligne interne aux blocs). */
+  body.page-debate .argument-url-field small.argument-url-ia-hint {
+    line-height: 14px !important;
+    margin-top: 0 !important;
+  }
+
+  body.page-debate .argument-url-field small:not(.argument-url-ia-hint) {
+    font-size: 12px;
+    line-height: 16px;
+    margin-top: 0;
+    margin-bottom: 0;
   }
 
   .idea-source-card-wrap {
@@ -14108,6 +14130,16 @@ body.page-debate .argument-form .form-close-btn {
     margin-bottom: 1px !important;
   }
 
+  body.page-debate .argument-form > h3 {
+    font-size: 19px !important;
+    text-align: center !important;
+  }
+
+  body.page-debate .argument-form-list-top h3 {
+    font-size: 19px !important;
+    margin-bottom: 0 !important;
+  }
+
   body.page-debate .argument-form label {
     font-size: 15px !important;
     font-weight: 700;
@@ -14128,7 +14160,10 @@ body.page-debate .argument-form .form-close-btn {
   }
 
   body.page-debate .argument-form-list-top {
+    padding-left: 44px;
     padding-right: 44px;
+    align-items: stretch;
+    margin-bottom: 12px;
   }
 
   body.page-debate .argument-form .form-close-btn {
@@ -14137,6 +14172,11 @@ body.page-debate .argument-form .form-close-btn {
     right: 0;
     margin-left: 0;
     z-index: 3;
+  }
+
+  /* Arène libre : centre verticalement le contenu du formulaire dans la modale */
+  body.page-debate .argument-form-list {
+    align-content: center;
   }
 }
 
