@@ -927,6 +927,7 @@
       .ada-arg-card { border: 1px solid rgba(36,48,56,.12); border-radius: 12px; padding: 10px 12px; margin: 0 0 8px; background: rgba(255,255,255,.66); box-shadow: 0 5px 14px rgba(36,48,56,.05); }
       .ada-arg-excluded { opacity: .6; }
       .ada-arg-excluded-label { margin-left: auto; font-size: 10px; font-weight: 600; color: #9ca3af; letter-spacing: .04em; text-transform: uppercase; }
+      .ada-arg-rank { font-size: 12px; font-weight: 700; color: #6b7280; background: #f3f4f6; border-radius: 999px; padding: 2px 8px; }
       .ada-arg-header { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
       .ada-arg-score { font-size: 20px; font-weight: 900; line-height: 1; color: #243038; }
       .ada-arg-score small { font-size: 11px; font-weight: 650; opacity: .58; }
@@ -1236,7 +1237,7 @@
         '</div>';
     }
 
-    function argCard(a, duplicateGroups = [], isExtraHidden = false, isOpen = false) {
+    function argCard(a, duplicateGroups = [], isExtraHidden = false, isOpen = false, rankPos = null, rankTotal = null) {
       const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
       const strengthsHtml = (a.strengths || []).length
         ? '<ul class="ada-arg-list ada-arg-strengths">' + a.strengths.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
@@ -1251,10 +1252,10 @@
       // poids dans le verdict (voir `excluded` ci-dessus) et resterait trompeur ici.
       const badgeCategory = a.final_category || a.category;
       return `<div class="ada-arg-card${excluded ? ' ada-arg-excluded' : ''}${isExtraHidden ? ' ada-arg-extra-hidden' : ''}">
-        <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${excluded && !isOpen ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
+        <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${rankPos !== null && rankTotal > 1 ? `<span class="ada-arg-rank">${rankPos} / ${rankTotal}</span>` : ''}${excluded && !isOpen ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
         <div class="ada-arg-text">"${esc(a.argumentText)}"</div>
         ${dupGroups(duplicateGroups)}
-        <div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/80 · Appui sourcé : ${a.source_score || 0}/20</div>
+        <div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/90 · Appui sourcé : ${a.source_score || 0}/10</div>
         ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
         ${a.final_score_note ? `<div class="ada-arg-expl">${esc(a.final_score_note)}</div>` : ''}
         ${strengthsHtml}${weaknessesHtml}
@@ -1263,8 +1264,10 @@
     }
 
     function campSection(camp, campData, pasteExcluded, isOpen) {
-      const args = campData.effectiveArguments || [];
-      if (!args.length) return `<div class="ada-empty">Aucune idée pour ${esc(campData.label)}.</div>`;
+      const rawArgs = campData.effectiveArguments || [];
+      if (!rawArgs.length) return `<div class="ada-empty">Aucune idée pour ${esc(campData.label)}.</div>`;
+      const args = [...rawArgs].sort((a, b) => (b.final_score || 0) - (a.final_score || 0));
+      const rankTotal = args.length;
       const qe = campData.goodExcellentCount || 0;
       const avg = campData.weightedAverage || 0;
       const pe = Number(pasteExcluded || 0);
@@ -1283,10 +1286,9 @@
         <details class="ada-args-details">
           <summary class="ada-args-summary">Voir les ${args.length} idée${args.length > 1 ? 's' : ''} évaluée${args.length > 1 ? 's' : ''}</summary>
           <div class="ada-args-list">
-            ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit, isOpen)).join('')}
+            ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit, isOpen, index + 1, rankTotal)).join('')}
             <div class="ada-load-more-wrap">
               ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'idées</button>' : ''}
-              <button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button>
             </div>
           </div>
         </details>
@@ -2017,16 +2019,17 @@
       <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
 
       <h3>2. Chaque idée distincte est notée sur 100</h3>
-      <p>Chaque idée conservée reçoit une note de solidité sur 100. Cette note repose sur plusieurs critères :</p>
+      <p>Chaque idée conservée reçoit une note de solidité sur 100. La qualité argumentative compte pour 90 points, les sources pour 10 points.</p>
       <ul>
-        <li><strong>Pertinence par rapport à la question de l'arène : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
+        <li><strong>Pertinence par rapport à la question : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
+        <li><strong>Clarté de la thèse : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
         <li><strong>Qualité du raisonnement : 25 points</strong><br>L'idée est-elle logique, cohérente et bien construite ?</li>
-        <li><strong>Appui factuel ou exemple concret : 20 points</strong><br>L'idée s'appuie-t-elle sur des faits, des exemples, des données ou une source identifiable ?</li>
-        <li><strong>Nuance et prise en compte de la complexité : 15 points</strong><br>L'idée évite-t-elle les simplifications abusives ? Reconnaît-elle les limites ou les tensions du sujet ?</li>
-        <li><strong>Clarté de l'expression : 15 points</strong><br>L'idée est-elle compréhensible, bien formulée et suffisamment précise ?</li>
-        <li><strong>Ton et respect de l'arène : 5 points</strong><br>L'idée reste-t-elle compatible avec une arène constructive, sans insulte ni attaque gratuite ?</li>
+        <li><strong>Précision / mécanisme concret : 15 points</strong><br>L'idée donne-t-elle un mécanisme, un exemple ou une conséquence précise ?</li>
+        <li><strong>Nuance et prise en compte des limites : 10 points</strong><br>L'idée reconnaît-elle les risques, objections ou limites ?</li>
+        <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
+        <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
       </ul>
-      <div class="ada-bareme-rule"><strong>Total : 100 points.</strong></div>
+      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 90 points · Sources : 10 points · Score final : 100 points.</strong></div>
 
       <h3>3. Les idées sont classées par niveau</h3>
       <ul>
@@ -2036,9 +2039,8 @@
         <li><strong>85 à 100 : excellente idée</strong> — très solide, bien construite, nuancée et bien appuyée.</li>
       </ul>
 
-      <h3>4. Les sources sont prises en compte séparément</h3>
-      <p>Quand une idée contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable, pertinente et bien liée à l'idée peut renforcer son évaluation. Mais une source ne suffit pas à rendre une idée excellente : une idée mal raisonnée reste pénalisée, même avec un lien. À l'inverse, une idée sans URL peut être bonne si elle est claire, logique et pertinente.</p>
-      <p>Le score final affiché (sur 100) additionne la <strong>qualité argumentative</strong> (sur 80, hors sources) et l'<strong>appui sourcé</strong> (sur 20). Une idée peut donc être excellente sur le plan du raisonnement tout en obtenant un score final plus modeste faute de source fournie : ce n'est pas une contradiction, seulement le reflet de deux dimensions distinctes — Agôn l'indique alors explicitement dans son explication.</p>
+      <h3>4. Les sources renforcent, elles ne remplacent pas</h3>
+      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut être excellente si elle est claire, logique et bien construite — la qualité du raisonnement représente 90 % du score.</p>
 
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>

@@ -3364,7 +3364,6 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal-inner {
       position: relative;
       width: 100%;
-      max-width: 1100px;
       height: 90vh;
       border-radius: 20px;
       overflow: hidden;
@@ -3431,6 +3430,10 @@ function ensureDebateIframeModal() {
       opacity: 0.45;
       pointer-events: none;
     }
+    #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-close,
+    #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh {
+      display: none !important;
+    }
     @media (max-width: 768px) {
       #debate-iframe-modal.open {
         inset: 0;
@@ -3458,7 +3461,7 @@ function ensureDebateIframeModal() {
     }
     @media (min-width: 769px) {
       #debate-iframe-modal.open {
-        padding: 16px 16px 0 16px;
+        padding: 16px 0 0 0;
         align-items: flex-end;
         justify-content: center;
       }
@@ -3468,7 +3471,7 @@ function ensureDebateIframeModal() {
       }
       #debate-iframe-modal-close {
         bottom: 78px;
-        left: max(16px, calc((100vw - 1100px) / 2 + 16px));
+        left: 26px;
       }
     }
     #debate-iframe-modal-frame {
@@ -3637,6 +3640,12 @@ function ensureDebateIframeModal() {
 
     if (e.data.type === "agon:pause-page-media") {
       pauseDebatePageMediaForIframeClose();
+      return;
+    }
+
+    if (e.data.type === "agon:ai-score-modal-visibility") {
+      const debateModal = document.getElementById("debate-iframe-modal");
+      if (debateModal) debateModal.classList.toggle("ai-score-modal-open-in-child", !!e.data.open);
       return;
     }
 
@@ -14595,12 +14604,12 @@ function renderIndexContextExpandedText(text, isOpen = false) {
     .filter(Boolean);
 
   if (isOpen) {
-    const hasOpenTail = parts.length >= 2;
+    const reflectionQuestion = parts[parts.length - 1] || "";
+    const latinMotto = parts[parts.length - 2] || "";
+    const hasOpenTail = parts.length >= 2 && /[?？]$/.test(reflectionQuestion);
     if (!hasOpenTail) {
       return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
     }
-    const reflectionQuestion = parts[parts.length - 1] || "";
-    const latinMotto = parts[parts.length - 2] || "";
     const latinStart = rawText.indexOf(latinMotto);
     const questionStart = latinStart >= 0 ? rawText.indexOf(reflectionQuestion, latinStart + latinMotto.length) : -1;
     if (latinStart < 0 || questionStart < 0) {
@@ -16657,7 +16666,7 @@ function syncBubbleFrameTop() {
     cloud.style.removeProperty('--bubble-frame-top');
     return;
   }
-  const frameDrop = 56;
+  const frameDrop = 40;
   const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top) + frameDrop);
   cloud.style.setProperty('--bubble-frame-top', offset + 'px');
 }
@@ -17568,12 +17577,12 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
   if (!parts.length) return "";
 
   if (isOpen) {
-    const hasOpenTail = parts.length >= 2;
+    const reflectionQuestion = parts[parts.length - 1] || "";
+    const latinMotto = parts[parts.length - 2] || "";
+    const hasOpenTail = parts.length >= 2 && /[?？]$/.test(reflectionQuestion);
     if (!hasOpenTail) {
       return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
     }
-    const reflectionQuestion = parts[parts.length - 1] || "";
-    const latinMotto = parts[parts.length - 2] || "";
     const bodyParts = parts.slice(0, parts.length - 2);
     return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
       + `<p class="article-latin-question">${escapeHtml(latinMotto)}</p>`
@@ -22114,6 +22123,7 @@ function buildArgumentScoreMap(analysis) {
     args.forEach(function(a) {
       if (!a || !a.argumentId) return;
       map[String(a.argumentId)] = {
+        camp:              side,
         final_score:       a.final_score       != null ? a.final_score       : null,
         final_category:    a.final_category    || a.category                 || null,
         short_explanation: a.short_explanation                                || '',
@@ -22133,6 +22143,20 @@ function buildArgumentScoreMap(analysis) {
         weaknesses:        []
       };
     }
+  });
+  // Précalculer le classement par camp (meilleur = rang 1)
+  ['A', 'B'].forEach(function(side) {
+    var campEntries = Object.values(map).filter(function(e) {
+      return e.camp === side && e.final_category !== 'copie' && e.final_score != null;
+    });
+    var sorted = campEntries.slice().sort(function(a, b) { return b.final_score - a.final_score; });
+    var total = sorted.length;
+    Object.keys(map).forEach(function(id) {
+      var e = map[id];
+      if (e.camp !== side || e.final_category === 'copie' || e.final_score == null) return;
+      e.rankPos   = sorted.filter(function(x) { return x.final_score > e.final_score; }).length + 1;
+      e.rankTotal = total;
+    });
   });
   return map;
 }
@@ -22208,6 +22232,9 @@ function showArgumentAiDetail(argId, triggerEl) {
   const scoreCls = entry.final_category ? ' arg-ai-score-' + entry.final_category : '';
   const isCopie = entry.final_category === 'copie';
 
+  const rankPos   = isCopie ? null : (entry.rankPos   || null);
+  const rankTotal = isCopie ? null : (entry.rankTotal || null);
+
   let html = '<div class="arg-ai-detail-header">'
     + '<span class="arg-ai-detail-header-label">✦ Analyse IA</span>'
     + '<button class="arg-ai-detail-close" type="button" aria-label="Fermer">✕</button>'
@@ -22225,6 +22252,12 @@ function showArgumentAiDetail(argId, triggerEl) {
     html += '<span class="arg-ai-detail-cat' + catCls + '">' + escapeHtml(catLabel) + '</span>';
   }
   html += '</div>';
+  if (rankPos !== null && rankTotal >= 1) {
+    html += '<div class="arg-ai-detail-rank-row">'
+      + '<span class="arg-ai-detail-rank-label">Classement</span>'
+      + '<span class="arg-ai-detail-rank">' + rankPos + ' / ' + rankTotal + '</span>'
+      + '</div>';
+  }
 
   if (entry.short_explanation) {
     html += '<div class="arg-ai-detail-expl">' + escapeHtml(entry.short_explanation) + '</div>';
@@ -22258,14 +22291,20 @@ function showArgumentAiDetail(argId, triggerEl) {
 
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
+  try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: true }, '*'); } catch(e) {}
+
+  function closeAiDetail() {
+    overlay.remove();
+    try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: false }, '*'); } catch(e) {}
+  }
 
   popup.querySelector('.arg-ai-detail-close').addEventListener('click', function(e) {
     e.stopPropagation();
-    overlay.remove();
+    closeAiDetail();
   });
 
   overlay.addEventListener('click', function(e) {
-    if (!popup.contains(e.target)) overlay.remove();
+    if (!popup.contains(e.target)) closeAiDetail();
   });
 }
 
@@ -28372,4 +28411,34 @@ window.addEventListener('pageshow', (event) => {
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && !bannerShown) poll();
   });
+})();
+
+// ===== CLOUD SECTION — PLEIN ÉCRAN DESKTOP =====
+// Donne à .agon-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
+// Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
+function syncCloudSectionHeight() {
+  if (window.innerWidth <= 768) return;
+  var section = document.getElementById('agon-tag-trends-section');
+  if (!section || section.hidden) return;
+  var docTop = section.getBoundingClientRect().top + window.scrollY;
+  var bottomBarH = getStableBottomBarOffset();
+  // Soustraire le bandeau bas pour que le cadre ::before du cloud (23px du bas du cloud)
+  // soit visible au-dessus du bandeau et non caché derrière lui.
+  section.style.height = Math.max(300, window.innerHeight - docTop - bottomBarH) + 'px';
+}
+
+(function initCloudSectionHeight() {
+  var section = document.getElementById('agon-tag-trends-section');
+  if (!section) return;
+
+  var obs = new MutationObserver(function() {
+    if (!section.hidden) {
+      requestAnimationFrame(function() { requestAnimationFrame(syncCloudSectionHeight); });
+    }
+  });
+  obs.observe(section, { attributes: true, attributeFilter: ['hidden'] });
+
+  window.addEventListener('resize', syncCloudSectionHeight, { passive: true });
+
+  if (!section.hidden) syncCloudSectionHeight();
 })();
