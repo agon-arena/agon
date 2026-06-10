@@ -12848,7 +12848,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
 } else if (notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
 } else if (notification.debate_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=debate`;
+  link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
 }
 
     if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {
@@ -14604,21 +14604,24 @@ function renderIndexContextExpandedText(text, isOpen = false) {
     .filter(Boolean);
 
   if (isOpen) {
-    const reflectionQuestion = parts[parts.length - 1] || "";
+    const lastPart = parts[parts.length - 1] || "";
     const latinMotto = parts[parts.length - 2] || "";
-    const hasOpenTail = parts.length >= 2 && /[?？]$/.test(reflectionQuestion);
+    const hasOpenTail = parts.length >= 2;
     if (!hasOpenTail) {
       return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
     }
     const latinStart = rawText.indexOf(latinMotto);
-    const questionStart = latinStart >= 0 ? rawText.indexOf(reflectionQuestion, latinStart + latinMotto.length) : -1;
-    if (latinStart < 0 || questionStart < 0) {
+    const lastStart = latinStart >= 0 ? rawText.indexOf(lastPart, latinStart + latinMotto.length) : -1;
+    if (latinStart < 0 || lastStart < 0) {
       return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
     }
     const beforeLatin = rawText.slice(0, latinStart);
-    const betweenLatinAndQuestion = rawText.slice(latinStart + latinMotto.length, questionStart).replace(/^\n{2,}/, "\n");
-    const afterQuestion = rawText.slice(questionStart + reflectionQuestion.length).replace(/^\n{2,}/, "\n");
-    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndQuestion)}<span class="article-reflection-question">${escapeHtml(reflectionQuestion)}</span>${escapeHtmlNl(afterQuestion)}`;
+    const betweenLatinAndLast = rawText.slice(latinStart + latinMotto.length, lastStart).replace(/^\n{2,}/, "\n");
+    const afterLast = rawText.slice(lastStart + lastPart.length).replace(/^\n{2,}/, "\n");
+    const lastHtml = /[?？]$/.test(lastPart)
+      ? `<span class="article-reflection-question">${escapeHtml(lastPart)}</span>`
+      : escapeHtml(lastPart);
+    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndLast)}${lastHtml}${escapeHtmlNl(afterLast)}`;
   }
 
   const signature = parts[parts.length - 1] || "";
@@ -17577,16 +17580,17 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
   if (!parts.length) return "";
 
   if (isOpen) {
-    const reflectionQuestion = parts[parts.length - 1] || "";
+    const lastPart = parts[parts.length - 1] || "";
     const latinMotto = parts[parts.length - 2] || "";
-    const hasOpenTail = parts.length >= 2 && /[?？]$/.test(reflectionQuestion);
+    const hasOpenTail = parts.length >= 2;
     if (!hasOpenTail) {
       return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
     }
     const bodyParts = parts.slice(0, parts.length - 2);
+    const lastClass = /[?？]$/.test(lastPart) ? "article-reflection-question" : "article-body-paragraph";
     return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
       + `<p class="article-latin-question">${escapeHtml(latinMotto)}</p>`
-      + `<p class="article-reflection-question">${escapeHtml(reflectionQuestion)}</p>`;
+      + `<p class="${lastClass}">${escapeHtml(lastPart)}</p>`;
   }
 
   const signature = parts[parts.length - 1] || "";
@@ -26668,7 +26672,7 @@ if (notification.type === "replacement_accepted" && notification.argument_id) {
 } else if (notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
 } else if (notification.debate_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=debate`;
+  link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
 }
 
 if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {

@@ -1876,7 +1876,7 @@
   }
 
   // ── Fetch stored analysis ────────────────────────────────────────────
-  async function openReport(debateId) {
+  async function openReport(debateId, prefetched) {
     const panel    = document.getElementById('ada-panel');
     const body     = document.getElementById('ada-body');
     const useAnim  = typeof showAiAnalysisAnimation === 'function';
@@ -1889,8 +1889,13 @@
 
     let applyContent;
     try {
-      const r    = await fetch('/api/debates/' + debateId + '/analysis');
-      const json = await r.json().catch(() => ({}));
+      let r, json;
+      if (prefetched) {
+        ({ r, json } = prefetched);
+      } else {
+        r    = await fetch('/api/debates/' + debateId + '/analysis');
+        json = await r.json().catch(() => ({}));
+      }
       if (!r.ok) {
         applyContent = () => { body.innerHTML = `<span class="ada-error">Erreur : ${esc(json.error || r.statusText)}</span>`; };
       } else if (json.raw) {
@@ -2091,6 +2096,8 @@
     const debateId = getDebateId();
     if (!debateId) return;
 
+    const wantsReport = new URLSearchParams(location.search).get('highlight') === 'ai-report';
+
     injectStyles();
 
     // Délégation clic sur le lien barème (présent dans le rapport dynamique)
@@ -2161,13 +2168,16 @@
       document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
       document.getElementById('ada-regen-btn').addEventListener('click', () => regenerate(debateId));
       observeAnimated();
+      if (wantsReport) openReport(debateId);
       return;
     }
 
+    let prefetched;
     try {
       const r    = await fetch('/api/debates/' + debateId + '/analysis');
       const json = await r.json().catch(() => ({}));
       if (!r.ok || !json.raw) return;
+      prefetched = { r, json };
     } catch (_) { return; }
 
     slot.innerHTML = `
@@ -2187,6 +2197,7 @@
     document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
     document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
     observeAnimated();
+    if (wantsReport) openReport(debateId, prefetched);
   }
 
   if (document.readyState === 'loading') {

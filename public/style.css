@@ -1822,7 +1822,7 @@ font-family: "Barlow Condensed", sans-serif;
   padding: 4px 0 20px;
 }
 .arena-type-choice-intro {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: #374151;
   margin: 0 0 14px;
@@ -1853,17 +1853,17 @@ font-family: "Barlow Condensed", sans-serif;
   transform: translateY(-2px);
 }
 .arena-type-card-icon {
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   margin-bottom: 2px;
 }
 .arena-type-card-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: #111827;
 }
 .arena-type-card-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: #6b7280;
   line-height: 1.45;
 }
@@ -1899,6 +1899,27 @@ font-family: "Barlow Condensed", sans-serif;
 .create-type-back-btn:hover { color: #374151; }
 @media (max-width: 540px) {
   .arena-type-cards { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 769px) {
+  .arena-type-choice-intro {
+    font-size: 21px;
+    margin: 0 0 18px;
+  }
+  .arena-type-card {
+    padding: 24px 22px;
+    gap: 8px;
+  }
+  .arena-type-card-icon {
+    font-size: 28px;
+  }
+  .arena-type-card-title {
+    font-size: 22px;
+  }
+  .arena-type-card-desc {
+    font-size: 15px;
+    line-height: 1.5;
+  }
 }
 
 .debate-type-toggle{
@@ -7117,18 +7138,24 @@ body.page-debate .topbar::after {
 
 @media (max-width: 768px) {
   .page-notifications-mobile .mobile-back-button {
-    width: 46px;
-    height: 46px;
-    min-width: 46px;
-    min-height: 46px;
+    position: fixed;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    z-index: 10000;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid #d1d5db;
-    border-radius: 12px;
-    background: #ffffff;
-    color: #6b7280;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border: 1.5px solid #111827;
+    border-radius: 999px;
+    background: rgba(26,39,47,0.94);
+    color: #e5edf3;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
     cursor: pointer;
     padding: 0;
     font-size: 18px;
@@ -7136,9 +7163,8 @@ body.page-debate .topbar::after {
   }
 
   .page-notifications-mobile .mobile-back-button:hover {
-    background: #f9fafb;
-    border-color: #9ca3af;
-    color: #111827;
+    background: rgba(17,24,39,0.98);
+    color: #ffffff;
   }
 
   .page-notifications-mobile .back-notifications-stack {
@@ -10742,7 +10768,7 @@ body.is-standalone .home-topbar-login-icon {
   height: 40px;
   border: 1px solid #d1d5db;
   border-radius: 12px;
-  background: #ffffff;
+  background: #e9ebec;
   color: #374151;
   display: inline-flex;
   align-items: center;
@@ -18900,7 +18926,7 @@ body.page-home-mobile .topbar-social {
   body.page-notifications .topbar,
   body.page-notifications-mobile .topbar {
     min-height: 78px !important;
-    padding-bottom: 2px !important;
+    padding-bottom: 10px !important;
   }
 
   body.page-create .topbar-inner.topbar-home,
