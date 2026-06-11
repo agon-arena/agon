@@ -13205,6 +13205,7 @@ body.page-debate .debate-context-text {
   white-space: pre-line;
   text-align: left;
   padding-left: 6px;
+  padding-right: 6px;
   box-sizing: border-box;
   text-indent: 1.1em;
   font-weight: 400 !important;
@@ -14611,9 +14612,9 @@ body.page-debate .voices-summary-container {
   display: none !important;
 }
 
-/* Arènes similaires — même largeur que la liste index */
+/* Arènes similaires — largeur légèrement plus compacte que la liste index */
 body.page-debate .similar-debates-bottom {
-  width: 100%;
+  width: min(100% - 10px, 1100px);
   max-width: 1100px;
   margin-left: auto;
   margin-right: auto;
@@ -14689,7 +14690,7 @@ body.page-debate .similar-debates-results .debate-card.index-card-active:not(.ha
 
 @media (min-width: 769px) {
   body.page-debate .similar-debates-bottom {
-    width: min(780px, 100%);
+    width: min(760px, 100%);
   }
 }
 body.page-debate .debate-top-add-button,
@@ -18303,6 +18304,17 @@ body.page-home #debates-list .theme-row-section:first-child {
   animation: agonTrendPulse 2.4s ease-in-out infinite;
 }
 
+.agon-tag-trend-connector {
+  display: none;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.34), 0 1px 3px rgba(0,0,0,0.22);
+  opacity: 0.62;
+  transform-origin: left center;
+  pointer-events: none;
+}
+
 .agon-tag-trend-down {
   animation-delay: 0.4s;
 }
@@ -18870,6 +18882,8 @@ body.page-home-mobile .topbar-social {
 
   body.page-debate .debate-context-text {
     font-size: 23px !important;
+    padding-left: 10px;
+    padding-right: 10px;
   }
   body.page-debate .argument-title {
     font-size: 23px;

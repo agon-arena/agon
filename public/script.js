@@ -636,6 +636,7 @@ let similarDebatesVisible = false;
 let similarDebatesLoading = false;
 let similarDebatesLoadingTimer = null;
 const SIMILAR_DEBATES_BATCH_SIZE = 4;
+const SIMILAR_DEBATES_MAX_RESULTS = 10;
 let similarDebatesVisibleCount = SIMILAR_DEBATES_BATCH_SIZE;
 let currentDebateCache = null;
 let similarDebatesCache = null;
@@ -773,10 +774,16 @@ const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta_paged_v2";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 60;
 const INDEX_DEBATES_PAGE_SIZE = 60;
+const INDEX_SIMILAR_DEBATES_FETCH_LIMIT = 120;
+const IDEA_OG_PREVIEW_CACHE_TTL = 24 * 60 * 60 * 1000;
+const IDEA_OG_PREVIEW_EMPTY_CACHE_TTL = 2 * 60 * 1000;
+const IDEA_OG_PREVIEW_CACHE_MAX = 80;
 const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
 const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
 const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
 const IFRAME_LATEST_MODAL_URL_KEY = "agon_iframe_latest_modal_url";
+const ideaOpenGraphPreviewCache = new Map();
+const ideaOpenGraphPreviewPending = new Map();
 
 function clearIndexDebatesSessionCache() {
   try {
@@ -5618,6 +5625,11 @@ function initIndexCardShareMenus(root = document) {
     '.page-home-mobile .debate-card .debate-card-share-actions',
     '.page-debate .similar-debates-results .debate-card .debate-card-share-actions'
   ].join(', ');
+  const hasShareBlocks =
+    !!scope.querySelector(selector) ||
+    !!(scope.matches && scope.matches(selector));
+
+  if (!hasShareBlocks && !initIndexCardShareMenus._bound) return;
 
   if (!initIndexCardShareMenus._bound) {
     initIndexCardShareMenus._bound = true;
@@ -8420,6 +8432,15 @@ function scheduleMobileIndexCardHighlightUpdate() {
 }
 function initMobileIndexCardHighlight() {
   if (indexCardHighlightBound) return;
+  const shouldBindIndexCardHighlight =
+    (document.body.classList.contains('page-home') || document.body.classList.contains('page-home-mobile')) &&
+    !getDebateId();
+
+  if (!shouldBindIndexCardHighlight) {
+    clearMobileIndexCardHighlight();
+    return;
+  }
+
   indexCardHighlightBound = true;
 
   // Inject desktop card highlight CSS
@@ -9012,7 +9033,7 @@ function bindIndexXTabletRefresh() {
   window.addEventListener('resize', rerenderVisibleXShells, { passive: true });
   window.addEventListener('orientationchange', rerenderVisibleXShells, { passive: true });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', rerenderVisibleXShells);
+    window.visualViewport.addEventListener('resize', rerenderVisibleXShells, { passive: true });
   }
 
   indexXTabletRefreshBound = true;
@@ -9976,18 +9997,44 @@ function normalizeIdeaOpenGraphPreview(data, url) {
 }
 
 async function fetchIdeaOpenGraphPreview(url) {
-  try {
-    const response = await fetch(API + "/link-preview", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Accept": "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
-    });
-    if (!response.ok) return null;
-    return normalizeIdeaOpenGraphPreview(await response.json(), url);
-  } catch (error) {
-    return null;
+  const safeUrl = normalizeIdeaSourceUrl(url);
+  if (!safeUrl) return null;
+
+  const cached = ideaOpenGraphPreviewCache.get(safeUrl);
+  const cachedTtl = cached?.preview ? IDEA_OG_PREVIEW_CACHE_TTL : IDEA_OG_PREVIEW_EMPTY_CACHE_TTL;
+  if (cached && Date.now() - cached.savedAt < cachedTtl) {
+    return cached.preview;
   }
+
+  if (ideaOpenGraphPreviewPending.has(safeUrl)) {
+    return ideaOpenGraphPreviewPending.get(safeUrl);
+  }
+
+  const request = fetch(API + "/link-preview", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Accept": "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ url: safeUrl })
+  })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      return normalizeIdeaOpenGraphPreview(await response.json(), safeUrl);
+    })
+    .catch(() => null)
+    .then((preview) => {
+      ideaOpenGraphPreviewCache.set(safeUrl, { savedAt: Date.now(), preview });
+      while (ideaOpenGraphPreviewCache.size > IDEA_OG_PREVIEW_CACHE_MAX) {
+        const oldestKey = ideaOpenGraphPreviewCache.keys().next().value;
+        ideaOpenGraphPreviewCache.delete(oldestKey);
+      }
+      return preview;
+    })
+    .finally(() => {
+      ideaOpenGraphPreviewPending.delete(safeUrl);
+    });
+
+  ideaOpenGraphPreviewPending.set(safeUrl, request);
+  return request;
 }
 
 function renderIdeaOpenGraphPreviewHtml(url, preview) {
@@ -10048,6 +10095,8 @@ function renderIdeaXDirectMobileColumnEmbed(embed) {
 
 function fitIdeaXEmbedInMobileColumn(embed) {
   if (!isIdeaXMobileColumnEmbed(embed)) return;
+  if (embed.dataset.ideaXFitQueued === '1') return;
+  embed.dataset.ideaXFitQueued = '1';
 
   const getAvailableWidth = () => {
     const card = embed.closest('.argument-card');
@@ -10161,7 +10210,10 @@ function fitIdeaXEmbedInMobileColumn(embed) {
     applyFit();
     setTimeout(applyFit, 120);
     setTimeout(applyFit, 400);
-    setTimeout(applyFit, 1200);
+    setTimeout(() => {
+      applyFit();
+      delete embed.dataset.ideaXFitQueued;
+    }, 1200);
   });
 }
 
@@ -16694,7 +16746,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260610-badge-near-tag");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-connector-visible-3");
 
 
 function syncBubbleFrameTop() {
@@ -17687,7 +17739,7 @@ function renderEvaluationAxis(debate) {
   el.id = 'debate-evaluation-axis';
   el.className = 'debate-evaluation-axis';
 
-  const labelText = (isOpen && axis) ? 'Ce que l\'IA valorisera' : 'Comment l\'IA évalue les contributions';
+  const labelText = (isOpen && axis) ? 'Barème personnalisé de l\'arène — sur 100 points' : 'Comment l\'IA évalue les contributions';
   const bodyText = (isOpen && axis) ? axis : (isOpen ? defaultOpenText : defaultDebateText);
 
   el.innerHTML = '<span class="debate-evaluation-axis-label">' + labelText + '</span>'
@@ -17704,7 +17756,7 @@ function renderEvaluationAxis(debate) {
   // Bloc dans le formulaire "Ajouter une idée" (uniquement arène libre avec axe personnalisé)
   if (formAxisEl) {
     if (isOpen && axis) {
-      formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Ce que l\'IA valorisera</span>'
+      formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Barème personnalisé — sur 100 points</span>'
         + '<p class="form-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
       formAxisEl.style.display = 'block';
     } else {
@@ -19245,7 +19297,7 @@ const resourceInputs = document.querySelectorAll('input[name="resource-mode"]');
   let debatesForSimilarity = [];
 
   try {
-    debatesForSimilarity = await fetchJSON(API + "/debates");
+    debatesForSimilarity = await fetchJSON(getIndexDebatesApiUrl(INDEX_SIMILAR_DEBATES_FETCH_LIMIT, 0));
   } catch (error) {
     debatesForSimilarity = [];
   }
@@ -20150,7 +20202,8 @@ function renderBottomSimilarDebates(currentDebate, debates) {
       return { debate, score };
     })
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, SIMILAR_DEBATES_MAX_RESULTS);
 
   if (!matches.length) {
     container.innerHTML = `<div class="empty-state">Aucune arène similaire pour le moment.</div>`;
@@ -20258,7 +20311,7 @@ function ensureSimilarDebatesCacheLoaded() {
     return similarDebatesCachePromise;
   }
 
-  similarDebatesCachePromise = fetchJSON(API + "/debates")
+  similarDebatesCachePromise = fetchJSON(getIndexDebatesApiUrl(INDEX_SIMILAR_DEBATES_FETCH_LIMIT, 0))
     .then((debates) => {
       similarDebatesCache = Array.isArray(debates) ? debates : [];
       return similarDebatesCache;
@@ -20341,7 +20394,10 @@ function toggleSimilarDebates() {
   loadDebate(debateId);
 }
 function loadMoreSimilarDebates() {
-  similarDebatesVisibleCount += SIMILAR_DEBATES_BATCH_SIZE;
+  similarDebatesVisibleCount = Math.min(
+    similarDebatesVisibleCount + SIMILAR_DEBATES_BATCH_SIZE,
+    SIMILAR_DEBATES_MAX_RESULTS
+  );
 
   if (currentDebateCache && Array.isArray(similarDebatesCache)) {
     renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
@@ -21483,7 +21539,7 @@ function bindTabletXEmbedRefresh() {
   window.addEventListener("resize", refresh, { passive: true });
   window.addEventListener("orientationchange", refresh, { passive: true });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", refresh);
+    window.visualViewport.addEventListener("resize", refresh, { passive: true });
   }
   debateXTabletRefreshBound = true;
 }
@@ -22220,22 +22276,24 @@ function showActiveRubricModal() {
     + '</div>';
 
   if (open) {
-    html += '<div class="rubric-modal-section">'
-      + '<p class="rubric-modal-text">Par défaut, l\'IA évalue les contributions selon leur pertinence, leur clarté, la qualité du raisonnement, leur originalité utile et leur apport à l\'arène.</p>'
-      + '</div>';
     if (axis) {
       html += '<div class="rubric-modal-section rubric-modal-axis">'
-        + '<div class="rubric-modal-section-title">Critère défini pour cette arène</div>'
+        + '<div class="rubric-modal-section-title">Barème personnalisé de cette arène — sur 100 points</div>'
         + '<p class="rubric-modal-axis-text">' + escapeHtml(axis) + '</p>'
+        + '</div>'
+        + '<div class="rubric-modal-section">'
+        + '<p class="rubric-modal-note">Seul ce barème est appliqué par l\'IA : la note est directement sur 100, sans bonus automatique pour les sources (elles ne comptent que si ce barème le prévoit).</p>'
         + '</div>';
     } else {
       html += '<div class="rubric-modal-section">'
-        + '<p class="rubric-modal-note">Aucun critère personnalisé n\'a été défini : le barème Agôn par défaut s\'applique.</p>'
+        + '<p class="rubric-modal-text">Par défaut, l\'IA évalue chaque contribution sur 100 points : pertinence par rapport au sujet (/20), clarté (/15), solidité ou justification (/25), apport à l\'arène (/25), nuance (/10), ton (/5). Les sources fournies en URL donnent un bonus jusqu\'à +10 points, score final plafonné à 100.</p>'
+        + '<p class="rubric-modal-text">Une contribution excellente peut atteindre 100 même sans source ; à l\'inverse, une source seule ne suffit jamais à rendre excellente une contribution moyenne.</p>'
+        + '<p class="rubric-modal-note">Aucun barème personnalisé n\'a été défini : le barème Agôn par défaut s\'applique.</p>'
         + '</div>';
     }
   } else {
     html += '<div class="rubric-modal-section">'
-      + '<p class="rubric-modal-text">L\'IA évalue les arguments selon leur pertinence par rapport à la question, la clarté de la thèse, la qualité du raisonnement, la nuance, la prise en compte des objections et la qualité du débat.</p>'
+      + '<p class="rubric-modal-text">L\'IA évalue chaque argument sur 100 points : pertinence par rapport à la question (/20), clarté de la thèse (/15), qualité du raisonnement (/30), précision du mécanisme concret (/20), nuance et prise en compte des objections (/10), ton (/5). Les sources fournies en URL donnent un bonus jusqu\'à +10 points, score final plafonné à 100.</p>'
       + '</div>';
   }
 
@@ -26104,7 +26162,7 @@ function initDebateTopbarAutoHide() {
       window.requestAnimationFrame(updateTopbar);
       ticking = true;
     }
-  });
+  }, { passive: true });
 
   updateTopbar();
 }
@@ -26656,8 +26714,10 @@ initPageArrivalLoadingOverlay();
 document.addEventListener("DOMContentLoaded", () => {
   initIframePageContextBridge();
   initDebateLinkPrewarm();
-initMobileIndexCardHighlight();
-scheduleMobileIndexCardHighlightUpdate();
+  if ((document.body.classList.contains('page-home') || document.body.classList.contains('page-home-mobile')) && !getDebateId()) {
+    initMobileIndexCardHighlight();
+    scheduleMobileIndexCardHighlightUpdate();
+  }
   initNotificationTransitionOverlay();
   attachAdminButtons();
   loadNotifications();

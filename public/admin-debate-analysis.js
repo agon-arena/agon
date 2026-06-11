@@ -23,6 +23,56 @@
     try { return new URLSearchParams(location.search).get('id') || ''; } catch { return ''; }
   }
 
+  const ANALYSIS_FETCH_CACHE_TTL = 60 * 1000;
+  const analysisFetchCache = new Map();
+
+  async function fetchStoredAnalysis(debateId, options = {}) {
+    const key = String(debateId || '').trim();
+    if (!key) throw new Error('Arène introuvable.');
+
+    const cached = analysisFetchCache.get(key);
+    if (!options.force && cached && Date.now() - cached.savedAt < ANALYSIS_FETCH_CACHE_TTL) {
+      if (cached.promise) return cached.promise;
+      if (cached.result) return cached.result;
+    }
+
+    const promise = fetch('/api/debates/' + key + '/analysis')
+      .then(async function (response) {
+        const json = await response.json().catch(() => ({}));
+        return {
+          r: {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText
+          },
+          json
+        };
+      })
+      .then(function (result) {
+        analysisFetchCache.set(key, { savedAt: Date.now(), result });
+        return result;
+      })
+      .catch(function (error) {
+        analysisFetchCache.delete(key);
+        throw error;
+      });
+
+    analysisFetchCache.set(key, { savedAt: Date.now(), promise });
+    return promise;
+  }
+
+  function rememberStoredAnalysis(debateId, json) {
+    const key = String(debateId || '').trim();
+    if (!key) return;
+    analysisFetchCache.set(key, {
+      savedAt: Date.now(),
+      result: {
+        r: { ok: true, status: 200, statusText: 'OK' },
+        json: json || {}
+      }
+    });
+  }
+
   // ── Styles ──────────────────────────────────────────────────────────
   function injectStyles() {
     const css = `
@@ -1716,9 +1766,18 @@
     if (!pop || pop.version !== 2) return '';
 
     if (pop.hasEnoughData === false) {
+      const totalArgs = Number(pop.totalArgs || 0);
+      const totalVotes = Number(pop.totalVotes || 0);
+      let message = "Analyse indisponible : il faut au moins deux idées effectivement notées pour comparer popularité et robustesse argumentative.";
+      if (pop.reason === 'no_scored_arguments') {
+        message = "Analyse indisponible : aucune idée n'a encore été effectivement notée par l'IA pour cette arène.";
+      }
+      const details = [];
+      if (pop.reason === 'not_enough_scored_arguments') details.push(totalArgs + ' idée' + (totalArgs > 1 ? 's' : '') + ' notée' + (totalArgs > 1 ? 's' : ''));
+      if (totalVotes > 0) details.push(totalVotes + ' voix détectée' + (totalVotes > 1 ? 's' : ''));
       return '<div class="ada-scoring-report"><div class="ada-report">' +
         '<div class="ada-section-h2"><span class="ada-section-icon">⚡</span> Popularité vs robustesse argumentative</div>' +
-        '<div class="ada-empty">Analyse indisponible : les données de vote ou de notation argumentative sont insuffisantes.</div>' +
+        '<div class="ada-empty">' + esc(message) + (details.length ? '<br><small>' + esc(details.join(' · ')) + '</small>' : '') + '</div>' +
       '</div></div>';
     }
 
@@ -1893,8 +1952,7 @@
       if (prefetched) {
         ({ r, json } = prefetched);
       } else {
-        r    = await fetch('/api/debates/' + debateId + '/analysis');
-        json = await r.json().catch(() => ({}));
+        ({ r, json } = await fetchStoredAnalysis(debateId));
       }
       if (!r.ok) {
         applyContent = () => { body.innerHTML = `<span class="ada-error">Erreur : ${esc(json.error || r.statusText)}</span>`; };
@@ -1948,6 +2006,7 @@
         body.innerHTML = `<span class="ada-error">Erreur : ${esc(json.error || r.statusText)}</span>`;
         return;
       }
+      rememberStoredAnalysis(debateId, json);
       const now = new Date().toISOString();
       let parsedRegen = null;
       try { parsedRegen = JSON.parse(json.raw || ''); } catch (_) {}
@@ -1971,8 +2030,7 @@
     if (!slot) return;
 
     try {
-      const r    = await fetch('/api/debates/' + debateId + '/analysis');
-      const json = await r.json().catch(() => ({}));
+      const { r, json } = await fetchStoredAnalysis(debateId);
       if (!r.ok) return;
 
       if (json.raw || json.status === 'ready') {
@@ -2174,8 +2232,7 @@
 
     let prefetched;
     try {
-      const r    = await fetch('/api/debates/' + debateId + '/analysis');
-      const json = await r.json().catch(() => ({}));
+      const { r, json } = await fetchStoredAnalysis(debateId);
       if (!r.ok || !json.raw) return;
       prefetched = { r, json };
     } catch (_) { return; }

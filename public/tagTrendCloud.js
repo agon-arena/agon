@@ -434,6 +434,8 @@ function positionTrendBadges(container) {
     const trend = bubble.querySelector(".agon-tag-trend")
       || container.querySelector(`.agon-tag-trend[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
     if (!trend) return;
+    const connector = bubble.querySelector(".agon-tag-trend-connector")
+      || container.querySelector(`.agon-tag-trend-connector[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
 
     const geo = bubbleGeo[idx];
 
@@ -447,6 +449,12 @@ function positionTrendBadges(container) {
       : null;
 
     container.appendChild(trend);
+    if (connector) {
+      container.appendChild(connector);
+      connector.style.display = "none";
+      connector.style.position = "absolute";
+      connector.style.zIndex = "25";
+    }
     trend.style.position = "absolute";
     trend.style.left = "0px";
     trend.style.top  = "0px";
@@ -466,26 +474,32 @@ function positionTrendBadges(container) {
     for (let d = maxContactDistance; d >= minDistance; d -= 3) {
       distanceCandidates.push(d);
     }
+    const relaxedMaxDistance = geo.r + (isMobileTagCloud() ? 60 : 46);
+    const relaxedDistanceCandidates = [];
+    for (let d = maxContactDistance + 3; d <= relaxedMaxDistance; d += 4) {
+      relaxedDistanceCandidates.push(d);
+    }
     const angleCandidates = Array.from(new Set([
       ...ANGLES,
       ...Array.from({ length: isMobileTagCloud() ? 48 : 24 }, (_, i) => -180 + i * (isMobileTagCloud() ? 7.5 : 15))
     ]));
 
-    function scoreCandidate(angleDeg, distance) {
+    function scoreCandidate(angleDeg, distance, options = {}) {
+      const relaxed = options.relaxed === true;
       const rad = angleDeg * Math.PI / 180;
       const cx = geo.cx + Math.cos(rad) * distance;
       const cy = geo.cy + Math.sin(rad) * distance;
       const l = cx - tw / 2, t = cy - th / 2;
       const r = l + tw,      b = t + th;
 
-      const bleed = isMobileTagCloud() ? 18 : 4;
+      const bleed = relaxed ? (isMobileTagCloud() ? 46 : 30) : (isMobileTagCloud() ? 18 : 4);
       if (l < -bleed || t < -bleed || r > cW + bleed || b > cH + bleed) return null;
 
       // Contact obligatoire : le point du badge le plus proche du centre de la
       // bulle doit être dans le cercle (badge tangent ou à cheval sur le bord)
       const nearestX = Math.min(Math.max(geo.cx, l), r);
       const nearestY = Math.min(Math.max(geo.cy, t), b);
-      if (Math.hypot(nearestX - geo.cx, nearestY - geo.cy) > geo.r) return null;
+      if (!relaxed && Math.hypot(nearestX - geo.cx, nearestY - geo.cy) > geo.r) return null;
 
       let s = 0;
 
@@ -498,6 +512,7 @@ function positionTrendBadges(container) {
       }
       // Léger tie-break vers le sommet (-90°)
       s -= Math.abs(angleDeg + 90) * 0.5;
+      if (relaxed) s -= distance * 1.2;
 
       // Pénalité : badge profond dans une autre bulle
       for (let i = 0; i < bubbleGeo.length; i++) {
@@ -505,7 +520,7 @@ function positionTrendBadges(container) {
         const ob = bubbleGeo[i];
         const bCx = (l + r) / 2, bCy = (t + b) / 2;
         const dist = Math.hypot(bCx - ob.cx, bCy - ob.cy);
-        if (dist < ob.r - 10) s -= 300;
+        if (dist < ob.r - 10) s -= relaxed ? 120 : 300;
         else if (dist < ob.r)  s -= 60 * (ob.r - dist);
       }
 
@@ -541,9 +556,25 @@ function positionTrendBadges(container) {
       }
     }
 
-    const best = bestReadable;
+    let best = bestReadable;
+    let usesConnector = false;
+    if (!best) {
+      for (const distance of relaxedDistanceCandidates) {
+        for (const angle of angleCandidates) {
+          const candidate = scoreCandidate(angle, distance, { relaxed: true });
+          if (!candidate) continue;
+          if (candidate.textOverlapArea > 0) continue;
+          if (!best || candidate.score > best.score) {
+            best = candidate;
+            usesConnector = true;
+          }
+        }
+      }
+    }
+
     if (!best) {
       trend.style.display = "none";
+      if (connector) connector.style.display = "none";
       return;
     }
 
@@ -553,6 +584,36 @@ function positionTrendBadges(container) {
 
     trend.style.left = finalL + "px";
     trend.style.top  = finalT + "px";
+
+    if (connector) {
+      const badgeCx = finalL + tw / 2;
+      const badgeCy = finalT + th / 2;
+      const dx = badgeCx - geo.cx;
+      const dy = badgeCy - geo.cy;
+      const distanceToBadge = Math.hypot(dx, dy);
+      const badgeTouchesOuterEdge = distanceToBadge >= geo.r - Math.max(8, th);
+      const shouldConnect = usesConnector || badgeTouchesOuterEdge;
+
+      if (shouldConnect && distanceToBadge > 0) {
+        const unitX = dx / distanceToBadge;
+        const unitY = dy / distanceToBadge;
+        const badgeHalfAlongRay = Math.min(
+          Math.abs(unitX) > 0.001 ? tw / (2 * Math.abs(unitX)) : Infinity,
+          Math.abs(unitY) > 0.001 ? th / (2 * Math.abs(unitY)) : Infinity
+        );
+        const visibleGap = Math.max(0, distanceToBadge - geo.r - badgeHalfAlongRay);
+        const len = Math.max(7, visibleGap + 5);
+        const startX = geo.cx + unitX * (geo.r + 1);
+        const startY = geo.cy + unitY * (geo.r + 1);
+        connector.style.display = "block";
+        connector.style.left = Math.round(startX) + "px";
+        connector.style.top = Math.round(startY) + "px";
+        connector.style.width = Math.round(len) + "px";
+        connector.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+      } else {
+        connector.style.display = "none";
+      }
+    }
 
     placed.push({ l: finalL, t: finalT, r: finalL + tw, b: finalT + th });
   });
@@ -624,7 +685,12 @@ function renderTagTrendCloud(container, trends, onReady) {
     trendSpan.dataset.tag = tag;
     trendSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
     trendSpan.textContent = trendMeta.label;
-    bubble.append(flashWrap, trendSpan, label);
+    const connectorSpan = document.createElement("span");
+    connectorSpan.className = `agon-tag-trend-connector ${trendMeta.className}`;
+    connectorSpan.dataset.bubbleIndex = String(index);
+    connectorSpan.dataset.tag = tag;
+    connectorSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
+    bubble.append(flashWrap, connectorSpan, trendSpan, label);
     container.appendChild(bubble);
   });
 

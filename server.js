@@ -4532,21 +4532,25 @@ app.put("/api/admin/argument/:id", requireAdmin, async (req, res) => {
 
 app.get("/api/debates", async (req, res) => {
   try {
+    const DEFAULT_DEBATES_PAGE_SIZE = 120;
     const MAX_DEBATES_PAGE_SIZE = 120;
     const rawLimit = Number.parseInt(String(req.query.limit || ""), 10);
     const rawOffset = Number.parseInt(String(req.query.offset || ""), 10);
     const hasPaginationLimit = Number.isFinite(rawLimit) && rawLimit > 0;
-    const safeLimit = hasPaginationLimit ? Math.min(rawLimit, MAX_DEBATES_PAGE_SIZE) : null;
+    const safeLimit = hasPaginationLimit
+      ? Math.min(rawLimit, MAX_DEBATES_PAGE_SIZE)
+      : DEFAULT_DEBATES_PAGE_SIZE;
     const safeOffset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
     const requestedSort = String(req.query.sort || "popular").trim().toLowerCase();
     const sortMode = ["popular", "recent", "old", "ideas"].includes(requestedSort)
       ? requestedSort
       : "popular";
+    const effectiveSortMode = !hasPaginationLimit && sortMode === "popular" ? "recent" : sortMode;
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
-      sort: sortMode,
+      sort: effectiveSortMode,
       search: searchQuery
     });
     const bypassCache = req.query._ || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
@@ -4556,14 +4560,14 @@ app.get("/api/debates", async (req, res) => {
       return res.json(cachedResponse);
     }
 
-    const canPageInDatabase = !searchQuery && hasPaginationLimit && (sortMode === "recent" || sortMode === "old");
+    const canPageInDatabase = !searchQuery && (effectiveSortMode === "recent" || effectiveSortMode === "old");
     let debatesQuery = supabase
       .from("debates")
       .select(DEBATES_LIST_SELECT_COLUMNS);
 
     if (canPageInDatabase) {
       debatesQuery = debatesQuery
-        .order("created_at", { ascending: sortMode === "old" })
+        .order("created_at", { ascending: effectiveSortMode === "old" })
         .range(safeOffset, safeOffset + safeLimit - 1);
     }
 
@@ -4711,19 +4715,19 @@ app.get("/api/debates", async (req, res) => {
       return rawDate ? new Date(rawDate).getTime() || 0 : 0;
     };
 
-    if (sortMode === "recent") {
+    if (effectiveSortMode === "recent") {
       rows.sort((a, b) => {
         const createdDiff = getRowTime(b, "created_at") - getRowTime(a, "created_at");
         if (createdDiff !== 0) return createdDiff;
         return Number(b.id || 0) - Number(a.id || 0);
       });
-    } else if (sortMode === "old") {
+    } else if (effectiveSortMode === "old") {
       rows.sort((a, b) => {
         const createdDiff = getRowTime(a, "created_at") - getRowTime(b, "created_at");
         if (createdDiff !== 0) return createdDiff;
         return Number(a.id || 0) - Number(b.id || 0);
       });
-    } else if (sortMode === "ideas") {
+    } else if (effectiveSortMode === "ideas") {
       rows.sort((a, b) => {
         if (Number(b.argument_count || 0) !== Number(a.argument_count || 0)) {
           return Number(b.argument_count || 0) - Number(a.argument_count || 0);
@@ -4785,8 +4789,8 @@ app.get("/api/debates", async (req, res) => {
     let pagedRows;
     if (canPageInDatabase) {
       pagedRows = rows;
-    } else if (hasPaginationLimit || safeOffset > 0) {
-      pagedRows = rows.slice(safeOffset, hasPaginationLimit ? safeOffset + safeLimit : undefined);
+    } else if (safeLimit || safeOffset > 0) {
+      pagedRows = rows.slice(safeOffset, safeLimit ? safeOffset + safeLimit : undefined);
     } else {
       pagedRows = rows.slice(0, MAX_DEBATES_RESPONSE);
     }
@@ -4810,7 +4814,7 @@ app.get("/api/debates", async (req, res) => {
       });
     }
 
-    const cacheTtlMs = (sortMode === "recent" || sortMode === "old")
+    const cacheTtlMs = (effectiveSortMode === "recent" || effectiveSortMode === "old")
       ? 10 * 1000
       : DEBATES_API_CACHE_TTL_MS;
     if (!bypassCache) {
@@ -6739,12 +6743,21 @@ async function _fetchDebatePayload(debateId) {
     paste_ratio: Number(a.paste_ratio) || 0
   });
 
+  // Analyse précédente (format JSON uniquement) : permet de réutiliser les
+  // notes des contributions inchangées au lieu de les renoter à chaque analyse.
+  let previousAnalysis = null;
+  const prevRaw = String(debate.ai_analysis || "").trimStart();
+  if (prevRaw.startsWith("{")) {
+    try { previousAnalysis = JSON.parse(prevRaw); } catch { previousAnalysis = null; }
+  }
+
   return {
     question:        debate.question          || "",
     positionA:       debate.option_a          || "",
     positionB:       debate.option_b          || "",
     content:         debate.content           || "",
     evaluation_axis: debate.evaluation_axis   || "",
+    previousAnalysis,
     argumentsA: (args || []).filter((a) => a.side === "A").map(mapArg),
     argumentsB: (args || []).filter((a) => a.side === "B").map(mapArg),
     comments:   comments.map((c) => ({ text: c.content || "", stance: c.stance || "" }))
@@ -6763,11 +6776,12 @@ async function _generateAndSaveAnalysis(debateId) {
 
   try {
     const payload = await _fetchDebatePayload(debateId);
-    const result  = await generateAnalysisJson(payload, (messages) => _callOpenAI(apiKey, messages));
+    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts));
     const raw     = JSON.stringify(result);
 
     const { error: saveError } = await supabase.from("debates").update({
       ai_analysis:              raw,
+      popularity_analysis:      null,
       ai_analysis_status:       "ready",
       ai_analysis_generated_at: new Date().toISOString()
     }).eq("id", debateId);
@@ -6776,7 +6790,7 @@ async function _generateAndSaveAnalysis(debateId) {
       console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde :`, saveError.message);
     } else {
       console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
-      _notifyParticipantsAnalysisReady(debateId, payload.question).catch(console.error);
+      _notifyParticipantsAnalysisReady(debateId, payload.question, result).catch(console.error);
     }
 
     // Analyse popularité vs robustesse (colonne séparée)
@@ -6804,7 +6818,88 @@ async function _generateAndSaveAnalysis(debateId) {
 }
 
 // Vérifie si le seuil est atteint et programme l'analyse si besoin
-async function _notifyParticipants(debateId, { type, message }) {
+function _getAnalysisScoreByArgumentId(analysis) {
+  const scoreByArgumentId = new Map();
+  const camps = analysis && analysis.camps ? analysis.camps : {};
+
+  for (const campKey of ["A", "B"]) {
+    const camp = camps[campKey] || {};
+    const effectiveArguments = Array.isArray(camp.effectiveArguments) ? camp.effectiveArguments : [];
+
+    for (const arg of effectiveArguments) {
+      const argumentId = String(arg?.argumentId || "").trim();
+      const score = Number(arg?.final_score);
+      if (!argumentId || !Number.isFinite(score)) continue;
+      scoreByArgumentId.set(argumentId, {
+        argumentId,
+        score: Math.max(0, Math.min(100, Math.round(score))),
+        category: String(arg?.final_category || arg?.category || "").trim()
+      });
+    }
+
+    const duplicateGroups = Array.isArray(camp.duplicateGroups) ? camp.duplicateGroups : [];
+    for (const group of duplicateGroups) {
+      const representativeId = String(group?.representativeArgumentId || "").trim();
+      const representativeScore = scoreByArgumentId.get(representativeId);
+      if (!representativeScore) continue;
+
+      const mergedIds = Array.isArray(group?.mergedArgumentIds) ? group.mergedArgumentIds : [];
+      for (const mergedIdRaw of mergedIds) {
+        const mergedId = String(mergedIdRaw || "").trim();
+        if (mergedId && !scoreByArgumentId.has(mergedId)) {
+          scoreByArgumentId.set(mergedId, { ...representativeScore, argumentId: mergedId });
+        }
+      }
+    }
+  }
+
+  return scoreByArgumentId;
+}
+
+function _buildAnalysisReadyPersonalization(analysis, questionLabel) {
+  const scoreByArgumentId = _getAnalysisScoreByArgumentId(analysis);
+  if (!scoreByArgumentId.size) return null;
+
+  return function buildPersonalization(argRows) {
+    const scoredByUser = new Map();
+
+    for (const arg of (argRows || [])) {
+      const userKey = String(arg?.author_key || "").trim();
+      const argumentId = String(arg?.id || "").trim();
+      if (!userKey || !argumentId) continue;
+
+      const scoreEntry = scoreByArgumentId.get(argumentId);
+      if (!scoreEntry) continue;
+
+      if (!scoredByUser.has(userKey)) scoredByUser.set(userKey, []);
+      scoredByUser.get(userKey).push(scoreEntry);
+    }
+
+    const messageByUserKey = new Map();
+
+    for (const [userKey, entries] of scoredByUser.entries()) {
+      const scores = entries
+        .filter((entry) => Number.isFinite(Number(entry.score)))
+        .sort((a, b) => Number(b.score) - Number(a.score));
+      if (!scores.length) continue;
+
+      const best = scores[0];
+      const scoreLabel = `${best.score}/100`;
+      const suffix = scores.length > 1
+        ? `Ta meilleure note IA : ${scoreLabel} (${scores.length} idées notées).`
+        : `Ta note IA : ${scoreLabel}.`;
+
+      messageByUserKey.set(
+        userKey,
+        `L'arbitrage IA de ${questionLabel} est disponible. ${suffix}`
+      );
+    }
+
+    return { messageByUserKey };
+  };
+}
+
+async function _notifyParticipants(debateId, { type, message, buildPersonalization = null }) {
   const { data: argRows } = await supabase
     .from("arguments")
     .select("id, author_key")
@@ -6832,23 +6927,47 @@ async function _notifyParticipants(debateId, { type, message }) {
 
   if (userKeys.size === 0) return;
 
+  let personalization = {};
+  if (typeof buildPersonalization === "function") {
+    try {
+      personalization = buildPersonalization(argRows || []) || {};
+    } catch (error) {
+      console.error("[notifications] personnalisation ignorée :", error?.message || error);
+    }
+  }
+  const messageByUserKey = personalization.messageByUserKey instanceof Map
+    ? personalization.messageByUserKey
+    : new Map();
+  const argumentIdByUserKey = personalization.argumentIdByUserKey instanceof Map
+    ? personalization.argumentIdByUserKey
+    : new Map();
+
   const now = nowIso();
   await supabase.from("notifications").insert(
-    [...userKeys].map((user_key) => ({
-      user_key,
-      type,
-      debate_id: debateId,
-      argument_id: null,
-      comment_id: null,
-      message,
-      is_read: 0,
-      created_at: now
-    }))
+    [...userKeys].map((user_key) => {
+      const personalMessage = messageByUserKey.get(user_key) || message;
+      const personalArgumentId = argumentIdByUserKey.get(user_key) || null;
+      return {
+        user_key,
+        type,
+        debate_id: debateId,
+        argument_id: personalArgumentId,
+        comment_id: null,
+        message: personalMessage,
+        is_read: 0,
+        created_at: now
+      };
+    })
   );
   clearNotificationsApiResponseCache();
 
   for (const user_key of userKeys) {
-    _sendPushNow(user_key, { type, message, debate_id: debateId }).catch(console.error);
+    _sendPushNow(user_key, {
+      type,
+      message: messageByUserKey.get(user_key) || message,
+      debate_id: debateId,
+      argument_id: argumentIdByUserKey.get(user_key) || null
+    }).catch(console.error);
   }
 }
 
@@ -6860,11 +6979,12 @@ function _notifyParticipantsAnalysisScheduled(debateId, question, argIds) {
   });
 }
 
-function _notifyParticipantsAnalysisReady(debateId, question) {
+function _notifyParticipantsAnalysisReady(debateId, question, analysis = null) {
   const questionLabel = quoteNotificationContent(question || "ce débat");
   return _notifyParticipants(debateId, {
     type: "analysis_ready",
-    message: `L'arbitrage IA de ${questionLabel} est disponible.`
+    message: `L'arbitrage IA de ${questionLabel} est disponible.`,
+    buildPersonalization: _buildAnalysisReadyPersonalization(analysis, questionLabel)
   });
 }
 
@@ -6944,11 +7064,11 @@ setInterval(async () => {
 
 // (anciens prompts _buildAnalysisPrompt1 / _PROMPT2 / _buildPrompt3 déplacés dans lib/debate-analysis.js)
 
-async function _callOpenAI(apiKey, messages) {
+async function _callOpenAI(apiKey, messages, opts = {}) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-    body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: 0.3 })
+    body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 })
   });
   if (!r.ok) {
     const body = await r.text().catch(() => "");

@@ -105,7 +105,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260610-final31" />
+<link rel="stylesheet" href="/style.min.css?v=20260611-final32" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -958,7 +958,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260606-final7"></script>
-<script src="/admin-debate-analysis.js?v=20260610-24"></script>
+<script src="/admin-debate-analysis.js?v=20260611-25"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
@@ -985,11 +985,30 @@ document.addEventListener('keydown', function(e) {
     commentStanceTimer = setTimeout(normalizeCommentStanceLabels, 40);
   }
 
+  function mutationTouchesCommentStance(mutations){
+    return Array.prototype.some.call(mutations || [], function(mutation){
+      var target = mutation.target;
+      if(target && target.nodeType === 1 && target.matches && target.matches('.comment-stance-favorable, .comment-stance-defavorable')){
+        return true;
+      }
+      return Array.prototype.some.call(mutation.addedNodes || [], function(node){
+        return node && node.nodeType === 1 && (
+          (node.matches && node.matches('.comment-stance-favorable, .comment-stance-defavorable')) ||
+          (node.querySelector && node.querySelector('.comment-stance-favorable, .comment-stance-defavorable'))
+        );
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     normalizeCommentStanceLabels();
 
     var observerRoot = document.querySelector('.debate-columns') || document.body;
-    var observer = new MutationObserver(scheduleCommentStanceRefresh);
+    var observer = new MutationObserver(function(mutations){
+      if(mutationTouchesCommentStance(mutations)){
+        scheduleCommentStanceRefresh();
+      }
+    });
     observer.observe(observerRoot, { childList: true, subtree: true });
 
     setTimeout(normalizeCommentStanceLabels, 250);
@@ -1051,8 +1070,8 @@ document.addEventListener('keydown', function(e) {
   window.addEventListener('resize', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
   window.addEventListener('orientationchange', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', queueEmbeddedDebateTopOffsetUpdate);
-    window.visualViewport.addEventListener('scroll', queueEmbeddedDebateTopOffsetUpdate);
+    window.visualViewport.addEventListener('resize', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
+    window.visualViewport.addEventListener('scroll', queueEmbeddedDebateTopOffsetUpdate, { passive: true });
   }
 
   function escapeHTML(value){
@@ -1132,11 +1151,30 @@ document.addEventListener('keydown', function(e) {
     refreshTimer = setTimeout(refreshArgumentPositionLabels, 40);
   }
 
+  function mutationTouchesArgumentCard(mutations){
+    return Array.prototype.some.call(mutations || [], function(mutation){
+      var target = mutation.target;
+      if(target && target.nodeType === 1 && target.matches && target.matches('.argument-card, .argument-title')){
+        return true;
+      }
+      return Array.prototype.some.call(mutation.addedNodes || [], function(node){
+        return node && node.nodeType === 1 && (
+          (node.matches && node.matches('.argument-card, .argument-title')) ||
+          (node.querySelector && node.querySelector('.argument-card, .argument-title'))
+        );
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     refreshArgumentPositionLabels();
 
     var observerRoot = document.querySelector('.debate-columns') || document.body;
-    var observer = new MutationObserver(scheduleRefresh);
+    var observer = new MutationObserver(function(mutations){
+      if(mutationTouchesArgumentCard(mutations)){
+        scheduleRefresh();
+      }
+    });
     observer.observe(observerRoot, { childList: true, subtree: true });
 
     ['title-a', 'title-b'].forEach(function(id){
@@ -1578,7 +1616,21 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   }
 
   // Observer le menu global créé dynamiquement par toggleIdeaShareMenu
-  const observer = new MutationObserver(function () {
+  function mutationTouchesShareMenu(mutations) {
+    return Array.prototype.some.call(mutations || [], function (mutation) {
+      var target = mutation.target;
+      if (target && target.id === 'idea-share-global-menu') return true;
+      return Array.prototype.some.call(mutation.addedNodes || [], function (node) {
+        return node && node.nodeType === 1 && (
+          node.id === 'idea-share-global-menu' ||
+          (node.querySelector && node.querySelector('#idea-share-global-menu'))
+        );
+      });
+    });
+  }
+
+  const observer = new MutationObserver(function (mutations) {
+    if (!mutationTouchesShareMenu(mutations)) return;
     const menu = document.getElementById('idea-share-global-menu');
     if (menu && menu.style.display === 'flex') {
       // Attendre que le menu soit positionné
@@ -1674,7 +1726,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
   function cleanWrap(type){
     var wrap = document.getElementById('debate-source-fallback');
-    if(!wrap) return;
+    if(!wrap) return false;
+    var changed = false;
 
     var embedSelector = type === 'instagram'
       ? 'blockquote.instagram-media, iframe[src*="instagram.com"]'
@@ -1684,23 +1737,33 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       ? 'blockquote.instagram-media, iframe[src*="instagram.com"]'
       : 'blockquote.twitter-tweet, iframe[src*="x.com"], iframe[src*="twitter.com"]';
 
-    if(!wrap.querySelector(embedSelector)) return;
+    if(!wrap.querySelector(embedSelector)) return false;
 
-    if(type === 'x') wrap.setAttribute('data-cleaned-x-source', 'true');
+    if(type === 'x' && wrap.getAttribute('data-cleaned-x-source') !== 'true') {
+      wrap.setAttribute('data-cleaned-x-source', 'true');
+      changed = true;
+    }
 
     wrap.querySelectorAll('.debate-source-domain, .debate-source-link, .debate-source-label, .debate-source-title').forEach(function(el){
-      if(!el.closest(protectedSelector)) el.remove();
+      if(!el.closest(protectedSelector)) {
+        el.remove();
+        changed = true;
+      }
     });
 
     Array.from(wrap.childNodes).forEach(function(node){
       if(node.nodeType === Node.TEXT_NODE) {
-        if(shouldRemoveLabel(node.textContent, type)) node.remove();
+        if(shouldRemoveLabel(node.textContent, type)) {
+          node.remove();
+          changed = true;
+        }
         return;
       }
       if(node.nodeType !== Node.ELEMENT_NODE) return;
       if(node.matches(protectedSelector)) return;
       if(shouldRemoveLabel(node.textContent, type)) {
         node.remove();
+        changed = true;
       }
     });
 
@@ -1708,11 +1771,13 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       if(el.closest(protectedSelector)) return;
       if(shouldRemoveLabel(el.textContent, type)) {
         el.remove();
+        changed = true;
         return;
       }
       Array.from(el.childNodes).forEach(function(node){
         if(node.nodeType === Node.TEXT_NODE && shouldRemoveLabel(node.textContent, type)) {
           node.remove();
+          changed = true;
         }
       });
     });
@@ -1723,27 +1788,47 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       while(node) {
         var prev = node.previousSibling;
         if(node.nodeType === Node.TEXT_NODE) {
-          if(normalizeText(node.textContent)) node.remove();
+          if(normalizeText(node.textContent)) {
+            node.remove();
+            changed = true;
+          }
         } else if(node.nodeType === Node.ELEMENT_NODE) {
           node.remove();
+          changed = true;
         }
         node = prev;
       }
     }
+
+    return changed;
   }
 
   function cleanAll(){
-    cleanWrap('instagram');
-    cleanWrap('x');
+    var instagramChanged = cleanWrap('instagram');
+    var xChanged = cleanWrap('x');
+    return instagramChanged || xChanged;
   }
 
   function boot(){
+    var stableCleanPasses = 0;
     cleanAll();
     var wrap = document.getElementById('debate-source-fallback');
     if(!wrap) return;
-    var observer = new MutationObserver(function(){ cleanAll(); });
+    var observer = new MutationObserver(function(){
+      stableCleanPasses = 0;
+      cleanAll();
+    });
     observer.observe(wrap, { childList: true, subtree: true, characterData: true });
-    [150, 400, 900, 1600, 2600, 4200].forEach(function(delay){ setTimeout(cleanAll, delay); });
+    [150, 400, 900, 1600, 2600, 4200].forEach(function(delay){
+      setTimeout(function(){
+        if(stableCleanPasses >= 2) return;
+        if(cleanAll()) {
+          stableCleanPasses = 0;
+        } else {
+          stableCleanPasses += 1;
+        }
+      }, delay);
+    });
   }
 
   if(document.readyState === 'loading') {
@@ -1771,6 +1856,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   var SOURCE_MARKER_LABEL = '↗ Source : ';
   var PREVIEW_CACHE_PREFIX = 'agon_idea_url_preview_';
   var previewMemoryCache = Object.create(null);
+  var previewPendingCache = Object.create(null);
 
   function normalizeIdeaUrl(raw){
     var value = String(raw || '').trim();
@@ -2104,6 +2190,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   function fetchOpenGraphPreview(url){
     var cached = readPreviewCache(url);
     if(cached) return Promise.resolve(cached);
+    if(previewPendingCache[url]) return previewPendingCache[url];
 
     var endpoints = [
       '/api/url-preview',
@@ -2138,9 +2225,14 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       });
     });
 
-    return attempts.reduce(function(chain, attempt){
+    previewPendingCache[url] = attempts.reduce(function(chain, attempt){
       return chain.catch(function(){ return attempt(); });
-    }, Promise.reject()).catch(function(){ return null; });
+    }, Promise.reject()).catch(function(){ return null; }).then(function(preview){
+      delete previewPendingCache[url];
+      return preview;
+    });
+
+    return previewPendingCache[url];
   }
 
   function renderYouTube(url, videoId){
@@ -2225,6 +2317,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
   function fitXEmbedInMobileColumn(embed){
     if(!isXMobileColumnEmbed(embed)) return;
+    if(embed.getAttribute('data-idea-x-fit-queued') === '1') return;
+    embed.setAttribute('data-idea-x-fit-queued', '1');
 
     var isFocusedColumn = isXMobileFocusedColumnEmbed(embed);
 
@@ -2323,7 +2417,10 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       applyFit();
       setTimeout(applyFit, 120);
       setTimeout(applyFit, 400);
-      setTimeout(applyFit, 1200);
+      setTimeout(function(){
+        applyFit();
+        embed.removeAttribute('data-idea-x-fit-queued');
+      }, 1200);
     });
   }
 
@@ -2480,16 +2577,32 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     }
   }
 
-  function transformIdeaSources(){
-    document.querySelectorAll('.argument-body').forEach(function(bodyEl){
+  function getArgumentBodies(root){
+    var scope = root && root.querySelectorAll ? root : document;
+    var bodies = Array.prototype.slice.call(scope.querySelectorAll('.argument-body:not([data-idea-source-transformed="1"])'));
+    if(scope.matches && scope.matches('.argument-body') && scope.dataset.ideaSourceTransformed !== '1'){
+      bodies.unshift(scope);
+    }
+    return bodies;
+  }
+
+  function transformIdeaSources(root){
+    getArgumentBodies(root).forEach(function(bodyEl){
       if(!bodyEl || bodyEl.dataset.ideaSourceTransformed === '1') return;
+      var card = bodyEl.closest('.argument-card') || bodyEl.parentNode;
+      if(card && card.querySelector('.idea-source-card-wrap')){
+        bodyEl.dataset.ideaSourceTransformed = '1';
+        return;
+      }
       var source = extractIdeaSource(bodyEl.textContent || '');
-      if(!source.url) return;
+      if(!source.url){
+        bodyEl.dataset.ideaSourceTransformed = '1';
+        return;
+      }
 
       bodyEl.textContent = source.cleanText;
       bodyEl.dataset.ideaSourceTransformed = '1';
 
-      var card = bodyEl.closest('.argument-card') || bodyEl.parentNode;
       if(!card || card.querySelector('.idea-source-card-wrap')) return;
 
       var wrap = document.createElement('div');
@@ -2511,9 +2624,16 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
   }
 
   var transformTimer = null;
-  function scheduleTransform(){
+  function scheduleTransform(root){
     clearTimeout(transformTimer);
-    transformTimer = setTimeout(transformIdeaSources, 80);
+    transformTimer = setTimeout(function(){ transformIdeaSources(root); }, 80);
+  }
+
+  function nodeTouchesIdeaSourceTransform(node){
+    return node && node.nodeType === 1 && (
+      (node.matches && node.matches('.argument-body, #' + CONFIG.list.form + ', #' + CONFIG.a.form + ', #' + CONFIG.b.form + ', #' + CONFIG.list.url + ', #' + CONFIG.a.url + ', #' + CONFIG.b.url)) ||
+      (node.querySelector && node.querySelector('.argument-body, #' + CONFIG.list.form + ', #' + CONFIG.a.form + ', #' + CONFIG.b.form + ', #' + CONFIG.list.url + ', #' + CONFIG.a.url + ', #' + CONFIG.b.url))
+    );
   }
 
   window.transformIdeaSources = transformIdeaSources;
@@ -2523,7 +2643,11 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     wireSubmitHandlers();
     transformIdeaSources();
 
-    var observer = new MutationObserver(function(){
+    var observer = new MutationObserver(function(mutations){
+      var shouldRefresh = Array.prototype.some.call(mutations || [], function(mutation){
+        return Array.prototype.some.call(mutation.addedNodes || [], nodeTouchesIdeaSourceTransform);
+      });
+      if(!shouldRefresh) return;
       wireSubmitHandlers();
       scheduleTransform();
     });

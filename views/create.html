@@ -433,13 +433,16 @@
     Orienter le barème IA
   </button>
   <div id="evaluation-axis-group" class="form-group" style="display:none; margin-top: 6px; margin-bottom: 6px;">
-    <label for="evaluation_axis">Ce que l'IA doit valoriser. <span class="label-hint">Le barème / l'axe de notation est public et visible par tous les participants.</span></label>
+    <label for="evaluation_axis">Barème personnalisé d'analyse IA — sur 100 points. <span class="label-hint">Public et visible par tous les participants. Si tu remplis ce champ, seul ton barème sera utilisé par l'IA.</span></label>
     <textarea
       id="evaluation_axis"
       name="evaluation_axis"
       maxlength="280"
-      rows="2"
-      placeholder="Tu peux orienter la notation : réponses drôles, sérieuses, réalistes, originales, argumentées… ou donner ton propre barème. Par défaut, l'IA évalue surtout la pertinence, la clarté, le raisonnement, l'originalité utile et l'apport à l'arène."
+      rows="6"
+      placeholder="3 possibilités :
+1. Champ vide → barème Agôn par défaut sur 100 pts : pertinence, clarté, solidité, apport à l'arène, nuance et ton, + bonus sources en URL (jusqu'à +10, plafonné à 100).
+2. Tes critères sans points (ex. : humour, audace, réalisme) → l'IA répartit les 100 points équitablement entre eux. Un critère unique (ex. : humour) garde un socle pertinence + clarté.
+3. Ton barème chiffré (ex. : humour /40, originalité /30, clarté /30) → appliqué tel quel, note directe sur 100."
     ></textarea>
   </div>
 </div>
