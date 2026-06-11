@@ -16633,6 +16633,21 @@ function buildIndexGlobalLoadMoreSentinelHtml() {
   `;
 }
 
+function getAlaUneSourceForCurrentFilters(filteredDebates) {
+  const source = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : filteredDebates;
+  if (currentTypeFilter === "agon") {
+    return source.filter((debate) => isAgonGeneratedDebate(debate));
+  }
+  return source;
+}
+
+function getTensionSourceForCurrentFilters(filteredDebates) {
+  if (currentTypeFilter === "agon" && Array.isArray(debatesCache) && debatesCache.length) {
+    return debatesCache;
+  }
+  return filteredDebates;
+}
+
 function buildIndexThematicSectionsHtml(debates) {
   try {
     _carouselPendingBatches.clear();
@@ -16643,9 +16658,9 @@ function buildIndexThematicSectionsHtml(debates) {
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
-    // ── À la une : toujours les 20 premières, jamais filtrées par bulle, mais masquée si une recherche est active ──
+    // ── À la une : jamais filtrée par bulle, mais respecte le filtre "publiées par agôn" ──
     const hasActiveIndexSearch = !!getCurrentIndexSearchQuery();
-    const alaUneSource = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : allDebates;
+    const alaUneSource = getAlaUneSourceForCurrentFilters(allDebates);
     if (!hasActiveIndexSearch && alaUneSource.length) {
       const sortedAll = [...alaUneSource].sort(byDate);
       const inner = _buildCarouselInner(sortedAll, "À la une", 20);
@@ -16655,7 +16670,7 @@ function buildIndexThematicSectionsHtml(debates) {
     }
 
     // ── Arènes sous tension : activité récente en priorité, puis dernières arènes actives ──
-    const tensionDebates = allDebates
+    const tensionDebates = getTensionSourceForCurrentFilters(allDebates)
       .filter((d) => (d.argument_count || 0) > 0 || (d.comment_count || 0) > 0)
       .sort((a, b) => {
         const scoreDiff = (b.tension_score || 0) - (a.tension_score || 0);
@@ -16746,7 +16761,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-connector-gap-only");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-near-bubble-first");
 
 
 function syncBubbleFrameTop() {

@@ -173,8 +173,10 @@ function rectToContainerSpace(rect, containerRect, padding = 0) {
   };
 }
 
-function getReadableTextRects(container, containerRect) {
-  const padding = isMobileTagCloud() ? 10 : 3;
+function getReadableTextRects(container, containerRect, paddingOverride = null) {
+  const padding = Number.isFinite(paddingOverride)
+    ? paddingOverride
+    : (isMobileTagCloud() ? 10 : 3);
   const rects = [];
 
   container.querySelectorAll(".agon-tag-label-overlay").forEach((overlay) => {
@@ -409,6 +411,7 @@ function positionTrendBadges(container) {
   // Zones de lecture des tags. Sur mobile, la marge est volontairement plus large :
   // un badge ne doit jamais masquer un mot, même visuellement avec l'ombre du texte.
   const overlayRects = getReadableTextRects(container, containerRect);
+  const tightOverlayRects = getReadableTextRects(container, containerRect, isMobileTagCloud() ? 4 : 1);
 
   const cbtn = container.querySelector(".agon-tag-center-btn");
   const cbtnR = cbtn ? (() => {
@@ -486,6 +489,7 @@ function positionTrendBadges(container) {
 
     function scoreCandidate(angleDeg, distance, options = {}) {
       const relaxed = options.relaxed === true;
+      const textRects = Array.isArray(options.textRects) ? options.textRects : overlayRects;
       const rad = angleDeg * Math.PI / 180;
       const cx = geo.cx + Math.cos(rad) * distance;
       const cy = geo.cy + Math.sin(rad) * distance;
@@ -527,7 +531,7 @@ function positionTrendBadges(container) {
       let textOverlapArea = 0;
 
       // Blocage lisibilité : un badge ne doit pas recouvrir le texte d'une bulle.
-      for (const or of overlayRects) {
+      for (const or of textRects) {
         textOverlapArea += getOverlapArea(l, t, r, b, or.l, or.t, or.r, or.b);
       }
 
@@ -552,6 +556,23 @@ function positionTrendBadges(container) {
         if (candidate.textOverlapArea > 0) continue;
         if (!bestReadable || candidate.score > bestReadable.score) {
           bestReadable = candidate;
+        }
+      }
+    }
+
+    // Si la marge de confort autour du texte force le badge trop loin, on
+    // retente dans la bulle avec une marge plus serrée avant d'autoriser
+    // une sortie avec connecteur. Le texte reste protégé, mais le badge ne
+    // s'éloigne que si aucune position interne lisible n'existe.
+    if (!bestReadable) {
+      for (const distance of distanceCandidates) {
+        for (const angle of angleCandidates) {
+          const candidate = scoreCandidate(angle, distance, { textRects: tightOverlayRects });
+          if (!candidate) continue;
+          if (candidate.textOverlapArea > 0) continue;
+          if (!bestReadable || candidate.score > bestReadable.score) {
+            bestReadable = candidate;
+          }
         }
       }
     }
