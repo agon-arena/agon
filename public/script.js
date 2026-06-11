@@ -11,7 +11,9 @@ function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+    navigator.serviceWorker.register("/service-worker.js", { updateViaCache: "none" })
+      .then((registration) => registration.update?.())
+      .catch(() => {});
   });
 }
 
@@ -614,6 +616,7 @@ let indexCardHighlightRaf = null;
 let indexCardHighlightBound = false;
 let indexCardHighlightTimeout = null;
 let indexCardHighlightLastRunTs = 0;
+let indexCardHighlightThematicCleared = false;
 let indexScrollWorkRaf = null;
 let indexScrollWorkPending = {
   youtube: false,
@@ -4011,6 +4014,7 @@ function openDebateIframeModal(url, options = {}) {
   }
 
   window.__agonDebateModalOpen = true;
+  document.body.classList.add("index-background-suspended");
 
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
@@ -4260,6 +4264,7 @@ function closeDebateIframeModal() {
     setDebateIframeModalCloseButtonVisible(false);
     window.__agonDebateModalOpen = false;
     window.__agonDebateModalOpenedFromNotifications = false;
+    document.body.classList.remove("index-background-suspended");
     unlockPageScrollForDebateModal();
     _debateModalSavedScrollY = null;
     _debateModalSavedScrollAnchor = null;
@@ -4279,6 +4284,7 @@ function closeDebateIframeModal() {
   syncIndexUrlWithOpenIframeModal("");
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
+  document.body.classList.remove("index-background-suspended");
   resumeIndexEmbedsAfterDebateModal();
 
   const restoredScrollY = _debateModalSavedScrollY !== null
@@ -5620,6 +5626,13 @@ function initIndexCardShareMenus(root = document) {
   };
   const supported = Object.keys(labels);
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+  const isHomeIndexShare =
+    document.body.classList.contains('page-home') ||
+    document.body.classList.contains('page-home-mobile');
+  if (isHomeIndexShare && typeof window.__agonIndexShareDropdownScan === "function") {
+    window.__agonIndexShareDropdownScan(scope);
+    return;
+  }
   const selector = [
     '.page-home .debate-card .debate-card-share-actions',
     '.page-home-mobile .debate-card .debate-card-share-actions',
@@ -7182,12 +7195,17 @@ function initIndexMediaSwipeEnhancements(root) {
 function initMediaSwipeAutoScroll(scope = document) {
   const DELAY = 2000;
   const RESUME_AFTER = 7000;
+  const isMobileViewport = window.matchMedia("(max-width: 768px)").matches;
 
   scope.querySelectorAll("[data-index-media-swipe-shell]").forEach((shell) => {
     let mediaItems;
     try { mediaItems = JSON.parse(shell.dataset.mediaItems || "[]"); } catch (e) { return; }
     if (!Array.isArray(mediaItems) || mediaItems.length < 2) return;
     if (shell.dataset.mediaAutoScrollBound) return;
+    if (isMobileViewport) {
+      shell.dataset.mediaAutoScrollBound = "mobile-disabled";
+      return;
+    }
     shell.dataset.mediaAutoScrollBound = "1";
     const containsSocialEmbed = mediaItems.some(isIndexSocialEmbedMediaItem);
     const shouldDisableMobileAutoScroll = () => containsSocialEmbed && window.matchMedia("(max-width: 768px)").matches;
@@ -7200,6 +7218,10 @@ function initMediaSwipeAutoScroll(scope = document) {
     const videoSelector = 'video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell, [data-index-local-video-shell], [data-index-youtube-shell]';
 
     const advance = () => {
+      if (window.__agonDebateModalOpen === true) {
+        stopTimer();
+        return;
+      }
       if (shouldDisableMobileAutoScroll()) {
         stopTimer();
         return;
@@ -7215,6 +7237,7 @@ function initMediaSwipeAutoScroll(scope = document) {
     };
 
     const start = () => {
+      if (window.__agonDebateModalOpen === true) return;
       if (shouldDisableMobileAutoScroll()) return;
       if (document.hidden || !isInView || !shell.isConnected) return;
       if (!timer) timer = setInterval(advance, DELAY);
@@ -8337,7 +8360,27 @@ function clearMobileIndexCardHighlight() {
     if (!card.closest('.theme-horizontal-inner')) card.classList.remove('index-card-active');
   });
 }
+
+function shouldSkipPageLevelIndexCardHighlight() {
+  const isHomeIndex =
+    (document.body.classList.contains('page-home') || document.body.classList.contains('page-home-mobile')) &&
+    !getDebateId();
+  return isHomeIndex && document.body.classList.contains('thematic-sections-active');
+}
+
+function clearPageLevelIndexCardHighlightOnce() {
+  if (indexCardHighlightThematicCleared) return;
+  clearMobileIndexCardHighlight();
+  indexCardHighlightThematicCleared = true;
+}
+
 function updateMobileIndexCardHighlight() {
+  if (shouldSkipPageLevelIndexCardHighlight()) {
+    clearPageLevelIndexCardHighlightOnce();
+    return;
+  }
+  indexCardHighlightThematicCleared = false;
+
 const isMobileHome =
   document.body.classList.contains('page-home-mobile') &&
   !getDebateId();
@@ -8406,6 +8449,18 @@ const isMobileHome =
 }
 
 function scheduleMobileIndexCardHighlightUpdate() {
+  if (shouldSkipPageLevelIndexCardHighlight()) {
+    if (indexCardHighlightTimeout !== null) {
+      clearTimeout(indexCardHighlightTimeout);
+      indexCardHighlightTimeout = null;
+    }
+    indexScrollWorkPending.cardHighlight = false;
+    indexCardHighlightRaf = null;
+    clearPageLevelIndexCardHighlightOnce();
+    return;
+  }
+  indexCardHighlightThematicCleared = false;
+
   const now = Date.now();
   const elapsed = now - indexCardHighlightLastRunTs;
   const minDelay = window.innerWidth <= 768 ? 90 : 45;
@@ -15418,8 +15473,224 @@ function _restoreMainTagCloud() {
   window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || []);
 }
 
+// ── Bulles Agôn : bascule entre le nuage actualité et le top 10 des arènes actives ──
+
+let _agonCloudMode = false;
+let _agonCloudOriginalCaptionHtml = null;
+let _agonCloudSwitchLoading = false;
+let _agonCloudSwitchToken = 0;
+let _agonCloudFrameTopLocked = false;
+let _agonCloudStableFrameTop = null;
+
+function preventAgonCloudSwitchScroll(event) {
+  if (!_agonCloudSwitchLoading) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function preventAgonCloudSwitchKeys(event) {
+  if (!_agonCloudSwitchLoading) return;
+  const blockedKeys = new Set([" ", "PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"]);
+  if (!blockedKeys.has(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+window.addEventListener("wheel", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+window.addEventListener("touchmove", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+window.addEventListener("keydown", preventAgonCloudSwitchKeys, { capture: true });
+
+function beginAgonCloudSwitchLoading(container) {
+  _agonCloudSwitchLoading = true;
+  const token = ++_agonCloudSwitchToken;
+  lockAgonCloudFrameTop(container);
+  document.body.classList.add("agon-cloud-switch-loading");
+  container?.classList.add("agon-cloud-switching");
+  showBubbleCloudLoadingSpinner({ switchMode: true });
+  return token;
+}
+
+function finishAgonCloudSwitchLoading(token, container) {
+  requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      if (token !== _agonCloudSwitchToken) return;
+      _agonCloudSwitchLoading = false;
+      _agonCloudFrameTopLocked = false;
+      document.body.classList.remove("agon-cloud-switch-loading");
+      container?.classList.remove("agon-cloud-switching");
+      hideBubbleCloudLoadingSpinner();
+    }, 40);
+  });
+}
+
+function afterAgonCloudSpinnerPaint(callback) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      callback();
+    });
+  });
+}
+
+// Thématiques trop générales écartées du fallback keyword (même esprit que le nuage actualité côté serveur)
+const AGON_CLOUD_GENERIC_KEYWORDS = new Set([
+  "actualite", "actualites", "politique", "international", "societe", "economie",
+  "education", "justice", "culture", "medias", "sport", "sports", "sante",
+  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
+  "information", "infos"
+]);
+
+// Libellé de bulle en cascade : cloud_label → premier keyword non générique → question tronquée
+function getAgonBubbleLabel(debate) {
+  const cloudLabel = String(debate?.cloud_label || "").trim();
+  if (cloudLabel) return cloudLabel;
+
+  const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
+  for (const keyword of keywords) {
+    const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
+    const norm = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    if (norm.length >= 3 && !AGON_CLOUD_GENERIC_KEYWORDS.has(norm)) return cleaned;
+  }
+
+  const question = String(debate?.question || "").replace(/\s*\?\s*$/, "").trim();
+  if (!question) return "";
+  if (question.length <= 35) return question;
+  const cut = question.slice(0, 32);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace >= 12 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+}
+
+// Top 10 des arènes par score d'activité (idées ×1 + commentaires ×0,5 + votes ×0,2),
+// avec priorité à l'activité récente : 48 h d'abord, puis 7 jours, puis historique.
+function buildAgonBubbleTrends() {
+  const debates = Array.isArray(debatesCache) ? debatesCache : [];
+  const activityScore = (ideas, comments, votes) =>
+    Number(ideas || 0) * 1 + Number(comments || 0) * 0.5 + Number(votes || 0) * 0.2;
+
+  const items = debates.map((debate) => ({
+    debate,
+    score48h:   activityScore(debate?.argument_count_48h, debate?.comment_count_48h, debate?.vote_count_48h),
+    score7d:    activityScore(debate?.argument_count_7d, debate?.comment_count_7d, debate?.vote_count_7d),
+    scoreTotal: activityScore(debate?.argument_count, debate?.comment_count, debate?.vote_count)
+  }));
+
+  // Sélection en cascade, sans doublon, jusqu'à 10 bulles
+  const selected = [];
+  const selectedIds = new Set();
+  const pushTier = (tier) => {
+    for (const item of tier) {
+      if (selected.length >= 10) return;
+      const id = String(item.debate?.id || "").trim();
+      if (!id || selectedIds.has(id)) continue;
+      selectedIds.add(id);
+      selected.push(item);
+    }
+  };
+  pushTier(items.filter(i => i.score48h > 0).sort((a, b) => b.score48h - a.score48h));
+  pushTier(items.filter(i => i.score7d > 0).sort((a, b) => b.score7d - a.score7d));
+  pushTier(items.filter(i => i.scoreTotal > 0).sort((a, b) => b.scoreTotal - a.scoreTotal));
+
+  // Taille pilotée par le score 7 jours : les arènes dont on parle actuellement
+  // dominent visuellement, les compléments historiques restent à la taille plancher.
+  // Cas limite : aucune activité sur 7 jours → repli sur le score historique pour
+  // éviter un nuage entièrement plat.
+  const max7d = selected.reduce((max, item) => Math.max(max, item.score7d), 0);
+  const sizeScoreOf = max7d > 0 ? (item) => item.score7d : (item) => item.scoreTotal;
+  const maxSizeScore = max7d > 0 ? max7d : selected.reduce((max, item) => Math.max(max, item.scoreTotal), 0);
+
+  return selected
+    .map((item) => ({
+      tag: getAgonBubbleLabel(item.debate),
+      subjectId: String(item.debate.id),
+      count: sizeScoreOf(item),
+      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0
+    }))
+    .filter((item) => item.tag);
+}
+
+// Met le segment actif du sélecteur en phase avec le mode courant
+function syncAgonCloudModeSwitch() {
+  document.getElementById('agon-cloud-mode-actu')?.classList.toggle('agon-cloud-mode-segment-active', !_agonCloudMode);
+  document.getElementById('agon-cloud-mode-agon-btn')?.classList.toggle('agon-cloud-mode-segment-active', _agonCloudMode);
+}
+
+// Cible explicitement un mode (utilisé par les segments du sélecteur)
+function setAgonCloudMode(enableAgon) {
+  if (Boolean(enableAgon) === _agonCloudMode) return;
+  if (_agonCloudSwitchLoading) return;
+  toggleAgonCloud();
+}
+
+function toggleAgonCloud() {
+  const container = document.querySelector('#agon-tag-trends-cloud');
+  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  if (!container || !window._tagTrendCloudModule) return;
+
+  if (_agonCloudMode) {
+    const token = beginAgonCloudSwitchLoading(container);
+    afterAgonCloudSpinnerPaint(() => {
+      _agonCloudMode = false;
+      container.classList.remove('agon-cloud-mode-agon');
+      syncAgonCloudModeSwitch();
+      if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
+      window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || [], () => {
+        // Retour aux bulles actu : on restaure le filtre "Arènes publiées par agôn"
+        // retiré temporairement par le mode Bulles Agôn.
+        if (currentTypeFilter !== "agon") {
+          setTypeFilter("agon");
+        } else {
+          applyIndexFilters();
+        }
+        finishAgonCloudSwitchLoading(token, container);
+      });
+      showBubbleCloudLoadingSpinner({ switchMode: true });
+    });
+    return;
+  }
+
+  const token = beginAgonCloudSwitchLoading(container);
+
+  afterAgonCloudSpinnerPaint(() => {
+    const trends = buildAgonBubbleTrends();
+    if (!trends.length) {
+      finishAgonCloudSwitchLoading(token, container);
+      return;
+    }
+
+    // Le mode est posé avant le re-render du feed pour que les bandeaux utilisent
+    // les compteurs de cartes du mode Agôn (10 en tension, 1 ailleurs sur mobile).
+    _agonCloudMode = true;
+
+    // Les Bulles Agôn montrent l'activité de toute la plateforme : le filtre
+    // "Arènes publiées par Agôn" est retiré au passage (les autres filtres restent)
+    // — setTypeFilter re-rend déjà le feed, sinon on le re-rend explicitement.
+    if (currentTypeFilter === "agon") {
+      setTypeFilter("all");
+    } else {
+      applyIndexFilters();
+    }
+
+    // Quitte proprement l'éventuel mode tags secondaires sans re-render intermédiaire
+    _tagCloudSecondaryMode = false;
+    _tagCloudOriginalTrends = null;
+    _tagCloudSecondaryTrends = null;
+    clearActiveBubbles();
+    container.classList.add('agon-cloud-mode-agon');
+    syncAgonCloudModeSwitch();
+    if (caption) {
+      if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
+      caption.textContent = "Les 10 arènes les plus actives sur Agôn.";
+    }
+    window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
+      finishAgonCloudSwitchLoading(token, container);
+    });
+    showBubbleCloudLoadingSpinner({ switchMode: true });
+  });
+}
+
 function hydrateLazyCarouselCards(inner, row) {
   initIndexCardShareMenus(inner);
+  if (typeof window.__agonIndexStatsScan === "function") window.__agonIndexStatsScan(inner);
   initIndexMediaSwipeEnhancements(inner);
   initIndexYouTubeObserver(inner);
   initIndexLocalVideoObserver(inner);
@@ -15474,11 +15745,6 @@ function handleBubbleTagClick(bubble) {
     }
   });
 
-  const alaUneSection = document.querySelector('.theme-row-section--a-la-une');
-  const scrollTarget = alaUneSection || document.querySelector('.theme-row-section');
-  const topbar = document.querySelector('.topbar');
-  const topbarH = topbar ? topbar.offsetHeight : 60;
-
   let targetDebateId = String(bubble.dataset.subjectId || "").trim();
   const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
   if (!targetDebateId && window._tagTrendsModule && trendsToSearch.length) {
@@ -15488,8 +15754,44 @@ function handleBubbleTagClick(bubble) {
     targetDebateId = String(activeTrend?.subjectId || "").trim();
   }
 
-  const card = targetDebateId && alaUneSection
-    ? alaUneSection.querySelector(`.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`)
+  // Bulles actu → bandeau "À la une" ; Bulles Agôn → bandeau "Arènes sous tension"
+  const bandSelector = _agonCloudMode ? '.theme-row-section--tension' : '.theme-row-section--a-la-une';
+  scrollToIndexBandAndFlashCard(bandSelector, targetDebateId);
+}
+
+// Si la carte ciblée n'est pas encore dans le carrousel (lazy-load), charge
+// d'un coup les lots en attente jusqu'à elle incluse, puis la retourne.
+function ensureCarouselCardLoaded(section, targetDebateId) {
+  const selector = `.debate-card[data-debate-id="${CSS.escape(targetDebateId)}"]`;
+  const existing = section.querySelector(selector);
+  if (existing) return existing;
+
+  const sentinel = section.querySelector('.carousel-load-sentinel');
+  const row = sentinel ? sentinel.closest('.theme-horizontal-row') : null;
+  if (!sentinel || !row) return null;
+
+  const pending = _carouselPendingBatches.get(sentinel.dataset.carouselKey);
+  if (!pending || !pending.length) return null;
+  const idx = pending.findIndex((d) => String(d?.id || "") === String(targetDebateId));
+  if (idx === -1) return null;
+
+  const batch = pending.splice(0, idx + 1);
+  appendCarouselBatchBeforeSentinel(row, sentinel, batch);
+  if (!pending.length) sentinel.remove();
+  return section.querySelector(selector);
+}
+
+// Scroll vers un bandeau de carrousel, centre la carte du débat ciblé et la fait
+// clignoter. Utilisé par les bulles actu (bandeau À la une) et les Bulles Agôn
+// (bandeau Arènes sous tension).
+function scrollToIndexBandAndFlashCard(sectionSelector, targetDebateId) {
+  const section = document.querySelector(sectionSelector);
+  const scrollTarget = section || document.querySelector('.theme-row-section');
+  const topbar = document.querySelector('.topbar');
+  const topbarH = topbar ? topbar.offsetHeight : 60;
+
+  const card = targetDebateId && section
+    ? ensureCarouselCardLoaded(section, targetDebateId)
     : null;
 
   const centerTargetCard = () => requestAnimationFrame(() => {
@@ -16654,7 +16956,12 @@ function buildIndexThematicSectionsHtml(debates) {
     const allDebates = Array.isArray(debates) ? debates : [];
     const sections = [];
     const isMobile = window.innerWidth <= 768;
-    const carouselInitial = isMobile ? 2 : _CAROUSEL_INITIAL;
+    // Mode Bulles Agôn (mobile) : le bandeau "Arènes sous tension" est la cible
+    // des bulles → 10 cartes d'emblée ; les autres bandeaux sont réduits à 1.
+    const agonCloudActive = isMobile && _agonCloudMode;
+    const carouselInitial = isMobile ? 1 : _CAROUSEL_INITIAL;
+    const alaUneInitial = isMobile ? (agonCloudActive ? 1 : 15) : 20;
+    const tensionInitial = agonCloudActive ? 10 : carouselInitial;
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
@@ -16663,7 +16970,7 @@ function buildIndexThematicSectionsHtml(debates) {
     const alaUneSource = getAlaUneSourceForCurrentFilters(allDebates);
     if (!hasActiveIndexSearch && alaUneSource.length) {
       const sortedAll = [...alaUneSource].sort(byDate);
-      const inner = _buildCarouselInner(sortedAll, "À la une", 20);
+      const inner = _buildCarouselInner(sortedAll, "À la une", alaUneInitial);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--a-la-une" data-theme="À la une"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">À la une</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${Math.min(sortedAll.length, 20)}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
@@ -16679,7 +16986,7 @@ function buildIndexThematicSectionsHtml(debates) {
           - new Date(a.last_activity_at || a.last_argument_at || a.created_at || 0);
       });
     if (tensionDebates.length) {
-      const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension", carouselInitial);
+      const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension", tensionInitial);
       if (inner) {
         sections.push(`<section class="theme-row-section theme-row-section--tension" data-theme="Arènes sous tension"><h2 class="theme-row-title"><button type="button" class="theme-row-jump-start" aria-label="Aller à la première carte" onclick="event.preventDefault(); event.stopPropagation(); jumpToStartOfCarousel(this)">«</button><button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev" aria-label="Voir les cartes précédentes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'prev')">‹</button><span class="theme-row-title-text">Arènes sous tension</span><button type="button" class="theme-row-swipe-button theme-row-swipe-button-next" aria-label="Voir les cartes suivantes" onclick="event.preventDefault(); event.stopPropagation(); scrollIndexThemeRowFromButton(this, 'next')">›</button></h2><div class="theme-horizontal-row" data-carousel-total="${tensionDebates.length}"><div class="theme-horizontal-inner">${inner}</div></div></section>`);
       }
@@ -16761,29 +17068,50 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-near-bubble-first");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-cloud-layout-pending");
 
+function lockAgonCloudFrameTop(container) {
+  const cloud = container || document.getElementById('agon-tag-trends-cloud');
+  if (!cloud) return;
+  const current = _agonCloudStableFrameTop || getComputedStyle(cloud).getPropertyValue('--bubble-frame-top').trim() || '55px';
+  cloud.style.setProperty('--bubble-frame-top', current);
+  _agonCloudFrameTopLocked = true;
+}
 
-function syncBubbleFrameTop() {
-  const btn = document.getElementById('index-sort-toggle');
+function syncBubbleFrameTop(options = {}) {
+  if (_agonCloudFrameTopLocked || _agonCloudSwitchLoading) return;
+  const force = options.force === true;
   const cloud = document.getElementById('agon-tag-trends-cloud');
+  if (!cloud) return;
+
+  if (force) {
+    _agonCloudStableFrameTop = null;
+    cloud.style.removeProperty('--bubble-frame-top');
+  } else if (_agonCloudStableFrameTop) {
+    cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
+    return;
+  }
+
+  const btn = document.getElementById('index-sort-toggle');
   if (!btn || !cloud) return;
   const btnRect = btn.getBoundingClientRect();
   const cloudRect = cloud.getBoundingClientRect();
   if (btnRect.bottom <= cloudRect.top) {
-    cloud.style.removeProperty('--bubble-frame-top');
+    _agonCloudStableFrameTop = getComputedStyle(cloud).getPropertyValue('--bubble-frame-top').trim() || '55px';
+    cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
     return;
   }
   const frameDrop = 40;
   const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top) + frameDrop);
-  cloud.style.setProperty('--bubble-frame-top', offset + 'px');
+  _agonCloudStableFrameTop = offset + 'px';
+  cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
 }
 
 (function initBubbleFrameSync() {
   let _frameTimer = null;
-  function debouncedSync() {
+  function debouncedSync(options = {}) {
     clearTimeout(_frameTimer);
-    _frameTimer = setTimeout(syncBubbleFrameTop, 32);
+    _frameTimer = setTimeout(() => syncBubbleFrameTop(options), 32);
   }
 
   const debatesSection = document.querySelector('.debates-section');
@@ -16796,7 +17124,7 @@ function syncBubbleFrameTop() {
     new ResizeObserver(debouncedSync).observe(cloud);
   }
 
-  window.addEventListener('resize', debouncedSync, { passive: true });
+  window.addEventListener('resize', () => debouncedSync({ force: true }), { passive: true });
 
   requestAnimationFrame(syncBubbleFrameTop);
 })();
@@ -16805,13 +17133,19 @@ const _bubbleSpinnerImg = new Image();
 _bubbleSpinnerImg.src = '/sablier-96.png';
 if (typeof _bubbleSpinnerImg.decode === 'function') _bubbleSpinnerImg.decode().catch(() => {});
 
-function showBubbleCloudLoadingSpinner() {
+function showBubbleCloudLoadingSpinner(options = {}) {
   const section = document.querySelector("#agon-tag-trends-section");
   const cloud = document.querySelector("#agon-tag-trends-cloud");
-  if (!section || !cloud || document.getElementById("agon-cloud-loading-spinner")) return;
+  if (!section || !cloud) return;
   section.hidden = false;
+  const existing = document.getElementById("agon-cloud-loading-spinner");
+  if (existing) {
+    existing.classList.toggle("agon-cloud-loading-switch", options.switchMode === true);
+    return;
+  }
   const spinner = document.createElement("div");
   spinner.id = "agon-cloud-loading-spinner";
+  if (options.switchMode === true) spinner.classList.add("agon-cloud-loading-switch");
   const img = document.createElement('img');
   img.src = '/sablier-96.png';
   img.alt = '';
@@ -16977,6 +17311,7 @@ function renderDebatesList(debates) {
 
   refreshAdminUI();
   initIndexCardShareMenus(document);
+  if (typeof window.__agonIndexStatsScan === "function") window.__agonIndexStatsScan(document);
   initIndexMediaSwipeEnhancements(document);
   startIndexSourceAutoPlay(document);
   initIndexYouTubeObserver(document);

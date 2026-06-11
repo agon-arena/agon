@@ -12,6 +12,11 @@ function getBubbleSizeClass(index, trendItem = null) {
 }
 
 const MAX_TAG_TREND_BUBBLES = 10;
+const BUBBLE_SIZE_BOOST = 1.035;
+
+function boostedBubbleSize(px) {
+  return Math.round(px * BUBBLE_SIZE_BOOST);
+}
 
 // Source unique de vérité pour la taille d'une bulle en pixels, avant facteur d'échelle global.
 // Utilisée à la fois pour l'affichage visuel (--agon-tag-bubble-size) et pour le placement.
@@ -24,13 +29,13 @@ function computeBubblePxSize(index, trendItem, isMobile) {
     const maxSize = index === 0
       ? (isMobile ? 155 : 185)
       : (isMobile ? 132 : 162);
-    return Math.round(minSize + ((maxSize - minSize) * amplified));
+    return boostedBubbleSize(minSize + ((maxSize - minSize) * amplified));
   }
   // Fallback aligné sur les tailles par défaut des classes CSS
   const sizeClass = getBubbleSizeClass(index);
-  if (sizeClass === "agon-tag-bubble-large") return index === 1 ? (isMobile ? 153 : 176) : (isMobile ? 128 : 153);
-  if (sizeClass === "agon-tag-bubble-medium") return isMobile ? 110 : 128;
-  return isMobile ? 72 : 86;
+  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 176) : (isMobile ? 128 : 153));
+  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 128);
+  return boostedBubbleSize(isMobile ? 72 : 86);
 }
 
 // Facteur d'échelle uniforme pour que toutes les bulles tiennent dans la zone utile.
@@ -60,9 +65,16 @@ function getWordLengthClass(word) {
 }
 
 function clearTagTrendCloud(container) {
+  container.classList.remove("agon-cloud-layout-pending");
   container.innerHTML = "";
   const parentSection = container.closest("section");
   if (parentSection) parentSection.hidden = true;
+}
+
+function clearTagTrendCloudVisualItems(container) {
+  container.querySelectorAll(
+    ".agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector"
+  ).forEach((el) => el.remove());
 }
 
 function fitLabelInBubble(bubble) {
@@ -655,7 +667,8 @@ function renderTagTrendCloud(container, trends, onReady) {
   const parentSection = container.closest("section");
   if (parentSection) parentSection.hidden = false;
 
-  container.innerHTML = "";
+  container.classList.add("agon-cloud-layout-pending");
+  clearTagTrendCloudVisualItems(container);
 
   const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
@@ -721,12 +734,14 @@ function renderTagTrendCloud(container, trends, onReady) {
   });
   container.appendChild(centerBtn);
 
-  container.style.visibility = "hidden";
+  const keepVisibleDuringSwitch = container.classList.contains("agon-cloud-switching");
+  if (!keepVisibleDuringSwitch) container.style.visibility = "hidden";
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       layoutTagTrendCloud(container);
-      container.style.visibility = "";
+      container.classList.remove("agon-cloud-layout-pending");
+      if (!keepVisibleDuringSwitch) container.style.visibility = "";
       if (onReady) onReady();
 
       if (document.fonts?.ready) {

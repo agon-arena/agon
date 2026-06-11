@@ -6706,9 +6706,14 @@ body.page-debate .topbar::after {
     transform: none;
   }
 
+  .page-home-mobile .agon-cloud-mode-switch {
+    margin-top: -47px;
+    margin-bottom: 8px;
+    /* z-index hérité de la règle de base (135) : doit rester au-dessus du nuage (130) */
+  }
+
   .page-home-mobile .agon-tag-trends-caption {
     transform: translateX(-9px);
-    margin-top: -47px;
     font-size: 11px;
     position: relative;
     z-index: 30;
@@ -17891,6 +17896,52 @@ body.page-home #debates-list .theme-row-section:first-child {
   letter-spacing: 0.02em;
 }
 
+/* Sélecteur de nuage à deux segments : Sujets actu ↔ Bulles Agôn */
+.agon-cloud-mode-switch {
+  position: relative;
+  z-index: 135;
+  display: flex;
+  width: max-content;
+  margin: 0 auto 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.agon-cloud-mode-segment {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  padding: 6px 16px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.agon-cloud-mode-segment:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.agon-cloud-mode-segment-active {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1A1F24;
+}
+
+.agon-cloud-mode-segment-active:hover {
+  color: #1A1F24;
+}
+
+/* Mode Bulles Agôn : pas de badge tendance (non pertinent pour le score d'activité) */
+.agon-cloud-mode-agon .agon-tag-trend,
+.agon-cloud-mode-agon .agon-tag-trend-connector {
+  display: none;
+}
+
 .agon-tag-trends-legend {
   margin: 10px 0 0;
   text-align: center;
@@ -17981,11 +18032,44 @@ body.page-home #debates-list .theme-row-section:first-child {
   z-index: 200;
 }
 
+#agon-cloud-loading-spinner.agon-cloud-loading-switch {
+  left: 0;
+  right: 0;
+  pointer-events: auto;
+  z-index: 420;
+  background: rgba(36, 48, 56, 0.16);
+  border-radius: 24px;
+  backdrop-filter: blur(1.5px);
+}
+
+body.agon-cloud-switch-loading::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: transparent;
+  cursor: wait;
+}
+
+.agon-tag-trends-cloud.agon-cloud-switching {
+  pointer-events: none;
+}
+
+.agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-bubble,
+.agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-center-btn,
+.agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-label-overlay,
+.agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-trend,
+.agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-trend-connector {
+  visibility: hidden;
+}
+
 #agon-cloud-loading-spinner img {
   width: 120px;
   height: 120px;
   object-fit: contain;
   transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 @media (max-width: 768px) {
@@ -18477,6 +18561,74 @@ body.page-home #debates-list .theme-row-section:first-child {
   border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
+/* ── Mode Bulles Agôn : couleurs inversées ──────────────────────────────
+   Les bulles prennent la couleur des écritures (sombre), les écritures
+   prennent la couleur des bulles (clair). L'état actif est inversé en
+   miroir (fond blanc, texte sombre) pour rester distinguable. */
+.agon-cloud-mode-agon .agon-tag-bubble {
+  background:
+    radial-gradient(ellipse at 38% 32%, rgba(42,51,61,1) 0%, rgba(28,36,44,1) 40%, rgba(16,22,28,1) 70%, rgba(5,7,10,1) 100%);
+  border-color: #eef3fb;
+  color: #eef3fb;
+  box-shadow:
+    0 16px 48px rgba(0,0,0,0.45),
+    0 6px 18px rgba(0,0,0,0.28),
+    0 2px 6px rgba(0,0,0,0.18),
+    inset 0 1px 3px rgba(255,255,255,0.25),
+    inset 0 -2px 6px rgba(0,0,0,0.5);
+}
+
+/* Reflets permanents très fortement atténués sur les bulles sombres */
+.agon-cloud-mode-agon .agon-tag-bubble::before,
+.agon-cloud-mode-agon .agon-tag-bubble::after {
+  opacity: 0.1;
+}
+
+/* Bouton central "À LA UNE" : gris clair avec liseré noir sur le nuage inversé */
+.agon-cloud-mode-agon .agon-tag-center-btn {
+  background: #d9dce0;
+  border-color: #05070a;
+  color: #1A1F24;
+}
+
+.agon-cloud-mode-agon .agon-tag-bubble .agon-tag-label,
+.agon-cloud-mode-agon .agon-tag-label {
+  color: #ffffff;
+  /* Ombre légère et écartée : lettres nettes, sans bavure sombre */
+  text-shadow:
+    0 1px 2px rgba(0,0,0,0.6),
+    0 0 14px rgba(0,0,0,0.4);
+}
+
+.agon-cloud-mode-agon .agon-tag-label-overlay:not(.agon-tag-label-overlay-active),
+.agon-cloud-mode-agon .agon-tag-label-overlay:not(.agon-tag-label-overlay-active) .agon-tag-word {
+  text-shadow:
+    0 1px 2px rgba(0,0,0,0.7),
+    0 0 10px rgba(0,0,0,0.5),
+    0 0 20px rgba(0,0,0,0.35);
+}
+
+.agon-cloud-mode-agon .agon-tag-bubble.agon-tag-bubble-active {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #05070a !important;
+}
+
+.agon-cloud-mode-agon .agon-tag-bubble.agon-tag-bubble-active .agon-tag-label,
+.agon-cloud-mode-agon .agon-tag-bubble.agon-tag-bubble-active .agon-tag-word {
+  color: #05070a !important;
+  text-shadow: none !important;
+}
+
+.agon-cloud-mode-agon .agon-tag-label-overlay-active,
+.agon-cloud-mode-agon .agon-tag-label-overlay-active .agon-tag-word {
+  color: #05070a !important;
+  /* Halo au clic : aura large et douce, lettres noires nettes sur bulle blanche */
+  text-shadow:
+    0 0 10px rgba(0,0,0,0.3),
+    0 0 20px rgba(0,0,0,0.18) !important;
+}
+
 .index-social-click-veil {
   position: absolute;
   inset: 0;
@@ -18583,6 +18735,13 @@ body.page-home #debates-list .theme-row-section:first-child {
 /* Pause toutes les animations des éléments hors viewport */
 .agon-anim-paused,
 .agon-anim-paused * {
+  animation-play-state: paused !important;
+}
+
+body.index-background-suspended #debates-list *,
+body.index-background-suspended #agon-tag-trends-section *,
+body.index-background-suspended .home-bottom-nav *,
+body.index-background-suspended .topbar * {
   animation-play-state: paused !important;
 }
 
@@ -20146,17 +20305,23 @@ body.page-home-mobile .debate-card.debate-card--community:not(.has-title-banner)
 .debate-card.debate-card--community .debate-card-ideas-count,
 .debate-card.debate-card--community .debate-card-comments-count,
 .debate-card.debate-card--community .debate-card-votes-count,
+.debate-card.debate-card--community .debate-date,
+.debate-card.debate-card--community .debate-last-argument,
 body.page-home .debate-card.debate-card--community .debate-card-stats-badge,
 body.page-home .debate-card.debate-card--community .debate-card-ideas-count,
 body.page-home .debate-card.debate-card--community .debate-card-comments-count,
 body.page-home .debate-card.debate-card--community .debate-card-votes-count,
+body.page-home .debate-card.debate-card--community .debate-date,
+body.page-home .debate-card.debate-card--community .debate-last-argument,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-stats-badge,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-ideas-count,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-comments-count,
-body.page-home-mobile .debate-card.debate-card--community .debate-card-votes-count {
-  background: rgba(0, 0, 0, 0.06) !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  color: rgba(0, 0, 0, 0.65) !important;
+body.page-home-mobile .debate-card.debate-card--community .debate-card-votes-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-date,
+body.page-home-mobile .debate-card.debate-card--community .debate-last-argument {
+  background: #d8dcde !important;
+  border-color: rgba(36, 48, 56, 0.14) !important;
+  color: #243038 !important;
 }
 
 .debate-card.debate-card--community .debate-card-options-btn {
@@ -20206,9 +20371,14 @@ body.page-home .debate-card.debate-card--community .debate-card-context-text::fi
 body.page-home .debate-card.debate-card--community .debate-card-context-text > p:first-child::first-letter,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-context-text::first-letter,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-context-text > p:first-child::first-letter {
-  color: rgba(0, 0, 0, 0.7) !important;
+  color: #243038 !important;
   font-size: 1em !important;
   font-weight: inherit !important;
+}
+
+body.page-home .debate-card.debate-card--community .context-first-letter,
+body.page-home-mobile .debate-card.debate-card--community .context-first-letter {
+  color: #243038 !important;
 }
 
 body.page-home .debate-card.debate-card--community .debate-card-context-toggle,

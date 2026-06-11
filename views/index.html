@@ -42,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.min.css?v=20260607-final16">
+  <link rel="stylesheet" href="/style.min.css?v=20260611-cloud-frame-stable">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -410,6 +410,10 @@
 
 <section id="agon-tag-trends-section" class="agon-tag-trends-section" hidden>
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
+<div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
+  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulle Actu</button>
+  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
+</div>
 <p class="agon-tag-trends-caption" style="text-align: center;">
   Sujets les plus évoqués par les principaux sites<br>d'information français ces dernières heures.
 </p>
@@ -759,7 +763,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260607-5" defer></script>
+<script src="/script.min.js?v=20260611-cloud-frame-stable" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -810,6 +814,7 @@
   var activeButton = null;
   var _indexShareScrolling = false;
   var _touchStartY = 0;
+  var _scanRaf = null;
 
   function closeAllDropdowns(){
     document.querySelectorAll('.index-share-dropdown.open').forEach(function(d){
@@ -852,7 +857,6 @@
     dd.style.visibility = 'visible';
   }
 
-  // Si le menu dépasse du viewport, scrolle pour le dégager puis repositionne
   function scrollToFit(btn, dd){
     var menuRect = dd.getBoundingClientRect();
     var spacing = 8;
@@ -860,15 +864,15 @@
     var overflowTop = spacing - menuRect.top;
     var scrollAmount = 0;
 
-    if (overflowBottom > 0) scrollAmount = overflowBottom;       // scroll vers le bas
-    else if (overflowTop > 0) scrollAmount = -overflowTop;       // scroll vers le haut
+    if (overflowBottom > 0) scrollAmount = overflowBottom;
+    else if (overflowTop > 0) scrollAmount = -overflowTop;
 
     if (scrollAmount === 0) return;
 
     _indexShareScrolling = true;
     window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
     setTimeout(function(){
-      positionDropdown(btn, dd); // repositionne après que le trigger ait bougé
+      positionDropdown(btn, dd);
       _indexShareScrolling = false;
     }, 400);
   }
@@ -881,7 +885,6 @@
     activeDropdown = dd;
     activeButton = btn;
 
-    // Scroll-to-fit après rendu
     requestAnimationFrame(function(){
       scrollToFit(btn, dd);
     });
@@ -973,9 +976,23 @@
     document.body.appendChild(dd);
   }
 
-  function scan(){
-    document.querySelectorAll('.debate-card-share-actions:not([data-share-transformed])').forEach(transform);
+  function scan(root){
+    var scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+    if (scope.matches && scope.matches('.debate-card-share-actions:not([data-share-transformed])')) {
+      transform(scope);
+    }
+    scope.querySelectorAll('.debate-card-share-actions:not([data-share-transformed])').forEach(transform);
   }
+
+  function scheduleScan(root){
+    if (_scanRaf) return;
+    _scanRaf = requestAnimationFrame(function(){
+      _scanRaf = null;
+      scan(root);
+    });
+  }
+
+  window.__agonIndexShareDropdownScan = scheduleScan;
 
   document.addEventListener('click', function(){
     closeAllDropdowns();
@@ -987,13 +1004,11 @@
     }
   });
 
-  // Fermeture au scroll (ignore les scrolls programmatiques d'ouverture)
   window.addEventListener('scroll', function(){
     if (_indexShareScrolling) return;
     if (activeDropdown) closeAllDropdowns();
   }, { passive: true, capture: true });
 
-  // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
   window.addEventListener('touchstart', function(e){
     _touchStartY = e.touches[0] ? e.touches[0].clientY : 0;
   }, { passive: true });
@@ -1005,19 +1020,12 @@
     if (deltaY > 10) closeAllDropdowns();
   }, { passive: true });
 
-  var tries = 0;
-  var interval = setInterval(function(){
-    scan();
-    tries++;
-    if(tries > 10) clearInterval(interval);
-  }, 300);
-
-  var _scanRaf = null;
-  new MutationObserver(function(){
-    if (_scanRaf) return;
-    _scanRaf = requestAnimationFrame(function(){ _scanRaf = null; scan(); });
-  }).observe(document.getElementById('debates-list') || document.querySelector('main') || document.body, { childList:true, subtree:true });
-})();</script>
+  window.addEventListener('agon:feed-ready', function(){ scheduleScan(document); });
+  document.addEventListener('agon:index-meta-updated', function(){ scheduleScan(document); });
+  setTimeout(function(){ scheduleScan(document); }, 1200);
+  setTimeout(function(){ scheduleScan(document); }, 2600);
+})();
+</script>
 
 <script>
 (function(){
@@ -1118,24 +1126,22 @@
     }
   }
 
-  function scanCards(){
-    document.querySelectorAll('.debate-card').forEach(applyCounts);
+  function scanCards(root){
+    var scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+    if (scope.matches && scope.matches('.debate-card')) applyCounts(scope);
+    scope.querySelectorAll('.debate-card').forEach(applyCounts);
   }
-
-  var tries = 0;
-  var interval = setInterval(function(){
-    scanCards();
-    tries += 1;
-    if (tries > 12) clearInterval(interval);
-  }, 300);
 
   var _scanCardsRaf = null;
-  function scheduleScanCards(){
+  function scheduleScanCards(root){
     if (_scanCardsRaf) return;
-    _scanCardsRaf = requestAnimationFrame(function(){ _scanCardsRaf = null; scanCards(); });
+    _scanCardsRaf = requestAnimationFrame(function(){ _scanCardsRaf = null; scanCards(root); });
   }
+  window.__agonIndexStatsScan = scheduleScanCards;
   document.addEventListener('agon:index-meta-updated', scheduleScanCards);
-  new MutationObserver(scheduleScanCards).observe(document.getElementById('debates-list') || document.querySelector('main') || document.body, { childList: true, subtree: true });
+  window.addEventListener('agon:feed-ready', function(){ scheduleScanCards(document); });
+  setTimeout(function(){ scheduleScanCards(document); }, 1200);
+  setTimeout(function(){ scheduleScanCards(document); }, 2600);
 })();
 </script>
 

@@ -1963,6 +1963,7 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "video_url",
   "media_extras",
   "keywords",
+  "cloud_label",
   "story_id",
   "episode_nav",
   "creator_key",
@@ -4613,10 +4614,14 @@ app.get("/api/debates", async (req, res) => {
 
     const commentCountByDebate = new Map();
     const recentCommentCountByDebate = new Map();
+    const comment48hCountByDebate = new Map();
+    const comment7dCountByDebate = new Map();
     const lastCommentAtByDebate = new Map();
     const lastVoteAtByDebate = new Map();
     const argumentIds = (args || []).map((arg) => arg.id);
     const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+    const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+    const cutoff7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     for (const arg of args || []) {
       const debateKey = String(arg.debate_id || "");
@@ -4645,12 +4650,43 @@ app.get("/api/debates", async (req, res) => {
         commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
 
         if (comment.created_at) {
-          if (new Date(comment.created_at).getTime() > cutoff24h) {
+          const commentTime = new Date(comment.created_at).getTime();
+          if (commentTime > cutoff24h) {
             recentCommentCountByDebate.set(debateId, Number(recentCommentCountByDebate.get(debateId) || 0) + 1);
+          }
+          if (commentTime > cutoff48h) {
+            comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
+          }
+          if (commentTime > cutoff7d) {
+            comment7dCountByDebate.set(debateId, Number(comment7dCountByDebate.get(debateId) || 0) + 1);
           }
           const previousLastCommentAt = lastCommentAtByDebate.get(debateId);
           if (!previousLastCommentAt || new Date(comment.created_at) > new Date(previousLastCommentAt)) {
             lastCommentAtByDebate.set(debateId, comment.created_at);
+          }
+        }
+      }
+    }
+
+    // Votes récents (7 jours max) pour le score d'activité des Bulles Agôn :
+    // la fenêtre temporelle limite la requête à un petit volume de lignes.
+    const vote48hCountByDebate = new Map();
+    const vote7dCountByDebate = new Map();
+    if (argumentIds.length) {
+      const { data: recentVotes, error: recentVotesError } = await supabase
+        .from("votes")
+        .select("argument_id,vote_count,created_at")
+        .gte("created_at", new Date(cutoff7d).toISOString());
+      if (recentVotesError) {
+        console.error("[recent votes]", recentVotesError.message);
+      } else {
+        for (const vote of recentVotes || []) {
+          const debateId = debateIdByArgumentId.get(String(vote.argument_id));
+          if (!debateId || !vote.created_at) continue;
+          const voteWeight = Math.max(1, Number(vote.vote_count) || 1);
+          vote7dCountByDebate.set(debateId, Number(vote7dCountByDebate.get(debateId) || 0) + voteWeight);
+          if (new Date(vote.created_at).getTime() > cutoff48h) {
+            vote48hCountByDebate.set(debateId, Number(vote48hCountByDebate.get(debateId) || 0) + voteWeight);
           }
         }
       }
@@ -4662,6 +4698,8 @@ app.get("/api/debates", async (req, res) => {
       const argument_count = debateArgs.length;
       const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
       const recent_argument_count = debateArgs.filter(a => a.created_at && new Date(a.created_at).getTime() > cutoff24h).length;
+      const argument_count_48h = debateArgs.filter(a => a.created_at && new Date(a.created_at).getTime() > cutoff48h).length;
+      const argument_count_7d = debateArgs.filter(a => a.created_at && new Date(a.created_at).getTime() > cutoff7d).length;
       const recent_comment_count = Number(recentCommentCountByDebate.get(sharedDebateId) || 0);
       const tension_score = recent_argument_count * 1 + recent_comment_count * 0.5;
       const last_argument_at = debateArgs.length
@@ -4697,6 +4735,12 @@ app.get("/api/debates", async (req, res) => {
         comment_count,
         recent_argument_count,
         recent_comment_count,
+        argument_count_48h,
+        argument_count_7d,
+        comment_count_48h: Number(comment48hCountByDebate.get(sharedDebateId) || 0),
+        comment_count_7d: Number(comment7dCountByDebate.get(sharedDebateId) || 0),
+        vote_count_48h: Number(vote48hCountByDebate.get(sharedDebateId) || 0),
+        vote_count_7d: Number(vote7dCountByDebate.get(sharedDebateId) || 0),
         tension_score,
         last_argument_at,
         last_comment_at,
@@ -4827,6 +4871,22 @@ app.get("/api/debates", async (req, res) => {
   }
 });
 
+const { generateCloudLabel } = require("./lib/cloud-label");
+
+// Génère et enregistre le cloud_label en arrière-plan (jamais bloquant) :
+// en cas d'échec IA, la colonne reste NULL et un fallback s'appliquera côté lecture.
+async function assignDebateCloudLabel(debateId, fields) {
+  try {
+    const label = await generateCloudLabel(fields);
+    if (!label) return;
+    const { error } = await supabase.from("debates").update({ cloud_label: label }).eq("id", debateId);
+    if (error) console.error("[cloud-label]", debateId, error.message);
+    else console.log(`[cloud-label] débat ${debateId} — "${label}"`);
+  } catch (e) {
+    console.error("[cloud-label]", debateId, e.message);
+  }
+}
+
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
     const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis } = req.body || {};
@@ -4919,6 +4979,14 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     clearDebatesApiResponseCache();
 
     setImmediate(async () => {
+      assignDebateCloudLabel(data.id, {
+        question,
+        content: normalizedContent,
+        optionA: option_a,
+        optionB: option_b,
+        category,
+        type: type || "debate"
+      });
       try {
         const currentSourceCount = normalizedSourceUrl ? 1 : 0;
         const { data: recentRows } = await supabase
@@ -6501,6 +6569,15 @@ app.post("/api/admin/veille/publish", async (req, res) => {
     }
     await setDebateKeywords(data.id, resolvedKeywords);
 
+    assignDebateCloudLabel(data.id, {
+      question: safeQuestion,
+      content: resolvedContent,
+      optionA: debateType === "open" ? "" : normalizedPositionA,
+      optionB: debateType === "open" ? "" : normalizedPositionB,
+      category: theme || "",
+      type: debateType
+    });
+
 
 
 // Calcul du badge de tendance au moment de la publication
@@ -6740,8 +6817,7 @@ async function _fetchDebatePayload(debateId) {
     text:        (a.body || a.title || "").trim(),
     source_url:  (a.source_url || "").trim() || _extractUrl(a.body),
     votes:       Number(a.votes || 0),
-    paste_ratio: Number(a.paste_ratio) || 0,
-    created_at:  a.created_at || null
+    paste_ratio: Number(a.paste_ratio) || 0
   });
 
   // Analyse précédente (format JSON uniquement) : permet de réutiliser les
