@@ -1287,15 +1287,44 @@
         '</div>';
     }
 
+    function customRubricReportHtml(report) {
+      if (!report || !Array.isArray(report.criteria) || !report.criteria.length) return '';
+      const criteriaHtml = report.criteria.map((criterion) => {
+        const label = String(criterion?.label || '').trim();
+        if (!label) return '';
+        const score = Number(criterion?.score);
+        const max = Number(criterion?.max);
+        const status = String(criterion?.status || '').trim();
+        const justification = String(criterion?.justification || '').trim();
+        const scoreText = Number.isFinite(score) && Number.isFinite(max) && max > 0
+          ? ` — ${score}/${max}`
+          : (Number.isFinite(score) ? ` — ${score} pts` : '');
+        return `<li><strong>${esc(label)}</strong>${esc(scoreText)}${status ? ` — ${esc(status)}` : ''}${justification ? `<br><span>${esc(justification)}</span>` : ''}</li>`;
+      }).filter(Boolean).join('');
+      const totalScore = Number(report.totalScore);
+      const maxScore = Number(report.maxScore || 100);
+      const totalHtml = Number.isFinite(totalScore)
+        ? `<div class="ada-arg-expl">Total : ${totalScore}/${Number.isFinite(maxScore) ? maxScore : 100}</div>`
+        : '';
+      return '<div class="ada-dup-section"><div class="ada-dup-title">Détail du barème</div>' +
+        '<ul class="ada-arg-list">' + criteriaHtml + '</ul>' +
+        totalHtml +
+        '</div>';
+    }
+
     function argCard(a, duplicateGroups = [], isExtraHidden = false, isOpen = false, rankPos = null, rankTotal = null) {
       const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
+      const customReport = a.custom_rubric_report && typeof a.custom_rubric_report === 'object' ? a.custom_rubric_report : null;
       const strengthsHtml = (a.strengths || []).length
         ? '<ul class="ada-arg-list ada-arg-strengths">' + a.strengths.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
       const weaknessesHtml = (a.weaknesses || []).length
         ? '<ul class="ada-arg-list ada-arg-weaknesses">' + a.weaknesses.map(s => `<li>${esc(s)}</li>`).join('') + '</ul>' : '';
-      const sourceHtml = a.has_url_source
+      const sourceHtml = customReport ? '' : (a.has_url_source
         ? `<div class="ada-arg-source ada-arg-source-ok">Source : ${esc(a.source_level || '')} — ${esc(a.source_explanation || '')}</div>`
-        : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`;
+        : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`);
+      const breakdownHtml = customReport
+        ? `<div class="ada-arg-breakdown">Barème personnalisé : ${a.final_score}/100</div>`
+        : `<div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/90 · Appui sourcé : ${a.source_score || 0}/10</div>`;
       const excluded = a.category === 'faible' || a.category === 'moyen';
       // Le badge affiche la catégorie du score final (cohérente avec le nombre /100 montré
       // juste à côté) — `a.category`, basé sur la qualité hors sources, ne sert qu'au
@@ -1305,9 +1334,10 @@
         <div class="ada-arg-header">${catBadge(badgeCategory, a.final_score)}${rankPos !== null && rankTotal > 1 ? `<span class="ada-arg-rank">${rankPos} / ${rankTotal}</span>` : ''}${excluded && !isOpen ? '<span class="ada-arg-excluded-label">non compté dans le verdict</span>' : ''}</div>
         <div class="ada-arg-text">"${esc(a.argumentText)}"</div>
         ${dupGroups(duplicateGroups)}
-        <div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/90 · Appui sourcé : ${a.source_score || 0}/10</div>
+        ${breakdownHtml}
         ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
         ${a.final_score_note ? `<div class="ada-arg-expl">${esc(a.final_score_note)}</div>` : ''}
+        ${customRubricReportHtml(customReport)}
         ${strengthsHtml}${weaknessesHtml}
         ${sourceHtml}
       </div>`;

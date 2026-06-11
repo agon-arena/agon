@@ -591,18 +591,15 @@ function positionTrendBadges(container) {
       const dx = badgeCx - geo.cx;
       const dy = badgeCy - geo.cy;
       const distanceToBadge = Math.hypot(dx, dy);
-      const badgeTouchesOuterEdge = distanceToBadge >= geo.r - Math.max(8, th);
-      const shouldConnect = usesConnector || badgeTouchesOuterEdge;
+      const nearestBadgeX = Math.min(Math.max(geo.cx, finalL), finalL + tw);
+      const nearestBadgeY = Math.min(Math.max(geo.cy, finalT), finalT + th);
+      const gapFromBubble = Math.hypot(nearestBadgeX - geo.cx, nearestBadgeY - geo.cy) - geo.r;
+      const shouldConnect = gapFromBubble > 4;
 
       if (shouldConnect && distanceToBadge > 0) {
         const unitX = dx / distanceToBadge;
         const unitY = dy / distanceToBadge;
-        const badgeHalfAlongRay = Math.min(
-          Math.abs(unitX) > 0.001 ? tw / (2 * Math.abs(unitX)) : Infinity,
-          Math.abs(unitY) > 0.001 ? th / (2 * Math.abs(unitY)) : Infinity
-        );
-        const visibleGap = Math.max(0, distanceToBadge - geo.r - badgeHalfAlongRay);
-        const len = Math.max(7, visibleGap + 5);
+        const len = Math.max(7, gapFromBubble + 3);
         const startX = geo.cx + unitX * (geo.r + 1);
         const startY = geo.cy + unitY * (geo.r + 1);
         connector.style.display = "block";

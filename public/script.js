@@ -16746,7 +16746,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-connector-visible-3");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-badge-connector-gap-only");
 
 
 function syncBubbleFrameTop() {
@@ -22228,6 +22228,7 @@ function buildArgumentScoreMap(analysis) {
         final_score:       a.final_score       != null ? a.final_score       : null,
         final_category:    a.final_category    || a.category                 || null,
         short_explanation: a.short_explanation                                || '',
+        custom_rubric_report: a.custom_rubric_report && typeof a.custom_rubric_report === 'object' ? a.custom_rubric_report : null,
         strengths:         Array.isArray(a.strengths)  ? a.strengths         : [],
         weaknesses:        Array.isArray(a.weaknesses) ? a.weaknesses        : []
       };
@@ -22240,6 +22241,7 @@ function buildArgumentScoreMap(analysis) {
         final_score:       0,
         final_category:    'copie',
         short_explanation: 'Copié-collé détecté — aucune valeur (on utilise son cerveau pour réfléchir, pas l\'IA).',
+        custom_rubric_report: null,
         strengths:         [],
         weaknesses:        []
       };
@@ -22317,6 +22319,35 @@ function showActiveRubricModal() {
   });
 }
 
+function renderCustomRubricDetailHtml(report) {
+  if (!report || !Array.isArray(report.criteria) || !report.criteria.length) return '';
+  const criteriaHtml = report.criteria.map(function(criterion) {
+    const label = String(criterion && criterion.label || '').trim();
+    if (!label) return '';
+    const score = criterion.score != null ? Number(criterion.score) : null;
+    const max = criterion.max != null ? Number(criterion.max) : null;
+    const status = String(criterion.status || '').trim();
+    const justification = String(criterion.justification || '').trim();
+    const scoreText = Number.isFinite(score) && Number.isFinite(max) && max > 0
+      ? ' — ' + score + '/' + max
+      : (Number.isFinite(score) ? ' — ' + score + ' pts' : '');
+    const statusText = status ? ' — ' + escapeHtml(status) : '';
+    return '<li><strong>' + escapeHtml(label) + '</strong>' + escapeHtml(scoreText) + statusText
+      + (justification ? '<br><span>' + escapeHtml(justification) + '</span>' : '')
+      + '</li>';
+  }).filter(Boolean).join('');
+  const totalScore = Number(report.totalScore);
+  const maxScore = Number(report.maxScore || 100);
+  const totalHtml = Number.isFinite(totalScore)
+    ? '<div class="arg-ai-detail-expl">Total : ' + totalScore + '/' + (Number.isFinite(maxScore) ? maxScore : 100) + '</div>'
+    : '';
+  return '<div class="arg-ai-detail-section">'
+    + '<div class="arg-ai-detail-section-title">Détail du barème</div>'
+    + '<ul class="arg-ai-detail-list">' + criteriaHtml + '</ul>'
+    + totalHtml
+    + '</div>';
+}
+
 function showArgumentAiDetail(argId, triggerEl) {
   const entry = currentArgumentScoreMap[argId];
   if (!entry) return;
@@ -22366,6 +22397,11 @@ function showArgumentAiDetail(argId, triggerEl) {
     html += '<div class="arg-ai-detail-expl">' + escapeHtml(entry.short_explanation) + '</div>';
   }
 
+  const customRubricHtml = renderCustomRubricDetailHtml(entry.custom_rubric_report);
+  if (customRubricHtml) {
+    html += customRubricHtml;
+  }
+
   if (entry.strengths && entry.strengths.length) {
     html += '<div class="arg-ai-detail-section">'
       + '<div class="arg-ai-detail-section-title arg-ai-strengths-title">✦ Points forts</div>'
@@ -22376,7 +22412,7 @@ function showArgumentAiDetail(argId, triggerEl) {
 
   if (entry.weaknesses && entry.weaknesses.length) {
     html += '<div class="arg-ai-detail-section">'
-      + '<div class="arg-ai-detail-section-title arg-ai-weaknesses-title">⚑ Points faibles</div>'
+      + '<div class="arg-ai-detail-section-title arg-ai-weaknesses-title">' + (entry.custom_rubric_report ? '⚑ Points à améliorer' : '⚑ Points faibles') + '</div>'
       + '<ul class="arg-ai-detail-list">'
       + entry.weaknesses.map(function(s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('')
       + '</ul></div>';
