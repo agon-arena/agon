@@ -6740,7 +6740,8 @@ async function _fetchDebatePayload(debateId) {
     text:        (a.body || a.title || "").trim(),
     source_url:  (a.source_url || "").trim() || _extractUrl(a.body),
     votes:       Number(a.votes || 0),
-    paste_ratio: Number(a.paste_ratio) || 0
+    paste_ratio: Number(a.paste_ratio) || 0,
+    created_at:  a.created_at || null
   });
 
   // Analyse précédente (format JSON uniquement) : permet de réutiliser les
