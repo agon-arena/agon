@@ -25,17 +25,17 @@ function computeBubblePxSize(index, trendItem, isMobile) {
   if (Number.isFinite(weight)) {
     const clamped = Math.max(0, Math.min(1, weight));
     const amplified = Math.pow(clamped, 1.75);
-    const minSize = isMobile ? 58 : 70;
+    const minSize = isMobile ? 58 : 78;
     const maxSize = index === 0
-      ? (isMobile ? 155 : 185)
-      : (isMobile ? 132 : 162);
+      ? (isMobile ? 155 : 207)
+      : (isMobile ? 132 : 181);
     return boostedBubbleSize(minSize + ((maxSize - minSize) * amplified));
   }
   // Fallback aligné sur les tailles par défaut des classes CSS
   const sizeClass = getBubbleSizeClass(index);
-  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 176) : (isMobile ? 128 : 153));
-  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 128);
-  return boostedBubbleSize(isMobile ? 72 : 86);
+  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 197) : (isMobile ? 128 : 171));
+  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 143);
+  return boostedBubbleSize(isMobile ? 72 : 96);
 }
 
 // Facteur d'échelle uniforme pour que toutes les bulles tiennent dans la zone utile.

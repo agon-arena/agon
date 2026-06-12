@@ -16801,12 +16801,32 @@ function initThematicRowDragScroll() {
       row.dataset.dragOffset = String(row.scrollLeft || 0);
     }, { passive: true });
 
-    // Laisse la molette/trackpad gérer naturellement les deux axes :
-    // deltaX fait défiler le rail, deltaY fait défiler la page.
+    // Route la molette explicitement pour éviter tout scroll vertical interne au rail :
+    // deltaY dominant → page ; deltaX dominant → carousel.
     row.addEventListener("wheel", (e) => {
+      if (e.ctrlKey) return;
       refreshRowMetrics();
       row.dataset.dragOffset = String(row.scrollLeft || 0);
-    }, { passive: true });
+      if (row.scrollTop) row.scrollTop = 0;
+
+      const unit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? window.innerHeight : 1);
+      const deltaX = e.deltaX * unit;
+      const deltaY = e.deltaY * unit;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      const horizontalIntent = e.shiftKey || absX > absY * 1.15;
+
+      e.preventDefault();
+
+      if (horizontalIntent) {
+        const nextLeft = row.scrollLeft + (absX > 0 ? deltaX : deltaY);
+        row.scrollLeft = Math.max(0, Math.min(getMaxRowOffset(), nextLeft));
+        row.dataset.dragOffset = String(row.scrollLeft || 0);
+        return;
+      }
+
+      window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
+    }, { passive: false });
 
     let touchIsHorizontal = false;
     let currentCardIndex = 0;
@@ -17072,7 +17092,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-cloud-layout-pending");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260612-bulles-desktop");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -28966,9 +28986,18 @@ function syncCloudSectionHeight() {
   if (!section || section.hidden) return;
   var docTop = section.getBoundingClientRect().top + window.scrollY;
   var bottomBarH = getStableBottomBarOffset();
+  // Hauteur extérieure (boîte + marges) du switch Bulles Actu/Agôn et de la légende :
+  // ajoutée à la section pour qu'ils tombent sous la ligne de flottaison — le cloud
+  // (flex:1) occupe tout l'espace visible, il faut scroller un peu pour voir les boutons.
+  var belowFoldExtra = 0;
+  [document.getElementById('agon-cloud-mode-switch'), section.querySelector('.agon-tag-trends-caption')].forEach(function(el) {
+    if (!el) return;
+    var cs = window.getComputedStyle(el);
+    belowFoldExtra += el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+  });
   // Soustraire le bandeau bas pour que le cadre ::before du cloud (23px du bas du cloud)
   // soit visible au-dessus du bandeau et non caché derrière lui.
-  section.style.height = Math.max(300, window.innerHeight - docTop - bottomBarH) + 'px';
+  section.style.height = (Math.max(300, window.innerHeight - docTop - bottomBarH) + belowFoldExtra) + 'px';
 }
 
 (function initCloudSectionHeight() {
