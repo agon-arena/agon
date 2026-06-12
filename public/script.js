@@ -15399,8 +15399,11 @@ function renderIndexActiveFilterTags() {
     `);
   });
 
-  container.innerHTML = tags.join("");
-  container.classList.toggle("index-active-filters-empty", tags.length === 0);
+  const hasActiveTags = tags.length > 0;
+  container.innerHTML = hasActiveTags
+    ? tags.join("")
+    : '<button type="button" class="index-active-filter-tag index-active-filter-default" tabindex="-1" aria-disabled="true"><span>Toutes les arènes agôn</span></button>';
+  container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
 }
 

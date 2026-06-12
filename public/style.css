@@ -1810,6 +1810,62 @@ font-family: "Barlow Condensed", sans-serif;
   margin-left: 6px;
 }
 
+/* Mobile : resserre l'interligne du texte d'aide du barème (trop aéré sur plusieurs lignes).
+   display:block pour que les lignes du hint utilisent son propre line-height (1.25 × 12px)
+   au lieu du strut du label parent (14px). */
+@media (max-width: 768px) {
+  #evaluation-axis-group label[for="evaluation_axis"] .label-hint {
+    display: block;
+    line-height: 1.25;
+    margin-left: 0;
+    margin-top: 2px;
+    margin-bottom: 8px;
+  }
+}
+
+/* Faux placeholder du barème : permet le titre « 3 possibilités » en gras centré,
+   impossible avec un placeholder natif. Masqué dès que le champ est rempli (oninput). */
+.axis-textarea-wrap {
+  position: relative;
+}
+
+/* Cadre agrandi pour que tout le texte explicatif (faux placeholder) soit lisible */
+.axis-textarea-wrap textarea {
+  height: 200px;
+  min-height: 200px;
+}
+
+@media (max-width: 768px) {
+  .axis-textarea-wrap textarea {
+    height: 290px;
+    min-height: 290px;
+  }
+}
+
+.axis-placeholder-overlay {
+  position: absolute;
+  inset: 1px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1.35;
+  pointer-events: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.axis-placeholder-overlay p {
+  margin: 0 0 4px;
+}
+
+.axis-placeholder-title {
+  display: block;
+  text-align: center;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
 .axis-hidden-option {
   display: flex;
   align-items: flex-start;
@@ -1822,8 +1878,14 @@ font-family: "Barlow Condensed", sans-serif;
 }
 
 .axis-hidden-option input[type="checkbox"] {
+  /* Neutralise les règles génériques input (width:100%, padding, min-height 48px mobile)
+     qui transforment la checkbox en bloc pleine largeur */
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
   margin: 2px 0 0;
-  flex: 0 0 auto;
+  flex: 0 0 16px;
   accent-color: #516776;
   cursor: pointer;
 }

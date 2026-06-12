@@ -85,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260612-bareme-cache">
+<link rel="stylesheet" href="/style.min.css?v=20260612-bareme-cache-7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -434,16 +434,21 @@
   </button>
   <div id="evaluation-axis-group" class="form-group" style="display:none; margin-top: 6px; margin-bottom: 6px;">
     <label for="evaluation_axis">Barème personnalisé d'analyse IA — sur 100 points. <span class="label-hint">Visible par tous les participants, sauf si tu choisis de le cacher ci-dessous. Si tu remplis ce champ, seul ton barème sera utilisé par l'IA.</span></label>
-    <textarea
-      id="evaluation_axis"
-      name="evaluation_axis"
-      maxlength="280"
-      rows="6"
-      placeholder="3 possibilités :
-1. Champ vide → barème Agôn par défaut sur 100 pts : pertinence, clarté, solidité, apport à l'arène, nuance et ton, + bonus sources en URL (jusqu'à +10, plafonné à 100).
-2. Tes critères sans points (ex. : humour, audace, réalisme) → l'IA répartit les 100 points équitablement entre eux. Un critère unique (ex. : humour) garde un socle pertinence + clarté.
-3. Ton barème chiffré (ex. : intro /10, définition /10, connaissances /60, clarté /20) → sépare les critères composés : l'IA les évaluera un par un."
-    ></textarea>
+    <div class="axis-textarea-wrap">
+      <textarea
+        id="evaluation_axis"
+        name="evaluation_axis"
+        maxlength="280"
+        rows="6"
+        oninput="document.getElementById('evaluation-axis-placeholder').style.display = this.value.trim() ? 'none' : 'block'"
+      ></textarea>
+      <div id="evaluation-axis-placeholder" class="axis-placeholder-overlay" aria-hidden="true">
+        <span class="axis-placeholder-title">3 possibilités</span>
+        <p>1. Champ vide → barème Agôn par défaut sur 100 pts : pertinence, clarté, solidité, apport à l'arène, nuance et ton, + bonus sources en URL (jusqu'à +10, plafonné à 100).</p>
+        <p>2. Tes critères sans points (ex. : humour, audace, réalisme) → l'IA répartit les 100 points équitablement entre eux. Un critère unique (ex. : humour) garde un socle pertinence + clarté.</p>
+        <p>3. Ton barème chiffré (ex. : intro /10, définition /10, connaissances /60, clarté /20) → sépare les critères composés : l'IA les évaluera un par un.</p>
+      </div>
+    </div>
     <label class="axis-hidden-option" for="evaluation_axis_hidden">
       <input type="checkbox" id="evaluation_axis_hidden" name="evaluation_axis_hidden">
       <span>Cacher le barème aux participants <span class="label-hint">Ils verront « Barème non communiqué » ; l'IA appliquera quand même ton barème pour noter les idées.</span></span>
