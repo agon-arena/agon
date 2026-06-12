@@ -1260,6 +1260,24 @@
   function renderNewAnalysis(d, popularityHtml) {
     const CAT_CSS = { excellent: 'ada-cat-excellent', bon: 'ada-cat-bon', moyen: 'ada-cat-moyen', faible: 'ada-cat-faible' };
     const CAT_LABEL = { excellent: 'excellent', bon: 'bon', moyen: 'moyen', faible: 'faible' };
+    const DEFAULT_CRITERIA = {
+      open: [
+        { key: 'pertinence', label: 'Pertinence par rapport au sujet', max: 20 },
+        { key: 'clarity',    label: 'Clarté', max: 15 },
+        { key: 'reasoning',  label: 'Solidité ou justification', max: 25 },
+        { key: 'precision',  label: "Apport à l'arène", max: 25 },
+        { key: 'nuance',     label: 'Nuance', max: 10 },
+        { key: 'tone',       label: 'Ton', max: 5 }
+      ],
+      position: [
+        { key: 'pertinence', label: 'Pertinence par rapport à la question', max: 20 },
+        { key: 'clarity',    label: 'Clarté de la thèse', max: 15 },
+        { key: 'reasoning',  label: 'Qualité du raisonnement', max: 30 },
+        { key: 'precision',  label: 'Précision / mécanisme concret', max: 20 },
+        { key: 'nuance',     label: 'Nuance et prise en compte des limites', max: 10 },
+        { key: 'tone',       label: "Qualité de l'arène / ton", max: 5 }
+      ]
+    };
 
     function catBadge(cat, score) {
       const cls = CAT_CSS[cat] || 'ada-cat-faible';
@@ -1312,6 +1330,29 @@
         '</div>';
     }
 
+    function defaultRubricReportHtml(a, isOpen) {
+      const scores = a && a.scores_without_sources && typeof a.scores_without_sources === 'object'
+        ? a.scores_without_sources
+        : null;
+      if (!scores) return '';
+      const criteria = isOpen ? DEFAULT_CRITERIA.open : DEFAULT_CRITERIA.position;
+      const criteriaHtml = criteria.map((criterion) => {
+        const score = Number(scores[criterion.key]);
+        if (!Number.isFinite(score)) return '';
+        return `<li><strong>${esc(criterion.label)}</strong> — ${score}/${criterion.max}</li>`;
+      }).filter(Boolean).join('');
+      if (!criteriaHtml) return '';
+      const qualityScore = Number(scores.total_without_sources);
+      const sourceScore = Number(a.source_score || 0);
+      const totalHtml = Number.isFinite(qualityScore)
+        ? `<div class="ada-arg-expl">Total qualité : ${qualityScore}/100${sourceScore > 0 ? ` · Bonus source : +${sourceScore} pts` : ''} · Score final : ${a.final_score}/100</div>`
+        : '';
+      return '<div class="ada-dup-section"><div class="ada-dup-title">Détail du barème</div>' +
+        '<ul class="ada-arg-list">' + criteriaHtml + '</ul>' +
+        totalHtml +
+        '</div>';
+    }
+
     function argCard(a, duplicateGroups = [], isExtraHidden = false, isOpen = false, rankPos = null, rankTotal = null) {
       const scoreOut = a.scores_without_sources ? Number(a.scores_without_sources.total_without_sources || 0) : 0;
       const customReport = a.custom_rubric_report && typeof a.custom_rubric_report === 'object' ? a.custom_rubric_report : null;
@@ -1324,7 +1365,7 @@
         : `<div class="ada-arg-source ada-arg-source-none">Aucune source URL fournie</div>`);
       const breakdownHtml = customReport
         ? `<div class="ada-arg-breakdown">Barème personnalisé : ${a.final_score}/100</div>`
-        : `<div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/90 · Appui sourcé : ${a.source_score || 0}/10</div>`;
+        : `<div class="ada-arg-breakdown">Qualité argumentative : ${scoreOut}/100 · Bonus source : +${a.source_score || 0} pts, score final plafonné à 100</div>`;
       const excluded = a.category === 'faible' || a.category === 'moyen';
       // Le badge affiche la catégorie du score final (cohérente avec le nombre /100 montré
       // juste à côté) — `a.category`, basé sur la qualité hors sources, ne sert qu'au
@@ -1337,7 +1378,7 @@
         ${breakdownHtml}
         ${a.short_explanation ? `<div class="ada-arg-expl">${esc(a.short_explanation)}</div>` : ''}
         ${a.final_score_note ? `<div class="ada-arg-expl">${esc(a.final_score_note)}</div>` : ''}
-        ${customRubricReportHtml(customReport)}
+        ${customReport ? customRubricReportHtml(customReport) : defaultRubricReportHtml(a, isOpen)}
         ${strengthsHtml}${weaknessesHtml}
         ${sourceHtml}
       </div>`;
@@ -2112,7 +2153,7 @@
       <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
 
       <h3>2. Chaque idée distincte est notée sur 100</h3>
-      <p>Chaque idée conservée reçoit une note de solidité sur 100. La qualité argumentative compte pour 90 points, les sources pour 10 points.</p>
+      <p>Chaque idée conservée reçoit une note de qualité argumentative sur 100. Si une URL est fournie, elle peut ajouter un bonus source jusqu'à +10 points, mais le score final reste toujours plafonné à 100.</p>
       <ul>
         <li><strong>Pertinence par rapport à la question : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
         <li><strong>Clarté de la thèse : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
@@ -2122,7 +2163,7 @@
         <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
         <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
       </ul>
-      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 90 points · Sources : 10 points · Score final : 100 points.</strong></div>
+      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 100 points · Bonus source possible : jusqu'à +10 points · Score final plafonné à 100.</strong></div>
 
       <h3>3. Les idées sont classées par niveau</h3>
       <ul>
@@ -2133,7 +2174,7 @@
       </ul>
 
       <h3>4. Les sources renforcent, elles ne remplacent pas</h3>
-      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut être excellente si elle est claire, logique et bien construite — la qualité du raisonnement représente 90 % du score.</p>
+      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>
 
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>

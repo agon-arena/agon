@@ -3362,6 +3362,15 @@ body.page-debate #score-b {
   color: #4b5563;
   margin-bottom: 16px;
 }
+.arg-ai-detail-public-comment {
+  max-width: 420px;
+  margin: 0 auto 20px;
+  text-align: center;
+  font-size: 18px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #1f2933;
+}
 .arg-ai-detail-section {
   margin-top: 14px;
 }
@@ -3382,9 +3391,33 @@ body.page-debate #score-b {
   line-height: 1.6;
 }
 .arg-ai-detail-list li { margin-bottom: 5px; }
+.arg-ai-detail-bottom-close {
+  display: block;
+  width: 100%;
+  margin: 22px auto 0;
+  padding: 11px 16px;
+  border: 1px solid #d7dde2;
+  border-radius: 10px;
+  background: #f3f6f4;
+  color: #1f2933;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.arg-ai-detail-bottom-close:hover {
+  background: #e9efec;
+  border-color: #c6d0d8;
+}
+.arg-ai-detail-bottom-close:active {
+  transform: translateY(1px);
+}
 @media (min-width: 768px) {
   .arg-ai-detail-popup  { font-size: 16px; }
   .arg-ai-detail-expl   { font-size: 16px; }
+  .arg-ai-detail-public-comment { font-size: 20px; }
   .arg-ai-detail-list   { font-size: 15px; }
   .arg-ai-detail-score  { font-size: 64px; }
   .arg-ai-detail-score-denom { font-size: 28px; }
@@ -17991,6 +18024,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 .agon-tag-trends-caption {
   position: relative;
   z-index: 135;
+  flex-shrink: 0;
   margin: 4px auto 14px;
   width: 100%;
   align-self: center;
@@ -18014,6 +18048,9 @@ body.page-home #debates-list .theme-row-section:first-child {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  /* overflow:hidden met la taille mini flex à 0 : sans flex-shrink:0, la section
+     desktop (hauteur figée + cloud rigide) écrase le switch à chaque bascule */
+  flex-shrink: 0;
 }
 
 .agon-cloud-mode-segment {
@@ -20037,12 +20074,13 @@ body.page-home-mobile .index-card-media-with-title .debate-card-local-image {
     margin-left: 0 !important;
     margin-right: 0 !important;
     width: 100% !important;
-    justify-content: flex-start !important;
     gap: 10px !important;
   }
-  body.page-home .debate-card-entry-button,
-  body.page-home-mobile .debate-card-entry-button {
-    margin-left: 0 !important;
+  body.page-home .debate-card-footer-actions {
+    justify-content: space-between !important;
+  }
+  body.page-home .debate-card-entry-button {
+    margin-left: auto !important;
     margin-right: 0 !important;
   }
 }

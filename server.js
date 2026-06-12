@@ -6963,6 +6963,7 @@ function _buildAnalysisReadyPersonalization(analysis, questionLabel) {
     }
 
     const messageByUserKey = new Map();
+    const argumentIdByUserKey = new Map();
 
     for (const [userKey, entries] of scoredByUser.entries()) {
       const scores = entries
@@ -6980,9 +6981,12 @@ function _buildAnalysisReadyPersonalization(analysis, questionLabel) {
         userKey,
         `L'arbitrage IA de ${questionLabel} est disponible. ${suffix}`
       );
+      if (best.argumentId) {
+        argumentIdByUserKey.set(userKey, best.argumentId);
+      }
     }
 
-    return { messageByUserKey };
+    return { messageByUserKey, argumentIdByUserKey };
   };
 }
 

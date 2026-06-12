@@ -634,6 +634,8 @@ let pendingTopCommentScroll = null;
 let currentAllArguments = [];
 let currentCommentsByArgument = {};
 let currentArgumentScoreMap = {};
+let pendingAiScorePopupArgumentId = null;
+let pendingAiScoreNotificationTransition = false;
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let similarDebatesLoading = false;
@@ -10667,6 +10669,16 @@ function clearActionLoading(element, loadingClass = "button-loading") {
 
 const NOTIFICATION_TRANSITION_STORAGE_KEY = "notification_transition_pending";
 
+function isAiScoreNotificationLink(link) {
+  try {
+    const parsedUrl = new URL(String(link || ""), window.location.origin);
+    const openAiScore = parsedUrl.searchParams.get("openAiScore");
+    return parsedUrl.pathname === "/debate" && (openAiScore === "1" || openAiScore === "true");
+  } catch (error) {
+    return false;
+  }
+}
+
 function isNotificationToDebateLoadingTransition(maxAgeMs = 15000) {
   const state = getNotificationTransitionState();
   if (!state?.active) return false;
@@ -10738,6 +10750,18 @@ function showNotificationTransitionOverlay(message = "Chargement en cours") {
   showPageArrivalLoadingOverlay(message || "Chargement en cours");
 }
 
+function showAiScoreNotificationTransitionOverlay(link = "") {
+  if (!isAiScoreNotificationLink(link || location.href)) return false;
+
+  if (typeof showAiAnalysisAnimation === "function") {
+    showAiAnalysisAnimation();
+    return true;
+  }
+
+  showNotificationTransitionOverlay("Chargement du rapport IA");
+  return false;
+}
+
 function notifyParentAboutNotificationTargetReady() {
   if (window.self === window.top) return;
   if (location.pathname !== "/debate") return;
@@ -10753,20 +10777,27 @@ function notifyParentAboutNotificationTargetReady() {
 
 function hideNotificationTransitionOverlay() {
   document.documentElement.classList.remove("notification-transition-pending-early");
+  pendingAiScoreNotificationTransition = false;
   hidePageArrivalLoadingOverlay();
+  if (typeof hideAiAnalysisAnimation === "function") {
+    hideAiAnalysisAnimation();
+  }
   notifyParentAboutNotificationTargetReady();
   clearNotificationTransitionState();
 }
 
 function beginNotificationTransition(link) {
+  const aiScorePopup = isAiScoreNotificationLink(link);
   const state = {
     active: true,
     link: String(link || ""),
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    aiScorePopup
   };
 
   setNotificationTransitionState(state);
-  showNotificationTransitionOverlay();
+  if (aiScorePopup) showAiScoreNotificationTransitionOverlay(link);
+  else showNotificationTransitionOverlay();
 }
 
 function handleNotificationsBackNavigation(event, fallbackHref = "/") {
@@ -10825,9 +10856,18 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
 
 function initNotificationTransitionOverlay() {
   const state = getNotificationTransitionState();
-  if (!state?.active) return;
+  if (!state?.active) {
+    if (location.pathname === "/debate" && isAiScoreNotificationLink(location.href)) {
+      showAiScoreNotificationTransitionOverlay(location.href);
+    }
+    return;
+  }
 
-  showNotificationTransitionOverlay();
+  if (state.aiScorePopup || isAiScoreNotificationLink(state.link)) {
+    showAiScoreNotificationTransitionOverlay(state.link || location.href);
+  } else {
+    showNotificationTransitionOverlay();
+  }
 
   if (location.pathname !== "/debate") {
     setTimeout(() => {
@@ -12967,7 +13007,9 @@ let icon = "🔔";
 let title = notification.message || "Nouvelle notification";
 let subtitle = "Ouvrir";
 
-if (notification.type === "replacement_accepted" && notification.argument_id) {
+if (notification.type === "analysis_ready" && notification.argument_id) {
+  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}&openAiScore=1`;
+} else if (notification.type === "replacement_accepted" && notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
 } else if (notification.comment_id) {
   link = `/debate?id=${notification.debate_id}&highlight=comment-${notification.comment_id}`;
@@ -13034,7 +13076,7 @@ if (notification.type === "analysis_scheduled") {
 if (notification.type === "analysis_ready") {
   icon = "⚖️";
   title = "L'arbitrage IA est disponible";
-  subtitle = "Voir l'analyse";
+  subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse";
 }
 
 title = getNotificationDisplayTitle(notification, title);
@@ -13108,8 +13150,12 @@ async function handleNotificationClick(event, notificationId, link, element = nu
     setNotificationTransitionState({
       active: true,
       link: String(link || ""),
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      aiScorePopup: isAiScoreNotificationLink(link)
     });
+    if (isAiScoreNotificationLink(link)) {
+      showAiScoreNotificationTransitionOverlay(link);
+    }
     openDebateIframeModal(link);
     return;
   }
@@ -14898,8 +14944,14 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
       updateIndexRowContextOpenState(row);
       // Libère immédiatement la hauteur fixe : le row suit la transition CSS de la carte (max-height 0.34s)
       row.style.height = '';
-      // Recalcule la hauteur exacte après la fin des transitions CSS
-      setTimeout(() => syncIndexThemeRowHeight(row), 370);
+      // Recalcule hauteur ET position des flèches après la fin des transitions CSS :
+      // updateCarouselCardHighlight (plus haut) a pu mesurer le rail encore déplié
+      // et corrompre --theme-carousel-button-top (flèches hors du rail).
+      setTimeout(() => {
+        syncIndexThemeRowHeight(row);
+        ensureCarouselHints(row);
+        updateIndexThemeRowSwipeButtons(row);
+      }, 370);
     }
   }
 
@@ -16400,6 +16452,13 @@ function jumpToStartOfCarousel(button) {
 function ensureCarouselHints(row) {
   const section = row.closest('.theme-row-section');
   if (!section) return { next: null, prev: null };
+  // Rail déplié (contexte de carte ouvert) : ne pas re-mesurer — la hauteur transitoire
+  // corromprait --theme-carousel-button-top et éjecterait les flèches hors du rail.
+  const existingNext = section.querySelector('.theme-carousel-next-hint');
+  const existingPrev = section.querySelector('.theme-carousel-prev-hint');
+  if (existingNext && existingPrev && row.querySelector('.debate-card-context-extra.is-open')) {
+    return { next: existingNext, prev: existingPrev };
+  }
   const title = section.querySelector('.theme-row-title');
   const titleH = title ? title.offsetHeight : 0;
   const rowH = row.offsetHeight;
@@ -22581,6 +22640,583 @@ async function loadDebate(id) {
   await loadDebateFullData(id);
 }
 
+const AGON_WEAK_IDEA_PUBLIC_COMMENTS = `
+Cette idée entre dans l'arène comme un champion et finit balayée comme une poussière.
+On dirait un argument écrit avec un casque trop grand et une épée en plastique.
+Cette idée ne perd pas le combat : elle se ridiculise avant même le salut.
+Cette idée n'a pas besoin d'adversaire, elle s'effondre toute seule.
+Le raisonnement est tellement maigre qu'un courant d'air le met à terre.
+Ça veut jouer au gladiateur, mais ça tremble dès qu'on sort un fait.
+Cette proposition a le panache d'une charge héroïque et la solidité d'un château de sable.
+L'idée bombe le torse, mais il n'y a rien derrière l'armure.
+C'est une attaque frontale sans lame, sans bouclier et sans cerveau tactique.
+L'idée arrive en criant victoire et repart en demandant où est la sortie.
+On dirait une idée qui a confondu bruit et puissance.
+Le propos parade, mais le raisonnement est déjà à genoux.
+C'est une idée qui se donne des airs de combat, alors qu'elle ne tient pas debout.
+Un seul contre-exemple suffit à lui casser les dents.
+Cette idée fonce comme un taureau et finit contre le mur des faits.
+L'idée croit frapper fort ; en réalité, elle agite les bras dans le vide.
+C'est moins un argument qu'un accident de raisonnement.
+Cette idée mérite une civière argumentative, pas une tribune.
+Cette idée ne sort pas vaincue : elle sort disséquée.
+L'arène n'a même pas eu besoin de se salir les mains.
+Cette proposition est un sacrifice offert aux contradicteurs.
+Le fond est creux, la forme gesticule, le résultat saigne.
+Cette idée veut trancher le débat, mais se coupe elle-même avec sa propre confusion.
+C'est une épée rouillée brandie comme un sceptre.
+On sent l'intention de frapper, mais pas la présence d'un argument.
+C'est une charge sans stratégie, suivie d'un effondrement très prévisible.
+L'idée tient jusqu'au moment tragique où quelqu'un la lit vraiment.
+Cette idée se présente comme une vérité ; elle repart comme une hypothèse blessée.
+Cette idée ne manque pas de courage, seulement de preuves, de logique et de colonne vertébrale.
+Le propos veut dominer, mais il rampe.
+C'est une idée qui fait beaucoup de bruit pour masquer son absence de muscles.
+Cette idée n'est pas fausse avec grandeur : elle est faible avec assurance.
+Cette idée a la grâce d'une chute au ralenti.
+L'idée se croit offensive, mais elle offre son flanc à chaque phrase.
+Le raisonnement a été envoyé au combat sans entraînement.
+C'est une armure vide qui fait du bruit en tombant.
+Cette idée donne envie de créer une infirmerie pour idées mal préparées.
+Aucune précision, aucune preuve, aucune tenue : défaite totale.
+Cette contribution confond audace et imprudence intellectuelle.
+Cette idée ne provoque pas le débat, elle provoque la pitié argumentative.
+L'idée veut être brutale ; elle est surtout fragile.
+On dirait une pensée lancée trop tôt, avant cuisson.
+L'idée entre dans le sable avec arrogance et en ressort en miettes.
+Cette idée n'a pas perdu contre une meilleure idée : elle a perdu contre elle-même.
+Cette idée est un duel où l'adversaire n'a même pas besoin de dégainer.
+Le propos essaie d'intimider, mais il n'a ni faits ni nerfs.
+C'est une phrase qui porte une armure, mais aucun soldat dedans.
+Cette idée n'est pas dangereuse, elle est juste exposée.
+Cette idée a été exécutée par sa propre absence de logique.
+Trop vague pour toucher, trop faible pour durer.
+L'idée remue beaucoup, mais ne pense pas assez.
+C'est une attaque en carton sous une pluie de faits.
+Cette idée veut faire tomber l'adversaire, mais trébuche sur sa première prémisse.
+Le débat commence, et cette idée est déjà au sol.
+Une belle démonstration de comment ne pas entrer dans l'arène.
+Cette idée ressemble à une provocation, mais sans la puissance derrière.
+Le raisonnement est si troué qu'on voit le vide à travers.
+Cette idée ne mérite pas un contre-argument, elle mérite une autopsie.
+L'idée a l'assurance d'un vainqueur et la structure d'une ruine.
+Le choc avec la réalité est immédiat, violent et définitif.
+Cette idée fait semblant d'être une pensée forte ; c'est juste une faiblesse bien emballée.
+L'idée tente un coup spectaculaire et se fracture sur le bon sens.
+Cette idée veut imposer sa loi, mais n'a même pas de fondations.
+Le raisonnement est tellement bancal qu'il tombe avant d'être attaqué.
+Cette idée n'est pas seulement faible : elle est dangereusement fière de l'être.
+L'idée arrive avec des certitudes, repart avec des fractures.
+On dirait un argument fabriqué dans l'urgence, avec les restes d'une intuition.
+Cette idée a la violence du ton, pas la force du fond.
+Le propos lève le glaive, puis découvre qu'il est en mousse.
+Cette contribution ne combat pas : elle se débat.
+Cette idée n'est pas vaincue par l'adversaire, mais par la simple exigence de clarté.
+Une idée si fragile qu'un regard critique suffit à la fissurer.
+L'idée joue au prédateur, mais c'est elle qui finit dévorée.
+Le raisonnement est un champ de ruines avant même l'assaut.
+Trop peu de faits, trop peu de logique, trop de confiance.
+Cette idée n'a pas été réfutée : elle s'est auto-détruite.
+C'est une démonstration à genoux qui prétend marcher droit.
+Le propos frappe au hasard et appelle ça une stratégie.
+Une idée pareille ne gagne pas un débat, elle sert d'échauffement.
+Cette idée ressemble à une conclusion sans chemin pour y arriver.
+Le verdict est cruel mais simple : presque rien ne tient.
+Cette idée aurait dû rester dans les vestiaires.
+L'idée entre dans l'arène en héros, sort en exemple pédagogique d'échec.
+Le raisonnement n'a pas de dents, seulement du bruit.
+C'est une flèche lancée sans arc.
+On dirait un brouillon qui a pris confiance trop vite.
+Cette idée ne tient que tant qu'on ne la questionne pas.
+Le texte avance comme un soldat ivre : beaucoup d'élan, aucune direction.
+Cette proposition a la profondeur d'une flaque et l'arrogance d'un empire.
+L'idée n'a pas d'arguments, seulement des gestes menaçants.
+Le fond est si léger qu'il flotte hors du débat.
+Cette idée ne résiste pas à l'analyse : elle se dissout.
+L'arène a rendu son jugement : trop faible pour survivre.
+Cette contribution est une chute déguisée en attaque.
+Cette idée a été construite sur du sable, puis surprise par la marée.
+L'idée croit être tranchante ; elle est surtout émoussée.
+Un coup d'oeil critique, et tout s'écroule.
+L'idée confond posture et pensée.
+Le raisonnement tombe en morceaux dès qu'on le soulève.
+Cette idée avance sans preuve, sans nuance, sans plan : carnage annoncé.
+Cette proposition est une cible immobile pour n'importe quel contradicteur.
+Cette idée a le style d'un duel, mais le contenu d'une débandade.
+C'est une armée de mots sans général.
+Le combat est terminé avant le premier coup sérieux.
+Cette idée a voulu entrer dans l'histoire ; elle entre surtout dans le bêtisier.
+L'idée se croit brutale, mais elle est juste bruyante.
+Le propos tente de mordre, mais n'a plus de dents.
+Cette contribution s'effondre avec une élégance presque comique.
+La seule chose solide ici, c'est la défaite.
+Cette idée ne manque pas d'ambition ; elle manque de tout ce qui permettrait de la porter.
+Cette idée est une provocation sans carburant.
+Le verdict tombe : trop fragile, trop flou, trop facile à abattre.
+`.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+
+const AGON_MEDIUM_IDEA_PUBLIC_COMMENTS = `
+Cette idée entre dans l'arène avec une vraie lame. L'idée ne décapite pas le débat, mais laisse une belle entaille.
+Bon coup porté : le raisonnement touche juste, même s'il manque encore le geste final.
+L'idée tient bien son bouclier. Cette idée encaisse, avance, et peut faire mal.
+Ce n'est pas encore un champion, mais ce n'est clairement pas une victime pour les lions.
+La proposition a du nerf, de la tenue et quelques traces de sang sur la lame.
+Cette idée ne domine pas toute l'arène, mais elle gagne nettement son duel.
+Le raisonnement est armé, plutôt solide, et assez dangereux pour inquiéter l'adversaire.
+Cette idée ne crie pas seulement au combat : elle sait aussi frapper.
+Bonne attaque. Pas parfaite, mais suffisamment nette pour faire reculer l'autre camp.
+Cette contribution a de la carrure. Il manque encore un peu de précision pour devenir vraiment redoutable.
+L'idée avance avec discipline : pas de triomphe impérial, mais une vraie victoire de terrain.
+Cette idée ne terrasse pas le débat, mais elle lui met un genou dans le sable.
+Bon équilibre entre force et clarté. La lame coupe, même si elle pourrait être mieux affûtée.
+Cette contribution mérite de rester debout dans l'arène.
+L'idée frappe assez juste pour qu'on arrête de sourire.
+L'idée est solide, combative, et nettement mieux équipée que la moyenne.
+Ce n'est pas une exécution, mais c'est une belle blessure argumentative.
+Cette idée ne fait pas encore trembler l'empire, mais elle gagne du territoire.
+Le raisonnement tient bon sous les coups. Il manque seulement un peu plus de preuve pour finir le combat.
+Cette idée sait où elle va, et elle n'y va pas les mains vides.
+L'idée a du tranchant, même si la lame accroche encore un peu.
+Bonne tenue dans l'arène : cette idée encaisse les objections sans s'effondrer.
+L'idée n'est pas invincible, mais elle oblige l'adversaire à se battre sérieusement.
+Cette contribution marque des points avec méthode, pas seulement avec du bruit.
+Le propos est suffisamment fort pour laisser une trace dans le sable.
+Cette idée a compris qu'un combat se gagne avec des preuves, pas seulement avec des cris.
+L'idée ne tranche pas tout, mais elle ouvre une vraie brèche.
+Bon combattant : pas encore maître d'armes, mais déjà dangereux.
+Le raisonnement tient debout, armé, et regarde l'adversaire en face.
+Cette idée a le mérite rare de ne pas se faire dévorer dès la première objection.
+Cette proposition est bien construite : pas royale, mais clairement respectable.
+Cette idée avance avec une armure correcte et une vraie intention stratégique.
+Bon impact. On sent que l'idée a été préparée avant d'entrer dans l'arène.
+Cette contribution laisse l'adversaire avec quelques bleus logiques.
+Pas de massacre, mais une victoire nette aux points.
+L'idée gagne son combat, même si elle ne soulève pas encore la foule.
+Cette idée a assez de force pour survivre à une vraie contradiction.
+Le raisonnement n'est pas parfait, mais il sait se défendre.
+Cette idée est dangereuse parce qu'elle ne repose pas seulement sur l'instinct.
+L'idée donne un coup propre, puis un autre un peu moins précis, mais l'ensemble tient.
+Bon niveau : ça cogne, ça pense, ça tient.
+Cette idée ne se contente pas d'exister dans l'arène : elle impose un début de respect.
+L'idée a une colonne vertébrale. Il lui manque encore quelques muscles.
+Cette contribution n'est pas brillante de bout en bout, mais elle a du poids.
+Cette idée mérite une place dans le combat, pas encore sur le trône.
+Le propos a du sang-froid. Il manque seulement la frappe décisive.
+L'idée arrive avec une stratégie réelle, même si quelques angles restent exposés.
+Cette contribution fait reculer les arguments faibles et oblige les bons à sortir leur bouclier.
+Cette proposition ne gagne pas tout, mais elle ne perd pas grand-chose.
+L'idée a le goût du combat et une base assez solide pour ne pas finir en poussière.
+On sent la lame sous le tissu : ce n'est pas décoratif.
+Bon argument : il entaille, il tient, il pourrait encore mieux viser.
+Cette idée n'écrase pas l'arène, mais elle y laisse son empreinte.
+Cette idée passe le premier choc, puis le deuxième. C'est déjà sérieux.
+L'idée a de quoi faire réfléchir l'adversaire avant de répondre.
+Le raisonnement est assez clair pour frapper juste, assez solide pour ne pas tomber.
+C'est une idée robuste, mais pas encore implacable.
+Cette contribution gagne du terrain sans fanfare, mais avec efficacité.
+Bon combattant de milieu-haut d'arène : technique correcte, impact réel.
+Cette idée fait mieux que survivre : elle commence à imposer son rythme.
+L'idée mérite une cicatrice honorable sur le tableau des scores.
+Pas encore une légende, mais sûrement pas un figurant.
+Cette contribution se bat proprement, avec quelques coups vraiment bien placés.
+Cette contribution n'a pas besoin de hurler : elle a déjà des arguments.
+Cette idée n'est pas parfaite, mais elle a assez de chair pour ne pas finir en squelette.
+Bon niveau de solidité : les failles existent, mais elles ne ruinent pas le combat.
+Cette idée avance avec une épée affûtée, même si le bouclier reste un peu léger.
+L'idée ne tue pas le débat, mais elle le blesse sérieusement.
+Cette idée oblige l'adversaire à répondre, et c'est déjà une victoire.
+Le raisonnement tient son rang dans l'arène.
+Cette proposition n'a pas tout prouvé, mais elle a prouvé qu'elle comptait.
+Cette idée sort du duel avec du sang sur la lame, pas seulement sur le visage.
+Bonne idée : imparfaite, mais suffisamment robuste pour peser.
+Cette idée n'a pas encore la précision du bourreau, mais elle sait porter un coup.
+L'idée gagne au mérite : force correcte, structure claire, impact réel.
+Cette contribution fait le travail avec assez d'élégance pour éviter la mêlée confuse.
+Le propos est armé, stable, et plutôt bien orienté.
+Cette idée ne fuit pas devant les faits : elle s'en sert plutôt bien.
+Cette idée a des angles morts, mais aussi de vraies zones de puissance.
+Bon combat. Il manque seulement un coup final pour faire taire l'arène.
+Cette idée ne prend pas le pouvoir, mais elle gagne l'attention.
+Cette contribution est assez forte pour mériter un adversaire sérieux.
+L'idée avance dans le sable avec assurance, sans trop glisser.
+Le raisonnement est bien sanglé dans son armure.
+Cette idée ne fait pas couler un fleuve de sang, mais elle laisse une marque.
+Bonne lame, bon bras, pas encore le geste parfait.
+Cette idée peut tenir face à une objection honnête.
+Cette idée n'a pas besoin de beaucoup d'effets : elle tient par sa structure.
+Cette contribution prend des risques, mais elle ne les prend pas n'importe comment.
+On voit une vraie volonté de convaincre, avec une base solide derrière.
+L'idée n'est pas impériale, mais elle est clairement combattante.
+Cette idée mérite mieux qu'un simple applaudissement poli.
+Le débat ne tombe pas, mais il chancelle un peu.
+Cette proposition a assez de densité pour ralentir les attaques adverses.
+Cette idée est perfectible, mais déjà dangereuse.
+Bonne passe d'armes : quelques imprécisions, mais un vrai impact.
+Cette idée ne massacre pas l'opposition, mais elle lui complique sérieusement la vie.
+Le raisonnement a du souffle, même s'il n'a pas encore la puissance d'un champion.
+Cette idée tient debout, avance, frappe, et garde une partie de son sang-froid.
+Cette idée sort de l'arène avec une victoire honorable et quelques blessures utiles.
+Cette idée peut être améliorée, mais elle n'a pas honte de son combat.
+On n'est pas dans le génie, mais clairement dans le solide.
+Cette idée montre qu'une idée peut être imparfaite sans être faible.
+Bon candidat pour le haut du classement, à condition d'affûter encore la lame.
+Cette idée laisse derrière elle plus qu'une trace : une vraie coupure dans le débat.
+Cette idée est bien née, bien armée, mais pas encore parfaitement entraînée.
+Cette idée gagne sans écraser, ce qui reste une victoire.
+Le fond est solide, la frappe est correcte, la finition peut progresser.
+Cette idée mérite de rester dans l'arène pour le prochain round.
+Le public ne se lève pas encore, mais il regarde avec attention.
+Cette contribution n'est pas une légende, mais elle commence à sentir le fer.
+Cette idée résiste mieux que beaucoup d'autres sous la pression.
+L'idée a suffisamment de force pour ne pas être balayée.
+Cette idée ne règne pas sur l'arène, mais elle y a gagné sa place.
+Bon argument, bonne tenue, quelques blessures évitables.
+Cette idée frappe juste assez fort pour laisser l'adversaire inquiet.
+Ce n'est pas encore le glaive final, mais c'est déjà une vraie arme.
+L'idée n'a pas tout verrouillé, mais elle a construit quelque chose qui tient.
+Cette idée avance comme un combattant sérieux : pas invincible, mais préparé.
+Bon sang-froid, bonne direction, impact réel.
+Cette idée manque encore d'un peu de précision, mais elle a déjà du mordant.
+Cette idée ne se contente pas de survivre : elle menace.
+Cette idée remporte le duel local, même si la guerre reste ouverte.
+Le raisonnement ne fait pas trembler les murs, mais il tient les portes.
+Cette idée est assez robuste pour résister à la mêlée.
+On sent qu'il y a du fer dans cette idée.
+Cette idée peut encore être mieux forgée, mais la matière est bonne.
+Une idée qui ne gagne pas par KO, mais aux points avec mérite.
+Cette idée fait couler un peu de sang argumentatif, et c'est déjà bien.
+Ce n'est pas l'idée du siècle, mais cette idée sait se battre.
+`.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+
+const AGON_GOOD_IDEA_PUBLIC_COMMENTS = `
+Cette idée entre dans l'arène avec une vraie lame. Sans décapiter le débat, cette contribution laisse une belle entaille.
+Bon coup porté : le raisonnement touche juste, même s'il manque encore le geste final.
+L'idée tient bien son bouclier. Cette contribution encaisse, avance, et peut faire mal.
+Ce n'est pas encore une idée championne, mais ce n'est clairement pas une victime pour les lions.
+La proposition a du nerf, de la tenue et quelques traces de sang sur la lame.
+Cette idée ne domine pas toute l'arène, mais gagne nettement son duel.
+Le raisonnement est armé, plutôt solide, et assez dangereux pour inquiéter l'adversaire.
+Cette idée ne crie pas seulement au combat : elle sait aussi frapper.
+Bonne attaque. Pas parfaite, mais suffisamment nette pour faire reculer l'autre camp.
+Cette contribution a de la carrure. Il manque encore un peu de précision pour devenir vraiment redoutable.
+L'idée avance avec discipline : pas de triomphe impérial, mais une vraie victoire de terrain.
+Cette idée ne terrasse pas le débat, mais lui met un genou dans le sable.
+Bon équilibre entre force et clarté. La lame coupe, même si le fil pourrait être mieux affûté.
+Cette contribution mérite de rester debout dans l'arène.
+L'idée frappe assez juste pour qu'on arrête de sourire.
+L'idée est solide, combative, et nettement mieux équipée que la moyenne.
+Ce n'est pas une exécution, mais c'est une belle blessure argumentative.
+Cette idée ne fait pas encore trembler l'empire, mais gagne du territoire.
+Le raisonnement tient bon sous les coups. Il manque seulement un peu plus de preuves pour finir le combat.
+Cette idée sait où aller, et n'avance pas les mains vides.
+L'idée a du tranchant, même si la lame accroche encore un peu.
+Bonne tenue dans l'arène : cette idée encaisse les objections sans s'effondrer.
+L'idée n'est pas invincible, mais oblige l'adversaire à se battre sérieusement.
+Cette contribution marque des points avec méthode, pas seulement avec du bruit.
+Le propos est suffisamment fort pour laisser une trace dans le sable.
+Cette idée a compris qu'un combat se gagne avec des preuves, pas seulement avec des cris.
+L'idée ne tranche pas tout, mais ouvre une vraie brèche.
+Bon combattant : pas encore maître d'armes, mais déjà dangereux.
+Le raisonnement tient debout, armé, et regarde l'adversaire en face.
+Cette idée a le mérite rare de ne pas se faire dévorer dès la première objection.
+Cette proposition est bien construite : pas royale, mais clairement respectable.
+Cette idée avance avec une armure correcte et une vraie intention stratégique.
+Bon impact. On sent que l'idée a été préparée avant d'entrer dans l'arène.
+Cette contribution laisse l'adversaire avec quelques bleus logiques.
+Pas de massacre, mais une victoire nette aux points.
+L'idée gagne son combat, même sans soulever encore la foule.
+Cette idée a assez de force pour survivre à une vraie contradiction.
+Le raisonnement n'est pas parfait, mais il sait se défendre.
+Cette idée est dangereuse parce qu'elle ne repose pas seulement sur l'instinct.
+L'idée donne un coup propre, puis un autre un peu moins précis, mais l'ensemble tient.
+Bon niveau : ça cogne, ça pense, ça tient.
+Cette idée ne se contente pas d'exister dans l'arène : elle impose un début de respect.
+L'idée a une colonne vertébrale. Il lui manque encore quelques muscles.
+Cette contribution n'est pas brillante de bout en bout, mais elle a du poids.
+Cette idée mérite une place dans le combat, pas encore sur le trône.
+Le propos a du sang-froid. Il manque seulement la frappe décisive.
+L'idée arrive avec une stratégie réelle, même si quelques angles restent exposés.
+Cette contribution fait reculer les arguments faibles et oblige les bons à sortir leur bouclier.
+Cette proposition ne gagne pas tout, mais ne perd pas grand-chose.
+L'idée a le goût du combat et une base assez solide pour ne pas finir en poussière.
+On sent la lame sous le tissu : ce n'est pas décoratif.
+Bon argument : il entaille, tient, et pourrait encore mieux viser.
+Cette idée n'écrase pas l'arène, mais y laisse son empreinte.
+Cette idée passe le premier choc, puis le deuxième. C'est déjà sérieux.
+L'idée a de quoi faire réfléchir l'adversaire avant de répondre.
+Le raisonnement est assez clair pour frapper juste, assez solide pour ne pas tomber.
+C'est une idée robuste, mais pas encore implacable.
+Cette contribution gagne du terrain sans fanfare, mais avec efficacité.
+Bon combattant de milieu-haut d'arène : technique correcte, impact réel.
+Cette idée fait mieux que survivre : elle commence à imposer son rythme.
+L'idée mérite une cicatrice honorable sur le tableau des scores.
+Pas encore une légende, mais sûrement pas un figurant.
+Cette contribution se bat proprement, avec quelques coups vraiment bien placés.
+Cette contribution n'a pas besoin de hurler : elle a déjà des arguments.
+Cette idée n'est pas parfaite, mais possède assez de chair pour ne pas finir en squelette.
+Bon niveau de solidité : les failles existent, mais ne ruinent pas le combat.
+Cette idée avance avec une épée affûtée, même si le bouclier reste un peu léger.
+L'idée ne tue pas le débat, mais le blesse sérieusement.
+Cette idée oblige l'adversaire à répondre, et c'est déjà une victoire.
+Le raisonnement tient son rang dans l'arène.
+Cette proposition n'a pas tout prouvé, mais a prouvé qu'elle comptait.
+Cette idée sort du duel avec du sang sur la lame, pas seulement sur le visage.
+Bonne idée : imparfaite, mais suffisamment robuste pour peser.
+Cette idée n'a pas encore la précision du bourreau, mais sait porter un coup.
+L'idée gagne au mérite : force correcte, structure claire, impact réel.
+Cette contribution fait le travail avec assez d'élégance pour éviter la mêlée confuse.
+Le propos est armé, stable, et plutôt bien orienté.
+Cette idée ne fuit pas devant les faits : elle s'en sert plutôt bien.
+Cette idée a des angles morts, mais aussi de vraies zones de puissance.
+Bon combat. Il manque seulement un coup final pour faire taire l'arène.
+Cette idée ne prend pas le pouvoir, mais gagne l'attention.
+Cette contribution est assez forte pour mériter un adversaire sérieux.
+L'idée avance dans le sable avec assurance, sans trop glisser.
+Le raisonnement est bien sanglé dans son armure.
+Cette idée ne fait pas couler un fleuve de sang, mais laisse une marque.
+Bonne lame, bon bras, pas encore le geste parfait.
+Cette idée peut tenir face à une objection honnête.
+Cette idée n'a pas besoin de beaucoup d'effets : elle tient par sa structure.
+Cette contribution prend des risques, mais pas n'importe comment.
+On voit une vraie volonté de convaincre, avec une base solide derrière.
+L'idée n'est pas impériale, mais clairement combattante.
+Cette idée mérite mieux qu'un simple applaudissement poli.
+Le débat ne tombe pas, mais chancelle un peu.
+Cette proposition a assez de densité pour ralentir les attaques adverses.
+Cette idée est perfectible, mais déjà dangereuse.
+Bonne passe d'armes : quelques imprécisions, mais un vrai impact.
+Cette idée ne massacre pas l'opposition, mais lui complique sérieusement la vie.
+Le raisonnement a du souffle, même sans avoir encore la puissance d'un champion.
+Cette idée tient debout, avance, frappe, et garde une partie de son sang-froid.
+Cette idée sort de l'arène avec une victoire honorable et quelques blessures utiles.
+Cette idée peut être améliorée, mais n'a pas honte de son combat.
+On n'est pas dans le génie, mais clairement dans le solide.
+Cette idée montre qu'une contribution peut être imparfaite sans être faible.
+Bon candidat pour le haut du classement, à condition d'affûter encore la lame.
+Cette idée laisse derrière elle plus qu'une trace : une vraie coupure dans le débat.
+Cette idée est bien née, bien armée, mais pas encore parfaitement entraînée.
+Cette idée gagne sans écraser, ce qui reste une victoire.
+Le fond est solide, la frappe est correcte, la finition peut progresser.
+Cette idée mérite de rester dans l'arène pour le prochain round.
+Le public ne se lève pas encore, mais regarde avec attention.
+Cette contribution n'est pas une légende, mais commence à sentir le fer.
+Cette idée résiste mieux que beaucoup d'autres sous la pression.
+L'idée a suffisamment de force pour ne pas être balayée.
+Cette idée ne règne pas sur l'arène, mais y a gagné sa place.
+Bon argument, bonne tenue, quelques blessures évitables.
+Cette idée frappe juste assez fort pour laisser l'adversaire inquiet.
+Ce n'est pas encore le glaive final, mais c'est déjà une vraie arme.
+L'idée n'a pas tout verrouillé, mais a construit quelque chose qui tient.
+Cette idée avance comme un combattant sérieux : pas invincible, mais préparé.
+Bon sang-froid, bonne direction, impact réel.
+Cette idée manque encore d'un peu de précision, mais possède déjà du mordant.
+Cette idée ne se contente pas de survivre : elle menace.
+Cette idée remporte le duel local, même si la guerre reste ouverte.
+Le raisonnement ne fait pas trembler les murs, mais tient les portes.
+Cette idée est assez robuste pour résister à la mêlée.
+On sent qu'il y a du fer dans cette idée.
+Cette idée peut encore être mieux forgée, mais la matière est bonne.
+Une idée qui ne gagne pas par KO, mais aux points avec mérite.
+Cette idée fait couler un peu de sang argumentatif, et c'est déjà bien.
+Ce n'est pas l'idée du siècle, mais cette idée sait se battre.
+`.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+
+const AGON_EXCELLENT_IDEA_PUBLIC_COMMENTS = `
+Cette idée ne gagne pas le débat : elle traverse l'arène en hurlant et laisse les objections en petits morceaux dans le sable.
+Cette contribution arrive avec une lame trop grande, trop brillante, et manifestement aucune envie de faire des prisonniers.
+L'idée éclate les contre-arguments comme des amphores vides contre un mur.
+C'est un carnage argumentatif : propre dans la logique, sale sur le sable.
+Cette idée ne répond pas aux objections, elle les attrape par le col et les jette aux lions.
+Le raisonnement frappe si vite que les adversaires n'ont même pas le temps de mal comprendre.
+Cette contribution transforme le débat en scène de crime intellectuelle.
+L'idée arrive, défonce la porte, renverse la table et repart avec le trophée.
+C'est une boucherie rhétorique, mais avec une excellente structure.
+Cette idée fait saigner les arguments mous par simple proximité.
+Le propos ne coupe pas le débat en deux : il le hache menu.
+Cette contribution ne laisse pas d'adversaires, seulement des traces au sol et une odeur de défaite.
+L'idée mord, arrache, crache les objections et demande la suivante.
+C'est du très haut niveau : même la mauvaise foi cherche un abri.
+Cette idée explose l'opposition avec la délicatesse d'un bélier lancé depuis une falaise.
+Le raisonnement ne discute pas, il charge, percute, broie et continue sa route.
+Cette contribution est un gladiateur sous caféine avec un doctorat en massacre logique.
+L'idée ne laisse pas une entaille, elle ouvre une tranchée.
+C'est une frappe tellement violente que le silence après ressemble à une évacuation médicale.
+Cette idée transforme les contre-arguments en confettis rouges.
+Le propos est nerveux, précis, dangereux : tout ce qu'on aime dans une arène mal surveillée.
+Cette contribution arrive comme une meute, pas comme une phrase.
+L'idée ne domine pas le débat, elle le plaque au sol et lui fait signer l'aveu.
+C'est tellement brutal que même les spectateurs demandent une pause hydratation.
+Cette idée fait passer les adversaires de "je conteste" à "je retire ma question".
+Le raisonnement a la douceur d'une enclume et l'efficacité d'une guillotine argumentative.
+Cette contribution découpe les faiblesses comme si elles lui devaient de l'argent.
+L'idée éclate les objections avec un calme qui rend la scène encore plus inquiétante.
+C'est une victoire nerveuse, sale, rapide, avec des morceaux de mauvaise foi sur les murs.
+Cette idée ne laisse pas de débat ouvert : elle ferme boutique, baisse le rideau et cloue la porte.
+Le propos est si tranchant qu'il faudrait le ranger hors de portée des arguments fragiles.
+Cette contribution ne fait pas débat : elle fait disparition.
+L'idée a le regard fixe du combattant qui a déjà choisi où frapper.
+C'est une charge sanguinaire contre les approximations.
+Cette idée démolit les contre-arguments comme des tabourets dans une bagarre de taverne.
+Le raisonnement avance couvert de preuves et visiblement ravi du carnage.
+Cette contribution met les arguments adverses en pièces détachées, sans notice de remontage.
+L'idée ne frappe pas fort : elle frappe trop fort, puis prétend que c'était nécessaire.
+C'est du débat de haute intensité : casque obligatoire, dignité facultative.
+Cette idée a transformé l'arène en abattoir pour objections faibles.
+Le propos fonce comme un taureau armé d'une bibliographie.
+Cette contribution ne tue pas le suspense : elle l'égorge dès l'introduction.
+L'idée est tellement efficace qu'on entend les contradictions couiner dans les gradins.
+C'est un massacre élégant, ce qui est probablement pire.
+Cette idée ne laisse aux adversaires qu'une pelle, un silence et un profond regret.
+Le raisonnement coupe net, puis recoupe pour être sûr.
+Cette contribution fait du contre-argument un sport dangereux.
+L'idée a le sang-froid d'un bourreau et l'énergie d'un chien de guerre.
+C'est une arène, pas une garderie : cette idée l'a très bien compris.
+Cette idée arrache le débat de ses gonds et le traîne au centre du sable.
+Le propos est si violent dans sa clarté qu'il devient presque impoli.
+Cette contribution piétine les objections faibles avec une joie peu réglementaire.
+L'idée n'est pas seulement excellente : elle a un problème de gestion de la violence argumentative.
+C'est une rafale logique. Les arguments adverses tombent avant de savoir d'où ça vient.
+Cette idée ne blesse pas l'opposition, elle lui laisse une facture de reconstruction.
+Le raisonnement avance comme une machine de siège conduite par quelqu'un de très contrarié.
+Cette contribution fait exploser le camp adverse en petits "oui mais" paniqués.
+L'idée a tellement de mordant qu'elle devrait porter une muselière rhétorique.
+C'est violent, drôle, précis : une humiliation avec service après-vente.
+Cette idée prend les objections une par une et les transforme en décor.
+Le propos a la nervosité d'un duel au couteau et la précision d'un scalpel.
+Cette contribution n'a pas besoin de forcer : les arguments faibles se couchent d'eux-mêmes par instinct de survie.
+L'idée traverse le débat comme une hache dans une porte vermoulue.
+C'est une excellente idée avec des tendances de catapulte.
+Cette idée ne convainc pas : elle menace intellectuellement jusqu'à reddition.
+Le raisonnement broie les failles, puis repasse dessus pour lisser le terrain.
+Cette contribution a laissé l'opposition en miettes, mais des miettes bien notées.
+L'idée est tellement sanguinaire que même les virgules semblent armées.
+C'est une démonstration qui sent le fer chaud et la peur des objections.
+Cette idée déclenche une alerte rouge dans le camp adverse.
+Le propos ne gagne pas proprement : il gagne avec panache, poussière et dégâts matériels.
+Cette contribution arrache les masques, les boucliers et deux ou trois illusions au passage.
+L'idée attaque les faiblesses comme si elles avaient insulté sa famille.
+C'est une boucherie gratuite, mais pédagogiquement utile.
+Cette idée ne fait pas reculer l'adversaire : elle le fait repenser ses choix de vie argumentative.
+Le raisonnement est trop armé pour une simple discussion.
+Cette contribution ne laisse pas le débat respirer : elle l'étrangle avec des preuves.
+L'idée tombe sur les objections comme une grille de herse.
+C'est une victoire tellement brutale qu'on hésite entre applaudir et appeler les secours.
+Cette idée met l'opposition en miettes, puis range les miettes par ordre alphabétique.
+Le propos frappe dans les angles morts avec une mauvaise joie très efficace.
+Cette contribution est une tornade de sable, de fer et de très bons arguments.
+L'idée ne laisse pas une trace : elle laisse un cratère.
+C'est du carnage premium, avec logique renforcée et finition sanglante.
+Cette idée transforme le débat en champ de bataille et ressort avec les chaussures propres.
+Le raisonnement a la finesse d'un marteau de guerre, mais un marteau de guerre très cultivé.
+Cette contribution ne débat pas, elle purge l'arène.
+L'idée plante son drapeau au milieu des ruines adverses.
+C'est tellement violent que même les objections non formulées ont préféré rester chez elles.
+Cette idée écrase les arguments mous comme des raisins dans une sandale de gladiateur.
+Le propos avance vite, frappe sec, laisse peu de survivants syntaxiques.
+Cette contribution a transformé les "oui mais" en petits bruits de panique.
+L'idée est une machine à transformer le flou en débris.
+C'est une victoire avec éclats, sang symbolique et petits cris de mauvaise foi.
+Cette idée ne laisse pas l'adversaire tomber : elle l'accompagne brutalement jusqu'au sol.
+Le raisonnement est si nerveux qu'il semble taper du pied avant même la première objection.
+Cette contribution fait passer le débat de "discussion" à "évacuation".
+L'idée est excellente, mais clairement trop heureuse de faire mal.
+C'est une lame qui rit.
+Cette idée donne l'impression que les objections ont signé une décharge avant d'entrer.
+Le propos a une violence de précision : pas de gestes inutiles, seulement des dégâts.
+Cette contribution ne gagne pas le combat, elle annule le camp adverse pour raisons sanitaires.
+L'idée mord la gorge du sujet et ne lâche qu'après validation du jury.
+C'est un carnage logique avec option feu d'artifice.
+Cette idée passe sur les objections comme une roue de char sur des biscuits secs.
+Le raisonnement est brutal, rapide, et extrêmement peu compatissant envers les idées faibles.
+Cette contribution transforme l'arène en atelier de découpe conceptuelle.
+L'idée fait exploser les arguments adverses comme des tonneaux dans une forge.
+C'est nerveux, méchant, splendide : le débat ressort avec des bleus.
+Cette idée n'a pas trouvé d'adversaire, seulement des obstacles temporaires.
+Le propos n'argumente pas, il percute.
+Cette contribution est tellement dominante que l'opposition semble avoir été recrutée pour servir d'exemple.
+L'idée arrive en furie, mais une furie bien documentée.
+C'est un bain de sang rhétorique, mais très bien organisé.
+Cette idée a la tendresse d'une porte de prison et la précision d'un maître d'armes.
+Le raisonnement chasse les faiblesses jusque dans les coins.
+Cette contribution ne laisse pas l'adversaire sans réponse : elle le laisse sans meuble intérieur.
+L'idée transforme les contre-arguments en poussière, puis éternue dessus.
+C'est du grand Agôn : la lame, le sable, le public, et quelqu'un qui regrette d'avoir parlé trop vite.
+Cette idée ne fait pas seulement gagner son camp : elle enterre les objections avec les honneurs militaires.
+Le propos a tellement de force qu'on devrait le lire avec un casque.
+Cette contribution découpe l'opposition en rondelles de mauvaise foi.
+L'idée ne gagne pas par KO : elle gagne par disparition progressive des survivants.
+C'est une excellente idée, donc naturellement une petite catastrophe pour tout ce qui passait en face.
+Cette idée frappe le débat au plexus et lui explique ensuite pourquoi c'était logique.
+Le raisonnement laisse derrière lui un alignement impeccable de contradictions neutralisées.
+Cette contribution a l'élégance d'un duel et la violence d'une mutinerie.
+L'idée transforme l'arène en zone sinistrée pour arguments faibles.
+C'est drôle parce que c'est trop net, trop fort, trop cruel pour les objections.
+Cette idée est une tempête de sable avec une méthode scientifique.
+Le propos pulvérise les approximations et fait semblant d'être désolé.
+Cette contribution a fait plus de dégâts aux arguments mous qu'un semestre de logique.
+L'idée laisse l'adversaire vivant uniquement pour témoigner.
+C'est une boucherie intellectuelle avec un joli sens du rythme.
+Cette idée a mis le débat à genoux, puis lui a demandé de reformuler correctement.
+Le raisonnement a la violence d'une porte qu'on ouvre au bélier.
+Cette contribution fait fondre les objections comme du gras sur une grille.
+L'idée ne traverse pas l'arène : elle la laboure.
+C'est une idée tellement nerveuse qu'elle semble vouloir se battre avec la suivante aussi.
+Cette idée n'a pas seulement gagné : elle a fait passer l'opposition pour un tutoriel.
+Le propos découpe, trie, classe, achève.
+Cette contribution laisse des marques sur le débat et des regrets dans le camp adverse.
+L'idée a de quoi nourrir les lions, les gradins et le rapport IA.
+C'est une excellente idée avec une brutalité de finale de tournoi clandestin.
+Cette idée ne discute pas avec les arguments faibles : elle les confisque.
+Le raisonnement met des coups si propres qu'on appelle ça de la pédagogie.
+Cette contribution arrive avec le feu dans les yeux et les sources dans les poches.
+L'idée est si violente dans son efficacité qu'elle devient presque thérapeutique.
+C'est le genre de carnage qui donne envie de revoir le ralenti.
+Cette idée ne fait pas une victoire : elle fait un exemple.
+Le propos a la brutalité du vrai et l'humour involontaire d'une opposition qui s'écroule.
+Cette contribution transforme le camp adverse en stage de reconstruction personnelle.
+L'idée cloue le débat au mur et lui demande s'il a d'autres questions.
+C'est sanguinaire, excessif, un peu honteux, donc parfait pour l'arène.
+`.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
+
+function getAgonPublicIdeaComment(entry, fallbackId) {
+  const score = Number(entry && entry.final_score);
+  const category = String((entry && (entry.final_category || entry.category)) || '').toLowerCase();
+  if (category === 'copie') return '';
+  const level = (category === 'faible' || (Number.isFinite(score) && score < 50))
+    ? 'weak'
+    : (category === 'moyen' || (Number.isFinite(score) && score >= 50 && score < 70))
+      ? 'medium'
+      : (category === 'bon' || (Number.isFinite(score) && score >= 70 && score < 85))
+        ? 'good'
+        : (category === 'excellent' || (Number.isFinite(score) && score >= 85))
+          ? 'excellent'
+          : '';
+  const pools = {
+    weak: AGON_WEAK_IDEA_PUBLIC_COMMENTS,
+    medium: AGON_MEDIUM_IDEA_PUBLIC_COMMENTS,
+    good: AGON_GOOD_IDEA_PUBLIC_COMMENTS,
+    excellent: AGON_EXCELLENT_IDEA_PUBLIC_COMMENTS
+  };
+  const icons = {
+    weak: '☠️',
+    medium: '🔨',
+    good: '⚔️',
+    excellent: '🔥'
+  };
+  const commentPool = pools[level] || null;
+  if (!commentPool || !commentPool.length) return '';
+  const seed = String(fallbackId || (entry && (entry.argumentId || entry.id)) || '') + ':' + String(Number.isFinite(score) ? Math.round(score) : '');
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % commentPool.length;
+  const comment = commentPool[index] || '';
+  return comment ? `${icons[level]} ${comment}` : '';
+}
+
+window.getAgonPublicIdeaComment = getAgonPublicIdeaComment;
+
 function buildArgumentScoreMap(analysis) {
   const map = {};
   const camps = analysis && analysis.camps;
@@ -22590,9 +23226,12 @@ function buildArgumentScoreMap(analysis) {
     args.forEach(function(a) {
       if (!a || !a.argumentId) return;
       map[String(a.argumentId)] = {
+        argumentId:        a.argumentId,
         camp:              side,
         final_score:       a.final_score       != null ? a.final_score       : null,
         final_category:    a.final_category    || a.category                 || null,
+        scores_without_sources: a.scores_without_sources && typeof a.scores_without_sources === 'object' ? a.scores_without_sources : null,
+        source_score:      a.source_score      != null ? a.source_score      : null,
         short_explanation: a.short_explanation                                || '',
         custom_rubric_report: a.custom_rubric_report && typeof a.custom_rubric_report === 'object' ? a.custom_rubric_report : null,
         strengths:         Array.isArray(a.strengths)  ? a.strengths         : [],
@@ -22604,9 +23243,12 @@ function buildArgumentScoreMap(analysis) {
   currentAllArguments.forEach(function(a) {
     if (Number(a.paste_ratio || 0) > 50 && !map[String(a.id)]) {
       map[String(a.id)] = {
+        argumentId:        a.id,
         final_score:       0,
         final_category:    'copie',
-        short_explanation: 'Copié-collé détecté — aucune valeur (on utilise son cerveau pour réfléchir, pas l\'IA).',
+        scores_without_sources: null,
+        source_score:      null,
+        short_explanation: '☠️ Idée décapitée dès l\'entrée dans l\'arène : on utilise sa cervelle pour s\'engager dans le combat, pas l\'IA.',
         custom_rubric_report: null,
         strengths:         [],
         weaknesses:        []
@@ -22723,6 +23365,46 @@ function renderCustomRubricDetailHtml(report) {
     + '</div>';
 }
 
+function renderDefaultRubricDetailHtml(entry, isOpen) {
+  const scores = entry && entry.scores_without_sources && typeof entry.scores_without_sources === 'object'
+    ? entry.scores_without_sources
+    : null;
+  if (!scores) return '';
+  const criteria = isOpen ? [
+    { key: 'pertinence', label: 'Pertinence par rapport au sujet', max: 20 },
+    { key: 'clarity',    label: 'Clarté', max: 15 },
+    { key: 'reasoning',  label: 'Solidité ou justification', max: 25 },
+    { key: 'precision',  label: "Apport à l'arène", max: 25 },
+    { key: 'nuance',     label: 'Nuance', max: 10 },
+    { key: 'tone',       label: 'Ton', max: 5 }
+  ] : [
+    { key: 'pertinence', label: 'Pertinence par rapport à la question', max: 20 },
+    { key: 'clarity',    label: 'Clarté de la thèse', max: 15 },
+    { key: 'reasoning',  label: 'Qualité du raisonnement', max: 30 },
+    { key: 'precision',  label: 'Précision / mécanisme concret', max: 20 },
+    { key: 'nuance',     label: 'Nuance et prise en compte des limites', max: 10 },
+    { key: 'tone',       label: "Qualité de l'arène / ton", max: 5 }
+  ];
+  const criteriaHtml = criteria.map(function(criterion) {
+    const score = Number(scores[criterion.key]);
+    if (!Number.isFinite(score)) return '';
+    return '<li><strong>' + escapeHtml(criterion.label) + '</strong> — ' + score + '/' + criterion.max + '</li>';
+  }).filter(Boolean).join('');
+  if (!criteriaHtml) return '';
+  const qualityScore = Number(scores.total_without_sources);
+  const sourceScore = Number(entry.source_score || 0);
+  const totalHtml = Number.isFinite(qualityScore)
+    ? '<div class="arg-ai-detail-expl">Total qualité : ' + qualityScore + '/100'
+      + (sourceScore > 0 ? ' · Bonus source : +' + sourceScore + ' pts' : '')
+      + ' · Score final : ' + entry.final_score + '/100</div>'
+    : '';
+  return '<div class="arg-ai-detail-section">'
+    + '<div class="arg-ai-detail-section-title">Détail du barème</div>'
+    + '<ul class="arg-ai-detail-list">' + criteriaHtml + '</ul>'
+    + totalHtml
+    + '</div>';
+}
+
 function showArgumentAiDetail(argId, triggerEl) {
   const entry = currentArgumentScoreMap[argId];
   if (!entry) return;
@@ -22768,13 +23450,17 @@ function showArgumentAiDetail(argId, triggerEl) {
       + '</div>';
   }
 
-  if (entry.short_explanation) {
-    html += '<div class="arg-ai-detail-expl">' + escapeHtml(entry.short_explanation) + '</div>';
+  const publicComment = getAgonPublicIdeaComment(entry, argId);
+  const mainExplanation = publicComment || entry.short_explanation;
+  if (mainExplanation) {
+    html += '<div class="arg-ai-detail-expl' + (publicComment ? ' arg-ai-detail-public-comment' : '') + '">' + escapeHtml(mainExplanation) + '</div>';
   }
 
   const customRubricHtml = renderCustomRubricDetailHtml(entry.custom_rubric_report);
   if (customRubricHtml) {
     html += customRubricHtml;
+  } else {
+    html += renderDefaultRubricDetailHtml(entry, currentDebateCache ? isOpenDebate(currentDebateCache) : false);
   }
 
   if (entry.strengths && entry.strengths.length) {
@@ -22792,6 +23478,8 @@ function showArgumentAiDetail(argId, triggerEl) {
       + entry.weaknesses.map(function(s) { return '<li>' + escapeHtml(s) + '</li>'; }).join('')
       + '</ul></div>';
   }
+
+  html += '<button class="arg-ai-detail-bottom-close" type="button">Fermer</button>';
 
   const overlay = document.createElement('div');
   overlay.id = 'argument-ai-detail-overlay';
@@ -22816,10 +23504,41 @@ function showArgumentAiDetail(argId, triggerEl) {
     e.stopPropagation();
     closeAiDetail();
   });
+  const bottomClose = popup.querySelector('.arg-ai-detail-bottom-close');
+  if (bottomClose) {
+    bottomClose.addEventListener('click', function(e) {
+      e.stopPropagation();
+      closeAiDetail();
+    });
+  }
 
   overlay.addEventListener('click', function(e) {
     if (!popup.contains(e.target)) closeAiDetail();
   });
+}
+
+function openPendingAiScorePopupIfReady() {
+  const argId = String(pendingAiScorePopupArgumentId || "").trim();
+  if (!argId) return false;
+
+  const existing = document.getElementById('argument-ai-detail-popup');
+  if (existing && existing.dataset.forArgId === argId) {
+    pendingAiScorePopupArgumentId = null;
+    return true;
+  }
+
+  const entry = currentArgumentScoreMap[argId];
+  if (!entry || entry.final_score == null) return false;
+
+  const card = getVisibleArgumentElement(argId);
+  const trigger = card ? (card.querySelector('.argument-ai-score-badge') || card) : null;
+  pendingAiScorePopupArgumentId = null;
+  showArgumentAiDetail(argId, trigger);
+  const transitionState = getNotificationTransitionState();
+  if (pendingAiScoreNotificationTransition || transitionState?.aiScorePopup) {
+    hideNotificationTransitionOverlay();
+  }
+  return true;
 }
 
 function renderArgumentAiScoreBadges() {
@@ -22854,6 +23573,7 @@ function renderArgumentAiScoreBadges() {
       if (actions) actions.parentNode.insertBefore(badge, actions);
     }
   });
+  openPendingAiScorePopupIfReady();
 }
 
 async function loadDebateFullData(id) {
@@ -23116,8 +23836,20 @@ refreshAdminUI();
 
 const params = new URLSearchParams(window.location.search);
 const highlight = params.get("highlight");
+const shouldOpenAiScore = params.get("openAiScore") === "1" || params.get("openAiScore") === "true";
 
 if (highlight) {
+if (shouldOpenAiScore && highlight.startsWith("argument-")) {
+  pendingAiScorePopupArgumentId = highlight.replace("argument-", "");
+  pendingAiScoreNotificationTransition = true;
+  const pendingArgId = pendingAiScorePopupArgumentId;
+  window.setTimeout(() => {
+    if (pendingAiScoreNotificationTransition && pendingAiScorePopupArgumentId === pendingArgId) {
+      pendingAiScorePopupArgumentId = null;
+      hideNotificationTransitionOverlay();
+    }
+  }, 10000);
+}
 if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
   argumentsVisible = currentAllArguments.length;
 }
@@ -23159,7 +23891,11 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
     }
 
     const finishNotificationReturnVisuals = () => {
-      if (location.pathname === "/debate" && isNotificationToDebateLoadingTransition()) {
+      if (shouldOpenAiScore && pendingAiScorePopupArgumentId) {
+        if (!openPendingAiScorePopupIfReady()) return;
+      }
+
+      if (location.pathname === "/debate" && (isNotificationToDebateLoadingTransition() || shouldOpenAiScore)) {
         hideNotificationTransitionOverlay();
         return;
       }
@@ -23190,12 +23926,16 @@ if (element) {
 
   scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false });
   highlightNotificationTargetElement(element, highlight, 5000);
+  if (shouldOpenAiScore && highlight.startsWith("argument-")) {
+    openPendingAiScorePopupIfReady();
+  }
 } else {
   finishNotificationReturnVisuals();
 }
 
     const url = new URL(window.location.href);
     url.searchParams.delete("highlight");
+    url.searchParams.delete("openAiScore");
     window.history.replaceState({}, "", url);
   }, 300);
 }
@@ -27231,7 +27971,9 @@ let icon = "🔔";
 let title = notification.message || "Nouvelle notification";
 let subtitle = "Ouvrir";
 
-if (notification.type === "replacement_accepted" && notification.argument_id) {
+if (notification.type === "analysis_ready" && notification.argument_id) {
+  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}&openAiScore=1`;
+} else if (notification.type === "replacement_accepted" && notification.argument_id) {
   link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
 } else if (notification.comment_id) {
   link = `/debate?id=${notification.debate_id}&highlight=comment-${notification.comment_id}`;
@@ -27297,7 +28039,7 @@ if (notification.type === "analysis_scheduled") {
 if (notification.type === "analysis_ready") {
   icon = "⚖️";
   title = "L'arbitrage IA est disponible";
-  subtitle = "Voir l'analyse";
+  subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse";
 }
       title = getNotificationDisplayTitle(notification, title);
      return `
