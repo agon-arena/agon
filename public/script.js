@@ -15481,7 +15481,6 @@ let _agonCloudOriginalCaptionHtml = null;
 let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
 let _agonCloudFrameTopLocked = false;
-let _agonCloudStableFrameTop = null;
 
 function preventAgonCloudSwitchScroll(event) {
   if (!_agonCloudSwitchLoading) return;
@@ -17074,45 +17073,21 @@ let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260611-cloud
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
   if (!cloud) return;
-  const current = _agonCloudStableFrameTop || getComputedStyle(cloud).getPropertyValue('--bubble-frame-top').trim() || '55px';
-  cloud.style.setProperty('--bubble-frame-top', current);
+  cloud.style.setProperty('--bubble-frame-top', '55px');
   _agonCloudFrameTopLocked = true;
 }
 
-function syncBubbleFrameTop(options = {}) {
-  if (_agonCloudFrameTopLocked || _agonCloudSwitchLoading) return;
-  const force = options.force === true;
+function syncBubbleFrameTop() {
   const cloud = document.getElementById('agon-tag-trends-cloud');
   if (!cloud) return;
-
-  if (force) {
-    _agonCloudStableFrameTop = null;
-    cloud.style.removeProperty('--bubble-frame-top');
-  } else if (_agonCloudStableFrameTop) {
-    cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
-    return;
-  }
-
-  const btn = document.getElementById('index-sort-toggle');
-  if (!btn || !cloud) return;
-  const btnRect = btn.getBoundingClientRect();
-  const cloudRect = cloud.getBoundingClientRect();
-  if (btnRect.bottom <= cloudRect.top) {
-    _agonCloudStableFrameTop = getComputedStyle(cloud).getPropertyValue('--bubble-frame-top').trim() || '55px';
-    cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
-    return;
-  }
-  const frameDrop = 40;
-  const offset = Math.max(0, Math.round(btnRect.bottom - cloudRect.top) + frameDrop);
-  _agonCloudStableFrameTop = offset + 'px';
-  cloud.style.setProperty('--bubble-frame-top', _agonCloudStableFrameTop);
+  cloud.style.setProperty('--bubble-frame-top', '55px');
 }
 
 (function initBubbleFrameSync() {
   let _frameTimer = null;
-  function debouncedSync(options = {}) {
+  function debouncedSync() {
     clearTimeout(_frameTimer);
-    _frameTimer = setTimeout(() => syncBubbleFrameTop(options), 32);
+    _frameTimer = setTimeout(syncBubbleFrameTop, 32);
   }
 
   const debatesSection = document.querySelector('.debates-section');
@@ -17125,7 +17100,7 @@ function syncBubbleFrameTop(options = {}) {
     new ResizeObserver(debouncedSync).observe(cloud);
   }
 
-  window.addEventListener('resize', () => debouncedSync({ force: true }), { passive: true });
+  window.addEventListener('resize', debouncedSync, { passive: true });
 
   requestAnimationFrame(syncBubbleFrameTop);
 })();
@@ -27134,7 +27109,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const navTop = nav.getBoundingClientRect().top;
       const availableCenter = (topbarBottom + navTop) / 2;
       // Le centre visuel des bulles est à 311px dans le container de 548px
-      const standaloneLift = 28;
+      const standaloneLift = 12;
       const targetCloudTop = availableCenter - 311 - standaloneLift;
       const currentCloudTop = cloud.getBoundingClientRect().top;
       cloud.style.marginTop = (targetCloudTop - currentCloudTop) + 'px';
