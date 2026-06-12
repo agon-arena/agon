@@ -6534,7 +6534,6 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
           data-index-youtube-poster
           aria-label="Lire la vidéo YouTube"
           title="Lire la vidéo YouTube"
-          onclick="event.preventDefault(); event.stopPropagation();"
           style="position:absolute; inset:0; z-index:1; display:block; width:100%; height:100%; border:0; padding:0; cursor:pointer; background-image:linear-gradient(180deg, rgba(15,23,42,0.10), rgba(15,23,42,0.42)), url('${thumbnailUrl}'); background-size:cover; background-position:center; background-repeat:no-repeat;"
         >
           <span
@@ -8557,6 +8556,17 @@ function initIndexLocalVideoObserver(root = document) {
 
       if (poster) {
         poster.onclick = (event) => {
+          // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+          // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+          // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+          const playHit = (sel) => {
+            const el = shell.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+          };
+          if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+            && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
           event.preventDefault();
           event.stopPropagation();
           shell.dataset.userStarted = 'true';
@@ -8571,6 +8581,17 @@ function initIndexLocalVideoObserver(root = document) {
 
       if (overlay) {
         overlay.onclick = (event) => {
+          // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+          // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+          // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+          const playHit = (sel) => {
+            const el = shell.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+          };
+          if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+            && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
           event.preventDefault();
           event.stopPropagation();
           shell.dataset.userStarted = 'true';
@@ -8648,6 +8669,17 @@ function initIndexLocalVideoObserver(root = document) {
 
     if (poster) {
       poster.onclick = (event) => {
+        // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+        // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+        // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+        const playHit = (sel) => {
+          const el = shell.querySelector(sel);
+          if (!el) return false;
+          const r = el.getBoundingClientRect();
+          return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+        };
+        if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+          && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.userStarted = 'true';
@@ -8662,6 +8694,17 @@ function initIndexLocalVideoObserver(root = document) {
 
     if (overlay) {
       overlay.onclick = (event) => {
+        // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+        // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+        // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+        const playHit = (sel) => {
+          const el = shell.querySelector(sel);
+          if (!el) return false;
+          const r = el.getBoundingClientRect();
+          return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+        };
+        if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+          && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.userStarted = 'true';
@@ -8772,6 +8815,17 @@ function initIndexYouTubeObserver(root = document) {
 
       if (poster) {
         poster.onclick = (event) => {
+          // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+          // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+          // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+          const playHit = (sel) => {
+            const el = shell.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+          };
+          if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+            && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
           event.preventDefault();
           event.stopPropagation();
           shell.dataset.userStarted = 'true';
@@ -8786,6 +8840,17 @@ function initIndexYouTubeObserver(root = document) {
 
       if (overlay) {
         overlay.onclick = (event) => {
+          // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+          // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+          // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+          const playHit = (sel) => {
+            const el = shell.querySelector(sel);
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+          };
+          if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+            && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
           event.preventDefault();
           event.stopPropagation();
           shell.dataset.userStarted = 'true';
@@ -8866,6 +8931,17 @@ function initIndexYouTubeObserver(root = document) {
 
     if (poster) {
       poster.onclick = (event) => {
+        // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+        // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+        // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+        const playHit = (sel) => {
+          const el = shell.querySelector(sel);
+          if (!el) return false;
+          const r = el.getBoundingClientRect();
+          return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+        };
+        if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+          && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.userStarted = 'true';
@@ -8880,6 +8956,17 @@ function initIndexYouTubeObserver(root = document) {
 
     if (overlay) {
       overlay.onclick = (event) => {
+        // Clic sur l'image hors bouton play / libellé : on laisse remonter vers
+        // openIndexDebateFromMedia (entrée dans l'arène). Test par coordonnées car
+        // l'overlay du play peut être en pointer-events:none (le poster reçoit le clic).
+        const playHit = (sel) => {
+          const el = shell.querySelector(sel);
+          if (!el) return false;
+          const r = el.getBoundingClientRect();
+          return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+        };
+        if (!event.target.closest('.debate-card-youtube-play, .debate-card-youtube-label')
+          && !playHit('.debate-card-youtube-play') && !playHit('.debate-card-youtube-label')) return;
         event.preventDefault();
         event.stopPropagation();
         shell.dataset.userStarted = 'true';
@@ -23493,7 +23580,7 @@ function showArgumentAiDetail(argId, triggerEl) {
   const publicComment = getAgonPublicIdeaComment(entry, argId);
   const mainExplanation = publicComment || entry.short_explanation;
   if (mainExplanation) {
-    html += '<div class="arg-ai-detail-expl' + (publicComment ? ' arg-ai-detail-public-comment' : '') + '">' + escapeHtml(mainExplanation) + '</div>';
+    html += '<div class="arg-ai-detail-expl' + (publicComment ? ' arg-ai-detail-public-comment' : '') + (isCopie ? ' arg-ai-detail-expl-copie' : '') + '">' + escapeHtml(mainExplanation) + '</div>';
   }
 
   const customRubricHtml = renderCustomRubricDetailHtml(entry.custom_rubric_report);
