@@ -15636,6 +15636,9 @@ function toggleAgonCloud() {
       container.classList.remove('agon-cloud-mode-agon');
       syncAgonCloudModeSwitch();
       if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
+      // La légende change de hauteur entre les modes : resynchronise la hauteur de la
+      // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
+      syncCloudSectionHeight();
       window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || [], () => {
         // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par agôn"
         // retiré temporairement par le mode Bulles Agôn.
@@ -15684,6 +15687,9 @@ function toggleAgonCloud() {
       if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
       caption.textContent = "Les 10 arènes les plus actives sur Agôn.";
     }
+    // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
+    // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
+    syncCloudSectionHeight();
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
       finishAgonCloudSwitchLoading(token, container);
     });
@@ -17092,7 +17098,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260612-bulles-desktop");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260612-bulles-desktop-2");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -28980,12 +28986,22 @@ window.addEventListener('pageshow', (event) => {
 // ===== CLOUD SECTION — PLEIN ÉCRAN DESKTOP =====
 // Donne à .agon-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
-function syncCloudSectionHeight() {
+var _cloudSectionBaseHeight = null;
+function syncCloudSectionHeight(recomputeBase) {
   if (window.innerWidth <= 768) return;
   var section = document.getElementById('agon-tag-trends-section');
   if (!section || section.hidden) return;
-  var docTop = section.getBoundingClientRect().top + window.scrollY;
-  var bottomBarH = getStableBottomBarOffset();
+  // Hauteur de base (espace visible pour le cloud) : calculée une seule fois à la
+  // première synchro puis uniquement sur resize. Jamais pendant les bascules
+  // Actu/Agôn ni les re-renders du feed : docTop et l'offset du bandeau bas y
+  // fluctuent de quelques px et feraient varier la hauteur du cadre entre modes.
+  if (recomputeBase || _cloudSectionBaseHeight === null) {
+    var docTop = section.getBoundingClientRect().top + window.scrollY;
+    // Soustraire le bandeau bas pour que le cadre ::before du cloud (23px du bas du cloud)
+    // soit visible au-dessus du bandeau et non caché derrière lui.
+    var bottomBarH = getStableBottomBarOffset();
+    _cloudSectionBaseHeight = Math.max(300, window.innerHeight - docTop - bottomBarH);
+  }
   // Hauteur extérieure (boîte + marges) du switch Bulles Actu/Agôn et de la légende :
   // ajoutée à la section pour qu'ils tombent sous la ligne de flottaison — le cloud
   // (flex:1) occupe tout l'espace visible, il faut scroller un peu pour voir les boutons.
@@ -28995,9 +29011,15 @@ function syncCloudSectionHeight() {
     var cs = window.getComputedStyle(el);
     belowFoldExtra += el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
   });
-  // Soustraire le bandeau bas pour que le cadre ::before du cloud (23px du bas du cloud)
-  // soit visible au-dessus du bandeau et non caché derrière lui.
-  section.style.height = (Math.max(300, window.innerHeight - docTop - bottomBarH) + belowFoldExtra) + 'px';
+  section.style.height = (_cloudSectionBaseHeight + belowFoldExtra) + 'px';
+  // Hauteur du cloud (donc du cadre ::before) épinglée directement à la base : ne dépend
+  // plus de la résolution flex ni des mesures du switch/légende, qui varient entre les
+  // modes Actu/Agôn et faisaient fluctuer la taille du cadre.
+  var cloud = document.getElementById('agon-tag-trends-cloud');
+  if (cloud) {
+    cloud.style.flex = '0 0 auto';
+    cloud.style.height = _cloudSectionBaseHeight + 'px';
+  }
 }
 
 (function initCloudSectionHeight() {
@@ -29006,12 +29028,14 @@ function syncCloudSectionHeight() {
 
   var obs = new MutationObserver(function() {
     if (!section.hidden) {
-      requestAnimationFrame(function() { requestAnimationFrame(syncCloudSectionHeight); });
+      // Ne pas passer syncCloudSectionHeight directement à rAF : le timestamp serait
+      // interprété comme recomputeBase=true et recalculerait la base en pleine bascule.
+      requestAnimationFrame(function() { requestAnimationFrame(function() { syncCloudSectionHeight(); }); });
     }
   });
   obs.observe(section, { attributes: true, attributeFilter: ['hidden'] });
 
-  window.addEventListener('resize', syncCloudSectionHeight, { passive: true });
+  window.addEventListener('resize', function() { syncCloudSectionHeight(true); }, { passive: true });
 
   if (!section.hidden) syncCloudSectionHeight();
 })();

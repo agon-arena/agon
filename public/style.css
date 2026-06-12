@@ -5,7 +5,13 @@ img, video, a, button {
 html,
 body {
   touch-action: pan-x pan-y;
-  /* Bloque le pull-to-refresh natif déclenché par les swipes diagonaux sur les carousels */
+}
+
+/* Bloque le pull-to-refresh natif déclenché par les swipes diagonaux sur les carousels.
+   Sur html UNIQUEMENT (= viewport) : posé aussi sur body, il avale la molette desktop,
+   car body devient un conteneur de scroll non scrollable via html.thematic-scroll
+   (overflow-x:hidden → overflow-y:auto calculé) et none y bloque le chaînage vers html. */
+html {
   overscroll-behavior-y: none;
 }
 
@@ -20018,6 +20024,9 @@ body.page-home-mobile .index-card-media-with-title .debate-card-local-image {
   body.page-home .debate-card.has-title-banner .debate-card-meta-below-media {
     padding-left: 16px;
     padding-right: 16px;
+    /* Le bloc meta a width:100% : sans border-box, le padding le fait déborder de
+       32px à droite et décentre badges/dates de 16px */
+    box-sizing: border-box;
   }
   body.page-home .debate-card.has-title-banner .debate-card-footer-actions {
     margin-left: 0 !important;
