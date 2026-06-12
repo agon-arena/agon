@@ -15400,7 +15400,8 @@ function renderIndexActiveFilterTags() {
   });
 
   container.innerHTML = tags.join("");
-  container.style.display = tags.length ? "flex" : "none";
+  container.classList.toggle("index-active-filters-empty", tags.length === 0);
+  container.style.display = "flex";
 }
 
 function clearActiveBubbles() {
@@ -27133,7 +27134,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const navTop = nav.getBoundingClientRect().top;
       const availableCenter = (topbarBottom + navTop) / 2;
       // Le centre visuel des bulles est à 311px dans le container de 548px
-      const targetCloudTop = availableCenter - 311 - 60;
+      const standaloneLift = 28;
+      const targetCloudTop = availableCenter - 311 - standaloneLift;
       const currentCloudTop = cloud.getBoundingClientRect().top;
       cloud.style.marginTop = (targetCloudTop - currentCloudTop) + 'px';
     });

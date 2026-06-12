@@ -8592,11 +8592,16 @@ padding:4px 14px 12px 14px;
   justify-content: center;
   gap: 8px;
   width: min(920px, 100%);
+  min-height: 26px;
   margin-top: 2px;
   margin-left: auto;
   margin-right: auto;
   position: relative;
   z-index: 140;
+}
+
+.index-active-filters.index-active-filters-empty {
+  pointer-events: none;
 }
 
 .index-active-filter-tag {

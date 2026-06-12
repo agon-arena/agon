@@ -42,7 +42,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.min.css?v=20260611-cloud-frame-stable">
+  <link rel="stylesheet" href="/style.min.css?v=20260612-bulles-actu-label">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
@@ -85,6 +85,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 4px 5px !important;
+      min-height: 26px;
       margin-top: 2px !important;
       margin-bottom: 6px !important;
     }
@@ -386,7 +387,7 @@
       </button>
     </div>
 
-    <div id="index-active-filters" class="index-active-filters" style="display:none;"></div>
+    <div id="index-active-filters" class="index-active-filters index-active-filters-empty"></div>
 
 
 
@@ -411,7 +412,7 @@
 <section id="agon-tag-trends-section" class="agon-tag-trends-section" hidden>
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
 <div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
-  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulle Actu</button>
+  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulles Actu</button>
   <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
 </div>
 <p class="agon-tag-trends-caption" style="text-align: center;">
@@ -763,7 +764,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260611-cloud-frame-stable" defer></script>
+<script src="/script.min.js?v=20260612-bulles-actu-label" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
