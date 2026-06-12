@@ -15293,7 +15293,7 @@ function getIndexTypeFilterLabel(type) {
   if (type === "debate") return "Arènes à positions";
   if (type === "question") return "Arènes libres";
   if (type === "visited") return "Arènes consultées";
-  if (type === "agon") return "Arènes publiées par agôn";
+  if (type === "agon") return "Arènes ouvertes par agôn";
   return "Tous";
 }
 
@@ -15634,7 +15634,7 @@ function toggleAgonCloud() {
       syncAgonCloudModeSwitch();
       if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
       window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || [], () => {
-        // Retour aux bulles actu : on restaure le filtre "Arènes publiées par agôn"
+        // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par agôn"
         // retiré temporairement par le mode Bulles Agôn.
         if (currentTypeFilter !== "agon") {
           setTypeFilter("agon");
@@ -15662,7 +15662,7 @@ function toggleAgonCloud() {
     _agonCloudMode = true;
 
     // Les Bulles Agôn montrent l'activité de toute la plateforme : le filtre
-    // "Arènes publiées par Agôn" est retiré au passage (les autres filtres restent)
+    // "Arènes ouvertes par Agôn" est retiré au passage (les autres filtres restent)
     // — setTypeFilter re-rend déjà le feed, sinon on le re-rend explicitement.
     if (currentTypeFilter === "agon") {
       setTypeFilter("all");
@@ -15754,7 +15754,7 @@ function handleBubbleTagClick(bubble) {
     targetDebateId = String(activeTrend?.subjectId || "").trim();
   }
 
-  // Bulles actu → bandeau "À la une" ; Bulles Agôn → bandeau "Arènes sous tension"
+  // Bulles Actu → bandeau "À la une" ; Bulles Agôn → bandeau "Arènes sous tension"
   const bandSelector = _agonCloudMode ? '.theme-row-section--tension' : '.theme-row-section--a-la-une';
   scrollToIndexBandAndFlashCard(bandSelector, targetDebateId);
 }
@@ -15782,7 +15782,7 @@ function ensureCarouselCardLoaded(section, targetDebateId) {
 }
 
 // Scroll vers un bandeau de carrousel, centre la carte du débat ciblé et la fait
-// clignoter. Utilisé par les bulles actu (bandeau À la une) et les Bulles Agôn
+// clignoter. Utilisé par les Bulles Actu (bandeau À la une) et les Bulles Agôn
 // (bandeau Arènes sous tension).
 function scrollToIndexBandAndFlashCard(sectionSelector, targetDebateId) {
   const section = document.querySelector(sectionSelector);
@@ -16790,6 +16790,10 @@ function initThematicRowDragScroll() {
     }, { capture: true });
 
     row.addEventListener("scroll", () => {
+      // overflow-x:auto force overflow-y:visible → auto : le rail est scrollable
+      // verticalement quand une carte hors écran est plus haute que la hauteur
+      // fixée par syncIndexThemeRowHeight. On épingle scrollTop à 0.
+      if (row.scrollTop) row.scrollTop = 0;
       refreshRowMetrics();
       row.dataset.dragOffset = String(row.scrollLeft || 0);
     }, { passive: true });
@@ -16944,9 +16948,6 @@ function getAlaUneSourceForCurrentFilters(filteredDebates) {
 }
 
 function getTensionSourceForCurrentFilters(filteredDebates) {
-  if (currentTypeFilter === "agon" && Array.isArray(debatesCache) && debatesCache.length) {
-    return debatesCache;
-  }
   return filteredDebates;
 }
 
@@ -16965,7 +16966,7 @@ function buildIndexThematicSectionsHtml(debates) {
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
-    // ── À la une : jamais filtrée par bulle, mais respecte le filtre "publiées par agôn" ──
+    // ── À la une : jamais filtrée par bulle, mais respecte le filtre "ouvertes par agôn" ──
     const hasActiveIndexSearch = !!getCurrentIndexSearchQuery();
     const alaUneSource = getAlaUneSourceForCurrentFilters(allDebates);
     if (!hasActiveIndexSearch && alaUneSource.length) {
@@ -18056,6 +18057,9 @@ function renderEvaluationAxis(debate) {
   const formAxisEl = document.getElementById('form-list-axis');
   const isOpen = isOpenDebate(debate);
   const axis = String(debate.evaluation_axis || '').trim();
+  // Barème personnalisé mais caché par le créateur (le serveur ne transmet pas le texte)
+  const axisHidden = isOpen && !axis && !!debate.evaluation_axis_hidden;
+  const hiddenText = "Barème non communiqué : le créateur de l'arène a choisi de ne pas le dévoiler. L'IA note quand même chaque idée sur 100 selon ce barème.";
 
   const defaultOpenText = "L'IA évalue la pertinence, la clarté, la qualité du raisonnement, l'originalité utile et l'apport de chaque contribution.";
   const defaultDebateText = "L'IA évalue la pertinence, la clarté de la thèse, la qualité du raisonnement, la nuance et la prise en compte des objections.";
@@ -18065,8 +18069,9 @@ function renderEvaluationAxis(debate) {
   el.id = 'debate-evaluation-axis';
   el.className = 'debate-evaluation-axis';
 
-  const labelText = (isOpen && axis) ? 'Barème personnalisé de l\'arène — sur 100 points' : 'Comment l\'IA évalue les contributions';
-  const bodyText = (isOpen && axis) ? axis : (isOpen ? defaultOpenText : defaultDebateText);
+  const labelText = (isOpen && axis) ? 'Barème personnalisé de l\'arène — sur 100 points'
+    : (axisHidden ? 'Barème personnalisé de l\'arène' : 'Comment l\'IA évalue les contributions');
+  const bodyText = (isOpen && axis) ? axis : (axisHidden ? hiddenText : (isOpen ? defaultOpenText : defaultDebateText));
 
   el.innerHTML = '<span class="debate-evaluation-axis-label">' + labelText + '</span>'
     + '<p class="debate-evaluation-axis-text">' + escapeHtml(bodyText) + '</p>';
@@ -18084,6 +18089,10 @@ function renderEvaluationAxis(debate) {
     if (isOpen && axis) {
       formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Barème personnalisé — sur 100 points</span>'
         + '<p class="form-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
+      formAxisEl.style.display = 'block';
+    } else if (axisHidden) {
+      formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Barème personnalisé — sur 100 points</span>'
+        + '<p class="form-evaluation-axis-text">' + escapeHtml(hiddenText) + '</p>';
       formAxisEl.style.display = 'block';
     } else {
       formAxisEl.style.display = 'none';
@@ -19921,6 +19930,7 @@ form.addEventListener("submit", async e => {
     const evaluationAxis = selectedType === "open"
       ? (document.getElementById("evaluation_axis")?.value.trim() || "")
       : undefined;
+    const evaluationAxisHidden = !!(evaluationAxis && document.getElementById("evaluation_axis_hidden")?.checked);
     const createPayload = JSON.stringify({
       question,
       category,
@@ -19932,6 +19942,7 @@ form.addEventListener("submit", async e => {
       option_a,
       option_b,
       ...(evaluationAxis !== undefined ? { evaluation_axis: evaluationAxis } : {}),
+      ...(evaluationAxisHidden ? { evaluation_axis_hidden: true } : {}),
       creatorKey
     });
 
@@ -22597,6 +22608,7 @@ function showActiveRubricModal() {
   const debate = currentDebateCache;
   const open = debate ? isOpenDebate(debate) : false;
   const axis = String((debate && debate.evaluation_axis) || '').trim();
+  const axisHidden = open && !axis && !!(debate && debate.evaluation_axis_hidden);
 
   let html = '<div class="rubric-modal-header">'
     + '<span class="rubric-modal-title">⚖ Barème IA actif</span>'
@@ -22608,6 +22620,14 @@ function showActiveRubricModal() {
       html += '<div class="rubric-modal-section rubric-modal-axis">'
         + '<div class="rubric-modal-section-title">Barème personnalisé de cette arène — sur 100 points</div>'
         + '<p class="rubric-modal-axis-text">' + escapeHtml(axis) + '</p>'
+        + '</div>'
+        + '<div class="rubric-modal-section">'
+        + '<p class="rubric-modal-note">Seul ce barème est appliqué par l\'IA : la note est directement sur 100, sans bonus automatique pour les sources (elles ne comptent que si ce barème le prévoit).</p>'
+        + '</div>';
+    } else if (axisHidden) {
+      html += '<div class="rubric-modal-section rubric-modal-axis">'
+        + '<div class="rubric-modal-section-title">Barème personnalisé de cette arène — sur 100 points</div>'
+        + '<p class="rubric-modal-axis-text">Barème non communiqué : le créateur de l\'arène a choisi de ne pas le dévoiler.</p>'
         + '</div>'
         + '<div class="rubric-modal-section">'
         + '<p class="rubric-modal-note">Seul ce barème est appliqué par l\'IA : la note est directement sur 100, sans bonus automatique pour les sources (elles ne comptent que si ce barème le prévoit).</p>'

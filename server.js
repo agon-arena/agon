@@ -4889,11 +4889,13 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedAxis = type === "open"
       ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 280)
       : null;
+    // Le créateur peut cacher son barème aux participants (l'IA l'applique quand même)
+    const normalizedAxisHidden = Boolean(normalizedAxis && evaluation_axis_hidden === true);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
@@ -4930,6 +4932,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         option_a,
         option_b,
         evaluation_axis: normalizedAxis,
+        ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
         creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
         created_at: nowIso()
       })
@@ -4949,6 +4952,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             option_a,
             option_b,
             evaluation_axis: normalizedAxis,
+            ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
             creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
             created_at: nowIso()
           })
@@ -5333,6 +5337,12 @@ app.get("/api/debates/:id", async (req, res) => {
       return res.status(404).json({ error: "Débat introuvable." });
     }
 
+    // Barème caché par le créateur : le texte ne doit jamais être exposé aux clients
+    // (seul le flag part au front, qui affiche « Barème non communiqué »).
+    const publicDebate = debate.evaluation_axis_hidden
+      ? { ...debate, evaluation_axis: "" }
+      : debate;
+
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
     const argumentIds = args.map((a) => a.id);
@@ -5340,7 +5350,7 @@ app.get("/api/debates/:id", async (req, res) => {
     if (!argumentIds.length) {
       const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
       const payload = {
-        debate,
+        debate: publicDebate,
         optionA,
         optionB,
         commentsByArgument: {},
@@ -5365,7 +5375,7 @@ app.get("/api/debates/:id", async (req, res) => {
     }
 
     const payload = {
-      debate,
+      debate: publicDebate,
       optionA,
       optionB,
       commentsByArgument,

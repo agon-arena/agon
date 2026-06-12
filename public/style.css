@@ -5,6 +5,8 @@ img, video, a, button {
 html,
 body {
   touch-action: pan-x pan-y;
+  /* Bloque le pull-to-refresh natif déclenché par les swipes diagonaux sur les carousels */
+  overscroll-behavior-y: none;
 }
 
 :root {
@@ -1806,6 +1808,30 @@ font-family: "Barlow Condensed", sans-serif;
   font-size: 12px;
   color: #9ca3af;
   margin-left: 6px;
+}
+
+.axis-hidden-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+  cursor: pointer;
+}
+
+.axis-hidden-option input[type="checkbox"] {
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: #516776;
+  cursor: pointer;
+}
+
+.axis-hidden-option .label-hint {
+  display: block;
+  margin-left: 0;
+  margin-top: 2px;
 }
 
 .create-category-group {
@@ -6713,10 +6739,13 @@ body.page-debate .topbar::after {
   }
 
   .page-home-mobile .agon-tag-trends-caption {
-    transform: translateX(-9px);
+    transform: none;
     font-size: 11px;
     position: relative;
     z-index: 30;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center !important;
   }
 
   .page-home-mobile .index-sort-toggle {
@@ -17885,6 +17914,9 @@ body.page-home #debates-list .theme-row-section:first-child {
   background: radial-gradient(ellipse at center, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.08) 45%, rgba(255,255,255,0) 75%), #243038;
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 
@@ -17893,6 +17925,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   z-index: 135;
   margin: 4px auto 14px;
   width: 100%;
+  align-self: center;
   text-align: center;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 13px;
@@ -17908,6 +17941,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   display: flex;
   width: max-content;
   margin: 0 auto 12px;
+  align-self: center;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -17919,6 +17953,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   background: transparent;
   color: rgba(255, 255, 255, 0.65);
   padding: 6px 16px;
+  min-width: 104px;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -17987,6 +18022,15 @@ body.page-home #debates-list .theme-row-section:first-child {
 @media (max-width: 768px) {
   .agon-tag-trends-cloud {
     --bubble-frame-top: 55px;
+  }
+
+  .page-home-mobile .agon-cloud-mode-switch,
+  .page-home-mobile .agon-tag-trends-caption {
+    align-self: center;
+    margin-left: auto;
+    margin-right: auto;
+    transform: none !important;
+    text-align: center !important;
   }
 
   .agon-tag-trends-cloud::before {
