@@ -17906,7 +17906,10 @@ body.page-home-mobile .debate-card-agon-badge {
   }
 
   body.page-home .theme-horizontal-inner {
-    grid-auto-columns: calc((100vw - 60px) / 4) !important;
+    /* gap 24px (au lieu de 20) : cartes un peu plus espacées ; la largeur des colonnes
+       absorbe les 12px ajoutés (3 gaps) pour garder 4 cartes visibles par écran */
+    gap: 24px !important;
+    grid-auto-columns: calc((100vw - 72px) / 4) !important;
     grid-template-rows: auto !important;
     padding-left: 12px !important;
     padding-right: 0 !important;

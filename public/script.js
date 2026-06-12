@@ -23239,6 +23239,37 @@ function buildArgumentScoreMap(analysis) {
       };
     });
   });
+  // Doublons regroupés par l'IA : chaque membre du groupe hérite de la note et du
+  // commentaire de son représentant (l'idée a été jugée équivalente et notée
+  // collectivement) — sinon ces cartes n'affichent ni note ni commentaire.
+  // Certaines analyses stockent des IDs préfixés par l'IA (ex. "ID:478")
+  const normalizeMergedId = function(value) {
+    return String(value || '').replace(/^id\s*:?\s*/i, '').trim();
+  };
+  ['A', 'B'].forEach(function(side) {
+    const groups = (camps[side] && camps[side].duplicateGroups) || [];
+    const repTexts = {};
+    ((camps[side] && camps[side].effectiveArguments) || []).forEach(function(a) {
+      if (a && a.argumentId) repTexts[String(a.argumentId)] = String(a.argumentText || '');
+    });
+    groups.forEach(function(g) {
+      const repId = normalizeMergedId(g && g.representativeArgumentId);
+      const rep = map[repId];
+      if (!rep) return;
+      const repText = repTexts[repId] || '';
+      const repExcerpt = repText.length > 90 ? repText.slice(0, 90).trim() + '…' : repText;
+      const mention = '🔗 Idée regroupée avec « ' + (repExcerpt || 'une idée équivalente') + ' » : jugées identiques sur le fond, elles partagent la même note.';
+      (Array.isArray(g.mergedArgumentIds) ? g.mergedArgumentIds : []).forEach(function(mid) {
+        const id = normalizeMergedId(mid);
+        if (!id || id === repId || map[id]) return;
+        map[id] = Object.assign({}, rep, {
+          argumentId: id,
+          merged_with: repId,
+          short_explanation: mention + (rep.short_explanation ? ' ' + rep.short_explanation : '')
+        });
+      });
+    });
+  });
   // Ajouter les arguments copié-collés (paste_ratio > 50) avec score 0
   currentAllArguments.forEach(function(a) {
     if (Number(a.paste_ratio || 0) > 50 && !map[String(a.id)]) {
@@ -23255,18 +23286,27 @@ function buildArgumentScoreMap(analysis) {
       };
     }
   });
-  // Précalculer le classement par camp (meilleur = rang 1)
+  // Précalculer le classement par camp (meilleur = rang 1).
+  // Les doublons hérités (merged_with) sont exclus du total — une idée regroupée
+  // ne compte qu'une fois — puis reçoivent le rang de leur représentant.
   ['A', 'B'].forEach(function(side) {
     var campEntries = Object.values(map).filter(function(e) {
-      return e.camp === side && e.final_category !== 'copie' && e.final_score != null;
+      return e.camp === side && e.final_category !== 'copie' && e.final_score != null && !e.merged_with;
     });
     var sorted = campEntries.slice().sort(function(a, b) { return b.final_score - a.final_score; });
     var total = sorted.length;
     Object.keys(map).forEach(function(id) {
       var e = map[id];
-      if (e.camp !== side || e.final_category === 'copie' || e.final_score == null) return;
+      if (e.camp !== side || e.final_category === 'copie' || e.final_score == null || e.merged_with) return;
       e.rankPos   = sorted.filter(function(x) { return x.final_score > e.final_score; }).length + 1;
       e.rankTotal = total;
+    });
+    Object.keys(map).forEach(function(id) {
+      var e = map[id];
+      if (e.camp !== side || !e.merged_with) return;
+      var rep = map[String(e.merged_with)];
+      e.rankPos   = rep && rep.rankPos   != null ? rep.rankPos   : null;
+      e.rankTotal = rep && rep.rankTotal != null ? rep.rankTotal : null;
     });
   });
   return map;
