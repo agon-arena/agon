@@ -10612,8 +10612,26 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   line-height: 1;
 }
 
-.index-floating-refresh-btn {
+.index-floating-refresh-btn,
+body.page-home .app-floating-refresh-btn,
+body.page-home-mobile .app-floating-refresh-btn {
   z-index: 150;
+  border-width: 3px;
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(26, 39, 47, 0.94), rgba(26, 39, 47, 0.94)) padding-box,
+    linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+}
+
+.index-floating-refresh-btn:hover,
+.index-floating-refresh-btn:focus-visible,
+body.page-home .app-floating-refresh-btn:hover,
+body.page-home .app-floating-refresh-btn:focus-visible,
+body.page-home-mobile .app-floating-refresh-btn:hover,
+body.page-home-mobile .app-floating-refresh-btn:focus-visible {
+  background:
+    linear-gradient(rgba(17, 24, 39, 0.98), rgba(17, 24, 39, 0.98)) padding-box,
+    linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
 }
 
 /* Passe au-dessus du menu de tri (Plus soutenues, Idées en progression, etc.) */
@@ -10675,6 +10693,7 @@ body.page-debate .debate-floating-refresh-btn {
 
 @media (min-width: 769px) {
   .index-floating-refresh-btn {
+    bottom: calc(48px + env(safe-area-inset-bottom, 0px));
     width: 56px;
     height: 56px;
   }
@@ -18299,6 +18318,10 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before {
 
 body.agon-mobile-cloud-viewport #agon-cloud-loading-spinner {
   bottom: 78px;
+}
+
+body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
+  margin-top: -55px;
 }
 
 .agon-tag-bubble {
