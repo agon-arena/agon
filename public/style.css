@@ -10567,7 +10567,7 @@ body.is-standalone .agon-tag-trends-section {
 
 body.is-standalone .page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: -6px;
+  margin-top: -10px;
 }
 
 @media (min-width: 769px) {
