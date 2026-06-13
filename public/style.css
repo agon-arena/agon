@@ -10535,6 +10535,17 @@ body.is-standalone .topbar {
   padding-top: calc(5px + env(safe-area-inset-top, 0px));
 }
 
+@media (max-width: 768px) {
+  body.is-standalone.page-home-mobile .topbar {
+    padding-top: calc(2px + env(safe-area-inset-top, 0px)) !important;
+  }
+
+  body.is-standalone.page-home-mobile .topbar-inner.topbar-home {
+    padding-top: 2px !important;
+    padding-bottom: 1px !important;
+  }
+}
+
 body.is-standalone .topbar-refresh-btn {
   display: flex;
 }

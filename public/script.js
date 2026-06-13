@@ -28025,7 +28025,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const navTop = nav.getBoundingClientRect().top;
       const availableCenter = (topbarBottom + navTop) / 2;
       // Le centre visuel des bulles est à 311px dans le container de 548px
-      const standaloneLift = 12;
+      const standaloneLift = 7;
       const targetCloudTop = availableCenter - 311 - standaloneLift;
       const currentCloudTop = cloud.getBoundingClientRect().top;
       cloud.style.marginTop = (targetCloudTop - currentCloudTop) + 'px';
