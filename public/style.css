@@ -8750,7 +8750,7 @@ padding:4px 14px 12px 14px;
   gap: 8px;
   min-height: 34px;
   padding: 7px 12px;
-  border: 1px solid #1A1F24;
+  border: 1px solid #eef3fb;
   border-radius: 999px;
   background: #1A1F24;
   color: #ffffff;
@@ -10541,12 +10541,12 @@ body.is-standalone .topbar {
 
 @media (max-width: 768px) {
   body.is-standalone.page-home-mobile .topbar {
-    padding-top: calc(2px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
   }
 
   body.is-standalone.page-home-mobile .topbar-inner.topbar-home {
-    padding-top: 2px !important;
-    padding-bottom: 1px !important;
+    padding-top: 1px !important;
+    padding-bottom: 0px !important;
   }
 }
 
@@ -18484,7 +18484,7 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   border-radius: 50%;
   background: #1A1F24;
   color: #ffffff;
-  border: 2px solid #1A1F24;
+  border: 2px solid #eef3fb;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -18813,10 +18813,9 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   opacity: 0.1;
 }
 
-/* Bouton central "À LA UNE" : gris clair avec liseré noir sur le nuage inversé */
+/* Bouton central "À LA UNE" : gris clair sur le nuage inversé */
 .agon-cloud-mode-agon .agon-tag-center-btn {
   background: #d9dce0;
-  border-color: #05070a;
   color: #1A1F24;
 }
 
