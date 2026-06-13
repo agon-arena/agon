@@ -105,7 +105,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260613-cloud-switch17" />
+<link rel="stylesheet" href="/style.min.css?v=20260613-cloud-switch18" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -113,6 +113,9 @@
 </head>
 <body class="page-debate">
 
+<button type="button" class="mobile-back-button" aria-label="Retour aux arènes">
+  <i class="fa-solid fa-arrow-left"></i>
+</button>
 
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
@@ -129,11 +132,6 @@
     </div>
 
     <div class="topbar-actions">
-<div class="mobile-topbar-actions">
-  <a href="/" class="topbar-back-arrow" title="Retour aux arènes" aria-label="Retour aux arènes">
-    <i class="fa-solid fa-arrow-left"></i>
-  </a>
-</div>
 <div class="home-topbar-menu-wrap">
   <button
     type="button"
@@ -910,7 +908,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260613-dots-fade"></script>
+	<script src="/script.min.js?v=20260613-back-btn"></script>
 <script>
 (function () {
   function isInteractive(target) {

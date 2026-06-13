@@ -4599,7 +4599,8 @@ function initIndexReturnNavigation() {
   const backSelectors = [
     ".debate-title-side-tools .debate-back-arrow",
     ".mobile-topbar-actions .topbar-back-arrow",
-    ".debate-nav-row .back-link"
+    ".debate-nav-row .back-link",
+    ".mobile-back-button"
   ];
 
   const setPendingBackButtonsState = () => {

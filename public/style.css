@@ -7282,7 +7282,8 @@ body.page-debate .topbar::after {
 }
 
 @media (max-width: 768px) {
-  .page-notifications-mobile .mobile-back-button {
+  .page-notifications-mobile .mobile-back-button,
+  .page-debate .mobile-back-button {
     position: fixed;
     bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     left: 16px;
@@ -7307,7 +7308,8 @@ body.page-debate .topbar::after {
     line-height: 1;
   }
 
-  .page-notifications-mobile .mobile-back-button:hover {
+  .page-notifications-mobile .mobile-back-button:hover,
+  .page-debate .mobile-back-button:hover {
     background: rgba(17,24,39,0.98);
     color: #ffffff;
   }
