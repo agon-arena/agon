@@ -6846,7 +6846,7 @@ body.page-debate .topbar::after {
   }
 
   body.is-standalone.page-home-mobile .agon-cloud-mode-switch {
-    margin-top: -57px;
+    margin-top: -59px;
   }
 
   .page-home-mobile .agon-tag-trends-caption {
@@ -10567,7 +10567,7 @@ body.is-standalone .agon-tag-trends-section {
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: -4px;
+  margin-top: -6px;
 }
 
 @media (min-width: 769px) {
@@ -18322,7 +18322,7 @@ body.agon-mobile-cloud-viewport #agon-cloud-loading-spinner {
 }
 
 body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
-  margin-top: -65px;
+  margin-top: -67px;
 }
 
 .agon-tag-bubble {
@@ -19887,16 +19887,8 @@ body.page-contact.in-iframe .contact-page-shell {
   color: #6b7280;
 }
 
-.about-accordion-locked summary {
-  cursor: default;
-}
-
 .about-accordion[open] summary::after {
   content: "−";
-}
-
-.about-accordion-locked[open] summary::after {
-  content: "";
 }
 
 .about-accordion-content {
