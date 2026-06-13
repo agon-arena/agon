@@ -173,8 +173,7 @@ function getRectOverlapArea(a, b) {
 }
 
 function isStandaloneMobileHome() {
-  return !!document.body?.classList?.contains("is-standalone")
-    && !!document.body?.classList?.contains("page-home-mobile");
+  return !!document.body?.classList?.contains("agon-mobile-cloud-viewport");
 }
 
 function isMobileTagCloud() {

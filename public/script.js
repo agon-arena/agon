@@ -226,6 +226,28 @@ function isStandaloneMode() {
 
 if (isStandaloneMode()) document.body.classList.add("is-standalone");
 
+function isAgonMobileCloudViewport() {
+  const viewportWidth = Math.min(
+    window.innerWidth || Number.POSITIVE_INFINITY,
+    window.visualViewport?.width || Number.POSITIVE_INFINITY
+  );
+  const cssMobile = viewportWidth <= 768 || window.matchMedia("(max-width: 768px)").matches;
+  const coarseTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches
+    || Number(navigator.maxTouchPoints || 0) > 1;
+  const narrowDevice = Math.min(screen.width || 9999, screen.height || 9999) <= 820;
+
+  return cssMobile || (isStandaloneMode() && coarseTouch && narrowDevice);
+}
+
+function syncAgonMobileCloudViewportClass() {
+  if (!document.body) return;
+  document.body.classList.toggle("agon-mobile-cloud-viewport", isAgonMobileCloudViewport());
+}
+
+syncAgonMobileCloudViewportClass();
+window.addEventListener("resize", syncAgonMobileCloudViewportClass, { passive: true });
+window.visualViewport?.addEventListener("resize", syncAgonMobileCloudViewportClass, { passive: true });
+
 function ensurePushMenuItemElement() {
   let item = document.getElementById("push-menu-item");
   if (item) return item;
@@ -15497,7 +15519,7 @@ function getCurrentIndexSearchQuery() {
 
 function alignStandaloneBubbleFrameToActiveFilter() {
   if (!document.body.classList.contains('is-standalone')) return;
-  if (!document.body.classList.contains('page-home-mobile')) return;
+  if (!isAgonMobileCloudViewport()) return;
 
   requestAnimationFrame(() => {
     const cloud = document.getElementById('agon-tag-trends-cloud');
@@ -17267,7 +17289,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260613-standalone-mobile-cloud");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260613-standalone-cloud-viewport");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -29905,7 +29927,7 @@ window.addEventListener('pageshow', (event) => {
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
 var _cloudSectionBaseHeight = null;
 function syncCloudSectionHeight(recomputeBase) {
-  if (document.body.classList.contains('page-home-mobile')) {
+  if (isAgonMobileCloudViewport()) {
     var mobileSection = document.getElementById('agon-tag-trends-section');
     var mobileCloud = document.getElementById('agon-tag-trends-cloud');
     if (mobileSection) mobileSection.style.height = '';

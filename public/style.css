@@ -10570,7 +10570,7 @@ body.is-standalone .page-home-mobile .agon-tag-trends-caption {
 }
 
 @media (min-width: 769px) {
-  body.is-standalone.page-home-mobile .agon-tag-trends-section {
+  body.is-standalone.agon-mobile-cloud-viewport .agon-tag-trends-section {
     padding-top: 76px !important;
     padding-bottom: 44px !important;
   }
@@ -18282,22 +18282,22 @@ body.agon-cloud-switch-loading::before {
   }
 }
 
-body.page-home-mobile .agon-tag-trends-section {
+body.agon-mobile-cloud-viewport .agon-tag-trends-section {
   max-width: 430px;
 }
 
-body.page-home-mobile .agon-tag-trends-cloud {
+body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
   max-width: 390px;
   height: 548px;
   min-height: 548px;
   flex: 0 0 auto;
 }
 
-body.page-home-mobile .agon-tag-trends-cloud::before {
+body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before {
   inset: var(--bubble-frame-top) 30px 78px;
 }
 
-body.page-home-mobile #agon-cloud-loading-spinner {
+body.agon-mobile-cloud-viewport #agon-cloud-loading-spinner {
   bottom: 78px;
 }
 
