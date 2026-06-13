@@ -172,8 +172,14 @@ function getRectOverlapArea(a, b) {
   return width * height;
 }
 
+function isStandaloneMobileHome() {
+  return !!document.body?.classList?.contains("is-standalone")
+    && !!document.body?.classList?.contains("page-home-mobile");
+}
+
 function isMobileTagCloud() {
-  return window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  return isStandaloneMobileHome()
+    || (window.matchMedia && window.matchMedia("(max-width: 640px)").matches);
 }
 
 function rectToContainerSpace(rect, containerRect, padding = 0) {
@@ -266,7 +272,7 @@ function applyCompactBubbleLayout(container) {
   const containerW = Math.round(container.getBoundingClientRect().width) || container.clientWidth || 390;
   const containerH = Math.round(container.getBoundingClientRect().height) || container.clientHeight || 548;
   const centerX = containerW / 2;
-  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const isMobile = isMobileTagCloud();
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
   const frameTop = parseFloat(frameTopRaw) || 55;
   const frameBottomInset = isMobile ? 78 : 23;
@@ -670,7 +676,7 @@ function renderTagTrendCloud(container, trends, onReady) {
   container.classList.add("agon-cloud-layout-pending");
   clearTagTrendCloudVisualItems(container);
 
-  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const isMobile = isMobileTagCloud();
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   trends.slice(0, MAX_TAG_TREND_BUBBLES).forEach((trendItem, index) => {

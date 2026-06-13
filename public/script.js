@@ -15495,6 +15495,27 @@ function getCurrentIndexSearchQuery() {
   return String(currentIndexSearchQuery || "").trim();
 }
 
+function alignStandaloneBubbleFrameToActiveFilter() {
+  if (!document.body.classList.contains('is-standalone')) return;
+  if (!document.body.classList.contains('page-home-mobile')) return;
+
+  requestAnimationFrame(() => {
+    const cloud = document.getElementById('agon-tag-trends-cloud');
+    const activeTag = document.querySelector('#index-active-filters .index-active-filter-tag');
+    if (!cloud || !activeTag) return;
+    if (!cloud.getClientRects().length || !activeTag.getClientRects().length) return;
+
+    const frameTop = parseFloat(getComputedStyle(cloud).getPropertyValue('--bubble-frame-top')) || 55;
+    const cloudRect = cloud.getBoundingClientRect();
+    const tagRect = activeTag.getBoundingClientRect();
+    const targetCloudTop = tagRect.bottom + 7 - frameTop;
+    const delta = targetCloudTop - cloudRect.top;
+    const currentMarginTop = parseFloat(cloud.style.marginTop || '0') || 0;
+
+    cloud.style.marginTop = (currentMarginTop + delta) + 'px';
+  });
+}
+
 function renderIndexActiveFilterTags() {
   const container = document.getElementById("index-active-filters");
   if (!container) return;
@@ -15544,6 +15565,7 @@ function renderIndexActiveFilterTags() {
     : '<button type="button" class="index-active-filter-tag index-active-filter-default" tabindex="-1" aria-disabled="true"><span>Toutes les arènes agôn</span></button>';
   container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
+  alignStandaloneBubbleFrameToActiveFilter();
 }
 
 function clearActiveBubbles() {
@@ -16490,8 +16512,9 @@ function syncIndexCarouselDots(row) {
     dots.innerHTML = Array.from({ length: dotCount }, () => '<span class="theme-carousel-dot"></span>').join("");
     if (dotCount >= 4) {
       const dotEls = dots.querySelectorAll(".theme-carousel-dot");
-      dotEls[dotCount - 1]?.classList.add("theme-carousel-dot--fade-2", "theme-carousel-dot--pill");
-      dotEls[dotCount - 2]?.classList.add("theme-carousel-dot--fade-1");
+      dotEls[dotCount - 1]?.classList.add("theme-carousel-dot--fade-3", "theme-carousel-dot--pill");
+      if (dotCount >= 5) dotEls[dotCount - 2]?.classList.add("theme-carousel-dot--fade-2");
+      if (dotCount >= 6) dotEls[dotCount - 3]?.classList.add("theme-carousel-dot--fade-1");
     }
     dots.querySelectorAll(".theme-carousel-dot").forEach((dot, index) => {
       dot.addEventListener("click", () => {
@@ -17244,7 +17267,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260612-bulles-desktop-2");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260613-standalone-mobile-cloud");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -17257,6 +17280,7 @@ function syncBubbleFrameTop() {
   const cloud = document.getElementById('agon-tag-trends-cloud');
   if (!cloud) return;
   cloud.style.setProperty('--bubble-frame-top', '55px');
+  alignStandaloneBubbleFrameToActiveFilter();
 }
 
 (function initBubbleFrameSync() {
@@ -28017,18 +28041,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (document.body.classList.contains('is-standalone')) {
     requestAnimationFrame(() => {
-      const cloud = document.getElementById('agon-tag-trends-cloud');
-      const topbar = document.querySelector('.topbar');
-      const nav = document.querySelector('.home-bottom-nav');
-      if (!cloud || !topbar || !nav) return;
-      const topbarBottom = topbar.getBoundingClientRect().bottom;
-      const navTop = nav.getBoundingClientRect().top;
-      const availableCenter = (topbarBottom + navTop) / 2;
-      // Le centre visuel des bulles est à 311px dans le container de 548px
-      const standaloneLift = 7;
-      const targetCloudTop = availableCenter - 311 - standaloneLift;
-      const currentCloudTop = cloud.getBoundingClientRect().top;
-      cloud.style.marginTop = (targetCloudTop - currentCloudTop) + 'px';
+      alignStandaloneBubbleFrameToActiveFilter();
     });
   }
 if (location.pathname === "/debate") {
@@ -29764,9 +29777,45 @@ window.addEventListener('pageshow', (event) => {
 (function() {
   var IDLE_RELOAD_KEY = "agon_idle_reload_hidden_at";
   var IDLE_RELOAD_THRESHOLD = 30 * 60 * 1000;
+  var idleReloadInProgress = false;
 
   function onHidden() {
     sessionStorage.setItem(IDLE_RELOAD_KEY, String(Date.now()));
+  }
+
+  function showIdleReloadOverlay() {
+    if (document.getElementById('agon-idle-reload-overlay')) return;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'agon-idle-reload-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:400000',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'background:#101820',
+      'pointer-events:auto'
+    ].join(';');
+    overlay.innerHTML = '<img src="/sablier-96.png" alt="" style="width:78px;height:78px;object-fit:contain;animation:pageArrivalLogoSpin 1s linear infinite;filter:drop-shadow(0 10px 24px rgba(0,0,0,.32));">';
+    document.body.appendChild(overlay);
+  }
+
+  function reloadAfterPaint() {
+    if (idleReloadInProgress) return;
+    idleReloadInProgress = true;
+    try { showPageArrivalLoadingOverlay(); } catch (e) {}
+    showIdleReloadOverlay();
+
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        setTimeout(function() {
+          location.reload();
+        }, 40);
+      });
+    });
   }
 
   function onVisible() {
@@ -29774,8 +29823,7 @@ window.addEventListener('pageshow', (event) => {
     sessionStorage.removeItem(IDLE_RELOAD_KEY);
     if (!hiddenAt || Date.now() - hiddenAt <= IDLE_RELOAD_THRESHOLD) return;
     if (window.__agonDebateModalOpen) return;
-    try { showPageArrivalLoadingOverlay(); } catch (e) {}
-    location.reload();
+    reloadAfterPaint();
   }
 
   document.addEventListener('visibilitychange', function() {
@@ -29857,6 +29905,16 @@ window.addEventListener('pageshow', (event) => {
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
 var _cloudSectionBaseHeight = null;
 function syncCloudSectionHeight(recomputeBase) {
+  if (document.body.classList.contains('page-home-mobile')) {
+    var mobileSection = document.getElementById('agon-tag-trends-section');
+    var mobileCloud = document.getElementById('agon-tag-trends-cloud');
+    if (mobileSection) mobileSection.style.height = '';
+    if (mobileCloud) {
+      mobileCloud.style.flex = '';
+      mobileCloud.style.height = '';
+    }
+    return;
+  }
   if (window.innerWidth <= 768) return;
   var section = document.getElementById('agon-tag-trends-section');
   if (!section || section.hidden) return;
@@ -29866,9 +29924,11 @@ function syncCloudSectionHeight(recomputeBase) {
   // fluctuent de quelques px et feraient varier la hauteur du cadre entre modes.
   if (recomputeBase || _cloudSectionBaseHeight === null) {
     var docTop = section.getBoundingClientRect().top + window.scrollY;
-    // Soustraire le bandeau bas pour que le cadre ::before du cloud (23px du bas du cloud)
-    // soit visible au-dessus du bandeau et non caché derrière lui.
-    var bottomBarH = getStableBottomBarOffset();
+    // Hors standalone, on garde le cadre au-dessus du bandeau bas. En standalone desktop,
+    // le switch doit commencer juste sous le premier écran pour demander un petit scroll.
+    var isStandaloneDesktop = document.body.classList.contains('is-standalone');
+    var standaloneBelowFoldGap = Math.round(Math.min(52, Math.max(28, window.innerHeight * 0.045)));
+    var bottomBarH = isStandaloneDesktop ? -standaloneBelowFoldGap : getStableBottomBarOffset();
     _cloudSectionBaseHeight = Math.max(300, window.innerHeight - docTop - bottomBarH);
   }
   // Hauteur extérieure (boîte + marges) du switch Bulles Actu/Agôn et de la légende :
