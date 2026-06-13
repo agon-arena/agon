@@ -10565,7 +10565,7 @@ body.is-standalone .agon-tag-trends-section {
   padding-bottom: 120px;
 }
 
-body.is-standalone .page-home-mobile .agon-tag-trends-caption {
+body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
   margin-top: -10px;
 }
