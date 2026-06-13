@@ -7329,6 +7329,26 @@ function initMediaSwipeAutoScroll(scope = document) {
   });
 }
 
+const INDEX_DEFAULT_FALLBACK_IMAGES = [
+  "/visuels/agon_optimisee_01.webp",
+  "/visuels/agon_optimisee_02.webp",
+  "/visuels/agon_optimisee_03.webp",
+  "/visuels/agon_optimisee_04.webp",
+  "/visuels/agon_optimisee_05.webp",
+  "/visuels/agon_optimisee_06.webp",
+  "/visuels/agon_optimisee_07.webp",
+  "/visuels/agon_optimisee_08.webp"
+];
+
+function getIndexDefaultFallbackImage(debateId) {
+  const id = String(debateId || "");
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return INDEX_DEFAULT_FALLBACK_IMAGES[hash % INDEX_DEFAULT_FALLBACK_IMAGES.length];
+}
+
 function buildIndexSwipeableMediaHtml(debate, options = {}) {
   const mediaItems = getIndexDebateMediaItems(debate);
   const initialIndex = getPreferredIndexMediaStartIndex(mediaItems, debate);
@@ -7338,7 +7358,7 @@ function buildIndexSwipeableMediaHtml(debate, options = {}) {
       scheduleIndexSourcePreviewHydration(String(debate?.id || "").trim());
       return buildIndexSourcePreviewLoadingCardHtml(String(debate?.id || "").trim());
     }
-    return buildIndexLocalImageCardHtml("/fondchargement-256.png", String(debate?.id || "").trim());
+    return buildIndexLocalImageCardHtml(getIndexDefaultFallbackImage(debate?.id), String(debate?.id || "").trim());
   }
 
   const currentSourcePreview = currentItem && String(currentItem.type || "").trim() === "source"
