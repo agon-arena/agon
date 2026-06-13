@@ -3434,8 +3434,11 @@ function ensureDebateIframeModal() {
       justify-content: center;
       padding: 10px 20px;
       border-radius: 999px;
-      border: 1.5px solid #111827;
-      background: rgba(26,39,47,0.94);
+      border-width: 3px;
+      border-color: transparent;
+      background:
+        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
       color: #e5edf3;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
@@ -3445,7 +3448,9 @@ function ensureDebateIframeModal() {
       transition: background 0.15s, color 0.15s;
     }
     #debate-iframe-modal-close:hover {
-      background: rgba(17,24,39,0.98);
+      background:
+        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
       color: #ffffff;
     }
     @media (max-width: 768px) {
@@ -3464,8 +3469,11 @@ function ensureDebateIframeModal() {
       height: 46px;
       padding: 0;
       border-radius: 999px;
-      border: 1.5px solid #111827;
-      background: rgba(26,39,47,0.94);
+      border-width: 3px;
+      border-color: transparent;
+      background:
+        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
       color: #e5edf3;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
@@ -3474,7 +3482,9 @@ function ensureDebateIframeModal() {
       transition: background 0.15s, color 0.15s;
     }
     #debate-iframe-modal-refresh:hover {
-      background: rgba(17,24,39,0.98);
+      background:
+        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
       color: #ffffff;
     }
     #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close,
