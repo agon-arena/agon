@@ -1020,6 +1020,12 @@ function ensurePageArrivalLoadingOverlayStyles() {
       -webkit-backdrop-filter: blur(14px);
     }
 
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-notification-to-debate {
+      background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
     .page-arrival-loading-overlay.page-arrival-loading-overlay-create-to-debate .page-arrival-loading-box {
       width: auto;
       max-width: min(90vw, 200px);
@@ -1229,7 +1235,7 @@ function clearCreatedDebateContext() {
 }
 
 function getPageArrivalLoadingImageSrc() {
-  if (isNotificationToDebateLoadingTransition()) {
+  if (isAiScorePopupOverlayContext()) {
     return "/sablier-96.png";
   }
 
@@ -1247,12 +1253,13 @@ function applyPageArrivalLoadingVisuals() {
   const isIframeDebateContext = isIframeDebateLoadingOverlayContext();
   const isCreateReturnTransition = isCreateToDebateLoadingTransition();
   const isCreateToDebate = isCreateToDebateOverlayContext();
-  const isNotificationToDebate = isNotificationToDebateLoadingTransition();
+  const isNotificationToDebate = isAiScorePopupOverlayContext();
   const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
 
   overlay.classList.toggle("page-arrival-loading-overlay-iframe-debate", isIframeDebateContext);
   overlay.classList.toggle("page-arrival-loading-overlay-return-to-debate", isCreateReturnTransition);
   overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate || isNotificationToDebate);
+  overlay.classList.toggle("page-arrival-loading-overlay-notification-to-debate", isNotificationToDebate);
 
   if (loadingImage) {
     const desiredSrc = getPageArrivalLoadingImageSrc();
@@ -1276,7 +1283,7 @@ function updatePageArrivalLoadingOverlayBounds() {
   const isDebatePage = location.pathname === "/debate";
   const isDebateMobile = isDebatePage && window.innerWidth <= 768;
   const preserveTopbar = (isDebatePage && (isIframeDebateLoadingOverlayContext() || isCreateToDebateLoadingTransition()))
-    || isNotificationToDebateLoadingTransition();
+    || isAiScorePopupOverlayContext();
   const top = preserveTopbar ? getStableTopbarBottomOffset() : 0;
   const bottom = isDebateMobile ? 0 : getStableBottomBarOffset();
 
@@ -10845,6 +10852,11 @@ function isNotificationToDebateLoadingTransition(maxAgeMs = 15000) {
   } catch (error) {
     return false;
   }
+}
+
+function isAiScorePopupOverlayContext() {
+  if (isNotificationToDebateLoadingTransition()) return true;
+  return location.pathname === "/debate" && isAiScoreNotificationLink(location.href);
 }
 
 function getNotificationTransitionState() {

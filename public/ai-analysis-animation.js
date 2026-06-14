@@ -40,7 +40,7 @@
         position: fixed; inset: 0; z-index: 9998;
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
-        background: radial-gradient(circle at center, #243038 0%, #101820 55%, #05070a 100%);
+        background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
         opacity: 1;
         transition: opacity ${FADE_MS}ms ease;
       }
