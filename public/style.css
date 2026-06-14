@@ -7282,6 +7282,10 @@ body.page-debate .topbar::after {
 }
 
 @media (max-width: 768px) {
+  body.debate-embedded-frame .mobile-back-button {
+    display: none !important;
+  }
+
   .page-notifications-mobile .mobile-back-button,
   .page-debate .mobile-back-button {
     position: fixed;
@@ -10723,11 +10727,11 @@ body.page-debate .debate-floating-refresh-btn {
   }
 
   .index-floating-scroll-up {
-    left: calc(50% - 150px);
+    left: calc(50% - 165px);
   }
 
   .index-floating-scroll-down {
-    left: calc(50% + 150px);
+    left: calc(50% + 165px);
   }
 }
 
@@ -18341,7 +18345,7 @@ body.agon-mobile-cloud-viewport #agon-cloud-loading-spinner {
 }
 
 body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
-  margin-top: -67px;
+  margin-top: -71px;
 }
 
 .agon-tag-bubble {

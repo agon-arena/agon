@@ -3497,6 +3497,9 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh {
       display: none !important;
     }
+    body:has(#debate-iframe-modal.open) .mobile-back-button {
+      display: none !important;
+    }
     @media (max-width: 768px) {
       #debate-iframe-modal.open {
         inset: 0;
@@ -17330,7 +17333,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260613-standalone-cloud-viewport");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260614-mobile-bubbles-slightly-larger");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');

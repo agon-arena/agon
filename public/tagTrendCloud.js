@@ -13,9 +13,10 @@ function getBubbleSizeClass(index, trendItem = null) {
 
 const MAX_TAG_TREND_BUBBLES = 10;
 const BUBBLE_SIZE_BOOST = 1.035;
+const MOBILE_BUBBLE_SIZE_BOOST = 1.025;
 
-function boostedBubbleSize(px) {
-  return Math.round(px * BUBBLE_SIZE_BOOST);
+function boostedBubbleSize(px, isMobile = false) {
+  return Math.round(px * BUBBLE_SIZE_BOOST * (isMobile ? MOBILE_BUBBLE_SIZE_BOOST : 1));
 }
 
 // Source unique de vérité pour la taille d'une bulle en pixels, avant facteur d'échelle global.
@@ -29,13 +30,13 @@ function computeBubblePxSize(index, trendItem, isMobile) {
     const maxSize = index === 0
       ? (isMobile ? 155 : 220)
       : (isMobile ? 132 : 192);
-    return boostedBubbleSize(minSize + ((maxSize - minSize) * amplified));
+    return boostedBubbleSize(minSize + ((maxSize - minSize) * amplified), isMobile);
   }
   // Fallback aligné sur les tailles par défaut des classes CSS
   const sizeClass = getBubbleSizeClass(index);
-  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 209) : (isMobile ? 128 : 181));
-  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 152);
-  return boostedBubbleSize(isMobile ? 72 : 102);
+  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 209) : (isMobile ? 128 : 181), isMobile);
+  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 152, isMobile);
+  return boostedBubbleSize(isMobile ? 72 : 102, isMobile);
 }
 
 // Facteur d'échelle uniforme pour que toutes les bulles tiennent dans la zone utile.
