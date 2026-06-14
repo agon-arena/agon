@@ -7357,17 +7357,7 @@ const INDEX_DEFAULT_FALLBACK_IMAGES = [
   "/visuels/agon_optimisee_05.webp",
   "/visuels/agon_optimisee_06.webp",
   "/visuels/agon_optimisee_07.webp",
-  "/visuels/agon_optimisee_08.webp",
-  "/visuels/agon_visuel_01.jpg",
-  "/visuels/agon_visuel_02.jpg",
-  "/visuels/agon_visuel_03.jpg",
-  "/visuels/agon_visuel_04.jpg",
-  "/visuels/agon_visuel_05.jpg",
-  "/visuels/agon_visuel_06.jpg",
-  "/visuels/agon_visuel_07.jpg",
-  "/visuels/agon_visuel_08.jpg",
-  "/visuels/agon_visuel_09.jpg",
-  "/visuels/agon_visuel_10.jpg"
+  "/visuels/agon_optimisee_08.webp"
 ];
 
 function getIndexDefaultFallbackImage(debateId) {
