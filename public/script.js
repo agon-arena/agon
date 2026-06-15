@@ -1,3 +1,55 @@
+// ─────────────────────────────────────────────────────────────────────────
+// États globaux window.__agon* — récapitulatif (coordination entre script.js
+// et les templates views/*.html, ou entre la page index et l'iframe /debate).
+// Ne pas renommer/supprimer sans vérifier toutes les occurrences ci-dessous.
+//
+// - __agonDebateModalOpen
+//     Écrit : ouverture/fermeture de la modale débat (index).
+//     Lu : auto-scroll des médias index, idle guard, refresh en arrière-plan
+//          — tous suspendus pendant que la modale est ouverte.
+// - __agonDebateModalOpenedFromNotifications
+//     Écrit à l'ouverture de la modale (selon location.pathname === "/notifications").
+//     Lu pour déterminer le comportement de fermeture/retour de la modale.
+// - __agonDebateModalNewDebateCreated
+//     Écrit quand un débat est créé depuis la modale.
+//     Lu+remis à false par l'index pour rafraîchir/insérer ce débat.
+// - __agonDebateModalPendingDebates
+//     Écrit avec la liste fraîche de débats pendant que la modale est ouverte.
+//     Lu+vidé à la fermeture de la modale pour appliquer le rafraîchissement
+//     différé sans perturber l'affichage pendant que la modale est ouverte.
+// - __agonIframeCurrentPathname
+//     Écrit par l'iframe /debate (pathname courant affiché dans la modale).
+//     Lu par le parent (index) pour la gestion du bouton retour/navigation.
+// - __agonDebateBackNavigationInitialized
+//     Garde d'idempotence : empêche de rebrancher plusieurs fois le handler
+//     de navigation retour de la modale débat.
+// - __agonPrefetchedDebateData
+//     Écrit par l'index (préchargement des données d'un débat avant ouverture
+//     de sa modale), sous la forme { id, debate }.
+//     Lu+vidé par loadDebate() dans l'iframe (window.parent.__agonPrefetchedDebateData)
+//     pour afficher instantanément le débat sans nouvel appel API.
+// - __agonSuspendedIndexEmbeds
+//     Écrit à l'ouverture de la modale (état des embeds index suspendus :
+//     vidéos/iframes mis en pause).
+//     Lu+vidé à la fermeture pour restaurer ces embeds.
+// - __agonIdleHomeGuard
+//     Défini dans views/create.html, notifications.html et debate.html sous la
+//     forme { check, markHidden, markVisible } (logique propre à chaque page).
+//     Lu par script.js pour rediriger vers l'accueil si la page est restée
+//     inactive trop longtemps.
+// - __agonIndexShareDropdownScan
+//     Défini dans views/index.html (= scheduleScan).
+//     Appelé par initIndexCardShareMenus() sur la page d'accueil à la place de
+//     son scan générique, car l'index a sa propre logique optimisée.
+// - __agonIndexStatsScan
+//     Défini dans views/index.html (= scheduleScanCards).
+//     Appelé par script.js après rendu de cartes pour rescanner les
+//     statistiques/badges IA des cartes de l'index.
+// - __agonIdeaXMobileColumnFitBound
+//     Garde d'idempotence : empêche de rebrancher plusieurs fois l'observer de
+//     mise à l'échelle des embeds X (Twitter) en colonne mobile.
+// ─────────────────────────────────────────────────────────────────────────
+
 const API = "/api";
 
 const COLOR_A          = '#516776';
@@ -6975,64 +7027,6 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null, op
   });
 }
 
-function startIndexSourceAutoPlay(root) {
-  return; // défilement automatique désactivé
-  const scope = root || document;
-  scope.querySelectorAll("[data-index-media-swipe-shell]").forEach(function(shell) {
-    let mediaItems;
-    try { mediaItems = JSON.parse(shell.dataset.mediaItems || "[]"); } catch { return; }
-    if (mediaItems.length < 2) return;
-    if (shell.dataset.autoPlayBound === "1") return;
-    shell.dataset.autoPlayBound = "1";
-
-    let paused = false;
-    let videoPlaying = false;
-
-    // Pause au survol/touch — ne reprend pas si une vidéo est en cours
-    shell.addEventListener("mouseenter", function() { paused = true; }, { passive: true });
-    shell.addEventListener("mouseleave", function() { if (!videoPlaying) paused = false; }, { passive: true });
-    shell.addEventListener("touchstart", function() { paused = true; }, { passive: true });
-    shell.addEventListener("touchend", function() {
-      setTimeout(function() { if (!videoPlaying) paused = false; }, 2000);
-    }, { passive: true });
-
-    // Pause quand hors du viewport
-    const observer = new IntersectionObserver(function(entries) {
-      if (!videoPlaying) paused = !entries[0].isIntersecting;
-    }, { threshold: 0.3 });
-    observer.observe(shell);
-
-    // Pause quand une vidéo est lancée — reprend seulement à pause/fin
-    const localVideo = shell.querySelector("[data-index-local-video-player]");
-    if (localVideo) {
-      localVideo.addEventListener("play", function() { videoPlaying = true; paused = true; });
-      localVideo.addEventListener("pause", function() { videoPlaying = false; paused = false; });
-      localVideo.addEventListener("ended", function() { videoPlaying = false; paused = false; });
-    }
-
-    // YouTube : détection via clic sur le bouton play ou l'iframe
-    shell.addEventListener("click", function(e) {
-      const t = e.target;
-      if (t.closest(".debate-card-youtube-play") || t.closest(".debate-card-youtube-iframe") || t.closest(".debate-card-youtube-shell")) {
-        videoPlaying = true;
-        paused = true;
-      }
-    });
-
-    // Swap → considère la vidéo comme arrêtée
-    // (paused reste géré par le timer touchend 2s pour éviter de relancer trop tôt)
-    shell.addEventListener("indexMediaSwapped", function() {
-      videoPlaying = false;
-    });
-
-    setInterval(function() {
-      if (paused || document.hidden) return;
-      const nextBtn = shell.querySelector(".index-media-swipe-hotspot-next");
-      if (nextBtn) nextBtn.click();
-    }, 2000);
-  });
-}
-
 function initIndexMediaSwipeEnhancements(root) {
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
 
@@ -7342,10 +7336,26 @@ function initMediaSwipeAutoScroll(scope = document) {
     }, { threshold: 0.3 });
     observer.observe(shell);
 
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopTimer();
-      else start();
-    }, { passive: true });
+    // Un seul listener global 'visibilitychange' est branché (voir plus bas) pour
+    // éviter d'en accumuler un par carte au fil des rendus successifs de l'index.
+    if (!initMediaSwipeAutoScroll._instances) {
+      initMediaSwipeAutoScroll._instances = new Set();
+    }
+    initMediaSwipeAutoScroll._instances.add({ shell, stopTimer, start });
+
+    if (!initMediaSwipeAutoScroll._visibilityBound) {
+      initMediaSwipeAutoScroll._visibilityBound = true;
+      document.addEventListener('visibilitychange', () => {
+        initMediaSwipeAutoScroll._instances.forEach((instance) => {
+          if (!instance.shell.isConnected) {
+            initMediaSwipeAutoScroll._instances.delete(instance);
+            return;
+          }
+          if (document.hidden) instance.stopTimer();
+          else instance.start();
+        });
+      }, { passive: true });
+    }
   });
 }
 
@@ -17557,7 +17567,6 @@ function renderDebatesList(debates) {
   initIndexCardShareMenus(document);
   if (typeof window.__agonIndexStatsScan === "function") window.__agonIndexStatsScan(document);
   initIndexMediaSwipeEnhancements(document);
-  startIndexSourceAutoPlay(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
   initIndexXObserver(document);
@@ -18084,6 +18093,8 @@ async function initIndex() {
       // Rendu immédiat depuis le cache — pas d'appel API pour l'affichage initial
       debatesCache = cached;
       restoreIndexDebatesPaginationStateFromCache(debatesCache);
+      const hadAllPagesLoadedBeforeRefresh = !indexDebatesApiHasMore;
+      const debatesCountBeforeRefresh = debatesCache.length;
       visitedDebatesVisible = 5;
       otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
       currentTypeFilter = DEFAULT_INDEX_TYPE_FILTER;
@@ -18114,7 +18125,13 @@ async function initIndex() {
       fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" }).then((fresh) => {
         const safeFresh = Array.isArray(fresh) ? fresh : [];
         debatesCache = mergeIndexDebatesPageIntoCache(safeFresh, 0);
-        indexDebatesApiHasMore = Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT);
+        const gainedNewDebates = debatesCache.length > debatesCountBeforeRefresh;
+        // Si toutes les arènes étaient déjà chargées avant ce rafraîchissement et que ce
+        // dernier n'en a pas révélé de nouvelles, on évite de relancer un chargement de
+        // pages supplémentaires (qui ne renverrait rien) dans loadAllRemainingIndexDebatesPages().
+        indexDebatesApiHasMore = (hadAllPagesLoadedBeforeRefresh && !gainedNewDebates)
+          ? false
+          : Boolean(INDEX_INITIAL_DEBATES_FETCH_LIMIT && safeFresh.length >= INDEX_INITIAL_DEBATES_FETCH_LIMIT);
         indexDebatesApiNextOffset = Math.max(indexDebatesApiNextOffset, safeFresh.length);
         saveDebatesToSessionCache(debatesCache, {
           nextOffset: indexDebatesApiNextOffset,
@@ -25757,37 +25774,6 @@ function updateLocalArgumentVoteState(argId, votes, myVoteCount, lastVotedAt = n
   });
 }
 
-
-function rerenderCurrentDebateArguments(debateId) {
-  const commentsByArgument = currentCommentsByArgument || {};
-  const unifiedContainer = document.getElementById("arguments-unified");
-  const argumentsAContainer = document.getElementById("arguments-a");
-  const argumentsBContainer = document.getElementById("arguments-b");
-  const openMode = isCurrentOpenDebateMode();
-
-  if (openMode || currentDebateViewMode === "list") {
-    if (argumentsAContainer) argumentsAContainer.innerHTML = "";
-    if (argumentsBContainer) argumentsBContainer.innerHTML = "";
-    renderUnifiedArgs("arguments-unified", currentAllArguments, debateId, commentsByArgument);
-
-    requestAnimationFrame(() => {
-      syncVoiceGuidanceState(debateId);
-    });
-    return;
-  }
-
-  if (unifiedContainer) unifiedContainer.innerHTML = "";
-
-  const argsA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A");
-  const argsB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B");
-
-  renderArgs("arguments-a", argsA, debateId, commentsByArgument);
-  renderArgs("arguments-b", argsB, debateId, commentsByArgument);
-
-  requestAnimationFrame(() => {
-    syncVoiceGuidanceState(debateId);
-  });
-}
 
 function rerenderArgumentsAfterLocalVoteChange(debateId) {
   const previousPinnedArgumentId = pinnedNewArgumentId;

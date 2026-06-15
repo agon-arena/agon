@@ -4287,7 +4287,7 @@ function addToMediaExtras(currentExtras, type, url, publishedAt) {
   return arr;
 }
 
-app.put("/api/admin/debate/:id", async (req, res) => {
+app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
     const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated, story_id } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
@@ -4414,7 +4414,7 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
   }
 });
 
-app.post("/api/admin/debate/:id/bump", async (req, res) => {
+app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
   try {
     const debateId = req.params.id;
     const preserveAgonGenerated = req.body?.preserve_agon_generated === true;
@@ -6261,7 +6261,7 @@ app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/check-similar", async (req, res) => {
+app.post("/api/admin/veille/check-similar", requireAdmin, async (req, res) => {
   const { question, positionA, positionB, resume } = req.body || {};
   if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
 
@@ -6364,11 +6364,11 @@ app.get("/admin/veille", (req, res) => {
   res.sendFile(path.join(__dirname, "views/admin-veille.html"));
 });
 
-app.get("/api/admin/veille", async (req, res) => {
+app.get("/api/admin/veille", requireAdmin, async (req, res) => {
   res.json(await loadVeillePending());
 });
 
-app.post("/api/admin/veille/proofread", async (req, res) => {
+app.post("/api/admin/veille/proofread", requireAdmin, async (req, res) => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
@@ -6443,7 +6443,7 @@ app.post("/api/admin/veille/proofread", async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/check-merge-positions", async (req, res) => {
+app.post("/api/admin/veille/check-merge-positions", requireAdmin, async (req, res) => {
   const { debateId, positionA, positionB } = req.body || {};
   if (!debateId) return res.status(400).json({ ok: false, error: 'debateId requis' });
 
@@ -6465,7 +6465,7 @@ app.post("/api/admin/veille/check-merge-positions", async (req, res) => {
   }
 });
 
-app.delete("/api/admin/veille/:id", async (req, res) => {
+app.delete("/api/admin/veille/:id", requireAdmin, async (req, res) => {
   try {
     await deleteVeillePending(Number(req.params.id));
     res.json({ ok: true });
@@ -6474,7 +6474,7 @@ app.delete("/api/admin/veille/:id", async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/publish", async (req, res) => {
+app.post("/api/admin/veille/publish", requireAdmin, async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
     const safeQuestion = String(question || "").trim().slice(0, 110);
@@ -6721,7 +6721,7 @@ const previousSourceCount = previousSourceKeys.size;
   }
 });
 
-app.post("/api/admin/veille/merge", async (req, res) => {
+app.post("/api/admin/veille/merge", requireAdmin, async (req, res) => {
   const { id, debateId, question, positionA, positionB, resume, links } = req.body || {};
   if (!id || !debateId) return res.status(400).json({ ok: false, error: "id et debateId requis" });
   try {
