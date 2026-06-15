@@ -490,6 +490,10 @@ function normalizeDebateContent(value) {
   return String(value || "").trim().slice(0, 1800);
 }
 
+function limitText(value, max) {
+  return String(value || "").trim().slice(0, max);
+}
+
 
 function normalizeKeywordList(values, max = 10, maxLength = 28) {
   const seen = new Set();
@@ -3518,7 +3522,7 @@ app.post("/api/push-subscriptions", rateLimit("push-subscriptions", 20), async (
    ADMIN
 ========================= */
 
-app.post("/api/admin/login", (req, res) => {
+app.post("/api/admin/login", rateLimit("admin-login", 5), (req, res) => {
   const { password } = req.body || {};
 
   if (password !== ADMIN_PASSWORD) {
@@ -5562,9 +5566,9 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
       .insert({
         debate_id: sharedDebateId,
         side,
-        title,
-        body,
-        source_url: String(source_url || "").trim(),
+        title: limitText(title, 180),
+        body: limitText(body, 2500),
+        source_url: limitText(source_url, 1000),
         author_key: authorKey || null,
         votes: 0,
         created_at: nowIso(),
@@ -5827,8 +5831,8 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
     } = req.body || {};
 
     const safeStance = ["favorable", "defavorable", "amelioration"].includes(stance) ? stance : null;
-    const safeImprovementTitle = safeStance === "amelioration" ? String(improvement_title || "").trim() : "";
-    const safeImprovementBody = safeStance === "amelioration" ? String(improvement_body || "").trim() : "";
+    const safeImprovementTitle = safeStance === "amelioration" ? limitText(improvement_title, 180) : "";
+    const safeImprovementBody = safeStance === "amelioration" ? limitText(improvement_body, 2500) : "";
 
     if (safeStance === "amelioration") {
       if (!safeImprovementTitle) {
@@ -5844,7 +5848,7 @@ app.post("/api/comments", rateLimit("comments", 20), async (req, res) => {
       .from("comments")
       .insert({
         argument_id,
-        content,
+        content: limitText(content, 2500),
         stance: safeStance,
         author_key: authorKey || null,
         reply_to_comment_id: reply_to_comment_id || null,
