@@ -7289,7 +7289,7 @@ body.page-debate .topbar::after {
   .page-notifications-mobile .mobile-back-button,
   .page-debate .mobile-back-button {
     position: fixed;
-    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(26px + env(safe-area-inset-bottom, 0px));
     left: 16px;
     z-index: 10000;
     width: 42px;
