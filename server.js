@@ -4,6 +4,8 @@ const compression = require("compression");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const dns = require("dns");
+const net = require("net");
 const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
@@ -247,6 +249,87 @@ function normalizeExternalUrl(value) {
   }
 
   return `https://${raw}`;
+}
+
+class SsrfBlockedError extends Error {
+  constructor(message = "URL bloquée (SSRF_BLOCKED)") {
+    super(message);
+    this.name = "SSRF_BLOCKED";
+  }
+}
+
+// Bloque les IP privées, link-local, loopback et réservées (anti-SSRF)
+function isPrivateOrReservedIp(ip) {
+  const version = net.isIP(ip);
+  if (!version) return true;
+
+  if (version === 4) {
+    const parts = ip.split(".").map(Number);
+    const [a, b] = parts;
+    if (a === 127) return true; // 127.0.0.0/8
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10
+    return false;
+  }
+
+  const normalized = ip.toLowerCase();
+
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) -> revérifie la partie IPv4
+  const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return isPrivateOrReservedIp(mapped[1]);
+
+  if (normalized === "::1") return true; // loopback
+  if (normalized === "::") return true; // unspecified
+
+  const firstGroup = normalized.split(":")[0];
+  const firstGroupValue = parseInt(firstGroup || "0", 16);
+
+  if ((firstGroupValue & 0xfe00) === 0xfc00) return true; // fc00::/7 (ULA)
+  if ((firstGroupValue & 0xffc0) === 0xfe80) return true; // fe80::/10 (link-local)
+
+  return false;
+}
+
+// Valide qu'une URL externe ne pointe pas vers une cible interne/privée avant fetch (anti-SSRF)
+async function assertSafeExternalUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (error) {
+    throw new SsrfBlockedError("URL invalide");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new SsrfBlockedError("Protocole non autorisé");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "0.0.0.0") {
+    throw new SsrfBlockedError("Hôte non autorisé");
+  }
+
+  if (net.isIP(hostname)) {
+    if (isPrivateOrReservedIp(hostname)) {
+      throw new SsrfBlockedError("Adresse IP non autorisée");
+    }
+    return;
+  }
+
+  let addresses;
+  try {
+    addresses = await dns.promises.lookup(hostname, { all: true });
+  } catch (error) {
+    throw new SsrfBlockedError("Résolution DNS impossible");
+  }
+
+  if (!addresses.length || addresses.some((entry) => isPrivateOrReservedIp(entry.address))) {
+    throw new SsrfBlockedError("Adresse résolue non autorisée");
+  }
 }
 
 const HTML_ENTITY_MAP = {
@@ -1890,13 +1973,28 @@ async function fetchPreviewHtml(url, timeoutMs = 6000, profile = "browser") {
       signal: controller.signal
     });
 
+    const finalUrl = response.url || url;
+
+    try {
+      await assertSafeExternalUrl(finalUrl);
+    } catch (error) {
+      return {
+        ok: false,
+        status: response.status,
+        finalUrl,
+        html: "",
+        contentType: "",
+        profile
+      };
+    }
+
     const contentType = String(response.headers.get("content-type") || "").toLowerCase();
     const html = response.ok ? await response.text() : "";
 
     return {
       ok: response.ok,
       status: response.status,
-      finalUrl: response.url || url,
+      finalUrl,
       html,
       contentType,
       profile
@@ -2274,6 +2372,12 @@ async function getExternalLinkPreview(sourceUrl) {
   let parsedUrl;
   try {
     parsedUrl = new URL(safeUrl);
+  } catch (error) {
+    return null;
+  }
+
+  try {
+    await assertSafeExternalUrl(safeUrl);
   } catch (error) {
     return null;
   }
