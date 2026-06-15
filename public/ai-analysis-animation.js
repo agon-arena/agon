@@ -8,6 +8,8 @@
   var _showToken = 0;
   var _sablierImg = null;
   var _sablierPromise = null;
+  var _bgImg = null;
+  var _bgPromise = null;
 
   function preloadSablier() {
     if (_sablierPromise) return _sablierPromise;
@@ -29,6 +31,28 @@
       }
     });
     return _sablierPromise;
+  }
+
+  function preloadBackground() {
+    if (_bgPromise) return _bgPromise;
+    _bgImg = new Image();
+    _bgImg.decoding = 'sync';
+    _bgImg.src = '/visuels/fondanimation.webp';
+    _bgPromise = new Promise(function (resolve) {
+      function done() {
+        if (_bgImg && typeof _bgImg.decode === 'function') {
+          _bgImg.decode().then(resolve).catch(resolve);
+        } else {
+          resolve();
+        }
+      }
+      if (_bgImg.complete && _bgImg.naturalWidth) done();
+      else {
+        _bgImg.onload = done;
+        _bgImg.onerror = resolve;
+      }
+    });
+    return _bgPromise;
   }
 
   function injectStyles() {
@@ -192,7 +216,7 @@
     var existing = document.getElementById('aala-overlay');
     if (existing) existing.parentNode.removeChild(existing);
 
-    preloadSablier().then(function () {
+    Promise.all([preloadSablier(), preloadBackground()]).then(function () {
       if (token !== _showToken) return;
       _showAt = Date.now();
       document.body.appendChild(buildOverlay());
@@ -227,4 +251,5 @@
   window.showAiAnalysisAnimation = showAiAnalysisAnimation;
   window.hideAiAnalysisAnimation = hideAiAnalysisAnimation;
   preloadSablier();
+  preloadBackground();
 })();
