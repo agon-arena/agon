@@ -6154,9 +6154,22 @@ async function deleteVeillePending(id) {
   clearVeillePendingKeywords(id);
 }
 
-app.post("/api/veille/receive", async (req, res) => {
-  console.log("[veille/receive] payload reçu:", JSON.stringify(req.body || {}, null, 2));
+app.post("/api/veille/receive", rateLimit("veille-receive", 20), async (req, res) => {
   const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords, politicalOrientation } = req.body || {};
+  console.log("[veille/receive] payload:", {
+    hasQuestion: !!question,
+    questionLen: String(question || "").length,
+    hasPositionA: !!positionA,
+    hasPositionB: !!positionB,
+    hasTheme: !!theme,
+    hasResume: !!resume,
+    resumeLen: String(resume || "").length,
+    sourcesCount: Array.isArray(sources) ? sources.length : (sources ? 1 : 0),
+    linksCount: Array.isArray(links) ? links.length : 0,
+    hasStorySelection: !!storySelection,
+    keywordsCount: Array.isArray(keywords) ? keywords.length : (keywords ? 1 : 0),
+    hasPoliticalOrientation: !!politicalOrientation
+  });
   if (!question) return res.status(400).json({ ok: false, error: "question manquante" });
   const safeQuestion = String(question || "").trim().slice(0, 110);
   const pendingId = Date.now();
