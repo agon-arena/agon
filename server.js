@@ -197,7 +197,7 @@ function buildIndexMeta(req) {
     title: "Agôn | L’arène des idées",
     description: "Agôn est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve pour faire émerger les positions les plus robustes.",
     url: buildAbsoluteUrl(req, "/"),
-    image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+    image: buildAbsoluteUrl(req, "/logo.jpeg"),
     imageAlt: "Agôn — l'arène des idées"
   };
 }
@@ -213,7 +213,7 @@ function buildDebateMeta(req, debate) {
     : buildAbsoluteUrl(req, "/debate");
   const ogImageUrl = debateId
     ? buildAbsoluteUrl(req, `/debate/${encodeURIComponent(debateId)}`)
-    : buildAbsoluteUrl(req, "/logo2.jpeg");
+    : buildAbsoluteUrl(req, "/logo.jpeg");
   const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
   const question = normalizeMetaText(debate?.question || "Débat sur agôn", 110);
   const optionA = normalizeMetaText(debate?.option_a || "", 80);
@@ -3400,7 +3400,7 @@ app.get("/debate", async (req, res) => {
       title: "Débat | agôn",
       description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, "/debate"),
-      image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+      image: buildAbsoluteUrl(req, "/logo.jpeg"),
       imageAlt: "Agôn — l'arène des idées"
     });
     return res.type("html").send(html);
@@ -3413,7 +3413,7 @@ app.get("/debate", async (req, res) => {
         title: "Débat introuvable | agôn",
         description: "Cette arène n'est plus disponible sur agôn.",
         url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
-        image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+        image: buildAbsoluteUrl(req, "/logo.jpeg"),
         imageAlt: "Agôn — l'arène des idées"
       });
       return res.status(404).type("html").send(html);
@@ -3427,7 +3427,7 @@ app.get("/debate", async (req, res) => {
       title: "Débat | agôn",
       description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
       url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
-      image: buildAbsoluteUrl(req, "/logo2.jpeg"),
+      image: buildAbsoluteUrl(req, "/logo.jpeg"),
       imageAlt: "Agôn — l'arène des idées"
     });
     return res.type("html").send(html);
@@ -3452,10 +3452,33 @@ app.get("/admin-stories", (req, res) => {
 
 const OG_WORKER_PATH = path.join(__dirname, "lib", "og-image-worker.js");
 
+// Le worker_threads postMessage peut faire perdre le type Buffer (le message
+// arrive parfois comme Uint8Array ou comme objet indexé {"0":...,"1":...}) :
+// on le reconvertit explicitement en Buffer avant tout envoi/cache.
+function toPngBuffer(result) {
+  if (Buffer.isBuffer(result)) return result;
+  if (result instanceof Uint8Array || result instanceof ArrayBuffer) return Buffer.from(result);
+  if (result && typeof result === "object") {
+    const keys = Object.keys(result);
+    if (keys.length && keys.every(k => /^\d+$/.test(k))) {
+      const bytes = new Uint8Array(keys.length);
+      for (const k of keys) bytes[Number(k)] = result[k];
+      return Buffer.from(bytes);
+    }
+  }
+  throw new Error("OG worker: résultat invalide (impossible de produire un PNG)");
+}
+
 function generateOgImageInWorker(payload) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(OG_WORKER_PATH, { workerData: payload });
-    worker.once("message", resolve);
+    worker.once("message", result => {
+      try {
+        resolve(toPngBuffer(result));
+      } catch (e) {
+        reject(e);
+      }
+    });
     worker.once("error", reject);
     worker.once("exit", code => { if (code !== 0) reject(new Error(`OG worker exited with code ${code}`)); });
   });
@@ -3491,7 +3514,7 @@ app.get("/debate/:id", async (req, res) => {
       isOpen,
       percentA,
       percentB,
-      logoPath: path.join(__dirname, "public/logo2.jpeg")
+      logoPath: path.join(__dirname, "public/logo.jpeg")
     });
 
     _cacheSet(ogImageCache, String(id), { buffer: pngBuffer, expiresAt: Date.now() + OG_IMAGE_CACHE_TTL_MS }, OG_IMAGE_CACHE_MAX);
