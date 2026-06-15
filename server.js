@@ -3505,7 +3505,7 @@ app.get("/debate/:id", async (req, res) => {
   }
 });
 
-app.post("/api/link-preview", rateLimit("preview", 30), async (req, res) => {
+app.post("/api/link-preview", rateLimit("preview", 120), async (req, res) => {
   try {
     const { url } = req.body || {};
     const safeUrl = normalizeExternalUrl(url);
@@ -4322,7 +4322,7 @@ app.delete("/api/admin/reports", requireAdmin, async (req, res) => {
    NOTIFICATIONS
 ========================= */
 
-app.get("/api/notifications", async (req, res) => {
+app.get("/api/notifications", rateLimit("notifications", 180), async (req, res) => {
   try {
     const userKey = req.query.userKey;
 
@@ -4357,7 +4357,7 @@ app.get("/api/notifications", async (req, res) => {
   }
 });
 
-app.post("/api/notifications/read-all", async (req, res) => {
+app.post("/api/notifications/read-all", rateLimit("notifications", 180), async (req, res) => {
   try {
     const { userKey } = req.body || {};
 
@@ -4383,7 +4383,7 @@ app.post("/api/notifications/read-all", async (req, res) => {
   }
 });
 
-app.post("/api/notifications/delete-all", async (req, res) => {
+app.post("/api/notifications/delete-all", rateLimit("notifications", 180), async (req, res) => {
   try {
     const { userKey } = req.body || {};
 
@@ -4409,7 +4409,7 @@ app.post("/api/notifications/delete-all", async (req, res) => {
   }
 });
 
-app.post("/api/notifications/read-one", async (req, res) => {
+app.post("/api/notifications/read-one", rateLimit("notifications", 180), async (req, res) => {
   try {
     const { userKey, notificationId } = req.body || {};
 
@@ -5468,7 +5468,7 @@ app.post("/api/debates/:id/video-file", express.raw({
 });
 
 // Map id → { status, scheduledAt } — doit être AVANT /api/debates/:id
-app.get("/api/debates/analysis-statuses", async (req, res) => {
+app.get("/api/debates/analysis-statuses", rateLimit("analysis-read", 240), async (req, res) => {
   const { data, error } = await supabase
     .from("debates")
     .select("id, ai_analysis_status, ai_analysis_scheduled_at")
@@ -6439,7 +6439,7 @@ app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/check-similar", requireAdmin, async (req, res) => {
+app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
   const { question, positionA, positionB, resume } = req.body || {};
   if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
 
@@ -6546,7 +6546,7 @@ app.get("/api/admin/veille", requireAdmin, async (req, res) => {
   res.json(await loadVeillePending());
 });
 
-app.post("/api/admin/veille/proofread", requireAdmin, async (req, res) => {
+app.post("/api/admin/veille/proofread", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
@@ -6621,7 +6621,7 @@ app.post("/api/admin/veille/proofread", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/check-merge-positions", requireAdmin, async (req, res) => {
+app.post("/api/admin/veille/check-merge-positions", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
   const { debateId, positionA, positionB } = req.body || {};
   if (!debateId) return res.status(400).json({ ok: false, error: 'debateId requis' });
 
@@ -6652,7 +6652,7 @@ app.delete("/api/admin/veille/:id", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/publish", requireAdmin, async (req, res) => {
+app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
   try {
     const safeQuestion = String(question || "").trim().slice(0, 110);
@@ -6899,7 +6899,7 @@ const previousSourceCount = previousSourceKeys.size;
   }
 });
 
-app.post("/api/admin/veille/merge", requireAdmin, async (req, res) => {
+app.post("/api/admin/veille/merge", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
   const { id, debateId, question, positionA, positionB, resume, links } = req.body || {};
   if (!id || !debateId) return res.status(400).json({ ok: false, error: "id et debateId requis" });
   try {
@@ -6948,7 +6948,7 @@ app.post("/api/admin/veille/merge", requireAdmin, async (req, res) => {
 /* --- Analyse IA d'un débat ---------------------------------------- */
 
 // Lecture publique du rapport stocké
-app.get("/api/debates/:id/analysis", async (req, res) => {
+app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
     .from("debates")
@@ -7347,7 +7347,7 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
   return data?.choices?.[0]?.message?.content || "";
 }
 
-app.post("/api/admin/analyze-debate", requireAdmin, express.json(), async (req, res) => {
+app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate", 5), express.json(), async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
 
   const { debateId } = req.body || {};
