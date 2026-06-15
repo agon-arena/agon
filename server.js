@@ -4741,7 +4741,10 @@ app.get("/api/debates", async (req, res) => {
       sort: effectiveSortMode,
       search: searchQuery
     });
-    const bypassCache = req.query._ || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    // req.query._ est un simple cache-buster côté navigateur (Date.now()) :
+    // il ne doit pas invalider le cache serveur. Seuls fresh=1 ou un header
+    // Cache-Control: no-store explicite forcent un bypass réel.
+    const bypassCache = req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
