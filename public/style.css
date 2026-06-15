@@ -9555,7 +9555,7 @@ padding:4px 14px 12px 14px;
   z-index: 3;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(17, 24, 39, 0.72);
+  background: rgba(17, 24, 39, 0.82);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -9563,8 +9563,6 @@ padding:4px 14px 12px 14px;
   max-width: calc(100% - 24px);
   overflow: hidden;
   text-overflow: ellipsis;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .index-media-swipe-media .debate-source-card-image-domain-badge {
@@ -9621,7 +9619,7 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   height: 30px;
   border: 0;
   border-radius: 50%;
-  background: rgba(10, 15, 20, 0.35);
+  background: rgba(10, 15, 20, 0.5);
   color: rgba(255, 255, 255, 0.8);
   display: flex;
   align-items: center;
@@ -9630,8 +9628,6 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   font-size: 18px;
   font-weight: 500;
   line-height: 1;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   transition: background 0.15s ease, opacity 0.15s ease;
   flex-shrink: 0;
 }
@@ -9649,10 +9645,8 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
     right: 2px;
   }
   .index-media-swipe-hotspot {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.65);
     color: #1a1a2e;
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.18);
   }
   .index-media-swipe-hotspot:hover,
@@ -9673,15 +9667,13 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   justify-content: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.56);
+  background: rgba(15, 23, 42, 0.72);
   color: rgba(255, 255, 255, 0.92);
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
   pointer-events: none;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
 }
 
 
@@ -18902,7 +18894,7 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   padding: 5px 12px;
   border: none;
   border-radius: 999px;
-  background: rgba(17, 24, 39, 0.82);
+  background: rgba(17, 24, 39, 0.92);
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
@@ -18911,8 +18903,6 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 2px 8px rgba(0,0,0,0.35);
   transition: background 0.15s ease, transform 0.15s ease;
 }

@@ -4724,32 +4724,14 @@ function initIndexReturnNavigation() {
   const goBackToIndex = (event) => {
     event.preventDefault();
 
-    const iframeReferrerPathname = (() => {
-      try {
-        const referrer = String(document.referrer || "").trim();
-        if (!referrer) return "";
-        const referrerUrl = new URL(referrer, window.location.origin);
-        if (referrerUrl.origin !== window.location.origin) return "";
-        return referrerUrl.pathname || "";
-      } catch (error) {
-        return "";
-      }
-    })();
-
     if (window.parent !== window) {
       window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
       return;
     }
 
+    // Page débat ouverte en page complète (ex. lien partagé) : history.back()
+    // n'a aucune garantie de ramener vers l'index Agôn, donc on y va directement.
     setPendingBackButtonsState();
-
-    // Arrivée directe via lien partagé (referrer externe ou absent) : history.back()
-    // quitterait Agôn au lieu de revenir à l'index, donc on y va directement.
-    if (window.history.length > 1 && iframeReferrerPathname) {
-      window.history.back();
-      return;
-    }
-
     window.location.href = "/";
   };
 
@@ -27991,7 +27973,7 @@ function closeReplacementSuccessMessage() {
   }, 250);
 }
 function shouldRunBackgroundRefresh() {
-  return !document.hidden;
+  return !document.hidden && window.__agonDebateModalOpen !== true;
 }
 
 
@@ -29933,7 +29915,7 @@ window.addEventListener('pageshow', (event) => {
   }
 
   function poll() {
-    if (document.hidden || bannerShown || !latestSeenAt) return;
+    if (document.hidden || window.__agonDebateModalOpen === true || bannerShown || !latestSeenAt) return;
     // Synchroniser avec le background refresh qui peut avoir mis à jour debatesCache
     var currentNewest = getNewestCreatedAt(debatesCache);
     if (currentNewest && currentNewest > latestSeenAt) latestSeenAt = currentNewest;
