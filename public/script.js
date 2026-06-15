@@ -4743,7 +4743,9 @@ function initIndexReturnNavigation() {
 
     setPendingBackButtonsState();
 
-    if (window.history.length > 1) {
+    // Arrivée directe via lien partagé (referrer externe ou absent) : history.back()
+    // quitterait Agôn au lieu de revenir à l'index, donc on y va directement.
+    if (window.history.length > 1 && iframeReferrerPathname) {
       window.history.back();
       return;
     }
