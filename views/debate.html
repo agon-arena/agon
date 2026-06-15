@@ -1663,7 +1663,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 <script>
 (function(){
-  var els = [document.getElementById('scroll-hint-l'), document.getElementById('scroll-hint-r')];
+  var els = [document.getElementById('scroll-hint-l'), document.getElementById('scroll-hint-r')].filter(Boolean);
+  if (!els.length) return;
   var gone = false;
   setTimeout(function(){ if(!gone) els.forEach(function(e){ e.classList.add('visible'); }); }, 1000);
   function hide(){
