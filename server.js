@@ -1471,6 +1471,61 @@ function enrichDebateWithStoredImage(debate) {
   };
 }
 
+// Sécurité C1 : creator_key / author_key sont des "clés-mots de passe" qui servent
+// à autoriser les suppressions/éditions. Elles ne doivent jamais quitter le serveur.
+// Ces helpers les retirent des réponses publiques et les remplacent par des booléens
+// calculés côté serveur (jamais à partir d'une valeur fournie par le client).
+function getRequestClientKey(req) {
+  return String(req?.query?.key || req?.query?.voterKey || "").trim();
+}
+
+function sanitizeDebateForClient(debate, clientKey) {
+  if (!debate) return debate;
+  const { creator_key, ...rest } = debate;
+  const normalizedClientKey = clientKey ? String(clientKey) : "";
+  return {
+    ...rest,
+    is_owner: !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey),
+    is_official: creator_key === AGON_ADMIN_CREATOR_KEY,
+    is_community: !!creator_key && creator_key !== AGON_ADMIN_CREATOR_KEY
+  };
+}
+
+function sanitizeArgumentForClient(argument, clientKey) {
+  if (!argument) return argument;
+  const { author_key, ...rest } = argument;
+  const normalizedClientKey = clientKey ? String(clientKey) : "";
+  return {
+    ...rest,
+    is_owner: !!(normalizedClientKey && author_key && String(author_key) === normalizedClientKey)
+  };
+}
+
+function sanitizeCommentForClient(comment, clientKey) {
+  if (!comment) return comment;
+  const { author_key, ...rest } = comment;
+  const normalizedClientKey = clientKey ? String(clientKey) : "";
+  return {
+    ...rest,
+    is_owner: !!(normalizedClientKey && author_key && String(author_key) === normalizedClientKey)
+  };
+}
+
+function sanitizeDebateDetailPayload(payload, clientKey) {
+  if (!payload) return payload;
+  const sanitizedCommentsByArgument = {};
+  for (const [argumentId, comments] of Object.entries(payload.commentsByArgument || {})) {
+    sanitizedCommentsByArgument[argumentId] = (comments || []).map((c) => sanitizeCommentForClient(c, clientKey));
+  }
+  return {
+    ...payload,
+    debate: sanitizeDebateForClient(payload.debate, clientKey),
+    optionA: (payload.optionA || []).map((a) => sanitizeArgumentForClient(a, clientKey)),
+    optionB: (payload.optionB || []).map((a) => sanitizeArgumentForClient(a, clientKey)),
+    commentsByArgument: sanitizedCommentsByArgument
+  };
+}
+
 function walkStructuredData(node, bucket = []) {
   if (!node) return bucket;
   if (Array.isArray(node)) {
@@ -4533,6 +4588,7 @@ app.put("/api/admin/argument/:id", requireAdmin, async (req, res) => {
 
 app.get("/api/debates", async (req, res) => {
   try {
+    const clientKey = getRequestClientKey(req);
     const DEFAULT_DEBATES_PAGE_SIZE = 120;
     const MAX_DEBATES_PAGE_SIZE = 120;
     const rawLimit = Number.parseInt(String(req.query.limit || ""), 10);
@@ -4558,7 +4614,7 @@ app.get("/api/debates", async (req, res) => {
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
-      return res.json(cachedResponse);
+      return res.json(cachedResponse.map((d) => sanitizeDebateForClient(d, clientKey)));
     }
 
     const canPageInDatabase = !searchQuery && (effectiveSortMode === "recent" || effectiveSortMode === "old");
@@ -4864,7 +4920,7 @@ app.get("/api/debates", async (req, res) => {
     if (!bypassCache) {
       setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
     }
-    res.json(rowsWithSourcePreview);
+    res.json(rowsWithSourcePreview.map((d) => sanitizeDebateForClient(d, clientKey)));
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture débats.");
@@ -5323,9 +5379,10 @@ app.get("/api/debates/analysis-statuses", async (req, res) => {
 app.get("/api/debates/:id", async (req, res) => {
   try {
     const id = req.params.id;
+    const clientKey = getRequestClientKey(req);
     const cachedResponse = getCachedDebateDetailResponse(id);
     if (cachedResponse) {
-      return res.json(cachedResponse);
+      return res.json(sanitizeDebateDetailPayload(cachedResponse, clientKey));
     }
 
     const [debate, args] = await Promise.all([
@@ -5357,7 +5414,7 @@ app.get("/api/debates/:id", async (req, res) => {
         sourcePreview
       };
       setCachedDebateDetailResponse(id, payload);
-      return res.json(payload);
+      return res.json(sanitizeDebateDetailPayload(payload, clientKey));
     }
 
     const [sourcePreview, comments] = await Promise.all([
@@ -5383,7 +5440,7 @@ app.get("/api/debates/:id", async (req, res) => {
     };
 
     setCachedDebateDetailResponse(id, payload);
-    res.json(payload);
+    res.json(sanitizeDebateDetailPayload(payload, clientKey));
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture arguments.");

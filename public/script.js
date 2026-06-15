@@ -4005,7 +4005,7 @@ async function scrollToIndexDebateCard(url) {
   if (!inCache) {
     // Tenter de récupérer ce débat spécifiquement et l'injecter dans le cache
     try {
-      const data = await fetchJSON(`${API}/debates/${encodeURIComponent(trimmedId)}`);
+      const data = await fetchJSON(`${API}/debates/${encodeURIComponent(trimmedId)}?key=${encodeURIComponent(getKey())}`);
       const debate = data?.debate || (data && data.id ? data : null);
       if (!debate || !debate.id) { _showEpisodeNavNotFound(); return; }
       debatesCache = [debate, ...debatesCache.filter(d => String(d?.id || "") !== String(debate.id))];
@@ -5673,7 +5673,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const includeDeleteButton = options.includeDeleteButton === true;
   const categoryBadgesHtml = buildIndexCardCategoryBadgesHtml(d.category);
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
-  const isCommunityCard = !isAgonGeneratedDebate(d) && !!d.creator_key;
+  const isCommunityCard = !!d.is_community;
 
   return `
     <article class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
@@ -11231,15 +11231,15 @@ function resolveCurrentUser() {
 
 function isArgumentOwner(argument) {
   if (!argument) return false;
-  return String(argument.author_key || "") === String(getKey() || "");
+  return !!argument.is_owner;
 }
 function isCommentOwner(comment) {
   if (!comment) return false;
-  return String(comment.author_key || "") === String(getKey() || "");
+  return !!comment.is_owner;
 }
 function isDebateOwner(debate) {
   if (!debate) return false;
-  return String(debate.creator_key || "") === String(getKey() || "");
+  return !!debate.is_owner;
 }
 
 function canDeleteDebate(debate) {
@@ -11248,7 +11248,7 @@ function canDeleteDebate(debate) {
 
 function isAgonGeneratedDebate(debate) {
   if (!debate) return false;
-  return String(debate.creator_key || "") === "__AGON_ADMIN__";
+  return !!debate.is_official;
 }
 
 function getState(id) {
@@ -14155,7 +14155,7 @@ async function saveAdminCardEdit(debateId, btn) {
     // Met à jour les caches
     const cached = [debatesCache, visitedDebatesCache, otherDebatesCache]
       .flat().find(d => d && String(d.id) === String(debateId));
-    const updatedDebate = { ...(cached || {}), ...body, id: debateId, creator_key: null };
+    const updatedDebate = { ...(cached || {}), ...body, id: debateId, is_official: false, is_community: false };
     updateDebateCachesAfterEdit(updatedDebate);
 
     // Met à jour le DOM de la carte directement
@@ -14327,7 +14327,8 @@ async function saveAndPublishAdminCard(debateId, btn) {
       ...(cached || {}),
       ...body,
       id: debateId,
-      creator_key: "__AGON_ADMIN__",
+      is_official: true,
+      is_community: false,
       bumped_at: publishTimestamp
     };
     updateDebateCachesAfterEdit(updatedDebate);
@@ -14350,7 +14351,8 @@ async function saveAndPublishAdminCard(debateId, btn) {
         ...currentDebateCache,
         ...body,
         id: debateId,
-        creator_key: "__AGON_ADMIN__",
+        is_official: true,
+        is_community: false,
         bumped_at: publishTimestamp
       };
       updateDebateCachesAfterEdit(updatedCurrentDebate);
@@ -14390,7 +14392,8 @@ async function bumpAdminDebate(debateId, btn) {
     const updatedDebate = {
       ...(cached || {}),
       id: debateId,
-      creator_key: null,
+      is_official: false,
+      is_community: false,
       bumped_at: bumpedAt
     };
     updateDebateCachesAfterEdit(updatedDebate);
@@ -14551,7 +14554,7 @@ async function toggleCurrentDebateAdminEditPanel() {
       const existingDebate = String(currentDebateCache?.id || "") === String(debateId)
         ? currentDebateCache
         : null;
-      const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId))?.debate || null;
+      const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey())))?.debate || null;
 
       if (!debate) {
         alert("Arène introuvable.");
@@ -17858,6 +17861,7 @@ function getIndexDebatesApiUrl(limit = INDEX_DEBATES_PAGE_SIZE, offset = 0, opti
     params.set("offset", String(safeOffset));
   }
   params.set("sort", sortMode);
+  params.set("key", getKey());
   const query = params.toString();
   return `${API}/debates?${query}${cacheBust}`;
 }
@@ -17961,6 +17965,7 @@ function ensureSearchMatchesInCache(query) {
     const params = new URLSearchParams();
     params.set("search", normalizedQuery);
     params.set("sort", getIndexDebatesSortQueryValue());
+    params.set("key", getKey());
     const matches = await fetchJSON(`${API}/debates?${params.toString()}`);
     const safeMatches = Array.isArray(matches) ? matches : [];
 
@@ -23814,7 +23819,7 @@ function renderArgumentAiScoreBadges() {
 
 async function loadDebateFullData(id) {
   try {
-    const data = await fetchJSON(API + "/debates/" + id);
+    const data = await fetchJSON(API + "/debates/" + id + "?key=" + encodeURIComponent(getKey()));
 
   document.getElementById("debate-question").textContent = data.debate.question;
   renderDebateContext(data.debate.content || "", isOpenDebate(data.debate));
@@ -25375,7 +25380,6 @@ async function submitArgument(debateId, side) {
         side: apiSide,
         title,
         body,
-        author_key: getKey(),
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,
         manualWritingBadge: pasteMeta.manualWritingBadge,
@@ -25523,7 +25527,6 @@ async function submitListArgument(debateId) {
         side,
         title,
         body,
-        author_key: getKey(),
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,
         manualWritingBadge: pasteMeta.manualWritingBadge,
@@ -25662,7 +25665,7 @@ try {
     improvement_title: data.improvement_title ?? improvement_title,
     improvement_body: data.improvement_body ?? improvement_body,
     likes: Number(data.likes || 0),
-    author_key: data.author_key ?? getKey(),
+    is_owner: true,
     created_at: data.created_at || new Date().toISOString()
   };
 
@@ -25800,7 +25803,7 @@ function insertLocalArgumentAfterPublish(debateId, argumentData = {}) {
     title: String(argumentData.title || ""),
     body: String(argumentData.body || ""),
     votes: Number(argumentData.votes || 0),
-    author_key: String(argumentData.author_key || getKey() || ""),
+    is_owner: true,
     created_at: argumentData.created_at || nowIsoString,
     last_voted_at: argumentData.last_voted_at || null
   };
@@ -26801,7 +26804,7 @@ const focusReplyUi = () => {
   const localTargetComment = getLocalCommentById(commentId, argumentId);
   const loadReplyForm = localTargetComment
     ? applyReplyTarget(localTargetComment)
-    : fetchJSON(API + "/debates/" + debateId)
+    : fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()))
         .then((debateData) => {
           const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
           const targetComment = comments.find(
@@ -27733,7 +27736,7 @@ async function editDebate() {
       ? currentDebateCache
       : null;
 
-    const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId))?.debate || null;
+    const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey())))?.debate || null;
 
     if (!debate) {
       alert("Arène introuvable.");
@@ -27799,7 +27802,7 @@ async function editArgument(argumentId) {
       : null;
 
     if (!argument) {
-      const data = await fetchJSON(API + "/debates/" + debateId);
+      const data = await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()));
       const allArguments = [...(data.optionA || []), ...(data.optionB || [])];
       argument = allArguments.find((item) => String(item.id) === String(argumentId));
     }
