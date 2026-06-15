@@ -7299,9 +7299,12 @@ body.page-debate .topbar::after {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1.5px solid #111827;
+    border-width: 3px;
+    border-color: transparent;
     border-radius: 999px;
-    background: rgba(26,39,47,0.94);
+    background:
+      linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+      linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
     color: #e5edf3;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -7314,7 +7317,9 @@ body.page-debate .topbar::after {
 
   .page-notifications-mobile .mobile-back-button:hover,
   .page-debate .mobile-back-button:hover {
-    background: rgba(17,24,39,0.98);
+    background:
+      linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+      linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
     color: #ffffff;
   }
 
