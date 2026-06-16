@@ -29161,7 +29161,8 @@ function toggleHomeBottomShareMenu(event) {
     }
     homeBottomShareMenuOpen = true;
 
-    // Si le menu dépasse en haut du viewport, scroller pour le dégager
+    // Attendre un frame avant d'ajouter les listeners pour éviter les faux positifs
+    // (resize/scroll déclenchés par l'ouverture du menu lui-même)
     requestAnimationFrame(() => {
       const menuRect = menu.getBoundingClientRect();
       const safeMargin = 8;
@@ -29171,26 +29172,26 @@ function toggleHomeBottomShareMenu(event) {
         window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
         setTimeout(() => { _homeBottomShareScrolling = false; }, 600);
       }
+
+      // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
+      window.__homeBottomShareAutoCloseHandler = () => {
+        if (_homeBottomShareScrolling) return;
+        closeHomeBottomShareMenu();
+      };
+      window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+      window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+      window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+
+      // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
+      let _homeBottomShareTouchStartY = 0;
+      window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
+      window.__homeBottomShareTouchMoveHandler = (e) => {
+        if (_homeBottomShareScrolling) return;
+        if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
+      };
+      window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
+      window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
     });
-
-    // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
-    window.__homeBottomShareAutoCloseHandler = () => {
-      if (_homeBottomShareScrolling) return;
-      closeHomeBottomShareMenu();
-    };
-    window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
-    window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
-    window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
-
-    // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
-    let _homeBottomShareTouchStartY = 0;
-    window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
-    window.__homeBottomShareTouchMoveHandler = (e) => {
-      if (_homeBottomShareScrolling) return;
-      if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
-    };
-    window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
-    window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
   }
 }
 
