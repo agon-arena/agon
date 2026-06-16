@@ -6,6 +6,7 @@
   var _showAt   = 0;
   var _injected = false;
   var _showToken = 0;
+  var _showPromise = null;
   var _sablierImg = null;
   var _sablierPromise = null;
   var _bgImg = null;
@@ -216,7 +217,7 @@
     var existing = document.getElementById('aala-overlay');
     if (existing) existing.parentNode.removeChild(existing);
 
-    Promise.all([preloadSablier(), preloadBackground()]).then(function () {
+    _showPromise = Promise.all([preloadSablier(), preloadBackground()]).then(function () {
       if (token !== _showToken) return;
       _showAt = Date.now();
       document.body.appendChild(buildOverlay());
@@ -224,28 +225,43 @@
   }
 
   function hideAiAnalysisAnimation(callback) {
-    var overlay = document.getElementById('aala-overlay');
-    if (!overlay) {
-      _showToken++;
-      if (callback) callback();
-      return;
-    }
+    var token = _showToken;
 
-    var elapsed   = Date.now() - _showAt;
-    var remaining = Math.max(0, MIN_MS - elapsed);
-
-    setTimeout(function () {
-      overlay = document.getElementById('aala-overlay');
-      if (overlay) {
-        overlay.classList.add('is-hiding');
-        setTimeout(function () {
-          if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-          if (callback) callback();
-        }, FADE_MS);
-      } else {
+    var doHide = function () {
+      if (token !== _showToken) {
         if (callback) callback();
+        return;
       }
-    }, remaining);
+
+      var overlay = document.getElementById('aala-overlay');
+      if (!overlay) {
+        _showToken++;
+        if (callback) callback();
+        return;
+      }
+
+      var elapsed   = Date.now() - _showAt;
+      var remaining = Math.max(0, MIN_MS - elapsed);
+
+      setTimeout(function () {
+        overlay = document.getElementById('aala-overlay');
+        if (overlay) {
+          overlay.classList.add('is-hiding');
+          setTimeout(function () {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            if (callback) callback();
+          }, FADE_MS);
+        } else {
+          if (callback) callback();
+        }
+      }, remaining);
+    };
+
+    if (_showPromise) {
+      _showPromise.then(doHide);
+    } else {
+      doHide();
+    }
   }
 
   window.showAiAnalysisAnimation = showAiAnalysisAnimation;
