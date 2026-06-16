@@ -17951,7 +17951,7 @@ async function loadAllRemainingIndexDebatesPages() {
   if (indexAllDebatesLoadInFlight || !indexDebatesApiHasMore) return;
   indexAllDebatesLoadInFlight = true;
 
-  const MAX_EXTRA_PAGES = 2;
+  const MAX_EXTRA_PAGES = 0;
   let pagesLoaded = 0;
 
   try {
