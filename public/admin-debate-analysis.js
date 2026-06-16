@@ -2046,7 +2046,16 @@
       } else if (json.status === 'failed') {
         applyContent = () => { body.innerHTML = '<span class="ada-error">La génération de l\'analyse a échoué.</span>'; };
       } else {
-        applyContent = () => { body.innerHTML = '<span class="ada-empty">Aucune analyse disponible pour cette arène.</span>'; };
+        if (isAdmin()) {
+          applyContent = () => {
+            body.innerHTML = '<span class="ada-empty">Aucune analyse disponible pour cette arène.</span>'
+              + '<div style="margin-top:14px;"><button type="button" id="ada-generate-now-btn" style="padding:8px 18px;background:#111;color:#fff;border:none;border-radius:8px;font:inherit;font-size:13px;cursor:pointer;">Générer l\'analyse IA maintenant</button></div>';
+            const genBtn = body.querySelector('#ada-generate-now-btn');
+            if (genBtn) genBtn.addEventListener('click', () => regenerate(debateId));
+          };
+        } else {
+          applyContent = () => { body.innerHTML = '<span class="ada-empty">Aucune analyse disponible pour cette arène.</span>'; };
+        }
       }
     } catch (err) {
       applyContent = () => { body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`; };
