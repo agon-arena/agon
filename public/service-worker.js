@@ -10,8 +10,8 @@ function buildRecoveryResponse(targetUrl) {
   <meta http-equiv="Cache-Control" content="no-store">
   <title>Agôn se reconnecte</title>
   <style>
-    html,body{margin:0;min-height:100%;background:#243038;color:#f3f6f4;font-family:Arial,Helvetica,sans-serif}
-    body{display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+    html,body{margin:0;background:#243038;color:#f3f6f4;font-family:Arial,Helvetica,sans-serif}
+    body{display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;box-sizing:border-box}
     main{max-width:360px;text-align:center}
     img{width:96px;height:96px;display:block;margin:0 auto 18px;animation:spin 1.1s linear infinite}
     h1{margin:0 0 10px;font-size:22px;line-height:1.2}
