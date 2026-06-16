@@ -29170,9 +29170,15 @@ function toggleHomeBottomShareMenu(event) {
     // Fermeture uniquement sur touch volontaire (> 10px) — pas de scroll listener
     // pour éviter les faux positifs du défilement automatique des sources.
     let _homeBottomShareTouchStartY = 0;
-    window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
+    let _homeBottomShareTouchStartX = 0;
+    window.__homeBottomShareTouchStartHandler = (e) => {
+      _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0;
+      _homeBottomShareTouchStartX = e.touches[0]?.clientX ?? 0;
+    };
     window.__homeBottomShareTouchMoveHandler = (e) => {
-      if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
+      const dy = Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY);
+      const dx = Math.abs((e.touches[0]?.clientX ?? 0) - _homeBottomShareTouchStartX);
+      if (dy > 10 && dy > dx) closeHomeBottomShareMenu();
     };
     window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
     window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
@@ -29198,6 +29204,7 @@ function initHomeBottomShareMenu() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest(".home-bottom-nav-item-wrap")) return;
+    if (event.target.closest("[data-index-media-swipe-step]")) return;
     if (Date.now() - _homeBottomShareOpenedAt < 400) return;
     closeHomeBottomShareMenu();
   });
