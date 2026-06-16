@@ -4713,6 +4713,20 @@ app.put("/api/admin/argument/:id", requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/api/admin/argument/:id/set-votes", requireAdmin, async (req, res) => {
+  try {
+    const votes = Math.max(0, Math.round(Number(req.body?.votes || 0)));
+    const { error } = await supabase
+      .from("arguments")
+      .update({ votes })
+      .eq("id", req.params.id);
+    if (error) return res.status(500).json({ error: "Erreur mise à jour votes." });
+    res.json({ success: true, votes });
+  } catch (error) {
+    return res.status(500).json({ error: "Erreur mise à jour votes." });
+  }
+});
+
 /* =========================
    DEBATES
 ========================= */
