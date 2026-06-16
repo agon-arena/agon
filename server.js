@@ -4749,6 +4749,7 @@ app.get("/api/debates", async (req, res) => {
       : "popular";
     const effectiveSortMode = !hasPaginationLimit && sortMode === "popular" ? "recent" : sortMode;
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
+    const categoryQuery = String(req.query.category || "").trim();
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
@@ -4758,14 +4759,14 @@ app.get("/api/debates", async (req, res) => {
     // req.query._ est un simple cache-buster côté navigateur (Date.now()) :
     // il ne doit pas invalider le cache serveur. Seuls fresh=1 ou un header
     // Cache-Control: no-store explicite forcent un bypass réel.
-    const bypassCache = req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    const bypassCache = categoryQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
       return res.json(cachedResponse.map((d) => sanitizeDebateForClient(d, clientKey)));
     }
 
-    const canPageInDatabase = !searchQuery && (effectiveSortMode === "recent" || effectiveSortMode === "old");
+    const canPageInDatabase = !searchQuery && (categoryQuery || effectiveSortMode === "recent" || effectiveSortMode === "old");
     let debatesQuery = supabase
       .from("debates")
       .select(DEBATES_LIST_SELECT_COLUMNS);
@@ -4774,6 +4775,10 @@ app.get("/api/debates", async (req, res) => {
       debatesQuery = debatesQuery
         .order("created_at", { ascending: effectiveSortMode === "old" })
         .range(safeOffset, safeOffset + safeLimit - 1);
+    }
+
+    if (categoryQuery) {
+      debatesQuery = debatesQuery.eq("category", categoryQuery);
     }
 
     const { data: debates, error } = await debatesQuery;

@@ -17177,16 +17177,23 @@ function initThematicRowDragScroll() {
 const _CAROUSEL_INITIAL = 5;
 const _CAROUSEL_BATCH = 5;
 const _carouselPendingBatches = new Map();
+const _carouselApiOffsets = new Map();
+const _carouselApiHasMore = new Map();
 
 function _buildCarouselInner(debates, key, initialCount = _CAROUSEL_INITIAL) {
   const initial = debates.slice(0, initialCount);
   const pending = debates.slice(initialCount);
   _carouselPendingBatches.set(key, pending);
+  const isApiPageable = DEBATE_CATEGORY_OPTIONS.includes(key);
+  if (isApiPageable) {
+    _carouselApiOffsets.set(key, debates.length);
+    _carouselApiHasMore.delete(key);
+  }
   const cardsHtml = initial.map((d) => {
     try { return buildIndexLikeDebateCardHtml(d, { includeDeleteButton: true }) + buildAdminEditPanelHtml(d); }
     catch (e) { return ""; }
   }).join("");
-  const sentinel = pending.length
+  const sentinel = (pending.length || isApiPageable)
     ? `<div class="carousel-load-sentinel" data-carousel-key="${escapeAttribute(key)}"></div>`
     : "";
   return cardsHtml + sentinel;
@@ -17217,6 +17224,8 @@ function getTensionSourceForCurrentFilters(filteredDebates) {
 function buildIndexThematicSectionsHtml(debates) {
   try {
     _carouselPendingBatches.clear();
+    _carouselApiOffsets.clear();
+    _carouselApiHasMore.clear();
     const allDebates = Array.isArray(debates) ? debates : [];
     const sections = [];
     const isMobile = window.innerWidth <= 768;
@@ -17298,25 +17307,53 @@ function initCarouselLazyLoad() {
     if (!row) return;
 
     let rafPending = false;
+    let apiFetching = false;
 
     function loadBatchIfNeeded() {
       rafPending = false;
       const pending = _carouselPendingBatches.get(key);
-      if (!pending || !pending.length) {
+
+      if (pending && pending.length) {
+        // Déclenche le chargement quand on est à moins d'une largeur de la fin
+        if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
+        const batch = pending.splice(0, _CAROUSEL_BATCH);
+        appendCarouselBatchBeforeSentinel(row, sentinel, batch);
+        if (!pending.length && _carouselApiHasMore.get(key) === false) {
+          row.removeEventListener('scroll', onScroll);
+          sentinel.remove();
+        }
+        return;
+      }
+
+      // Pool mémoire épuisé → fallback API pour les catégories réelles
+      if (!DEBATE_CATEGORY_OPTIONS.includes(key) || _carouselApiHasMore.get(key) === false || apiFetching) {
         row.removeEventListener('scroll', onScroll);
         sentinel.remove();
         return;
       }
-      // Déclenche le chargement quand on est à moins d'une largeur de la fin
       if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
 
-      const batch = pending.splice(0, _CAROUSEL_BATCH);
-      appendCarouselBatchBeforeSentinel(row, sentinel, batch);
-
-      if (!pending.length) {
-        row.removeEventListener('scroll', onScroll);
-        sentinel.remove();
-      }
+      apiFetching = true;
+      const offset = _carouselApiOffsets.get(key) || 0;
+      const renderedIds = new Set(Array.from(row.querySelectorAll('.debate-card[data-debate-id]')).map(function(el) { return el.dataset.debateId; }));
+      fetchJSON(API + '/debates?category=' + encodeURIComponent(key) + '&sort=recent&limit=' + _CAROUSEL_BATCH + '&offset=' + offset + '&key=' + encodeURIComponent(getKey()))
+        .then(function(fetched) {
+          var safe = Array.isArray(fetched) ? fetched : [];
+          _carouselApiOffsets.set(key, offset + safe.length);
+          _carouselApiHasMore.set(key, safe.length >= _CAROUSEL_BATCH);
+          var newDebates = safe.filter(function(d) { return !renderedIds.has(String(d.id)); });
+          if (newDebates.length) appendCarouselBatchBeforeSentinel(row, sentinel, newDebates);
+          if (_carouselApiHasMore.get(key) === false) {
+            row.removeEventListener('scroll', onScroll);
+            sentinel.remove();
+          }
+        })
+        .catch(function() {
+          _carouselApiHasMore.set(key, false);
+          row.removeEventListener('scroll', onScroll);
+          sentinel.remove();
+        })
+        .finally(function() { apiFetching = false; });
     }
 
     function onScroll() {
