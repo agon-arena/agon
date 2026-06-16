@@ -29105,6 +29105,7 @@ window.closeIdeaShareMenus = closeIdeaShareMenus;
 
 let homeBottomShareMenuOpen = false;
 let _homeBottomShareScrolling = false;
+let _homeBottomShareOpenedAt = 0;
 
 function removeHomeBottomShareAutoCloseListeners() {
   if (window.__homeBottomShareTouchMoveHandler) {
@@ -29153,6 +29154,7 @@ function toggleHomeBottomShareMenu(event) {
       trigger.setAttribute("aria-expanded", "true");
     }
     homeBottomShareMenuOpen = true;
+    _homeBottomShareOpenedAt = Date.now();
 
     // Ajuster la position si le menu dépasse en haut du viewport
     requestAnimationFrame(() => {
@@ -29196,6 +29198,7 @@ function initHomeBottomShareMenu() {
 
   document.addEventListener("click", (event) => {
     if (event.target.closest(".home-bottom-nav-item-wrap")) return;
+    if (Date.now() - _homeBottomShareOpenedAt < 400) return;
     closeHomeBottomShareMenu();
   });
 
