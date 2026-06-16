@@ -29233,7 +29233,6 @@ function initHomeTopbarAutoHide() {
       topbar.classList.add("topbar-hidden");
       lastScrollY = currentScrollY;
       ticking = false;
-      closeHomeBottomShareMenu();
       return;
     }
 
