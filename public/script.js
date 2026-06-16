@@ -5473,7 +5473,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); copyIndexDebateLink('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Copier le lien"
   >
-    <i class="fa-solid fa-link"></i>
+    <i class="fa-solid fa-link" style="color:#2563eb"></i>
   </button>
 
   <button
@@ -5482,7 +5482,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); showIndexDebateQrCode('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Afficher le QR code"
   >
-    <i class="fa-solid fa-qrcode"></i>
+    <i class="fa-solid fa-qrcode" style="color:#374151"></i>
   </button>
 
   <button
@@ -5491,7 +5491,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnX('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur X"
   >
-    <i class="fa-brands fa-x-twitter"></i>
+    <i class="fa-brands fa-x-twitter" style="color:#111827"></i>
   </button>
 
   <button
@@ -5500,7 +5500,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnInstagram('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Instagram"
   >
-    <i class="fa-brands fa-instagram"></i>
+    <i class="fa-brands fa-instagram" style="color:#e1306c"></i>
   </button>
 
   <button
@@ -5509,7 +5509,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnWhatsApp('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur WhatsApp"
   >
-    <i class="fa-brands fa-whatsapp"></i>
+    <i class="fa-brands fa-whatsapp" style="color:#25d366"></i>
   </button>
 
   <button
@@ -5518,7 +5518,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateByEmail('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager par email"
   >
-    <i class="fa-solid fa-envelope"></i>
+    <i class="fa-solid fa-envelope" style="color:#ea4335"></i>
   </button>
 
   <button
@@ -5527,7 +5527,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnLinkedIn('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur LinkedIn"
   >
-    <i class="fa-brands fa-linkedin-in"></i>
+    <i class="fa-brands fa-linkedin-in" style="color:#0a66c2"></i>
   </button>
 
   <button
@@ -5536,7 +5536,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnMastodon('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Mastodon"
   >
-    <i class="fa-brands fa-mastodon"></i>
+    <i class="fa-brands fa-mastodon" style="color:#6364ff"></i>
   </button>
 
   <button
@@ -5545,7 +5545,7 @@ function buildIndexCardShareActionsHtml(debate) {
     onclick="event.preventDefault(); event.stopPropagation(); shareIndexDebateOnReddit('${d.id}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
     title="Partager sur Reddit"
   >
-    <i class="fa-brands fa-reddit-alien"></i>
+    <i class="fa-brands fa-reddit-alien" style="color:#ff4500"></i>
   </button>
 </div>
   `;
@@ -29107,13 +29107,6 @@ let homeBottomShareMenuOpen = false;
 let _homeBottomShareScrolling = false;
 
 function removeHomeBottomShareAutoCloseListeners() {
-  if (window.__homeBottomShareAutoCloseHandler) {
-    window.removeEventListener("scroll", window.__homeBottomShareAutoCloseHandler);
-    window.removeEventListener("wheel", window.__homeBottomShareAutoCloseHandler);
-    window.removeEventListener("resize", window.__homeBottomShareAutoCloseHandler);
-    window.__homeBottomShareAutoCloseHandler = null;
-  }
-
   if (window.__homeBottomShareTouchMoveHandler) {
     window.removeEventListener("touchstart", window.__homeBottomShareTouchStartHandler, true);
     window.removeEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, true);
@@ -29172,28 +29165,15 @@ function toggleHomeBottomShareMenu(event) {
       }
     });
 
-    // Délai de 350ms avant d'attacher les listeners de fermeture automatique :
-    // évite que le défilement automatique du nuage de sources (ou tout autre scroll
-    // programmatique au moment de l'ouverture) ne ferme immédiatement le menu.
-    setTimeout(() => {
-      if (!homeBottomShareMenuOpen) return; // menu déjà fermé entre-temps
-      window.__homeBottomShareAutoCloseHandler = () => {
-        if (_homeBottomShareScrolling) return;
-        closeHomeBottomShareMenu();
-      };
-      window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true });
-      window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true });
-      window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true });
-
-      let _homeBottomShareTouchStartY = 0;
-      window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
-      window.__homeBottomShareTouchMoveHandler = (e) => {
-        if (_homeBottomShareScrolling) return;
-        if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
-      };
-      window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
-      window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
-    }, 350);
+    // Fermeture uniquement sur touch volontaire (> 10px) — pas de scroll listener
+    // pour éviter les faux positifs du défilement automatique des sources.
+    let _homeBottomShareTouchStartY = 0;
+    window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
+    window.__homeBottomShareTouchMoveHandler = (e) => {
+      if (Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY) > 10) closeHomeBottomShareMenu();
+    };
+    window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
+    window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
   }
 }
 
