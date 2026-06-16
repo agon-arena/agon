@@ -17951,10 +17951,14 @@ async function loadAllRemainingIndexDebatesPages() {
   if (indexAllDebatesLoadInFlight || !indexDebatesApiHasMore) return;
   indexAllDebatesLoadInFlight = true;
 
+  const MAX_EXTRA_PAGES = 2;
+  let pagesLoaded = 0;
+
   try {
-    while (indexDebatesApiHasMore) {
+    while (indexDebatesApiHasMore && pagesLoaded < MAX_EXTRA_PAGES) {
       const fetchedPage = await fetchAndMergeNextIndexDebatesPage();
       if (!Array.isArray(fetchedPage) || !fetchedPage.length) break;
+      pagesLoaded++;
     }
 
     if (window.__agonDebateModalOpen) return;
