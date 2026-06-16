@@ -108,7 +108,10 @@ const CATEGORIES = [
 ];
 
 function headers() {
-  return { 'Content-Type': 'application/json' };
+  const token = (function() { try { return localStorage.getItem('admin_token') || ''; } catch { return ''; } })();
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['x-admin-token'] = token;
+  return h;
 }
 
 function esc(s) {
