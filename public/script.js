@@ -5453,6 +5453,7 @@ function toggleCardOptionsMenu(btn) {
 document.addEventListener('click', (e) => {
   if (!e.isTrusted) return;
   if (e.target && e.target.closest && e.target.closest('.debate-card-options-wrap')) return;
+  if (e.target && e.target.closest && e.target.closest('[data-index-media-swipe-step]')) return;
   closeAllCardOptionsMenus();
 });
 
