@@ -5403,6 +5403,12 @@ function buildIndexCardEnterButtonHtml(debate) {
 function buildIndexCardFooterActionsHtml(debate) {
   const d = debate || {};
   const safeId = escapeAttribute(String(d.id || ''));
+  const encQ = encodeURIComponent(String(d.question || '')).replace(/'/g, '%27');
+  const encA = encodeURIComponent(String(d.option_a || '')).replace(/'/g, '%27');
+  const encB = encodeURIComponent(String(d.option_b || '')).replace(/'/g, '%27');
+  const encType = encodeURIComponent(String(d.type || 'debate')).replace(/'/g, '%27');
+  const pA = d.percent_a ?? 50;
+  const pB = d.percent_b ?? 50;
 
   return `
     <div class="debate-card-footer-actions">
@@ -5416,9 +5422,12 @@ function buildIndexCardFooterActionsHtml(debate) {
             onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
           >···</button>
           <div class="debate-card-options-menu" role="menu" onclick="event.stopPropagation()">
-            <div class="debate-card-options-share-row" onclick="event.stopPropagation()">
-              ${buildIndexCardShareActionsHtml(d)}
-            </div>
+            <button
+              class="debate-card-options-item"
+              type="button"
+              role="menuitem"
+              onclick="event.stopPropagation(); closeAllCardOptionsMenus(); shareIndexDebateCard('${safeId}', '${encQ}', '${encA}', '${encB}', '${pA}', '${pB}', '${encType}')"
+            >Partager</button>
             <div class="debate-card-options-divider"></div>
             <button
               class="debate-card-options-item report-button"
@@ -12571,6 +12580,17 @@ async function copyIndexDebateLink(
   } catch (error) {
     showShareCopyManualMessage("Copie manuelle du lien", message, "La copie automatique n'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous.", "🔗");
   }
+}
+
+async function shareIndexDebateCard(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
+  const question = decodeURIComponent(encodedQuestion || "");
+  const optionA = decodeURIComponent(encodedOptionA || "");
+  const optionB = decodeURIComponent(encodedOptionB || "");
+  const { title, text, url } = getIndexDebateShareData(debateId, question, optionA, optionB, percentA, percentB, type);
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return; } catch (e) { if (e?.name === "AbortError") return; }
+  }
+  await copyIndexDebateLink(debateId, encodedQuestion, encodedOptionA, encodedOptionB, percentA, percentB, type);
 }
 
 function shareIndexDebateOnX(debateId, encodedQuestion, encodedOptionA = "", encodedOptionB = "", percentA = 50, percentB = 50, type = "debate") {
