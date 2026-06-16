@@ -51,7 +51,7 @@
       </div>
     </details>
 
-    <details class="about-accordion">
+    <details class="about-accordion" id="fonctionnement-feed">
       <summary>Fonctionnement du feed officiel</summary>
       <div class="about-accordion-content">
         <p>Le feed d’Agôn est alimenté automatiquement à partir de flux RSS issus de médias en ligne. Les contenus mis en avant sont sélectionnés selon deux critères principaux : les sujets les plus évoqués par plusieurs médias différents, et les sujets susceptibles de faire émerger des points de vue opposés.</p>
@@ -146,6 +146,22 @@
     if (event.currentTarget.open) loadMedias();
   });
   loadMedias();
+})();
+
+(function() {
+  function openFeedSection() {
+    var el = document.getElementById('fonctionnement-feed');
+    if (!el) return;
+    el.setAttribute('open', '');
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (location.hash === '#fonctionnement-feed') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', openFeedSection);
+    } else {
+      openFeedSection();
+    }
+  }
 })();
 </script>
 </body>
