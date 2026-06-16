@@ -9383,6 +9383,10 @@ padding:4px 14px 12px 14px;
   background: #ffffff;
   border-color: #e5e7eb;
 }
+.debate-card-options-share-row .share-icon-button.copy i { color: #2563eb; }
+.debate-card-options-share-row .share-icon-button.qrcode i { color: #6b7280; }
+.debate-card-options-share-row .share-icon-button.x i { color: #111827; }
+.debate-card-options-share-row .share-icon-button.email i { color: #ea4335; }
 
 .debate-card-options-divider {
   height: 1px;
