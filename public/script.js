@@ -29108,9 +29108,9 @@ let _homeBottomShareScrolling = false;
 
 function removeHomeBottomShareAutoCloseListeners() {
   if (window.__homeBottomShareAutoCloseHandler) {
-    window.removeEventListener("scroll", window.__homeBottomShareAutoCloseHandler, true);
-    window.removeEventListener("wheel", window.__homeBottomShareAutoCloseHandler, true);
-    window.removeEventListener("resize", window.__homeBottomShareAutoCloseHandler, true);
+    window.removeEventListener("scroll", window.__homeBottomShareAutoCloseHandler);
+    window.removeEventListener("wheel", window.__homeBottomShareAutoCloseHandler);
+    window.removeEventListener("resize", window.__homeBottomShareAutoCloseHandler);
     window.__homeBottomShareAutoCloseHandler = null;
   }
 
@@ -29178,9 +29178,9 @@ function toggleHomeBottomShareMenu(event) {
         if (_homeBottomShareScrolling) return;
         closeHomeBottomShareMenu();
       };
-      window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
-      window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
-      window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true, capture: true });
+      window.addEventListener("scroll", window.__homeBottomShareAutoCloseHandler, { passive: true });
+      window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true });
+      window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true });
 
       // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
       let _homeBottomShareTouchStartY = 0;
