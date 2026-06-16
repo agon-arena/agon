@@ -29161,19 +29161,22 @@ function toggleHomeBottomShareMenu(event) {
     }
     homeBottomShareMenuOpen = true;
 
-    // Attendre un frame avant d'ajouter les listeners pour éviter les faux positifs
-    // (resize/scroll déclenchés par l'ouverture du menu lui-même)
+    // Ajuster la position si le menu dépasse en haut du viewport
     requestAnimationFrame(() => {
       const menuRect = menu.getBoundingClientRect();
       const safeMargin = 8;
       if (menuRect.top < safeMargin) {
-        const scrollAmount = menuRect.top - safeMargin; // valeur négative → remonte la page
         _homeBottomShareScrolling = true;
-        window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+        window.scrollBy({ top: menuRect.top - safeMargin, behavior: 'smooth' });
         setTimeout(() => { _homeBottomShareScrolling = false; }, 600);
       }
+    });
 
-      // Les handlers ignorent les scrolls programmatiques (ouverture du menu)
+    // Délai de 350ms avant d'attacher les listeners de fermeture automatique :
+    // évite que le défilement automatique du nuage de sources (ou tout autre scroll
+    // programmatique au moment de l'ouverture) ne ferme immédiatement le menu.
+    setTimeout(() => {
+      if (!homeBottomShareMenuOpen) return; // menu déjà fermé entre-temps
       window.__homeBottomShareAutoCloseHandler = () => {
         if (_homeBottomShareScrolling) return;
         closeHomeBottomShareMenu();
@@ -29182,7 +29185,6 @@ function toggleHomeBottomShareMenu(event) {
       window.addEventListener("wheel", window.__homeBottomShareAutoCloseHandler, { passive: true });
       window.addEventListener("resize", window.__homeBottomShareAutoCloseHandler, { passive: true });
 
-      // Fermeture au scroll tactile uniquement si déplacement > 10px (évite les faux positifs au tap)
       let _homeBottomShareTouchStartY = 0;
       window.__homeBottomShareTouchStartHandler = (e) => { _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0; };
       window.__homeBottomShareTouchMoveHandler = (e) => {
@@ -29191,7 +29193,7 @@ function toggleHomeBottomShareMenu(event) {
       };
       window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
       window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
-    });
+    }, 350);
   }
 }
 
