@@ -278,6 +278,16 @@ function isStandaloneMode() {
 
 if (isStandaloneMode()) document.body.classList.add("is-standalone");
 
+if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
+  fetch(API + "/users/mark-app-installed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ legacyKey: getKey() })
+  }).then((response) => {
+    if (response.ok) lsSet("appInstallPinged", "1");
+  }).catch(() => {});
+}
+
 function isAgonMobileCloudViewport() {
   const viewportWidth = Math.min(
     window.innerWidth || Number.POSITIVE_INFINITY,
@@ -13357,6 +13367,8 @@ async function initAdminReports() {
 
   const totalVisitsEl = document.getElementById("total-visits-today");
   const uniqueVisitorsEl = document.getElementById("unique-visitors-today");
+  const totalAppInstallsEl = document.getElementById("total-app-installs");
+  const totalPushSubscribersEl = document.getElementById("total-push-subscribers");
 
   if (!container) return;
 
@@ -13380,6 +13392,20 @@ async function initAdminReports() {
 
     if (uniqueVisitorsEl) {
       uniqueVisitorsEl.textContent = String(visitsStats.unique_visitors_today || 0);
+    }
+
+    const appStats = await fetchJSON(API + "/admin/app-stats", {
+      headers: {
+        "x-admin-token": getAdminToken()
+      }
+    });
+
+    if (totalAppInstallsEl) {
+      totalAppInstallsEl.textContent = String(appStats.total_app_installs || 0);
+    }
+
+    if (totalPushSubscribersEl) {
+      totalPushSubscribersEl.textContent = String(appStats.total_push_subscribers || 0);
     }
 
     const reports = await fetchJSON(API + "/admin/reports", {

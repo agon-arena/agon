@@ -3596,6 +3596,31 @@ app.post("/api/users/resolve", rateLimit("users", 30), async (req, res) => {
   }
 });
 
+app.post("/api/users/mark-app-installed", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    const { error } = await supabase
+      .from("users")
+      .update({ app_installed_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .is("app_installed_at", null);
+
+    if (error) throw error;
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur enregistrement app installee.");
+  }
+});
+
 /* =========================
    PUSH SUBSCRIPTIONS
 ========================= */
@@ -4005,6 +4030,28 @@ app.get("/api/admin/visits/today", requireAdmin, async (req, res) => {
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture visites.");
+  }
+});
+
+app.get("/api/admin/app-stats", requireAdmin, async (req, res) => {
+  try {
+    const [installsResult, pushResult] = await Promise.all([
+      supabase.from("users").select("id", { count: "exact", head: true }).not("app_installed_at", "is", null),
+      supabase.from("push_subscriptions").select("user_id").is("revoked_at", null)
+    ]);
+
+    if (installsResult.error) throw installsResult.error;
+    if (pushResult.error) throw pushResult.error;
+
+    const uniquePushUsers = new Set((pushResult.data || []).map((r) => r.user_id));
+
+    res.json({
+      total_app_installs: installsResult.count || 0,
+      total_push_subscribers: uniquePushUsers.size
+    });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur lecture statistiques app.");
   }
 });
 
