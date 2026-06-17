@@ -9354,10 +9354,11 @@ padding:4px 14px 12px 14px;
   left: 0;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
-  padding: 4px;
-  min-width: 200px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+  padding: 3px;
+  min-width: 0;
+  width: max-content;
   z-index: 9999;
 }
 
@@ -9366,11 +9367,11 @@ padding:4px 14px 12px 14px;
 }
 
 .debate-card-options-share-row {
-  padding: 6px 4px 4px;
+  padding: 3px 3px 2px;
 }
 
 .debate-card-options-share-row .debate-card-share-actions {
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
   overflow: visible;
 }
@@ -9380,8 +9381,14 @@ padding:4px 14px 12px 14px;
   height: 30px;
   min-width: 30px;
   min-height: 30px;
-  background: #ffffff;
-  border-color: #e5e7eb;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.debate-card-options-share-row .index-share-btn {
+  background: #ffffff !important;
+  border-color: transparent !important;
 }
 .debate-card-options-share-row .share-icon-button.copy i { color: #2563eb; }
 .debate-card-options-share-row .share-icon-button.qrcode i { color: #6b7280; }
@@ -9395,22 +9402,30 @@ padding:4px 14px 12px 14px;
 }
 
 .debate-card-options-item {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border: none;
-  border-radius: 7px;
+  border-radius: 999px;
   background: transparent;
   color: #374151;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
-  transition: background 0.12s;
+  white-space: nowrap;
+  opacity: 1 !important;
 }
 
-.debate-card-options-item:hover {
-  background: #f3f4f6;
+.debate-card-options-item:hover,
+.debate-card-options-item:focus {
+  background: transparent !important;
+  outline: none !important;
+  border: none !important;
+  text-decoration: none !important;
 }
 
 .debate-card-footer-report {
