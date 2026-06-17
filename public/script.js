@@ -7211,6 +7211,7 @@ function initIndexMediaSwipeEnhancements(root) {
   scope.querySelectorAll("[data-index-media-swipe-shell]").forEach((shell) => {
     if (shell.getAttribute("data-index-media-swipe-ready") === "1") return;
     shell.setAttribute("data-index-media-swipe-ready", "1");
+    shell.__agonRenderIndex = renderShellIndex;
   });
   initMediaSwipeAutoScroll(scope);
 }
@@ -7255,8 +7256,13 @@ function initMediaSwipeAutoScroll(scope = document) {
         stopPermanently();
         return;
       }
-      const nextBtn = shell.querySelector("[data-index-media-swipe-step='next']");
-      if (nextBtn) nextBtn.click();
+      if (typeof shell.__agonRenderIndex === 'function') {
+        const currentIndex = Number(shell.dataset.currentIndex || "0") || 0;
+        shell.__agonRenderIndex(shell, currentIndex + 1);
+      } else {
+        const nextBtn = shell.querySelector("[data-index-media-swipe-step='next']");
+        if (nextBtn) nextBtn.click();
+      }
     };
 
     const start = () => {
