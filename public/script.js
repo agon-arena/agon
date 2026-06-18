@@ -12727,9 +12727,14 @@ function isAdmin() {
 
 // Pour les arènes officielles (créées par l'admin), permet au compte admin de
 // rester reconnu comme "propriétaire" côté serveur (ex: accès au barème caché)
-// même si la clé de navigateur ne correspond pas à creator_key.
+// même si la clé de navigateur ne correspond pas à creator_key. On envoie le
+// token dès qu'il existe en local, sans attendre la vérification asynchrone
+// (adminSessionVerified) : le serveur est seul juge de sa validité, et
+// attendre cette vérification créait une race au chargement de la page
+// débat (token envoyé trop tard, barème caché vu comme non-propriétaire).
 function debateOwnerHeaders() {
-  return isAdmin() ? { "x-admin-token": getAdminToken() } : {};
+  const token = getAdminToken();
+  return token ? { "x-admin-token": token } : {};
 }
 
 function setAdminToken(token) {
