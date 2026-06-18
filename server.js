@@ -5148,7 +5148,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedAxis = type === "open"
-      ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 280)
+      ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500)
       : null;
     // Le créateur peut cacher son barème aux participants (l'IA l'applique quand même)
     const normalizedAxisHidden = Boolean(normalizedAxis && evaluation_axis_hidden === true);
