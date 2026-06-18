@@ -1570,9 +1570,13 @@ function sanitizeDebateForClient(debate, clientKey) {
   if (!debate) return debate;
   const { creator_key, ...rest } = debate;
   const normalizedClientKey = clientKey ? String(clientKey) : "";
+  const isOwner = !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey);
   return {
     ...rest,
-    is_owner: !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey),
+    // Barème caché par le créateur : le texte ne doit jamais être exposé aux
+    // autres clients, mais le créateur doit pouvoir le consulter lui-même.
+    ...(rest.evaluation_axis_hidden && !isOwner ? { evaluation_axis: "" } : {}),
+    is_owner: isOwner,
     is_official: creator_key === AGON_ADMIN_CREATOR_KEY,
     is_community: !!creator_key && creator_key !== AGON_ADMIN_CREATOR_KEY
   };
@@ -5597,12 +5601,6 @@ app.get("/api/debates/:id", async (req, res) => {
       return res.status(404).json({ error: "Débat introuvable." });
     }
 
-    // Barème caché par le créateur : le texte ne doit jamais être exposé aux clients
-    // (seul le flag part au front, qui affiche « Barème non communiqué »).
-    const publicDebate = debate.evaluation_axis_hidden
-      ? { ...debate, evaluation_axis: "" }
-      : debate;
-
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
     const argumentIds = args.map((a) => a.id);
@@ -5610,7 +5608,7 @@ app.get("/api/debates/:id", async (req, res) => {
     if (!argumentIds.length) {
       const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
       const payload = {
-        debate: publicDebate,
+        debate,
         optionA,
         optionB,
         commentsByArgument: {},
@@ -5635,7 +5633,7 @@ app.get("/api/debates/:id", async (req, res) => {
     }
 
     const payload = {
-      debate: publicDebate,
+      debate,
       optionA,
       optionB,
       commentsByArgument,
@@ -7047,9 +7045,10 @@ app.post("/api/admin/veille/merge", requireAdmin, rateLimit("admin-ai", 10), asy
 // Lecture publique du rapport stocké
 app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req, res) => {
   const { id } = req.params;
+  const clientKey = getRequestClientKey(req);
   const { data, error } = await supabase
     .from("debates")
-    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, popularity_analysis")
+    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, popularity_analysis, evaluation_axis_hidden, creator_key")
     .eq("id", id)
     .single();
   if (error || !data) {
@@ -7068,6 +7067,19 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
       const idx = fullAnalysis.indexOf(marker);
       if (idx !== -1) raw = fullAnalysis.slice(idx + marker.length).trim();
     }
+  }
+  // Barème caché par le créateur : le détail (orientation + règles dérivées)
+  // ne doit fuiter ni vers les autres visiteurs ni vers le rapport IA public —
+  // seul le créateur peut le consulter (cf. sanitizeDebateForClient).
+  const isOwner = !!(clientKey && data.creator_key && String(data.creator_key) === clientKey);
+  if (raw && data.evaluation_axis_hidden && !isOwner) {
+    try {
+      const parsedRaw = JSON.parse(raw);
+      if (parsedRaw?.scoringGrid?.scoringMode === "custom") {
+        parsedRaw.scoringGrid = { ...parsedRaw.scoringGrid, axisSource: "", customRubric: "", axisHidden: true };
+        raw = JSON.stringify(parsedRaw);
+      }
+    } catch (_) {}
   }
   return res.json({
     raw:            raw,

@@ -41,7 +41,8 @@
       if (cached.result) return cached.result;
     }
 
-    const promise = fetch('/api/debates/' + key + '/analysis')
+    const clientKey = (typeof getKey === 'function') ? getKey() : '';
+    const promise = fetch('/api/debates/' + key + '/analysis' + (clientKey ? '?key=' + encodeURIComponent(clientKey) : ''))
       .then(async function (response) {
         const json = await response.json().catch(() => ({}));
         return {
@@ -2182,6 +2183,12 @@
         <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
       </ul>
       <div class="ada-bareme-rule"><strong>Total qualité argumentative : 100 points · Bonus source possible : jusqu'à +10 points · Score final plafonné à 100.</strong></div>`;
+    }
+
+    if (grid.axisHidden) {
+      return `<h3>2. Cette arène utilise un barème personnalisé</h3>
+      <p>Le créateur de cette arène a défini une orientation propre, mais a choisi de ne pas la dévoiler publiquement. Agôn applique malgré tout cette orientation, stabilisée en un barème unique sur 100 points, à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
+      <div class="ada-bareme-rule"><strong>Total : 100 points · Score final = total obtenu sur le barème personnalisé, sans bonus source séparé.</strong></div>`;
     }
 
     const orientation = esc(grid.axisSource || '');

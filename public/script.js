@@ -18423,8 +18423,11 @@ function renderEvaluationAxis(debate) {
   const formAxisEl = document.getElementById('form-list-axis');
   const isOpen = isOpenDebate(debate);
   const axis = String(debate.evaluation_axis || '').trim();
-  // Barème personnalisé mais caché par le créateur (le serveur ne transmet pas le texte)
+  // Barème personnalisé mais caché par le créateur (le serveur ne transmet pas le
+  // texte aux autres clients ; seul le créateur reçoit le texte réel — voir
+  // sanitizeDebateForClient côté serveur).
   const axisHidden = isOpen && !axis && !!debate.evaluation_axis_hidden;
+  const ownerOnlyAxis = isOpen && axis && !!debate.evaluation_axis_hidden && !!debate.is_owner;
   const hiddenText = "Barème non communiqué : le créateur de l'arène a choisi de ne pas le dévoiler. L'IA note quand même chaque idée sur 100 selon ce barème.";
 
   const defaultOpenText = "L'IA évalue la pertinence, la clarté, la qualité du raisonnement, l'originalité utile et l'apport de chaque contribution.";
@@ -18435,7 +18438,8 @@ function renderEvaluationAxis(debate) {
   el.id = 'debate-evaluation-axis';
   el.className = 'debate-evaluation-axis';
 
-  const labelText = (isOpen && axis) ? 'Barème personnalisé de l\'arène — sur 100 points'
+  const labelText = (isOpen && axis)
+    ? 'Barème personnalisé de l\'arène — sur 100 points' + (ownerOnlyAxis ? ' (visible par toi seulement)' : '')
     : (axisHidden ? 'Barème personnalisé de l\'arène' : 'Comment l\'IA évalue les contributions');
   const bodyText = (isOpen && axis) ? axis : (axisHidden ? hiddenText : (isOpen ? defaultOpenText : defaultDebateText));
 
@@ -23601,6 +23605,7 @@ function showActiveRubricModal() {
   const open = debate ? isOpenDebate(debate) : false;
   const axis = String((debate && debate.evaluation_axis) || '').trim();
   const axisHidden = open && !axis && !!(debate && debate.evaluation_axis_hidden);
+  const ownerOnlyAxis = open && axis && !!(debate && debate.evaluation_axis_hidden) && !!(debate && debate.is_owner);
 
   let html = '<div class="rubric-modal-header">'
     + '<span class="rubric-modal-title">⚖ Barème IA actif</span>'
@@ -23610,7 +23615,7 @@ function showActiveRubricModal() {
   if (open) {
     if (axis) {
       html += '<div class="rubric-modal-section rubric-modal-axis">'
-        + '<div class="rubric-modal-section-title">Barème personnalisé de cette arène — sur 100 points</div>'
+        + '<div class="rubric-modal-section-title">Barème personnalisé de cette arène — sur 100 points' + (ownerOnlyAxis ? ' (visible par toi seulement)' : '') + '</div>'
         + '<p class="rubric-modal-axis-text">' + escapeHtml(axis) + '</p>'
         + '</div>'
         + '<div class="rubric-modal-section">'
