@@ -1018,7 +1018,7 @@ function ensurePageArrivalLoadingOverlayStyles() {
       right: 0;
       top: var(--page-arrival-loading-top, 0px);
       bottom: var(--page-arrival-loading-bottom, 0px);
-      z-index: 18;
+      z-index: 1200;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -22943,7 +22943,11 @@ async function loadDebate(id) {
     if (p && String(p.id || "") === String(id) && p.debate) {
       window.parent.__agonPrefetchedDebateData = null;
       applyDebateCachedPreview(p.debate);
-      loadDebateFullData(id).catch(() => {});
+      if (window.self !== window.top) {
+        await loadDebateFullData(id);
+      } else {
+        loadDebateFullData(id).catch(() => {});
+      }
       return;
     }
   } catch(e) {}

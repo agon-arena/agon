@@ -5279,7 +5279,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         const currentSourceCount = normalizedSourceUrl ? 1 : 0;
         const { data: recentRows } = await supabase
           .from("debates")
-          .select("id, question, content, source_url, media_extras, created_at")
+          .select("id, question, content, source_url, media_extras, created_at, keywords")
           .neq("id", data.id)
           .order("created_at", { ascending: false })
           .limit(TREND_RECENT_SUBJECTS_LIMIT);
@@ -5296,7 +5296,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             id: String(d.id),
             question: String(d.question || ""),
             resume: String(d.content || "").slice(0, 200),
-            tags: [],
+            tags: normalizeKeywordList(d.keywords || [], 10, 60),
             sourceCount: previousSourceKeys.size,
             created_at: d.created_at
           };
@@ -6905,7 +6905,7 @@ const currentSourceCount = currentSourceKeys.size;
 
   const { data: recentRows } = await supabase
     .from("debates")
-    .select("id, question, content, source_url, media_extras, created_at")
+    .select("id, question, content, source_url, media_extras, created_at, keywords")
     .neq("id", data.id)
     .order("created_at", { ascending: false })
     .limit(TREND_RECENT_SUBJECTS_LIMIT);
