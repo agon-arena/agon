@@ -5145,7 +5145,8 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments } = req.body || {};
+    const normalizedLongArguments = long_arguments === true;
     const normalizedContent = normalizeDebateContent(content);
     const normalizedAxis = type === "open"
       ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500)
@@ -5189,6 +5190,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         option_b,
         evaluation_axis: normalizedAxis,
         ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
+        ...(normalizedLongArguments ? { long_arguments: true } : {}),
         creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
         created_at: nowIso()
       })
@@ -5209,6 +5211,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             option_b,
             evaluation_axis: normalizedAxis,
             ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
+            ...(normalizedLongArguments ? { long_arguments: true } : {}),
             creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
             created_at: nowIso()
           })
@@ -5756,6 +5759,8 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
     const { debate_id, side, title, body, authorKey, source_url, pasteRatio, pastedChars, manualWritingBadge, usedMicrophone } = req.body || {};
     const requestedDebateId = debate_id;
     const sharedDebateId = resolveSharedDebateId(debate_id) || debate_id;
+    const sourceDebateRow = await getDebateById(requestedDebateId);
+    const maxBodyLength = sourceDebateRow?.long_arguments ? 1800 : 600;
 
     const { data, error } = await supabase
       .from("arguments")
@@ -5763,7 +5768,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         debate_id: sharedDebateId,
         side,
         title: limitText(title, 180),
-        body: limitText(body, 2500),
+        body: limitText(body, maxBodyLength),
         source_url: limitText(source_url, 1000),
         author_key: authorKey || null,
         votes: 0,
@@ -5783,7 +5788,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
 
     invalidateSharedDebateCaches(requestedDebateId);
 
-    const debateRow = await getDebateById(requestedDebateId);
+    const debateRow = sourceDebateRow;
 
     if (
       debateRow &&

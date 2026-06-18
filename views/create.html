@@ -574,6 +574,13 @@
   <small>Importe une seule vidéo (MP4, WebM, MOV ou M4V, 80 Mo max). Les vidéos lourdes peuvent être allégées avant envoi pour accélérer le téléversement. Le lien source et l’image deviennent alors indisponibles.</small>
 </div>
 
+<div class="form-group create-form-group">
+  <label class="axis-hidden-option" for="long_arguments">
+    <input type="checkbox" id="long_arguments" name="long_arguments">
+    <span>Permettre aux utilisateurs de rédiger des idées jusqu'à 1800 caractères <span class="label-hint">Par défaut, les idées sont limitées à 600 caractères.</span></span>
+  </label>
+</div>
+
         <div class="create-actions create-actions-sticky">
           <button class="button create-submit-button" type="submit">Ouvrir l'arène</button>
         </div>
@@ -750,7 +757,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260618-ai-report-notif-anim"></script>
+<script src="/script.min.js?v=20260618-long-arguments"></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

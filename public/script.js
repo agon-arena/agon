@@ -1526,6 +1526,22 @@ function updateCreateTypeUI() {
     optionBInput.required = selected !== "open";
   }
 }
+// Le créateur de l'arène peut autoriser des idées plus longues (1800 au lieu
+// de 600 caractères) : applique cette limite sur les 3 zones de rédaction
+// possibles (arène libre / position A / position B) dès que le débat est chargé.
+function applyArgumentBodyCharacterLimit(debate) {
+  const max = debate && debate.long_arguments ? 1800 : 600;
+  [
+    ["list-body", "count-body-list"],
+    ["a-body", "count-body-a"],
+    ["b-body", "count-body-b"]
+  ].forEach(([fieldId, counterId]) => {
+    const field = document.getElementById(fieldId);
+    if (field) field.maxLength = max;
+    updateCounter(fieldId, counterId, max);
+  });
+}
+
 function applyDebateTypeUI(debate) {
   const openMode = isOpenDebate(debate);
 
@@ -20281,6 +20297,7 @@ form.addEventListener("submit", async e => {
       ? (document.getElementById("evaluation_axis")?.value.trim() || "")
       : undefined;
     const evaluationAxisHidden = !!(evaluationAxis && document.getElementById("evaluation_axis_hidden")?.checked);
+    const longArguments = !!document.getElementById("long_arguments")?.checked;
     const createPayload = JSON.stringify({
       question,
       category,
@@ -20293,6 +20310,7 @@ form.addEventListener("submit", async e => {
       option_b,
       ...(evaluationAxis !== undefined ? { evaluation_axis: evaluationAxis } : {}),
       ...(evaluationAxisHidden ? { evaluation_axis_hidden: true } : {}),
+      ...(longArguments ? { long_arguments: true } : {}),
       creatorKey
     });
 
@@ -22884,6 +22902,7 @@ function applyDebateCachedPreview(debate) {
   applyDebateTypeUI(d);
   updateDeleteDebateButtonVisibility(d);
   currentDebateCache = d;
+  applyArgumentBodyCharacterLimit(d);
 }
 
 async function loadDebate(id) {
@@ -24101,6 +24120,7 @@ currentDebateShareData = {
   percentB
 };
 currentDebateCache = data.debate;
+applyArgumentBodyCharacterLimit(data.debate);
 
 if (data.debate.ai_analysis_status === 'ready') {
   fetch(API + '/debates/' + id + '/analysis')
@@ -25375,8 +25395,9 @@ async function submitArgument(debateId, side) {
     return;
   }
 
-  if (rawBody.length > 600) {
-    alert("Maximum 600 caractères pour le texte de l'idée.");
+  const maxBodyLength = bodyField.maxLength > 0 ? bodyField.maxLength : 600;
+  if (rawBody.length > maxBodyLength) {
+    alert(`Maximum ${maxBodyLength} caractères pour le texte de l'idée.`);
     return;
   }
 
@@ -25508,8 +25529,9 @@ async function submitListArgument(debateId) {
     return;
   }
 
-  if (rawBody.length > 600) {
-    alert("Maximum 600 caractères pour le texte de l'idée.");
+  const maxBodyLength = bodyField.maxLength > 0 ? bodyField.maxLength : 600;
+  if (rawBody.length > maxBodyLength) {
+    alert(`Maximum ${maxBodyLength} caractères pour le texte de l'idée.`);
     return;
   }
 
@@ -28366,7 +28388,11 @@ function updateCounter(inputId, counterId, max) {
   const counter = document.getElementById(counterId);
   if (!input || !counter) return;
 
-  counter.textContent = `${input.value.length} / ${max}`;
+  // La limite réelle peut avoir été ajustée dynamiquement via l'attribut
+  // maxlength (ex. idées longues activées par le créateur de l'arène) :
+  // elle prime toujours sur la valeur littérale passée par l'appelant.
+  const effectiveMax = input.maxLength > 0 ? input.maxLength : max;
+  counter.textContent = `${input.value.length} / ${effectiveMax}`;
 }
 
 function handleArgumentInput(side) {
