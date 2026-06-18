@@ -85,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260618-caret-color">
+<link rel="stylesheet" href="/style.min.css?v=20260618-bareme-strictness">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
@@ -453,6 +453,23 @@
       <input type="checkbox" id="evaluation_axis_hidden" name="evaluation_axis_hidden">
       <span>Cacher le barème aux participants <span class="label-hint">Ils verront « Barème non communiqué » ; l'IA appliquera quand même ton barème pour noter les idées.</span></span>
     </label>
+    <div class="axis-strictness-group">
+      <span class="axis-strictness-label">Niveau de correction IA <span class="label-hint">Toujours visible des participants, même si tu caches le barème ci-dessus.</span></span>
+      <div class="axis-strictness-options">
+        <label class="axis-strictness-option" for="correction_strictness_souple">
+          <input type="radio" id="correction_strictness_souple" name="correction_strictness" value="souple">
+          <span>Souple</span>
+        </label>
+        <label class="axis-strictness-option" for="correction_strictness_normal">
+          <input type="radio" id="correction_strictness_normal" name="correction_strictness" value="normal" checked>
+          <span>Normal</span>
+        </label>
+        <label class="axis-strictness-option" for="correction_strictness_exigeant">
+          <input type="radio" id="correction_strictness_exigeant" name="correction_strictness" value="exigeant">
+          <span>Exigeant</span>
+        </label>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -757,7 +774,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260618-bareme-admin-owner"></script>
+<script src="/script.min.js?v=20260618-bareme-strictness"></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

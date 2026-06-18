@@ -1902,6 +1902,45 @@ font-family: "Barlow Condensed", sans-serif;
   margin-top: 2px;
 }
 
+.axis-strictness-group {
+  margin-top: 10px;
+}
+
+.axis-strictness-label {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+}
+
+.axis-strictness-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.axis-strictness-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #111827;
+  cursor: pointer;
+}
+
+.axis-strictness-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 16px;
+  accent-color: #516776;
+  cursor: pointer;
+}
+
 .create-category-group {
   margin-top: 14px;
   margin-bottom: 14px;
@@ -2940,10 +2979,18 @@ body.page-debate #score-b {
   justify-content: space-between;
   margin-bottom: 16px;
 }
+.rubric-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .rubric-modal-title {
   font-size: 15px;
   font-weight: 700;
   color: #111827;
+}
+.rubric-modal-title-group .debate-evaluation-axis-strictness-badge {
+  margin: 0;
 }
 .rubric-modal-section {
   margin-bottom: 14px;
@@ -9938,6 +9985,26 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
 }
 @media (min-width: 769px) {
   .debate-evaluation-axis-text { font-size: 15px; }
+}
+
+.debate-evaluation-axis-strictness-badge {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-style: normal;
+}
+.debate-evaluation-axis-strictness-souple {
+  background: rgba(74, 222, 128, 0.16);
+  color: #4ade80;
+}
+.debate-evaluation-axis-strictness-exigeant {
+  background: rgba(248, 113, 113, 0.16);
+  color: #f87171;
 }
 
 .debate-context-wrap {

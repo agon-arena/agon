@@ -5153,7 +5153,7 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness } = req.body || {};
     const normalizedLongArguments = long_arguments === true;
     const normalizedContent = normalizeDebateContent(content);
     const normalizedAxis = type === "open"
@@ -5161,6 +5161,10 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
       : null;
     // Le créateur peut cacher son barème aux participants (l'IA l'applique quand même)
     const normalizedAxisHidden = Boolean(normalizedAxis && evaluation_axis_hidden === true);
+    // Niveau de correction IA : toujours visible des participants, indépendant du masquage du barème ci-dessus.
+    const normalizedStrictness = type === "open" && ["souple", "exigeant"].includes(String(correction_strictness || ""))
+      ? String(correction_strictness)
+      : null;
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
@@ -5199,6 +5203,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         evaluation_axis: normalizedAxis,
         ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
         ...(normalizedLongArguments ? { long_arguments: true } : {}),
+        ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
         creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
         created_at: nowIso()
       })
@@ -5220,6 +5225,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             evaluation_axis: normalizedAxis,
             ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
             ...(normalizedLongArguments ? { long_arguments: true } : {}),
+            ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
             creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
             created_at: nowIso()
           })
@@ -7137,6 +7143,7 @@ async function _fetchDebatePayload(debateId) {
     positionB:       debate.option_b          || "",
     content:         debate.content           || "",
     evaluation_axis: debate.evaluation_axis   || "",
+    correction_strictness: debate.correction_strictness || "normal",
     previousAnalysis,
     argumentsA: (args || []).filter((a) => a.side === "A").map(mapArg),
     argumentsB: (args || []).filter((a) => a.side === "B").map(mapArg),

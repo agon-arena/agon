@@ -3484,7 +3484,7 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.loading {
       inset: var(--debate-iframe-modal-top, 0px) 0 0 0;
       padding: 0;
-      background: transparent;
+      background: #243038;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
       align-items: stretch;
@@ -18449,8 +18449,18 @@ function renderEvaluationAxis(debate) {
     ? 'Barème personnalisé de l\'arène — sur 100 points' + (ownerOnlyAxis ? ' (visible par toi seulement)' : '')
     : (axisHidden ? 'Barème personnalisé de l\'arène' : 'Comment l\'IA évalue les contributions');
   const bodyText = (isOpen && axis) ? axis : (axisHidden ? hiddenText : (isOpen ? defaultOpenText : defaultDebateText));
+  // Niveau de correction : toujours visible des participants, même si le
+  // créateur a caché le texte du barème (cf. evaluation_axis_hidden ci-dessus).
+  const strictness = String(debate.correction_strictness || '').trim();
+  const strictnessLabel = strictness === 'souple' ? 'Correction souple'
+    : strictness === 'exigeant' ? 'Correction exigeante'
+    : '';
+  const strictnessBadgeHtml = (isOpen && strictnessLabel)
+    ? '<span class="debate-evaluation-axis-strictness-badge debate-evaluation-axis-strictness-' + strictness + '">' + strictnessLabel + '</span>'
+    : '';
 
   el.innerHTML = '<span class="debate-evaluation-axis-label">' + labelText + '</span>'
+    + strictnessBadgeHtml
     + '<p class="debate-evaluation-axis-text">' + escapeHtml(bodyText) + '</p>';
 
   const contextWrap = document.getElementById('debate-context-wrap');
@@ -20309,6 +20319,9 @@ form.addEventListener("submit", async e => {
       : undefined;
     const evaluationAxisHidden = !!(evaluationAxis && document.getElementById("evaluation_axis_hidden")?.checked);
     const longArguments = !!document.getElementById("long_arguments")?.checked;
+    const correctionStrictness = selectedType === "open"
+      ? (document.querySelector('input[name="correction_strictness"]:checked')?.value || "normal")
+      : "normal";
     const createPayload = JSON.stringify({
       question,
       category,
@@ -20322,6 +20335,7 @@ form.addEventListener("submit", async e => {
       ...(evaluationAxis !== undefined ? { evaluation_axis: evaluationAxis } : {}),
       ...(evaluationAxisHidden ? { evaluation_axis_hidden: true } : {}),
       ...(longArguments ? { long_arguments: true } : {}),
+      ...(correctionStrictness !== "normal" ? { correction_strictness: correctionStrictness } : {}),
       creatorKey
     });
 
@@ -23613,9 +23627,16 @@ function showActiveRubricModal() {
   const axis = String((debate && debate.evaluation_axis) || '').trim();
   const axisHidden = open && !axis && !!(debate && debate.evaluation_axis_hidden);
   const ownerOnlyAxis = open && axis && !!(debate && debate.evaluation_axis_hidden) && !!(debate && debate.is_owner);
+  const strictness = String((debate && debate.correction_strictness) || '').trim();
+  const strictnessLabel = strictness === 'souple' ? 'Correction souple'
+    : strictness === 'exigeant' ? 'Correction exigeante'
+    : '';
+  const strictnessBadgeHtml = (open && strictnessLabel)
+    ? '<span class="debate-evaluation-axis-strictness-badge debate-evaluation-axis-strictness-' + strictness + '">' + strictnessLabel + '</span>'
+    : '';
 
   let html = '<div class="rubric-modal-header">'
-    + '<span class="rubric-modal-title">⚖ Barème IA actif</span>'
+    + '<span class="rubric-modal-title-group"><span class="rubric-modal-title">⚖ Barème IA actif</span>' + strictnessBadgeHtml + '</span>'
     + '<button class="rubric-modal-close" type="button" aria-label="Fermer">✕</button>'
     + '</div>';
 
