@@ -7470,7 +7470,7 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-    body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 })
+    body: JSON.stringify({ model: opts.model || "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 })
   });
   if (!r.ok) {
     const body = await r.text().catch(() => "");
