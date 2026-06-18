@@ -12,8 +12,8 @@ function getBubbleSizeClass(index, trendItem = null) {
 }
 
 const MAX_TAG_TREND_BUBBLES = 10;
-const BUBBLE_SIZE_BOOST = 1.08;
-const MOBILE_BUBBLE_SIZE_BOOST = 1.06;
+const BUBBLE_SIZE_BOOST = 1.03;
+const MOBILE_BUBBLE_SIZE_BOOST = 1.01;
 
 function boostedBubbleSize(px, isMobile = false) {
   return Math.round(px * BUBBLE_SIZE_BOOST * (isMobile ? MOBILE_BUBBLE_SIZE_BOOST : 1));

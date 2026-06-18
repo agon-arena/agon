@@ -6638,7 +6638,7 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   width: min(920px, 100%);
-  margin: -10px auto 0;
+  margin: -14px auto 0;
   position: relative;
   z-index: 140;
 }
@@ -6646,13 +6646,13 @@ body.page-debate .topbar::after {
 .index-sort-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   border: 1px solid #d1d5db;
   border-radius: 999px;
   background: #e9ebec;
   color: #111827;
-  padding: 5px 10px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 10.5px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -6926,9 +6926,9 @@ body.page-debate .topbar::after {
   }
 
   .page-home-mobile .index-sort-toggle {
-    min-height: 30px;
-    padding: 5px 10px;
-    font-size: 11px;
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: 10.5px;
   }
 
   .page-home-mobile .index-explorer-controls {
@@ -8824,15 +8824,15 @@ padding:4px 14px 12px 14px;
 .index-active-filter-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 4px 9px;
+  gap: 4px;
+  min-height: 23px;
+  padding: 3px 7px;
   border: 1px solid #1A1F24;
   border-radius: 999px;
   background: #1A1F24;
   color: #ffffff;
   font: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -8845,12 +8845,12 @@ padding:4px 14px 12px 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
   border-radius: 999px;
   background: #e5e7eb;
   color: #374151;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
 }
 
@@ -8865,9 +8865,9 @@ padding:4px 14px 12px 14px;
 
 .page-home-mobile .index-active-filter-tag {
   max-width: 100%;
-  min-height: 25px;
-  padding: 4px 9px;
-  font-size: 10px;
+  min-height: 22px;
+  padding: 3px 7px;
+  font-size: 9.5px;
 }
 @media (min-width: 901px) {
   #debate-question,
@@ -17553,7 +17553,7 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 
 body.page-home #index-active-filters,
 body.page-home .index-active-filters {
-  margin-top: 2px !important;
+  margin-top: -2px !important;
 }
 
 @media (min-width: 769px) {
