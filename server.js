@@ -5156,8 +5156,19 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness } = req.body || {};
     const normalizedLongArguments = long_arguments === true;
     const normalizedContent = normalizeDebateContent(content);
+    // Préserve la mise en page (sauts de ligne) telle que tapée par le créateur
+    // dans le textarea : seuls les espaces/tabulations à l'intérieur d'une
+    // ligne sont aplatis, pas les retours à la ligne entre les critères.
     const normalizedAxis = type === "open"
-      ? String(evaluation_axis || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500)
+      ? String(evaluation_axis || "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\r\n?/g, "\n")
+          .split("\n")
+          .map((line) => line.replace(/[ \t]+/g, " ").trim())
+          .join("\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim()
+          .slice(0, 1500)
       : null;
     // Le créateur peut cacher son barème aux participants (l'IA l'applique quand même)
     const normalizedAxisHidden = Boolean(normalizedAxis && evaluation_axis_hidden === true);
