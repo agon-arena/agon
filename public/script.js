@@ -720,6 +720,7 @@ let currentCommentsByArgument = {};
 let currentArgumentScoreMap = {};
 let pendingAiScorePopupArgumentId = null;
 let pendingAiScoreNotificationTransition = false;
+let pendingAiReportNotificationTransition = false;
 let currentDebateViewMode = "columns";
 let similarDebatesVisible = false;
 let similarDebatesLoading = false;
@@ -10830,8 +10831,12 @@ const NOTIFICATION_TRANSITION_STORAGE_KEY = "notification_transition_pending";
 function isAiScoreNotificationLink(link) {
   try {
     const parsedUrl = new URL(String(link || ""), window.location.origin);
+    if (parsedUrl.pathname !== "/debate") return false;
     const openAiScore = parsedUrl.searchParams.get("openAiScore");
-    return parsedUrl.pathname === "/debate" && (openAiScore === "1" || openAiScore === "true");
+    if (openAiScore === "1" || openAiScore === "true") return true;
+    // Notification "arbitrage IA disponible" (rapport global du débat, pas un argument précis) :
+    // doit déclencher la même animation IA que le score d'un argument.
+    return parsedUrl.searchParams.get("highlight") === "ai-report";
   } catch (error) {
     return false;
   }
@@ -10941,6 +10946,7 @@ function notifyParentAboutNotificationTargetReady() {
 function hideNotificationTransitionOverlay() {
   document.documentElement.classList.remove("notification-transition-pending-early");
   pendingAiScoreNotificationTransition = false;
+  pendingAiReportNotificationTransition = false;
   hidePageArrivalLoadingOverlay();
   if (typeof hideAiAnalysisAnimation === "function") {
     hideAiAnalysisAnimation();
@@ -24135,6 +24141,18 @@ const highlight = params.get("highlight");
 const shouldOpenAiScore = params.get("openAiScore") === "1" || params.get("openAiScore") === "true";
 
 if (highlight) {
+if (highlight === "ai-report") {
+  // admin-debate-analysis.js ouvre le rapport et masque lui-même l'overlay de
+  // transition une fois le contenu réellement affiché (cf. wantsReport côté
+  // admin-debate-analysis.js). Filet de sécurité si ce script échoue à le faire.
+  pendingAiReportNotificationTransition = true;
+  window.setTimeout(() => {
+    if (pendingAiReportNotificationTransition) {
+      pendingAiReportNotificationTransition = false;
+      hideNotificationTransitionOverlay();
+    }
+  }, 15000);
+}
 if (shouldOpenAiScore && highlight.startsWith("argument-")) {
   pendingAiScorePopupArgumentId = highlight.replace("argument-", "");
   pendingAiScoreNotificationTransition = true;
@@ -24190,6 +24208,10 @@ if (highlight.startsWith("argument-") || highlight.startsWith("comment-")) {
       if (shouldOpenAiScore && pendingAiScorePopupArgumentId) {
         if (!openPendingAiScorePopupIfReady()) return;
       }
+
+      // admin-debate-analysis.js masquera lui-même l'overlay une fois le
+      // rapport IA réellement affiché (cf. pendingAiReportNotificationTransition).
+      if (highlight === "ai-report" && pendingAiReportNotificationTransition) return;
 
       if (location.pathname === "/debate" && (isNotificationToDebateLoadingTransition() || shouldOpenAiScore)) {
         hideNotificationTransitionOverlay();

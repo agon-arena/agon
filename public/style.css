@@ -2272,6 +2272,11 @@ select {
   font: inherit;
   box-sizing: border-box;
   background: white;
+  /* Sur certains mobiles (mode sombre système), le navigateur applique un
+     curseur de saisie clair par défaut si aucune couleur n'est précisée,
+     ce qui le rend invisible sur fond blanc. Fixe explicitement le curseur
+     en sombre, indépendamment du thème système. */
+  caret-color: #1f2937;
 }
 
 textarea {

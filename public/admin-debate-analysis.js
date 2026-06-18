@@ -26,6 +26,11 @@
   const ANALYSIS_FETCH_CACHE_TTL = 60 * 1000;
   const analysisFetchCache = new Map();
 
+  // Grille de notation de la dernière analyse rendue (utilisée par le modal
+  // "Comment Agôn évalue les idées" pour afficher le barème personnalisé
+  // réellement appliqué, au lieu de toujours montrer la grille générique.
+  let lastScoringGrid = null;
+
   async function fetchStoredAnalysis(debateId, options = {}) {
     const key = String(debateId || '').trim();
     if (!key) throw new Error('Arène introuvable.');
@@ -1258,6 +1263,7 @@
   // ── New-format renderer (version 2 JSON) ────────────────────────────
 
   function renderNewAnalysis(d, popularityHtml) {
+    lastScoringGrid = (d && d.scoringGrid && typeof d.scoringGrid === 'object') ? d.scoringGrid : null;
     const CAT_CSS = { excellent: 'ada-cat-excellent', bon: 'ada-cat-bon', moyen: 'ada-cat-moyen', faible: 'ada-cat-faible' };
     const CAT_LABEL = { excellent: 'excellent', bon: 'bon', moyen: 'moyen', faible: 'faible' };
     const DEFAULT_CRITERIA = {
@@ -2006,7 +2012,7 @@
   }
 
   // ── Fetch stored analysis ────────────────────────────────────────────
-  async function openReport(debateId, prefetched) {
+  async function openReport(debateId, prefetched, opts = {}) {
     const panel    = document.getElementById('ada-panel');
     const body     = document.getElementById('ada-body');
     const useAnim  = typeof showAiAnalysisAnimation === 'function';
@@ -2061,8 +2067,18 @@
       applyContent = () => { body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`; };
     }
 
-    if (useAnim) hideAiAnalysisAnimation(applyContent);
-    else applyContent();
+    const finalize = () => {
+      applyContent();
+      // Notification "arbitrage IA disponible" : c'est ici, une fois le rapport
+      // réellement visible, qu'on masque l'overlay de transition côté script.js
+      // (cf. pendingAiReportNotificationTransition) — pas avant.
+      if (opts.fromNotification && typeof window.hideNotificationTransitionOverlay === 'function') {
+        window.hideNotificationTransitionOverlay();
+      }
+    };
+
+    if (useAnim) hideAiAnalysisAnimation(finalize);
+    else finalize();
   }
 
   // ── Regenerate analysis (admin only) ────────────────────────────────
@@ -2149,6 +2165,38 @@
   }
 
   // ── Init ─────────────────────────────────────────────────────────────
+  function _baremeCriteriaSectionHtml() {
+    const grid = lastScoringGrid;
+    const isCustom = grid && grid.scoringMode === 'custom';
+
+    if (!isCustom) {
+      return `<h3>2. Chaque idée distincte est notée sur 100</h3>
+      <p>Chaque idée conservée reçoit une note de qualité argumentative sur 100. Si une URL est fournie, elle peut ajouter un bonus source jusqu'à +10 points, mais le score final reste toujours plafonné à 100.</p>
+      <ul>
+        <li><strong>Pertinence par rapport à la question : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
+        <li><strong>Clarté de la thèse : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
+        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'idée est-elle logique, cohérente et bien construite ?</li>
+        <li><strong>Précision / mécanisme concret : 15 points</strong><br>L'idée donne-t-elle un mécanisme, un exemple ou une conséquence précise ?</li>
+        <li><strong>Nuance et prise en compte des limites : 10 points</strong><br>L'idée reconnaît-elle les risques, objections ou limites ?</li>
+        <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
+        <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
+      </ul>
+      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 100 points · Bonus source possible : jusqu'à +10 points · Score final plafonné à 100.</strong></div>`;
+    }
+
+    const orientation = esc(grid.axisSource || '');
+    const ruleLines = String(grid.customRubric || '')
+      .split('\n')
+      .map((line) => line.replace(/^[-•]\s*/, '').trim())
+      .filter(Boolean)
+      .map((line) => `<li>${esc(line)}</li>`)
+      .join('');
+    return `<h3>2. Cette arène utilise un barème personnalisé</h3>
+      <p>Le créateur de cette arène a défini une orientation propre${orientation ? ` : <strong>« ${orientation} »</strong>` : ''}. Agôn a stabilisé cette orientation en un barème unique, sur 100 points, appliqué à l'identique à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
+      ${ruleLines ? `<ul>${ruleLines}</ul>` : ''}
+      <div class="ada-bareme-rule"><strong>Total : 100 points · Score final = total obtenu sur le barème personnalisé, sans bonus source séparé.</strong></div>`;
+  }
+
   function _openBaremeModal() {
     const overlay = document.createElement('div');
     overlay.className = 'ada-bareme-overlay';
@@ -2161,18 +2209,7 @@
       <h3>1. Les doublons sont regroupés</h3>
       <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
 
-      <h3>2. Chaque idée distincte est notée sur 100</h3>
-      <p>Chaque idée conservée reçoit une note de qualité argumentative sur 100. Si une URL est fournie, elle peut ajouter un bonus source jusqu'à +10 points, mais le score final reste toujours plafonné à 100.</p>
-      <ul>
-        <li><strong>Pertinence par rapport à la question : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
-        <li><strong>Clarté de la thèse : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
-        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'idée est-elle logique, cohérente et bien construite ?</li>
-        <li><strong>Précision / mécanisme concret : 15 points</strong><br>L'idée donne-t-elle un mécanisme, un exemple ou une conséquence précise ?</li>
-        <li><strong>Nuance et prise en compte des limites : 10 points</strong><br>L'idée reconnaît-elle les risques, objections ou limites ?</li>
-        <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
-        <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
-      </ul>
-      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 100 points · Bonus source possible : jusqu'à +10 points · Score final plafonné à 100.</strong></div>
+      ${_baremeCriteriaSectionHtml()}
 
       <h3>3. Les idées sont classées par niveau</h3>
       <ul>
@@ -2182,8 +2219,8 @@
         <li><strong>85 à 100 : excellente idée</strong> — très solide, bien construite, nuancée et bien appuyée.</li>
       </ul>
 
-      <h3>4. Les sources renforcent, elles ne remplacent pas</h3>
-      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>
+      ${(lastScoringGrid && lastScoringGrid.scoringMode === 'custom') ? '' : `<h3>4. Les sources renforcent, elles ne remplacent pas</h3>
+      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>`}
 
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>
@@ -2306,7 +2343,7 @@
       document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
       document.getElementById('ada-regen-btn').addEventListener('click', () => regenerate(debateId));
       observeAnimated();
-      if (wantsReport) openReport(debateId);
+      if (wantsReport) openReport(debateId, undefined, { fromNotification: true });
       return;
     }
 
@@ -2334,7 +2371,7 @@
     document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
     document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
     observeAnimated();
-    if (wantsReport) openReport(debateId, prefetched);
+    if (wantsReport) openReport(debateId, prefetched, { fromNotification: true });
   }
 
   if (document.readyState === 'loading') {
