@@ -42,7 +42,8 @@
     }
 
     const clientKey = (typeof getKey === 'function') ? getKey() : '';
-    const promise = fetch('/api/debates/' + key + '/analysis' + (clientKey ? '?key=' + encodeURIComponent(clientKey) : ''))
+    const adminHeaders = (typeof debateOwnerHeaders === 'function') ? debateOwnerHeaders() : {};
+    const promise = fetch('/api/debates/' + key + '/analysis' + (clientKey ? '?key=' + encodeURIComponent(clientKey) : ''), { headers: adminHeaders })
       .then(async function (response) {
         const json = await response.json().catch(() => ({}));
         return {

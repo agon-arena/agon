@@ -4032,7 +4032,7 @@ async function scrollToIndexDebateCard(url) {
   if (!inCache) {
     // Tenter de récupérer ce débat spécifiquement et l'injecter dans le cache
     try {
-      const data = await fetchJSON(`${API}/debates/${encodeURIComponent(trimmedId)}?key=${encodeURIComponent(getKey())}`);
+      const data = await fetchJSON(`${API}/debates/${encodeURIComponent(trimmedId)}?key=${encodeURIComponent(getKey())}`, { headers: debateOwnerHeaders() });
       const debate = data?.debate || (data && data.id ? data : null);
       if (!debate || !debate.id) { _showEpisodeNavNotFound(); return; }
       debatesCache = [debate, ...debatesCache.filter(d => String(d?.id || "") !== String(debate.id))];
@@ -12725,6 +12725,13 @@ function isAdmin() {
   return !!getAdminToken() && adminSessionVerified;
 }
 
+// Pour les arènes officielles (créées par l'admin), permet au compte admin de
+// rester reconnu comme "propriétaire" côté serveur (ex: accès au barème caché)
+// même si la clé de navigateur ne correspond pas à creator_key.
+function debateOwnerHeaders() {
+  return isAdmin() ? { "x-admin-token": getAdminToken() } : {};
+}
+
 function setAdminToken(token) {
   localStorage.setItem("admin_token", token);
   adminSessionVerified = !!token;
@@ -14590,7 +14597,7 @@ async function toggleCurrentDebateAdminEditPanel() {
       const existingDebate = String(currentDebateCache?.id || "") === String(debateId)
         ? currentDebateCache
         : null;
-      const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey())))?.debate || null;
+      const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() }))?.debate || null;
 
       if (!debate) {
         alert("Arène introuvable.");
@@ -23904,7 +23911,7 @@ function renderArgumentAiScoreBadges() {
 
 async function loadDebateFullData(id) {
   try {
-    const data = await fetchJSON(API + "/debates/" + id + "?key=" + encodeURIComponent(getKey()));
+    const data = await fetchJSON(API + "/debates/" + id + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() });
 
   document.getElementById("debate-question").textContent = data.debate.question;
   renderDebateContext(data.debate.content || "", isOpenDebate(data.debate));
@@ -26908,7 +26915,7 @@ const focusReplyUi = () => {
   const localTargetComment = getLocalCommentById(commentId, argumentId);
   const loadReplyForm = localTargetComment
     ? applyReplyTarget(localTargetComment)
-    : fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()))
+    : fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() })
         .then((debateData) => {
           const comments = debateData.commentsByArgument?.[String(argumentId)] || [];
           const targetComment = comments.find(
@@ -27840,7 +27847,7 @@ async function editDebate() {
       ? currentDebateCache
       : null;
 
-    const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey())))?.debate || null;
+    const debate = existingDebate || (await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() }))?.debate || null;
 
     if (!debate) {
       alert("Arène introuvable.");
@@ -27906,7 +27913,7 @@ async function editArgument(argumentId) {
       : null;
 
     if (!argument) {
-      const data = await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()));
+      const data = await fetchJSON(API + "/debates/" + debateId + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() });
       const allArguments = [...(data.optionA || []), ...(data.optionB || [])];
       argument = allArguments.find((item) => String(item.id) === String(argumentId));
     }

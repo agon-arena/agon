@@ -1566,11 +1566,15 @@ function getRequestClientKey(req) {
   return String(req?.query?.key || req?.query?.voterKey || "").trim();
 }
 
-function sanitizeDebateForClient(debate, clientKey) {
+function sanitizeDebateForClient(debate, clientKey, isAdminRequest = false) {
   if (!debate) return debate;
   const { creator_key, ...rest } = debate;
   const normalizedClientKey = clientKey ? String(clientKey) : "";
-  const isOwner = !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey);
+  // Pour les arènes officielles (creator_key = AGON_ADMIN_CREATOR_KEY), aucune
+  // clé de navigateur ne correspondra jamais : seul un token admin valide
+  // permet d'être reconnu comme "propriétaire" de ce type d'arène.
+  const isOwner = !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey)
+    || !!(isAdminRequest && creator_key === AGON_ADMIN_CREATOR_KEY);
   return {
     ...rest,
     // Barème caché par le créateur : le texte ne doit jamais être exposé aux
@@ -1602,7 +1606,7 @@ function sanitizeCommentForClient(comment, clientKey) {
   };
 }
 
-function sanitizeDebateDetailPayload(payload, clientKey) {
+function sanitizeDebateDetailPayload(payload, clientKey, isAdminRequest = false) {
   if (!payload) return payload;
   const sanitizedCommentsByArgument = {};
   for (const [argumentId, comments] of Object.entries(payload.commentsByArgument || {})) {
@@ -1610,7 +1614,7 @@ function sanitizeDebateDetailPayload(payload, clientKey) {
   }
   return {
     ...payload,
-    debate: sanitizeDebateForClient(payload.debate, clientKey),
+    debate: sanitizeDebateForClient(payload.debate, clientKey, isAdminRequest),
     optionA: (payload.optionA || []).map((a) => sanitizeArgumentForClient(a, clientKey)),
     optionB: (payload.optionB || []).map((a) => sanitizeArgumentForClient(a, clientKey)),
     commentsByArgument: sanitizedCommentsByArgument
@@ -5587,9 +5591,10 @@ app.get("/api/debates/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const clientKey = getRequestClientKey(req);
+    const isAdminRequest = isAdmin(req);
     const cachedResponse = getCachedDebateDetailResponse(id);
     if (cachedResponse) {
-      return res.json(sanitizeDebateDetailPayload(cachedResponse, clientKey));
+      return res.json(sanitizeDebateDetailPayload(cachedResponse, clientKey, isAdminRequest));
     }
 
     const [debate, args] = await Promise.all([
@@ -5615,7 +5620,7 @@ app.get("/api/debates/:id", async (req, res) => {
         sourcePreview
       };
       setCachedDebateDetailResponse(id, payload);
-      return res.json(sanitizeDebateDetailPayload(payload, clientKey));
+      return res.json(sanitizeDebateDetailPayload(payload, clientKey, isAdminRequest));
     }
 
     const [sourcePreview, comments] = await Promise.all([
@@ -5641,7 +5646,7 @@ app.get("/api/debates/:id", async (req, res) => {
     };
 
     setCachedDebateDetailResponse(id, payload);
-    res.json(sanitizeDebateDetailPayload(payload, clientKey));
+    res.json(sanitizeDebateDetailPayload(payload, clientKey, isAdminRequest));
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur lecture arguments.");
@@ -7071,7 +7076,8 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
   // Barème caché par le créateur : le détail (orientation + règles dérivées)
   // ne doit fuiter ni vers les autres visiteurs ni vers le rapport IA public —
   // seul le créateur peut le consulter (cf. sanitizeDebateForClient).
-  const isOwner = !!(clientKey && data.creator_key && String(data.creator_key) === clientKey);
+  const isOwner = !!(clientKey && data.creator_key && String(data.creator_key) === clientKey)
+    || !!(isAdmin(req) && data.creator_key === AGON_ADMIN_CREATOR_KEY);
   if (raw && data.evaluation_axis_hidden && !isOwner) {
     try {
       const parsedRaw = JSON.parse(raw);
