@@ -4630,13 +4630,13 @@ function initDebateBottomExplorerLink() {
     event.stopPropagation();
 
     try {
-      window.parent.location.href = "/";
-    } catch (error) {
-      try {
-        window.top.location.href = "/";
-      } catch (nestedError) {
-        window.location.href = "/";
+      if (typeof window.parent.closeDebateIframeModal === "function") {
+        window.parent.closeDebateIframeModal();
+      } else {
+        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
       }
+    } catch (error) {
+      try { window.parent.postMessage({ type: "agon:close-debate-modal" }, "*"); } catch (nestedError) {}
     }
   });
 }
@@ -4653,13 +4653,13 @@ function initDebateTopExplorerLink() {
     event.stopPropagation();
 
     try {
-      window.parent.location.href = "/";
-    } catch (error) {
-      try {
-        window.top.location.href = "/";
-      } catch (nestedError) {
-        window.location.href = "/";
+      if (typeof window.parent.closeDebateIframeModal === "function") {
+        window.parent.closeDebateIframeModal();
+      } else {
+        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
       }
+    } catch (error) {
+      try { window.parent.postMessage({ type: "agon:close-debate-modal" }, "*"); } catch (nestedError) {}
     }
   });
 }
@@ -15698,9 +15698,7 @@ function renderIndexActiveFilterTags() {
   });
 
   const hasActiveTags = tags.length > 0;
-  container.innerHTML = hasActiveTags
-    ? tags.join("")
-    : '<button type="button" class="index-active-filter-tag index-active-filter-default" tabindex="-1" aria-disabled="true"><span>Les arènes ouvertes par la communauté agôn</span></button>';
+  container.innerHTML = hasActiveTags ? tags.join("") : "";
   container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
   alignStandaloneBubbleFrameToActiveFilter();

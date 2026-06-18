@@ -8824,15 +8824,15 @@ padding:4px 14px 12px 14px;
 .index-active-filter-tag {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 7px 12px;
+  gap: 6px;
+  min-height: 26px;
+  padding: 4px 9px;
   border: 1px solid #1A1F24;
   border-radius: 999px;
   background: #1A1F24;
   color: #ffffff;
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -8845,12 +8845,12 @@ padding:4px 14px 12px 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   border-radius: 999px;
   background: #e5e7eb;
   color: #374151;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -8865,9 +8865,9 @@ padding:4px 14px 12px 14px;
 
 .page-home-mobile .index-active-filter-tag {
   max-width: 100%;
-  min-height: 32px;
-  padding: 6px 11px;
-  font-size: 12px;
+  min-height: 25px;
+  padding: 4px 9px;
+  font-size: 10px;
 }
 @media (min-width: 901px) {
   #debate-question,
