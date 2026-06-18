@@ -15570,6 +15570,7 @@ function getIndexTypeFilterLabel(type) {
   if (type === "question") return "Arènes libres";
   if (type === "visited") return "Arènes consultées";
   if (type === "agon") return "Arènes ouvertes par agôn";
+  if (type === "community") return "Arènes ouvertes par la communauté";
   return "Tous";
 }
 
@@ -15699,7 +15700,7 @@ function renderIndexActiveFilterTags() {
   const hasActiveTags = tags.length > 0;
   container.innerHTML = hasActiveTags
     ? tags.join("")
-    : '<button type="button" class="index-active-filter-tag index-active-filter-default" tabindex="-1" aria-disabled="true"><span>Toutes les arènes agôn</span></button>';
+    : '<button type="button" class="index-active-filter-tag index-active-filter-default" tabindex="-1" aria-disabled="true"><span>Les arènes ouvertes par la communauté agôn</span></button>';
   container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
   alignStandaloneBubbleFrameToActiveFilter();
@@ -15965,14 +15966,9 @@ function toggleAgonCloud() {
     // les compteurs de cartes du mode Agôn (10 en tension, 1 ailleurs sur mobile).
     _agonCloudMode = true;
 
-    // Les Bulles Agôn montrent l'activité de toute la plateforme : le filtre
-    // "Arènes ouvertes par Agôn" est retiré au passage (les autres filtres restent)
-    // — setTypeFilter re-rend déjà le feed, sinon on le re-rend explicitement.
-    if (currentTypeFilter === "agon") {
-      setTypeFilter("all");
-    } else {
-      applyIndexFilters();
-    }
+    // Les bandeaux thématiques sous les Bulles Agôn ne montrent que les arènes
+    // ouvertes par la communauté, quel que soit le filtre actif avant le switch.
+    setTypeFilter("community");
 
     // Quitte proprement l'éventuel mode tags secondaires sans re-render intermédiaire
     _tagCloudSecondaryMode = false;
@@ -16439,6 +16435,10 @@ function getFilteredDebatesForIndex(baseDebates) {
 
   if (currentTypeFilter === "agon") {
     filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate));
+  }
+
+  if (currentTypeFilter === "community") {
+    filteredDebates = filteredDebates.filter((debate) => !isAgonGeneratedDebate(debate));
   }
 
   const activeCategoryFilters = getCurrentCategoryFilters();
@@ -17285,6 +17285,9 @@ function getAlaUneSourceForCurrentFilters(filteredDebates) {
   const source = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : filteredDebates;
   if (currentTypeFilter === "agon") {
     return source.filter((debate) => isAgonGeneratedDebate(debate));
+  }
+  if (currentTypeFilter === "community") {
+    return source.filter((debate) => !isAgonGeneratedDebate(debate));
   }
   return source;
 }
