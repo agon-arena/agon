@@ -50,7 +50,7 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
 
 app.use(express.json({ limit: "100kb" }));
-app.use(express.static("public", { maxAge: 0, setHeaders: (res) => res.setHeader("Cache-Control", "no-store") }));
+app.use(express.static("public", { maxAge: "2m" }));
 
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
 // ATTENTION : basé sur req.ip. Si l'app est derrière un proxy (Render, Heroku,
