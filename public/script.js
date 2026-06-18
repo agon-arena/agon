@@ -2963,6 +2963,10 @@ function lockPageScrollForDebateModal(savedScrollY = 0) {
     _debateModalScrollLockMode = "mobile";
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${safeScrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
     document.body.style.width = "100%";
 
     _debateModalTouchBlockHandler = (event) => {
@@ -2995,6 +2999,10 @@ function unlockPageScrollForDebateModal() {
   if (_debateModalScrollLockMode === "mobile") {
     document.documentElement.style.overflow = "";
     document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
     document.body.style.width = "";
 
     if (_debateModalTouchBlockHandler) {
@@ -3035,7 +3043,7 @@ function ensureDebateIframeParentLoadingStyles() {
       right: 0;
       top: var(--debate-iframe-parent-loading-top, 0px);
       bottom: 0;
-      z-index: 9998;
+      z-index: 10000;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -5690,7 +5698,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     <article class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
-      <a class="debate-card-link" href="/debate?id=${d.id}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event); return false;">
+      <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
         <div class="debate-card-top-row">
           <div class="debate-card-top-meta">
             ${categoryBadgesHtml}
@@ -5699,7 +5707,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
         </div>
         ${mediaOutsideLink ? "" : mediaHtml}
         <h2>${escapeHtml(d.question)}</h2>
-      </a>
+      </div>
 
       ${includeDeleteButton ? getDebateCardDeleteButtonHtml(d) : ""}
       ${mediaOutsideLink ? `
@@ -12443,7 +12451,7 @@ function getIndexDebateShareSnapshotFromDom(debateId) {
   const card = document.querySelector(`article.debate-card[data-debate-id="${CSS.escape(normalizedId)}"]`);
   if (!card) return null;
 
-  const title = card.querySelector("a.debate-card-link h2")?.textContent?.trim() || "";
+  const title = card.querySelector(".debate-card-link h2")?.textContent?.trim() || "";
   const optionA = card.querySelector(".pos-a")?.textContent?.trim() || "";
   const optionB = card.querySelector(".pos-b")?.textContent?.trim() || "";
   const scoreLabels = Array.from(card.querySelectorAll(".score-labels span")).map((node) => String(node.textContent || "").trim());
@@ -14209,7 +14217,7 @@ async function saveAdminCardEdit(debateId, btn) {
     // Met à jour le DOM de la carte directement
     const card = panel.closest('article.debate-card');
     if (card) {
-      const h2 = card.querySelector('a.debate-card-link h2');
+      const h2 = card.querySelector('.debate-card-link h2');
       if (h2) h2.textContent = body.question;
 
       const posA = card.querySelector('.pos-a');
@@ -14384,7 +14392,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
     // Met à jour le DOM de la carte
     const card = panel.closest('article.debate-card');
     if (card) {
-      const h2 = card.querySelector('a.debate-card-link h2');
+      const h2 = card.querySelector('.debate-card-link h2');
       if (h2) h2.textContent = body.question;
       const posA = card.querySelector('.pos-a');
       const posB = card.querySelector('.pos-b');
