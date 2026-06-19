@@ -3004,7 +3004,7 @@ function quoteNotificationContent(value, maxLength = 90) {
   return label ? `« ${label} »` : "";
 }
 
-async function _sendPushNow(userKey, { type, message, debate_id = null, argument_id = null, comment_id = null }) {
+async function _sendPushNow(userKey, { type, message, debate_id = null, argument_id = null, comment_id = null, notification_id = null }) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
   const event = await createNotificationEventSafe(supabase, {
     eventType: type,
@@ -3013,7 +3013,7 @@ async function _sendPushNow(userKey, { type, message, debate_id = null, argument
     debateId: debate_id,
     argumentId: argument_id,
     commentId: comment_id,
-    payload: { message }
+    payload: { message, notification_id }
   });
   if (!event?.id) return;
   await sendNotificationEventPushById(supabase, {
@@ -3033,7 +3033,7 @@ async function createNotification({
 }) {
   if (!user_key || !message || !type) return;
 
-  await supabase.from("notifications").insert({
+  const { data: insertedNotification, error: notificationInsertError } = await supabase.from("notifications").insert({
     user_key,
     type,
     debate_id,
@@ -3042,10 +3042,19 @@ async function createNotification({
     message,
     is_read: 0,
     created_at: nowIso()
-  });
+  }).select("id").single();
+
+  if (notificationInsertError) throw notificationInsertError;
 
   clearNotificationsApiResponseCache();
-  _sendPushNow(user_key, { type, message, debate_id, argument_id, comment_id }).catch(console.error);
+  _sendPushNow(user_key, {
+    type,
+    message,
+    debate_id,
+    argument_id,
+    comment_id,
+    notification_id: insertedNotification?.id || null
+  }).catch(console.error);
 }
 
 // Map<argumentId (string), {authorKey, debateId, side, wasMajorityAtPost}>
@@ -4500,6 +4509,32 @@ app.post("/api/notifications/read-one", rateLimit("notifications", 180), async (
       .update({ is_read: 1 })
       .eq("id", notificationId)
       .eq("user_key", userKey);
+
+    if (error) {
+      console.error(error);
+      return sendServerError(res, "Erreur mise à jour notification.");
+    }
+
+    clearNotificationsApiResponseCache();
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur mise à jour notification.");
+  }
+});
+
+app.post("/api/notifications/read-from-push", rateLimit("notifications", 180), async (req, res) => {
+  try {
+    const { notificationId } = req.body || {};
+
+    if (!notificationId) {
+      return res.status(400).json({ error: "Paramètres manquants." });
+    }
+
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: 1 })
+      .eq("id", notificationId);
 
     if (error) {
       console.error(error);
@@ -7422,7 +7457,7 @@ async function _notifyParticipants(debateId, { type, message, buildPersonalizati
     : new Map();
 
   const now = nowIso();
-  await supabase.from("notifications").insert(
+  const { data: insertedNotifications, error: notificationInsertError } = await supabase.from("notifications").insert(
     [...userKeys].map((user_key) => {
       const personalMessage = messageByUserKey.get(user_key) || message;
       const personalArgumentId = argumentIdByUserKey.get(user_key) || null;
@@ -7437,6 +7472,14 @@ async function _notifyParticipants(debateId, { type, message, buildPersonalizati
         created_at: now
       };
     })
+  ).select("id, user_key");
+
+  if (notificationInsertError) throw notificationInsertError;
+
+  const notificationIdByUserKey = new Map(
+    (insertedNotifications || [])
+      .filter((row) => row?.user_key)
+      .map((row) => [row.user_key, row.id])
   );
   clearNotificationsApiResponseCache();
 
@@ -7445,7 +7488,8 @@ async function _notifyParticipants(debateId, { type, message, buildPersonalizati
       type,
       message: messageByUserKey.get(user_key) || message,
       debate_id: debateId,
-      argument_id: argumentIdByUserKey.get(user_key) || null
+      argument_id: argumentIdByUserKey.get(user_key) || null,
+      notification_id: notificationIdByUserKey.get(user_key) || null
     }).catch(console.error);
   }
 }

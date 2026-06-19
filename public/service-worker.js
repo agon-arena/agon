@@ -90,7 +90,8 @@ self.addEventListener("push", (event) => {
     icon: payload.icon || "/icon-192-optimized.png",
     badge: payload.badge || "/icon-192-optimized.png",
     data: {
-      url: payload.url || "/"
+      url: payload.url || "/",
+      notificationId: payload.notificationId || payload.notification_id || null
     }
   };
 
@@ -101,8 +102,20 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const targetUrl = event.notification?.data?.url || "/";
+  const notificationId = event.notification?.data?.notificationId || null;
 
   event.waitUntil((async () => {
+    if (notificationId) {
+      try {
+        await fetch("/api/notifications/read-from-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId }),
+          keepalive: true
+        });
+      } catch (_) {}
+    }
+
     const windowClients = await self.clients.matchAll({
       type: "window",
       includeUncontrolled: true
