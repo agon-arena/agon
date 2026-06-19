@@ -8965,33 +8965,47 @@ padding:4px 14px 12px 14px;
 }
 .voice-stepper-btn-guided,
 .my-argument-chip-stepper-btn-guided{
+  position: relative;
   animation: voiceStepperPulse 1.15s ease-in-out infinite;
-  box-shadow: 0 0 0 0 rgba(55, 48, 163, 0.28);
+}
+
+.voice-stepper-btn-guided::after,
+.my-argument-chip-stepper-btn-guided::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 8px rgba(55, 48, 163, 0.12);
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  animation: voiceStepperHalo 1.15s ease-in-out infinite;
 }
 
 .voice-stepper-btn-guided.voice-stepper-btn-minus,
-.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-minus{
+.voice-stepper-btn-guided.voice-stepper-btn-minus::after,
+.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-minus,
+.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-minus::after{
   animation-delay: 0.08s;
 }
 
 .voice-stepper-btn-guided.voice-stepper-btn-plus,
-.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-plus{
+.voice-stepper-btn-guided.voice-stepper-btn-plus::after,
+.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-plus,
+.my-argument-chip-stepper-btn-guided.my-argument-chip-stepper-btn-plus::after{
   animation-delay: 0s;
 }
 
 @keyframes voiceStepperPulse{
-  0%{
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(55, 48, 163, 0.00);
-  }
-  50%{
-    transform: scale(1.06);
-    box-shadow: 0 0 0 8px rgba(55, 48, 163, 0.12);
-  }
-  100%{
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(55, 48, 163, 0.00);
-  }
+  0%{ transform: scale(1); }
+  50%{ transform: scale(1.06); }
+  100%{ transform: scale(1); }
+}
+
+@keyframes voiceStepperHalo{
+  0%{ opacity: 0; transform: scale(0.7); }
+  50%{ opacity: 1; transform: scale(1); }
+  100%{ opacity: 0; transform: scale(1.3); }
 }
 
 /* ===== OPEN GRAPH – centrage carte source page débat ===== */
@@ -14383,14 +14397,28 @@ body.page-debate .idea-share-menu .share-icon-button:hover {
   }
 }
 @keyframes voiceStepperPulse {
-  0%   { transform: scale(1);    box-shadow: 0 0 0 0   rgba(0, 0, 0, 0.00); }
-  50%  { transform: scale(1.12); box-shadow: 0 0 0 10px rgba(0, 0, 0, 0.12); }
-  100% { transform: scale(1);    box-shadow: 0 0 0 0   rgba(0, 0, 0, 0.00); }
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
 body.page-debate .voice-stepper-btn-guided,
 body.page-debate .my-argument-chip-stepper-btn-guided {
+  position: relative;
   animation: voiceStepperPulse 1.15s ease-in-out infinite;
+}
+
+body.page-debate .voice-stepper-btn-guided::after,
+body.page-debate .my-argument-chip-stepper-btn-guided::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 10px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  animation: voiceStepperHalo 1.15s ease-in-out infinite;
 }
 
 /* Redéfinition des animations de flash avec les couleurs opaques */
@@ -15080,6 +15108,11 @@ body.page-debate .similar-debates-results .debate-card.index-card-active:not(.ha
     animation: voiceStepperPulse 1.8s ease-in-out infinite;
   }
 
+  body.page-debate .voice-stepper-btn-guided::after,
+  body.page-debate .my-argument-chip-stepper-btn-guided::after {
+    animation: voiceStepperHalo 1.8s ease-in-out infinite;
+  }
+
   body.page-debate .similar-debates-results .debate-card {
     transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
     will-change: auto;
@@ -15331,10 +15364,319 @@ body.page-debate .argument-url-field small {
   line-height: 1.35;
 }
 
+/* Modale "Ajouter une idée" : textes un peu plus lisibles, mobile et desktop. */
+body.page-debate .argument-form h3,
+body.page-debate .argument-form-list-top h3 {
+  font-size: 26px !important;
+}
+
+body.page-debate .argument-form-list-subtitle,
+body.page-debate .form-evaluation-axis-text {
+  font-size: 15px;
+}
+
+body.page-debate .form-evaluation-axis-label {
+  font-size: 12px;
+}
+
+body.page-debate .argument-form label,
+body.page-debate .argument-url-field label {
+  font-size: 16px !important;
+}
+
+body.page-debate .argument-form input,
+body.page-debate .argument-form textarea,
+body.page-debate .argument-url-field input[type="url"] {
+  font-size: 16px !important;
+}
+
+body.page-debate .argument-form small,
+body.page-debate .argument-url-field small,
+small.argument-url-ia-hint,
+body.page-debate .argument-url-field small.argument-url-ia-hint {
+  font-size: 13px !important;
+}
+
+body.page-debate .list-position-button {
+  font-size: 19px;
+}
+
+body.page-debate .voice-dictation-button {
+  font-size: 13px;
+}
+
+body.page-debate .voice-dictation-hint {
+  font-size: 12px;
+}
+
+body.page-debate .rubric-btn {
+  font-size: 14px;
+}
+
+body.page-debate .argument-form .button {
+  font-size: 18px;
+}
+
+body.page-debate .rubric-modal-title {
+  font-size: 17px;
+}
+
+body.page-debate .rubric-modal-section-title {
+  font-size: 12px;
+}
+
+body.page-debate .rubric-modal-text,
+body.page-debate .rubric-modal-axis-text {
+  font-size: 16px;
+}
+
+body.page-debate .rubric-modal-note {
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-form h3,
+  body.page-debate .argument-form-body > h3,
+  body.page-debate .argument-form-list-top h3 {
+    font-size: 21px !important;
+  }
+
+  body.page-debate .argument-form-list-subtitle,
+  body.page-debate .form-evaluation-axis-text {
+    font-size: 14px;
+  }
+
+  body.page-debate .form-evaluation-axis-label {
+    font-size: 11px;
+  }
+
+  body.page-debate .argument-form label,
+  body.page-debate .argument-url-field label {
+    font-size: 16px !important;
+  }
+
+  body.page-debate .argument-form input,
+  body.page-debate .argument-form textarea,
+  body.page-debate .argument-url-field input[type="url"] {
+    font-size: 16px !important;
+  }
+
+  body.page-debate .argument-form small,
+  body.page-debate .argument-url-field small,
+  small.argument-url-ia-hint,
+  body.page-debate .argument-url-field small.argument-url-ia-hint {
+    font-size: 13px !important;
+  }
+
+  body.page-debate .list-position-button {
+    font-size: 17px;
+  }
+
+  body.page-debate .voice-dictation-button {
+    font-size: 12px;
+  }
+
+  body.page-debate .voice-dictation-hint {
+    font-size: 11px;
+  }
+
+  body.page-debate .rubric-btn {
+    font-size: 14px;
+  }
+
+  body.page-debate .argument-form .button {
+    font-size: 18px;
+  }
+
+  body.page-debate .rubric-modal-title {
+    font-size: 16px;
+  }
+
+  body.page-debate .rubric-modal-section-title {
+    font-size: 12px;
+  }
+
+  body.page-debate .rubric-modal-text,
+  body.page-debate .rubric-modal-axis-text {
+    font-size: 15px;
+  }
+
+  body.page-debate .rubric-modal-note {
+    font-size: 14px;
+  }
+}
+
 body.page-debate .argument-url-preview,
 body.page-debate .idea-source-card-wrap {
   width: 100%;
   margin-top: 10px;
+}
+
+/* Création d'arène : textes légèrement agrandis sans changer la logique du formulaire. */
+body.page-create .arena-type-choice-intro,
+body.page-create-mobile .arena-type-choice-intro {
+  font-size: 22px !important;
+}
+
+body.page-create .arena-type-card-title,
+body.page-create-mobile .arena-type-card-title {
+  font-size: 24px !important;
+}
+
+body.page-create .arena-type-card-desc,
+body.page-create-mobile .arena-type-card-desc {
+  font-size: 16px !important;
+}
+
+body.page-create .create-type-indicator-badge,
+body.page-create-mobile .create-type-indicator-badge {
+  font-size: 15px !important;
+}
+
+body.page-create .create-type-back-btn,
+body.page-create-mobile .create-type-back-btn {
+  font-size: 14px !important;
+}
+
+body.page-create .create-form label,
+body.page-create-mobile .create-form label,
+body.page-create .position-card label,
+body.page-create-mobile .position-card label {
+  font-size: 18px !important;
+}
+
+body.page-create .label-hint,
+body.page-create-mobile .label-hint {
+  font-size: 14px !important;
+}
+
+body.page-create input,
+body.page-create textarea,
+body.page-create select,
+body.page-create-mobile input,
+body.page-create-mobile textarea,
+body.page-create-mobile select {
+  font-size: 18px !important;
+}
+
+body.page-create .axis-placeholder-overlay,
+body.page-create-mobile .axis-placeholder-overlay {
+  font-size: 15px !important;
+}
+
+body.page-create .axis-placeholder-title,
+body.page-create-mobile .axis-placeholder-title {
+  font-size: 17px !important;
+}
+
+body.page-create .axis-hidden-option,
+body.page-create-mobile .axis-hidden-option,
+body.page-create .axis-strictness-label,
+body.page-create-mobile .axis-strictness-label {
+  font-size: 16px !important;
+}
+
+body.page-create .create-resource-option,
+body.page-create-mobile .create-resource-option,
+body.page-create .create-resource-option span,
+body.page-create-mobile .create-resource-option span {
+  font-size: 15px !important;
+}
+
+body.page-create #create-category-toggle-label,
+body.page-create .create-category-toggle-label,
+body.page-create-mobile #create-category-toggle-label,
+body.page-create-mobile .create-category-toggle-label,
+body.page-create .create-category-option span,
+body.page-create-mobile .create-category-option span,
+body.page-create .create-category-chip,
+body.page-create-mobile .create-category-chip {
+  font-size: 15px !important;
+}
+
+body.page-create .create-submit-button,
+body.page-create-mobile .create-submit-button {
+  font-size: 20px !important;
+}
+
+body.page-create .create-submit-helper,
+body.page-create-mobile .create-submit-helper {
+  font-size: 15px !important;
+}
+
+body.page-create .create-form small,
+body.page-create-mobile .create-form small,
+body.page-create .position-card small,
+body.page-create-mobile .position-card small,
+body.page-create #question-count,
+body.page-create-mobile #question-count,
+body.page-create #context-text-count,
+body.page-create-mobile #context-text-count,
+body.page-create #evaluation-axis-count,
+body.page-create-mobile #evaluation-axis-count {
+  font-size: 14px !important;
+}
+
+body.page-create .create-context-toggle,
+body.page-create-mobile .create-context-toggle,
+body.page-create #toggle-context-button,
+body.page-create-mobile #toggle-context-button,
+body.page-create #toggle-axis-button,
+body.page-create-mobile #toggle-axis-button {
+  font-size: 16px !important;
+}
+
+body.page-create .axis-strictness-option span,
+body.page-create-mobile .axis-strictness-option span {
+  font-size: 15px !important;
+}
+
+@media (max-width: 768px) {
+  body.page-create-mobile .arena-type-choice-intro {
+    font-size: 22px !important;
+  }
+
+  body.page-create-mobile .arena-type-card-title {
+    font-size: 24px !important;
+  }
+
+  body.page-create-mobile .arena-type-card-desc {
+    font-size: 16px !important;
+  }
+
+  body.page-create-mobile .create-form label,
+  body.page-create-mobile .position-card label {
+    font-size: 18px !important;
+  }
+
+  body.page-create-mobile .label-hint {
+    font-size: 14px !important;
+  }
+
+  body.page-create-mobile input,
+  body.page-create-mobile textarea,
+  body.page-create-mobile select {
+    font-size: 18px !important;
+  }
+
+  body.page-create-mobile .create-resource-option span,
+  body.page-create-mobile .debate-type-option span {
+    font-size: 15px !important;
+  }
+
+  body.page-create-mobile .create-form small,
+  body.page-create-mobile .position-card small,
+  body.page-create-mobile #question-count,
+  body.page-create-mobile #context-text-count,
+  body.page-create-mobile #evaluation-axis-count {
+    font-size: 14px !important;
+  }
+
+  body.page-create-mobile .create-context-toggle,
+  body.page-create-mobile #toggle-context-button,
+  body.page-create-mobile #toggle-axis-button {
+    font-size: 16px !important;
+  }
 }
 
 body.page-debate .argument-body + .idea-source-card-wrap {
@@ -20076,6 +20418,237 @@ body.page-contact.in-iframe .contact-page-shell {
 }
 
 
+/* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
+body.page-debate .argument-form h3,
+body.page-debate .argument-form-body > h3,
+body.page-debate .argument-form-list-top h3 {
+  font-size: 30px !important;
+  line-height: 1.05 !important;
+}
+
+body.page-debate .argument-form-list-subtitle {
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form label,
+body.page-debate .argument-form .argument-url-field label {
+  font-size: 19px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-debate .argument-form input,
+body.page-debate .argument-form textarea,
+body.page-debate .argument-form .argument-url-field input[type="url"] {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form small,
+body.page-debate .argument-form .argument-url-field small,
+body.page-debate .argument-form .argument-url-ia-hint {
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form .list-position-button {
+  font-size: 21px !important;
+}
+
+body.page-debate .argument-form .voice-dictation-button,
+body.page-debate .argument-form .rubric-btn {
+  font-size: 16px !important;
+}
+
+body.page-debate .argument-form .voice-dictation-hint {
+  font-size: 14px !important;
+}
+
+body.page-debate .argument-form .button[type="submit"] {
+  font-size: 21px !important;
+}
+
+body.page-debate .rubric-modal-title {
+  font-size: 21px !important;
+}
+
+body.page-debate .rubric-modal-section-title {
+  font-size: 15px !important;
+}
+
+body.page-debate .rubric-modal-text,
+body.page-debate .rubric-modal-axis-text {
+  font-size: 19px !important;
+  line-height: 1.45 !important;
+}
+
+body.page-debate .rubric-modal-note {
+  font-size: 17px !important;
+  line-height: 1.4 !important;
+}
+
+body.page-create .create-card .arena-type-choice-intro,
+body.page-create-mobile .create-card .arena-type-choice-intro {
+  font-size: 24px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-create .create-card .arena-type-card-title,
+body.page-create-mobile .create-card .arena-type-card-title {
+  font-size: 26px !important;
+  line-height: 1.05 !important;
+}
+
+body.page-create .create-card .arena-type-card-desc,
+body.page-create-mobile .create-card .arena-type-card-desc {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .create-type-indicator-badge,
+body.page-create-mobile .create-card .create-type-indicator-badge {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-type-back-btn,
+body.page-create-mobile .create-card .create-type-back-btn {
+  font-size: 16px !important;
+}
+
+body.page-create .create-card .create-form label,
+body.page-create-mobile .create-card .create-form label,
+body.page-create .create-card .position-card label,
+body.page-create-mobile .create-card .position-card label {
+  font-size: 20px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-create .create-card .label-hint,
+body.page-create-mobile .create-card .label-hint {
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+}
+
+body.page-create .create-card input,
+body.page-create .create-card textarea,
+body.page-create .create-card select,
+body.page-create-mobile .create-card input,
+body.page-create-mobile .create-card textarea,
+body.page-create-mobile .create-card select {
+  font-size: 19px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card small,
+body.page-create-mobile .create-card small,
+body.page-create .create-card .position-card small,
+body.page-create-mobile .create-card .position-card small {
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .axis-placeholder-overlay,
+body.page-create-mobile .create-card .axis-placeholder-overlay {
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .axis-placeholder-title,
+body.page-create-mobile .create-card .axis-placeholder-title {
+  font-size: 19px !important;
+}
+
+body.page-create .create-card .axis-hidden-option,
+body.page-create-mobile .create-card .axis-hidden-option,
+body.page-create .create-card .axis-strictness-label,
+body.page-create-mobile .create-card .axis-strictness-label,
+body.page-create .create-card .axis-strictness-option span,
+body.page-create-mobile .create-card .axis-strictness-option span {
+  font-size: 17px !important;
+  line-height: 1.2 !important;
+}
+
+body.page-create .create-card .create-context-toggle,
+body.page-create-mobile .create-card .create-context-toggle,
+body.page-create .create-card #toggle-context-button,
+body.page-create-mobile .create-card #toggle-context-button,
+body.page-create .create-card #toggle-axis-button,
+body.page-create-mobile .create-card #toggle-axis-button {
+  font-size: 18px !important;
+}
+
+body.page-create .create-card .create-category-toggle,
+body.page-create-mobile .create-card .create-category-toggle,
+body.page-create .create-card #create-category-toggle-label,
+body.page-create-mobile .create-card #create-category-toggle-label,
+body.page-create .create-card .create-category-option span,
+body.page-create-mobile .create-card .create-category-option span,
+body.page-create .create-card .create-category-chip,
+body.page-create-mobile .create-card .create-category-chip {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-resource-option,
+body.page-create-mobile .create-card .create-resource-option,
+body.page-create .create-card .create-resource-option span,
+body.page-create-mobile .create-card .create-resource-option span {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-submit-button,
+body.page-create-mobile .create-card .create-submit-button {
+  font-size: 23px !important;
+}
+
+body.page-create .create-card .create-submit-helper,
+body.page-create-mobile .create-card .create-submit-helper {
+  font-size: 17px !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-form h3,
+  body.page-debate .argument-form-body > h3,
+  body.page-debate .argument-form-list-top h3 {
+    font-size: 25px !important;
+  }
+
+  body.page-debate .argument-form label,
+  body.page-debate .argument-form .argument-url-field label {
+    font-size: 18px !important;
+  }
+
+  body.page-debate .argument-form .list-position-button,
+  body.page-debate .argument-form .button[type="submit"] {
+    font-size: 20px !important;
+  }
+
+  body.page-debate .rubric-modal-title {
+    font-size: 20px !important;
+  }
+
+  body.page-debate .rubric-modal-text,
+  body.page-debate .rubric-modal-axis-text {
+    font-size: 18px !important;
+  }
+
+  body.page-create .create-card .arena-type-choice-intro,
+  body.page-create-mobile .create-card .arena-type-choice-intro {
+    font-size: 23px !important;
+  }
+
+  body.page-create .create-card .arena-type-card-title,
+  body.page-create-mobile .create-card .arena-type-card-title {
+    font-size: 25px !important;
+  }
+
+  body.page-create .create-card .create-form label,
+  body.page-create-mobile .create-card .create-form label,
+  body.page-create .create-card .position-card label,
+  body.page-create-mobile .create-card .position-card label {
+    font-size: 19px !important;
+  }
+}
+
 .about-accordion {
   border-top: 1px solid #e5e7eb;
 }
@@ -20915,4 +21488,235 @@ body.page-home-mobile .debate-card.debate-card--community:hover::before {
 body.page-home .debate-card.debate-card--community::after,
 body.page-home-mobile .debate-card.debate-card--community::after {
   background: none !important;
+}
+
+/* Overrides finaux : textes des modales création / ajout idée / barème IA. */
+body.page-debate .argument-form h3,
+body.page-debate .argument-form-body > h3,
+body.page-debate .argument-form-list-top h3 {
+  font-size: 30px !important;
+  line-height: 1.05 !important;
+}
+
+body.page-debate .argument-form-list-subtitle {
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form label,
+body.page-debate .argument-form .argument-url-field label {
+  font-size: 19px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-debate .argument-form input,
+body.page-debate .argument-form textarea,
+body.page-debate .argument-form .argument-url-field input[type="url"] {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form small,
+body.page-debate .argument-form .argument-url-field small,
+body.page-debate .argument-form .argument-url-ia-hint {
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-debate .argument-form .list-position-button {
+  font-size: 21px !important;
+}
+
+body.page-debate .argument-form .voice-dictation-button,
+body.page-debate .argument-form .rubric-btn {
+  font-size: 16px !important;
+}
+
+body.page-debate .argument-form .voice-dictation-hint {
+  font-size: 14px !important;
+}
+
+body.page-debate .argument-form .button[type="submit"] {
+  font-size: 21px !important;
+}
+
+body.page-debate .rubric-modal-title {
+  font-size: 21px !important;
+}
+
+body.page-debate .rubric-modal-section-title {
+  font-size: 15px !important;
+}
+
+body.page-debate .rubric-modal-text,
+body.page-debate .rubric-modal-axis-text {
+  font-size: 19px !important;
+  line-height: 1.45 !important;
+}
+
+body.page-debate .rubric-modal-note {
+  font-size: 17px !important;
+  line-height: 1.4 !important;
+}
+
+body.page-create .create-card .arena-type-choice-intro,
+body.page-create-mobile .create-card .arena-type-choice-intro {
+  font-size: 24px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-create .create-card .arena-type-card-title,
+body.page-create-mobile .create-card .arena-type-card-title {
+  font-size: 26px !important;
+  line-height: 1.05 !important;
+}
+
+body.page-create .create-card .arena-type-card-desc,
+body.page-create-mobile .create-card .arena-type-card-desc {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .create-type-indicator-badge,
+body.page-create-mobile .create-card .create-type-indicator-badge {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-type-back-btn,
+body.page-create-mobile .create-card .create-type-back-btn {
+  font-size: 16px !important;
+}
+
+body.page-create .create-card .create-form label,
+body.page-create-mobile .create-card .create-form label,
+body.page-create .create-card .position-card label,
+body.page-create-mobile .create-card .position-card label {
+  font-size: 20px !important;
+  line-height: 1.15 !important;
+}
+
+body.page-create .create-card .label-hint,
+body.page-create-mobile .create-card .label-hint {
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+}
+
+body.page-create .create-card input,
+body.page-create .create-card textarea,
+body.page-create .create-card select,
+body.page-create-mobile .create-card input,
+body.page-create-mobile .create-card textarea,
+body.page-create-mobile .create-card select {
+  font-size: 19px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card small,
+body.page-create-mobile .create-card small,
+body.page-create .create-card .position-card small,
+body.page-create-mobile .create-card .position-card small {
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .axis-placeholder-overlay,
+body.page-create-mobile .create-card .axis-placeholder-overlay {
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+}
+
+body.page-create .create-card .axis-placeholder-title,
+body.page-create-mobile .create-card .axis-placeholder-title {
+  font-size: 19px !important;
+}
+
+body.page-create .create-card .axis-hidden-option,
+body.page-create-mobile .create-card .axis-hidden-option,
+body.page-create .create-card .axis-strictness-label,
+body.page-create-mobile .create-card .axis-strictness-label,
+body.page-create .create-card .axis-strictness-option span,
+body.page-create-mobile .create-card .axis-strictness-option span {
+  font-size: 17px !important;
+  line-height: 1.2 !important;
+}
+
+body.page-create .create-card .create-context-toggle,
+body.page-create-mobile .create-card .create-context-toggle,
+body.page-create .create-card #toggle-context-button,
+body.page-create-mobile .create-card #toggle-context-button,
+body.page-create .create-card #toggle-axis-button,
+body.page-create-mobile .create-card #toggle-axis-button {
+  font-size: 18px !important;
+}
+
+body.page-create .create-card .create-category-toggle,
+body.page-create-mobile .create-card .create-category-toggle,
+body.page-create .create-card #create-category-toggle-label,
+body.page-create-mobile .create-card #create-category-toggle-label,
+body.page-create .create-card .create-category-option span,
+body.page-create-mobile .create-card .create-category-option span,
+body.page-create .create-card .create-category-chip,
+body.page-create-mobile .create-card .create-category-chip {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-resource-option,
+body.page-create-mobile .create-card .create-resource-option,
+body.page-create .create-card .create-resource-option span,
+body.page-create-mobile .create-card .create-resource-option span {
+  font-size: 17px !important;
+}
+
+body.page-create .create-card .create-submit-button,
+body.page-create-mobile .create-card .create-submit-button {
+  font-size: 23px !important;
+}
+
+body.page-create .create-card .create-submit-helper,
+body.page-create-mobile .create-card .create-submit-helper {
+  font-size: 17px !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .argument-form h3,
+  body.page-debate .argument-form-body > h3,
+  body.page-debate .argument-form-list-top h3 {
+    font-size: 25px !important;
+  }
+
+  body.page-debate .argument-form label,
+  body.page-debate .argument-form .argument-url-field label {
+    font-size: 18px !important;
+  }
+
+  body.page-debate .argument-form .list-position-button,
+  body.page-debate .argument-form .button[type="submit"] {
+    font-size: 20px !important;
+  }
+
+  body.page-debate .rubric-modal-title {
+    font-size: 20px !important;
+  }
+
+  body.page-debate .rubric-modal-text,
+  body.page-debate .rubric-modal-axis-text {
+    font-size: 18px !important;
+  }
+
+  body.page-create .create-card .arena-type-choice-intro,
+  body.page-create-mobile .create-card .arena-type-choice-intro {
+    font-size: 23px !important;
+  }
+
+  body.page-create .create-card .arena-type-card-title,
+  body.page-create-mobile .create-card .arena-type-card-title {
+    font-size: 25px !important;
+  }
+
+  body.page-create .create-card .create-form label,
+  body.page-create-mobile .create-card .create-form label,
+  body.page-create .create-card .position-card label,
+  body.page-create-mobile .create-card .position-card label {
+    font-size: 19px !important;
+  }
 }

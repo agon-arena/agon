@@ -701,6 +701,9 @@ let indexCardHighlightBound = false;
 let indexCardHighlightTimeout = null;
 let indexCardHighlightLastRunTs = 0;
 let indexCardHighlightThematicCleared = false;
+let indexCardVisibilityObserver = null;
+let indexCardObservedSet = new WeakSet();
+const indexCardVisibleSet = new Set();
 let indexScrollWorkRaf = null;
 let indexScrollWorkPending = {
   youtube: false,
@@ -8471,6 +8474,24 @@ function clearPageLevelIndexCardHighlightOnce() {
   indexCardHighlightThematicCleared = true;
 }
 
+function ensureIndexCardVisibilityObserver() {
+  if (indexCardVisibilityObserver) return indexCardVisibilityObserver;
+  indexCardVisibilityObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) indexCardVisibleSet.add(entry.target);
+      else indexCardVisibleSet.delete(entry.target);
+    });
+  }, { rootMargin: '100% 0px' });
+  return indexCardVisibilityObserver;
+}
+
+function resetIndexCardVisibilityObserver() {
+  indexCardVisibilityObserver?.disconnect();
+  indexCardVisibilityObserver = null;
+  indexCardVisibleSet.clear();
+  indexCardObservedSet = new WeakSet();
+}
+
 function updateMobileIndexCardHighlight() {
   if (shouldSkipPageLevelIndexCardHighlight()) {
     clearPageLevelIndexCardHighlightOnce();
@@ -8515,6 +8536,17 @@ const isMobileHome =
     return;
   }
 
+  const visibilityObserver = ensureIndexCardVisibilityObserver();
+  cards.forEach((card) => {
+    if (indexCardObservedSet.has(card)) return;
+    indexCardObservedSet.add(card);
+    visibilityObserver.observe(card);
+  });
+  // Ne calcule la position que des cartes déjà signalées visibles par l'observer
+  // (repli sur la liste complète si l'observer n'a pas encore rapporté, ex. juste après le rendu).
+  const candidateCards = cards.filter((card) => indexCardVisibleSet.has(card));
+  const scanCards = candidateCards.length ? candidateCards : cards;
+
   const topbar = document.querySelector('.topbar');
   const topOffset = (topbar ? topbar.offsetHeight : 0) + 12;
   const viewportCenter = topOffset + ((window.innerHeight - topOffset) * 0.32);
@@ -8522,7 +8554,7 @@ const isMobileHome =
   let bestCard = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
-  cards.forEach((card) => {
+  scanCards.forEach((card) => {
     const rect = card.getBoundingClientRect();
 
     const visible =
@@ -8560,7 +8592,7 @@ function scheduleMobileIndexCardHighlightUpdate() {
 
   const now = Date.now();
   const elapsed = now - indexCardHighlightLastRunTs;
-  const minDelay = window.innerWidth <= 768 ? 90 : 45;
+  const minDelay = window.innerWidth <= 768 ? 160 : 45;
 
   if (indexCardHighlightTimeout !== null) {
     clearTimeout(indexCardHighlightTimeout);
@@ -15863,7 +15895,7 @@ function getAgonBubbleLabel(debate) {
 // Top 10 des arènes par score d'activité (idées ×1 + commentaires ×0,5 + votes ×0,2),
 // avec priorité à l'activité récente : 48 h d'abord, puis 7 jours, puis historique.
 function buildAgonBubbleTrends() {
-  const debates = Array.isArray(debatesCache) ? debatesCache : [];
+  const debates = (Array.isArray(debatesCache) ? debatesCache : []).filter((debate) => !isAgonGeneratedDebate(debate));
   const activityScore = (ideas, comments, votes) =>
     Number(ideas || 0) * 1 + Number(comments || 0) * 0.5 + Number(votes || 0) * 0.2;
 
@@ -15977,7 +16009,7 @@ function toggleAgonCloud() {
     syncAgonCloudModeSwitch();
     if (caption) {
       if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
-      caption.textContent = "Les 10 arènes les plus actives sur Agôn.";
+      caption.textContent = "Les arènes créées par la communauté les plus tendues.";
     }
     // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
@@ -16641,18 +16673,28 @@ function syncIndexCarouselDots(row) {
     section.appendChild(dots);
   }
 
-  if (Number(dots.dataset.count || "0") !== dotCount) {
+  const prevDotCount = Number(dots.dataset.count || "0");
+  if (prevDotCount !== dotCount) {
     dots.dataset.count = String(dotCount);
-    delete dots.dataset.activeIndex;
-    dots.innerHTML = Array.from({ length: dotCount }, () => '<span class="theme-carousel-dot"></span>').join("");
-    if (dotCount >= 4) {
+
+    if (dotCount > prevDotCount) {
+      // Lazy-load added cards: append only the missing dots, keep existing ones (and the active state) intact.
+      const frag = document.createDocumentFragment();
+      for (let i = prevDotCount; i < dotCount; i++) {
+        const dot = document.createElement("span");
+        dot.className = "theme-carousel-dot";
+        frag.appendChild(dot);
+      }
+      dots.appendChild(frag);
+    } else {
       const dotEls = dots.querySelectorAll(".theme-carousel-dot");
-      dotEls[dotCount - 1]?.classList.add("theme-carousel-dot--fade-3", "theme-carousel-dot--pill");
-      if (dotCount >= 5) dotEls[dotCount - 2]?.classList.add("theme-carousel-dot--fade-2");
-      if (dotCount >= 6) dotEls[dotCount - 3]?.classList.add("theme-carousel-dot--fade-1");
+      for (let i = dotEls.length - 1; i >= dotCount; i--) dotEls[i].remove();
     }
-    dots.querySelectorAll(".theme-carousel-dot").forEach((dot, index) => {
-      dot.addEventListener("click", () => {
+
+    const dotEls = Array.from(dots.querySelectorAll(".theme-carousel-dot"));
+    dotEls.forEach((dot, index) => {
+      dot.className = "theme-carousel-dot";
+      dot.onclick = () => {
         const currentCards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
         if (!currentCards.length) return;
         const targetCardIndex = dotCount <= 1 ? 0
@@ -16662,8 +16704,18 @@ function syncIndexCarouselDots(row) {
         const targetLeft = targetCard.offsetLeft - (row.clientWidth - targetCard.offsetWidth) / 2;
         row.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
         window.setTimeout(() => updateIndexThemeRowSwipeButtons(row), 260);
-      });
+      };
     });
+    if (dotCount >= 4) {
+      dotEls[dotCount - 1]?.classList.add("theme-carousel-dot--fade-3", "theme-carousel-dot--pill");
+      if (dotCount >= 5) dotEls[dotCount - 2]?.classList.add("theme-carousel-dot--fade-2");
+      if (dotCount >= 6) dotEls[dotCount - 3]?.classList.add("theme-carousel-dot--fade-1");
+    }
+
+    const prevActive = dots.dataset.activeIndex;
+    if (prevActive != null) {
+      dotEls.forEach((dot, index) => dot.classList.toggle("is-active", index === Number(prevActive)));
+    }
   }
 
   const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth);
@@ -16755,6 +16807,14 @@ function syncIndexThemeRowHeight(row) {
     return cardRight > rowLeft + 2 && cardLeft < rowRight - 2;
   });
   const targetCards = visibleCards.length ? visibleCards : cards;
+
+  // Tant que les cartes visibles et la largeur de la rangée n'ont pas changé, la hauteur
+  // calculée serait identique : on évite de refaire les getBoundingClientRect/getComputedStyle
+  // (coûteux) à chaque frame d'un scroll continu qui ne fait que glisser entre deux mêmes cartes.
+  const visibleKey = row.clientWidth + '|' + targetCards.map((c) => c.dataset.debateId || '').join(',');
+  if (row.dataset.heightVisibleKey === visibleKey && row.style.height) return;
+  row.dataset.heightVisibleKey = visibleKey;
+
   const rowRect = row.getBoundingClientRect();
   const rowStyle = getComputedStyle(row);
   const bottomPadding = parseInt(rowStyle.paddingBottom, 10) || 0;
@@ -17594,6 +17654,7 @@ function renderDebatesList(debates) {
     return;
   }
   cleanupIndexInfiniteScrollObserver();
+  resetIndexCardVisibilityObserver();
 
   const previouslyOpenContextIds = getOpenIndexContextDebateIds();
 
