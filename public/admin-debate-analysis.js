@@ -151,6 +151,7 @@
       }
       .ada-regen-btn:hover { background: #243038; color: #f3f6f4; }
       .ada-regen-btn:disabled { opacity: .55; cursor: default; }
+      .ada-regen-btn-under-trigger { margin-top: 8px; }
       .ada-collapse-wrap {
         padding: 6px 14px 16px; display: flex; justify-content: center;
       }
@@ -1063,6 +1064,7 @@
       .ada-load-more-wrap {
         display: flex;
         justify-content: center;
+        gap: 8px;
         margin: 2px 0 8px;
       }
       .ada-load-more-btn {
@@ -1418,6 +1420,7 @@
             ${args.map((arg, index) => argCard(arg, duplicateGroupsForArgument(duplicateGroups, arg.argumentId), index >= visibleLimit, isOpen, index + 1, rankTotal)).join('')}
             <div class="ada-load-more-wrap">
               ${hasMoreArgs ? '<button type="button" class="ada-load-more-btn" data-ada-expanded="0">Charger plus d\'idées</button>' : ''}
+              <button type="button" class="ada-load-more-btn ada-panel-close-btn" data-ada-close-panel="1">Masquer</button>
             </div>
           </div>
         </details>
@@ -2102,7 +2105,7 @@
       const json = await r.json().catch(() => ({}));
       if (!r.ok) {
         body.innerHTML = `<span class="ada-error">Erreur : ${esc(json.error || r.statusText)}</span>`;
-        return;
+        return false;
       }
       rememberStoredAnalysis(debateId, json);
       const now = new Date().toISOString();
@@ -2115,8 +2118,10 @@
           ? renderNewAnalysis(parsedRegen, popularityRegen ? renderPopularityAnalysis(popularityRegen, parsedRegen) : '')
           : renderScoringReport(json.raw || ''));
       bindLoadMoreArguments(body);
+      return true;
     } catch (err) {
       body.innerHTML = `<span class="ada-error">Erreur : ${esc(err.message)}</span>`;
+      return false;
     } finally {
       if (regenBtn) { regenBtn.disabled = false; regenBtn.textContent = 'Regénérer'; }
     }
@@ -2327,31 +2332,53 @@
         </div>`;
 
     if (isAdmin()) {
-      const adminFooter = `
-        <div class="ada-panel-footer">
-          <button type="button" id="ada-regen-btn" class="ada-regen-btn">Regénérer</button>
-        </div>`;
+      let hasReport = false;
+      try {
+        const { r, json } = await fetchStoredAnalysis(debateId);
+        hasReport = r.ok && !!json.raw;
+      } catch (_) {}
+
+      const triggerLabel = hasReport ? 'Analyse et arbitrage IA' : 'Générer rapport IA';
+      const regenBtnHtml = hasReport ? '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>' : '';
 
       slot.innerHTML = `
         <div class="ada-wrap">
-          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
+          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">${triggerLabel}</button>
+          ${regenBtnHtml}
           <div id="ada-panel" class="ada-panel">
             <div class="ada-panel-header">
               <span class="ada-panel-title">Analyse et arbitrage IA</span>
               <button type="button" id="ada-close-btn" class="ada-close-btn" title="Fermer">✕</button>
             </div>
             <div id="ada-body" class="ada-body"></div>
-            ${adminFooter}
             ${collapseFooter}
           </div>
         </div>`;
 
-      document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
+      const triggerBtn = document.getElementById('ada-trigger-btn');
+      const bindRegenBtn = () => {
+        const btn = document.getElementById('ada-regen-btn');
+        if (btn) btn.addEventListener('click', () => regenerate(debateId));
+      };
+      bindRegenBtn();
+
+      triggerBtn.addEventListener('click', async () => {
+        if (hasReport) {
+          openReport(debateId);
+          return;
+        }
+        const ok = await regenerate(debateId);
+        if (ok) {
+          hasReport = true;
+          triggerBtn.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA';
+          triggerBtn.insertAdjacentHTML('afterend', '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>');
+          bindRegenBtn();
+        }
+      });
       document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
       document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
-      document.getElementById('ada-regen-btn').addEventListener('click', () => regenerate(debateId));
       observeAnimated();
-      if (wantsReport) openReport(debateId, undefined, { fromNotification: true });
+      if (wantsReport && hasReport) openReport(debateId, undefined, { fromNotification: true });
       return;
     }
 

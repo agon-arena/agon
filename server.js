@@ -5796,7 +5796,11 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         paste_ratio: Math.max(0, Math.min(100, Math.round(Number(pasteRatio || 0)))),
         pasted_chars: Math.max(0, Math.round(Number(pastedChars || 0))),
         manual_writing_badge: manualWritingBadge === true || manualWritingBadge === "true",
-        used_microphone: usedMicrophone === true || usedMicrophone === "true"
+        used_microphone: usedMicrophone === true || usedMicrophone === "true",
+        auto_vote_wave1_status: "pending",
+        auto_vote_wave1_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        auto_vote_wave2_status: "pending",
+        auto_vote_wave2_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       })
       .select("id")
       .single();
@@ -6034,6 +6038,64 @@ app.delete("/api/arguments/:id", async (req, res) => {
     return res.status(500).json({ error: "Erreur suppression argument." });
   }
 });
+
+// Attribution automatique de voix par vagues : +2min (1 à 8 votes) puis +24h (1 à 12 votes)
+async function _applyAutoVoteWave(argument, wave) {
+  const amount = wave === 1
+    ? Math.floor(Math.random() * 8) + 1
+    : Math.floor(Math.random() * 12) + 1;
+  const statusField = wave === 1 ? "auto_vote_wave1_status" : "auto_vote_wave2_status";
+  const newVotes = Number(argument.votes || 0) + amount;
+
+  const { error } = await supabase
+    .from("arguments")
+    .update({ votes: newVotes, [statusField]: "done" })
+    .eq("id", argument.id);
+
+  if (error) {
+    console.error(`[auto-vote wave${wave}]`, error.message);
+    return;
+  }
+
+  invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
+  console.log(`[auto-vote wave${wave}] argument ${argument.id} +${amount} votes (total ${newVotes})`);
+}
+
+// Vague 1 : vérifie toutes les 30s les idées dont les +2min sont écoulées
+setInterval(async () => {
+  try {
+    const now = new Date().toISOString();
+    const { data: pending } = await supabase
+      .from("arguments")
+      .select("id, votes, debate_id")
+      .eq("auto_vote_wave1_status", "pending")
+      .lte("auto_vote_wave1_at", now);
+
+    for (const row of (pending || [])) {
+      await _applyAutoVoteWave(row, 1);
+    }
+  } catch (err) {
+    console.error("[auto-vote wave1 scheduler]", err.message);
+  }
+}, 30 * 1000).unref();
+
+// Vague 2 : vérifie toutes les 15 min les idées dont les +24h sont écoulées
+setInterval(async () => {
+  try {
+    const now = new Date().toISOString();
+    const { data: pending } = await supabase
+      .from("arguments")
+      .select("id, votes, debate_id")
+      .eq("auto_vote_wave2_status", "pending")
+      .lte("auto_vote_wave2_at", now);
+
+    for (const row of (pending || [])) {
+      await _applyAutoVoteWave(row, 2);
+    }
+  } catch (err) {
+    console.error("[auto-vote wave2 scheduler]", err.message);
+  }
+}, 15 * 60 * 1000).unref();
 
 /* =========================
    COMMENTS
