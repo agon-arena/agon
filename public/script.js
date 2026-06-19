@@ -27486,6 +27486,14 @@ function resetArgumentFormScroll(form) {
   if (body) body.scrollTop = 0;
 }
 
+// Sur mobile, focus() ouvre le clavier virtuel qui pousse la modale et
+// recadre la vue sur le champ ciblé, masquant le titre malgré preventScroll
+// (c'est le clavier, pas le scroll programmatique, qui recadre la vue).
+// On évite donc l'auto-focus sur mobile pour garder le haut de la modale visible.
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
 function toggleForm(side) {
   const form = document.getElementById("form-" + side);
   if (!form) return;
@@ -28955,6 +28963,7 @@ function openListArgumentForm(side = "a") {
 setListArgumentSide("");
 
   setTimeout(() => {
+    if (isMobileViewport()) return;
     const titleInput = document.getElementById("list-title");
     if (titleInput) titleInput.focus({ preventScroll: true });
   }, 50);
@@ -28988,6 +28997,7 @@ const offset = (topbar ? topbar.offsetHeight : 80) + 120;
       behavior: "smooth"
     });
 
+    if (isMobileViewport()) return;
     const titleInput = document.getElementById(`${normalizedSide}-title`);
     if (titleInput) titleInput.focus({ preventScroll: true });
   }, 50);
@@ -29020,6 +29030,12 @@ function openArgumentComposer(side) {
   setListArgumentSide(normalizedSide);
 
   setTimeout(() => {
+    if (isMobileViewport()) {
+      resetArgumentFormScroll(listForm);
+      requestAnimationFrame(() => resetArgumentFormScroll(listForm));
+      return;
+    }
+
     const topbar = document.querySelector(".topbar");
     const offset = (topbar ? topbar.offsetHeight : 80) + 120;
     const y = listForm.offsetTop - offset;

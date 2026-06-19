@@ -14578,9 +14578,9 @@ body.page-debate .argument-form .form-close-btn {
     z-index: 3;
   }
 
-  /* Arène libre : centre verticalement le contenu du formulaire dans la modale */
+  /* Arène libre : le haut du formulaire doit rester visible dès l'ouverture mobile. */
   body.page-debate .argument-form-list .argument-form-body {
-    align-content: center;
+    align-content: start;
   }
 }
 
