@@ -23814,6 +23814,48 @@ function attachScrollFadeHint(scrollEl, overlayParent, fadeColor) {
   requestAnimationFrame(update);
 }
 
+// Même principe que attachScrollFadeHint, mais pour une page entière qui n'a
+// pas de conteneur scrollable dédié : c'est la fenêtre (ou l'iframe) qui scrolle.
+// Se décale automatiquement au-dessus de .home-bottom-nav quand elle est visible
+// (sa présence varie selon la page et la largeur d'écran).
+function attachPageScrollFadeHint(fadeColor) {
+  if (document.querySelector('.page-scroll-fade-hint')) return;
+
+  const hint = document.createElement('div');
+  hint.className = 'page-scroll-fade-hint is-hidden';
+  if (fadeColor) hint.style.setProperty('--scroll-fade-color', fadeColor);
+  hint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+  document.body.appendChild(hint);
+  hint.querySelector('.scroll-fade-hint-text').addEventListener('click', function(e) {
+    e.stopPropagation();
+    window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
+  });
+
+  function update() {
+    const bottomNav = document.querySelector('.home-bottom-nav');
+    const navHeight = (bottomNav && bottomNav.offsetParent) ? bottomNav.getBoundingClientRect().height : 0;
+    hint.style.bottom = navHeight + 'px';
+
+    const doc = document.documentElement;
+    const hasOverflow = doc.scrollHeight > window.innerHeight + 2;
+    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 4;
+    hint.classList.toggle('is-hidden', !hasOverflow || atBottom);
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  requestAnimationFrame(update);
+
+  let mutationFrame = null;
+  const observer = new MutationObserver(() => {
+    if (mutationFrame) return;
+    mutationFrame = requestAnimationFrame(() => {
+      mutationFrame = null;
+      update();
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
 function showArgumentAiDetail(argId, triggerEl) {
   const entry = currentArgumentScoreMap[argId];
   if (!entry) return;
@@ -27439,6 +27481,11 @@ function setupArgumentFormScrollHint(form) {
   if (body) attachScrollFadeHint(body, form, '#ffffff');
 }
 
+function resetArgumentFormScroll(form) {
+  const body = form && form.querySelector('.argument-form-body');
+  if (body) body.scrollTop = 0;
+}
+
 function toggleForm(side) {
   const form = document.getElementById("form-" + side);
   if (!form) return;
@@ -27459,6 +27506,7 @@ function toggleForm(side) {
     openedArgumentForm = form;
     document.body.classList.add("argument-form-open");
     syncIframeParentArgumentFormState(true);
+    resetArgumentFormScroll(form);
     setupArgumentFormScrollHint(form);
   } else {
     form.style.display = "none";
@@ -28291,7 +28339,10 @@ document.addEventListener("DOMContentLoaded", () => {
     showBubbleCloudLoadingSpinner();
     initIndex();
   }
-  if (location.pathname === "/create") initCreate();
+  if (location.pathname === "/create") {
+    initCreate();
+    attachPageScrollFadeHint('#f3f4f6');
+  }
 
   if (document.body.classList.contains('is-standalone')) {
     requestAnimationFrame(() => {
@@ -28898,13 +28949,14 @@ function openListArgumentForm(side = "a") {
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  resetArgumentFormScroll(form);
   setupArgumentFormScrollHint(form);
 
 setListArgumentSide("");
 
   setTimeout(() => {
     const titleInput = document.getElementById("list-title");
-    if (titleInput) titleInput.focus();
+    if (titleInput) titleInput.focus({ preventScroll: true });
   }, 50);
 }
 
@@ -28923,6 +28975,7 @@ function openArgumentFormAndScroll(side) {
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  resetArgumentFormScroll(form);
   setupArgumentFormScrollHint(form);
 
   setTimeout(() => {
@@ -28936,7 +28989,7 @@ const offset = (topbar ? topbar.offsetHeight : 80) + 120;
     });
 
     const titleInput = document.getElementById(`${normalizedSide}-title`);
-    if (titleInput) titleInput.focus();
+    if (titleInput) titleInput.focus({ preventScroll: true });
   }, 50);
 }
 
@@ -28961,6 +29014,7 @@ function openArgumentComposer(side) {
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  resetArgumentFormScroll(listForm);
   setupArgumentFormScrollHint(listForm);
 
   setListArgumentSide(normalizedSide);
@@ -28976,7 +29030,7 @@ function openArgumentComposer(side) {
     });
 
     const titleInput = document.getElementById("list-title");
-    if (titleInput) titleInput.focus();
+    if (titleInput) titleInput.focus({ preventScroll: true });
   }, 50);
 }
 
@@ -29469,6 +29523,8 @@ function toggleIndexExplorerMenu(event) {
   } else {
     menu.classList.add('home-bottom-share-menu-open');
     if (btn) btn.setAttribute('aria-expanded', 'true');
+    const body = menu.querySelector('.index-explorer-menu-body');
+    if (body) attachScrollFadeHint(body, menu, '#ffffff');
   }
 }
 
