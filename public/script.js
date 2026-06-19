@@ -15992,7 +15992,10 @@ function toggleAgonCloud() {
 
   const token = beginAgonCloudSwitchLoading(container);
 
-  afterAgonCloudSpinnerPaint(() => {
+  afterAgonCloudSpinnerPaint(async () => {
+    await ensureAllIndexDebatesLoadedForAgonTrends();
+    if (token !== _agonCloudSwitchToken) return;
+
     const trends = buildAgonBubbleTrends();
     if (!trends.length) {
       finishAgonCloudSwitchLoading(token, container);
@@ -18114,6 +18117,26 @@ async function loadAllRemainingIndexDebatesPages() {
     });
   } catch (error) {
     console.warn('Chargement complet des arènes interrompu :', error);
+  } finally {
+    indexAllDebatesLoadInFlight = false;
+  }
+}
+
+// Le score des Bulles Agôn (top 10 des arènes les plus actives) doit être calculé
+// sur l'ensemble des arènes : le flux vertical normal se limite désormais aux 60
+// premières (cf. MAX_EXTRA_PAGES=0 plus haut), ce qui faussait le classement tant
+// que les pages suivantes n'étaient pas encore chargées par ailleurs.
+async function ensureAllIndexDebatesLoadedForAgonTrends() {
+  if (indexAllDebatesLoadInFlight) return;
+  indexAllDebatesLoadInFlight = true;
+
+  try {
+    while (indexDebatesApiHasMore) {
+      const fetchedPage = await fetchAndMergeNextIndexDebatesPage();
+      if (!Array.isArray(fetchedPage) || !fetchedPage.length) break;
+    }
+  } catch (error) {
+    console.warn('Chargement complet des arènes pour les Bulles Agôn interrompu :', error);
   } finally {
     indexAllDebatesLoadInFlight = false;
   }
