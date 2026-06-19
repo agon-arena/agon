@@ -3301,9 +3301,9 @@ body.page-debate #score-b {
   display: block;
   width: fit-content;
   margin: -10px auto 8px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
-  padding: 2px 9px;
+  padding: 4px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: #243038;
@@ -3504,7 +3504,7 @@ body.page-debate #score-b {
   color: #111827;
 }
 .arg-ai-detail-expl {
-  font-size: 15px;
+  font-size: 19px;
   line-height: 1.65;
   color: #4b5563;
   margin-bottom: 16px;
@@ -3519,7 +3519,7 @@ body.page-debate #score-b {
   max-width: 420px;
   margin: 0 auto 20px;
   text-align: center;
-  font-size: 18px;
+  font-size: 24px;
   line-height: 1.45;
   font-weight: 700;
   color: #1f2933;
@@ -3540,7 +3540,7 @@ body.page-debate #score-b {
   margin: 0;
   padding-left: 18px;
   color: #4b5563;
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1.6;
 }
 .arg-ai-detail-list li { margin-bottom: 5px; }
@@ -3568,11 +3568,11 @@ body.page-debate #score-b {
   transform: translateY(1px);
 }
 @media (min-width: 768px) {
-  .arg-ai-detail-popup  { width: min(680px, 100%); font-size: 16px; }
+  .arg-ai-detail-popup  { width: min(1040px, 100%); font-size: 16px; }
   .arg-ai-detail-popup-body { padding: 32px 36px 36px; }
-  .arg-ai-detail-expl   { font-size: 16px; }
-  .arg-ai-detail-public-comment { font-size: 20px; }
-  .arg-ai-detail-list   { font-size: 15px; }
+  .arg-ai-detail-expl   { font-size: 23px; }
+  .arg-ai-detail-public-comment { font-size: 30px; max-width: 880px; }
+  .arg-ai-detail-list   { font-size: 22px; }
   .arg-ai-detail-score  { font-size: 64px; }
   .arg-ai-detail-score-denom { font-size: 28px; }
 }
