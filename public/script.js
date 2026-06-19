@@ -2672,6 +2672,11 @@ function getSupportRankMap(args, options = {}) {
   return rankMap;
 }
 
+function getRankScopedArguments(allArgs, side) {
+  if (isOpenDebate(currentDebateCache)) return allArgs || [];
+  return (allArgs || []).filter((arg) => String(arg.side || "") === side);
+}
+
 function getSupportRankMapBySide(args) {
   const rankMapA = getSupportRankMap(args, { side: "A" });
   const rankMapB = getSupportRankMap(args, { side: "B" });
@@ -2772,7 +2777,9 @@ function renderUnifiedVotedArgumentsSummary(debateId, args) {
   const state = getState(debateId);
 
   const sortedArgs = sortArgumentsByScore(args || []);
-  const supportRankMap = getSupportRankMapBySide(args || []);
+  const supportRankMap = isOpenDebate(currentDebateCache)
+    ? getSupportRankMap(args || [])
+    : getSupportRankMapBySide(args || []);
   const votedArgumentsA = [];
   const votedArgumentsB = [];
 
@@ -25047,7 +25054,9 @@ if (hiddenArgs.length > 0) {
 function renderUnifiedArgs(container, args, debateId, commentsByArgument) {
   const state = getState(debateId);
   const commentLikeState = getCommentLikeState(debateId);
-  const supportRankMap = getSupportRankMapBySide(args || []);
+  const supportRankMap = isOpenDebate(currentDebateCache)
+    ? getSupportRankMap(args || [])
+    : getSupportRankMapBySide(args || []);
 const sortedArgs = sortArgumentsByMode(args || [], commentsByArgument);  const visibleArgs = sortedArgs.slice(0, argumentsVisible);
   const hiddenArgs = sortedArgs.slice(argumentsVisible);
 
@@ -26266,7 +26275,7 @@ function shouldRerenderArgumentsAfterVoteChange(argId, beforeRankMap = {}, befor
   }
 
   const targetSide = getNormalizedArgumentSide(targetAfter);
-  const afterRankMap = getSupportRankMap(currentAllArguments || [], { side: targetSide });
+  const afterRankMap = getSupportRankMap(getRankScopedArguments(currentAllArguments, targetSide));
   const previousRank = Number(beforeRankMap?.[argIdString] || 0);
   const nextRank = Number(afterRankMap?.[argIdString] || 0);
 
@@ -26297,9 +26306,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
   const targetSide = targetBefore ? String(targetBefore.side || "") : "";
 
   const beforeRankMap = getSupportRankMap(
-    (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === targetSide
-    )
+    getRankScopedArguments(currentAllArguments, targetSide)
   );
 
   const totalVotesUsed = Object.values(state).reduce((sum, value) => {
@@ -26346,9 +26353,7 @@ async function vote(debateId, argId, shouldScroll = true, button = null) {
 
     const optimisticAfterSide = targetAfterOptimistic ? String(targetAfterOptimistic.side || "") : targetSide;
 
-    const optimisticArgsSameSide = (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === optimisticAfterSide
-    );
+    const optimisticArgsSameSide = getRankScopedArguments(currentAllArguments, optimisticAfterSide);
     const optimisticAfterRankMap = getSupportRankMap(optimisticArgsSameSide);
     const previousRank = Number(beforeRankMap[argIdString] || 0);
     const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
@@ -26463,9 +26468,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
   const targetSide = targetBefore ? String(targetBefore.side || "") : "";
 
   const beforeRankMap = getSupportRankMap(
-    (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === targetSide
-    )
+    getRankScopedArguments(currentAllArguments, targetSide)
   );
 
   const previousState = { ...state };
@@ -26504,9 +26507,7 @@ async function unvote(debateId, argId, shouldScroll = true, button = null) {
 
     const optimisticAfterSide = targetAfterOptimistic ? String(targetAfterOptimistic.side || "") : targetSide;
 
-    const optimisticArgsSameSide = (currentAllArguments || []).filter(
-      (arg) => String(arg.side || "") === optimisticAfterSide
-    );
+    const optimisticArgsSameSide = getRankScopedArguments(currentAllArguments, optimisticAfterSide);
     const optimisticAfterRankMap = getSupportRankMap(optimisticArgsSameSide);
     const previousRank = Number(beforeRankMap[argIdString] || 0);
     const nextRank = Number(optimisticAfterRankMap[argIdString] || 0);
