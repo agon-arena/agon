@@ -105,7 +105,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260618-active-filter-tags-touch" />
+<link rel="stylesheet" href="/style.min.css?v=20260619-scroll-fade-hint-generic" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
@@ -458,6 +458,7 @@
   <div id="my-arguments-b" class="my-arguments-summary my-arguments-summary-right"></div>
 </section>
 <form id="form-list" class="argument-form argument-form-list" style="display:none;">
+<div class="argument-form-body">
 <div class="argument-form-list-top">
   <div>
 <h3>Ajouter une idée</h3>    <p id="list-form-subtitle" class="argument-form-list-subtitle">Choisis la position, puis rédige ton idée.</p>
@@ -558,6 +559,7 @@
 
 <button type="button" class="rubric-btn" onclick="showActiveRubricModal()"><span aria-hidden="true">⚖</span> Barème IA</button>
 <button type="submit" class="button">Publier l'idée</button>
+</div>
   </form>
 <section class="debate-view-switch">
 
@@ -607,6 +609,7 @@
   
 
     <form id="form-a" class="argument-form" style="display:none;">
+    <div class="argument-form-body">
       <h3>Ajouter une idée</h3>
 <button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
 
@@ -673,6 +676,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 
 <button type="button" class="rubric-btn" onclick="showActiveRubricModal()"><span aria-hidden="true">⚖</span> Barème IA</button>
 <button type="submit" class="button">Publier l’idée</button>
+    </div>
     </form>
 
     <div id="arguments-a" class="arguments-list"></div>
@@ -681,6 +685,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
   <div id="column-b" class="debate-column column-b">
 
     <form id="form-b" class="argument-form" style="display:none;">
+    <div class="argument-form-body">
       <h3>Ajouter une idée</h3>
 <button type="button" class="form-close-btn" onclick="closeArgumentForm()">✕</button>
 
@@ -746,6 +751,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 
 <button type="button" class="rubric-btn" onclick="showActiveRubricModal()"><span aria-hidden="true">⚖</span> Barème IA</button>
 <button type="submit" class="button">Publier l’idée</button>
+    </div>
     </form>
 
     <div id="arguments-b" class="arguments-list"></div>
@@ -908,7 +914,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260618-iframe-explorer-close"></script>
+	<script src="/script.min.js?v=20260619-scroll-fade-hint-generic"></script>
 <script>
 (function () {
   function isInteractive(target) {

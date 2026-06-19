@@ -23694,7 +23694,7 @@ function showActiveRubricModal() {
 
   const popup = document.createElement('div');
   popup.className = 'arg-ai-detail-popup rubric-modal-popup';
-  popup.innerHTML = html;
+  popup.innerHTML = '<div class="arg-ai-detail-popup-body">' + html + '</div>';
 
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
@@ -23775,6 +23775,43 @@ function renderDefaultRubricDetailHtml(entry, isOpen) {
     + '<ul class="arg-ai-detail-list">' + criteriaHtml + '</ul>'
     + totalHtml
     + '</div>';
+}
+
+// Ajoute, en bas d'une zone scrollable, un dégradé + indicateur "suite ↓" tant
+// que du contenu dépasse en dessous, et le masque dès que l'utilisateur atteint le bas.
+// Le bandeau est un calque absolu posé à côté (pas dans) la zone de scroll, pour
+// qu'il reste toujours pleinement opaque sans dépendre de la position du contenu —
+// overlayParent doit donc être un ancêtre "position:relative" dont les bords
+// correspondent exactement à ceux de scrollEl (cf. .arg-ai-detail-popup-body).
+// fadeColor (optionnel) doit reprendre la couleur de fond visible à cet endroit.
+// Idempotent : rappelable à chaque ouverture d'un panneau statique réutilisé.
+function attachScrollFadeHint(scrollEl, overlayParent, fadeColor) {
+  const parent = overlayParent || scrollEl;
+  let hint = parent.querySelector(':scope > .scroll-fade-hint');
+  if (hint) {
+    if (fadeColor) hint.style.setProperty('--scroll-fade-color', fadeColor);
+    if (hint._update) hint._update();
+    return;
+  }
+
+  hint = document.createElement('div');
+  hint.className = 'scroll-fade-hint is-hidden';
+  if (fadeColor) hint.style.setProperty('--scroll-fade-color', fadeColor);
+  hint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+  parent.appendChild(hint);
+  hint.querySelector('.scroll-fade-hint-text').addEventListener('click', function(e) {
+    e.stopPropagation();
+    scrollEl.scrollBy({ top: scrollEl.clientHeight * 0.8, behavior: 'smooth' });
+  });
+
+  function update() {
+    const hasOverflow = scrollEl.scrollHeight > scrollEl.clientHeight + 2;
+    const atBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 4;
+    hint.classList.toggle('is-hidden', !hasOverflow || atBottom);
+  }
+  hint._update = update;
+  scrollEl.addEventListener('scroll', update, { passive: true });
+  requestAnimationFrame(update);
 }
 
 function showArgumentAiDetail(argId, triggerEl) {
@@ -23861,10 +23898,13 @@ function showArgumentAiDetail(argId, triggerEl) {
   popup.id = 'argument-ai-detail-popup';
   popup.className = 'arg-ai-detail-popup';
   popup.dataset.forArgId = argId;
-  popup.innerHTML = html;
+  popup.innerHTML = '<div class="arg-ai-detail-popup-body">' + html + '</div>';
 
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
+  const bottomClose = popup.querySelector('.arg-ai-detail-bottom-close');
+  const scrollBody = popup.querySelector('.arg-ai-detail-popup-body');
+  attachScrollFadeHint(scrollBody, popup);
   try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: true }, '*'); } catch(e) {}
 
   function closeAiDetail() {
@@ -23876,7 +23916,6 @@ function showArgumentAiDetail(argId, triggerEl) {
     e.stopPropagation();
     closeAiDetail();
   });
-  const bottomClose = popup.querySelector('.arg-ai-detail-bottom-close');
   if (bottomClose) {
     bottomClose.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -27393,6 +27432,13 @@ async function deleteComment(debateId, commentId) {
    Toggle form
 ========================= */
 
+// Le formulaire d'idée (.argument-form) est un coquille flex non-scrollable ;
+// sa zone de contenu réelle est .argument-form-body, qui porte le scroll.
+function setupArgumentFormScrollHint(form) {
+  const body = form && form.querySelector('.argument-form-body');
+  if (body) attachScrollFadeHint(body, form, '#ffffff');
+}
+
 function toggleForm(side) {
   const form = document.getElementById("form-" + side);
   if (!form) return;
@@ -27409,10 +27455,11 @@ function toggleForm(side) {
   }
 
   if (isHidden) {
-    form.style.display = "grid";
+    form.style.display = "flex";
     openedArgumentForm = form;
     document.body.classList.add("argument-form-open");
     syncIframeParentArgumentFormState(true);
+    setupArgumentFormScrollHint(form);
   } else {
     form.style.display = "none";
     openedArgumentForm = null;
@@ -28847,10 +28894,11 @@ function openListArgumentForm(side = "a") {
   if (formA) formA.style.display = "none";
   if (formB) formB.style.display = "none";
 
-  form.style.display = "grid";
+  form.style.display = "flex";
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  setupArgumentFormScrollHint(form);
 
 setListArgumentSide("");
 
@@ -28871,10 +28919,11 @@ function openArgumentFormAndScroll(side) {
   if (otherForm) otherForm.style.display = "none";
   if (listForm) listForm.style.display = "none";
 
-  form.style.display = "grid";
+  form.style.display = "flex";
   openedArgumentForm = form;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  setupArgumentFormScrollHint(form);
 
   setTimeout(() => {
     const topbar = document.querySelector(".topbar");
@@ -28908,10 +28957,11 @@ function openArgumentComposer(side) {
     normalizedSide = side;
   }
 
-  listForm.style.display = "grid";
+  listForm.style.display = "flex";
   openedArgumentForm = listForm;
   document.body.classList.add("argument-form-open");
   syncIframeParentArgumentFormState(true);
+  setupArgumentFormScrollHint(listForm);
 
   setListArgumentSide(normalizedSide);
 
