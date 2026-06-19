@@ -6059,6 +6059,21 @@ async function _applyAutoVoteWave(argument, wave) {
 
   invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
   console.log(`[auto-vote wave${wave}] argument ${argument.id} +${amount} votes (total ${newVotes})`);
+
+  if (argument.author_key) {
+    for (let i = 0; i < amount; i++) {
+      try {
+        await createOrMergeVoteNotification({
+          user_key: argument.author_key,
+          debate_id: argument.debate_id,
+          argument_id: argument.id,
+          argument_title: argument.title
+        });
+      } catch (notificationError) {
+        console.error(`[auto-vote wave${wave}] notification`, notificationError.message);
+      }
+    }
+  }
 }
 
 // Vague 1 : vérifie toutes les 30s les idées dont les +2min sont écoulées
@@ -6067,7 +6082,7 @@ setInterval(async () => {
     const now = new Date().toISOString();
     const { data: pending } = await supabase
       .from("arguments")
-      .select("id, votes, debate_id")
+      .select("id, votes, debate_id, author_key, title")
       .eq("auto_vote_wave1_status", "pending")
       .lte("auto_vote_wave1_at", now);
 
@@ -6085,7 +6100,7 @@ setInterval(async () => {
     const now = new Date().toISOString();
     const { data: pending } = await supabase
       .from("arguments")
-      .select("id, votes, debate_id")
+      .select("id, votes, debate_id, author_key, title")
       .eq("auto_vote_wave2_status", "pending")
       .lte("auto_vote_wave2_at", now);
 
