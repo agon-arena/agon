@@ -6151,41 +6151,55 @@ async function _applyAutoVoteWave(argument, wave) {
   }
 }
 
-// Vague 1 : vérifie toutes les 30s les idées dont les +2min sont écoulées
-setInterval(async () => {
-  try {
-    const now = new Date().toISOString();
-    const { data: pending } = await supabase
-      .from("arguments")
-      .select("id, votes, debate_id, author_key, title")
-      .eq("auto_vote_wave1_status", "pending")
-      .lte("auto_vote_wave1_at", now);
+// Interrupteur d'urgence : ces deux schedulers font un balayage complet de la
+// table arguments (pas d'index sur auto_vote_wave*_status, cf.
+// data/migration-auto-vote-waves-index.sql) toutes les 30s / 15 min, 24h/24,
+// indépendamment du trafic — identifié comme cause probable de l'épuisement
+// du budget Disk IO Supabase du 20/06/2026. Mettre AUTO_VOTE_SCHEDULERS_ENABLED=false
+// dans l'environnement pour les couper temporairement (ex. le temps de poser
+// l'index ci-dessus sur une base déjà à court de marge), puis remettre à true
+// (ou retirer la variable) une fois la situation stabilisée.
+const AUTO_VOTE_SCHEDULERS_ENABLED = process.env.AUTO_VOTE_SCHEDULERS_ENABLED !== "false";
 
-    for (const row of (pending || [])) {
-      await _applyAutoVoteWave(row, 1);
+if (AUTO_VOTE_SCHEDULERS_ENABLED) {
+  // Vague 1 : vérifie toutes les 30s les idées dont les +2min sont écoulées
+  setInterval(async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data: pending } = await supabase
+        .from("arguments")
+        .select("id, votes, debate_id, author_key, title")
+        .eq("auto_vote_wave1_status", "pending")
+        .lte("auto_vote_wave1_at", now);
+
+      for (const row of (pending || [])) {
+        await _applyAutoVoteWave(row, 1);
+      }
+    } catch (err) {
+      console.error("[auto-vote wave1 scheduler]", err.message);
     }
-  } catch (err) {
-    console.error("[auto-vote wave1 scheduler]", err.message);
-  }
-}, 30 * 1000).unref();
+  }, 30 * 1000).unref();
 
-// Vague 2 : vérifie toutes les 15 min les idées dont les +24h sont écoulées
-setInterval(async () => {
-  try {
-    const now = new Date().toISOString();
-    const { data: pending } = await supabase
-      .from("arguments")
-      .select("id, votes, debate_id, author_key, title")
-      .eq("auto_vote_wave2_status", "pending")
-      .lte("auto_vote_wave2_at", now);
+  // Vague 2 : vérifie toutes les 15 min les idées dont les +24h sont écoulées
+  setInterval(async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data: pending } = await supabase
+        .from("arguments")
+        .select("id, votes, debate_id, author_key, title")
+        .eq("auto_vote_wave2_status", "pending")
+        .lte("auto_vote_wave2_at", now);
 
-    for (const row of (pending || [])) {
-      await _applyAutoVoteWave(row, 2);
+      for (const row of (pending || [])) {
+        await _applyAutoVoteWave(row, 2);
+      }
+    } catch (err) {
+      console.error("[auto-vote wave2 scheduler]", err.message);
     }
-  } catch (err) {
-    console.error("[auto-vote wave2 scheduler]", err.message);
-  }
-}, 15 * 60 * 1000).unref();
+  }, 15 * 60 * 1000).unref();
+} else {
+  console.log("[auto-vote schedulers] désactivés via AUTO_VOTE_SCHEDULERS_ENABLED=false");
+}
 
 /* =========================
    PURGE DE RÉTENTION (page_visits / notification_events)
