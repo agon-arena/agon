@@ -6188,6 +6188,64 @@ setInterval(async () => {
 }, 15 * 60 * 1000).unref();
 
 /* =========================
+   PURGE DE RÉTENTION (page_visits / notification_events)
+========================= */
+// Ces deux tables ne reçoivent que des inserts (un visiteur de page, un push
+// envoyé) et n'avaient jusqu'ici aucune purge : elles grossissent indéfiniment
+// depuis le lancement du site, probable cause principale de l'épuisement de
+// quota/ressources Supabase constaté le 20/06/2026. page_visits n'est lue que
+// pour les stats du jour (/api/admin/visits/today) ; notification_events n'a
+// plus d'utilité une fois le push traité, hormis pour du débogage récent.
+const PAGE_VISITS_RETENTION_DAYS = 90;
+const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
+const RETENTION_DELETE_BATCH_SIZE = 500;
+const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
+
+async function pruneOldRows(table, retentionDays) {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  let totalDeleted = 0;
+
+  for (let batch = 0; batch < RETENTION_DELETE_MAX_BATCHES_PER_RUN; batch++) {
+    const { data: staleRows, error: selectError } = await supabase
+      .from(table)
+      .select("id")
+      .lt("created_at", cutoff)
+      .limit(RETENTION_DELETE_BATCH_SIZE);
+
+    if (selectError) {
+      console.error(`[retention] ${table} lecture :`, selectError.message);
+      break;
+    }
+
+    const staleIds = (staleRows || []).map((row) => row.id);
+    if (!staleIds.length) break;
+
+    const { error: deleteError } = await supabase.from(table).delete().in("id", staleIds);
+    if (deleteError) {
+      console.error(`[retention] ${table} suppression :`, deleteError.message);
+      break;
+    }
+
+    totalDeleted += staleIds.length;
+    if (staleIds.length < RETENTION_DELETE_BATCH_SIZE) break;
+  }
+
+  if (totalDeleted > 0) {
+    console.log(`[retention] ${table} : ${totalDeleted} ligne(s) de plus de ${retentionDays}j supprimée(s).`);
+  }
+}
+
+async function runDataRetentionCleanup() {
+  await pruneOldRows("page_visits", PAGE_VISITS_RETENTION_DAYS);
+  await pruneOldRows("notification_events", NOTIFICATION_EVENTS_RETENTION_DAYS);
+}
+
+runDataRetentionCleanup().catch((err) => console.error("[retention] purge initiale :", err.message));
+setInterval(() => {
+  runDataRetentionCleanup().catch((err) => console.error("[retention] purge planifiée :", err.message));
+}, 24 * 60 * 60 * 1000).unref();
+
+/* =========================
    COMMENTS
 ========================= */
 
