@@ -3033,7 +3033,7 @@ async function createNotification({
 }) {
   if (!user_key || !message || !type) return;
 
-  const { data: insertedNotification, error: notificationInsertError } = await supabase.from("notifications").insert({
+  const notificationRow = {
     user_key,
     type,
     debate_id,
@@ -3042,9 +3042,32 @@ async function createNotification({
     message,
     is_read: 0,
     created_at: nowIso()
-  }).select("id").single();
+  };
+
+  const { error: notificationInsertError } = await supabase
+    .from("notifications")
+    .insert(notificationRow);
 
   if (notificationInsertError) throw notificationInsertError;
+
+  let notificationId = null;
+  try {
+    const { data: insertedNotification, error: notificationIdError } = await supabase
+      .from("notifications")
+      .select("id")
+      .eq("user_key", user_key)
+      .eq("type", type)
+      .eq("message", message)
+      .eq("created_at", notificationRow.created_at)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (notificationIdError) throw notificationIdError;
+    notificationId = insertedNotification?.id || null;
+  } catch (notificationIdError) {
+    console.warn("[push] notification_id indisponible, push envoyé sans auto-read :", notificationIdError?.message || notificationIdError);
+  }
 
   clearNotificationsApiResponseCache();
   _sendPushNow(user_key, {
@@ -3053,7 +3076,7 @@ async function createNotification({
     debate_id,
     argument_id,
     comment_id,
-    notification_id: insertedNotification?.id || null
+    notification_id: notificationId
   }).catch(console.error);
 }
 
@@ -7457,30 +7480,46 @@ async function _notifyParticipants(debateId, { type, message, buildPersonalizati
     : new Map();
 
   const now = nowIso();
-  const { data: insertedNotifications, error: notificationInsertError } = await supabase.from("notifications").insert(
-    [...userKeys].map((user_key) => {
-      const personalMessage = messageByUserKey.get(user_key) || message;
-      const personalArgumentId = argumentIdByUserKey.get(user_key) || null;
-      return {
-        user_key,
-        type,
-        debate_id: debateId,
-        argument_id: personalArgumentId,
-        comment_id: null,
-        message: personalMessage,
-        is_read: 0,
-        created_at: now
-      };
-    })
-  ).select("id, user_key");
+  const notificationRows = [...userKeys].map((user_key) => {
+    const personalMessage = messageByUserKey.get(user_key) || message;
+    const personalArgumentId = argumentIdByUserKey.get(user_key) || null;
+    return {
+      user_key,
+      type,
+      debate_id: debateId,
+      argument_id: personalArgumentId,
+      comment_id: null,
+      message: personalMessage,
+      is_read: 0,
+      created_at: now
+    };
+  });
+
+  const { error: notificationInsertError } = await supabase
+    .from("notifications")
+    .insert(notificationRows);
 
   if (notificationInsertError) throw notificationInsertError;
 
-  const notificationIdByUserKey = new Map(
-    (insertedNotifications || [])
-      .filter((row) => row?.user_key)
-      .map((row) => [row.user_key, row.id])
-  );
+  const notificationIdByUserKey = new Map();
+  try {
+    const { data: insertedNotifications, error: notificationIdError } = await supabase
+      .from("notifications")
+      .select("id, user_key")
+      .eq("type", type)
+      .eq("debate_id", debateId)
+      .eq("created_at", now)
+      .in("user_key", [...userKeys]);
+
+    if (notificationIdError) throw notificationIdError;
+
+    for (const row of (insertedNotifications || [])) {
+      if (!row?.user_key || notificationIdByUserKey.has(row.user_key)) continue;
+      notificationIdByUserKey.set(row.user_key, row.id);
+    }
+  } catch (notificationIdError) {
+    console.warn("[push] notification_id groupé indisponible, push envoyé sans auto-read :", notificationIdError?.message || notificationIdError);
+  }
   clearNotificationsApiResponseCache();
 
   for (const user_key of userKeys) {
