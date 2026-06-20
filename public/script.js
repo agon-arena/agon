@@ -15911,81 +15911,23 @@ function afterAgonCloudSpinnerPaint(callback) {
   });
 }
 
-// Thématiques trop générales écartées du fallback keyword (même esprit que le nuage actualité côté serveur)
-const AGON_CLOUD_GENERIC_KEYWORDS = new Set([
-  "actualite", "actualites", "politique", "international", "societe", "economie",
-  "education", "justice", "culture", "medias", "sport", "sports", "sante",
-  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
-  "information", "infos"
-]);
-
-// Libellé de bulle en cascade : cloud_label → premier keyword non générique → question tronquée
-function getAgonBubbleLabel(debate) {
-  const cloudLabel = String(debate?.cloud_label || "").trim();
-  if (cloudLabel) return cloudLabel;
-
-  const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
-  for (const keyword of keywords) {
-    const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
-    const norm = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-    if (norm.length >= 3 && !AGON_CLOUD_GENERIC_KEYWORDS.has(norm)) return cleaned;
+// Top 10 des arènes communautaires les plus actives : calculé côté serveur
+// (GET /api/agon-bubbles) directement en base, pour ne plus avoir à charger
+// toutes les arènes dans le navigateur juste pour ce classement. Garde-fou de
+// 5s : fetchJSON n'a pas de timeout propre, donc si la requête reste bloquée,
+// on n'attend jamais indéfiniment (sans quoi le sablier de la bascule Bulles
+// Actu/Agôn tournerait à l'infini).
+async function fetchAgonBubbleTrends() {
+  try {
+    const result = await Promise.race([
+      fetchJSON(API + "/agon-bubbles"),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+    ]);
+    return Array.isArray(result?.bubbles) ? result.bubbles : [];
+  } catch (error) {
+    console.warn('Chargement des Bulles Agôn interrompu :', error);
+    return [];
   }
-
-  const question = String(debate?.question || "").replace(/\s*\?\s*$/, "").trim();
-  if (!question) return "";
-  if (question.length <= 35) return question;
-  const cut = question.slice(0, 32);
-  const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace >= 12 ? cut.slice(0, lastSpace) : cut).trim() + "…";
-}
-
-// Top 10 des arènes par score d'activité (idées ×1 + commentaires ×0,5 + votes ×0,2),
-// avec priorité à l'activité récente : 48 h d'abord, puis 7 jours, puis historique.
-function buildAgonBubbleTrends() {
-  const debates = (Array.isArray(debatesCache) ? debatesCache : []).filter((debate) => !isAgonGeneratedDebate(debate));
-  const activityScore = (ideas, comments, votes) =>
-    Number(ideas || 0) * 1 + Number(comments || 0) * 0.5 + Number(votes || 0) * 0.2;
-
-  const items = debates.map((debate) => ({
-    debate,
-    score48h:   activityScore(debate?.argument_count_48h, debate?.comment_count_48h, debate?.vote_count_48h),
-    score7d:    activityScore(debate?.argument_count_7d, debate?.comment_count_7d, debate?.vote_count_7d),
-    scoreTotal: activityScore(debate?.argument_count, debate?.comment_count, debate?.vote_count)
-  }));
-
-  // Sélection en cascade, sans doublon, jusqu'à 10 bulles
-  const selected = [];
-  const selectedIds = new Set();
-  const pushTier = (tier) => {
-    for (const item of tier) {
-      if (selected.length >= 10) return;
-      const id = String(item.debate?.id || "").trim();
-      if (!id || selectedIds.has(id)) continue;
-      selectedIds.add(id);
-      selected.push(item);
-    }
-  };
-  pushTier(items.filter(i => i.score48h > 0).sort((a, b) => b.score48h - a.score48h));
-  pushTier(items.filter(i => i.score7d > 0).sort((a, b) => b.score7d - a.score7d));
-  pushTier(items.filter(i => i.scoreTotal > 0).sort((a, b) => b.scoreTotal - a.scoreTotal));
-
-  // Taille pilotée par le score 7 jours : les arènes dont on parle actuellement
-  // dominent visuellement, les compléments historiques restent à la taille plancher.
-  // Cas limite : aucune activité sur 7 jours → repli sur le score historique pour
-  // éviter un nuage entièrement plat.
-  const max7d = selected.reduce((max, item) => Math.max(max, item.score7d), 0);
-  const sizeScoreOf = max7d > 0 ? (item) => item.score7d : (item) => item.scoreTotal;
-  const maxSizeScore = max7d > 0 ? max7d : selected.reduce((max, item) => Math.max(max, item.scoreTotal), 0);
-
-  return selected
-    .map((item) => ({
-      tag: getAgonBubbleLabel(item.debate),
-      subjectId: String(item.debate.id),
-      count: sizeScoreOf(item),
-      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0
-    }))
-    .filter((item) => item.tag);
 }
 
 // Met le segment actif du sélecteur en phase avec le mode courant
@@ -16034,10 +15976,9 @@ function toggleAgonCloud() {
   const token = beginAgonCloudSwitchLoading(container);
 
   afterAgonCloudSpinnerPaint(async () => {
-    await ensureAllIndexDebatesLoadedForAgonTrends();
+    const trends = await fetchAgonBubbleTrends();
     if (token !== _agonCloudSwitchToken) return;
 
-    const trends = buildAgonBubbleTrends();
     if (!trends.length) {
       finishAgonCloudSwitchLoading(token, container);
       return;
@@ -18158,37 +18099,6 @@ async function loadAllRemainingIndexDebatesPages() {
     });
   } catch (error) {
     console.warn('Chargement complet des arènes interrompu :', error);
-  } finally {
-    indexAllDebatesLoadInFlight = false;
-  }
-}
-
-// Le score des Bulles Agôn (top 10 des arènes les plus actives) doit être calculé
-// sur l'ensemble des arènes : le flux vertical normal se limite désormais aux 60
-// premières (cf. MAX_EXTRA_PAGES=0 plus haut), ce qui faussait le classement tant
-// que les pages suivantes n'étaient pas encore chargées par ailleurs.
-// Garde-fou : fetchJSON n'a pas de timeout propre, donc si une requête reste
-// bloquée (ex. backend inaccessible), on n'attend jamais indéfiniment — sans
-// quoi le sablier des Bulles Agôn tournerait à l'infini (cf. toggleAgonCloud).
-async function ensureAllIndexDebatesLoadedForAgonTrends() {
-  if (indexAllDebatesLoadInFlight) return;
-  indexAllDebatesLoadInFlight = true;
-
-  const TIMEOUT_MS = 8000;
-  const deadline = Date.now() + TIMEOUT_MS;
-
-  try {
-    while (indexDebatesApiHasMore && Date.now() < deadline) {
-      let timedOut = false;
-      const fetchedPage = await Promise.race([
-        fetchAndMergeNextIndexDebatesPage(),
-        new Promise((resolve) => setTimeout(() => { timedOut = true; resolve(null); }, Math.max(0, deadline - Date.now())))
-      ]);
-      if (timedOut) break;
-      if (!Array.isArray(fetchedPage) || !fetchedPage.length) break;
-    }
-  } catch (error) {
-    console.warn('Chargement complet des arènes pour les Bulles Agôn interrompu :', error);
   } finally {
     indexAllDebatesLoadInFlight = false;
   }

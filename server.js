@@ -6721,6 +6721,189 @@ app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("admin-ai", 
   }
 });
 
+// Thématiques trop générales écartées du fallback keyword (même esprit que le
+// nuage actualité, cf. AGON_CLOUD_GENERIC_KEYWORDS côté client).
+const AGON_CLOUD_GENERIC_KEYWORDS = new Set([
+  "actualite", "actualites", "politique", "international", "societe", "economie",
+  "education", "justice", "culture", "medias", "sport", "sports", "sante",
+  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
+  "information", "infos"
+]);
+
+// Libellé de bulle en cascade : cloud_label → premier keyword non générique → question tronquée.
+function getAgonBubbleLabel(debate) {
+  const cloudLabel = String(debate?.cloud_label || "").trim();
+  if (cloudLabel) return cloudLabel;
+
+  const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
+  for (const keyword of keywords) {
+    const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
+    const norm = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    if (norm.length >= 3 && !AGON_CLOUD_GENERIC_KEYWORDS.has(norm)) return cleaned;
+  }
+
+  const question = String(debate?.question || "").replace(/\s*\?\s*$/, "").trim();
+  if (!question) return "";
+  if (question.length <= 35) return question;
+  const cut = question.slice(0, 32);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace >= 12 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+}
+
+let agonBubbleTrendsCache = null;
+const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 30 * 1000;
+
+// Top 10 des arènes communautaires par score d'activité (idées ×1 + commentaires
+// ×0,5 + votes ×0,2), priorité à l'activité récente : 48h, puis 7j, puis historique.
+// Calculé en base — contrairement au calcul client précédent, on n'a plus besoin
+// de charger toutes les arènes dans le navigateur pour obtenir ce classement.
+async function computeAgonBubbleTrends() {
+  if (agonBubbleTrendsCache && Date.now() < agonBubbleTrendsCache.expiresAt) {
+    return agonBubbleTrendsCache.value;
+  }
+
+  const { data: debateRows, error: debatesError } = await supabase
+    .from("debates")
+    .select("id, question, keywords, cloud_label, creator_key, created_at")
+    .not("creator_key", "is", null)
+    .neq("creator_key", AGON_ADMIN_CREATOR_KEY);
+
+  if (debatesError) throw debatesError;
+  if (!debateRows || !debateRows.length) return [];
+
+  const debateIds = debateRows.map((d) => d.id);
+  const sharedDebateIds = [...new Set(debateIds.map((id) => resolveSharedDebateId(id) || String(id)))];
+
+  const { data: args, error: argsError } = await supabase
+    .from("arguments")
+    .select("id, debate_id, votes, created_at")
+    .in("debate_id", sharedDebateIds);
+
+  if (argsError) throw argsError;
+
+  const argsByDebate = new Map();
+  const debateIdByArgumentId = new Map();
+  for (const arg of args || []) {
+    const debateKey = String(arg.debate_id || "");
+    if (!argsByDebate.has(debateKey)) argsByDebate.set(debateKey, []);
+    argsByDebate.get(debateKey).push(arg);
+    debateIdByArgumentId.set(String(arg.id), debateKey);
+  }
+
+  const argumentIds = (args || []).map((arg) => arg.id);
+  const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+  const cutoff7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const commentCountByDebate = new Map();
+  const comment48hCountByDebate = new Map();
+  const comment7dCountByDebate = new Map();
+
+  if (argumentIds.length) {
+    const { data: comments, error: commentsError } = await supabase
+      .from("comments")
+      .select("argument_id, created_at")
+      .in("argument_id", argumentIds);
+
+    if (commentsError) throw commentsError;
+
+    for (const comment of comments || []) {
+      const debateId = debateIdByArgumentId.get(String(comment.argument_id));
+      if (!debateId) continue;
+      commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
+
+      if (comment.created_at) {
+        const commentTime = new Date(comment.created_at).getTime();
+        if (commentTime > cutoff48h) comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
+        if (commentTime > cutoff7d) comment7dCountByDebate.set(debateId, Number(comment7dCountByDebate.get(debateId) || 0) + 1);
+      }
+    }
+  }
+
+  const vote48hCountByDebate = new Map();
+  const vote7dCountByDebate = new Map();
+
+  if (argumentIds.length) {
+    const { data: recentVotes, error: recentVotesError } = await supabase
+      .from("votes")
+      .select("argument_id, vote_count, created_at")
+      .gte("created_at", new Date(cutoff7d).toISOString());
+
+    if (recentVotesError) throw recentVotesError;
+
+    for (const vote of recentVotes || []) {
+      const debateId = debateIdByArgumentId.get(String(vote.argument_id));
+      if (!debateId || !vote.created_at) continue;
+      const voteWeight = Math.max(1, Number(vote.vote_count) || 1);
+      vote7dCountByDebate.set(debateId, Number(vote7dCountByDebate.get(debateId) || 0) + voteWeight);
+      if (new Date(vote.created_at).getTime() > cutoff48h) {
+        vote48hCountByDebate.set(debateId, Number(vote48hCountByDebate.get(debateId) || 0) + voteWeight);
+      }
+    }
+  }
+
+  const activityScore = (ideas, comments, votes) =>
+    Number(ideas || 0) * 1 + Number(comments || 0) * 0.5 + Number(votes || 0) * 0.2;
+
+  const items = debateRows.map((debate) => {
+    const sharedDebateId = resolveSharedDebateId(debate.id) || String(debate.id);
+    const debateArgs = argsByDebate.get(sharedDebateId) || [];
+    const argument_count = debateArgs.length;
+    const argument_count_48h = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff48h).length;
+    const argument_count_7d = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff7d).length;
+    const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
+    const vote_count = debateArgs.reduce((sum, a) => sum + Number(a.votes || 0), 0);
+
+    return {
+      debate,
+      score48h: activityScore(argument_count_48h, comment48hCountByDebate.get(sharedDebateId), vote48hCountByDebate.get(sharedDebateId)),
+      score7d: activityScore(argument_count_7d, comment7dCountByDebate.get(sharedDebateId), vote7dCountByDebate.get(sharedDebateId)),
+      scoreTotal: activityScore(argument_count, comment_count, vote_count)
+    };
+  });
+
+  const selected = [];
+  const selectedIds = new Set();
+  const pushTier = (tier) => {
+    for (const item of tier) {
+      if (selected.length >= 10) return;
+      const id = String(item.debate?.id || "").trim();
+      if (!id || selectedIds.has(id)) continue;
+      selectedIds.add(id);
+      selected.push(item);
+    }
+  };
+  pushTier(items.filter((i) => i.score48h > 0).sort((a, b) => b.score48h - a.score48h));
+  pushTier(items.filter((i) => i.score7d > 0).sort((a, b) => b.score7d - a.score7d));
+  pushTier(items.filter((i) => i.scoreTotal > 0).sort((a, b) => b.scoreTotal - a.scoreTotal));
+
+  const max7d = selected.reduce((max, item) => Math.max(max, item.score7d), 0);
+  const sizeScoreOf = max7d > 0 ? (item) => item.score7d : (item) => item.scoreTotal;
+  const maxSizeScore = max7d > 0 ? max7d : selected.reduce((max, item) => Math.max(max, item.scoreTotal), 0);
+
+  const bubbles = selected
+    .map((item) => ({
+      tag: getAgonBubbleLabel(item.debate),
+      subjectId: String(item.debate.id),
+      count: sizeScoreOf(item),
+      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0
+    }))
+    .filter((item) => item.tag);
+
+  agonBubbleTrendsCache = { value: bubbles, expiresAt: Date.now() + AGON_BUBBLE_TRENDS_CACHE_TTL_MS };
+  return bubbles;
+}
+
+app.get("/api/agon-bubbles", async (req, res) => {
+  try {
+    const bubbles = await computeAgonBubbleTrends();
+    res.json({ bubbles });
+  } catch (error) {
+    console.error(error);
+    res.json({ bubbles: [] });
+  }
+});
+
 app.get("/api/cloud-bubbles", async (req, res) => {
   try {
     const data = await loadCloudBubbles();
