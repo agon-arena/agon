@@ -857,33 +857,62 @@ function clearVeillePendingStorySelection(id) {
 
 
 let _cloudBubblesCache = null;
+let _cloudBubblesRefreshPromise = null;
+
+function loadCloudBubblesFromFile() {
+  if (!fs.existsSync(cloudBubblesPath)) return null;
+  const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
+  if (!parsed || typeof parsed !== "object") return null;
+  return Array.isArray(parsed.bubbles) ? parsed : { bubbles: [], lastUpdatedAt: null };
+}
+
+async function refreshCloudBubblesFromSupabase() {
+  if (_cloudBubblesRefreshPromise) return _cloudBubblesRefreshPromise;
+  _cloudBubblesRefreshPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("app_config")
+        .select("value")
+        .eq("key", "cloud_bubbles")
+        .maybeSingle();
+      if (!error && data?.value && typeof data.value === "object") {
+        _cloudBubblesCache = data.value;
+      }
+    } catch {}
+  })().finally(() => {
+    _cloudBubblesRefreshPromise = null;
+  });
+  return _cloudBubblesRefreshPromise;
+}
 
 async function loadCloudBubbles() {
   if (_cloudBubblesCache) return _cloudBubblesCache;
 
-  // Essaie Supabase en premier
+  // Sert vite la dernière version connue du serveur, puis rafraîchit Supabase
+  // en arrière-plan pour éviter un délai de cold cache au chargement des bulles.
   try {
-    const { data, error } = await supabase
-      .from("app_config")
-      .select("value")
-      .eq("key", "cloud_bubbles")
-      .maybeSingle();
-    if (!error && data?.value && typeof data.value === "object") {
-      _cloudBubblesCache = data.value;
+    const localData = loadCloudBubblesFromFile();
+    if (localData) {
+      _cloudBubblesCache = localData;
+      refreshCloudBubblesFromSupabase().catch(() => {});
       return _cloudBubblesCache;
     }
   } catch {}
 
+  // Fallback si aucun fichier local n'est disponible.
+  try {
+    await refreshCloudBubblesFromSupabase();
+    if (_cloudBubblesCache) return _cloudBubblesCache;
+  } catch {}
+
   // Fallback / migration one-shot : fichier JSON local
   try {
-    if (fs.existsSync(cloudBubblesPath)) {
-      const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
-      if (parsed && typeof parsed === "object") {
-        _cloudBubblesCache = Array.isArray(parsed.bubbles) ? parsed : { bubbles: [], lastUpdatedAt: null };
-        // Tente de migrer dans Supabase silencieusement si la table existe
-        if (_cloudBubblesCache.bubbles.length) saveCloudBubbles(_cloudBubblesCache).catch(() => {});
-        return _cloudBubblesCache;
-      }
+    const localData = loadCloudBubblesFromFile();
+    if (localData) {
+      _cloudBubblesCache = localData;
+      // Tente de migrer dans Supabase silencieusement si la table existe
+      if (_cloudBubblesCache.bubbles.length) saveCloudBubbles(_cloudBubblesCache).catch(() => {});
+      return _cloudBubblesCache;
     }
   } catch {}
 
@@ -6753,6 +6782,10 @@ function getAgonBubbleLabel(debate) {
 
 let agonBubbleTrendsCache = null;
 const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 30 * 1000;
+// Supabase peut rester bloqué plusieurs dizaines de secondes avant de répondre
+// (ou de tomber en erreur) en cas de panne réseau côté infra — sans timeout
+// explicite, ces requêtes traîneraient la requête HTTP entrante avec elles.
+const AGON_BUBBLE_QUERY_TIMEOUT_MS = 8000;
 
 // Top 10 des arènes communautaires par score d'activité (idées ×1 + commentaires
 // ×0,5 + votes ×0,2), priorité à l'activité récente : 48h, puis 7j, puis historique.
@@ -6767,7 +6800,8 @@ async function computeAgonBubbleTrends() {
     .from("debates")
     .select("id, question, keywords, cloud_label, creator_key, created_at")
     .not("creator_key", "is", null)
-    .neq("creator_key", AGON_ADMIN_CREATOR_KEY);
+    .neq("creator_key", AGON_ADMIN_CREATOR_KEY)
+    .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS));
 
   if (debatesError) throw debatesError;
   if (!debateRows || !debateRows.length) return [];
@@ -6778,7 +6812,8 @@ async function computeAgonBubbleTrends() {
   const { data: args, error: argsError } = await supabase
     .from("arguments")
     .select("id, debate_id, votes, created_at")
-    .in("debate_id", sharedDebateIds);
+    .in("debate_id", sharedDebateIds)
+    .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS));
 
   if (argsError) throw argsError;
 
@@ -6798,14 +6833,27 @@ async function computeAgonBubbleTrends() {
   const commentCountByDebate = new Map();
   const comment48hCountByDebate = new Map();
   const comment7dCountByDebate = new Map();
+  const vote48hCountByDebate = new Map();
+  const vote7dCountByDebate = new Map();
 
   if (argumentIds.length) {
-    const { data: comments, error: commentsError } = await supabase
-      .from("comments")
-      .select("argument_id, created_at")
-      .in("argument_id", argumentIds);
+    // Indépendantes l'une de l'autre : lancées en parallèle plutôt qu'en
+    // série pour ne pas cumuler deux allers-retours réseau.
+    const [{ data: comments, error: commentsError }, { data: recentVotes, error: recentVotesError }] = await Promise.all([
+      supabase
+        .from("comments")
+        .select("argument_id, created_at")
+        .in("argument_id", argumentIds)
+        .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)),
+      supabase
+        .from("votes")
+        .select("argument_id, vote_count, created_at")
+        .gte("created_at", new Date(cutoff7d).toISOString())
+        .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS))
+    ]);
 
     if (commentsError) throw commentsError;
+    if (recentVotesError) throw recentVotesError;
 
     for (const comment of comments || []) {
       const debateId = debateIdByArgumentId.get(String(comment.argument_id));
@@ -6818,18 +6866,6 @@ async function computeAgonBubbleTrends() {
         if (commentTime > cutoff7d) comment7dCountByDebate.set(debateId, Number(comment7dCountByDebate.get(debateId) || 0) + 1);
       }
     }
-  }
-
-  const vote48hCountByDebate = new Map();
-  const vote7dCountByDebate = new Map();
-
-  if (argumentIds.length) {
-    const { data: recentVotes, error: recentVotesError } = await supabase
-      .from("votes")
-      .select("argument_id, vote_count, created_at")
-      .gte("created_at", new Date(cutoff7d).toISOString());
-
-    if (recentVotesError) throw recentVotesError;
 
     for (const vote of recentVotes || []) {
       const debateId = debateIdByArgumentId.get(String(vote.argument_id));
