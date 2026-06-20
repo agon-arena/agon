@@ -3044,30 +3044,18 @@ async function createNotification({
     created_at: nowIso()
   };
 
-  const { error: notificationInsertError } = await supabase
+  // .maybeSingle() plutôt que .single() : ne jette pas si le insert+select
+  // combiné ne renvoie pas exactement une ligne, mais reste un aller-retour
+  // atomique fiable (avec la clé service role, qui contourne les policies RLS)
+  // — bien plus robuste qu'une seconde requête de recherche par contenu, qui
+  // peut matcher la mauvaise ligne ou n'en trouver aucune en cas de doublon.
+  const { data: insertedNotification, error: notificationInsertError } = await supabase
     .from("notifications")
-    .insert(notificationRow);
+    .insert(notificationRow)
+    .select("id")
+    .maybeSingle();
 
   if (notificationInsertError) throw notificationInsertError;
-
-  let notificationId = null;
-  try {
-    const { data: insertedNotification, error: notificationIdError } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("user_key", user_key)
-      .eq("type", type)
-      .eq("message", message)
-      .eq("created_at", notificationRow.created_at)
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (notificationIdError) throw notificationIdError;
-    notificationId = insertedNotification?.id || null;
-  } catch (notificationIdError) {
-    console.warn("[push] notification_id indisponible, push envoyé sans auto-read :", notificationIdError?.message || notificationIdError);
-  }
 
   clearNotificationsApiResponseCache();
   _sendPushNow(user_key, {
@@ -3076,7 +3064,7 @@ async function createNotification({
     debate_id,
     argument_id,
     comment_id,
-    notification_id: notificationId
+    notification_id: insertedNotification?.id || null
   }).catch(console.error);
 }
 
@@ -7495,31 +7483,18 @@ async function _notifyParticipants(debateId, { type, message, buildPersonalizati
     };
   });
 
-  const { error: notificationInsertError } = await supabase
+  const { data: insertedNotifications, error: notificationInsertError } = await supabase
     .from("notifications")
-    .insert(notificationRows);
+    .insert(notificationRows)
+    .select("id, user_key");
 
   if (notificationInsertError) throw notificationInsertError;
 
-  const notificationIdByUserKey = new Map();
-  try {
-    const { data: insertedNotifications, error: notificationIdError } = await supabase
-      .from("notifications")
-      .select("id, user_key")
-      .eq("type", type)
-      .eq("debate_id", debateId)
-      .eq("created_at", now)
-      .in("user_key", [...userKeys]);
-
-    if (notificationIdError) throw notificationIdError;
-
-    for (const row of (insertedNotifications || [])) {
-      if (!row?.user_key || notificationIdByUserKey.has(row.user_key)) continue;
-      notificationIdByUserKey.set(row.user_key, row.id);
-    }
-  } catch (notificationIdError) {
-    console.warn("[push] notification_id groupé indisponible, push envoyé sans auto-read :", notificationIdError?.message || notificationIdError);
-  }
+  const notificationIdByUserKey = new Map(
+    (insertedNotifications || [])
+      .filter((row) => row?.user_key)
+      .map((row) => [row.user_key, row.id])
+  );
   clearNotificationsApiResponseCache();
 
   for (const user_key of userKeys) {
