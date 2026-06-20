@@ -15289,7 +15289,7 @@ function updateIndexRowContextOpenState(row) {
 
 function getIndexRowBottomBuffer(row) {
   if (!row) return 2;
-  return window.matchMedia("(max-width: 768px)").matches ? 18 : 2;
+  return window.matchMedia("(max-width: 768px)").matches ? 0 : 2;
 }
 
 function getIndexCardVisualBottomOffset(card, rowRect) {
@@ -15299,6 +15299,10 @@ function getIndexCardVisualBottomOffset(card, rowRect) {
     card.querySelectorAll(
       '.debate-card-meta-below-media, .debate-card-counts-row, .debate-card-footer-actions, .debate-card-context-extra, .debate-card-context-toggle'
     ).forEach((el) => {
+      const hiddenContextExtra = el.closest('.debate-card-context-extra:not(.is-open)');
+      if (hiddenContextExtra) return;
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return;
       const rect = el.getBoundingClientRect();
       if (rect && rect.height > 0) rects.push(rect);
     });
@@ -16898,24 +16902,46 @@ function ensureCarouselHints(row) {
   return { next, prev };
 }
 
-function syncIndexThemeRowHeight(row) {
+function getIndexRowCenteredCard(row, cards) {
+  if (!row || !cards?.length) return null;
+  const center = row.scrollLeft + row.clientWidth / 2;
+  let best = null;
+  let bestDistance = Infinity;
+  cards.forEach((card) => {
+    const distance = Math.abs((card.offsetLeft + card.offsetWidth / 2) - center);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = card;
+    }
+  });
+  return best;
+}
+
+function syncIndexThemeRowHeight(row, options = {}) {
   const cards = Array.from(row?.querySelectorAll?.(".theme-horizontal-inner > .debate-card") || []);
   if (!row || !cards.length) return;
 
+  const force = !!options.force;
   const rowLeft = row.scrollLeft;
   const rowRight = row.scrollLeft + row.clientWidth;
+  const isMobileRow = window.matchMedia("(max-width: 768px)").matches;
   const visibleCards = cards.filter((card) => {
     const cardLeft = card.offsetLeft;
     const cardRight = cardLeft + card.offsetWidth;
     return cardRight > rowLeft + 2 && cardLeft < rowRight - 2;
   });
-  const targetCards = visibleCards.length ? visibleCards : cards;
+  let targetCards = visibleCards.length ? visibleCards : cards;
+
+  if (isMobileRow) {
+    const centeredCard = getIndexRowCenteredCard(row, cards);
+    targetCards = centeredCard ? [centeredCard] : (visibleCards.length ? [visibleCards[0]] : cards.slice(0, 1));
+  }
 
   // Tant que les cartes visibles et la largeur de la rangée n'ont pas changé, la hauteur
   // calculée serait identique : on évite de refaire les getBoundingClientRect/getComputedStyle
   // (coûteux) à chaque frame d'un scroll continu qui ne fait que glisser entre deux mêmes cartes.
   const visibleKey = row.clientWidth + '|' + targetCards.map((c) => c.dataset.debateId || '').join(',');
-  if (row.dataset.heightVisibleKey === visibleKey && row.style.height) return;
+  if (!force && row.dataset.heightVisibleKey === visibleKey && row.style.height) return;
   row.dataset.heightVisibleKey = visibleKey;
 
   const rowRect = row.getBoundingClientRect();
@@ -16927,7 +16953,6 @@ function syncIndexThemeRowHeight(row) {
 
   if (nextHeight > 0) {
     const currentHeight = parseFloat(row.style.height || '0') || 0;
-    const isMobileRow = window.matchMedia("(max-width: 768px)").matches;
     if (isMobileRow && currentHeight && Math.abs(nextHeight - currentHeight) < 3) return;
     row.style.height = `${nextHeight}px`;
   }
@@ -17105,7 +17130,7 @@ function initThematicRowDragScroll() {
         clearTimeout(scrollEndTimer);
         scrollEndTimer = setTimeout(() => {
           if (_isMobileCache) {
-            syncIndexThemeRowHeight(row);
+            syncIndexThemeRowHeight(row, { force: true });
             updateIndexThemeRowSwipeButtons(row);
           } else {
             updateCarouselCardHighlight(row);
@@ -17131,9 +17156,28 @@ function initThematicRowDragScroll() {
       const t = e.target;
       if (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO')) {
         row.style.height = '';
-        requestAnimationFrame(() => syncIndexThemeRowHeight(row));
+        row.dataset.heightVisibleKey = '';
+        requestAnimationFrame(() => syncIndexThemeRowHeight(row, { force: true }));
       }
     }, { capture: true, passive: true });
+
+    if (window.ResizeObserver && !row.dataset.heightResizeObserved) {
+      row.dataset.heightResizeObserved = "1";
+      let resizeHeightRaf = null;
+      const resizeObserver = new ResizeObserver(() => {
+        if (!_isMobileCache || resizeHeightRaf) return;
+        resizeHeightRaf = requestAnimationFrame(() => {
+          resizeHeightRaf = null;
+          row.dataset.heightVisibleKey = '';
+          syncIndexThemeRowHeight(row, { force: true });
+          syncIndexCarouselDots(row);
+          updateIndexThemeRowSwipeButtons(row);
+        });
+      });
+      row.querySelectorAll(".theme-horizontal-inner > .debate-card").forEach((card) => {
+        resizeObserver.observe(card);
+      });
+    }
 
     ensureCarouselHints(row);
     updateIndexThemeRowSwipeButtons(row);

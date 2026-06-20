@@ -21077,17 +21077,9 @@ body.page-home-mobile .theme-horizontal-row {
 }
 
 @media (max-width: 768px) {
-  body.page-home-mobile .theme-horizontal-row {
-    padding-bottom: 16px !important;
-  }
-
   body.page-home-mobile .theme-carousel-dots {
-    margin-top: 7px !important;
-    margin-bottom: 22px !important;
-  }
-
-  body.page-home-mobile .debate-card .debate-card-meta-below-media {
-    margin-bottom: 6px !important;
+    margin-top: -13px !important;
+    margin-bottom: 18px !important;
   }
 }
 
