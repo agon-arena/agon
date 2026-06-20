@@ -914,7 +914,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260620-push-read-fallback"></script>
+	<script src="/script.min.js?v=20260620-bulles-spinner-timeout"></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1847,28 +1847,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     boot();
   }
   window.addEventListener('load', cleanAll);
-})();
-</script>
-
-<script>
-// Correctif ciblé Safari/WebKit : sur certains chargements de la page débat,
-// le contenu est bien rendu dans le DOM mais Safari ne repeint pas la zone
-// sous l'aperçu de la source tant qu'aucune interaction n'a lieu (la page
-// reste visuellement figée sur le titre + l'aperçu jusqu'au premier clic).
-// On force un repaint sans impact visuel à quelques instants après le chargement.
-(function(){
-  function nudgeRepaint(){
-    var el = document.body;
-    if(!el) return;
-    var prevTransform = el.style.webkitTransform;
-    el.style.webkitTransform = 'translateZ(0)';
-    requestAnimationFrame(function(){
-      el.style.webkitTransform = prevTransform || '';
-    });
-  }
-  [300, 800, 1600].forEach(function(delay){
-    setTimeout(nudgeRepaint, delay);
-  });
 })();
 </script>
 

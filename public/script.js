@@ -18167,13 +18167,24 @@ async function loadAllRemainingIndexDebatesPages() {
 // sur l'ensemble des arènes : le flux vertical normal se limite désormais aux 60
 // premières (cf. MAX_EXTRA_PAGES=0 plus haut), ce qui faussait le classement tant
 // que les pages suivantes n'étaient pas encore chargées par ailleurs.
+// Garde-fou : fetchJSON n'a pas de timeout propre, donc si une requête reste
+// bloquée (ex. backend inaccessible), on n'attend jamais indéfiniment — sans
+// quoi le sablier des Bulles Agôn tournerait à l'infini (cf. toggleAgonCloud).
 async function ensureAllIndexDebatesLoadedForAgonTrends() {
   if (indexAllDebatesLoadInFlight) return;
   indexAllDebatesLoadInFlight = true;
 
+  const TIMEOUT_MS = 8000;
+  const deadline = Date.now() + TIMEOUT_MS;
+
   try {
-    while (indexDebatesApiHasMore) {
-      const fetchedPage = await fetchAndMergeNextIndexDebatesPage();
+    while (indexDebatesApiHasMore && Date.now() < deadline) {
+      let timedOut = false;
+      const fetchedPage = await Promise.race([
+        fetchAndMergeNextIndexDebatesPage(),
+        new Promise((resolve) => setTimeout(() => { timedOut = true; resolve(null); }, Math.max(0, deadline - Date.now())))
+      ]);
+      if (timedOut) break;
       if (!Array.isArray(fetchedPage) || !fetchedPage.length) break;
     }
   } catch (error) {
