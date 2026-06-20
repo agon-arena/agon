@@ -42,11 +42,75 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.min.css?v=20260619-ai-modal-size2">
+  <link rel="stylesheet" href="/style.min.css?v=20260620-startup-latency-fix">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     html:not(.admin-ui-ready) [data-admin] {
       display: none !important;
+    }
+  </style>
+  <style id="agon-startup-critical-css">
+    html,
+    body {
+      background: #243038;
+    }
+    .agon-startup-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #243038 0%, #101820 55%, #05070a 100%);
+      color: #ffffff;
+      opacity: 1;
+      transition: opacity 0.45s ease, visibility 0.45s ease;
+    }
+    .agon-startup-loader.is-hiding {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    html.agon-skip-startup-once .agon-startup-loader {
+      display: none !important;
+    }
+    .agon-startup-loader-inner {
+      text-align: center;
+      padding: 32px 24px;
+      max-width: 360px;
+    }
+    .agon-startup-brand {
+      margin-top: 24px;
+      margin-bottom: 14px;
+    }
+    .agon-startup-logo-img {
+      width: 180px;
+      max-width: 80vw;
+      height: auto;
+      min-height: 60px;
+      display: block;
+      margin: 0 auto;
+      filter: brightness(0.914) saturate(0.96);
+    }
+    .agon-startup-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .agon-startup-line {
+      margin: 9px 0;
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: rgba(255, 255, 255, 0.45);
+      opacity: 0;
+    }
+    .agon-startup-line.is-playing {
+      animation: agonStartupLineIn 1.4s ease forwards;
+    }
+    @keyframes agonStartupLineIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
   </style>
   <style>
@@ -124,6 +188,33 @@
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
 <script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}t();window.addEventListener('pageshow',t,true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);})()</script>
+<script>
+(function(){
+  var shouldSkipStartup = false;
+  try {
+    if (sessionStorage.getItem('agon_skip_startup_once') === '1') {
+      sessionStorage.removeItem('agon_skip_startup_once');
+      shouldSkipStartup = true;
+    }
+  } catch (_) {}
+
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('skipStartup') === '1') {
+      params.delete('skipStartup');
+      var query = params.toString();
+      var nextUrl = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+      window.history.replaceState(window.history.state || {}, '', nextUrl);
+      shouldSkipStartup = true;
+    }
+  } catch (_) {}
+
+  if (shouldSkipStartup) {
+    window.__agonSkipStartupOnce = true;
+    document.documentElement.classList.add('agon-skip-startup-once');
+  }
+})();
+</script>
 
 <div id="agon-startup-loader" class="agon-startup-loader">
   <div class="agon-startup-loader-inner">
@@ -135,6 +226,25 @@
     </div>
   </div>
 </div>
+<script>
+(function(){
+  var loader = document.getElementById('agon-startup-loader');
+  if (!loader) return;
+  if (window.__agonSkipStartupOnce === true) {
+    if (loader.parentNode) loader.parentNode.removeChild(loader);
+    return;
+  }
+  var line = loader.querySelector('.agon-startup-line-1');
+  if (!line) return;
+  window.__agonStartupInlineStarted = true;
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      line.classList.add('is-playing');
+    });
+  });
+})();
+</script>
 
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
@@ -766,7 +876,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260620-bulles-agon-serveur" defer></script>
+<script src="/script.min.js?v=20260620-iframe-close-skip-startup" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

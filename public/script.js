@@ -173,9 +173,20 @@ registerServiceWorker();
   const playStartupLine = async function(line, holdAfterAnimationMs) {
     if (!line) return;
     await waitForPaint();
-    line.classList.add('is-playing');
-    await waitForLineAnimationEnd(line);
-    await wait(holdAfterAnimationMs);
+    if (!line.classList.contains('is-playing')) {
+      window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      line.classList.add('is-playing');
+    }
+
+    const startedAt = Number(window.__agonStartupLineStartedAt || 0);
+    const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
+    const elapsed = startedAt ? Math.max(0, now - startedAt) : 0;
+
+    if (elapsed < 1300) {
+      await waitForLineAnimationEnd(line);
+    }
+
+    await wait(Math.max(0, holdAfterAnimationMs - elapsed));
   };
 
   let introSequenceDone = false;
@@ -204,7 +215,9 @@ registerServiceWorker();
 
   async function runIntroSequence() {
     // Pause sur le logo avant les messages
-    await wait(900);
+    if (window.__agonStartupInlineStarted !== true) {
+      await wait(900);
+    }
 
     await playStartupLine(loader.querySelector('.agon-startup-line-1'), 2800);
 
@@ -757,6 +770,30 @@ let indexXTabletRefreshBound = false;
 let indexFilterFeedWarmupPromise = null;
 let indexSearchFetchState = null;
 let indexPendingAdminProtectedDebatesRender = null;
+
+const SAFARI_NATIVE_PREVIEW_BLOCK_SELECTOR = [
+  ".debate-card",
+  ".debate-card-link",
+  ".index-card-media-with-title",
+  ".index-card-title-banner",
+  ".debate-card-media",
+  ".debate-card-source",
+  ".debate-source-card",
+  ".debate-source-preview-wrap",
+  "#debate-source-preview-wrap",
+  ".debate-source-fallback",
+  "#debate-source-fallback",
+  ".debate-image-wrap",
+  "#debate-image-wrap",
+  ".debate-video-wrap",
+  "#debate-video-wrap"
+].join(", ");
+
+document.addEventListener("dragstart", (event) => {
+  if (event.target?.closest?.(SAFARI_NATIVE_PREVIEW_BLOCK_SELECTOR)) {
+    event.preventDefault();
+  }
+}, true);
 
 const DEBATE_CATEGORY_OPTIONS = [
   "Politique",
@@ -4423,7 +4460,8 @@ function closeDebateIframeModal() {
     unlockPageScrollForDebateModal();
     _debateModalSavedScrollY = null;
     _debateModalSavedScrollAnchor = null;
-    window.location.href = "/";
+    try { sessionStorage.setItem(INDEX_SKIP_STARTUP_ONCE_KEY, "1"); } catch (error) {}
+    window.location.replace("/?skipStartup=1");
     return;
   }
 
@@ -4524,6 +4562,7 @@ function isTopLevelIframeModalPage() {
 }
 
 const NOTIFICATIONS_RETURN_CONTEXT_KEY = "agon_notifications_return_context";
+const INDEX_SKIP_STARTUP_ONCE_KEY = "agon_skip_startup_once";
 
 function rememberNotificationsReturnContext(returnUrl = "") {
   const normalizedReturnUrl = String(returnUrl || "").trim();
@@ -14785,6 +14824,7 @@ function adminToggleEditPanel(btn) {
       p._adminOriginalNextSibling = null;
     }
     p.style.width = p.style.height = p.style.left = p.style.top = p.style.transform = p.style.maxHeight = '';
+    setTimeout(flushIndexAdminProtectedDebatesRender, 0);
   }
 }
 

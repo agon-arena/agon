@@ -212,7 +212,7 @@ function buildDebateMeta(req, debate) {
     ? buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`)
     : buildAbsoluteUrl(req, "/debate");
   const ogImageUrl = debateId
-    ? buildAbsoluteUrl(req, `/debate/${encodeURIComponent(debateId)}`)
+    ? buildAbsoluteUrl(req, `/og/debate/${encodeURIComponent(debateId)}.png`)
     : buildAbsoluteUrl(req, "/logo.jpeg");
   const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
   const question = normalizeMetaText(debate?.question || "Débat sur agôn", 110);
@@ -3183,11 +3183,14 @@ async function createOrMergeVoteNotificationNow({
   user_key,
   debate_id = null,
   argument_id = null,
-  argument_title = ""
+  argument_title = "",
+  vote_count_increment = 1,
+  push_on_merge = false
 }) {
   if (!user_key || !argument_id) return;
 
   const ideaLabel = quoteNotificationContent(argument_title || "cette idée");
+  const increment = Math.max(1, Math.round(Number(vote_count_increment || 1)));
   const windowStartIso = new Date(Date.now() - VOTE_NOTIFICATION_AGGREGATION_WINDOW_MS).toISOString();
   const { data: recentNotification, error } = await supabase
     .from("notifications")
@@ -3208,21 +3211,22 @@ async function createOrMergeVoteNotificationNow({
       type: "vote_on_argument",
       debate_id,
       argument_id,
-      message: `Votre idée ${ideaLabel} a reçu 1 voix.`
+      message: `Votre idée ${ideaLabel} a reçu ${increment} voix.`
     });
     return;
   }
 
   const matched = String(recentNotification.message || "").match(/a reçu\s+(\d+)\s+voix?/i);
   const currentCount = matched ? Number.parseInt(matched[1], 10) : 1;
-  const nextCount = Math.max(2, currentCount + 1);
+  const nextCount = Math.max(2, currentCount + increment);
+  const nextMessage = `Votre idée ${ideaLabel} a reçu ${nextCount} voix.`;
 
   const { error: updateError } = await supabase
     .from("notifications")
     .update({
       debate_id,
       argument_id,
-      message: `Votre idée ${ideaLabel} a reçu ${nextCount} voix.`,
+      message: nextMessage,
       is_read: 0,
       created_at: nowIso()
     })
@@ -3230,6 +3234,18 @@ async function createOrMergeVoteNotificationNow({
 
   if (updateError) throw updateError;
   clearNotificationsApiResponseCache();
+
+  if (push_on_merge) {
+    await _sendPushNow(user_key, {
+      type: "vote_on_argument",
+      message: nextMessage,
+      debate_id,
+      argument_id,
+      notification_id: recentNotification.id
+    }).catch((pushError) => {
+      console.error("[vote notification push]", pushError);
+    });
+  }
 }
 
 function createOrMergeVoteNotification(payload) {
@@ -3541,10 +3557,8 @@ function generateOgImageInWorker(payload) {
   });
 }
 
-app.get("/debate/:id", async (req, res) => {
+async function sendDebateOgImage(req, res, id) {
   try {
-    const id = req.params.id;
-
     const cachedEntry = ogImageCache.get(String(id));
     if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
       res.setHeader("Content-Type", "image/png");
@@ -3583,6 +3597,21 @@ app.get("/debate/:id", async (req, res) => {
     console.error(error);
     res.status(500).send("Erreur génération image");
   }
+}
+
+app.get("/og/debate/:id.png", async (req, res) => {
+  return sendDebateOgImage(req, res, req.params.id);
+});
+
+app.get("/debate/:id", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  const accept = String(req.headers.accept || "");
+
+  if (accept.includes("text/html")) {
+    return res.redirect(302, `/debate?id=${encodeURIComponent(id)}`);
+  }
+
+  return sendDebateOgImage(req, res, id);
 });
 
 app.post("/api/link-preview", rateLimit("preview", 120), async (req, res) => {
@@ -6136,17 +6165,17 @@ async function _applyAutoVoteWave(argument, wave) {
   console.log(`[auto-vote wave${wave}] argument ${argument.id} +${amount} votes (total ${newVotes})`);
 
   if (argument.author_key) {
-    for (let i = 0; i < amount; i++) {
-      try {
-        await createOrMergeVoteNotification({
-          user_key: argument.author_key,
-          debate_id: argument.debate_id,
-          argument_id: argument.id,
-          argument_title: argument.title
-        });
-      } catch (notificationError) {
-        console.error(`[auto-vote wave${wave}] notification`, notificationError.message);
-      }
+    try {
+      await createOrMergeVoteNotification({
+        user_key: argument.author_key,
+        debate_id: argument.debate_id,
+        argument_id: argument.id,
+        argument_title: argument.title,
+        vote_count_increment: amount,
+        push_on_merge: true
+      });
+    } catch (notificationError) {
+      console.error(`[auto-vote wave${wave}] notification`, notificationError.message);
     }
   }
 }

@@ -779,6 +779,34 @@ main.create-page {
   outline-offset: 3px;
 }
 
+.debate-card,
+.debate-card *,
+.debate-card-link,
+.index-card-media-with-title,
+.index-card-media-with-title *,
+.index-card-title-banner,
+.index-card-title-banner *,
+.debate-source-card,
+.debate-source-card *,
+.debate-source-preview-wrap,
+.debate-source-preview-wrap *,
+#debate-source-preview-wrap,
+#debate-source-preview-wrap *,
+.debate-source-fallback,
+.debate-source-fallback *,
+#debate-source-fallback,
+#debate-source-fallback *,
+.debate-image-wrap,
+.debate-image-wrap *,
+#debate-image-wrap,
+#debate-image-wrap *,
+.debate-video-wrap,
+.debate-video-wrap *,
+#debate-video-wrap,
+#debate-video-wrap * {
+  -webkit-user-drag: none;
+}
+
 .debate-card-top-row {
   display: flex;
   align-items: flex-start;
@@ -17701,7 +17729,13 @@ html.thematic-scroll .theme-row-section {
 .theme-carousel-dot::before {
   content: '';
   position: absolute;
-  inset: -12px;
+  /* Zone de clic élargie, mais jamais vers le haut : éviter qu'elle ne
+     déborde sur la carte juste au-dessus (boutons "Voir plus" / "Entrer
+     dans l'arène" capturés par erreur par un point de pagination). */
+  top: -4px;
+  right: -12px;
+  bottom: -12px;
+  left: -12px;
 }
 
 .theme-carousel-dot.is-active {
@@ -17735,7 +17769,7 @@ html.thematic-scroll .theme-row-section {
 
 @media (min-width: 769px) {
   .theme-carousel-dots {
-    margin-top: -6px;
+    margin-top: 0;
     margin-bottom: 12px;
   }
 
