@@ -1422,6 +1422,7 @@ function hidePageArrivalLoadingOverlay() {
 
 function markPageArrivalLoadingOverlayReady() {
   pageArrivalLoadingOverlayReady = true;
+  window.__agonPageArrivalReady = true;
 
   if (isIframeDebateLoadingOverlayContext()) {
     try {
@@ -3228,25 +3229,31 @@ function hideDebateIframeParentLoadingOverlay() {
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
 }
 
-// Garde-fou anti-blocage : arme un filet de sécurité unique qui, si le message
+// Garde-fou anti-blocage : arme un filet de sécurité qui, si le message
 // "prêt" de l'iframe n'arrive jamais (navigation qui échoue, redirection
 // inattendue, page qui ne répond plus...), vérifie où l'iframe a réellement
-// atterri. Si elle est bien sur la page attendue, on masque le loader
-// normalement (le message "prêt" a simplement été perdu) ; sinon on bascule
-// vers un état d'erreur clair avec une action de récupération, plutôt que de
-// révéler silencieusement un contenu cassé après un délai arbitraire.
-function armDebateIframeParentLoadingFallback(expectedPathname, onResolved) {
+// atterri ET si elle a réellement fini de charger son contenu (drapeau
+// __agonPageArrivalReady posé par markPageArrivalLoadingOverlayReady).
+// Si la page est sur la bonne URL mais encore en train de charger ses données
+// (cas d'un débat simplement lent à charger, pas bloqué), on retente plutôt
+// que de masquer le loader trop tôt et révéler une page à moitié rendue.
+// Si elle n'a toujours pas terminé après plusieurs tentatives, ou si elle
+// n'est pas du tout sur la page attendue, on bascule vers un état d'erreur
+// clair avec une action de récupération.
+function armDebateIframeParentLoadingFallback(expectedPathname, onResolved, attempt = 0) {
   if (debateIframeParentLoadingFallbackTimer) {
     clearTimeout(debateIframeParentLoadingFallbackTimer);
   }
   const expected = String(expectedPathname || "").trim();
   debateIframeParentLoadingFallbackTimer = setTimeout(() => {
     debateIframeParentLoadingFallbackTimer = null;
-    resolveStuckDebateIframeParentLoading(expected, onResolved);
+    resolveStuckDebateIframeParentLoading(expected, onResolved, attempt);
   }, 9000);
 }
 
-function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved) {
+const DEBATE_IFRAME_PARENT_LOADING_MAX_RETRIES = 3;
+
+function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved, attempt = 0) {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal || !modal.classList.contains("loading")) return;
 
@@ -3264,10 +3271,17 @@ function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved) {
 
   const frame = document.getElementById("debate-iframe-modal-frame");
   let landedPathname = "";
+  let iframeContentReady = false;
   try { landedPathname = frame?.contentWindow?.location?.pathname || ""; } catch (e) {}
+  try { iframeContentReady = frame?.contentWindow?.__agonPageArrivalReady === true; } catch (e) {}
 
-  if (landedPathname === expectedPathname) {
+  if (landedPathname === expectedPathname && iframeContentReady) {
     resolveAsLoaded();
+    return;
+  }
+
+  if (landedPathname === expectedPathname && attempt < DEBATE_IFRAME_PARENT_LOADING_MAX_RETRIES) {
+    armDebateIframeParentLoadingFallback(expectedPathname, onResolved, attempt + 1);
     return;
   }
 
@@ -13184,6 +13198,33 @@ function saveLocallyReadNotifId(id) {
 }
 function isNotifLocallyRead(id) {
   return getLocallyReadNotifIds().has(String(id));
+}
+
+// Filet de sécurité au chargement de page : le service worker tente déjà de
+// marquer la notification lue en tâche de fond au clic sur le push (voir
+// service-worker.js), mais ce fetch en arrière-plan peut être interrompu par
+// l'OS (iOS en particulier ne garantit pas l'exécution du service worker après
+// un clic depuis une app totalement fermée). L'URL ouverte par le push porte
+// donc aussi l'id en query param ?notif=, et la page elle-même confirme la
+// lecture une fois ouverte au premier plan — appel inoffensif si déjà fait.
+function confirmPushNotificationReadFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const notifId = params.get("notif");
+  if (!notifId) return;
+
+  saveLocallyReadNotifId(notifId);
+  decrementStoredUnreadNotificationCount();
+
+  fetch(API + "/notifications/read-from-push", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notificationId: notifId }),
+    keepalive: true
+  }).catch(() => {});
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete("notif");
+  window.history.replaceState({}, "", url);
 }
 
 function markNotificationElementAsReadLocally(element) {
@@ -28409,6 +28450,7 @@ function removeAiScoreSortOption() {
 initPageArrivalLoadingOverlay();
 
 document.addEventListener("DOMContentLoaded", () => {
+  confirmPushNotificationReadFromUrl();
   initIframePageContextBridge();
   initDebateLinkPrewarm();
   if ((document.body.classList.contains('page-home') || document.body.classList.contains('page-home-mobile')) && !getDebateId()) {
