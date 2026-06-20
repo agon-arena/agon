@@ -21076,6 +21076,21 @@ body.page-home-mobile .theme-horizontal-row {
   overflow-y: visible;
 }
 
+@media (max-width: 768px) {
+  body.page-home-mobile .theme-horizontal-row {
+    padding-bottom: 16px !important;
+  }
+
+  body.page-home-mobile .theme-carousel-dots {
+    margin-top: 7px !important;
+    margin-bottom: 22px !important;
+  }
+
+  body.page-home-mobile .debate-card .debate-card-meta-below-media {
+    margin-bottom: 6px !important;
+  }
+}
+
 /* ── Optimisations performance mobile ── */
 @media (max-width: 768px) {
   .debate-card,

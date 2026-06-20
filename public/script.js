@@ -234,18 +234,21 @@ registerServiceWorker();
 // Accès localStorage/sessionStorage robustes (private browsing, quota plein, Safari ITP)
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, String(val)); } catch {} }
+function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
 
 const PUSH_INVITE_LAST_SHOWN_KEY = "pushInviteLastShownAt";
 const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
 const PUSH_SUBSCRIBED_KEY = "pushSubscribed";
+const PUSH_VAPID_PUBLIC_KEY_STORAGE_KEY = "pushVapidPublicKey";
 const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
+let pushSubscriptionSyncPromise = null;
 
 // Nettoie la clé dismissed corrompue par l'ancien bug (iOS "denied" par défaut)
 try {
   if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1" && lsGet(PUSH_SUBSCRIBED_KEY) !== "1") {
-    localStorage.removeItem(PUSH_INVITE_DISMISSED_KEY);
+    lsRemove(PUSH_INVITE_DISMISSED_KEY);
   }
 } catch {}
 
@@ -504,56 +507,102 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+async function getPushPublicKeyOrThrow() {
+  const keyResponse = await fetch(API + "/push/public-key");
+  if (!keyResponse.ok) throw new Error("push-key-unavailable");
+
+  const keyData = await keyResponse.json();
+  const publicKey = String(keyData?.publicKey || "").trim();
+  if (!keyData?.available || !publicKey) throw new Error("push-key-unavailable");
+
+  return publicKey;
+}
+
+async function savePushSubscriptionToServer(subscription) {
+  const saveResponse = await fetch(API + "/push-subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      legacyKey: getKey(),
+      subscription: typeof subscription.toJSON === "function"
+        ? subscription.toJSON()
+        : subscription
+    })
+  });
+
+  if (!saveResponse.ok) throw new Error("push-subscription-save-failed");
+  return saveResponse.json().catch(() => null);
+}
+
+async function syncPushSubscriptionWithServer({ askPermission = false, forceFresh = false } = {}) {
+  if (!browserCanUsePushNotifications()) return false;
+
+  const publicKey = await getPushPublicKeyOrThrow();
+
+  let permission = Notification.permission;
+  if (permission !== "granted" && askPermission) {
+    permission = await Notification.requestPermission();
+  }
+
+  if (permission !== "granted") {
+    // Sur iOS standalone, "denied" est parfois l'état par défaut avant toute vraie demande.
+    if (permission === "denied" && !isStandaloneMode()) lsSet(PUSH_INVITE_DISMISSED_KEY, "1");
+    return false;
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  const storedPublicKey = lsGet(PUSH_VAPID_PUBLIC_KEY_STORAGE_KEY);
+  const shouldRenewForVapidKey = !!subscription && storedPublicKey !== publicKey;
+
+  if (subscription && (forceFresh || shouldRenewForVapidKey)) {
+    try { await subscription.unsubscribe(); } catch (error) {}
+    subscription = null;
+  }
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
+  }
+
+  await savePushSubscriptionToServer(subscription);
+  lsSet(PUSH_SUBSCRIBED_KEY, "1");
+  lsSet(PUSH_VAPID_PUBLIC_KEY_STORAGE_KEY, publicKey);
+  return true;
+}
+
+function refreshPushSubscriptionIfGranted() {
+  if (!browserCanUsePushNotifications()) return null;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return null;
+  if (pushSubscriptionSyncPromise) return pushSubscriptionSyncPromise;
+
+  pushSubscriptionSyncPromise = syncPushSubscriptionWithServer()
+    .catch((error) => {
+      console.warn("[push] resynchronisation abonnement impossible", error);
+      return false;
+    })
+    .finally(() => {
+      pushSubscriptionSyncPromise = null;
+    });
+
+  return pushSubscriptionSyncPromise;
+}
+
 async function enablePushNotificationsFromInvite() {
-  if (pushInviteEnablePending || !browserCanUsePushNotifications()) return;
+  if (pushInviteEnablePending || !browserCanUsePushNotifications()) return false;
 
   pushInviteEnablePending = true;
 
   try {
-    const keyResponse = await fetch(API + "/push/public-key");
-    if (!keyResponse.ok) throw new Error("push-key-unavailable");
-
-    const keyData = await keyResponse.json();
-    const publicKey = keyData?.publicKey;
-    if (!keyData?.available || !publicKey) throw new Error("push-key-unavailable");
-
-    let permission = Notification.permission;
-    if (permission !== "granted") {
-      permission = await Notification.requestPermission();
-    }
-
-    if (permission !== "granted") {
-      // Sur iOS standalone, "denied" est l'état par défaut avant toute vraie demande — ne pas marquer comme dismissé
-      if (permission === "denied" && !isStandaloneMode()) lsSet(PUSH_INVITE_DISMISSED_KEY, "1");
-      hidePushInvite();
-      return;
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-    const existingSubscription = await registration.pushManager.getSubscription();
-    const subscription = existingSubscription || await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey)
-    });
-
-    const saveResponse = await fetch(API + "/push-subscriptions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        legacyKey: getKey(),
-        subscription: typeof subscription.toJSON === "function"
-          ? subscription.toJSON()
-          : subscription
-      })
-    });
-
-    if (!saveResponse.ok) throw new Error("push-subscription-save-failed");
-
-    lsSet(PUSH_SUBSCRIBED_KEY, "1");
+    const synced = await syncPushSubscriptionWithServer({ askPermission: true });
     hidePushInvite();
+    return synced;
   } catch (error) {
     console.error(error);
     hidePushInvite();
+    return false;
   } finally {
     pushInviteEnablePending = false;
   }
@@ -15238,6 +15287,25 @@ function updateIndexRowContextOpenState(row) {
   row.classList.toggle('index-row-context-open', !!row.querySelector('[data-index-context-toggle][aria-expanded="true"]'));
 }
 
+function getIndexRowBottomBuffer(row) {
+  if (!row) return 2;
+  return window.matchMedia("(max-width: 768px)").matches ? 18 : 2;
+}
+
+function getIndexCardVisualBottomOffset(card, rowRect) {
+  if (!card || !rowRect) return 0;
+  const rects = [card.getBoundingClientRect()];
+  if (window.matchMedia("(max-width: 768px)").matches) {
+    card.querySelectorAll(
+      '.debate-card-meta-below-media, .debate-card-counts-row, .debate-card-footer-actions, .debate-card-context-extra, .debate-card-context-toggle'
+    ).forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect && rect.height > 0) rects.push(rect);
+    });
+  }
+  return Math.max(...rects.map((rect) => rect.bottom - rowRect.top));
+}
+
 function reserveIndexRowHeightForContextOpen(article, metaEl) {
   const row = article?.closest?.('.theme-horizontal-row');
   if (!row) return;
@@ -15263,7 +15331,10 @@ function reserveIndexRowHeightForContextOpen(article, metaEl) {
     }
   }
 
-  const neededHeight = Math.ceil(articleTop + targetArticleHeight + bottomPadding + 10);
+  const visualBottom = getIndexCardVisualBottomOffset(article, rowRect);
+  const neededHeight = Math.ceil(
+    Math.max(articleTop + targetArticleHeight, visualBottom) + bottomPadding + getIndexRowBottomBuffer(row)
+  );
   const currentHeight = parseFloat(row.style.height || '0') || rowRect.height || 0;
   if (neededHeight > currentHeight) {
     row.style.height = `${neededHeight}px`;
@@ -16850,9 +16921,9 @@ function syncIndexThemeRowHeight(row) {
   const rowRect = row.getBoundingClientRect();
   const rowStyle = getComputedStyle(row);
   const bottomPadding = parseInt(rowStyle.paddingBottom, 10) || 0;
-  const visualBottom = Math.max(...targetCards.map((card) => card.getBoundingClientRect().bottom - rowRect.top));
+  const visualBottom = Math.max(...targetCards.map((card) => getIndexCardVisualBottomOffset(card, rowRect)));
   const fallbackHeight = Math.max(...targetCards.map((card) => card.offsetTop + card.offsetHeight));
-  const nextHeight = Math.ceil(Math.max(visualBottom, fallbackHeight) + bottomPadding + 2);
+  const nextHeight = Math.ceil(Math.max(visualBottom, fallbackHeight) + bottomPadding + getIndexRowBottomBuffer(row));
 
   if (nextHeight > 0) {
     const currentHeight = parseFloat(row.style.height || '0') || 0;
@@ -16920,11 +16991,15 @@ function updateCarouselCardHighlight(row) {
       return c.offsetLeft >= scrollLeft - 2 && (c.offsetLeft + c.offsetWidth) <= viewRight + 2;
     });
     const targetCards = fullyVisible.length > 0 ? fullyVisible : [best];
-    const maxHeight = Math.max(...targetCards.map(c => c.offsetHeight));
+    const maxHeight = Math.max(...targetCards.map(c => {
+      const cardTop = c.getBoundingClientRect().top - rowRect.top;
+      const visualHeight = getIndexCardVisualBottomOffset(c, rowRect) - cardTop;
+      return Math.max(c.offsetHeight, visualHeight);
+    }));
     const rowStyle = getComputedStyle(row);
     const vertPadding = (parseInt(rowStyle.paddingTop) || 0) + (parseInt(rowStyle.paddingBottom) || 0);
     // Compenser le scale max (1.07) pour que la carte agrandie ne soit pas coupée
-    row.style.height = (Math.ceil(maxHeight * 1.07) + vertPadding) + 'px';
+    row.style.height = (Math.ceil(maxHeight * 1.07) + vertPadding + getIndexRowBottomBuffer(row)) + 'px';
     syncIndexThemeRowHeight(row);
   }
 
@@ -18494,20 +18569,36 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
   }
 
   const signature = parts[parts.length - 1] || "";
-  const question = parts[parts.length - 2] || "";
-  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
-  if (!hasAgonTail) {
+  const isSignature = parts.length >= 2 && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
+  if (!isSignature) {
     return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
   }
 
-  const possibleLatinQuestion = parts.length >= 4 ? parts[parts.length - 3] : "";
-  const hasLatinQuestion = !!possibleLatinQuestion && !/[?？]$/.test(possibleLatinQuestion);
-  const latinQuestion = hasLatinQuestion ? parts[parts.length - 3] : "";
-  const bodyParts = parts.slice(0, parts.length - (hasLatinQuestion ? 3 : 2));
+  const isLatinMotto = (text) => {
+    if (!text || /[?？]$/.test(text)) return false;
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    return wordCount > 0 && wordCount <= 6 && text.length <= 60;
+  };
+
+  const rest = parts.slice(0, parts.length - 1);
+  const last = rest[rest.length - 1] || "";
+  let question = "";
+  let latinQuestion = "";
+  let bodyParts = rest;
+  if (/[?？]$/.test(last)) {
+    question = last;
+    const beforeQuestion = rest.slice(0, rest.length - 1);
+    const candidate = beforeQuestion[beforeQuestion.length - 1] || "";
+    bodyParts = isLatinMotto(candidate) ? beforeQuestion.slice(0, beforeQuestion.length - 1) : beforeQuestion;
+    if (isLatinMotto(candidate)) latinQuestion = candidate;
+  } else if (isLatinMotto(last)) {
+    latinQuestion = last;
+    bodyParts = rest.slice(0, rest.length - 1);
+  }
 
   return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
     + (latinQuestion ? `<p class="article-latin-question">${escapeHtml(latinQuestion)}</p>` : "")
-    + `<p class="article-debate-question">${escapeHtml(question)}</p>`
+    + (question ? `<p class="article-debate-question">${escapeHtml(question)}</p>` : "")
     + `<p class="article-signature">${escapeHtml(signature)}</p>`;
 }
 
@@ -30065,9 +30156,9 @@ async function handlePushMenuClick() {
     return;
   }
 
-  await enablePushNotificationsFromInvite();
+  const subscribed = await enablePushNotificationsFromInvite();
 
-  if (Notification.permission === "granted") {
+  if (subscribed && Notification.permission === "granted") {
     const btn = document.getElementById("push-menu-item");
     const icon = document.getElementById("push-menu-icon");
     const label = document.getElementById("push-menu-label");
@@ -30075,6 +30166,8 @@ async function handlePushMenuClick() {
     if (icon) icon.className = "fa-regular fa-bell";
     if (label) label.textContent = "Alertes activées";
     showReplacementSuccessMessage("Notifications activées", "Tu recevras désormais les alertes en temps réel.", null, "🔔");
+  } else if (Notification.permission === "granted") {
+    showReplacementSuccessMessage("Erreur", "Les alertes n'ont pas pu être réactivées. Réessaie dans quelques instants.", null, "⚠️");
   }
 }
 
@@ -30099,15 +30192,21 @@ function maybeShowPushInviteOnStandaloneOpen() {
   }, 1500);
 }
 
-document.addEventListener("DOMContentLoaded", maybeShowPushInviteOnStandaloneOpen);
+function initPushSubscriptionRefresh() {
+  refreshPushSubscriptionIfGranted();
+}
 
 if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPushSubscriptionRefresh);
+  document.addEventListener("DOMContentLoaded", maybeShowPushInviteOnStandaloneOpen);
   document.addEventListener("DOMContentLoaded", initHomeTopbarMenu);
   document.addEventListener("DOMContentLoaded", initPushMenuItem);
   document.addEventListener("DOMContentLoaded", initDebateNotificationIframeTriggers);
   document.addEventListener("DOMContentLoaded", initDebateBottomExplorerLink);
   document.addEventListener("DOMContentLoaded", initDebateTopExplorerLink);
 } else {
+  initPushSubscriptionRefresh();
+  maybeShowPushInviteOnStandaloneOpen();
   initHomeTopbarMenu();
   initPushMenuItem();
   initDebateNotificationIframeTriggers();

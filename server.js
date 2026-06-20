@@ -2742,6 +2742,11 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
 // Nombre de publications récentes comparées au nouveau sujet pour le calcul de tendance
 const TREND_RECENT_SUBJECTS_LIMIT = 30;
 
+// Écart minimal avant qu'un débat puisse être considéré comme le remplaçant d'un autre :
+// les arènes sorties dans la même rafale de publication (lot de veille) ne sont pas
+// une évolution réelle de l'actu dans le temps, elles doivent rester visibles séparément.
+const MIN_TREND_MATCH_GAP_MS = 10 * 60 * 1000;
+
 /**
  * Compare un nouveau sujet avec les publications récentes pour détecter
  * s'il appartient à une même séquence d'actualité.
@@ -5387,7 +5392,10 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
           .neq("id", data.id)
           .order("created_at", { ascending: false })
           .limit(TREND_RECENT_SUBJECTS_LIMIT);
-        const recentSubjects = (recentRows || []).map((d) => {
+        const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
+        const recentSubjects = (recentRows || [])
+          .filter((d) => !d.created_at || new Date(d.created_at).getTime() <= matchCutoff)
+          .map((d) => {
           const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
           const srcExtras = extras.filter((e) => e && typeof e === "object" &&
             String(e.type || "source").trim() === "source" &&
@@ -7353,7 +7361,10 @@ const currentSourceCount = currentSourceKeys.size;
     .order("created_at", { ascending: false })
     .limit(TREND_RECENT_SUBJECTS_LIMIT);
 
-  const recentSubjects = (recentRows || []).map((d) => {
+  const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
+  const recentSubjects = (recentRows || [])
+    .filter((d) => !d.created_at || new Date(d.created_at).getTime() <= matchCutoff)
+    .map((d) => {
     const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
     const srcExtras = extras.filter((e) => e && typeof e === "object" &&
       String(e.type || "source").trim() === "source" &&
