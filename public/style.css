@@ -1071,10 +1071,10 @@ font-family: "Barlow Condensed", sans-serif;
 
 .debate-card-context-text[data-expanded="true"] .context-text-clamp,
 .debate-card-context-text[data-expanded="true"] p,
-.debate-card-context-text[data-expanded="true"] .article-body-paragraph,
-.debate-card-context-text[data-expanded="true"] .article-latin-question,
-.debate-card-context-text[data-expanded="true"] .article-debate-question,
-.debate-card-context-text[data-expanded="true"] .article-signature {
+.debate-card-context-text[data-expanded="true"] .context-body-paragraph,
+.debate-card-context-text[data-expanded="true"] .context-latin-question,
+.debate-card-context-text[data-expanded="true"] .context-debate-question,
+.debate-card-context-text[data-expanded="true"] .context-signature {
   font-size: inherit !important;
 }
 
@@ -1086,7 +1086,7 @@ font-family: "Barlow Condensed", sans-serif;
   font-weight: 400 !important;
 }
 
-.debate-card-context-text .article-latin-question {
+.debate-card-context-text .context-latin-question {
   display: block;
   font-weight: 800 !important;
   text-align: center;
@@ -1094,7 +1094,7 @@ font-family: "Barlow Condensed", sans-serif;
   margin: 0;
 }
 
-.debate-card-context-text .article-debate-question {
+.debate-card-context-text .context-debate-question {
   display: block;
   font-style: italic !important;
   text-align: center;
@@ -1102,7 +1102,7 @@ font-family: "Barlow Condensed", sans-serif;
   margin: 0;
 }
 
-.debate-card-context-text .article-reflection-question {
+.debate-card-context-text .context-reflection-question {
   display: block;
   font-style: italic !important;
   text-align: left;
@@ -13685,13 +13685,13 @@ body.page-debate .debate-context-text span {
   margin-bottom: 0.45em;
 }
 
-body.page-debate .debate-context-text .article-body-paragraph {
+body.page-debate .debate-context-text .context-body-paragraph {
   text-align: left;
   text-indent: 1.1em;
   white-space: pre-line;
 }
 
-body.page-debate .debate-context-text .article-latin-question {
+body.page-debate .debate-context-text .context-latin-question {
   display: block;
   text-align: center !important;
   text-indent: 0;
@@ -13700,21 +13700,21 @@ body.page-debate .debate-context-text .article-latin-question {
   margin-top: 1em;
 }
 
-body.page-debate .debate-context-text .article-debate-question {
+body.page-debate .debate-context-text .context-debate-question {
   text-align: center;
   text-indent: 0;
   font-style: italic;
   margin-top: 1em;
 }
 
-body.page-debate .debate-context-text .article-reflection-question {
+body.page-debate .debate-context-text .context-reflection-question {
   text-align: left;
   text-indent: 0;
   font-style: italic;
   margin-top: 1em;
 }
 
-body.page-debate .debate-context-text .article-signature {
+body.page-debate .debate-context-text .context-signature {
   text-align: left;
   text-indent: 0;
   font-weight: 400 !important;
@@ -19631,8 +19631,8 @@ body.page-home-mobile .debate-card-context-text :where(p, span, div) {
   font-weight: 400 !important;
 }
 
-body.page-home .debate-card-context-text .article-latin-question,
-body.page-home-mobile .debate-card-context-text .article-latin-question {
+body.page-home .debate-card-context-text .context-latin-question,
+body.page-home-mobile .debate-card-context-text .context-latin-question {
   font-weight: 800 !important;
 }
 
@@ -21176,6 +21176,20 @@ body.page-home-mobile .theme-horizontal-row {
 
   .home-bottom-nav {
     padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* En mode standalone, .home-bottom-nav grandit avec la safe-area (règle
+   ci-dessus), mais .app-floating-refresh-btn plafonnait cette safe-area à
+   10px (cf. règle mobile dans la section "Optimisations performance mobile") :
+   les boutons flottants (haut/bas/refresh) finissaient au même niveau que le
+   bandeau du bas au lieu de flotter au-dessus. On retire le plafond et on
+   recalcule l'offset pour garder ~15px d'écart au-dessus du bandeau, quelle
+   que soit la valeur de la safe-area (vérifié à 0 et 34px de safe-area-inset-bottom).
+   Voir public/style.css:21177 pour la formule du bandeau. */
+@media (display-mode: standalone) {
+  .app-floating-refresh-btn {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 

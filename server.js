@@ -2050,7 +2050,12 @@ async function fetchPreviewHtml(url, timeoutMs = 6000, profile = "browser") {
     }
 
     const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    const html = response.ok ? await response.text() : "";
+
+    // L'URL collée par l'utilisateur peut pointer directement sur une image
+    // (ex: lien gstatic encrypted-tbn0) plutôt que sur une page HTML avec des
+    // balises og:image à scraper. Dans ce cas inutile (et coûteux) de lire le
+    // corps en texte : il n'y a aucun HTML à parser.
+    const html = response.ok && !contentType.startsWith("image/") ? await response.text() : "";
 
     return {
       ok: response.ok,
@@ -2482,7 +2487,28 @@ async function getExternalLinkPreview(sourceUrl) {
           continue;
         }
 
-        if (!fetched?.ok || !fetched.html) {
+        if (!fetched?.ok) {
+          continue;
+        }
+
+        // Lien direct vers une image (pas de page HTML à scraper) : on l'utilise
+        // elle-même comme aperçu plutôt que de chercher des balises og:image absentes.
+        if (fetched.contentType.startsWith("image/")) {
+          const directImageUrl = fetched.finalUrl || safeUrl;
+          previewCandidates.push({
+            url: safeUrl,
+            finalUrl: directImageUrl,
+            canonicalUrl: directImageUrl,
+            domain,
+            title: domain,
+            description: "",
+            image: directImageUrl,
+            siteName: domain
+          });
+          break;
+        }
+
+        if (!fetched.html) {
           continue;
         }
 
@@ -3417,13 +3443,13 @@ app.get("/debates/:id", async (req, res) => {
       const meta = buildDebateMeta(req, debate);
       meta.url = buildAbsoluteUrl(req, `/debates/${encodeURIComponent(debateId)}`);
       const html = replaceMetaPlaceholders(template, meta);
-      return res.type("html").send(html);
+      return res.set("Cache-Control", "no-store").type("html").send(html);
     }
   } catch (error) {
     console.error(error);
   }
   const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
-  res.type("html").send(html);
+  res.set("Cache-Control", "no-store").type("html").send(html);
 });
 
 app.get("/create", (req, res) => {
@@ -3505,7 +3531,7 @@ app.get("/debate", async (req, res) => {
       image: buildAbsoluteUrl(req, "/logo.jpeg"),
       imageAlt: "Agôn — l'arène des idées"
     });
-    return res.type("html").send(html);
+    return res.set("Cache-Control", "no-store").type("html").send(html);
   }
 
   try {
@@ -3518,11 +3544,11 @@ app.get("/debate", async (req, res) => {
         image: buildAbsoluteUrl(req, "/logo.jpeg"),
         imageAlt: "Agôn — l'arène des idées"
       });
-      return res.status(404).type("html").send(html);
+      return res.status(404).set("Cache-Control", "no-store").type("html").send(html);
     }
 
     const html = replaceMetaPlaceholders(template, buildDebateMeta(req, debate));
-    return res.type("html").send(html);
+    return res.set("Cache-Control", "no-store").type("html").send(html);
   } catch (error) {
     console.error(error);
     const html = replaceMetaPlaceholders(template, {
@@ -3532,7 +3558,7 @@ app.get("/debate", async (req, res) => {
       image: buildAbsoluteUrl(req, "/logo.jpeg"),
       imageAlt: "Agôn — l'arène des idées"
     });
-    return res.type("html").send(html);
+    return res.set("Cache-Control", "no-store").type("html").send(html);
   }
 });
 

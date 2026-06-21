@@ -3428,6 +3428,14 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("contact-frame-open", String(pathname || "") === "/contact");
 }
 
+function setDebateIframeAiLoadingAnimationState(isOpen) {
+  const open = !!isOpen;
+  const modal = document.getElementById("debate-iframe-modal");
+  if (modal) modal.classList.toggle("ai-loading-animation-open-in-child", open);
+  document.documentElement.classList.toggle("ai-loading-animation-open-in-child", open);
+  if (document.body) document.body.classList.toggle("ai-loading-animation-open-in-child", open);
+}
+
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
   if (!frame) {
     setDebateIframeModalCloseButtonVisible(true);
@@ -3704,17 +3712,22 @@ function ensureDebateIframeModal() {
       display: none !important;
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
-      inset: 0 !important;
+      inset: 0 0 -180px 0 !important;
       padding: 0 !important;
       align-items: stretch !important;
       justify-content: stretch !important;
       background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
+      overflow: hidden !important;
+    }
+    html.ai-loading-animation-open-in-child,
+    body.ai-loading-animation-open-in-child {
+      background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-inner {
       width: 100% !important;
-      height: calc(100vh + 72px) !important;
+      height: calc(100vh + 180px) !important;
       max-width: none !important;
       max-height: none !important;
       border-radius: 0 !important;
@@ -3724,7 +3737,7 @@ function ensureDebateIframeModal() {
     }
     @supports (height: 100dvh) {
       #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-inner {
-        height: calc(100dvh + 72px) !important;
+        height: calc(100dvh + 180px) !important;
       }
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-frame {
@@ -3951,8 +3964,7 @@ function ensureDebateIframeModal() {
     }
 
     if (e.data.type === "agon:ai-loading-animation-visibility") {
-      const debateModal = document.getElementById("debate-iframe-modal");
-      if (debateModal) debateModal.classList.toggle("ai-loading-animation-open-in-child", !!e.data.open);
+      setDebateIframeAiLoadingAnimationState(!!e.data.open);
       return;
     }
 
@@ -4277,6 +4289,7 @@ function openDebateIframeModal(url, options = {}) {
   const existingModal = document.getElementById("debate-iframe-modal");
   if (existingModal) {
     existingModal.classList.remove("argument-form-open-in-child");
+    setDebateIframeAiLoadingAnimationState(false);
   }
 
   const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
@@ -4542,6 +4555,7 @@ function closeDebateIframeModal() {
     setDebateIframeModalCloseButtonVisible(false);
     window.__agonDebateModalOpen = false;
     window.__agonDebateModalOpenedFromNotifications = false;
+    setDebateIframeAiLoadingAnimationState(false);
     document.body.classList.remove("index-background-suspended");
     unlockPageScrollForDebateModal();
     _debateModalSavedScrollY = null;
@@ -4559,6 +4573,7 @@ function closeDebateIframeModal() {
 
   modal.classList.remove("open");
   modal.classList.remove("argument-form-open-in-child");
+  setDebateIframeAiLoadingAnimationState(false);
   setDebateIframeModalLoadingState(false);
   syncIndexUrlWithOpenIframeModal("");
   window.__agonDebateModalOpen = false;
@@ -5844,7 +5859,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isCommunityCard = !!d.is_community;
 
   return `
-    <article class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
       <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
@@ -5870,7 +5885,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
       ${buildIndexCardBottomEntryHtml(d, { mediaOutsideLink })}
       ${contextHtml}
       ${buildIndexCardFooterActionsHtml(d)}
-    </article>
+    </div>
   `;
 }
 
@@ -13721,7 +13736,7 @@ async function initAdminReports() {
                 : "#");
 
       return `
-<article class="debate-card debate-card-no-media">
+<div class="debate-card debate-card-no-media">
           <div class="debate-card-category">${typeLabel}</div>
           <h2>${escapeHtml(targetTitle)}</h2>
           <p><strong>Motif :</strong> ${reasonLabel}</p>
@@ -13755,7 +13770,7 @@ async function initAdminReports() {
               Supprimer le signalement
             </button>
           </div>
-        </article>
+        </div>
       `;
     }).join("");
   } catch (error) {
@@ -15221,9 +15236,9 @@ function renderIndexContextExpandedText(text, isOpen = false) {
     const betweenLatinAndLast = rawText.slice(latinStart + latinMotto.length, lastStart).replace(/^\n{2,}/, "\n");
     const afterLast = rawText.slice(lastStart + lastPart.length).replace(/^\n{2,}/, "\n");
     const lastHtml = /[?？]$/.test(lastPart)
-      ? `<span class="article-reflection-question">${escapeHtml(lastPart)}</span>`
+      ? `<span class="context-reflection-question">${escapeHtml(lastPart)}</span>`
       : escapeHtml(lastPart);
-    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndLast)}${lastHtml}${escapeHtmlNl(afterLast)}`;
+    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndLast)}${lastHtml}${escapeHtmlNl(afterLast)}`;
   }
 
   const signature = parts[parts.length - 1] || "";
@@ -15244,12 +15259,12 @@ function renderIndexContextExpandedText(text, isOpen = false) {
   if (questionStart < 0) {
     const beforeLatin = rawText.slice(0, latinStart);
     const afterLatin = rawText.slice(latinStart + latinQuestion.length);
-    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}`;
+    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}`;
   }
   const beforeLatin = rawText.slice(0, latinStart);
   const afterLatin = rawText.slice(latinStart + latinQuestion.length, questionStart).replace(/^\n{2,}/, "\n");
   const afterQuestion = rawText.slice(questionStart + question.length).replace(/^\n{2,}/, "\n");
-  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="article-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="article-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}`;
+  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="context-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}`;
 }
 
 function closeIndexContextPreview(button) {
@@ -18640,19 +18655,19 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
     const latinMotto = parts[parts.length - 2] || "";
     const hasOpenTail = parts.length >= 2;
     if (!hasOpenTail) {
-      return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
+      return parts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("");
     }
     const bodyParts = parts.slice(0, parts.length - 2);
-    const lastClass = /[?？]$/.test(lastPart) ? "article-reflection-question" : "article-body-paragraph";
-    return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
-      + `<p class="article-latin-question">${escapeHtml(latinMotto)}</p>`
-      + `<p class="${lastClass}">${escapeHtml(lastPart)}</p>`;
+    const lastClass = /[?？]$/.test(lastPart) ? "context-reflection-question" : "context-body-paragraph";
+    return bodyParts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("")
+      + `<div class="context-latin-question">${escapeHtml(latinMotto)}</div>`
+      + `<div class="${lastClass}">${escapeHtml(lastPart)}</div>`;
   }
 
   const signature = parts[parts.length - 1] || "";
   const isSignature = parts.length >= 2 && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
   if (!isSignature) {
-    return parts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("");
+    return parts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("");
   }
 
   const isLatinMotto = (text) => {
@@ -18677,10 +18692,10 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
     bodyParts = rest.slice(0, rest.length - 1);
   }
 
-  return bodyParts.map((part) => `<p class="article-body-paragraph">${escapeHtml(part)}</p>`).join("")
-    + (latinQuestion ? `<p class="article-latin-question">${escapeHtml(latinQuestion)}</p>` : "")
-    + (question ? `<p class="article-debate-question">${escapeHtml(question)}</p>` : "")
-    + `<p class="article-signature">${escapeHtml(signature)}</p>`;
+  return bodyParts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("")
+    + (latinQuestion ? `<div class="context-latin-question">${escapeHtml(latinQuestion)}</div>` : "")
+    + (question ? `<div class="context-debate-question">${escapeHtml(question)}</div>` : "")
+    + `<div class="context-signature">${escapeHtml(signature)}</div>`;
 }
 
 function renderDebateContext(content, isOpen = false) {
@@ -18740,7 +18755,7 @@ function renderEvaluationAxis(debate) {
 
   el.innerHTML = '<span class="debate-evaluation-axis-label">' + labelText + '</span>'
     + strictnessBadgeHtml
-    + '<p class="debate-evaluation-axis-text">' + escapeHtml(bodyText) + '</p>';
+    + '<div class="debate-evaluation-axis-text">' + escapeHtml(bodyText) + '</div>';
 
   const contextWrap = document.getElementById('debate-context-wrap');
   const hero = document.querySelector('section.debate-hero');
@@ -18754,11 +18769,11 @@ function renderEvaluationAxis(debate) {
   if (formAxisEl) {
     if (isOpen && axis) {
       formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Barème personnalisé — sur 100 points</span>'
-        + '<p class="form-evaluation-axis-text">' + escapeHtml(axis) + '</p>';
+        + '<div class="form-evaluation-axis-text">' + escapeHtml(axis) + '</div>';
       formAxisEl.style.display = 'block';
     } else if (axisHidden) {
       formAxisEl.innerHTML = '<span class="form-evaluation-axis-label">Barème personnalisé — sur 100 points</span>'
-        + '<p class="form-evaluation-axis-text">' + escapeHtml(hiddenText) + '</p>';
+        + '<div class="form-evaluation-axis-text">' + escapeHtml(hiddenText) + '</div>';
       formAxisEl.style.display = 'block';
     } else {
       formAxisEl.style.display = 'none';
@@ -21149,14 +21164,14 @@ function renderSimilarDebatesLoadingState(container) {
 
     <div class="similar-debates-skeleton-list" aria-hidden="true">
       ${Array.from({ length: 3 }).map(() => `
-        <article class="similar-debates-skeleton-card">
+        <div class="similar-debates-skeleton-card">
           <div class="similar-debates-skeleton-line" style="width: 34%;"></div>
           <div class="similar-debates-skeleton-line" style="width: 82%; margin-top: 14px; height: 15px;"></div>
           <div class="similar-debates-skeleton-line" style="width: 68%;"></div>
           <div class="similar-debates-skeleton-line" style="width: 100%; margin-top: 16px;"></div>
           <div class="similar-debates-skeleton-line" style="width: 92%;"></div>
           <div class="similar-debates-skeleton-line" style="width: 54%; margin-top: 16px;"></div>
-        </article>
+        </div>
       `).join("")}
     </div>
   `;
@@ -24880,7 +24895,7 @@ const hiddenCommentsCount = Math.max(0, comments.length - visibleComments.length
 const repliesByParentId = buildCommentRepliesByParent(allComments);
 
 return `
-<article id="argument-${a.id}"
+<div id="argument-${a.id}"
          class="argument-card ${voted ? "argument-card-voted" : ""}"
   ondblclick="handleArgumentDoubleClick(event, '${a.side === "A" ? "a" : "b"}', '${a.id}')">
   ${renderStrongProgressBadge(a)}
@@ -25225,7 +25240,7 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
           ` : ""}
 
         </div>
-      </article>
+      </div>
     `;
   }).join("");
 if (hiddenArgs.length > 0) {
@@ -25336,7 +25351,7 @@ const cardSideClass = debateIsOpen
   : (a.side === "A" ? "argument-card-a" : "argument-card-b");
    
 return `
-    <article id="list-argument-${a.id}" class="argument-card argument-card-unified ${cardSideClass} ${voted ? "argument-card-voted" : ""}">
+    <div id="list-argument-${a.id}" class="argument-card argument-card-unified ${cardSideClass} ${voted ? "argument-card-voted" : ""}">
       ${renderStrongProgressBadge(a)}
       ${(isOwner || isAdmin()) ? `
         <button
@@ -25679,7 +25694,7 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
             </div>
           ` : ""}
         </div>
-      </article>
+      </div>
     `;
   }).join("");
 

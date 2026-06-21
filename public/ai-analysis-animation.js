@@ -86,12 +86,15 @@
     var el = document.createElement('style');
     el.textContent = `
       #aala-overlay {
-        position: fixed; top: 0; right: 0; bottom: -72px; left: 0; z-index: 100000;
-        width: 100vw; min-height: calc(var(--aala-vvh, 100vh) + 72px);
+        --aala-bottom-bleed: 180px;
+        position: fixed; top: 0; right: 0; bottom: auto; left: 0; z-index: 100000;
+        width: 100vw;
+        height: calc(var(--aala-vvh, 100vh) + var(--aala-bottom-bleed));
+        min-height: calc(var(--aala-vvh, 100vh) + var(--aala-bottom-bleed));
         --aala-center-y: calc(var(--aala-vvh, 100vh) / 2);
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
-        background: #06161e;
+        background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
         opacity: 1;
         transition: opacity ${FADE_MS}ms ease;
         overscroll-behavior: none;
@@ -102,13 +105,17 @@
       }
       @supports (height: 100dvh) {
         #aala-overlay {
-          min-height: calc(var(--aala-vvh, 100dvh) + 72px);
+          height: calc(var(--aala-vvh, 100dvh) + var(--aala-bottom-bleed));
+          min-height: calc(var(--aala-vvh, 100dvh) + var(--aala-bottom-bleed));
         }
       }
       #aala-overlay::before {
         content: "";
         position: absolute;
         inset: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
         z-index: 0;
         pointer-events: none;
         background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
