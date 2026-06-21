@@ -42,9 +42,34 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+  <!-- style.min.css reste bloquant : il pilote toute la mise en page (dont les
+       positions des bulles du nuage), un retard ici casse visuellement la page.
+       Google Fonts / Font Awesome sont des CDN externes purement cosmétiques
+       (police de repli + icônes) : un léger retard n'abîme pas la mise en page,
+       donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
+       réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
+       déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
   <link rel="stylesheet" href="/style.min.css?v=20260621-app-safearea-bg">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+  <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin>
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  </noscript>
+  <script>
+    (function () {
+      function swap(link) {
+        if (!link || link.rel === 'stylesheet') return;
+        link.rel = 'stylesheet';
+      }
+      ['agon-font-preload', 'agon-fa-preload'].forEach(function (id) {
+        var link = document.getElementById(id);
+        if (!link) return;
+        link.addEventListener('load', function () { swap(link); }, { once: true });
+        setTimeout(function () { swap(link); }, 3000);
+      });
+    })();
+  </script>
   <style>
     html:not(.admin-ui-ready) [data-admin] {
       display: none !important;
