@@ -3698,7 +3698,9 @@ function ensureDebateIframeModal() {
       pointer-events: none;
     }
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-close,
-    #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh {
+    #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh,
+    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-close,
+    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh {
       display: none !important;
     }
     body:has(#debate-iframe-modal.open) .mobile-back-button {
@@ -3916,6 +3918,12 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:ai-score-modal-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("ai-score-modal-open-in-child", !!e.data.open);
+      return;
+    }
+
+    if (e.data.type === "agon:ai-loading-animation-visibility") {
+      const debateModal = document.getElementById("debate-iframe-modal");
+      if (debateModal) debateModal.classList.toggle("ai-loading-animation-open-in-child", !!e.data.open);
       return;
     }
 

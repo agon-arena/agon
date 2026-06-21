@@ -221,6 +221,7 @@
       if (token !== _showToken) return;
       _showAt = Date.now();
       document.body.appendChild(buildOverlay());
+      try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: true }, '*'); } catch (e) {}
     });
   }
 
@@ -249,6 +250,7 @@
           overlay.classList.add('is-hiding');
           setTimeout(function () {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: false }, '*'); } catch (e) {}
             if (callback) callback();
           }, FADE_MS);
         } else {

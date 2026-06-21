@@ -2003,7 +2003,7 @@
         });
         btn.dataset.adaExpanded = '0';
         btn.classList.remove('is-collapse');
-        btn.textContent = 'Charger plus d\'arguments';
+        btn.textContent = 'Charger plus d\'idées';
         scrollToAnalysisElement(btn.closest('.ada-args-details') || list);
         return;
       }
@@ -2011,8 +2011,7 @@
         card.classList.remove('ada-arg-extra-hidden');
       });
       btn.dataset.adaExpanded = '1';
-      btn.classList.add('is-collapse');
-      btn.textContent = 'Masquer les arguments';
+      btn.style.display = 'none';
     });
   }
 
