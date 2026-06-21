@@ -3703,6 +3703,35 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh {
       display: none !important;
     }
+    #debate-iframe-modal.ai-loading-animation-open-in-child {
+      inset: 0 !important;
+      padding: 0 !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+      background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-inner {
+      width: 100% !important;
+      height: calc(100vh + 72px) !important;
+      max-width: none !important;
+      max-height: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      background: #06161e !important;
+      transform: translateZ(0);
+    }
+    @supports (height: 100dvh) {
+      #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-inner {
+        height: calc(100dvh + 72px) !important;
+      }
+    }
+    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-frame {
+      width: 100% !important;
+      height: 100% !important;
+      background: #06161e !important;
+    }
     body:has(#debate-iframe-modal.open) .mobile-back-button {
       display: none !important;
     }

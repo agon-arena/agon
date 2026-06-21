@@ -1,4 +1,13 @@
-const SW_VERSION = "20260611-v6";
+const SW_VERSION = "20260621-v7";
+const STATIC_CACHE = `agon-static-${SW_VERSION}`;
+
+// Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
+// cache-first, une nouvelle version a une URL différente donc pas de risque de
+// servir du contenu obsolète. Ça évite de retélécharger ces fichiers (et les CSS
+// externes de polices/icônes) à chaque ouverture froide de l'app installée.
+function isCacheableStaticAsset(url) {
+  return /\.(?:css|js|png|jpe?g|svg|webp|woff2?|ttf)(?:\?.*)?$/i.test(url);
+}
 
 function buildRecoveryResponse(targetUrl) {
   const safeUrl = String(targetUrl || "/");
@@ -54,23 +63,51 @@ self.addEventListener("install", () => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((key) => key !== STATIC_CACHE).map((key) => caches.delete(key)))
+      )
+    ])
+  );
 });
 
-// Force les pages HTML à être toujours rechargées depuis le réseau (contourne le cache iOS PWA).
-// Si le serveur répond 5xx pendant un redémarrage, on ne laisse pas iOS standalone
-// mémoriser une page d'erreur brute : on sert une page de récupération non cachable.
 self.addEventListener("fetch", (event) => {
-  if (event.request.mode === "navigate") {
+  const { request } = event;
+
+  // Force les pages HTML à être toujours rechargées depuis le réseau (contourne le cache iOS PWA).
+  // Si le serveur répond 5xx pendant un redémarrage, on ne laisse pas iOS standalone
+  // mémoriser une page d'erreur brute : on sert une page de récupération non cachable.
+  if (request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request, { cache: "no-store" }).then((response) => {
+      fetch(request, { cache: "no-store" }).then((response) => {
         if (response && response.status >= 500) {
-          return buildRecoveryResponse(event.request.url);
+          return buildRecoveryResponse(request.url);
         }
         return response;
-      }).catch(() => buildRecoveryResponse(event.request.url))
+      }).catch(() => buildRecoveryResponse(request.url))
     );
     return;
+  }
+
+  // Assets statiques (CSS/JS/images/polices, même origine ou CDN) : cache-first
+  // avec revalidation en arrière-plan, pour accélérer les ouvertures suivantes
+  // de l'app sans jamais bloquer sur le réseau si une copie est déjà en cache.
+  if (request.method === "GET" && isCacheableStaticAsset(request.url)) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          const networkFetch = fetch(request).then((response) => {
+            if (response && (response.ok || response.type === "opaque")) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(() => cached);
+          return cached || networkFetch;
+        })
+      )
+    );
   }
 });
 

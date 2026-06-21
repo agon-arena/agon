@@ -28,6 +28,7 @@
   <link rel="preconnect" href="https://www.youtube-nocookie.com">
   <link rel="preconnect" href="https://syndication.twitter.com">
   <link rel="preconnect" href="https://www.instagram.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 
   <link rel="icon" href="/favicon-64.png" type="image/png">
   <link rel="preload" href="/sablier-96.png" as="image">
@@ -41,9 +42,17 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="/style.min.css?v=20260620-index-dots-up">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Chargement non bloquant : le loader plein écran (#agon-startup-loader, CSS critique
+       inline ci-dessous) masque la page pendant que ces feuilles arrivent, donc on évite
+       qu'elles retardent le premier paint (et donc le démarrage de l'animation du loader). -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" as="style" href="/style.min.css?v=20260620-index-dots-up" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+    <link rel="stylesheet" href="/style.min.css?v=20260620-index-dots-up">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  </noscript>
   <style>
     html:not(.admin-ui-ready) [data-admin] {
       display: none !important;
@@ -876,7 +885,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260621-bubble-badge-overlap-fix" defer></script>
+<script src="/script.min.js?v=20260621-ai-animation-bottom-cover" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
