@@ -1028,26 +1028,50 @@ async function rebuildCloudBubbles() {
     if (Array.isArray(d.keywords) && d.keywords.length) keywordsMap[d.id] = d.keywords;
   }
 
+  // Masque les ancêtres explicitement cités par matchedSubjectId, sur toute la
+  // profondeur de la chaîne (ex: 941→940→921 doit masquer 940 ET 921, même si 940
+  // est lui-même ignoré avant d'avoir pu propager son propre lien). On ne fusionne
+  // jamais deux débats qui n'ont pas de lien direct/transitif entre eux : des
+  // « cousins » reliés seulement par un ancêtre commun lointain (ex: deux sujets
+  // sortis dans la même rafale de veille, jamais comparés entre eux par l'IA)
+  // restent des bulles séparées — la fenêtre anti-rafale (MIN_TREND_MATCH_GAP_MS)
+  // doit rester respectée, on ne la contourne pas via un ancêtre partagé.
+  const trendParent = new Map();
+  for (const debate of (allDebates || [])) {
+    const matchedId = getDebateTrend(debate.id)?.matchedSubjectId;
+    if (matchedId) trendParent.set(String(debate.id), String(matchedId));
+  }
+
+  const hiddenAncestors = new Set();
+  for (const startId of trendParent.keys()) {
+    const visited = new Set([startId]);
+    let current = trendParent.get(startId);
+    while (current && !visited.has(current)) {
+      hiddenAncestors.add(current);
+      visited.add(current);
+      current = trendParent.get(current);
+    }
+  }
+
   const seenTags = new Set();
-  const supersededByTrend = new Set();
   const candidates = [];
   for (const debate of (allDebates || [])) {
-    if (supersededByTrend.has(String(debate.id))) continue;
+    const id = String(debate.id);
+    if (hiddenAncestors.has(id)) continue;
+
     const label = getCloudLabelFromDebate(debate.id, keywordsMap);
     if (!label) continue;
     const sourceCount = countCloudSources(debate);
     if (sourceCount <= 0) continue;
     const normTag = normalizeTag(label);
     if (seenTags.has(normTag)) continue;
+
     seenTags.add(normTag);
     const debateDate = debate.source_published_at || debate.created_at || now;
     const trendEntry = getDebateTrend(debate.id);
-    if (trendEntry?.matchedSubjectId) {
-      supersededByTrend.add(String(trendEntry.matchedSubjectId));
-    }
     candidates.push({
       tag: label,
-      subjectId: String(debate.id),
+      subjectId: id,
       count: sourceCount,
       debateDate,
       trend: Number(trendEntry?.trend ?? 0),
@@ -2740,7 +2764,7 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
 
 
 // Nombre de publications récentes comparées au nouveau sujet pour le calcul de tendance
-const TREND_RECENT_SUBJECTS_LIMIT = 30;
+const TREND_RECENT_SUBJECTS_LIMIT = 10;
 
 // Écart minimal avant qu'un débat puisse être considéré comme le remplaçant d'un autre :
 // les arènes sorties dans la même rafale de publication (lot de veille) ne sont pas

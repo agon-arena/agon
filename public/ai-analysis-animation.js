@@ -62,7 +62,8 @@
     var el = document.createElement('style');
     el.textContent = `
       #aala-overlay {
-        position: fixed; inset: 0; z-index: 9998;
+        position: fixed; inset: 0; z-index: 100000;
+        width: 100vw; height: 100dvh;
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
         background: url("/visuels/fondanimation.webp") center center / cover no-repeat;

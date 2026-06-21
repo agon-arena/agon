@@ -507,6 +507,7 @@ function positionTrendBadges(container) {
 
     function scoreCandidate(angleDeg, distance, options = {}) {
       const relaxed = options.relaxed === true;
+      const avoidBadgeOverlap = options.avoidBadgeOverlap === true;
       const textRects = Array.isArray(options.textRects) ? options.textRects : overlayRects;
       const rad = angleDeg * Math.PI / 180;
       const cx = geo.cx + Math.cos(rad) * distance;
@@ -522,6 +523,15 @@ function positionTrendBadges(container) {
       const nearestX = Math.min(Math.max(geo.cx, l), r);
       const nearestY = Math.min(Math.max(geo.cy, t), b);
       if (!relaxed && Math.hypot(nearestX - geo.cx, nearestY - geo.cy) > geo.r) return null;
+
+      // Chevauchement avec un badge déjà placé : par défaut une simple pénalité
+      // de score, mais peut devenir un rejet strict (cf. avoidBadgeOverlap) pour
+      // qu'un badge ne recouvre jamais visuellement un autre badge.
+      let badgeOverlapArea = 0;
+      for (const pb of placed) {
+        badgeOverlapArea += getOverlapArea(l, t, r, b, pb.l, pb.t, pb.r, pb.b);
+      }
+      if (avoidBadgeOverlap && badgeOverlapArea > 0) return null;
 
       let s = 0;
 
@@ -553,39 +563,24 @@ function positionTrendBadges(container) {
         textOverlapArea += getOverlapArea(l, t, r, b, or.l, or.t, or.r, or.b);
       }
 
-      // Pénalité : chevauchement avec badge déjà placé
-      for (const pb of placed) {
-        s -= getOverlapArea(l, t, r, b, pb.l, pb.t, pb.r, pb.b) * 15;
-      }
+      s -= badgeOverlapArea * 15;
 
       // Blocage absolu : bouton central
       if (cbtnR && rectsOverlap(l, t, r, b, cbtnR.l, cbtnR.t, cbtnR.r, cbtnR.b)) {
         return null;
       }
 
-      return { score: s, textOverlapArea, l, t, r, b };
+      return { score: s, textOverlapArea, badgeOverlapArea, l, t, r, b };
     }
 
-    let bestReadable = null;
-    for (const distance of distanceCandidates) {
-      for (const angle of angleCandidates) {
-        const candidate = scoreCandidate(angle, distance);
-        if (!candidate) continue;
-        if (candidate.textOverlapArea > 0) continue;
-        if (!bestReadable || candidate.score > bestReadable.score) {
-          bestReadable = candidate;
-        }
-      }
-    }
-
-    // Si la marge de confort autour du texte force le badge trop loin, on
-    // retente dans la bulle avec une marge plus serrée avant d'autoriser
-    // une sortie avec connecteur. Le texte reste protégé, mais le badge ne
-    // s'éloigne que si aucune position interne lisible n'existe.
-    if (!bestReadable) {
+    // Cherche le meilleur candidat en 3 passes (lecture stricte, lecture serrée,
+    // sortie avec connecteur). Quand avoidBadgeOverlap est vrai, un candidat qui
+    // chevaucherait un badge déjà placé est rejeté plutôt que simplement pénalisé.
+    function findBestCandidate(avoidBadgeOverlap) {
+      let bestReadable = null;
       for (const distance of distanceCandidates) {
         for (const angle of angleCandidates) {
-          const candidate = scoreCandidate(angle, distance, { textRects: tightOverlayRects });
+          const candidate = scoreCandidate(angle, distance, { avoidBadgeOverlap });
           if (!candidate) continue;
           if (candidate.textOverlapArea > 0) continue;
           if (!bestReadable || candidate.score > bestReadable.score) {
@@ -593,22 +588,50 @@ function positionTrendBadges(container) {
           }
         }
       }
-    }
 
-    let best = bestReadable;
-    let usesConnector = false;
-    if (!best) {
-      for (const distance of relaxedDistanceCandidates) {
-        for (const angle of angleCandidates) {
-          const candidate = scoreCandidate(angle, distance, { relaxed: true });
-          if (!candidate) continue;
-          if (candidate.textOverlapArea > 0) continue;
-          if (!best || candidate.score > best.score) {
-            best = candidate;
-            usesConnector = true;
+      // Si la marge de confort autour du texte force le badge trop loin, on
+      // retente dans la bulle avec une marge plus serrée avant d'autoriser
+      // une sortie avec connecteur. Le texte reste protégé, mais le badge ne
+      // s'éloigne que si aucune position interne lisible n'existe.
+      if (!bestReadable) {
+        for (const distance of distanceCandidates) {
+          for (const angle of angleCandidates) {
+            const candidate = scoreCandidate(angle, distance, { textRects: tightOverlayRects, avoidBadgeOverlap });
+            if (!candidate) continue;
+            if (candidate.textOverlapArea > 0) continue;
+            if (!bestReadable || candidate.score > bestReadable.score) {
+              bestReadable = candidate;
+            }
           }
         }
       }
+
+      let best = bestReadable;
+      let usesConnector = false;
+      if (!best) {
+        for (const distance of relaxedDistanceCandidates) {
+          for (const angle of angleCandidates) {
+            const candidate = scoreCandidate(angle, distance, { relaxed: true, avoidBadgeOverlap });
+            if (!candidate) continue;
+            if (candidate.textOverlapArea > 0) continue;
+            if (!best || candidate.score > best.score) {
+              best = candidate;
+              usesConnector = true;
+            }
+          }
+        }
+      }
+
+      return { best, usesConnector };
+    }
+
+    // 1re tentative : aucun chevauchement toléré entre badges. Si la bulle est
+    // trop entourée pour qu'une place libre existe, on retombe sur l'ancien
+    // comportement (chevauchement autorisé en dernier recours) plutôt que de
+    // cacher le badge.
+    let { best, usesConnector } = findBestCandidate(true);
+    if (!best) {
+      ({ best, usesConnector } = findBestCandidate(false));
     }
 
     if (!best) {

@@ -17661,7 +17661,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260618-bubbles-slightly-smaller");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260621-badge-overlap-fix");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
