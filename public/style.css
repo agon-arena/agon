@@ -20683,6 +20683,39 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 }
 
+/* Correctif final app/iOS : ne jamais laisser la safe-area basse reprendre
+   le gris global du body. */
+@media (max-width: 768px), (display-mode: standalone) {
+  html {
+    background-color: #243038 !important;
+  }
+
+  body.page-home-mobile,
+  body.page-create-mobile,
+  body.page-notifications-mobile,
+  body.page-debate,
+  body.page-contact,
+  body.page-about {
+    min-height: 100vh !important;
+    background-color: #243038 !important;
+  }
+
+  @supports (min-height: 100dvh) {
+    body.page-home-mobile,
+    body.page-create-mobile,
+    body.page-notifications-mobile,
+    body.page-debate,
+    body.page-contact,
+    body.page-about {
+      min-height: 100dvh !important;
+    }
+  }
+
+  .home-bottom-nav {
+    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
 .about-accordion {
   border-top: 1px solid #e5e7eb;
 }
@@ -21085,6 +21118,40 @@ body.page-home-mobile .theme-horizontal-row {
 
 /* ── Optimisations performance mobile ── */
 @media (max-width: 768px) {
+  html,
+  body.page-home-mobile,
+  body.page-create-mobile,
+  body.page-notifications-mobile,
+  body.page-debate,
+  body.page-contact,
+  body.page-about {
+    background-color: #243038 !important;
+  }
+
+  html {
+    min-height: 100%;
+  }
+
+  body.page-home-mobile,
+  body.page-create-mobile,
+  body.page-notifications-mobile,
+  body.page-debate,
+  body.page-contact,
+  body.page-about {
+    min-height: 100vh;
+  }
+
+  @supports (min-height: 100dvh) {
+    body.page-home-mobile,
+    body.page-create-mobile,
+    body.page-notifications-mobile,
+    body.page-debate,
+    body.page-contact,
+    body.page-about {
+      min-height: 100dvh;
+    }
+  }
+
   .debate-card,
   .home-bottom-nav,
   .app-floating-refresh-btn,
@@ -21099,6 +21166,16 @@ body.page-home-mobile .theme-horizontal-row {
   .debate-card:hover,
   .debate-card:focus-within {
     will-change: auto !important;
+  }
+}
+
+@media (max-width: 768px), (display-mode: standalone) {
+  html {
+    background: #243038 !important;
+  }
+
+  .home-bottom-nav {
+    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 

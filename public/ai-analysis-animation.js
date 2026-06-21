@@ -88,6 +88,7 @@
       #aala-overlay {
         position: fixed; top: 0; right: 0; bottom: -72px; left: 0; z-index: 100000;
         width: 100vw; min-height: calc(var(--aala-vvh, 100vh) + 72px);
+        --aala-center-y: calc(var(--aala-vvh, 100vh) / 2);
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
         background: #06161e;
@@ -123,7 +124,7 @@
 
       /* Sablier centré, toujours au-dessus */
       .aala-sablier {
-        position: absolute; top: 50%; left: 50%;
+        position: absolute; top: var(--aala-center-y, 50vh); left: 50%;
         width: 140px; height: 140px;
         z-index: 4;
         animation: aala-spin-pulse 5s linear infinite;
@@ -146,7 +147,7 @@
 
       /* Cerveaux positionnés au centre de l'overlay */
       .aala-brain {
-        position: absolute; top: 50%; left: 50%;
+        position: absolute; top: var(--aala-center-y, 50vh); left: 50%;
         z-index: 2;
         pointer-events: none; user-select: none;
         line-height: 1; text-align: center;
