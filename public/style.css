@@ -10185,6 +10185,8 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
 /* ===== HOME BOTTOM NAV ===== */
 
 :root {
+  --agon-mobile-bottom-fill: 0px;
+  --agon-safe-bottom: env(safe-area-inset-bottom, 0px);
   --home-bottom-nav-offset: 0px;
 }
 
@@ -22069,6 +22071,16 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 /* Override ultime iOS/PWA : ce bloc doit rester a la toute fin. */
 @media (max-width: 768px), (display-mode: standalone) {
+  :root {
+    --agon-safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @supports (bottom: max(0px, 1px)) {
+    :root {
+      --agon-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--agon-mobile-bottom-fill, 0px));
+    }
+  }
+
   html {
     min-height: 100% !important;
     background: transparent !important;
@@ -22080,7 +22092,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-debate,
   body.page-contact,
   body.page-about {
-    min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: calc(100vh + var(--agon-safe-bottom)) !important;
     background-clip: border-box !important;
   }
 
@@ -22091,7 +22103,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-debate,
     body.page-contact,
     body.page-about {
-      min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+      min-height: calc(100dvh + var(--agon-safe-bottom)) !important;
     }
   }
 
@@ -22120,8 +22132,8 @@ body.page-create-mobile .create-card .create-submit-helper {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-    height: env(safe-area-inset-bottom, 0px);
+    bottom: calc(0px - var(--agon-safe-bottom));
+    height: var(--agon-safe-bottom);
     z-index: 1;
     pointer-events: none;
     background: inherit;
@@ -22140,24 +22152,24 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.ai-loading-animation-open-in-child::after,
   html.aala-overlay-active body::after {
-    bottom: -220px;
-    height: calc(env(safe-area-inset-bottom, 0px) + 220px);
+    bottom: calc(-220px - var(--agon-safe-bottom));
+    height: calc(var(--agon-safe-bottom) + 220px);
     z-index: 99999;
     background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
   }
 
   .home-bottom-nav {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
-    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(0px - var(--agon-safe-bottom)) !important;
+    padding-bottom: calc(3px + var(--agon-safe-bottom)) !important;
   }
 
   #debate-iframe-modal.open {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(0px - var(--agon-safe-bottom)) !important;
   }
 
   #debate-iframe-modal.ai-loading-animation-open-in-child,
   #debate-ai-parent-animation-overlay,
   #aala-overlay {
-    bottom: -220px !important;
+    bottom: calc(-220px - var(--agon-safe-bottom)) !important;
   }
 }

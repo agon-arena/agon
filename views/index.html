@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260621-safearea-fill">
+  <link rel="stylesheet" href="/style.min.css?v=20260621-safearea-px">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -902,7 +902,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260621-ai-parent-fullbleed" defer></script>
+<script src="/script.min.js?v=20260621-safearea-px" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1472,5 +1472,53 @@
     <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
   </div>
 </div>
+<script>
+(function(){
+  // Panneau de diagnostic temporaire (?debugFloat=1) pour mesurer en direct la
+  // safe-area et la position réelle des boutons flottants / du bandeau du bas
+  // sur un vrai appareil, sans avoir besoin de l'Inspecteur Web. À retirer une
+  // fois le réglage validé. Persisté en localStorage pour rester actif dans
+  // l'app installée (qui s'ouvre toujours sur "/" sans paramètre d'URL).
+  var debugFloatParam = new URLSearchParams(location.search).get('debugFloat');
+  if (debugFloatParam === '1') { try { localStorage.setItem('agon_debug_float', '1'); } catch (e) {} }
+  if (debugFloatParam === '0') { try { localStorage.removeItem('agon_debug_float'); } catch (e) {} }
+  var debugFloatOn = debugFloatParam === '1' || (function () { try { return localStorage.getItem('agon_debug_float') === '1'; } catch (e) { return false; } })();
+  if (!debugFloatOn) return;
+
+  var panel = document.createElement('div');
+  panel.style.cssText = 'position:fixed;top:8px;left:8px;right:8px;z-index:999999;background:rgba(0,0,0,0.85);color:#0f0;font:11px/1.4 monospace;padding:8px;border-radius:8px;white-space:pre-wrap;pointer-events:none;';
+  document.body.appendChild(panel);
+
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:0;bottom:env(safe-area-inset-bottom, -1px);width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(probe);
+
+  function rect(sel) {
+    var el = document.querySelector(sel);
+    if (!el) return 'absent';
+    var r = el.getBoundingClientRect();
+    return 'top=' + Math.round(r.top) + ' bottom=' + Math.round(r.bottom) + ' height=' + Math.round(r.height);
+  }
+
+  function update() {
+    var safeAreaBottom = Math.round(window.innerHeight - probe.getBoundingClientRect().top);
+    panel.textContent =
+      'standalone=' + (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) +
+      '\ninnerHeight=' + window.innerHeight + ' visualViewport.height=' + (window.visualViewport ? Math.round(window.visualViewport.height) : 'n/a') +
+      '\nsafe-area-inset-bottom=' + safeAreaBottom +
+      '\nnav: ' + rect('.home-bottom-nav') +
+      '\nbtn-up: ' + rect('.index-floating-scroll-up') +
+      '\nbtn-refresh: ' + rect('.index-floating-refresh-btn:not(.index-floating-scroll-btn)') +
+      '\nbtn-down: ' + rect('.index-floating-scroll-down') +
+      '\nscrollY=' + Math.round(window.scrollY);
+  }
+
+  update();
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', update);
+  setInterval(update, 500);
+})();
+</script>
 </body>
 </html>

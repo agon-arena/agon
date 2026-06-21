@@ -30121,8 +30121,61 @@ window.scrollToTheme = scrollToTheme;
 
 let homeBottomNavViewportOffsetRaf = null;
 let homeBottomNavViewportOffsetTimeout = null;
+let agonSafeAreaBottomProbe = null;
+
+function isAgonMobileViewportBottomFillEnabled() {
+  return window.innerWidth <= 768 ||
+    window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches ||
+    window.matchMedia?.("(display-mode: standalone)")?.matches;
+}
+
+function getAgonMobileViewportBottomFill() {
+  if (!isAgonMobileViewportBottomFillEnabled()) return 0;
+
+  const vv = window.visualViewport;
+  const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  if (!vv || !layoutHeight) return 0;
+
+  const raw = Math.max(0, Math.round(layoutHeight - ((Number(vv.height) || 0) + (Number(vv.offsetTop) || 0))));
+  const maxToolbarOffset = Math.max(120, Math.round(layoutHeight * 0.24));
+  return raw <= maxToolbarOffset ? raw : 0;
+}
+
+function getAgonCssSafeAreaBottomFill() {
+  if (!isAgonMobileViewportBottomFillEnabled()) return 0;
+
+  if (!agonSafeAreaBottomProbe) {
+    agonSafeAreaBottomProbe = document.createElement("div");
+    agonSafeAreaBottomProbe.setAttribute("aria-hidden", "true");
+    agonSafeAreaBottomProbe.style.cssText = [
+      "position:fixed",
+      "left:0",
+      "bottom:0",
+      "width:0",
+      "height:0",
+      "padding-bottom:env(safe-area-inset-bottom,0px)",
+      "visibility:hidden",
+      "pointer-events:none",
+      "z-index:-1"
+    ].join(";");
+    (document.body || document.documentElement).appendChild(agonSafeAreaBottomProbe);
+  }
+
+  return Math.max(0, Math.round(parseFloat(window.getComputedStyle(agonSafeAreaBottomProbe).paddingBottom) || 0));
+}
+
+function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOffset) {
+  const viewportValue = Math.max(0, Math.round(Number(viewportOffset) || 0));
+  const safeValue = Math.max(0, Math.round(Number(safeOffset) || 0));
+  document.documentElement.style.setProperty('--agon-mobile-bottom-fill', `${viewportValue}px`);
+  document.documentElement.style.setProperty('--agon-safe-bottom', `${safeValue}px`);
+}
 
 function updateHomeBottomNavViewportOffset() {
+  const viewportBottomFill = getAgonMobileViewportBottomFill();
+  const safeBottomFill = Math.max(viewportBottomFill, getAgonCssSafeAreaBottomFill());
+  setAgonMobileViewportBottomFill(viewportBottomFill, safeBottomFill);
+
   if (window.innerWidth > 768) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
     return;
@@ -30151,10 +30204,7 @@ function updateHomeBottomNavViewportOffset() {
     return;
   }
 
-  const raw = Math.max(0, Math.round(window.innerHeight - (vv.height + vv.offsetTop)));
-  const maxToolbarOffset = Math.max(96, Math.round(window.innerHeight * 0.18));
-  const offset = raw <= maxToolbarOffset ? raw : 0;
-  document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(offset)}px`);
+  document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(safeBottomFill)}px`);
 }
 
 function scheduleHomeBottomNavViewportOffsetUpdate() {
@@ -30176,6 +30226,29 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
     updateHomeBottomNavViewportOffset();
   }, 120);
 }
+
+function bindAgonMobileViewportBottomFillSync() {
+  if (document.documentElement.dataset.agonMobileViewportBottomFillBound === "true") return;
+  document.documentElement.dataset.agonMobileViewportBottomFillBound = "true";
+
+  window.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  window.addEventListener("orientationchange", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  window.addEventListener("pageshow", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  window.addEventListener("load", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  document.addEventListener("visibilitychange", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleHomeBottomNavViewportOffsetUpdate, { once: true });
+  }
+  scheduleHomeBottomNavViewportOffsetUpdate();
+}
+
+bindAgonMobileViewportBottomFillSync();
 
 function ensureHomeTopbarContactLink() {
   const menu = document.getElementById("home-topbar-menu");
