@@ -3428,12 +3428,83 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("contact-frame-open", String(pathname || "") === "/contact");
 }
 
+function syncDebateIframeAiParentAnimationViewport() {
+  const overlay = document.getElementById("debate-ai-parent-animation-overlay");
+  if (!overlay) return;
+  const height = Math.ceil(
+    window.visualViewport?.height ||
+    window.innerHeight ||
+    document.documentElement.clientHeight ||
+    0
+  );
+  if (height) overlay.style.setProperty("--debate-ai-parent-vvh", `${height}px`);
+}
+
+function bindDebateIframeAiParentAnimationViewportSync() {
+  if (document.documentElement.dataset.debateAiParentAnimationViewportBound === "true") return;
+  document.documentElement.dataset.debateAiParentAnimationViewportBound = "true";
+  window.addEventListener("resize", syncDebateIframeAiParentAnimationViewport, { passive: true });
+  window.addEventListener("orientationchange", syncDebateIframeAiParentAnimationViewport, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", syncDebateIframeAiParentAnimationViewport, { passive: true });
+    window.visualViewport.addEventListener("scroll", syncDebateIframeAiParentAnimationViewport, { passive: true });
+  }
+}
+
+function showDebateIframeAiParentAnimationOverlay() {
+  if (!document.body) return;
+  if (window.__agonDebateAiParentAnimationHideTimer) {
+    clearTimeout(window.__agonDebateAiParentAnimationHideTimer);
+    window.__agonDebateAiParentAnimationHideTimer = null;
+  }
+
+  let overlay = document.getElementById("debate-ai-parent-animation-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "debate-ai-parent-animation-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="debate-ai-parent-brain debate-ai-parent-far debate-ai-parent-far-1">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-far debate-ai-parent-far-2">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-far debate-ai-parent-far-3">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-mid debate-ai-parent-mid-1">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-mid debate-ai-parent-mid-2">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-mid debate-ai-parent-mid-3">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-near debate-ai-parent-near-1">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-near debate-ai-parent-near-2">🧠</div>
+      <div class="debate-ai-parent-brain debate-ai-parent-near debate-ai-parent-near-3">🧠</div>
+      <img class="debate-ai-parent-sablier" src="/sablier3-256.png" alt="" decoding="sync">
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  overlay.classList.remove("is-hiding");
+  bindDebateIframeAiParentAnimationViewportSync();
+  syncDebateIframeAiParentAnimationViewport();
+  requestAnimationFrame(syncDebateIframeAiParentAnimationViewport);
+}
+
+function hideDebateIframeAiParentAnimationOverlay() {
+  const overlay = document.getElementById("debate-ai-parent-animation-overlay");
+  if (!overlay) return;
+  overlay.classList.add("is-hiding");
+  if (window.__agonDebateAiParentAnimationHideTimer) {
+    clearTimeout(window.__agonDebateAiParentAnimationHideTimer);
+  }
+  window.__agonDebateAiParentAnimationHideTimer = setTimeout(() => {
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    window.__agonDebateAiParentAnimationHideTimer = null;
+  }, 180);
+}
+
 function setDebateIframeAiLoadingAnimationState(isOpen) {
   const open = !!isOpen;
   const modal = document.getElementById("debate-iframe-modal");
   if (modal) modal.classList.toggle("ai-loading-animation-open-in-child", open);
   document.documentElement.classList.toggle("ai-loading-animation-open-in-child", open);
   if (document.body) document.body.classList.toggle("ai-loading-animation-open-in-child", open);
+  if (open) showDebateIframeAiParentAnimationOverlay();
+  else hideDebateIframeAiParentAnimationOverlay();
 }
 
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
@@ -3724,6 +3795,146 @@ function ensureDebateIframeModal() {
     html.ai-loading-animation-open-in-child,
     body.ai-loading-animation-open-in-child {
       background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
+    }
+    #debate-ai-parent-animation-overlay {
+      --debate-ai-parent-bleed: 220px;
+      --debate-ai-parent-vvh: 100vh;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: calc(-1 * var(--debate-ai-parent-bleed));
+      left: 0;
+      z-index: 100000;
+      width: 100vw;
+      height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-bleed));
+      min-height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-bleed));
+      overflow: hidden;
+      pointer-events: none;
+      background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
+      opacity: 1;
+      transition: opacity 180ms ease;
+      transform: translateZ(0);
+      will-change: opacity;
+      isolation: isolate;
+    }
+    @supports (height: 100dvh) {
+      #debate-ai-parent-animation-overlay {
+        height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-bleed));
+        min-height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-bleed));
+      }
+    }
+    #debate-ai-parent-animation-overlay::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
+      pointer-events: none;
+      transform: translateZ(0);
+    }
+    #debate-ai-parent-animation-overlay.is-hiding {
+      opacity: 0;
+    }
+    .debate-ai-parent-sablier {
+      position: absolute;
+      top: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
+      left: 50%;
+      width: 140px;
+      height: 140px;
+      z-index: 4;
+      pointer-events: none;
+      animation: debate-ai-parent-spin-pulse 5s linear infinite;
+      filter:
+        drop-shadow(0 0 6px rgba(255,255,255,0.95))
+        drop-shadow(0 0 16px rgba(255,255,255,0.75))
+        drop-shadow(0 0 32px rgba(200,220,255,0.55))
+        drop-shadow(0 0 55px rgba(180,210,255,0.35));
+    }
+    .debate-ai-parent-brain {
+      position: absolute;
+      top: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
+      left: 50%;
+      z-index: 2;
+      pointer-events: none;
+      user-select: none;
+      line-height: 1;
+      text-align: center;
+      opacity: 0.94;
+      filter:
+        drop-shadow(0 0 4px rgba(255,255,255,0.85))
+        drop-shadow(0 0 11px rgba(255,180,220,0.48))
+        drop-shadow(0 0 18px rgba(150,205,255,0.30))
+        saturate(1.18)
+        contrast(1.06);
+      text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    }
+    .debate-ai-parent-far {
+      margin-top: -34px;
+      margin-left: -34px;
+      width: 68px;
+      height: 68px;
+      font-size: 58px;
+      animation: debate-ai-parent-spiral-far 9s linear infinite;
+    }
+    .debate-ai-parent-far-1 { animation-delay: 0s; }
+    .debate-ai-parent-far-2 { animation-delay: -3s; }
+    .debate-ai-parent-far-3 { animation-delay: -6s; }
+    .debate-ai-parent-mid {
+      margin-top: -26px;
+      margin-left: -26px;
+      width: 52px;
+      height: 52px;
+      font-size: 44px;
+      animation: debate-ai-parent-spiral-mid 7s linear infinite;
+    }
+    .debate-ai-parent-mid-1 { animation-delay: -0.5s; }
+    .debate-ai-parent-mid-2 { animation-delay: -2.83s; }
+    .debate-ai-parent-mid-3 { animation-delay: -5.17s; }
+    .debate-ai-parent-near {
+      margin-top: -19px;
+      margin-left: -19px;
+      width: 38px;
+      height: 38px;
+      font-size: 32px;
+      animation: debate-ai-parent-spiral-near 5s linear infinite;
+    }
+    .debate-ai-parent-near-1 { animation-delay: -0.25s; }
+    .debate-ai-parent-near-2 { animation-delay: -1.92s; }
+    .debate-ai-parent-near-3 { animation-delay: -3.58s; }
+    @keyframes debate-ai-parent-spin-pulse {
+      0%    { transform: translate(-50%, -50%) rotate(0deg)   scale(1);    }
+      12.5% { transform: translate(-50%, -50%) rotate(45deg)  scale(1.08); }
+      25%   { transform: translate(-50%, -50%) rotate(90deg)  scale(1);    }
+      37.5% { transform: translate(-50%, -50%) rotate(135deg) scale(1.08); }
+      50%   { transform: translate(-50%, -50%) rotate(180deg) scale(1);    }
+      62.5% { transform: translate(-50%, -50%) rotate(225deg) scale(1.08); }
+      75%   { transform: translate(-50%, -50%) rotate(270deg) scale(1);    }
+      87.5% { transform: translate(-50%, -50%) rotate(315deg) scale(1.08); }
+      100%  { transform: translate(-50%, -50%) rotate(360deg) scale(1);    }
+    }
+    @keyframes debate-ai-parent-spiral-far {
+      0%   { transform: rotate(0deg)   translateX(650px) scale(1.6);  opacity: 0;    }
+      4%   { opacity: 0.96; }
+      28%  { transform: rotate(130deg) translateX(420px) scale(1.2);  opacity: 0.92; }
+      55%  { transform: rotate(270deg) translateX(180px) scale(0.7);  opacity: 0.78; }
+      80%  { transform: rotate(390deg) translateX(45px)  scale(0.28); opacity: 0.36; }
+      100% { transform: rotate(460deg) translateX(0px)   scale(0);    opacity: 0;    }
+    }
+    @keyframes debate-ai-parent-spiral-mid {
+      0%   { transform: rotate(0deg)   translateX(450px) scale(1.3);  opacity: 0;    }
+      5%   { opacity: 0.92; }
+      28%  { transform: rotate(130deg) translateX(290px) scale(1.0);  opacity: 0.86; }
+      55%  { transform: rotate(270deg) translateX(120px) scale(0.6);  opacity: 0.68; }
+      80%  { transform: rotate(390deg) translateX(28px)  scale(0.22); opacity: 0.30; }
+      100% { transform: rotate(460deg) translateX(0px)   scale(0);    opacity: 0;    }
+    }
+    @keyframes debate-ai-parent-spiral-near {
+      0%   { transform: rotate(0deg)   translateX(280px) scale(1.0);  opacity: 0;    }
+      6%   { opacity: 0.88; }
+      28%  { transform: rotate(130deg) translateX(175px) scale(0.8);  opacity: 0.82; }
+      55%  { transform: rotate(270deg) translateX(72px)  scale(0.5);  opacity: 0.60; }
+      80%  { transform: rotate(390deg) translateX(16px)  scale(0.18); opacity: 0.25; }
+      100% { transform: rotate(460deg) translateX(0px)   scale(0);    opacity: 0;    }
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-inner {
       width: 100% !important;
