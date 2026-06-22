@@ -14227,57 +14227,72 @@ body.page-debate .argument-card::before {
   margin-left: auto !important;
   margin-right: auto !important;
 }
-/* La carte garde ses coins arrondis et sa bordure complète par défaut ;
-   sur page-debate, .argument-card est TOUJOURS immédiatement suivie d'un
-   .comments-block (les deux fonctions qui rendent les idées le génèrent
-   systématiquement) : pas besoin de :has() pour cibler ce cas, on aplatit
-   directement le coin bas et on retire la bordure basse pour que les deux
-   blocs se ressoudent en une seule carte continue, sans cassure ni
-   double-bordure. (Pas de :has() : certains navigateurs/webviews embarqués
-   ne le supportent pas, et la règle précédente ne s'appliquait alors pas.) */
-body.page-debate .argument-card {
-  border-bottom: none;
-  border-radius: 14px 14px 0 0;
-  margin-bottom: 0;
-  /* L'ombre de la carte (box-shadow) se projetait juste en dessous d'elle,
-     donc pile sur .comments-block maintenant qu'il n'y a plus d'écart : ça
-     ressemblait à un dégradé qui coupait la carte en deux. On la retire ici
-     et on la reporte sur .comments-block, qui est maintenant le vrai bas
-     visuel de l'ensemble. */
-  box-shadow: none;
+/* L'unité visuelle réelle de la carte d'idée est .argument-card-unit : un
+   wrapper qui contient .argument-card (haut) et .comments-block (bas),
+   réunis comme frères en JS (cf. wrapArgumentCardsWithComments). Bordure,
+   ombre, arrondi et survol vivent uniquement ici, sur UN SEUL élément — fini
+   les hacks pour recoller deux éléments distincts à chaque nouvel état
+   (survol, flash de vote, etc.) qui ne s'appliquait qu'à l'un des deux et
+   révélait la coupure. Le wrapper est le vrai item de la grille
+   .arguments-list(-unified) : .argument-card et .comments-block ne sont
+   plus des frères au niveau de la grille, juste un empilement normal à
+   l'intérieur, donc plus de gap de grille à annuler non plus. */
+body.page-debate .argument-card-unit {
+  border: 1px solid #d1d5db;
+  border-radius: 14px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* .argument-card:hover (translateY(-1px) + ombre plus forte) recréait
-   exactement le même défaut au survol en desktop : un filet noir apparaissait
-   entre la carte et .comments-block puisque la carte se soulevait seule. */
+body.page-debate .argument-card-unit:hover {
+  border-color: #9ca3af;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.10);
+  transform: translateY(-1px);
+}
+
+body.page-debate .argument-card {
+  border: none;
+  box-shadow: none;
+  margin-bottom: 0;
+  border-radius: 14px 14px 0 0;
+}
+
 body.page-debate .argument-card:hover {
   transform: none;
   box-shadow: none;
 }
 
-/* .comments-block est un frère de .argument-card (pas un enfant) : il
-   s'affichait donc à fond perdu sur l'anthracite de la page au lieu de
-   prolonger la carte blanche au-dessus. On le ressoude visuellement à la
-   carte (mêmes bords, coins arrondis en bas seulement, fond blanc). */
+@media (max-width: 768px) {
+  /* Resserre l'espace avant la jonction avec .comments-block sur mobile :
+     le padding-bottom général de la carte (18px) était inchangé là où, sur
+     desktop, l'espace ressenti était jugé correct. */
+  body.page-debate .argument-card {
+    padding-bottom: 2px;
+  }
+}
+
 body.page-debate .comments-block {
   background: #ffffff;
-  border-left: 1px solid #d1d5db;
-  border-right: 1px solid #d1d5db;
-  border-bottom: 1px solid #d1d5db;
-  /* Le trait de séparation passe en petit trait centré (cf. ::before
-     ci-dessous), plus cohérent avec le petit trait décoratif en haut de
-     carte qu'une ligne pleine largeur. */
-  border-top: none !important;
+  border: none;
   border-radius: 0 0 14px 14px;
-  /* Annule le gap:18px de la grille .arguments-list(-unified), pas une
-     marge de carte : un -6px ne suffisait pas, il restait un filet de fond
-     anthracite visible entre les deux blocs. */
-  margin-top: -8px;
-  padding: 6px 18px 18px;
-  /* Pas de box-shadow ici : son flou remonte au-dessus du bord supérieur de
-     l'élément (le "0 3px 8px" déborde vers le haut) et redessine exactement
-     le dégradé qu'on cherche à supprimer, pile à la jonction avec la carte. */
   box-shadow: none;
+  margin-top: 0;
+  padding: 6px 18px 18px;
+}
+
+/* Le flash de vote (classe posée par JS sur .argument-card uniquement) ne
+   touchait que la moitié haute, révélant les deux pièces : on le rejoue à
+   l'identique sur .comments-block pour que tout change de couleur ensemble. */
+.argument-card.flash-green + .comments-block {
+  animation: flashGreenCard 1s ease-in-out 2;
+}
+.argument-card.flash-blue + .comments-block {
+  animation: flashBlueCard 2s ease-out 1;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .comments-block {
+    padding-top: 0;
+  }
 }
 
 body.page-debate .comments-block::before {
@@ -14288,6 +14303,12 @@ body.page-debate .comments-block::before {
   background: #d1d5db;
   border-radius: 2px;
   margin: 0 auto 10px;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .comments-block::before {
+    margin: 2px auto 2px;
+  }
 }
 
 /* .argument-card-unified a un fond légèrement écru (#f5f5f4), pas blanc pur :

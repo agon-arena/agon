@@ -24931,6 +24931,27 @@ if (element) {
   }
 }
 
+// .argument-card et .comments-block sont générés comme deux <div> frères
+// (cf. renderArgs/renderUnifiedArgs) ; sur page-debate, le CSS les recolle
+// visuellement en une seule carte. Ce recollage CSS pur s'est révélé fragile
+// : tout état qui ne cible que .argument-card (survol, flash de vote...)
+// rouvrait la coupure puisqu'il ne s'appliquait pas à .comments-block. On les
+// réunit donc réellement dans un wrapper commun après le rendu, pour que la
+// carte soit une seule unité DOM et non deux éléments qu'il faut sans cesse
+// resynchroniser en CSS.
+function wrapArgumentCardsWithComments(container) {
+  if (!container) return;
+  Array.from(container.querySelectorAll(":scope > .argument-card")).forEach((card) => {
+    const next = card.nextElementSibling;
+    if (!next || !next.classList.contains("comments-block")) return;
+    const wrapper = document.createElement("div");
+    wrapper.className = "argument-card-unit";
+    card.parentNode.insertBefore(wrapper, card);
+    wrapper.appendChild(card);
+    wrapper.appendChild(next);
+  });
+}
+
 function renderArgs(container, args, debateId, commentsByArgument) {
   const state = getState(debateId);
   const commentLikeState = getCommentLikeState(debateId);
@@ -25497,6 +25518,7 @@ if (hiddenArgs.length > 0) {
   } else if (typeof window.transformIdeaSources === "function") {
     window.transformIdeaSources();
   }
+  wrapArgumentCardsWithComments(div);
 
 }
 function renderUnifiedArgs(container, args, debateId, commentsByArgument) {
@@ -25952,6 +25974,7 @@ ${renderCommentRepliesPanelMarkup(debateId, a.id, repliesByParentId, c.id, comme
   } else if (typeof window.transformIdeaSources === "function") {
     window.transformIdeaSources();
   }
+  wrapArgumentCardsWithComments(div);
 }
 
 
