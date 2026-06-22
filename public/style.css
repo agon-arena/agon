@@ -7508,6 +7508,28 @@ body.page-debate .topbar::after {
   }
 }
 
+/* ===== Dock flottant retour/actualiser/votes (page débat mobile) :
+   masqué tout en haut de page pour ne pas recouvrir le texte de la
+   consigne qui commence juste sous la carte source/média ; réapparaît
+   dès que l'utilisateur scrolle (voir initDebateFloatingDockAutoReveal
+   dans script.js, qui pose .debate-floating-dock-visible sur body). ===== */
+@media (max-width: 768px) {
+  body.page-debate .mobile-back-button,
+  body.page-debate .debate-floating-refresh-btn,
+  body.page-debate #voices-float-badge {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  body.page-debate.debate-floating-dock-visible .mobile-back-button,
+  body.page-debate.debate-floating-dock-visible .debate-floating-refresh-btn,
+  body.page-debate.debate-floating-dock-visible #voices-float-badge {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 /* ===== CREATE PAGE : retour + cloche alignés ===== */
 
 @media (max-width: 768px) {

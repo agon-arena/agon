@@ -3151,6 +3151,19 @@ function ensureDebateIframeParentLoadingStyles() {
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.18s ease;
+      /* position:fixed + backdrop-filter peut se désynchroniser visuellement
+         pendant le scroll sur iOS/WebKit (le contenu "saute" puis se replace) ;
+         on promeut une couche de composition dédiée pour éviter ce décalage,
+         comme pour .app-floating-refresh-btn. */
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      transform: translateZ(0);
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      transform: translateZ(0);
     }
 
     #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-overlay-visible {
@@ -24489,7 +24502,7 @@ function openPendingAiScorePopupIfReady() {
 function renderArgumentAiScoreBadges() {
   if (!Object.keys(currentArgumentScoreMap).length) return;
   const articles = document.querySelectorAll(
-    'article.argument-card[id^="argument-"], article.argument-card[id^="list-argument-"]'
+    '.argument-card[id^="argument-"], .argument-card[id^="list-argument-"]'
   );
   articles.forEach(function(article) {
     const argId = article.id.replace(/^(?:list-)?argument-/, '');
@@ -28303,6 +28316,27 @@ function initDebateTitleAutoHide() {
   updateDebateTitleVisibility();
 }
 
+function initDebateFloatingDockAutoReveal() {
+  if (window.location.pathname !== "/debate") return;
+
+  const SHOW_AFTER = 120;
+  let ticking = false;
+
+  function update() {
+    document.body.classList.toggle("debate-floating-dock-visible", window.scrollY > SHOW_AFTER);
+    ticking = false;
+  }
+
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      window.requestAnimationFrame(update);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  update();
+}
+
 function rerenderCurrentDebateArguments() {
   const debateId = getDebateId();
   if (!debateId) return;
@@ -28824,6 +28858,7 @@ document.addEventListener("DOMContentLoaded", () => {
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
   initDebateTitleAutoHide();
+  initDebateFloatingDockAutoReveal();
   initHomeTopbarAutoHide();
   initHomeBottomShareMenu();
   initIndexCardShareMenus(document);
