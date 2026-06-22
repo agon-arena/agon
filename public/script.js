@@ -3150,7 +3150,13 @@ function ensureDebateIframeParentLoadingStyles() {
       -webkit-backdrop-filter: blur(8px);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.18s ease;
+      /* "top" dépend de --debate-iframe-parent-loading-top, recalculé au
+         resize/scroll (cf. refreshModalLoadingBounds) : en PWA standalone iOS,
+         env(safe-area-inset-top) peut n'être résolue qu'après le premier rendu,
+         ce qui décale la topbar et donc ce top une fois le calcul rejoué. On
+         transitionne "top" pour que ce réajustement glisse au lieu de "sauter".
+      */
+      transition: opacity 0.18s ease, top 0.18s ease;
       /* position:fixed + backdrop-filter peut se désynchroniser visuellement
          pendant le scroll sur iOS/WebKit (le contenu "saute" puis se replace) ;
          on promeut une couche de composition dédiée pour éviter ce décalage,
@@ -3312,6 +3318,11 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   document.body.classList.add("debate-iframe-parent-loading-open");
   updateDebateIframeParentLoadingOverlayBounds();
   requestAnimationFrame(updateDebateIframeParentLoadingOverlayBounds);
+  // En PWA standalone iOS, env(safe-area-inset-top) peut n'être résolue par
+  // WKWebView qu'avec un léger retard après le premier rendu : un recalcul
+  // différé rattrape ce cas sans attendre un resize qui peut ne jamais venir
+  // (la transition CSS sur "top" rend ce rattrapage imperceptible).
+  setTimeout(updateDebateIframeParentLoadingOverlayBounds, 200);
   overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
 }
 
@@ -28320,10 +28331,14 @@ function initDebateFloatingDockAutoReveal() {
   if (window.location.pathname !== "/debate") return;
 
   const SHOW_AFTER = 120;
+  const HIDE_NEAR_BOTTOM = 40;
   let ticking = false;
 
   function update() {
-    document.body.classList.toggle("debate-floating-dock-visible", window.scrollY > SHOW_AFTER);
+    const scrollEl = document.scrollingElement || document.documentElement;
+    const nearBottom = window.scrollY + window.innerHeight >= scrollEl.scrollHeight - HIDE_NEAR_BOTTOM;
+    const shouldShow = window.scrollY > SHOW_AFTER && !nearBottom;
+    document.body.classList.toggle("debate-floating-dock-visible", shouldShow);
     ticking = false;
   }
 

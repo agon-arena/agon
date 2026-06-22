@@ -10616,9 +10616,16 @@ body.page-home.page-home-mobile {
 
 @media (max-width: 768px) {
   .page-create.page-create-mobile main.create-page,
-  .page-debate main.debate-page,
   .page-notifications.page-notifications-mobile main.home-page {
     padding-bottom: 74px;
+  }
+
+  /* Sur mobile, .home-bottom-nav est masquée sur page-debate (remplacée par
+     le dock flottant retour/actualiser/votes) : pas besoin de réserver une
+     pleine bande de respiration pour une barre qui ne s'affiche pas, ça
+     laissait juste un vide de fond anthracite après le dernier contenu. */
+  .page-debate main.debate-page {
+    padding-bottom: 16px;
   }
 }
 
