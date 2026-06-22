@@ -3432,10 +3432,11 @@ function syncDebateIframeAiParentAnimationViewport() {
   const overlay = document.getElementById("debate-ai-parent-animation-overlay");
   if (!overlay) return;
   const height = Math.ceil(
-    window.visualViewport?.height ||
-    window.innerHeight ||
-    document.documentElement.clientHeight ||
-    0
+    Math.max(
+      window.visualViewport?.height || 0,
+      window.innerHeight || 0,
+      document.documentElement.clientHeight || 0
+    )
   );
   if (height) overlay.style.setProperty("--debate-ai-parent-vvh", `${height}px`);
 }
@@ -30248,7 +30249,167 @@ function bindAgonMobileViewportBottomFillSync() {
   scheduleHomeBottomNavViewportOffsetUpdate();
 }
 
+let agonStandaloneBottomSurfaceRaf = null;
+let agonStandaloneBottomSurfaceTimeout = null;
+let agonStandaloneBottomSurfaceObserver = null;
+let agonDebateSourceBottomFillPx = 0;
+
+function isAgonStandaloneMobileScreen() {
+  if (!isStandaloneMode()) return false;
+
+  const narrow = window.innerWidth <= 768 ||
+    window.matchMedia?.("(max-width: 768px)")?.matches ||
+    (window.visualViewport && Number(window.visualViewport.width || 0) <= 768);
+  const touch = window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches ||
+    Number(navigator.maxTouchPoints || 0) > 1;
+  const phoneLike = Math.min(screen.width || 9999, screen.height || 9999) <= 820;
+
+  return !!(narrow || (touch && phoneLike));
+}
+
+function getAgonViewportBottomY() {
+  const vv = window.visualViewport;
+  const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const visualBottom = vv
+    ? (Number(vv.offsetTop || 0) + Number(vv.height || 0))
+    : 0;
+  return Math.max(layoutHeight, visualBottom || 0);
+}
+
+function isAgonVisibleElement(el) {
+  if (!el) return false;
+  const styles = window.getComputedStyle(el);
+  if (styles.display === "none" || styles.visibility === "hidden") return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 1 && rect.height > 1;
+}
+
+function getAgonDebateBottomSurface() {
+  const selectors = [
+    "#debate-source-fallback .debate-source-card",
+    "#debate-source-fallback",
+    "#debate-source-preview-wrap",
+    "#debate-image-wrap",
+    "#debate-video-wrap"
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (isAgonVisibleElement(el)) return el;
+  }
+
+  return null;
+}
+
+function setAgonDebateSourceBottomFill(value) {
+  const next = Math.max(0, Math.round(Number(value) || 0));
+  if (Math.abs(next - agonDebateSourceBottomFillPx) < 1) return;
+  agonDebateSourceBottomFillPx = next;
+  document.documentElement.style.setProperty("--agon-debate-source-bottom-fill", `${next}px`);
+}
+
+function updateAgonStandaloneBottomSurfaceFill() {
+  const body = document.body;
+  if (!body || !body.classList.contains("page-debate") || !isAgonStandaloneMobileScreen()) {
+    setAgonDebateSourceBottomFill(0);
+    return;
+  }
+
+  const surface = getAgonDebateBottomSurface();
+  const viewportBottom = getAgonViewportBottomY();
+  if (!surface || !viewportBottom) {
+    setAgonDebateSourceBottomFill(0);
+    return;
+  }
+
+  const rect = surface.getBoundingClientRect();
+  if (rect.top >= viewportBottom || rect.bottom <= 0) return;
+
+  const current = agonDebateSourceBottomFillPx;
+  const gap = Math.round(viewportBottom - rect.bottom);
+  let next = current;
+
+  if (gap > 1 && gap <= 150) {
+    next = Math.min(150, current + gap);
+  } else if (gap < -2) {
+    next = Math.max(0, current + gap);
+  }
+
+  setAgonDebateSourceBottomFill(next);
+}
+
+function scheduleAgonStandaloneBottomSurfaceFillUpdate() {
+  if (agonStandaloneBottomSurfaceRaf !== null) {
+    cancelAnimationFrame(agonStandaloneBottomSurfaceRaf);
+  }
+
+  agonStandaloneBottomSurfaceRaf = requestAnimationFrame(() => {
+    agonStandaloneBottomSurfaceRaf = null;
+    updateAgonStandaloneBottomSurfaceFill();
+  });
+
+  if (agonStandaloneBottomSurfaceTimeout !== null) {
+    clearTimeout(agonStandaloneBottomSurfaceTimeout);
+  }
+
+  agonStandaloneBottomSurfaceTimeout = window.setTimeout(() => {
+    agonStandaloneBottomSurfaceTimeout = null;
+    updateAgonStandaloneBottomSurfaceFill();
+  }, 160);
+}
+
+function bindAgonStandaloneBottomSurfaceFillSync() {
+  if (document.documentElement.dataset.agonStandaloneBottomSurfaceFillBound === "true") return;
+  document.documentElement.dataset.agonStandaloneBottomSurfaceFillBound = "true";
+
+  window.addEventListener("resize", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("orientationchange", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("pageshow", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("load", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  document.addEventListener("visibilitychange", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  }
+
+  const bindObserver = () => {
+    if (agonStandaloneBottomSurfaceObserver) return;
+    const targets = [
+      document.getElementById("debate-source-fallback"),
+      document.getElementById("debate-source-preview-wrap"),
+      document.getElementById("debate-image-wrap"),
+      document.getElementById("debate-video-wrap")
+    ].filter(Boolean);
+
+    if (!targets.length) {
+      window.setTimeout(bindObserver, 500);
+      return;
+    }
+
+    agonStandaloneBottomSurfaceObserver = new MutationObserver(scheduleAgonStandaloneBottomSurfaceFillUpdate);
+    targets.forEach((target) => {
+      agonStandaloneBottomSurfaceObserver.observe(target, {
+        attributes: true,
+        attributeFilter: ["class", "style"],
+        childList: true,
+        subtree: true
+      });
+    });
+    scheduleAgonStandaloneBottomSurfaceFillUpdate();
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindObserver, { once: true });
+  } else {
+    bindObserver();
+  }
+
+  scheduleAgonStandaloneBottomSurfaceFillUpdate();
+}
+
 bindAgonMobileViewportBottomFillSync();
+bindAgonStandaloneBottomSurfaceFillSync();
 
 function ensureHomeTopbarContactLink() {
   const menu = document.getElementById("home-topbar-menu");

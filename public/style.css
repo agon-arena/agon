@@ -10188,6 +10188,7 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   --agon-mobile-bottom-fill: 0px;
   --agon-safe-bottom: env(safe-area-inset-bottom, 0px);
   --home-bottom-nav-offset: 0px;
+  --agon-debate-source-bottom-fill: 0px;
 }
 
 body.page-home.page-home-mobile {
@@ -20696,7 +20697,7 @@ body.page-create-mobile .create-card .create-submit-helper {
 @media (max-width: 768px), (display-mode: standalone) {
   html {
     min-height: 100% !important;
-    background: transparent !important;
+    background: #243038 !important;
   }
 
   body.page-home-mobile,
@@ -21394,18 +21395,18 @@ body.page-home-mobile .theme-horizontal-row {
   }
 }
 
-/* En mode standalone, .home-bottom-nav grandit avec la safe-area (règle
-   ci-dessus), mais .app-floating-refresh-btn plafonnait cette safe-area à
-   10px (cf. règle mobile dans la section "Optimisations performance mobile") :
-   les boutons flottants (haut/bas/refresh) finissaient au même niveau que le
-   bandeau du bas au lieu de flotter au-dessus. On retire le plafond et on
-   recalcule l'offset. Valeur ajustée par dichotomie faute d'accès à un vrai
-   iPhone : 46px (capé) = trop bas/chevauche le bandeau, 70px = trop haut/
-   chevauche le contenu au-dessus. 41px (+safe-area) = point milieu en cours
-   de calibration avec l'utilisateur. */
-@media (display-mode: standalone) {
+/* Mesures réelles prises sur iPhone (panneau de diagnostic) : .home-bottom-nav
+   se positionne toujours à peu près à "innerHeight - 54px" en haut, QUELLE QUE
+   SOIT la safe-area (vérifié à 1px et 35px de safe-area-inset-bottom, en Safari
+   et en standalone) — le calc(3px + env(safe-area-inset-bottom)) du padding du
+   bandeau et le débordement de rendu qu'il provoque s'annulent exactement. Donc
+   pour que les boutons restent à cheval sur le bandeau SANS bouger pendant le
+   scroll (la safe-area change dynamiquement en Safari quand la barre d'adresse
+   se cache), on les positionne en pixels fixes, sans env(safe-area-inset-bottom).
+   bottom=32px centre le bouton (44px de haut) exactement sur la jonction. */
+@media (max-width: 768px), (display-mode: standalone) {
   .app-floating-refresh-btn {
-    bottom: calc(41px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: 32px !important;
   }
 }
 
@@ -22083,7 +22084,7 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   html {
     min-height: 100% !important;
-    background: transparent !important;
+    background: #243038 !important;
   }
 
   body.page-home-mobile,
@@ -22122,45 +22123,26 @@ body.page-create-mobile .create-card .create-submit-helper {
     }
   }
 
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after,
-  body.page-contact::after,
-  body.page-about::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(0px - var(--agon-safe-bottom));
-    height: var(--agon-safe-bottom);
-    z-index: 1;
-    pointer-events: none;
-    background: inherit;
-    transform: translateZ(0);
-  }
-
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after {
-    z-index: 144;
-    background:
-      linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) bottom / 100% 5px no-repeat,
-      #e9ebec;
-  }
-
+  body.page-home-mobile:not(.admin-edit-open)::after,
+  body.page-create-mobile:not(.admin-edit-open)::after,
+  body.page-notifications-mobile:not(.admin-edit-open)::after,
+  body.page-debate:not(.admin-edit-open):not(.argument-form-open)::after,
+  body.page-contact:not(.admin-edit-open)::after,
+  body.page-about:not(.admin-edit-open)::after,
   body.ai-loading-animation-open-in-child::after,
   html.aala-overlay-active body::after {
-    bottom: calc(-220px - var(--agon-safe-bottom));
-    height: calc(var(--agon-safe-bottom) + 220px);
-    z-index: 99999;
-    background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
+    content: none !important;
+    display: none !important;
   }
 
   .home-bottom-nav {
     bottom: calc(0px - var(--agon-safe-bottom)) !important;
     padding-bottom: calc(3px + var(--agon-safe-bottom)) !important;
+  }
+
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-body,
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate .debate-source-fallback .debate-source-card .debate-source-card-body {
+    padding-bottom: calc(14px + var(--agon-debate-source-bottom-fill, 0px)) !important;
   }
 
   #debate-iframe-modal.open {
@@ -22171,5 +22153,12 @@ body.page-create-mobile .create-card .create-submit-helper {
   #debate-ai-parent-animation-overlay,
   #aala-overlay {
     bottom: calc(-220px - var(--agon-safe-bottom)) !important;
+  }
+
+  html.ai-loading-animation-open-in-child,
+  body.ai-loading-animation-open-in-child,
+  html.aala-overlay-active,
+  html.aala-overlay-active body {
+    background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
   }
 }

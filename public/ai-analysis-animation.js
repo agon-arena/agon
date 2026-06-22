@@ -15,7 +15,11 @@
 
   function getViewportHeight() {
     var vvHeight = window.visualViewport && window.visualViewport.height;
-    return Math.ceil(vvHeight || window.innerHeight || document.documentElement.clientHeight || 0);
+    return Math.ceil(Math.max(
+      vvHeight || 0,
+      window.innerHeight || 0,
+      document.documentElement.clientHeight || 0
+    ));
   }
 
   function syncOverlayViewportSize() {
@@ -87,9 +91,9 @@
     el.textContent = `
       #aala-overlay {
         --aala-bottom-bleed: 180px;
-        position: fixed; top: 0; right: 0; bottom: auto; left: 0; z-index: 100000;
+        position: fixed; top: 0; right: 0; bottom: calc(-1 * var(--aala-bottom-bleed)); left: 0; z-index: 100000;
         width: 100vw;
-        height: calc(var(--aala-vvh, 100vh) + var(--aala-bottom-bleed));
+        height: auto;
         min-height: calc(var(--aala-vvh, 100vh) + var(--aala-bottom-bleed));
         --aala-center-y: calc(var(--aala-vvh, 100vh) / 2);
         overflow: hidden;
@@ -105,7 +109,7 @@
       }
       @supports (height: 100dvh) {
         #aala-overlay {
-          height: calc(var(--aala-vvh, 100dvh) + var(--aala-bottom-bleed));
+          height: auto;
           min-height: calc(var(--aala-vvh, 100dvh) + var(--aala-bottom-bleed));
         }
       }
