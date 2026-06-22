@@ -8821,6 +8821,14 @@ body.page-debate .topbar::after {
   justify-content: center;
   width: 100%;
 }
+
+/* .report-button a un margin-left:8px pensé pour s'aligner après d'autres
+   boutons (ex: dans la liste des actions d'un commentaire) ; ici c'est le
+   seul élément du conteneur centré, ce 8px à gauche seulement le décale
+   visuellement du centre réel. */
+.argument-report-bottom .report-button {
+  margin-left: 0;
+}
 @media (min-width: 769px){
   .debate-top-add-button{
     padding: 14px 20px;
@@ -10616,16 +10624,9 @@ body.page-home.page-home-mobile {
 
 @media (max-width: 768px) {
   .page-create.page-create-mobile main.create-page,
+  .page-debate main.debate-page,
   .page-notifications.page-notifications-mobile main.home-page {
     padding-bottom: 74px;
-  }
-
-  /* Sur mobile, .home-bottom-nav est masquée sur page-debate (remplacée par
-     le dock flottant retour/actualiser/votes) : pas besoin de réserver une
-     pleine bande de respiration pour une barre qui ne s'affiche pas, ça
-     laissait juste un vide de fond anthracite après le dernier contenu. */
-  .page-debate main.debate-page {
-    padding-bottom: 16px;
   }
 }
 
@@ -14226,8 +14227,86 @@ body.page-debate .argument-card::before {
   margin-left: auto !important;
   margin-right: auto !important;
 }
-body.page-debate .argument-card .comments-block {
-  border-top-color: #243038 !important;
+/* La carte garde ses coins arrondis et sa bordure complète par défaut ;
+   sur page-debate, .argument-card est TOUJOURS immédiatement suivie d'un
+   .comments-block (les deux fonctions qui rendent les idées le génèrent
+   systématiquement) : pas besoin de :has() pour cibler ce cas, on aplatit
+   directement le coin bas et on retire la bordure basse pour que les deux
+   blocs se ressoudent en une seule carte continue, sans cassure ni
+   double-bordure. (Pas de :has() : certains navigateurs/webviews embarqués
+   ne le supportent pas, et la règle précédente ne s'appliquait alors pas.) */
+body.page-debate .argument-card {
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  margin-bottom: 0;
+  /* L'ombre de la carte (box-shadow) se projetait juste en dessous d'elle,
+     donc pile sur .comments-block maintenant qu'il n'y a plus d'écart : ça
+     ressemblait à un dégradé qui coupait la carte en deux. On la retire ici
+     et on la reporte sur .comments-block, qui est maintenant le vrai bas
+     visuel de l'ensemble. */
+  box-shadow: none;
+}
+
+/* .argument-card:hover (translateY(-1px) + ombre plus forte) recréait
+   exactement le même défaut au survol en desktop : un filet noir apparaissait
+   entre la carte et .comments-block puisque la carte se soulevait seule. */
+body.page-debate .argument-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* .comments-block est un frère de .argument-card (pas un enfant) : il
+   s'affichait donc à fond perdu sur l'anthracite de la page au lieu de
+   prolonger la carte blanche au-dessus. On le ressoude visuellement à la
+   carte (mêmes bords, coins arrondis en bas seulement, fond blanc). */
+body.page-debate .comments-block {
+  background: #ffffff;
+  border-left: 1px solid #d1d5db;
+  border-right: 1px solid #d1d5db;
+  border-bottom: 1px solid #d1d5db;
+  /* Le trait de séparation passe en petit trait centré (cf. ::before
+     ci-dessous), plus cohérent avec le petit trait décoratif en haut de
+     carte qu'une ligne pleine largeur. */
+  border-top: none !important;
+  border-radius: 0 0 14px 14px;
+  /* Annule le gap:18px de la grille .arguments-list(-unified), pas une
+     marge de carte : un -6px ne suffisait pas, il restait un filet de fond
+     anthracite visible entre les deux blocs. */
+  margin-top: -8px;
+  padding: 6px 18px 18px;
+  /* Pas de box-shadow ici : son flou remonte au-dessus du bord supérieur de
+     l'élément (le "0 3px 8px" déborde vers le haut) et redessine exactement
+     le dégradé qu'on cherche à supprimer, pile à la jonction avec la carte. */
+  box-shadow: none;
+}
+
+body.page-debate .comments-block::before {
+  content: "";
+  display: block;
+  height: 1px;
+  width: 36px;
+  background: #d1d5db;
+  border-radius: 2px;
+  margin: 0 auto 10px;
+}
+
+/* .argument-card-unified a un fond légèrement écru (#f5f5f4), pas blanc pur :
+   on aligne .comments-block sur cette même teinte pour que les deux moitiés
+   se voient comme une seule carte, sans démarcation de couleur. */
+body.page-debate .argument-card-unified + .comments-block {
+  background: #f5f5f4;
+}
+
+/* Vue pour/contre (débat binaire) : les cartes #arguments-a/#arguments-b
+   sont teintées par camp (var(--color-a-bg)/--color-b-bg) — on applique la
+   même teinte à .comments-block, qui est leur frère dans le même conteneur,
+   pour la même raison de continuité visuelle que ci-dessus. */
+#arguments-a .comments-block {
+  background-color: var(--color-a-bg);
+}
+
+#arguments-b .comments-block {
+  background-color: var(--color-b-bg);
 }
 
 /* Chips "mes arguments votés" en haut des colonnes */

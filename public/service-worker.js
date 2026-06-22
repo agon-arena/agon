@@ -1,4 +1,4 @@
-const SW_VERSION = "20260622-loading-overlay-smooth-resync";
+const SW_VERSION = "20260622-report-button-centering";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
