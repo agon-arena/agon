@@ -12897,7 +12897,11 @@ body.admin-edit-open::after {
 @media (max-width: 768px) {
   #debate-iframe-modal-close {
     top: auto !important;
-    bottom: calc(32px + env(safe-area-inset-bottom, 0px)) !important;
+    /* Pas d'env(safe-area-inset-bottom) : doit rester aligné avec le bouton
+       refresh de l'index (lui-même en position fixe, voir plus bas dans ce
+       fichier), qui ne peut pas dépendre de la safe-area sans bouger pendant
+       le scroll ni se désaligner du bandeau du bas en mode standalone. */
+    bottom: 32px !important;
     left: auto !important;
     right: 322px !important;
     width: 42px !important;
@@ -16690,7 +16694,9 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
   }
 
   #voices-float-badge {
-    bottom: calc(32px + env(safe-area-inset-bottom, 0px)) !important;
+    /* Pas d'env(safe-area-inset-bottom), pour rester aligné avec le bouton
+       refresh de l'index et #debate-iframe-modal-close (même raisonnement). */
+    bottom: 32px !important;
   }
 
   #voices-panel {
