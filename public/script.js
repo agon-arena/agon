@@ -30329,8 +30329,8 @@ function updateAgonStandaloneBottomSurfaceFill() {
   const gap = Math.round(viewportBottom - rect.bottom);
   let next = current;
 
-  if (gap > 1 && gap <= 150) {
-    next = Math.min(150, current + gap);
+  if (gap > 1 && gap <= 220) {
+    next = Math.min(220, current + gap);
   } else if (gap < -2) {
     next = Math.max(0, current + gap);
   }

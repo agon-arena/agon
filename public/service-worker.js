@@ -1,4 +1,4 @@
-const SW_VERSION = "20260622-app-bottom-fill";
+const SW_VERSION = "20260622-app-bottom-fill2";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
