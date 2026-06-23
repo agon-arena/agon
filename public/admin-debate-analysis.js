@@ -2135,11 +2135,12 @@
       const { r, json } = await fetchStoredAnalysis(debateId);
       if (!r.ok) return;
 
-      const hasReady = !!(json.raw || json.status === 'ready');
-      // Une régénération peut être programmée alors qu'un rapport précédent existe
-      // déjà (cf. _scheduleAnalysisIfNeeded côté serveur) : on affiche alors les deux
-      // badges côte à côte plutôt que de masquer le compte à rebours.
       const hasPending = (json.status === 'scheduled' || json.status === 'generating') && !!json.scheduledAt;
+      // Une régénération peut être programmée alors qu'un rapport précédent existe
+      // déjà (cf. _scheduleAnalysisIfNeeded côté serveur) : dans ce cas, seul le
+      // compte à rebours est affiché ici — le rapport existant reste consultable
+      // via le bouton "Voir le rapport" du bloc d'analyse, pas via ce badge.
+      const hasReady = !hasPending && !!(json.raw || json.status === 'ready');
 
       if (hasReady) {
         const readyBadge = document.createElement('span');

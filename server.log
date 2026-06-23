@@ -1,0 +1,14 @@
+
+> debat-app@1.0.0 start
+> node server.js
+
+[dotenv@17.3.1] injecting env (11) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[auto-vote schedulers] désactivés via AUTO_VOTE_SCHEDULERS_ENABLED=false
+Server running on port 3001
+[veille-medias] cache chargé depuis Supabase
+[Agôn] Content migré vers Supabase : 10 débats.
+[Agôn] Assets migrés vers Supabase : 20 débats.
+[Agôn] Keywords migrés vers Supabase : 11 débats.
+[Agôn] Tag exclusions chargés depuis Supabase : 18 tags.
+[Agôn] Shared debate links chargés depuis Supabase : 14 liens.
+[Agôn] Cache /api/debates?sort=recent préchauffé.
