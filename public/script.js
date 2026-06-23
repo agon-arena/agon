@@ -2245,12 +2245,7 @@ function changeArgumentsSort(mode) {
 
   currentArgumentsSortMode = normalizedMode;
 
-  const menu = document.getElementById("sort-menu");
-  if (menu) {
-    menu.classList.remove("sort-menu-visible");
-    const refreshBtn = document.querySelector(".app-floating-refresh-btn");
-    if (refreshBtn) refreshBtn.style.display = "";
-  }
+  setSortMenuVisible(false);
 
   updateSortButtonLabel();
 
@@ -2278,9 +2273,36 @@ function toggleSortMenu() {
   const menu = document.getElementById("sort-menu");
   if (!menu) return;
 
-  menu.classList.toggle("sort-menu-visible");
+  setSortMenuVisible(!menu.classList.contains("sort-menu-visible"));
+}
+
+// Le bouton refresh flottant a will-change:transform + backdrop-filter (calque
+// GPU dédié pour un fix iOS) : sous WebKit/Safari un calque promu peut
+// s'afficher au-dessus du menu malgré un z-index plus faible. On le masque
+// donc explicitement pendant que le menu est ouvert plutôt que de compter
+// sur le z-index pour ce bouton-là.
+//
+// Quand la page débat est affichée dans l'iframe modal de l'accueil (route
+// /debates/:id), le bouton refresh réellement visible à l'écran est celui du
+// chrome de la modale (#debate-iframe-modal-refresh, dans le document parent),
+// pas celui de ce document — le CSS/JS d'ici ne peut donc pas l'atteindre. On
+// prévient le parent par postMessage, comme pour argument-form-visibility /
+// ai-score-modal-visibility, pour qu'il masque ce bouton pendant que ce menu
+// est ouvert.
+function setSortMenuVisible(isVisible) {
+  const menu = document.getElementById("sort-menu");
+  if (!menu) return;
+
+  menu.classList.toggle("sort-menu-visible", isVisible);
+
   const refreshBtn = document.querySelector(".app-floating-refresh-btn");
-  if (refreshBtn) refreshBtn.style.display = menu.classList.contains("sort-menu-visible") ? "none" : "";
+  if (refreshBtn) refreshBtn.style.display = isVisible ? "none" : "";
+
+  if (window.parent !== window) {
+    try {
+      window.parent.postMessage({ type: "agon:sort-menu-visibility", open: isVisible }, "*");
+    } catch (_) {}
+  }
 }
 
 function updateSortButtonLabel() {
@@ -3804,7 +3826,8 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-close,
-    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh {
+    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh,
+    #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh {
       display: none !important;
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
@@ -4070,6 +4093,16 @@ function ensureDebateIframeModal() {
 
     if (e.data.type === "agon:debate-created") {
       window.__agonDebateModalNewDebateCreated = true;
+      return;
+    }
+
+    if (e.data.type === "agon:sort-menu-visibility") {
+      // Le menu "Trier les idées" de la page débat embarquée doit passer
+      // devant le bouton refresh du chrome de la modale
+      // (#debate-iframe-modal-refresh) — masqué via cette classe, même
+      // convention que argument-form-open-in-child / ai-score-modal-open-in-child.
+      const debateModal = document.getElementById("debate-iframe-modal");
+      if (debateModal) debateModal.classList.toggle("sort-menu-open-in-child", !!e.data.open);
       return;
     }
 
@@ -29097,9 +29130,7 @@ document.addEventListener("click", function(event) {
   if (!dropdown || !menu) return;
 
   if (!dropdown.contains(event.target)) {
-    menu.classList.remove("sort-menu-visible");
-    const refreshBtn = document.querySelector(".app-floating-refresh-btn");
-    if (refreshBtn) refreshBtn.style.display = "";
+    setSortMenuVisible(false);
   }
 });
 

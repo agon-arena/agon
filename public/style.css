@@ -10935,9 +10935,9 @@ body.page-home-mobile .app-floating-refresh-btn:focus-visible {
     linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
 }
 
-/* Passe au-dessus du menu de tri (Plus soutenues, Idées en progression, etc.) */
+/* Reste sous le menu de tri (Plus soutenues, Idées en progression, etc.) */
 body.page-debate .debate-floating-refresh-btn {
-  z-index: 201;
+  z-index: 120;
 }
 
 .agon-new-debates-banner {
@@ -15356,9 +15356,19 @@ body.page-debate .similar-debates-toggle-btn:focus-visible {
   box-shadow: none !important;
 }
 
-/* Bouton tri + menu tri */
+/* Bouton tri + menu tri — reste sous le bandeau de navigation bas blanc
+   (.home-bottom-nav, z-index 145) au repos (bouton fermé), mais passe
+   au-dessus dès que le menu est ouvert. Le bouton refresh flottant a
+   will-change:transform + backdrop-filter (calque GPU dédié pour un fix
+   iOS) : sous WebKit/Safari un calque promu peut s'afficher au-dessus d'un
+   z-index plus élevé malgré tout, donc on le masque plutôt via JS
+   (toggleSortMenu) pendant que le menu est ouvert au lieu de compter sur le
+   z-index pour celui-ci. */
 body.page-debate .sort-dropdown {
-  z-index: 160;
+  z-index: 100;
+}
+body.page-debate .sort-dropdown:has(.sort-menu-visible) {
+  z-index: 150;
 }
 body.page-debate .sort-button {
   background: #2e3d47 !important;
@@ -15375,7 +15385,7 @@ body.page-debate .sort-button:hover {
 body.page-debate .sort-menu {
   background: #2e3d47 !important;
   border-color: #3a4a55 !important;
-  z-index: 160;
+  z-index: 150;
 }
 body.page-debate .sort-menu button {
   color: #e8e8e8 !important;

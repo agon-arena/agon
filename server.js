@@ -45,6 +45,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
+// Identifiant fixe envoyé par le pipeline Certamen (bot veille) sur POST /api/debates
+// pour publier des arènes communauté. Ces arènes ne doivent jamais afficher de badge
+// de tendance sur les cartes (demande explicite de Kevin) : voir le garde-fou autour
+// de setDebateTrend dans POST /api/debates.
+const CERTAMEN_CREATOR_KEY = process.env.CERTAMEN_CREATOR_KEY || "certamen-bot";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
@@ -5434,6 +5439,13 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         type: type || "debate"
       });
       try {
+        // Certamen (pipeline bot veille) publie ses arènes communauté via cet endpoint
+        // avec ce creatorKey fixe : jamais de badge de tendance sur ces cartes.
+        if (creatorKey === CERTAMEN_CREATOR_KEY) {
+          await rebuildCloudBubblesAfterPublish("create-debate", data.id);
+          return;
+        }
+
         const currentSourceCount = normalizedSourceUrl ? 1 : 0;
         const { data: recentRows } = await supabase
           .from("debates")

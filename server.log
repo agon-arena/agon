@@ -2,13 +2,25 @@
 > debat-app@1.0.0 start
 > node server.js
 
-[dotenv@17.3.1] injecting env (11) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (11) from .env -- tip: ⚙️  override existing env vars with { override: true }
 [auto-vote schedulers] désactivés via AUTO_VOTE_SCHEDULERS_ENABLED=false
-Server running on port 3001
-[veille-medias] cache chargé depuis Supabase
-[Agôn] Content migré vers Supabase : 10 débats.
-[Agôn] Assets migrés vers Supabase : 20 débats.
-[Agôn] Keywords migrés vers Supabase : 11 débats.
-[Agôn] Tag exclusions chargés depuis Supabase : 18 tags.
-[Agôn] Shared debate links chargés depuis Supabase : 14 liens.
-[Agôn] Cache /api/debates?sort=recent préchauffé.
+node:events:496
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.18.0
