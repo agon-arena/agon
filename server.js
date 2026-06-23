@@ -939,8 +939,8 @@ async function syncCloudBubbleTagIfPresent(debateId) {
   const data = await loadCloudBubbles();
   const idx = (data.bubbles || []).findIndex(b => String(b.subjectId) === id);
   if (idx < 0) return;
-  const { data: row } = await supabase.from("debates").select("keywords").eq("id", id).maybeSingle();
-  const newTag = getCloudLabelFromDebate(id, { [id]: row?.keywords || [] });
+  const { data: row } = await supabase.from("debates").select("keywords, cloud_label").eq("id", id).maybeSingle();
+  const newTag = getCloudLabelFromDebate(row || {});
   if (!newTag || newTag === data.bubbles[idx].tag) return;
   data.bubbles[idx] = { ...data.bubbles[idx], tag: newTag };
   await saveCloudBubbles(data);
@@ -963,8 +963,12 @@ function normalizeCloudLabel(tag) {
     .trim();
 }
 
-function getCloudLabelFromDebate(debateId, keywordsMap) {
-  const keywords = normalizeKeywordList(keywordsMap?.[String(debateId)] || []);
+// Libellé en cascade : cloud_label IA → premier keyword non générique.
+function getCloudLabelFromDebate(debate) {
+  const cloudLabel = String(debate?.cloud_label || "").trim();
+  if (cloudLabel) return cloudLabel;
+
+  const keywords = normalizeKeywordList(debate?.keywords || []);
   for (const keyword of keywords) {
     const normalized = normalizeCloudLabel(keyword);
     if (normalized.length >= 3 && !CLOUD_GENERIC_LABELS_SET.has(normalized)) {
@@ -1018,15 +1022,10 @@ async function rebuildCloudBubbles() {
 
   const { data: allDebates, error } = await supabase
     .from("debates")
-    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords")
+    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-
-  const keywordsMap = {};
-  for (const d of (allDebates || [])) {
-    if (Array.isArray(d.keywords) && d.keywords.length) keywordsMap[d.id] = d.keywords;
-  }
 
   // Masque les ancêtres explicitement cités par matchedSubjectId, sur toute la
   // profondeur de la chaîne (ex: 941→940→921 doit masquer 940 ET 921, même si 940
@@ -1059,7 +1058,7 @@ async function rebuildCloudBubbles() {
     const id = String(debate.id);
     if (hiddenAncestors.has(id)) continue;
 
-    const label = getCloudLabelFromDebate(debate.id, keywordsMap);
+    const label = getCloudLabelFromDebate(debate);
     if (!label) continue;
     const sourceCount = countCloudSources(debate);
     if (sourceCount <= 0) continue;
@@ -1089,7 +1088,7 @@ async function rebuildCloudBubbles() {
   if (ids.length) {
     const { data: currentDebates, error: currentError } = await supabase
       .from("debates")
-      .select("id, source_url, media_extras, created_at, source_published_at")
+      .select("id, source_url, media_extras, created_at, source_published_at, keywords, cloud_label")
       .in("id", ids);
     if (currentError) throw new Error(currentError.message);
     for (const debate of (currentDebates || [])) debateMap.set(String(debate.id), debate);
@@ -1099,7 +1098,7 @@ async function rebuildCloudBubbles() {
     .map((bubble) => {
       const debate = debateMap.get(String(bubble.subjectId));
       const refreshedCount = debate ? countCloudSources(debate) : Number(bubble.count || 0);
-      const tag = getCloudLabelFromDebate(bubble.subjectId, keywordsMap) || bubble.tag;
+      const tag = (debate ? getCloudLabelFromDebate(debate) : "") || bubble.tag;
       return {
         tag,
         subjectId: String(bubble.subjectId),

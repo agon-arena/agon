@@ -24770,7 +24770,10 @@ currentDebateShareData = {
 currentDebateCache = data.debate;
 applyArgumentBodyCharacterLimit(data.debate);
 
-if (data.debate.ai_analysis_status === 'ready') {
+if (data.debate.ai_analysis_status !== 'none') {
+  // status peut être "scheduled"/"generating"/"failed" tout en ayant déjà
+  // un ai_analysis valide en base (re-génération en attente) : on affiche
+  // ce rapport existant plutôt que de masquer les notes pendant l'attente.
   fetch(API + '/debates/' + id + '/analysis')
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(json) {
