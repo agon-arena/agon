@@ -208,7 +208,7 @@
         }
       }
       #debate-ai-countdown-slot {
-        display: flex; justify-content: center;
+        display: flex; justify-content: center; flex-wrap: wrap; gap: 6px;
         margin-top: 1px;
       }
 
@@ -2135,9 +2135,19 @@
       const { r, json } = await fetchStoredAnalysis(debateId);
       if (!r.ok) return;
 
-      if (json.raw || json.status === 'ready') {
-        slot.innerHTML = '<span class="ada-countdown-ready" style="cursor:pointer;" title="Voir l\'analyse"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
-        slot.querySelector('.ada-countdown-ready').addEventListener('click', () => {
+      const hasReady = !!(json.raw || json.status === 'ready');
+      // Une régénération peut être programmée alors qu'un rapport précédent existe
+      // déjà (cf. _scheduleAnalysisIfNeeded côté serveur) : on affiche alors les deux
+      // badges côte à côte plutôt que de masquer le compte à rebours.
+      const hasPending = (json.status === 'scheduled' || json.status === 'generating') && !!json.scheduledAt;
+
+      if (hasReady) {
+        const readyBadge = document.createElement('span');
+        readyBadge.className = 'ada-countdown-ready';
+        readyBadge.style.cursor = 'pointer';
+        readyBadge.title = "Voir l'analyse";
+        readyBadge.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible';
+        readyBadge.addEventListener('click', () => {
           const target = document.getElementById('debate-ai-analysis-slot');
           scrollToAnalysisElement(target);
           setTimeout(() => {
@@ -2145,11 +2155,10 @@
             if (triggerBtn) triggerBtn.click();
           }, 400);
         });
-        observeAnimated(slot);
-        return;
+        slot.appendChild(readyBadge);
       }
 
-      if ((json.status === 'scheduled' || json.status === 'generating') && json.scheduledAt) {
+      if (hasPending) {
         const target = new Date(json.scheduledAt).getTime();
         const badge  = document.createElement('span');
         badge.className = 'ada-countdown-badge';
@@ -2159,14 +2168,16 @@
         const tick = () => {
           const secs = Math.max(0, Math.round((target - Date.now()) / 1000));
           if (secs <= 0) {
-            slot.innerHTML = '<span class="ada-countdown-ready"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>';
+            badge.textContent = 'Mise à jour de l\'analyse en cours…';
           } else {
-            badge.textContent = 'Analyse IA dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
+            badge.textContent = 'Prochaine analyse dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
             setTimeout(tick, 1000);
           }
         };
         tick();
       }
+
+      observeAnimated(slot);
     } catch (_) {}
   }
 
