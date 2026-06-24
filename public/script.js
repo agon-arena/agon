@@ -15539,7 +15539,7 @@ function renderIndexContextExpandedText(text, isOpen = false) {
 function closeIndexContextPreview(button) {
   if (!button || button.getAttribute('aria-expanded') !== 'true') return;
   const card = button.closest('[data-index-context-card]');
-  const article = button.closest('article.debate-card');
+  const article = button.closest('.debate-card');
   const textEl = card?.querySelector('[data-index-context-text]');
   const metaEl = card?.querySelector('.debate-card-context-extra');
   const shortText = textEl?.getAttribute('data-short-text') || '';
@@ -15571,13 +15571,6 @@ function restoreOpenIndexContextCards(container, openIds) {
     if (btn && btn.getAttribute('aria-expanded') !== 'true') {
       toggleIndexContextPreview(btn);
     }
-  });
-}
-
-function closeAllOpenContextPreviews(exceptCard) {
-  document.querySelectorAll('[data-index-context-toggle][aria-expanded="true"]').forEach((btn) => {
-    const card = btn.closest('.debate-card');
-    if (card && card !== exceptCard) closeIndexContextPreview(btn);
   });
 }
 
@@ -15667,7 +15660,7 @@ function reserveIndexRowHeightForContextOpen(article, metaEl) {
 }
 
 function syncIndexContextPreviewLayout(button, shouldReveal) {
-  const article = button?.closest('article.debate-card');
+  const article = button?.closest('.debate-card');
   if (!article) return;
 
   const row = article.closest('.theme-horizontal-row');
@@ -15675,11 +15668,6 @@ function syncIndexContextPreviewLayout(button, shouldReveal) {
     updateCarouselCardHighlight(row);
     if (shouldReveal) {
       reserveIndexRowHeightForContextOpen(article, article.querySelector('.debate-card-context-extra'));
-      const neededHeight = Math.ceil((article.offsetHeight || article.getBoundingClientRect().height || 0) + 10);
-      const currentHeight = parseFloat(row.style.height || '0') || 0;
-      if (neededHeight > currentHeight) {
-        row.style.height = `${neededHeight}px`;
-      }
     } else {
       updateIndexRowContextOpenState(row);
       // Libère immédiatement la hauteur fixe : le row suit la transition CSS de la carte (max-height 0.34s)
@@ -15724,7 +15712,7 @@ function keepIndexCardSourceImagesAlive(article, durationMs = 5000) {
 
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
-  const article = button?.closest('article.debate-card');
+  const article = button?.closest('.debate-card');
   const textEl = card?.querySelector('[data-index-context-text]');
   const metaEl = card?.querySelector('.debate-card-context-extra');
   if (!button || (!textEl && !metaEl)) return;
@@ -17486,7 +17474,7 @@ function initThematicRowDragScroll() {
       row.dataset.heightResizeObserved = "1";
       let resizeHeightRaf = null;
       const resizeObserver = new ResizeObserver(() => {
-        if (!_isMobileCache || resizeHeightRaf) return;
+        if (resizeHeightRaf) return;
         resizeHeightRaf = requestAnimationFrame(() => {
           resizeHeightRaf = null;
           row.dataset.heightVisibleKey = '';
