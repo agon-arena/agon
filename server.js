@@ -2796,13 +2796,13 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
 }
 
 
-// Nombre de publications récentes comparées au nouveau sujet pour le calcul de tendance
-const TREND_RECENT_SUBJECTS_LIMIT = 10;
+// Nombre de publications antérieures comparées au nouveau sujet pour le calcul de tendance
+const TREND_RECENT_SUBJECTS_LIMIT = 20;
 
 // Écart minimal avant qu'un débat puisse être considéré comme le remplaçant d'un autre :
 // les arènes sorties dans la même rafale de publication (lot de veille) ne sont pas
 // une évolution réelle de l'actu dans le temps, elles doivent rester visibles séparément.
-const MIN_TREND_MATCH_GAP_MS = 10 * 60 * 1000;
+const MIN_TREND_MATCH_GAP_MS = 60 * 60 * 1000;
 
 /**
  * Compare un nouveau sujet avec les publications récentes pour détecter
@@ -2841,7 +2841,7 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     "Nouveau sujet :",
     formatSubject(newSubject),
     "",
-    "Publications récentes (les 24 dernières) :",
+    "Publications récentes (les 20 dernières, publiées il y a au moins 1h) :",
     recentLines,
     "",
     "Si plusieurs sujets semblent appartenir à la même séquence, retourne TOUS leurs ids dans le tableau matchedSubjectIds (pas seulement un).",
@@ -5450,15 +5450,15 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         }
 
         const currentSourceCount = normalizedSourceUrl ? 1 : 0;
+        const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
         const { data: recentRows } = await supabase
           .from("debates")
           .select("id, question, content, source_url, media_extras, created_at, keywords")
           .neq("id", data.id)
+          .lte("created_at", new Date(matchCutoff).toISOString())
           .order("created_at", { ascending: false })
           .limit(TREND_RECENT_SUBJECTS_LIMIT);
-        const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
         const recentSubjects = (recentRows || [])
-          .filter((d) => !d.created_at || new Date(d.created_at).getTime() <= matchCutoff)
           .map((d) => {
           const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
           const srcExtras = extras.filter((e) => e && typeof e === "object" &&
@@ -7001,12 +7001,15 @@ async function computeAgonBubbleTrends() {
 
   const argumentIds = (args || []).map((arg) => arg.id);
   const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+  const cutoff96h = Date.now() - 96 * 60 * 60 * 1000;
   const cutoff7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
   const commentCountByDebate = new Map();
   const comment48hCountByDebate = new Map();
+  const commentPrev48hCountByDebate = new Map();
   const comment7dCountByDebate = new Map();
   const vote48hCountByDebate = new Map();
+  const votePrev48hCountByDebate = new Map();
   const vote7dCountByDebate = new Map();
 
   if (argumentIds.length) {
@@ -7036,6 +7039,7 @@ async function computeAgonBubbleTrends() {
       if (comment.created_at) {
         const commentTime = new Date(comment.created_at).getTime();
         if (commentTime > cutoff48h) comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
+        else if (commentTime > cutoff96h) commentPrev48hCountByDebate.set(debateId, Number(commentPrev48hCountByDebate.get(debateId) || 0) + 1);
         if (commentTime > cutoff7d) comment7dCountByDebate.set(debateId, Number(comment7dCountByDebate.get(debateId) || 0) + 1);
       }
     }
@@ -7045,8 +7049,11 @@ async function computeAgonBubbleTrends() {
       if (!debateId || !vote.created_at) continue;
       const voteWeight = Math.max(1, Number(vote.vote_count) || 1);
       vote7dCountByDebate.set(debateId, Number(vote7dCountByDebate.get(debateId) || 0) + voteWeight);
-      if (new Date(vote.created_at).getTime() > cutoff48h) {
+      const voteTime = new Date(vote.created_at).getTime();
+      if (voteTime > cutoff48h) {
         vote48hCountByDebate.set(debateId, Number(vote48hCountByDebate.get(debateId) || 0) + voteWeight);
+      } else if (voteTime > cutoff96h) {
+        votePrev48hCountByDebate.set(debateId, Number(votePrev48hCountByDebate.get(debateId) || 0) + voteWeight);
       }
     }
   }
@@ -7059,6 +7066,11 @@ async function computeAgonBubbleTrends() {
     const debateArgs = argsByDebate.get(sharedDebateId) || [];
     const argument_count = debateArgs.length;
     const argument_count_48h = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff48h).length;
+    const argument_count_prev48h = debateArgs.filter((a) => {
+      if (!a.created_at) return false;
+      const t = new Date(a.created_at).getTime();
+      return t > cutoff96h && t <= cutoff48h;
+    }).length;
     const argument_count_7d = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff7d).length;
     const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
     const vote_count = debateArgs.reduce((sum, a) => sum + Number(a.votes || 0), 0);
@@ -7066,6 +7078,7 @@ async function computeAgonBubbleTrends() {
     return {
       debate,
       score48h: activityScore(argument_count_48h, comment48hCountByDebate.get(sharedDebateId), vote48hCountByDebate.get(sharedDebateId)),
+      scorePrev48h: activityScore(argument_count_prev48h, commentPrev48hCountByDebate.get(sharedDebateId), votePrev48hCountByDebate.get(sharedDebateId)),
       score7d: activityScore(argument_count_7d, comment7dCountByDebate.get(sharedDebateId), vote7dCountByDebate.get(sharedDebateId)),
       scoreTotal: activityScore(argument_count, comment_count, vote_count)
     };
@@ -7090,12 +7103,20 @@ async function computeAgonBubbleTrends() {
   const sizeScoreOf = max7d > 0 ? (item) => item.score7d : (item) => item.scoreTotal;
   const maxSizeScore = max7d > 0 ? max7d : selected.reduce((max, item) => Math.max(max, item.scoreTotal), 0);
 
+  // Tendance = évolution de l'activité des dernières 48h par rapport aux 48h précédentes (48h-96h).
+  const computeTrend = (current, previous) => {
+    if (!previous && !current) return 0;
+    if (!previous) return 100;
+    return Math.round(((current - previous) / previous) * 100);
+  };
+
   const bubbles = selected
     .map((item) => ({
       tag: getAgonBubbleLabel(item.debate),
       subjectId: String(item.debate.id),
       count: sizeScoreOf(item),
-      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0
+      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0,
+      trend: computeTrend(item.score48h, item.scorePrev48h)
     }))
     .filter((item) => item.tag);
 
@@ -7418,16 +7439,16 @@ if (!currentSourceKeys.size && sourceUrl) {
 const currentSourceCount = currentSourceKeys.size;
   console.log(`[trend] nouveau sujet id=${data.id} currentSourceCount=${currentSourceCount}`);
 
+  const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
   const { data: recentRows } = await supabase
     .from("debates")
     .select("id, question, content, source_url, media_extras, created_at, keywords")
     .neq("id", data.id)
+    .lte("created_at", new Date(matchCutoff).toISOString())
     .order("created_at", { ascending: false })
     .limit(TREND_RECENT_SUBJECTS_LIMIT);
 
-  const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
   const recentSubjects = (recentRows || [])
-    .filter((d) => !d.created_at || new Date(d.created_at).getTime() <= matchCutoff)
     .map((d) => {
     const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
     const srcExtras = extras.filter((e) => e && typeof e === "object" &&
