@@ -707,7 +707,8 @@ function renderTagTrendCloud(container, trends, onReady) {
     if (!tag) return;
 
     const trendValue = Number(trendItem?.trend);
-    const trendMeta = getTrendMeta(trendValue);
+    const hasTrend = Number.isFinite(trendValue) && trendValue !== 0;
+    const trendMeta = hasTrend ? getTrendMeta(trendValue) : null;
     const bubble = document.createElement("button");
     bubble.className = [
       "agon-tag-bubble",
@@ -739,18 +740,21 @@ function renderTagTrendCloud(container, trends, onReady) {
     const flashWrap = document.createElement("span");
     flashWrap.className = "agon-tag-bubble-flash";
 
-    const trendSpan = document.createElement("span");
-    trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
-    trendSpan.dataset.bubbleIndex = String(index);
-    trendSpan.dataset.tag = tag;
-    trendSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
-    trendSpan.textContent = trendMeta.label;
-    const connectorSpan = document.createElement("span");
-    connectorSpan.className = `agon-tag-trend-connector ${trendMeta.className}`;
-    connectorSpan.dataset.bubbleIndex = String(index);
-    connectorSpan.dataset.tag = tag;
-    connectorSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
-    bubble.append(flashWrap, connectorSpan, trendSpan, label);
+    bubble.append(flashWrap, label);
+    if (hasTrend) {
+      const trendSpan = document.createElement("span");
+      trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
+      trendSpan.dataset.bubbleIndex = String(index);
+      trendSpan.dataset.tag = tag;
+      trendSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
+      trendSpan.textContent = trendMeta.label;
+      const connectorSpan = document.createElement("span");
+      connectorSpan.className = `agon-tag-trend-connector ${trendMeta.className}`;
+      connectorSpan.dataset.bubbleIndex = String(index);
+      connectorSpan.dataset.tag = tag;
+      connectorSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
+      bubble.append(connectorSpan, trendSpan);
+    }
     container.appendChild(bubble);
   });
 
