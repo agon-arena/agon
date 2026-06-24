@@ -59,6 +59,89 @@ const COLOR_B          = '#AEC0CC';
 const COLOR_B_BG       = '#e8f3f7';
 const COLOR_B_BORDER   = '#AEC0CC';
 
+// DIAGNOSTIC TEMPORAIRE — à retirer une fois le bug du "refresh" de l'index résolu.
+// Trace tous les déclencheurs suspects de reload/navigation/loader/rerender.
+function __agonDebugRefreshLog(source, type, extra = {}) {
+  try {
+    console.log("[AGON DEBUG REFRESH]", {
+      source,
+      type,
+      timestamp: new Date().toISOString(),
+      url: String(window.location.href || ""),
+      scrollY: Math.round(window.scrollY || 0),
+      modalOpen: window.__agonDebateModalOpen === true,
+      ...extra
+    });
+  } catch (e) {}
+}
+
+// DIAGNOSTIC TEMPORAIRE — à appeler juste avant tout location.reload()/replace()/href
+// connu du code Agôn, pour pouvoir distinguer au prochain démarrage un reload
+// déclenché par notre propre code d'un reload déclenché par le navigateur mobile
+// (onglet déchargé pour mémoire) ou d'un crash/timeout réseau dont notre code n'a
+// pas connaissance (dans ce dernier cas, aucun motif ne sera trouvé au démarrage).
+const AGON_LAST_RELOAD_REASON_KEY = "agon_last_reload_reason";
+function __agonRecordReloadReason(reason) {
+  try {
+    sessionStorage.setItem(AGON_LAST_RELOAD_REASON_KEY, JSON.stringify({ reason, at: Date.now() }));
+  } catch (e) {}
+}
+
+// DIAGNOSTIC TEMPORAIRE — s'exécute au tout début de chaque chargement de script.js.
+(function __agonDebugStartupDiagnostic() {
+  try {
+    let navigationType = "unknown";
+    try {
+      const navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+      if (navEntry) {
+        navigationType = navEntry.type;
+      } else if (performance.navigation) {
+        navigationType = ["navigate", "reload", "back_forward", "reserved"][performance.navigation.type] || "unknown";
+      }
+    } catch (e) {}
+
+    const wasDiscarded = document.wasDiscarded === true;
+
+    let lastReloadReason = null;
+    try {
+      const raw = sessionStorage.getItem(AGON_LAST_RELOAD_REASON_KEY);
+      if (raw) {
+        lastReloadReason = JSON.parse(raw);
+        sessionStorage.removeItem(AGON_LAST_RELOAD_REASON_KEY);
+      }
+    } catch (e) {}
+
+    const skipStartup = window.__agonSkipStartupOnce === true;
+
+    let likelyCause = "navigation normale (premier chargement ou lien cliqué)";
+    if (lastReloadReason) {
+      likelyCause = "code Agôn : " + lastReloadReason.reason;
+    } else if (navigationType === "reload" && wasDiscarded) {
+      likelyCause = "navigateur mobile : onglet déchargé pour mémoire puis rechargé (tab discard)";
+    } else if (navigationType === "reload" && !wasDiscarded) {
+      likelyCause = "reload sans motif connu de notre code : navigateur/OS, crash, ou erreur réseau/surcharge indéterminée";
+    } else if (wasDiscarded) {
+      likelyCause = "navigateur mobile : onglet déchargé pour mémoire (tab discard)";
+    }
+
+    console.log("[AGON DEBUG STARTUP]", {
+      navigationType,
+      wasDiscarded,
+      lastReloadReason: lastReloadReason ? lastReloadReason.reason : null,
+      lastReloadReasonAt: lastReloadReason ? new Date(lastReloadReason.at).toISOString() : null,
+      skipStartup,
+      likelyCause,
+      timestamp: new Date().toISOString(),
+      url: String(window.location.href || ""),
+      userAgent: String(navigator.userAgent || "")
+    });
+  } catch (e) {}
+})();
+
+document.addEventListener("visibilitychange", () => {
+  __agonDebugRefreshLog("document-visibilitychange", "rerender", { hidden: document.hidden });
+});
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
@@ -1444,6 +1527,7 @@ function updatePageArrivalLoadingOverlayBounds() {
 }
 
 function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
+  __agonDebugRefreshLog("showPageArrivalLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
   ensurePageArrivalLoadingOverlayStyles();
 
   let overlay = document.getElementById("page-arrival-loading-overlay");
@@ -3294,6 +3378,7 @@ function getDebateIframeParentLoadingImageSrc() {
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   if (!isTopLevelIframeModalPage()) return;
+  __agonDebugRefreshLog("showDebateIframeParentLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
 
   ensurePageArrivalLoadingOverlayStyles();
   ensureDebateIframeParentLoadingStyles();
@@ -4588,6 +4673,7 @@ function openDebateIframeModal(url, options = {}) {
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 900);
   window.__agonIframeCurrentPathname = iframeUrlPathname;
   syncDebateIframeModalPageClass(iframeUrlPathname);
+  __agonDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
@@ -4812,6 +4898,7 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 }
 
 function closeDebateIframeModal() {
+  __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
@@ -4830,10 +4917,13 @@ function closeDebateIframeModal() {
     _debateModalSavedScrollY = null;
     _debateModalSavedScrollAnchor = null;
     try { sessionStorage.setItem(INDEX_SKIP_STARTUP_ONCE_KEY, "1"); } catch (error) {}
+    __agonDebugRefreshLog("closeDebateIframeModal", "navigation", { target: "/?skipStartup=1", via: "window.location.replace" });
+    __agonRecordReloadReason("close-modal-from-notifications-return-to-index");
     window.location.replace("/?skipStartup=1");
     return;
   }
 
+  __agonDebugRefreshLog("closeDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay" });
   showDebateIframeParentLoadingOverlay("Chargement en cours");
 
   try {
@@ -13391,6 +13481,8 @@ async function adminLogout() {
 
     clearAdminToken();
     refreshAdminUI();
+    __agonRecordReloadReason("admin-logout");
+    try { sessionStorage.setItem('agon_skip_startup_once', '1'); } catch (e) {}
     location.reload();
   } catch (error) {
     alert(error.message);
@@ -16953,6 +17045,7 @@ function sortDebatesForIndex(debates) {
 
 
 function applyIndexFilters() {
+  __agonDebugRefreshLog("applyIndexFilters", "rerender", {});
   syncIndexTypeFilterButtons();
   syncIndexShortcutFilterButtons();
   const filteredDebates = getFilteredDebatesForIndex(debatesCache);
@@ -18104,9 +18197,11 @@ function renderDebatesList(debates) {
   // Si la modale iframe est ouverte, on ne re-rend pas maintenant
   // pour ne pas perturber la position de scroll ni recréer le DOM
   if (window.__agonDebateModalOpen) {
+    __agonDebugRefreshLog("renderDebatesList", "rerender", { phase: "deferred-while-modal-open", count: Array.isArray(debates) ? debates.length : null });
     window.__agonDebateModalPendingDebates = debates;
     return;
   }
+  __agonDebugRefreshLog("renderDebatesList", "rerender", { phase: "full-dom-rebuild", count: Array.isArray(debates) ? debates.length : null });
   // En mode admin, l'édition d'une carte peut contenir un menu thématique ouvert.
   // On évite alors que le scroll infini reconstruise la liste et referme ce menu.
   if (isIndexAdminEditInteractionActive()) {
@@ -30891,6 +30986,7 @@ window.addEventListener('pageshow', (event) => {
   if (!event.persisted) return;
   const p = location.pathname;
   if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return;
+  __agonDebugRefreshLog("pageshow-bfcache", "rerender", { persisted: true, pathname: p });
   clearIndexDebatesSessionCache();
   if (window.__agonDebateModalOpen) {
     try { closeDebateIframeModal(); } catch (e) {}
@@ -30921,66 +31017,11 @@ window.addEventListener('pageshow', (event) => {
   });
 })();
 
-// Rechargement automatique après 5 min d'absence (toutes pages).
-(function() {
-  var IDLE_RELOAD_KEY = "agon_idle_reload_hidden_at";
-  var IDLE_RELOAD_THRESHOLD = 30 * 60 * 1000;
-  var idleReloadInProgress = false;
-
-  function onHidden() {
-    sessionStorage.setItem(IDLE_RELOAD_KEY, String(Date.now()));
-  }
-
-  function showIdleReloadOverlay() {
-    if (document.getElementById('agon-idle-reload-overlay')) return;
-
-    var overlay = document.createElement('div');
-    overlay.id = 'agon-idle-reload-overlay';
-    overlay.setAttribute('aria-hidden', 'true');
-    overlay.style.cssText = [
-      'position:fixed',
-      'inset:0',
-      'z-index:400000',
-      'display:flex',
-      'align-items:center',
-      'justify-content:center',
-      'background:#101820',
-      'pointer-events:auto'
-    ].join(';');
-    overlay.innerHTML = '<img src="/sablier-96.png" alt="" style="width:78px;height:78px;object-fit:contain;animation:pageArrivalLogoSpin 1s linear infinite;filter:drop-shadow(0 10px 24px rgba(0,0,0,.32));">';
-    document.body.appendChild(overlay);
-  }
-
-  function reloadAfterPaint() {
-    if (idleReloadInProgress) return;
-    idleReloadInProgress = true;
-    try { showPageArrivalLoadingOverlay(); } catch (e) {}
-    showIdleReloadOverlay();
-
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        setTimeout(function() {
-          location.reload();
-        }, 40);
-      });
-    });
-  }
-
-  function onVisible() {
-    var hiddenAt = Number(sessionStorage.getItem(IDLE_RELOAD_KEY) || 0);
-    sessionStorage.removeItem(IDLE_RELOAD_KEY);
-    if (!hiddenAt || Date.now() - hiddenAt <= IDLE_RELOAD_THRESHOLD) return;
-    if (window.__agonDebateModalOpen) return;
-    reloadAfterPaint();
-  }
-
-  document.addEventListener('visibilitychange', function() {
-    if (document.hidden) onHidden();
-    else onVisible();
-  });
-})();
-
 // Bandeau "nouvelles publications" (style réseaux sociaux).
+// Remplace l'ancien rechargement automatique après inactivité (location.reload()
+// déclenché sur visibilitychange) : ce reload forcé interrompait la lecture mobile
+// et rejouait l'intro Agôn / "mentem eleva". L'utilisateur décide désormais lui-même
+// du moment où il actualise, via ce bandeau.
 (function() {
   var p = location.pathname;
   if (p !== '/' && p !== '/debates') return;
@@ -31008,6 +31049,8 @@ window.addEventListener('pageshow', (event) => {
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
       document.body.appendChild(overlay);
+      __agonRecordReloadReason("new-debates-banner-click");
+      try { sessionStorage.setItem('agon_skip_startup_once', '1'); } catch (e) {}
       setTimeout(function() { window.location.reload(); }, 60);
     });
   }

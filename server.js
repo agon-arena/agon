@@ -1027,7 +1027,7 @@ async function rebuildCloudBubbles() {
 
   const { data: allDebates, error } = await supabase
     .from("debates")
-    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label")
+    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label, creator_key")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -1062,6 +1062,9 @@ async function rebuildCloudBubbles() {
   for (const debate of (allDebates || [])) {
     const id = String(debate.id);
     if (hiddenAncestors.has(id)) continue;
+    // Bulles Actu = arènes officielles uniquement ; les arènes communauté (ex: Certamen)
+    // ont leur propre nuage côté client (Bulles Agôn).
+    if (debate.creator_key !== AGON_ADMIN_CREATOR_KEY) continue;
 
     const label = getCloudLabelFromDebate(debate);
     if (!label) continue;
