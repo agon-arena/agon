@@ -3365,9 +3365,11 @@ function ensureDebateIframeParentLoadingStyles() {
   document.head.appendChild(style);
 }
 
-function updateDebateIframeParentLoadingOverlayBounds() {
+function updateDebateIframeParentLoadingOverlayBounds(options = {}) {
   const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
   if (!overlay) return;
+
+  if (!options.force && overlay.dataset.agonBoundsFrozen === "true") return;
 
   overlay.style.setProperty("--debate-iframe-parent-loading-top", `${getStableTopbarBottomOffset()}px`);
 }
@@ -3423,14 +3425,22 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   }
 
   document.body.classList.add("debate-iframe-parent-loading-open");
-  updateDebateIframeParentLoadingOverlayBounds();
-  requestAnimationFrame(updateDebateIframeParentLoadingOverlayBounds);
-  // En PWA standalone iOS, env(safe-area-inset-top) peut n'être résolue par
-  // WKWebView qu'avec un léger retard après le premier rendu : un recalcul
-  // différé rattrape ce cas sans attendre un resize qui peut ne jamais venir
-  // (la transition CSS sur "top" rend ce rattrapage imperceptible).
-  setTimeout(updateDebateIframeParentLoadingOverlayBounds, 200);
-  overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
+
+  if (overlay.classList.contains("debate-iframe-parent-loading-overlay-visible")) {
+    overlay.dataset.agonBoundsFrozen = "true";
+    return;
+  }
+
+  overlay.dataset.agonBoundsFrozen = "false";
+  updateDebateIframeParentLoadingOverlayBounds({ force: true });
+  requestAnimationFrame(() => {
+    updateDebateIframeParentLoadingOverlayBounds({ force: true });
+    requestAnimationFrame(() => {
+      updateDebateIframeParentLoadingOverlayBounds({ force: true });
+      overlay.dataset.agonBoundsFrozen = "true";
+      overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
+    });
+  });
 }
 
 function hideDebateIframeParentLoadingOverlay() {
@@ -3443,6 +3453,7 @@ function hideDebateIframeParentLoadingOverlay() {
   }
 
   if (!overlay) return;
+  delete overlay.dataset.agonBoundsFrozen;
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
 }
 
@@ -4674,15 +4685,14 @@ function openDebateIframeModal(url, options = {}) {
   window.__agonIframeCurrentPathname = iframeUrlPathname;
   syncDebateIframeModalPageClass(iframeUrlPathname);
   __agonDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
-  setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   setDebateIframeModalCloseButtonVisible(true);
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
-  frame.src = url;
   modal.classList.add("open");
+  lockPageScrollForDebateModal(_debateModalSavedScrollY);
+  setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
+  frame.src = url;
 
   armDebateIframeParentLoadingFallback(iframeUrlPathname);
-
-  lockPageScrollForDebateModal(_debateModalSavedScrollY);
 }
 
 const prefetchedDebateUrls = new Set();
@@ -4952,6 +4962,14 @@ function closeDebateIframeModal() {
   };
 
   unlockPageScrollForDebateModal();
+  // unlockPageScrollForDebateModal() retire le position:fixed (nécessaire pour que
+  // restoreScrollPosition() puisse re-scroller la page) mais ça laisse une fenêtre
+  // où l'utilisateur peut scroller "sous" l'overlay "Chargement en cours" — il n'est
+  // pas position:fixed côté body, juste affiché par-dessus. On bloque les inputs de
+  // scroll (sans bouger le body) avec le même verrou léger que l'infinite scroll de
+  // l'index, jusqu'à ce que l'overlay disparaisse (cf. hideDebateIframeParentLoadingOverlay
+  // plus bas).
+  lockIndexBatchScroll();
 
   if (closeButton && document.activeElement === closeButton) {
     closeButton.blur();
@@ -5007,7 +5025,10 @@ function closeDebateIframeModal() {
 
   syncIndexUrlWithOpenIframeModal("");
 
-  setTimeout(() => hideDebateIframeParentLoadingOverlay(), 450);
+  setTimeout(() => {
+    hideDebateIframeParentLoadingOverlay();
+    unlockIndexBatchScroll();
+  }, 450);
 }
 
 function isTopLevelDebatePage() {
@@ -5417,6 +5438,32 @@ function removeVoiceHighlight(element) {
   element.classList.remove("voice-title-highlight-green");
 }
 
+function getArgumentCardFlashTarget(element) {
+  if (!element || typeof element.closest !== "function") return element;
+  if (element.classList?.contains("argument-card-unit")) return element;
+
+  const card = element.classList?.contains("argument-card")
+    ? element
+    : element.closest(".argument-card");
+  return card?.closest(".argument-card-unit") || card || element;
+}
+
+function restartArgumentCardFlash(element, className, durationMs = 2000) {
+  const target = getArgumentCardFlashTarget(element);
+  if (!target?.classList) return;
+
+  if (element?.classList && element !== target) {
+    element.classList.remove("flash-green", "flash-blue");
+  }
+
+  target.classList.remove("flash-green", "flash-blue");
+  void target.offsetWidth;
+  target.classList.add(className);
+  setTimeout(() => {
+    target.classList.remove(className);
+  }, durationMs);
+}
+
 function highlightNotificationTargetElement(element, highlight, durationMs = 2000) {
   if (!element) return;
 
@@ -5427,6 +5474,16 @@ function highlightNotificationTargetElement(element, highlight, durationMs = 200
     String(element.id || "").startsWith("list-");
 
   if (isOpenArena) {
+    if (String(highlight || "").startsWith("argument-")) {
+      const isGreenTarget =
+        element.classList.contains("argument-card-a") ||
+        !!element.closest(".argument-card-a") ||
+        !!element.closest("#arguments-a") ||
+        !!element.closest(".column-a");
+      restartArgumentCardFlash(element, isGreenTarget ? "flash-green" : "flash-blue", durationMs);
+      return;
+    }
+
     applyVoiceHighlight(element);
     setTimeout(() => {
       removeVoiceHighlight(element);
@@ -5442,11 +5499,7 @@ function highlightNotificationTargetElement(element, highlight, durationMs = 200
 
   if (isGreenTarget) {
     if (String(highlight || "").startsWith("argument-")) {
-      element.classList.add("flash-green");
-
-      setTimeout(() => {
-        element.classList.remove("flash-green");
-      }, durationMs);
+      restartArgumentCardFlash(element, "flash-green", durationMs);
     } else {
       element.classList.add("admin-highlight-green");
 
@@ -5455,11 +5508,15 @@ function highlightNotificationTargetElement(element, highlight, durationMs = 200
       }, durationMs);
     }
   } else {
-    element.classList.add("flash-blue");
+    if (String(highlight || "").startsWith("argument-")) {
+      restartArgumentCardFlash(element, "flash-blue", durationMs);
+    } else {
+      element.classList.add("flash-blue");
 
-    setTimeout(() => {
-      element.classList.remove("flash-blue");
-    }, durationMs);
+      setTimeout(() => {
+        element.classList.remove("flash-blue");
+      }, durationMs);
+    }
   }
 }
 
@@ -5613,12 +5670,7 @@ function flashArgumentCard(argumentId) {
   if (!element) return;
 
   if (isOpenDebate(currentDebateCache)) {
-    element.classList.remove("flash-green", "flash-blue");
-    void element.offsetWidth;
-    element.classList.add("flash-green");
-    setTimeout(() => {
-      element.classList.remove("flash-green");
-    }, 5000);
+    restartArgumentCardFlash(element, "flash-green", 5000);
     return;
   }
 
@@ -5628,19 +5680,10 @@ function flashArgumentCard(argumentId) {
     !!element.closest("#arguments-a") ||
     !!element.closest(".column-a");
 
-  element.classList.remove("flash-green", "flash-blue");
-  void element.offsetWidth;
-
   if (isGreenTarget) {
-    element.classList.add("flash-green");
-    setTimeout(() => {
-      element.classList.remove("flash-green");
-    }, 5000);
+    restartArgumentCardFlash(element, "flash-green", 5000);
   } else {
-    element.classList.add("flash-blue");
-    setTimeout(() => {
-      element.classList.remove("flash-blue");
-    }, 5000);
+    restartArgumentCardFlash(element, "flash-blue", 5000);
   }
 }
 function scrollToTopOfArgumentCardAndFlash(argumentId) {
@@ -11831,6 +11874,10 @@ function isAgonGeneratedDebate(debate) {
   return !!debate.is_official;
 }
 
+function getDebatePoliticalGroup(debate) {
+  return (debate?.political_group === "left" || debate?.political_group === "right") ? debate.political_group : "mixed";
+}
+
 function getState(id) {
   const s = localStorage.getItem("votes_" + id);
   if (!s) return {};
@@ -16459,6 +16506,88 @@ function setAgonCloudMode(enableAgon) {
   toggleAgonCloud();
 }
 
+// ── Filtre gauche/droite du nuage Bulles Actu (veille mixte) ──
+// Uniquement disponible en mode Bulles Actu : "mixed" réutilise les tendances déjà
+// chargées (window.AGON_TAG_TRENDS), "left"/"right" vont chercher les 2 nuages
+// dédiés (GET /api/cloud-bubbles-left|right), jamais mélangés au nuage général ni
+// au nuage communautaire Bulles Agôn.
+let _politicalCloudGroup = 'mixed';
+
+// Légende adaptée au nuage affiché : même lien "en savoir plus" dans les 3 cas,
+// seule la phrase d'intro change.
+const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>';
+const POLITICAL_CLOUD_CAPTION_TEXT = {
+  mixed: "Les tendances de l'actualité française ces dernières heures.",
+  left: "Les tendances de l'actualité française dans les médias plutôt orientés à gauche ces dernières heures.",
+  right: "Les tendances de l'actualité française dans les médias plutôt orientés à droite ces dernières heures."
+};
+
+function applyPoliticalCloudCaption(group) {
+  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  if (!caption) return;
+  const text = POLITICAL_CLOUD_CAPTION_TEXT[group] || POLITICAL_CLOUD_CAPTION_TEXT.mixed;
+  caption.innerHTML = text + POLITICAL_CLOUD_CAPTION_LINK_HTML;
+}
+
+async function fetchPoliticalBubbleTrends(group) {
+  const endpoint = group === 'left' ? '/cloud-bubbles-left' : '/cloud-bubbles-right';
+  try {
+    const result = await Promise.race([
+      fetchJSON(API + endpoint),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+    ]);
+    return Array.isArray(result?.bubbles) ? result.bubbles : [];
+  } catch (error) {
+    console.warn('Chargement du nuage ' + group + ' interrompu :', error);
+    return [];
+  }
+}
+
+function syncPoliticalCloudSwitch() {
+  document.getElementById('agon-political-cloud-mixed')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'mixed');
+  document.getElementById('agon-political-cloud-left')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'left');
+  document.getElementById('agon-political-cloud-right')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'right');
+}
+
+function setPoliticalCloudGroup(group) {
+  if (_agonCloudMode) return;
+  if (group === _politicalCloudGroup) return;
+  if (_agonCloudSwitchLoading) return;
+  const container = document.querySelector('#agon-tag-trends-cloud');
+  if (!container || !window._tagTrendCloudModule) return;
+
+  const token = beginAgonCloudSwitchLoading(container);
+  afterAgonCloudSpinnerPaint(async () => {
+    const trends = group === 'mixed' ? (window.AGON_TAG_TRENDS || []) : await fetchPoliticalBubbleTrends(group);
+    if (token !== _agonCloudSwitchToken) return;
+
+    // renderTagTrendCloud() ne déclenche jamais son callback quand trends est vide
+    // (cf. tagTrendCloud.js) — sans ce garde-fou le sablier tournerait indéfiniment,
+    // exactement comme le gère déjà toggleAgonCloud() pour le même cas.
+    if (!trends.length) {
+      finishAgonCloudSwitchLoading(token, container);
+      return;
+    }
+
+    _politicalCloudGroup = group;
+    syncPoliticalCloudSwitch();
+    applyPoliticalCloudCaption(group);
+    // Teinte légèrement les bulles selon le nuage affiché (cf. .agon-cloud-political-*
+    // dans style.css) — purement visuel, aucun impact sur le rendu lui-même.
+    container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
+    if (group === 'left' || group === 'right') container.classList.add('agon-cloud-political-' + group);
+    // Les thématiques sous le nuage doivent suivre le même nuage (cf. filtre
+    // _politicalCloudGroup ajouté dans getFilteredDebatesForIndex) — on force le
+    // filtre "agon" pour rester cohérent avec le mode Bulles Actu, comme le fait déjà
+    // toggleAgonCloud() pour Bulles Agôn.
+    setTypeFilter("agon");
+    window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
+      finishAgonCloudSwitchLoading(token, container);
+    });
+    showBubbleCloudLoadingSpinner({ switchMode: true });
+  });
+}
+
 function toggleAgonCloud() {
   const container = document.querySelector('#agon-tag-trends-cloud');
   const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
@@ -16470,6 +16599,12 @@ function toggleAgonCloud() {
       _agonCloudMode = false;
       container.classList.remove('agon-cloud-mode-agon');
       syncAgonCloudModeSwitch();
+      // Retour en Bulles Actu : le filtre gauche/droite redevient disponible, repart
+      // toujours sur "Général" pour rester simple et prévisible.
+      _politicalCloudGroup = 'mixed';
+      syncPoliticalCloudSwitch();
+      container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
+      document.getElementById('agon-political-cloud-switch')?.removeAttribute('hidden');
       if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
@@ -16514,7 +16649,11 @@ function toggleAgonCloud() {
     _tagCloudSecondaryTrends = null;
     clearActiveBubbles();
     container.classList.add('agon-cloud-mode-agon');
+    container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
     syncAgonCloudModeSwitch();
+    // Le filtre gauche/droite ne s'applique qu'au nuage Actu : pas pertinent en
+    // Bulles Agôn, donc masqué tant qu'on reste dans ce mode.
+    document.getElementById('agon-political-cloud-switch')?.setAttribute('hidden', '');
     if (caption) {
       if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
       caption.textContent = "Les arènes créées par la communauté les plus tendues.";
@@ -16977,6 +17116,14 @@ function getFilteredDebatesForIndex(baseDebates) {
 
   if (currentTypeFilter === "community") {
     filteredDebates = filteredDebates.filter((debate) => !isAgonGeneratedDebate(debate));
+  }
+
+  // Tant que le nuage Bulles Gauche/Droite est actif, les thématiques sous le nuage
+  // ne doivent jamais remélanger les arènes générales avec les arènes gauche/droite —
+  // appliqué indépendamment du sous-filtre (Toutes/Débats/Questions/catégorie) pour
+  // que ça reste vrai même si l'utilisateur change de filtre sans revenir à "Général".
+  if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
+    filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
   }
 
   const activeCategoryFilters = getCurrentCategoryFilters();
@@ -17894,6 +18041,12 @@ function buildIndexGlobalLoadMoreSentinelHtml() {
 
 function getAlaUneSourceForCurrentFilters(filteredDebates) {
   const source = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : filteredDebates;
+  // Bulles Gauche/Droite : "À la une" ignore volontairement les bulles de sujet
+  // (cf. commentaire plus haut), mais doit quand même respecter la séparation des
+  // 3 nuages — sinon les arènes générales y réapparaissent malgré le filtre actif.
+  if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
+    return source.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
+  }
   if (currentTypeFilter === "agon") {
     return source.filter((debate) => isAgonGeneratedDebate(debate));
   }
@@ -18022,7 +18175,7 @@ function initCarouselLazyLoad() {
       apiFetching = true;
       const offset = _carouselApiOffsets.get(key) || 0;
       const renderedIds = new Set(Array.from(row.querySelectorAll('.debate-card[data-debate-id]')).map(function(el) { return el.dataset.debateId; }));
-      fetchJSON(API + '/debates?category=' + encodeURIComponent(key) + '&sort=recent&limit=' + _CAROUSEL_BATCH + '&offset=' + offset + '&key=' + encodeURIComponent(getKey()))
+      fetchJSON(API + '/debates?category=' + encodeURIComponent(key) + '&sort=recent&limit=' + _CAROUSEL_BATCH + '&offset=' + offset + '&key=' + encodeURIComponent(getKey()) + ((_politicalCloudGroup === 'left' || _politicalCloudGroup === 'right') ? '&politicalGroup=' + _politicalCloudGroup : ''))
         .then(function(fetched) {
           var safe = Array.isArray(fetched) ? fetched : [];
           _carouselApiOffsets.set(key, offset + safe.length);
@@ -18718,7 +18871,8 @@ function getIndexFeedFilterSnapshot() {
   return JSON.stringify({
     type: String(currentTypeFilter || ''),
     search: String(getCurrentIndexSearchQuery() || ''),
-    categories: getCurrentCategoryFilters()
+    categories: getCurrentCategoryFilters(),
+    politicalGroup: String(_politicalCloudGroup || 'mixed')
   });
 }
 
@@ -19010,7 +19164,12 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
       return parts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("");
     }
     const bodyParts = parts.slice(0, parts.length - 2);
-    const lastClass = /[?？]$/.test(lastPart) ? "context-reflection-question" : "context-body-paragraph";
+    const lastLooksLikeSignature = /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(lastPart);
+    const lastClass = lastLooksLikeSignature
+      ? "context-signature"
+      : /[?？]$/.test(lastPart)
+        ? "context-reflection-question"
+        : "context-body-paragraph";
     return bodyParts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("")
       + `<div class="context-latin-question">${escapeHtml(latinMotto)}</div>`
       + `<div class="${lastClass}">${escapeHtml(lastPart)}</div>`;
@@ -24712,6 +24871,11 @@ if (isOpenDebate(data.debate)) {
 currentDebateViewMode = getDebateViewMode();
 updateDebateViewModeUI();
 updateSortButtonLabel();
+// Doit être affecté avant tout rendu dépendant de isOpenDebate(currentDebateCache)
+// (renderUnifiedVotedArgumentsSummary, renderUnifiedArgs juste après) : sinon ces
+// rendus utilisent encore l'ancien débat (ou null) et basculent par erreur sur un
+// classement scindé par côté A/B au lieu du classement unique attendu pour une arène libre.
+currentDebateCache = data.debate;
 applyDebateTypeUI(data.debate);
 updateDeleteDebateButtonVisibility(data.debate);
 
@@ -24903,7 +25067,6 @@ currentDebateShareData = {
   percentA,
   percentB
 };
-currentDebateCache = data.debate;
 applyArgumentBodyCharacterLimit(data.debate);
 
 if (data.debate.ai_analysis_status !== 'none') {

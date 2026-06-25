@@ -207,9 +207,24 @@
           font-size: 14px;
         }
       }
+      .ada-countdown-progress {
+        display: inline-flex; align-items: center;
+        padding: 0 6px;
+        font-size: 11px; font-weight: 500; color: #111827;
+        white-space: nowrap; font-style: italic; line-height: 1.3;
+      }
+      @media (min-width: 769px) {
+        .ada-countdown-progress { font-size: 12px; }
+      }
       #debate-ai-countdown-slot {
         display: flex; justify-content: center; flex-wrap: wrap; gap: 6px;
-        margin-top: 1px;
+        margin: 7px 0 0;
+        min-height: 0;
+      }
+      #debate-ai-progress-slot {
+        display: flex; justify-content: center; flex-wrap: wrap; gap: 6px;
+        margin: 2px 0 -6px;
+        min-height: 0;
       }
 
       /* ── Report container ── */
@@ -2129,7 +2144,10 @@
   // ── Countdown ────────────────────────────────────────────────────────
   async function initCountdown(debateId) {
     const slot = document.getElementById('debate-ai-countdown-slot');
-    if (!slot) return;
+    const progressSlot = document.getElementById('debate-ai-progress-slot') || slot;
+    if (!slot && !progressSlot) return;
+    if (slot) slot.innerHTML = '';
+    if (progressSlot && progressSlot !== slot) progressSlot.innerHTML = '';
 
     try {
       const { r, json } = await fetchStoredAnalysis(debateId);
@@ -2156,14 +2174,14 @@
             if (triggerBtn) triggerBtn.click();
           }, 400);
         });
-        slot.appendChild(readyBadge);
+        if (slot) slot.appendChild(readyBadge);
       }
 
       if (hasPending) {
         const target = new Date(json.scheduledAt).getTime();
         const badge  = document.createElement('span');
         badge.className = 'ada-countdown-badge';
-        slot.appendChild(badge);
+        if (slot) slot.appendChild(badge);
         _visObs.observe(badge);
 
         const tick = () => {
@@ -2178,7 +2196,23 @@
         tick();
       }
 
-      observeAnimated(slot);
+      if (!hasPending && Number.isFinite(json.contributionsRemaining) && json.contributionsRemaining > 0) {
+        const n = json.contributionsRemaining;
+        const grid = json.scoringGrid || null;
+        const progress = document.createElement('span');
+        progress.className = 'ada-countdown-progress';
+        progress.style.cursor = 'pointer';
+        progress.title = "Comment l'IA évalue les contributions";
+        progress.textContent = `Encore ${n} contribution${n > 1 ? 's' : ''} avant ${hasReady ? 'la prochaine analyse IA' : "le lancement de l'analyse IA"}`;
+        // Avant la 1re analyse, aucun barème stabilisé n'existe : on utilise la
+        // config réelle de l'arène (libre vs à position) renvoyée par le serveur,
+        // plutôt que lastScoringGrid qui ne reflète qu'un rapport déjà généré.
+        progress.addEventListener('click', () => { if (grid) lastScoringGrid = grid; _openBaremeModal(); });
+        if (progressSlot) progressSlot.appendChild(progress);
+      }
+
+      if (slot) observeAnimated(slot);
+      if (progressSlot && progressSlot !== slot) observeAnimated(progressSlot);
     } catch (_) {}
   }
 
@@ -2186,6 +2220,22 @@
   function _baremeCriteriaSectionHtml() {
     const grid = lastScoringGrid;
     const isCustom = grid && grid.scoringMode === 'custom';
+    const isOpenType = !isCustom && grid && grid.type === 'open';
+
+    if (isOpenType) {
+      return `<h3>2. Chaque idée distincte est notée sur 100</h3>
+      <p>Cette arène est libre (sans camps opposés) : chaque idée conservée reçoit une note de qualité argumentative sur 100. Si une URL est fournie, elle peut ajouter un bonus source jusqu'à +10 points, mais le score final reste toujours plafonné à 100.</p>
+      <ul>
+        <li><strong>Pertinence par rapport au sujet : 20 points</strong><br>L'idée répond-elle vraiment au sujet posé ?</li>
+        <li><strong>Clarté : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
+        <li><strong>Solidité ou justification : 25 points</strong><br>L'idée est-elle logique, cohérente et bien étayée ?</li>
+        <li><strong>Apport à l'arène : 25 points</strong><br>L'idée apporte-t-elle un éclairage ou un élément nouveau au débat ?</li>
+        <li><strong>Nuance : 10 points</strong><br>L'idée reconnaît-elle les risques, objections ou limites ?</li>
+        <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
+        <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>
+      </ul>
+      <div class="ada-bareme-rule"><strong>Total qualité argumentative : 100 points · Bonus source possible : jusqu'à +10 points · Score final plafonné à 100.</strong></div>`;
+    }
 
     if (!isCustom) {
       return `<h3>2. Chaque idée distincte est notée sur 100</h3>
@@ -2222,16 +2272,25 @@
   }
 
   function _openBaremeModal() {
+    // Une arène libre n'a pas de camps : aucun verdict comparatif n'y est calculé
+    // (cf. `!d.isOpen` qui masque la carte verdict dans renderNewAnalysis) — les
+    // idées y sont seulement notées et classées individuellement.
+    const isOpenArena = !!(lastScoringGrid && lastScoringGrid.type === 'open');
+
     const overlay = document.createElement('div');
     overlay.className = 'ada-bareme-overlay';
     overlay.innerHTML = `<div class="ada-bareme-modal">
       <button class="ada-bareme-close" aria-label="Fermer">✕</button>
       <h2>Comment Agôn évalue les idées ?</h2>
-      <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides.</p>
+      <p>${isOpenArena
+        ? "Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quelles idées sont, dans cette arène libre, les plus solides argumentativement."
+        : "Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides."}</p>
       <p><strong>L'analyse IA n'évalue pas la vérité absolue d'une opinion. Elle évalue la qualité argumentative des contributions selon des critères publics — c'est une analyse contestable, pas un verdict de vérité.</strong></p>
 
       <h3>1. Les doublons sont regroupés</h3>
-      <p>Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
+      <p>${isOpenArena
+        ? "Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'une idée paraisse plus soutenue simplement parce qu'elle est répétée plusieurs fois."
+        : "Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois."}</p>
 
       ${_baremeCriteriaSectionHtml()}
 
@@ -2246,6 +2305,13 @@
       ${(lastScoringGrid && lastScoringGrid.scoringMode === 'custom') ? '' : `<h3>4. Les sources renforcent, elles ne remplacent pas</h3>
       <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>`}
 
+      ${isOpenArena ? `
+      <h3>5. Les idées sont classées, sans camps ni verdict</h3>
+      <p>Une arène libre n'oppose pas deux camps : il n'y a donc pas de verdict global. Chaque idée est simplement classée selon son propre score, de la plus solide à la plus faible.</p>
+
+      <h3>En résumé</h3>
+      <p>Agôn valorise la qualité de chaque idée plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, et les idées sont classées du score le plus élevé au plus faible — sans comparaison entre camps.</p>
+      ` : `
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>
       <div class="ada-bareme-rule">
@@ -2265,6 +2331,7 @@
 
       <h3>En résumé</h3>
       <p>Agôn valorise la qualité des idées plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, les idées faibles ne pèsent pas dans le verdict, et les excellentes idées sont davantage valorisées. Lorsque la comparaison entre les camps est trop déséquilibrée, Agôn l'indique clairement.</p>
+      `}
     </div>`;
 
     const panelCloseBtn = document.getElementById('ada-close-btn');
@@ -2342,67 +2409,19 @@
           <button type="button" id="ada-collapse-btn" class="ada-collapse-btn">Masquer l’analyse IA</button>
         </div>`;
 
-    if (isAdmin()) {
-      let hasReport = false;
-      try {
-        const { r, json } = await fetchStoredAnalysis(debateId);
-        hasReport = r.ok && !!json.raw;
-      } catch (_) {}
-
-      const triggerLabel = hasReport ? 'Analyse et arbitrage IA' : 'Générer rapport IA';
-      const regenBtnHtml = hasReport ? '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>' : '';
-
-      slot.innerHTML = `
-        <div class="ada-wrap">
-          <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">${triggerLabel}</button>
-          ${regenBtnHtml}
-          <div id="ada-panel" class="ada-panel">
-            <div class="ada-panel-header">
-              <span class="ada-panel-title">Analyse et arbitrage IA</span>
-              <button type="button" id="ada-close-btn" class="ada-close-btn" title="Fermer">✕</button>
-            </div>
-            <div id="ada-body" class="ada-body"></div>
-            ${collapseFooter}
-          </div>
-        </div>`;
-
-      const triggerBtn = document.getElementById('ada-trigger-btn');
-      const bindRegenBtn = () => {
-        const btn = document.getElementById('ada-regen-btn');
-        if (btn) btn.addEventListener('click', () => regenerate(debateId));
-      };
-      bindRegenBtn();
-
-      triggerBtn.addEventListener('click', async () => {
-        if (hasReport) {
-          openReport(debateId);
-          return;
-        }
-        const ok = await regenerate(debateId);
-        if (ok) {
-          hasReport = true;
-          triggerBtn.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA';
-          triggerBtn.insertAdjacentHTML('afterend', '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>');
-          bindRegenBtn();
-        }
-      });
-      document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
-      document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
-      observeAnimated();
-      if (wantsReport && hasReport) openReport(debateId, undefined, { fromNotification: true });
-      return;
-    }
-
-    let prefetched;
+    let hasReport = false;
     try {
       const { r, json } = await fetchStoredAnalysis(debateId);
-      if (!r.ok || !json.raw) return;
-      prefetched = { r, json };
-    } catch (_) { return; }
+      hasReport = r.ok && !!json.raw;
+    } catch (_) {}
+
+    const triggerLabel = hasReport ? 'Analyse et arbitrage IA' : 'Générer rapport IA';
+    const regenBtnHtml = hasReport ? '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>' : '';
 
     slot.innerHTML = `
       <div class="ada-wrap">
-        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA</button>
+        <button type="button" id="ada-trigger-btn" class="ada-trigger-btn"><img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">${triggerLabel}</button>
+        ${regenBtnHtml}
         <div id="ada-panel" class="ada-panel">
           <div class="ada-panel-header">
             <span class="ada-panel-title">Analyse et arbitrage IA</span>
@@ -2413,11 +2432,45 @@
         </div>
       </div>`;
 
-    document.getElementById('ada-trigger-btn').addEventListener('click', () => openReport(debateId));
+    // La génération (coûteuse, appels OpenAI) reste protégée par le mot de passe
+    // admin côté serveur (requireAdmin sur /api/admin/analyze-debate) — mais le
+    // bouton est visible pour tous : si le visiteur n'est pas encore admin, on lui
+    // demande le mot de passe au clic plutôt que de masquer le bouton. La simple
+    // consultation d'un rapport déjà généré (openReport) reste libre, sans mot de passe.
+    async function ensureAdminForGeneration() {
+      if (isAdmin()) return true;
+      if (typeof window.adminLogin === 'function') await window.adminLogin();
+      return isAdmin();
+    }
+
+    const triggerBtn = document.getElementById('ada-trigger-btn');
+    const bindRegenBtn = () => {
+      const btn = document.getElementById('ada-regen-btn');
+      if (btn) btn.addEventListener('click', async () => {
+        if (!(await ensureAdminForGeneration())) return;
+        regenerate(debateId);
+      });
+    };
+    bindRegenBtn();
+
+    triggerBtn.addEventListener('click', async () => {
+      if (hasReport) {
+        openReport(debateId);
+        return;
+      }
+      if (!(await ensureAdminForGeneration())) return;
+      const ok = await regenerate(debateId);
+      if (ok) {
+        hasReport = true;
+        triggerBtn.innerHTML = '<img src="/sablier2-64.png" alt="" style="width:28px;height:28px;vertical-align:middle;margin-right:6px;">Analyse et arbitrage IA';
+        triggerBtn.insertAdjacentHTML('afterend', '<button type="button" id="ada-regen-btn" class="ada-regen-btn ada-regen-btn-under-trigger">Regénérer</button>');
+        bindRegenBtn();
+      }
+    });
     document.getElementById('ada-close-btn').addEventListener('click', closeReportPanel);
     document.getElementById('ada-collapse-btn').addEventListener('click', closeReportPanel);
     observeAnimated();
-    if (wantsReport) openReport(debateId, prefetched, { fromNotification: true });
+    if (wantsReport && hasReport) openReport(debateId, undefined, { fromNotification: true });
   }
 
   if (document.readyState === 'loading') {

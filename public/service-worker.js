@@ -1,4 +1,4 @@
-const SW_VERSION = "20260622-argument-card-unit-wrap";
+const SW_VERSION = "20260625-analysis-progress-after-ready";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en

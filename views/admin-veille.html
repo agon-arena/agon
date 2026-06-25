@@ -412,6 +412,12 @@ function renderItem(item) {
     renderKeywordEditor(item) +
     '<label>Thématique</label>' +
     '<select class="f-theme">' + catOptions + '</select>' +
+    '<label>Nuage Agôn</label>' +
+    '<select class="f-political-group">' +
+      '<option value="mixed"' + (item.politicalGroup === 'mixed' || !item.politicalGroup ? ' selected' : '') + '>Mixte (nuage général)</option>' +
+      '<option value="left"' + (item.politicalGroup === 'left' ? ' selected' : '') + '>Gauche</option>' +
+      '<option value="right"' + (item.politicalGroup === 'right' ? ' selected' : '') + '>Droite</option>' +
+    '</select>' +
     renderStorySelectionNotice(item) +
     '<label>Liens sources</label>' +
     (item.links && item.links.length
@@ -784,7 +790,8 @@ async function publish(btn) {
     keywords: keywords,
     links: links,
     linkedDebateId: item.dataset.linkedDebateId || '',
-    storySelection: collectStorySelection(item)
+    storySelection: collectStorySelection(item),
+    politicalGroup: item.querySelector('.f-political-group') ? item.querySelector('.f-political-group').value : 'mixed'
   };
 
   if (body.linkedDebateId) {

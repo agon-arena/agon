@@ -880,8 +880,12 @@ function clearVeillePendingStorySelection(id) {
 
 
 
-let _cloudBubblesCache = null;
-let _cloudBubblesRefreshPromise = null;
+const DEFAULT_CLOUD_BUBBLES_KEY = "cloud_bubbles";
+// Cache/refresh-promise indexés par storageKey ("cloud_bubbles", "cloud_bubbles_left",
+// "cloud_bubbles_right", ...) pour que les 3 nuages (général/gauche/droite) ne se
+// piétinent jamais en mémoire.
+let _cloudBubblesCacheByKey = new Map();
+let _cloudBubblesRefreshPromiseByKey = new Map();
 
 function loadCloudBubblesFromFile() {
   if (!fs.existsSync(cloudBubblesPath)) return null;
@@ -890,68 +894,76 @@ function loadCloudBubblesFromFile() {
   return Array.isArray(parsed.bubbles) ? parsed : { bubbles: [], lastUpdatedAt: null };
 }
 
-async function refreshCloudBubblesFromSupabase() {
-  if (_cloudBubblesRefreshPromise) return _cloudBubblesRefreshPromise;
-  _cloudBubblesRefreshPromise = (async () => {
+async function refreshCloudBubblesFromSupabase(storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
+  if (_cloudBubblesRefreshPromiseByKey.has(storageKey)) return _cloudBubblesRefreshPromiseByKey.get(storageKey);
+  const promise = (async () => {
     try {
       const { data, error } = await supabase
         .from("app_config")
         .select("value")
-        .eq("key", "cloud_bubbles")
+        .eq("key", storageKey)
         .maybeSingle();
       if (!error && data?.value && typeof data.value === "object") {
-        _cloudBubblesCache = data.value;
+        _cloudBubblesCacheByKey.set(storageKey, data.value);
       }
     } catch {}
   })().finally(() => {
-    _cloudBubblesRefreshPromise = null;
+    _cloudBubblesRefreshPromiseByKey.delete(storageKey);
   });
-  return _cloudBubblesRefreshPromise;
+  _cloudBubblesRefreshPromiseByKey.set(storageKey, promise);
+  return promise;
 }
 
-async function loadCloudBubbles() {
-  if (_cloudBubblesCache) return _cloudBubblesCache;
+async function loadCloudBubbles(storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
+  if (_cloudBubblesCacheByKey.has(storageKey)) return _cloudBubblesCacheByKey.get(storageKey);
 
-  // Sert vite la dernière version connue du serveur, puis rafraîchit Supabase
-  // en arrière-plan pour éviter un délai de cold cache au chargement des bulles.
-  try {
-    const localData = loadCloudBubblesFromFile();
-    if (localData) {
-      _cloudBubblesCache = localData;
-      refreshCloudBubblesFromSupabase().catch(() => {});
-      return _cloudBubblesCache;
-    }
-  } catch {}
+  // Le fallback fichier local ne concerne que le nuage historique "mixed" (migration
+  // one-shot) ; les nouveaux pools gauche/droite n'ont pas de fichier équivalent.
+  if (storageKey === DEFAULT_CLOUD_BUBBLES_KEY) {
+    // Sert vite la dernière version connue du serveur, puis rafraîchit Supabase
+    // en arrière-plan pour éviter un délai de cold cache au chargement des bulles.
+    try {
+      const localData = loadCloudBubblesFromFile();
+      if (localData) {
+        _cloudBubblesCacheByKey.set(storageKey, localData);
+        refreshCloudBubblesFromSupabase(storageKey).catch(() => {});
+        return localData;
+      }
+    } catch {}
+  }
 
   // Fallback si aucun fichier local n'est disponible.
   try {
-    await refreshCloudBubblesFromSupabase();
-    if (_cloudBubblesCache) return _cloudBubblesCache;
+    await refreshCloudBubblesFromSupabase(storageKey);
+    if (_cloudBubblesCacheByKey.has(storageKey)) return _cloudBubblesCacheByKey.get(storageKey);
   } catch {}
 
-  // Fallback / migration one-shot : fichier JSON local
-  try {
-    const localData = loadCloudBubblesFromFile();
-    if (localData) {
-      _cloudBubblesCache = localData;
-      // Tente de migrer dans Supabase silencieusement si la table existe
-      if (_cloudBubblesCache.bubbles.length) saveCloudBubbles(_cloudBubblesCache).catch(() => {});
-      return _cloudBubblesCache;
-    }
-  } catch {}
+  // Fallback / migration one-shot : fichier JSON local (pool "mixed" uniquement)
+  if (storageKey === DEFAULT_CLOUD_BUBBLES_KEY) {
+    try {
+      const localData = loadCloudBubblesFromFile();
+      if (localData) {
+        _cloudBubblesCacheByKey.set(storageKey, localData);
+        // Tente de migrer dans Supabase silencieusement si la table existe
+        if (localData.bubbles.length) saveCloudBubbles(localData, storageKey).catch(() => {});
+        return localData;
+      }
+    } catch {}
+  }
 
-  _cloudBubblesCache = { bubbles: [], lastUpdatedAt: null };
-  return _cloudBubblesCache;
+  const empty = { bubbles: [], lastUpdatedAt: null };
+  _cloudBubblesCacheByKey.set(storageKey, empty);
+  return empty;
 }
 
-async function saveCloudBubbles(data) {
+async function saveCloudBubbles(data, storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
   try {
     const safe = { bubbles: Array.isArray(data?.bubbles) ? data.bubbles : [], lastUpdatedAt: data?.lastUpdatedAt || null };
     const { error } = await supabase
       .from("app_config")
-      .upsert({ key: "cloud_bubbles", value: safe, updated_at: new Date().toISOString() });
+      .upsert({ key: storageKey, value: safe, updated_at: new Date().toISOString() });
     if (error) throw error;
-    _cloudBubblesCache = safe;
+    _cloudBubblesCacheByKey.set(storageKey, safe);
   } catch (e) {
     console.error("[cloud-bubbles] save error:", e.message);
   }
@@ -1041,12 +1053,16 @@ function countCloudSources(debate) {
   return sources.size;
 }
 
-async function rebuildCloudBubbles() {
+// politicalGroup ("mixed" par défaut) sépare le nuage officiel en 3 pools indépendants
+// (général / gauche / droite) sans dupliquer cette logique — cf. rebuildCloudBubbles()
+// ci-dessous, conservé comme alias "mixed" pour ne rien changer aux appelants existants.
+async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
   const now = new Date().toISOString();
+  const storageKey = politicalGroup === "mixed" ? "cloud_bubbles" : `cloud_bubbles_${politicalGroup}`;
 
   const { data: allDebates, error } = await supabase
     .from("debates")
-    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label, creator_key")
+    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label, creator_key, political_group")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -1082,8 +1098,10 @@ async function rebuildCloudBubbles() {
     const id = String(debate.id);
     if (hiddenAncestors.has(id)) continue;
     // Bulles Actu = arènes officielles uniquement ; les arènes communauté (ex: Certamen)
-    // ont leur propre nuage côté client (Bulles Agôn).
+    // ont leur propre nuage côté client (Bulles Agôn). political_group sépare en plus
+    // le pool officiel en 3 nuages indépendants (général / gauche / droite).
     if (debate.creator_key !== AGON_ADMIN_CREATOR_KEY) continue;
+    if ((debate.political_group || "mixed") !== politicalGroup) continue;
 
     const label = getCloudLabelFromDebate(debate);
     if (!label) continue;
@@ -1145,14 +1163,17 @@ async function rebuildCloudBubbles() {
   }));
 
   const newData = { bubbles, lastUpdatedAt: new Date().toISOString() };
-  await saveCloudBubbles(newData);
+  await saveCloudBubbles(newData, storageKey);
 
   return { ok: true, count: bubbles.length, newAdded: added, updated, updatedAt: newData.lastUpdatedAt };
 }
 
-async function rebuildCloudBubblesAfterPublish(reason, debateId = null) {
+// Alias conservé pour ne rien changer aux appelants existants (toujours le pool "mixed").
+const rebuildCloudBubbles = () => rebuildCloudBubblesForGroup("mixed");
+
+async function rebuildCloudBubblesAfterPublish(reason, debateId = null, politicalGroup = "mixed") {
   try {
-    return await rebuildCloudBubbles();
+    return await rebuildCloudBubblesForGroup(politicalGroup);
   } catch (error) {
     console.error("[cloud-bubbles] auto update failed", {
       reason,
@@ -2217,7 +2238,8 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "episode_nav",
   "creator_key",
   "created_at",
-  "bumped_at"
+  "bumped_at",
+  "political_group"
 ].join(",");
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
@@ -2727,16 +2749,20 @@ function getVeilleSimilarityCandidates(input, debates) {
       const sharedCount = baseTokenSet.filter(token => debateTokenSet.has(token)).length;
       const longSharedCount = baseTokenSet.filter(token => token.length >= 7 && debateTokenSet.has(token)).length;
 
+      // Score proportionnel au nombre de mots significatifs partagés (les mots longs,
+      // >=7 lettres, comptent double) — remplace l'ancien palier plat à 0.72 dès 4 mots
+      // partagés, qui mettait à égalité un vrai doublon (20+ mots partagés) et n'importe
+      // quelle paire de sujets ne partageant que 4 mots français courants, au point que
+      // ce bruit pouvait évincer le vrai doublon du top retenu par tri de récence.
+      const weightedShared = sharedCount + longSharedCount;
+      const sharedBoost = weightedShared >= 4 ? Math.min(0.95, 0.5 + weightedShared * 0.013) : 0;
+
       let score = overlapScore;
       if (exactQuestion) score = Math.max(score, 1);
       if (strongSubstring) score = Math.max(score, 0.78);
-      if (sharedCount >= 4) score = Math.max(score, 0.72);
-      if (longSharedCount >= 2 && overlapScore >= 0.45) score = Math.max(score, 0.69);
+      score = Math.max(score, sharedBoost);
 
-      const keep = exactQuestion
-        || score >= 0.72
-        || (score >= 0.64 && sharedCount >= 4)
-        || (score >= 0.6 && longSharedCount >= 2 && strongSubstring);
+      const keep = score >= 0.72;
       if (!keep) return null;
 
       return {
@@ -4990,6 +5016,8 @@ app.get("/api/debates", async (req, res) => {
     const effectiveSortMode = !hasPaginationLimit && sortMode === "popular" ? "recent" : sortMode;
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
     const categoryQuery = String(req.query.category || "").trim();
+    const rawPoliticalGroupQuery = String(req.query.politicalGroup || "").trim();
+    const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right") ? rawPoliticalGroupQuery : "";
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
@@ -4999,7 +5027,7 @@ app.get("/api/debates", async (req, res) => {
     // req.query._ est un simple cache-buster côté navigateur (Date.now()) :
     // il ne doit pas invalider le cache serveur. Seuls fresh=1 ou un header
     // Cache-Control: no-store explicite forcent un bypass réel.
-    const bypassCache = categoryQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    const bypassCache = categoryQuery || politicalGroupQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
@@ -5019,6 +5047,13 @@ app.get("/api/debates", async (req, res) => {
 
     if (categoryQuery) {
       debatesQuery = debatesQuery.eq("category", categoryQuery);
+    }
+
+    // Pagination par catégorie du nuage Bulles Gauche/Droite (carousels du front) :
+    // sans ce filtre, le "load more" d'une rubrique thématique réinjecte des
+    // arènes générales pendant qu'un nuage gauche/droite est actif.
+    if (politicalGroupQuery) {
+      debatesQuery = debatesQuery.eq("political_group", politicalGroupQuery);
     }
 
     const { data: debates, error } = await debatesQuery;
@@ -5793,10 +5828,17 @@ app.get("/api/debates/analysis-statuses", rateLimit("analysis-read", 240), async
   if (error) return res.json({});
   const map = {};
   for (const row of data || []) {
-    map[row.id] = {
+    const entry = {
       status:      row.ai_analysis_status,
       scheduledAt: row.ai_analysis_scheduled_at || null
     };
+    // Arènes fusionnées : l'état n'est stocké que sur l'arène canonique — on le
+    // reflète aussi sur les arènes fusionnées avec elle pour que leurs cartes
+    // affichent le même badge sur la page d'accueil.
+    const groupIds = getDebateIdsInSharedSpace(row.id);
+    for (const id of (groupIds.length > 1 ? groupIds : [row.id])) {
+      map[id] = entry;
+    }
   }
   return res.json(map);
 });
@@ -6709,7 +6751,8 @@ async function loadVeillePending() {
     keywords: normalizeKeywordList(r.pending_keywords || [], 10, 60),
     addedAt: r.added_at,
     linkedDebateId: String(r.pending_linked_debate_id || "").trim(),
-    storySelection: r.pending_story_selection || null
+    storySelection: r.pending_story_selection || null,
+    politicalGroup: (r.political_group === "left" || r.political_group === "right") ? r.political_group : "mixed"
   }));
 }
 
@@ -6722,7 +6765,8 @@ async function deleteVeillePending(id) {
 }
 
 app.post("/api/veille/receive", rateLimit("veille-receive", 20), async (req, res) => {
-  const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords, politicalOrientation } = req.body || {};
+  const { question, positionA, positionB, theme, resume, sources, links, storySelection, keywords, politicalOrientation, politicalGroup } = req.body || {};
+  const resolvedPoliticalGroup = (politicalGroup === "left" || politicalGroup === "right") ? politicalGroup : "mixed";
   console.log("[veille/receive] payload:", {
     hasQuestion: !!question,
     questionLen: String(question || "").length,
@@ -6749,7 +6793,8 @@ app.post("/api/veille/receive", rateLimit("veille-receive", 20), async (req, res
     resume: resume || null,
     sources: sources || null,
     links: links || [],
-    political_orientation: politicalOrientation || null
+    political_orientation: politicalOrientation || null,
+    political_group: resolvedPoliticalGroup
   });
   if (error) { console.error("veille receive:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
   const normalizedStorySelection = normalizeStorySelection(storySelection);
@@ -6995,6 +7040,10 @@ async function computeAgonBubbleTrends() {
     .select("id, question, keywords, cloud_label, creator_key, created_at")
     .not("creator_key", "is", null)
     .neq("creator_key", AGON_ADMIN_CREATOR_KEY)
+    // Les arènes gauche/droite issues de la veille mixte ont leurs 2 nuages dédiés
+    // (cf. rebuildCloudBubblesForGroup) — elles ne doivent jamais se mélanger ici
+    // avec le nuage communautaire partagé (ex: Certamen).
+    .or("political_group.is.null,political_group.eq.mixed")
     .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS));
 
   if (debatesError) throw debatesError;
@@ -7164,10 +7213,36 @@ app.get("/api/cloud-bubbles", async (req, res) => {
   }
 });
 
+// Nuages dédiés gauche/droite (veille mixte) — même format de réponse que /api/cloud-bubbles,
+// jamais mélangés avec le pool général ni avec le nuage communautaire (Bulles Agôn).
+app.get("/api/cloud-bubbles-left", async (req, res) => {
+  try {
+    const data = await loadCloudBubbles("cloud_bubbles_left");
+    res.json({ ok: true, bubbles: data.bubbles || [], lastUpdatedAt: data.lastUpdatedAt || null });
+  } catch {
+    res.json({ ok: true, bubbles: [], lastUpdatedAt: null });
+  }
+});
+
+app.get("/api/cloud-bubbles-right", async (req, res) => {
+  try {
+    const data = await loadCloudBubbles("cloud_bubbles_right");
+    res.json({ ok: true, bubbles: data.bubbles || [], lastUpdatedAt: data.lastUpdatedAt || null });
+  } catch {
+    res.json({ ok: true, bubbles: [], lastUpdatedAt: null });
+  }
+});
+
 app.post("/api/admin/update-cloud", requireAdmin, express.json(), async (req, res) => {
   try {
-    const result = await rebuildCloudBubbles();
-    res.json(result);
+    const result = await rebuildCloudBubblesForGroup("mixed");
+    const [leftResult, rightResult] = await Promise.all([
+      rebuildCloudBubblesForGroup("left").catch((e) => ({ ok: false, error: e.message, count: 0 })),
+      rebuildCloudBubblesForGroup("right").catch((e) => ({ ok: false, error: e.message, count: 0 }))
+    ]);
+    // Réponse additive : "count" reste celui du pool général (comportement actuel du
+    // bouton admin inchangé), leftCount/rightCount sont de nouvelles infos en plus.
+    res.json({ ...result, leftCount: leftResult.count || 0, rightCount: rightResult.count || 0 });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -7327,7 +7402,7 @@ app.delete("/api/admin/veille/:id", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
-  const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning } = req.body || {};
+  const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning, politicalGroup } = req.body || {};
   try {
     const safeQuestion = String(question || "").trim().slice(0, 110);
     let pendingRow = null;
@@ -7342,6 +7417,8 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
     }
     const pendingResume = String(pendingRow?.resume || "").trim();
     let pendingPoliticalOrientation = pendingRow?.political_orientation || null;
+    const rawPublishPoliticalGroup = politicalGroup || pendingRow?.political_group;
+    const resolvedPoliticalGroup = (rawPublishPoliticalGroup === "left" || rawPublishPoliticalGroup === "right") ? rawPublishPoliticalGroup : "mixed";
 
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
@@ -7423,7 +7500,8 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
       type: debateType,
       creator_key: AGON_ADMIN_CREATOR_KEY,
       created_at: nowIso(),
-      political_orientation: pendingPoliticalOrientation || null
+      political_orientation: pendingPoliticalOrientation || null,
+      political_group: resolvedPoliticalGroup
     }).select("id").single();
     if (error) {
       console.error("[veille publish] insert error", {
@@ -7580,7 +7658,7 @@ const previousSourceCount = previousSourceKeys.size;
     }
     if (id) await deleteVeillePending(Number(id));
     invalidateSharedDebateCaches(canonicalLinkedDebateId || data.id);
-    await rebuildCloudBubblesAfterPublish("veille-publish", data.id);
+    await rebuildCloudBubblesAfterPublish("veille-publish", data.id, resolvedPoliticalGroup);
     res.json({ ok: true, debateId: data.id });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -7645,11 +7723,14 @@ app.post("/api/admin/veille/merge", requireAdmin, rateLimit("admin-ai", 10), asy
 // Lecture publique du rapport stocké
 app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req, res) => {
   const { id } = req.params;
+  // Arènes fusionnées (admin "Sujets en attente") : l'analyse n'existe que sur
+  // l'arène canonique — on la relit depuis là, quelle que soit l'arène visitée.
+  const canonicalId = resolveSharedDebateId(id) || String(id);
   const clientKey = getRequestClientKey(req);
   const { data, error } = await supabase
     .from("debates")
-    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, popularity_analysis, evaluation_axis_hidden, creator_key")
-    .eq("id", id)
+    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, ai_analysis_last_score, popularity_analysis, evaluation_axis_hidden, evaluation_axis, type, creator_key")
+    .eq("id", canonicalId)
     .single();
   if (error || !data) {
     console.error("[analysis GET]", id, error?.message || "no data");
@@ -7682,21 +7763,79 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
       }
     } catch (_) {}
   }
+  const status = data.ai_analysis_status || "none";
+  let contributionsRemaining = null;
+  let scoringGrid = null;
+  // Hors compte à rebours déjà programmé : on indique combien de contributions
+  // (arguments + commentaires) manquent encore avant le prochain déclenchement.
+  if (status !== "scheduled" && status !== "generating") {
+    const hasExisting = !!data.ai_analysis;
+    const threshold = hasExisting ? Number(data.ai_analysis_last_score || 0) + 5 : 10;
+    // Si cette arène est fusionnée avec d'autres, le score compte les
+    // contributions cumulées de toutes les arènes liées (même seuil partagé).
+    const groupIds = getDebateIdsInSharedSpace(canonicalId);
+    const scoreScope = groupIds.length > 1 ? groupIds : null;
+    const { score } = await _computeAnalysisScore(canonicalId, scoreScope);
+    let effectiveLastScore = Number(data.ai_analysis_last_score || 0);
+
+    // Ancien cas limite : si des contributions arrivaient pendant qu'une analyse
+    // était déjà programmée, le rapport généré les couvrait, mais le score de
+    // référence restait celui du déclenchement initial. Le compteur tombait alors
+    // à 0 juste après publication au lieu de repartir vers le prochain seuil.
+    if (hasExisting && status === "ready" && data.ai_analysis_generated_at) {
+      const { score: generatedScore } = await _computeAnalysisScore(canonicalId, scoreScope, {
+        untilIso: data.ai_analysis_generated_at
+      });
+      if (Number.isFinite(generatedScore) && generatedScore > effectiveLastScore) {
+        effectiveLastScore = generatedScore;
+        supabase
+          .from("debates")
+          .update({ ai_analysis_last_score: generatedScore })
+          .eq("id", canonicalId)
+          .then(({ error: healError }) => {
+            if (healError) console.error("[analysis score heal]", canonicalId, healError.message);
+          });
+      }
+    }
+
+    const effectiveThreshold = hasExisting ? effectiveLastScore + 5 : threshold;
+    contributionsRemaining = Math.max(0, Math.ceil(effectiveThreshold - score));
+
+    // Avant la 1re analyse, aucun barème stabilisé n'existe encore : on reconstruit
+    // la config réelle (libre/personnalisé vs à position) à partir du débat lui-même,
+    // pour que la modale d'explication reflète l'arène plutôt qu'un barème générique.
+    if (!hasExisting) {
+      const debateType = String(data.type || "").trim().toLowerCase() === "open" ? "open" : "position";
+      const axisRaw = String(data.evaluation_axis || "").trim();
+      const axisHidden = !!data.evaluation_axis_hidden;
+      scoringGrid = (debateType === "open" && axisRaw)
+        ? { type: "open", scoringMode: "custom", axisHidden, axisSource: (axisHidden && !isOwner) ? "" : axisRaw, customRubric: "" }
+        : { type: debateType, scoringMode: "default" };
+    }
+  }
+
   return res.json({
-    raw:            raw,
-    popularityRaw:  data.popularity_analysis || null,
-    status:         data.ai_analysis_status || "none",
-    scheduledAt:    data.ai_analysis_scheduled_at || null,
-    generatedAt:    data.ai_analysis_generated_at || null
+    raw:                    raw,
+    popularityRaw:          data.popularity_analysis || null,
+    status:                 status,
+    scheduledAt:            data.ai_analysis_scheduled_at || null,
+    generatedAt:            data.ai_analysis_generated_at || null,
+    contributionsRemaining: contributionsRemaining,
+    scoringGrid:            scoringGrid
   });
 });
 
-// Construit le payload à partir de la base (pour la génération automatique)
-async function _fetchDebatePayload(debateId) {
+// Construit le payload à partir de la base (pour la génération automatique).
+// Quand des arènes ont été fusionnées, `debateId` est l'arène canonique
+// (question/contenu présentés à l'IA) et `groupIds` couvre canonique + arènes
+// fusionnées (contributions cumulées, y compris celles postées avant la fusion).
+async function _fetchDebatePayload(debateId, groupIds = null) {
+  const ids = (groupIds && groupIds.length) ? groupIds : [debateId];
+
   const debate = await getDebateById(debateId);
   if (!debate) throw new Error("Débat introuvable.");
 
-  const { data: args } = await supabase.from("arguments").select("*").eq("debate_id", debateId);
+  const { data: args } = await supabase.from("arguments").select("*").in("debate_id", ids);
   const argIds = (args || []).map((a) => a.id);
 
   let comments = [];
@@ -7743,15 +7882,22 @@ async function _fetchDebatePayload(debateId) {
 const { generateAnalysisJson }        = require('./lib/debate-analysis');
 const { generatePopularityAnalysis }  = require('./lib/popularity-analysis');
 
-// Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin)
+// Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin).
+// Toujours écrite sur l'arène canonique uniquement (cf. _scheduleAnalysisIfNeeded) :
+// les arènes fusionnées la relisent via resolveSharedDebateId, pas de duplication.
 async function _generateAndSaveAnalysis(debateId) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
-  await supabase.from("debates").update({ ai_analysis_status: "generating" }).eq("id", debateId);
+  const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
+  const groupIds = getDebateIdsInSharedSpace(canonicalId);
+
+  await supabase.from("debates").update({ ai_analysis_status: "generating" }).eq("id", canonicalId);
 
   try {
-    const payload = await _fetchDebatePayload(debateId);
+    const generationScoreScope = groupIds.length > 1 ? groupIds : null;
+    const { score: generationScore } = await _computeAnalysisScore(canonicalId, generationScoreScope);
+    const payload = await _fetchDebatePayload(canonicalId, groupIds.length > 1 ? groupIds : null);
     const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts));
     const raw     = JSON.stringify(result);
 
@@ -7759,14 +7905,17 @@ async function _generateAndSaveAnalysis(debateId) {
       ai_analysis:              raw,
       popularity_analysis:      null,
       ai_analysis_status:       "ready",
-      ai_analysis_generated_at: new Date().toISOString()
-    }).eq("id", debateId);
+      ai_analysis_generated_at: new Date().toISOString(),
+      ai_analysis_last_score:   generationScore
+    }).eq("id", canonicalId);
 
     if (saveError) {
-      console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde :`, saveError.message);
+      console.error(`[auto-analysis] débat ${canonicalId} — erreur sauvegarde :`, saveError.message);
     } else {
-      console.log(`[auto-analysis] débat ${debateId} — analyse générée et sauvegardée.`);
-      _notifyParticipantsAnalysisReady(debateId, payload.question, result).catch(console.error);
+      console.log(`[auto-analysis] débat ${canonicalId}${groupIds.length > 1 ? ` (fusionné avec ${groupIds.filter((gid) => String(gid) !== String(canonicalId)).join(",")})` : ""} — analyse générée et sauvegardée.`);
+      for (const id of groupIds) {
+        _notifyParticipantsAnalysisReady(id, payload.question, result).catch(console.error);
+      }
     }
 
     // Analyse popularité vs robustesse (colonne séparée)
@@ -7775,20 +7924,20 @@ async function _generateAndSaveAnalysis(debateId) {
       const popularityRaw    = JSON.stringify(popularityResult);
       const { error: popErr } = await supabase.from("debates")
         .update({ popularity_analysis: popularityRaw })
-        .eq("id", debateId);
+        .eq("id", canonicalId);
       if (popErr) {
-        console.error(`[auto-analysis] débat ${debateId} — erreur sauvegarde popularité :`, popErr.message);
+        console.error(`[auto-analysis] débat ${canonicalId} — erreur sauvegarde popularité :`, popErr.message);
       } else {
-        console.log(`[auto-analysis] débat ${debateId} — analyse popularité sauvegardée.`);
+        console.log(`[auto-analysis] débat ${canonicalId} — analyse popularité sauvegardée.`);
       }
     } catch (popErr) {
-      console.error(`[auto-analysis] débat ${debateId} — analyse popularité échouée :`, popErr.message);
+      console.error(`[auto-analysis] débat ${canonicalId} — analyse popularité échouée :`, popErr.message);
     }
 
     return raw;
   } catch (err) {
-    console.error(`[auto-analysis] débat ${debateId} — échec :`, err.message);
-    await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", debateId);
+    console.error(`[auto-analysis] débat ${canonicalId} — échec :`, err.message);
+    await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
     throw err;
   }
 }
@@ -7980,14 +8129,54 @@ function _notifyParticipantsAnalysisReady(debateId, question, analysis = null) {
   });
 }
 
-// — 1re analyse à 10 pts, puis re-déclenchement tous les 5 pts supplémentaires
+// Score de contributions d'un débat (ou d'un groupe d'arènes fusionnées via
+// shared_debate_links) : 1 pt par argument, 0.5 pt par commentaire.
+async function _computeAnalysisScore(debateId, groupIds = null, opts = {}) {
+  const ids = (groupIds && groupIds.length) ? groupIds : [debateId];
+  const untilIso = opts && opts.untilIso ? String(opts.untilIso) : null;
+
+  let argCountQuery = supabase
+    .from("arguments")
+    .select("*", { count: "exact", head: true })
+    .in("debate_id", ids);
+  if (untilIso) argCountQuery = argCountQuery.lte("created_at", untilIso);
+  const { count: argCount } = await argCountQuery;
+
+  let argIdsQuery = supabase
+    .from("arguments")
+    .select("id")
+    .in("debate_id", ids);
+  if (untilIso) argIdsQuery = argIdsQuery.lte("created_at", untilIso);
+  const { data: argIds } = await argIdsQuery;
+
+  let commentCount = 0;
+  if (argIds && argIds.length) {
+    let commentCountQuery = supabase
+      .from("comments")
+      .select("*", { count: "exact", head: true })
+      .in("argument_id", argIds.map((a) => a.id));
+    if (untilIso) commentCountQuery = commentCountQuery.lte("created_at", untilIso);
+    const { count } = await commentCountQuery;
+    commentCount = count || 0;
+  }
+
+  return { argCount: argCount || 0, commentCount, score: (argCount || 0) + commentCount * 0.5, argIds };
+}
+
+// — 1re analyse à 10 pts, puis re-déclenchement tous les 5 pts supplémentaires.
+// Quand des arènes ont été fusionnées (admin "Sujets en attente" → shared_debate_links),
+// l'analyse IA est unique et stockée uniquement sur l'arène canonique : le score
+// compte les contributions cumulées de toutes les arènes fusionnées, et le rapport
+// généré est relu depuis la canonique par n'importe laquelle des arènes liées
+// (cf. resolveSharedDebateId dans GET /api/debates/:id/analysis).
 async function _scheduleAnalysisIfNeeded(debateId) {
   if (!debateId) return;
+  const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
 
   const { data: debate } = await supabase
     .from("debates")
     .select("ai_analysis_status, ai_analysis, ai_analysis_last_score, question")
-    .eq("id", debateId)
+    .eq("id", canonicalId)
     .single();
 
   if (!debate) return;
@@ -7996,26 +8185,8 @@ async function _scheduleAnalysisIfNeeded(debateId) {
   // Ne pas re-programmer si déjà en attente ou en cours de génération
   if (status === "scheduled" || status === "generating") return;
 
-  const { count: argCount } = await supabase
-    .from("arguments")
-    .select("*", { count: "exact", head: true })
-    .eq("debate_id", debateId);
-
-  const { data: argIds } = await supabase
-    .from("arguments")
-    .select("id")
-    .eq("debate_id", debateId);
-
-  let commentCount = 0;
-  if (argIds && argIds.length) {
-    const { count } = await supabase
-      .from("comments")
-      .select("*", { count: "exact", head: true })
-      .in("argument_id", argIds.map((a) => a.id));
-    commentCount = count || 0;
-  }
-
-  const score = (argCount || 0) + commentCount * 0.5;
+  const groupIds = getDebateIdsInSharedSpace(canonicalId);
+  const { score, argIds } = await _computeAnalysisScore(canonicalId, groupIds.length > 1 ? groupIds : null);
   const lastScore = Number(debate.ai_analysis_last_score || 0);
   const hasExisting = !!(debate.ai_analysis);
 
@@ -8030,9 +8201,11 @@ async function _scheduleAnalysisIfNeeded(debateId) {
       ai_analysis_status:       "scheduled",
       ai_analysis_scheduled_at: scheduledAt,
       ai_analysis_last_score:   score
-    }).eq("id", debateId);
-    console.log(`[auto-analysis] débat ${debateId} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
-    _notifyParticipantsAnalysisScheduled(debateId, debate.question, argIds).catch(console.error);
+    }).eq("id", canonicalId);
+    console.log(`[auto-analysis] débat ${canonicalId}${groupIds.length > 1 ? ` (fusionné avec ${groupIds.filter((gid) => String(gid) !== String(canonicalId)).join(",")})` : ""} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
+    for (const id of groupIds) {
+      _notifyParticipantsAnalysisScheduled(id, debate.question, argIds).catch(console.error);
+    }
   }
 }
 
@@ -8078,7 +8251,8 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
 
   try {
     const raw = await _generateAndSaveAnalysis(debateId);
-    const { data: popData } = await supabase.from("debates").select("popularity_analysis").eq("id", debateId).single();
+    const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
+    const { data: popData } = await supabase.from("debates").select("popularity_analysis").eq("id", canonicalId).single();
     return res.json({ raw, popularityRaw: popData?.popularity_analysis || null });
   } catch (err) {
     console.error("[analyze-debate]", err.message);

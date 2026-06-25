@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260624-score-ideas-black">
+  <link rel="stylesheet" href="/style.min.css?v=20260625-political-cloud-toggle-13">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -551,6 +551,11 @@
   <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulles Actu</button>
   <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
 </div>
+<div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
+  <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')">Bulles Gauche</button>
+  <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Général</button>
+  <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Bulles Droite</button>
+</div>
 <p class="agon-tag-trends-caption" style="text-align: center;">
   Les tendances de l'actualité française ces dernières heures.<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>
 </p>
@@ -903,7 +908,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260624-score-ideas-black" defer></script>
+<script src="/script.min.js?v=20260625-political-cloud-toggle-13" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

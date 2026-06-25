@@ -10852,7 +10852,7 @@ body.is-standalone .agon-tag-trends-section {
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: -6px;
+  margin-top: 18px;
 }
 
 @media (min-width: 769px) {
@@ -13699,7 +13699,7 @@ body.page-debate .debate-context-text {
   padding-left: 6px;
   padding-right: 6px;
   box-sizing: border-box;
-  text-indent: 1.1em;
+  text-indent: 0;
   font-weight: 400 !important;
   font-size: 23px !important;
 }
@@ -13764,9 +13764,12 @@ body.page-debate .debate-context-text .context-reflection-question {
 }
 
 body.page-debate .debate-context-text .context-signature {
+  display: block;
   text-align: left;
-  text-indent: 0;
+  text-indent: 0 !important;
   font-weight: 400 !important;
+  margin-top: 0.55em;
+  margin-bottom: 0.45em;
 }
 
 body.page-debate .debate-episode-nav {
@@ -14245,9 +14248,85 @@ body.page-debate .argument-card::before {
    plus des frères au niveau de la grille, juste un empilement normal à
    l'intérieur, donc plus de gap de grille à annuler non plus. */
 body.page-debate .argument-card-unit {
+  position: relative;
   border: 1px solid #d1d5db;
   border-radius: 14px;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+
+body.page-debate .argument-card-unit.flash-green,
+body.page-debate .argument-card-unit.flash-blue {
+  isolation: isolate;
+}
+
+body.page-debate .argument-card-unit.flash-green::after,
+body.page-debate .argument-card-unit.flash-blue::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 8;
+}
+
+body.page-debate .argument-card-unit.flash-green {
+  animation: argumentCardUnitFlashGreenShadow 1s ease-in-out 2;
+}
+
+body.page-debate .argument-card-unit.flash-green::after {
+  animation: argumentCardUnitFlashGreenOverlay 1s ease-in-out 2;
+}
+
+body.page-debate .argument-card-unit.flash-blue {
+  animation: argumentCardUnitFlashBlueShadow 2s ease-out 1;
+}
+
+body.page-debate .argument-card-unit.flash-blue::after {
+  animation: argumentCardUnitFlashBlueOverlay 2s ease-out 1;
+}
+
+@keyframes argumentCardUnitFlashGreenShadow {
+  0% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(81,103,118,0.24), 0 8px 18px rgba(0, 0, 0, 0.10);
+  }
+  100% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  }
+}
+
+@keyframes argumentCardUnitFlashGreenOverlay {
+  0%,
+  100% {
+    background: rgba(81,103,118,0);
+  }
+  50% {
+    background: rgba(81,103,118,0.22);
+  }
+}
+
+@keyframes argumentCardUnitFlashBlueShadow {
+  0% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(61,90,110,0.22), 0 8px 18px rgba(0, 0, 0, 0.10);
+  }
+  100% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  }
+}
+
+@keyframes argumentCardUnitFlashBlueOverlay {
+  0%,
+  100% {
+    background: rgba(36,48,56,0);
+  }
+  40% {
+    background: rgba(61,90,110,0.24);
+  }
 }
 
 body.page-debate .argument-card-unit:hover {
@@ -18835,7 +18914,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   position: relative;
   z-index: 135;
   flex-shrink: 0;
-  margin: 4px auto 14px;
+  margin: 18px auto 26px;
   width: 100%;
   align-self: center;
   text-align: center;
@@ -18889,6 +18968,24 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 .agon-cloud-mode-segment-active:hover {
   color: #1A1F24;
+}
+
+/* Sélecteur gauche/général/droite (filtre du nuage Actu) : volontairement plus
+   petit que le sélecteur Bulles Actu/Bulles Agôn au-dessus, pour rester secondaire. */
+#agon-political-cloud-switch {
+  margin: 0 auto 12px;
+}
+
+#agon-political-cloud-switch .agon-cloud-mode-segment {
+  padding: 4px 11px;
+  min-width: 64px;
+  font-size: 10px;
+}
+
+/* .agon-cloud-mode-switch impose display:flex, qui écrase sinon l'attribut natif
+   "hidden" posé en mode Bulles Agôn (cf. toggleAgonCloud() dans script.js). */
+#agon-political-cloud-switch[hidden] {
+  display: none;
 }
 
 /* Mode Bulles Agôn : pas de badge tendance (non pertinent pour le score d'activité) */
@@ -19044,7 +19141,8 @@ body.agon-cloud-switch-loading::before {
 
 @media (min-width: 769px) {
   .agon-tag-trends-caption {
-    margin-top: -7px;
+    margin-top: 18px;
+    margin-bottom: 40px;
   }
   .agon-tag-trends-section {
     max-width: min(780px, 100%);
@@ -19106,6 +19204,20 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Nuage "Bulles Droite" : même bulle, légèrement plus bleutée pour la distinguer
+   du nuage général. */
+.agon-cloud-political-right .agon-tag-bubble {
+  background:
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(200,222,255,1) 40%, rgba(150,190,250,1) 70%, rgba(95,150,235,1) 100%);
+}
+
+/* Nuage "Bulles Gauche" : même bulle, légèrement rougie pour la distinguer du
+   nuage général. */
+.agon-cloud-political-left .agon-tag-bubble {
+  background:
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(255,215,215,1) 40%, rgba(250,175,175,1) 70%, rgba(235,120,120,1) 100%);
 }
 
 .agon-tag-bubble::before {
@@ -20028,6 +20140,10 @@ body.page-home-mobile .topbar-social {
     font-size: 23px !important;
     padding-left: 10px;
     padding-right: 10px;
+  }
+  body.page-debate .debate-context-text .context-signature {
+    margin-top: 0.9em;
+    margin-bottom: 0.8em;
   }
   body.page-debate .argument-title {
     font-size: 23px;
