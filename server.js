@@ -43,6 +43,20 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
 });
 
+// Filet de sécurité : une coupure réseau/DNS ponctuelle vers Supabase (ex. getaddrinfo
+// ENOTFOUND) qui échappe à un try/catch dans une route async fait planter tout le
+// process par défaut (Node ≥15 : unhandledRejection = crash). Repéré le 24/06/2026 via
+// pm2 (21 redémarrages en quelques minutes), probable cause des refresh inopinés côté
+// index pendant la fenêtre de redémarrage. On loggue sans jamais tuer le process pour
+// ces deux signaux ; un vrai bug logique a de bien meilleures chances d'être vu en
+// pratique via les logs applicatifs existants que via un crash silencieux.
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+});
+
 const adminTokens = new Set();
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 // Identifiant fixe envoyé par le pipeline Certamen (bot veille) sur POST /api/debates
@@ -142,7 +156,12 @@ function _processMediasRows(items) {
       const isYt = item.type === "youtube" || String(item?.url || "").includes("youtube.com");
       let domain = isYt ? "youtube.com" : "";
       if (!isYt) {
-        try { domain = new URL(String(item?.rss || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
+        // Le flux RSS passe parfois par un service tiers (feedburner, etc.) dont le domaine
+        // ne correspond pas au site réel des articles : on privilégie le champ url s'il est renseigné.
+        try { domain = new URL(String(item?.url || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
+        if (!domain) {
+          try { domain = new URL(String(item?.rss || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
+        }
       }
       return {
         nom:         String(item?.nom || item?.name || "").trim(),
@@ -5319,7 +5338,7 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness } = req.body || {};
+    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
     const normalizedLongArguments = long_arguments === true;
     const normalizedContent = normalizeDebateContent(content);
     // Préserve la mise en page (sauts de ligne) telle que tapée par le créateur
@@ -5382,7 +5401,8 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         ...(normalizedLongArguments ? { long_arguments: true } : {}),
         ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
         creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
-        created_at: nowIso()
+        created_at: nowIso(),
+        political_orientation: politicalOrientation || null
       })
       .select("id")
       .single();
@@ -5404,7 +5424,8 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             ...(normalizedLongArguments ? { long_arguments: true } : {}),
             ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
             creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
-            created_at: nowIso()
+            created_at: nowIso(),
+            political_orientation: politicalOrientation || null
           })
           .select("id")
           .single();
@@ -7320,7 +7341,7 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
       pendingRow = pr;
     }
     const pendingResume = String(pendingRow?.resume || "").trim();
-    const pendingPoliticalOrientation = pendingRow?.political_orientation || null;
+    let pendingPoliticalOrientation = pendingRow?.political_orientation || null;
 
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
@@ -7334,8 +7355,8 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
       date: typeof l === "object" ? (l.date || "") : "",
       added_at: nowIsoExtras
     })).filter(e => e.url);
-    const normalizedPositionA = String(positionA || "").trim();
-    const normalizedPositionB = String(positionB || "").trim();
+    let normalizedPositionA = String(positionA || "").trim();
+    let normalizedPositionB = String(positionB || "").trim();
     const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
     const requestedLinkedDebateId = String(linkedDebateId || pendingRow?.pending_linked_debate_id || "").trim();
     const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
@@ -7376,7 +7397,18 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
         positionA: normalizedPositionA,
         positionB: normalizedPositionB
       });
-      if (!alignment.ok && !(forcePublishOnAlignmentWarning && ["ambiguous", "inverted"].includes(String(alignment.verdict || "").trim()))) {
+      if (alignment.verdict === "inverted") {
+        // Permute les positions (et l'étiquette gauche/droite associée) pour qu'elles
+        // correspondent au sens de l'arène existante, au lieu de bloquer la fusion.
+        [normalizedPositionA, normalizedPositionB] = [normalizedPositionB, normalizedPositionA];
+        if (pendingPoliticalOrientation && pendingPoliticalOrientation.isPolitical) {
+          pendingPoliticalOrientation = {
+            ...pendingPoliticalOrientation,
+            positionA: pendingPoliticalOrientation.positionB,
+            positionB: pendingPoliticalOrientation.positionA
+          };
+        }
+      } else if (!alignment.ok && !(forcePublishOnAlignmentWarning && alignment.verdict === "ambiguous")) {
         return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
       }
     }
@@ -7584,15 +7616,22 @@ app.post("/api/admin/veille/merge", requireAdmin, rateLimit("admin-ai", 10), asy
       positionA: normalizedPositionA,
       positionB: normalizedPositionB
     });
-    if (!alignment.ok) {
+    // "inverted" ne bloque plus la fusion : la position A de la nouvelle arène correspond
+    // à la position B de l'existante (et inversement), donc on permute au lieu d'annuler —
+    // le swap effectif a lieu à la publication (/api/admin/veille/publish), seul endroit où
+    // les positions sont réellement écrites en base.
+    if (!alignment.ok && alignment.verdict !== "inverted") {
       return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
     }
 
     setVeillePendingLinkedDebate(id, debateId);
     res.json({
       ok: true,
+      verdict: alignment.verdict,
       debateId: resolveSharedDebateId(debateId) || String(debateId),
-      message: "Le debat partage est selectionne. Les cartes resteront separees jusqu'a la publication."
+      message: alignment.verdict === "inverted"
+        ? "Positions inversées par rapport à l'arène existante : elles seront permutées automatiquement à la publication."
+        : "Le debat partage est selectionne. Les cartes resteront separees jusqu'a la publication."
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

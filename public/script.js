@@ -22467,6 +22467,21 @@ function initDebateMediaHistory(debate) {
         addYouTubeOrientationKey(veilleYouTubeChannelMap, m.nom, m.orientation);
       }
     });
+
+    // Alias : certains libellés de chaînes YouTube stockés par le bot de veille
+    // diffèrent du nom officiel renseigné dans veille_medias (ex: "France Info" vs "Franceinfo").
+    // On réutilise l'orientation déjà connue du nom canonique plutôt que de la dupliquer en dur.
+    const youtubeNameAliases = {
+      'AFP - Agence France-Presse': 'AFP',
+      'HuffPost': 'HuffPost France',
+      'France Info': 'Franceinfo',
+      'TF1 : infos': 'TF1',
+      'Oncle Obs': "L'Obs"
+    };
+    Object.entries(youtubeNameAliases).forEach(function([alias, canonicalName]) {
+      const orientation = veilleYouTubeChannelMap[normalizeMediaIdentity(canonicalName)];
+      if (orientation) addYouTubeOrientationKey(veilleYouTubeChannelMap, alias, orientation);
+    });
   } catch (_) {}
 
   function getSourceOrientation(url, author) {
@@ -24859,11 +24874,15 @@ if (isOpen) {
     `;
   }
 
+  const ideasCountA = data.optionA.length;
+  const ideasCountB = data.optionB.length;
+
   if (scoreA) {
     scoreA.style.display = "";
     scoreA.innerHTML = `
       <strong>${percentA}%</strong>
       <span class="score-votes">(${votesA} voix)</span>
+      <span class="score-ideas">${ideasCountA} idée${ideasCountA === 1 ? "" : "s"}</span>
     `;
   }
 
@@ -24872,6 +24891,7 @@ if (isOpen) {
     scoreB.innerHTML = `
       <strong>${percentB}%</strong>
       <span class="score-votes">(${votesB} voix)</span>
+      <span class="score-ideas">${ideasCountB} idée${ideasCountB === 1 ? "" : "s"}</span>
     `;
   }
 }
@@ -26738,6 +26758,8 @@ function refreshDebateScoreFromCurrentArguments() {
   const votesB = (currentAllArguments || []).reduce((sum, arg) => {
     return String(arg.side || "") === "B" ? sum + Number(arg.votes || 0) : sum;
   }, 0);
+  const ideasCountA = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "A").length;
+  const ideasCountB = (currentAllArguments || []).filter((arg) => String(arg.side || "") === "B").length;
 
   const total = votesA + votesB;
   let percentA = 50;
@@ -26770,6 +26792,7 @@ function refreshDebateScoreFromCurrentArguments() {
       scoreA.innerHTML = `
       <strong>${percentA}%</strong>
       <span class="score-votes">(${votesA} voix)</span>
+      <span class="score-ideas">${ideasCountA} idée${ideasCountA === 1 ? "" : "s"}</span>
     `;
     }
 
@@ -26778,6 +26801,7 @@ function refreshDebateScoreFromCurrentArguments() {
       scoreB.innerHTML = `
       <strong>${percentB}%</strong>
       <span class="score-votes">(${votesB} voix)</span>
+      <span class="score-ideas">${ideasCountB} idée${ideasCountB === 1 ? "" : "s"}</span>
     `;
     }
   }

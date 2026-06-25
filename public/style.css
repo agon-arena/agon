@@ -2869,6 +2869,13 @@ body.page-debate #score-b {
   margin-left:6px;
 }
 
+.score-ideas{
+  display:block;
+  font-size:13px;
+  color:inherit;
+  margin-top:2px;
+}
+
 .position-argument-button{
   margin-top: auto;
   border:none;
