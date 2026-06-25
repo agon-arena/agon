@@ -908,7 +908,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260625-political-cloud-toggle-13" defer></script>
+<script src="/script.min.js?v=20260625-no-return-loader" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1439,7 +1439,7 @@
         clearInterval(_timer);
         _timer = null;
         hideToast();
-        if (_recoveryMode) window.location.reload();
+        _recoveryMode = false;
       })
       .catch(function() {});
   }

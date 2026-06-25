@@ -4183,7 +4183,7 @@ function ensureDebateIframeModal() {
     if (!e.data || typeof e.data !== "object") return;
 
     if (e.data.type === "agon:close-debate-modal") {
-      closeDebateIframeModal();
+      closeDebateIframeModal({ skipReturnLoader: e.data.skipReturnLoader === true });
       return;
     }
 
@@ -4907,12 +4907,13 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
   await waitForIndexEmbedShellsReady(shellsBefore, timeoutMs);
 }
 
-function closeDebateIframeModal() {
+function closeDebateIframeModal(options = {}) {
   __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!modal) return;
+  const skipReturnLoader = options && options.skipReturnLoader === true;
   const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
   const shouldReturnDirectlyToIndex = openedFromNotifications && location.pathname === "/notifications";
 
@@ -4933,8 +4934,17 @@ function closeDebateIframeModal() {
     return;
   }
 
-  __agonDebugRefreshLog("closeDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay" });
-  showDebateIframeParentLoadingOverlay("Chargement en cours");
+  const shouldShowReturnLoader = !skipReturnLoader && (
+    window.__agonDebateModalNewDebateCreated === true ||
+    window.__agonDebateModalPendingDebates !== null
+  );
+
+  if (shouldShowReturnLoader) {
+    __agonDebugRefreshLog("closeDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay" });
+    showDebateIframeParentLoadingOverlay("Chargement en cours");
+  } else {
+    hideDebateIframeParentLoadingOverlay();
+  }
 
   try {
     frame?.contentWindow?.postMessage({ type: "agon:pause-page-media" }, "*");
@@ -4962,14 +4972,11 @@ function closeDebateIframeModal() {
   };
 
   unlockPageScrollForDebateModal();
-  // unlockPageScrollForDebateModal() retire le position:fixed (nécessaire pour que
-  // restoreScrollPosition() puisse re-scroller la page) mais ça laisse une fenêtre
-  // où l'utilisateur peut scroller "sous" l'overlay "Chargement en cours" — il n'est
-  // pas position:fixed côté body, juste affiché par-dessus. On bloque les inputs de
-  // scroll (sans bouger le body) avec le même verrou léger que l'infinite scroll de
-  // l'index, jusqu'à ce que l'overlay disparaisse (cf. hideDebateIframeParentLoadingOverlay
-  // plus bas).
-  lockIndexBatchScroll();
+  if (shouldShowReturnLoader) {
+    // Pendant un vrai rafraîchissement de l'index, on bloque brièvement le scroll
+    // derrière l'overlay pour éviter un déplacement sous la couche de chargement.
+    lockIndexBatchScroll();
+  }
 
   if (closeButton && document.activeElement === closeButton) {
     closeButton.blur();
@@ -5025,10 +5032,14 @@ function closeDebateIframeModal() {
 
   syncIndexUrlWithOpenIframeModal("");
 
-  setTimeout(() => {
-    hideDebateIframeParentLoadingOverlay();
+  if (shouldShowReturnLoader) {
+    setTimeout(() => {
+      hideDebateIframeParentLoadingOverlay();
+      unlockIndexBatchScroll();
+    }, 450);
+  } else {
     unlockIndexBatchScroll();
-  }, 450);
+  }
 }
 
 function isTopLevelDebatePage() {
@@ -5175,12 +5186,12 @@ function initDebateBottomExplorerLink() {
 
     try {
       if (typeof window.parent.closeDebateIframeModal === "function") {
-        window.parent.closeDebateIframeModal();
+        window.parent.closeDebateIframeModal({ skipReturnLoader: true });
       } else {
-        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+        window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*");
       }
     } catch (error) {
-      try { window.parent.postMessage({ type: "agon:close-debate-modal" }, "*"); } catch (nestedError) {}
+      try { window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
     }
   });
 }
@@ -5198,12 +5209,12 @@ function initDebateTopExplorerLink() {
 
     try {
       if (typeof window.parent.closeDebateIframeModal === "function") {
-        window.parent.closeDebateIframeModal();
+        window.parent.closeDebateIframeModal({ skipReturnLoader: true });
       } else {
-        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+        window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*");
       }
     } catch (error) {
-      try { window.parent.postMessage({ type: "agon:close-debate-modal" }, "*"); } catch (nestedError) {}
+      try { window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
     }
   });
 }

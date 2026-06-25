@@ -4984,9 +4984,14 @@ app.post("/api/admin/argument/:id/set-votes", requireAdmin, async (req, res) => 
     const votes = Math.max(0, Math.round(Number(req.body?.votes || 0)));
     const { error } = await supabase
       .from("arguments")
-      .update({ votes })
+      .update({
+        votes,
+        auto_vote_wave1_status: "done",
+        auto_vote_wave2_status: "done"
+      })
       .eq("id", req.params.id);
     if (error) return res.status(500).json({ error: "Erreur mise à jour votes." });
+    console.log(`[admin set-votes] argument ${req.params.id} — votes=${votes}, vagues auto-vote neutralisées`);
     res.json({ success: true, votes });
   } catch (error) {
     return res.status(500).json({ error: "Erreur mise à jour votes." });
