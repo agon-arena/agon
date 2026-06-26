@@ -1666,7 +1666,7 @@ font-family: "Barlow Condensed", sans-serif;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .share-icon-button:hover {
@@ -2116,7 +2116,7 @@ font-family: "Barlow Condensed", sans-serif;
   cursor:pointer;
   font-weight:700;
   font-size:15px;
-  transition:all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 .debate-type-option input:checked{
   accent-color:#111827;
@@ -2174,7 +2174,7 @@ font-family: "Barlow Condensed", sans-serif;
   font-weight:400;
   font-size:12px;
   color:#6b7280;
-  transition:all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .create-resource-option input{
@@ -2444,7 +2444,7 @@ select:focus {
   font-weight:700;
   font-size:14px;
   cursor:pointer;
-  transition:all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
 .debate-focus-btn-a{
@@ -3108,7 +3108,7 @@ body.page-debate #score-b {
   border-radius: 12px;
   cursor: pointer;
   box-shadow: 0 6px 16px rgba(37,99,235,0.25);
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .argument-form .button:hover {
@@ -3253,7 +3253,7 @@ body.page-debate #score-b {
   justify-content:center;
   cursor:pointer;
   box-shadow:0 2px 8px rgba(0,0,0,0.08);
-  transition:all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
   z-index:3;
 }
 
@@ -4711,7 +4711,7 @@ body.page-debate #score-b {
   font-size:14px;
   font-weight:600;
   cursor:pointer;
-  transition:all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .share-button i{
@@ -5025,7 +5025,7 @@ body.page-debate #score-b {
   font-size:18px;
   line-height:1.05;
   cursor:pointer;
-  transition:all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
   min-height:48px;
   display:flex;
   align-items:center;
@@ -5338,7 +5338,7 @@ body.debate-topbar-hidden .debate-scroll-add-wrap {
   color:#4b5563;
   cursor:pointer;
   min-height:36px;
-  transition:all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
 .debate-type-filter button:hover{
@@ -5429,7 +5429,7 @@ body.page-debate .topbar::after {
   background:rgba(255,255,255,0.92);
   color:#111827;
   box-shadow:0 2px 6px rgba(0,0,0,0.08);
-  transition:all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
 }
 
 .debate-top-add-button{
@@ -5535,7 +5535,7 @@ body.page-debate .topbar::after {
   padding:8px 14px;
   border-radius:999px;
   opacity:0.85;
-  transition:all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 #reset-notifications-btn:hover,
@@ -7026,7 +7026,7 @@ body.page-debate .topbar::after {
   .page-home-mobile .agon-cloud-mode-switch {
     margin-top: -47px;
     margin-bottom: 8px;
-    /* z-index hérité de la règle de base (135) : doit rester au-dessus du nuage (130) */
+    z-index: 165;
   }
 
   body.is-standalone.page-home-mobile .agon-cloud-mode-switch {
@@ -7691,7 +7691,7 @@ body.page-debate .topbar::after {
   border-radius: 10px !important;
   background: #ffffff !important;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 /* hover */
@@ -12602,7 +12602,7 @@ body.admin-edit-open::after {
   border-radius: 10px;
   background: #ffffff;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
   box-sizing: border-box;
 }
 
@@ -12662,7 +12662,7 @@ body.admin-edit-open::after {
   border-radius: 8px;
   background: #f9fafb;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .create-category-option:hover {
@@ -12773,7 +12773,7 @@ body.admin-edit-open::after {
   border-radius: 8px;
   background: #f9fafb;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
 }
 
 .create-category-option:hover {
@@ -19097,7 +19097,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 #agon-cloud-loading-spinner.agon-cloud-loading-switch {
   left: 0;
   right: 0;
-  pointer-events: auto;
+  pointer-events: none;
   z-index: 420;
   background: rgba(36, 48, 56, 0.16);
   border-radius: 24px;
@@ -19111,6 +19111,7 @@ body.agon-cloud-switch-loading::before {
   z-index: 9990;
   background: transparent;
   cursor: wait;
+  pointer-events: none;
 }
 
 .agon-tag-trends-cloud.agon-cloud-switching {
@@ -22429,5 +22430,62 @@ body.page-create-mobile .create-card .create-submit-helper {
   html.aala-overlay-active,
   html.aala-overlay-active body {
     background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
+  }
+}
+
+/* ─── Performance mobile : réduction des animations GPU coûteuses ─── */
+
+/* Version allégée de agonBubbleBreathe pour mobile : opacity seule (pas de scale).
+   Le scale force le browser à recomposer chaque bulle à chaque frame ; l'opacity
+   est traitée directement par le GPU sans recomposition de layout. */
+@keyframes agonBubbleBreatheLight {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.88; }
+}
+
+@media (max-width: 768px) {
+  /* Remplacement breathe : scale(1.035–1.095) → opacity légère */
+  .agon-tag-bubble {
+    animation: agonBubbleBreatheLight 4s ease-in-out infinite;
+  }
+
+  /* Flash : translateX + rotate coûteux sur 10 pseudos-éléments simultanés */
+  .agon-tag-bubble-flash::after {
+    animation: none;
+  }
+
+  /* Trend pulse : opacity sur badges tendance de chaque carte */
+  .debate-card-trend-badge,
+  .agon-tag-trend {
+    animation: none;
+  }
+
+  /* Rocket float : translateY infini + filter drop-shadow sur icône ranking */
+  .ranking-gain-icon {
+    animation: rankingRocketPop 0.9s ease;
+    filter: none;
+  }
+
+  /* Sparkles ranking */
+  .ranking-gain-box::before,
+  .ranking-gain-box::after {
+    animation: none;
+  }
+}
+
+/* Respect strict du paramètre système "réduire les animations" */
+@media (prefers-reduced-motion: reduce) {
+  .agon-tag-bubble,
+  .agon-tag-bubble-flash::after,
+  .debate-card-trend-badge,
+  .agon-tag-trend,
+  .ranking-gain-icon,
+  .ranking-gain-box::before,
+  .ranking-gain-box::after,
+  .voice-stepper-btn-guided,
+  .voice-stepper-btn-guided::after,
+  .my-argument-chip-stepper-btn-guided,
+  .my-argument-chip-stepper-btn-guided::after {
+    animation: none !important;
   }
 }

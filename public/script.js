@@ -61,7 +61,11 @@ const COLOR_B_BORDER   = '#AEC0CC';
 
 // DIAGNOSTIC TEMPORAIRE — à retirer une fois le bug du "refresh" de l'index résolu.
 // Trace tous les déclencheurs suspects de reload/navigation/loader/rerender.
+// Mettre __AGON_DEBUG_REFRESH_ENABLED = true pour réactiver (désactivé en prod
+// pour éviter console.log + localStorage synchrone à chaque interaction).
+const __AGON_DEBUG_REFRESH_ENABLED = false;
 function __agonDebugRefreshLog(source, type, extra = {}) {
+  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
   try {
     const entry = {
       source,
@@ -132,25 +136,27 @@ function __agonRecordReloadReason(reason) {
       likelyCause = "navigateur mobile : onglet déchargé pour mémoire (tab discard)";
     }
 
-    const entry = {
-      navigationType,
-      wasDiscarded,
-      lastReloadReason: lastReloadReason ? lastReloadReason.reason : null,
-      lastReloadReasonAt: lastReloadReason ? new Date(lastReloadReason.at).toISOString() : null,
-      skipStartup,
-      likelyCause,
-      timestamp: new Date().toISOString(),
-      url: String(window.location.href || ""),
-      userAgent: String(navigator.userAgent || "")
-    };
-    console.log("[AGON DEBUG STARTUP]", entry);
-    try {
-      const KEY = "agon_startup_log";
-      const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
-      prev.unshift(entry);
-      if (prev.length > 20) prev.length = 20;
-      localStorage.setItem(KEY, JSON.stringify(prev));
-    } catch (e2) {}
+    if (__AGON_DEBUG_REFRESH_ENABLED) {
+      const entry = {
+        navigationType,
+        wasDiscarded,
+        lastReloadReason: lastReloadReason ? lastReloadReason.reason : null,
+        lastReloadReasonAt: lastReloadReason ? new Date(lastReloadReason.at).toISOString() : null,
+        skipStartup,
+        likelyCause,
+        timestamp: new Date().toISOString(),
+        url: String(window.location.href || ""),
+        userAgent: String(navigator.userAgent || "")
+      };
+      console.log("[AGON DEBUG STARTUP]", entry);
+      try {
+        const KEY = "agon_startup_log";
+        const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
+        prev.unshift(entry);
+        if (prev.length > 20) prev.length = 20;
+        localStorage.setItem(KEY, JSON.stringify(prev));
+      } catch (e2) {}
+    }
   } catch (e) {}
 })();
 
@@ -1304,6 +1310,10 @@ function ensurePageArrivalLoadingOverlayStyles() {
 
     .page-arrival-loading-overlay.page-arrival-loading-overlay-visible {
       opacity: 1;
+      pointer-events: none;
+    }
+
+    body.page-debate .page-arrival-loading-overlay.page-arrival-loading-overlay-visible {
       pointer-events: auto;
     }
 
@@ -3294,7 +3304,7 @@ function ensureDebateIframeParentLoadingStyles() {
       transform: translateZ(0);
     }
 
-    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-overlay-visible {
+    body.debate-iframe-parent-loading-open #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-overlay-visible {
       opacity: 1;
       pointer-events: auto;
     }
@@ -3471,6 +3481,56 @@ function hideDebateIframeParentLoadingOverlay() {
   if (!overlay) return;
   delete overlay.dataset.agonBoundsFrozen;
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
+}
+
+function cleanupStaleDebateIframeModalBlockers() {
+  const modal = document.getElementById("debate-iframe-modal");
+  const isModalReallyOpen = !!modal?.classList?.contains("open");
+  if (isModalReallyOpen) return;
+
+  window.__agonDebateModalOpen = false;
+  window.__agonDebateModalOpenedFromNotifications = false;
+  document.body.classList.remove("index-background-suspended");
+  document.body.classList.remove("debate-iframe-parent-loading-open");
+  if (modal) {
+    modal.classList.remove("loading");
+    modal.classList.remove("argument-form-open-in-child");
+    modal.classList.remove("ai-score-modal-open-in-child");
+    modal.classList.remove("ai-loading-animation-open-in-child");
+    modal.classList.remove("sort-menu-open-in-child");
+  }
+  setDebateIframeAiLoadingAnimationState(false);
+  revealDebateIframeModalFrame();
+
+  const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
+  if (overlay) {
+    delete overlay.dataset.agonBoundsFrozen;
+    overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
+    overlay.classList.remove("debate-iframe-parent-loading-stuck");
+  }
+}
+
+function initDebateIframeModalBlockerRecovery() {
+  if (document.documentElement.dataset.debateIframeBlockerRecoveryInitialized === "true") return;
+  document.documentElement.dataset.debateIframeBlockerRecoveryInitialized = "true";
+
+  const recover = () => cleanupStaleDebateIframeModalBlockers();
+  window.addEventListener("pageshow", recover, true);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) recover();
+  }, true);
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    const staleOverlayClick = target instanceof Element && target.closest("#debate-iframe-parent-loading-overlay");
+    const staleModalClick = target instanceof Element && target.closest("#debate-iframe-modal");
+    if (staleOverlayClick || staleModalClick) recover();
+  }, true);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initDebateIframeModalBlockerRecovery);
+} else {
+  initDebateIframeModalBlockerRecovery();
 }
 
 // Garde-fou anti-blocage : arme un filet de sécurité qui, si le message
@@ -7949,6 +8009,19 @@ function initIndexMediaSwipeEnhancements(root) {
 }
 
 function initMediaSwipeAutoScroll(scope = document) {
+  // Purger les instances orphelines des rebuilds DOM précédents avant d'en créer
+  // de nouvelles : stoppe les setInterval + déconnecte les IntersectionObserver
+  // des shells qui ne sont plus dans le DOM.
+  if (initMediaSwipeAutoScroll._instances) {
+    initMediaSwipeAutoScroll._instances.forEach((instance) => {
+      if (!instance.shell.isConnected) {
+        instance.stopTimer();
+        instance.observer?.disconnect();
+        initMediaSwipeAutoScroll._instances.delete(instance);
+      }
+    });
+  }
+
   const DELAY = 2000;
   const RESUME_AFTER = 7000;
   const isMobileViewport = window.matchMedia("(max-width: 768px)").matches;
@@ -8063,13 +8136,16 @@ function initMediaSwipeAutoScroll(scope = document) {
     if (!initMediaSwipeAutoScroll._instances) {
       initMediaSwipeAutoScroll._instances = new Set();
     }
-    initMediaSwipeAutoScroll._instances.add({ shell, stopTimer, start });
+    // observer stocké dans l'instance pour pouvoir le déconnecter lors du cleanup.
+    initMediaSwipeAutoScroll._instances.add({ shell, stopTimer, start, observer });
 
     if (!initMediaSwipeAutoScroll._visibilityBound) {
       initMediaSwipeAutoScroll._visibilityBound = true;
       document.addEventListener('visibilitychange', () => {
         initMediaSwipeAutoScroll._instances.forEach((instance) => {
           if (!instance.shell.isConnected) {
+            instance.stopTimer();
+            instance.observer?.disconnect();
             initMediaSwipeAutoScroll._instances.delete(instance);
             return;
           }
@@ -16560,6 +16636,7 @@ let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
 let _agonCloudFrameTopLocked = false;
 let _agonCloudSwitchSafetyTimer = null;
+let _agonCloudScrollBlockersAttached = false;
 
 function preventAgonCloudSwitchScroll(event) {
   if (!_agonCloudSwitchLoading) return;
@@ -16575,14 +16652,30 @@ function preventAgonCloudSwitchKeys(event) {
   event.stopPropagation();
 }
 
-window.addEventListener("wheel", preventAgonCloudSwitchScroll, { passive: false, capture: true });
-window.addEventListener("touchmove", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+// wheel/touchmove non-passifs attachés uniquement pendant le switch (voir begin/finish).
+// keydown reste permanent car il ne bloque pas le scroll natif.
 window.addEventListener("keydown", preventAgonCloudSwitchKeys, { capture: true });
+
+function _attachAgonCloudScrollBlockers() {
+  if (_agonCloudScrollBlockersAttached) return;
+  _agonCloudScrollBlockersAttached = true;
+  window.addEventListener("wheel", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+  window.addEventListener("touchmove", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+}
+
+function _detachAgonCloudScrollBlockers() {
+  if (!_agonCloudScrollBlockersAttached) return;
+  _agonCloudScrollBlockersAttached = false;
+  window.removeEventListener("wheel", preventAgonCloudSwitchScroll, { capture: true });
+  window.removeEventListener("touchmove", preventAgonCloudSwitchScroll, { capture: true });
+}
 
 function beginAgonCloudSwitchLoading(container) {
   _agonCloudSwitchLoading = true;
+  _attachAgonCloudScrollBlockers();
   const token = ++_agonCloudSwitchToken;
   if (_agonCloudSwitchSafetyTimer) clearTimeout(_agonCloudSwitchSafetyTimer);
+  try { document.body.dataset.agonCloudSwitchStartedAt = String(Date.now()); } catch (error) {}
   lockAgonCloudFrameTop(container);
   document.body.classList.add("agon-cloud-switch-loading");
   container?.classList.add("agon-cloud-switching");
@@ -16603,12 +16696,55 @@ function finishAgonCloudSwitchLoading(token, container) {
         _agonCloudSwitchSafetyTimer = null;
       }
       _agonCloudSwitchLoading = false;
+      _detachAgonCloudScrollBlockers();
       _agonCloudFrameTopLocked = false;
+      try { delete document.body.dataset.agonCloudSwitchStartedAt; } catch (error) {}
       document.body.classList.remove("agon-cloud-switch-loading");
       container?.classList.remove("agon-cloud-switching");
       hideBubbleCloudLoadingSpinner();
     }, 40);
   });
+}
+
+function cleanupStaleAgonCloudSwitchBlockers(force = false) {
+  const container = document.querySelector("#agon-tag-trends-cloud");
+  const bodyHasBlocker = document.body?.classList?.contains("agon-cloud-switch-loading");
+  const containerHasBlocker = container?.classList?.contains("agon-cloud-switching");
+  if (!bodyHasBlocker && !containerHasBlocker) return;
+
+  const startedAt = Number(document.body?.dataset?.agonCloudSwitchStartedAt || 0);
+  const isStale = !startedAt || Date.now() - startedAt > 7000;
+  if (!force && _agonCloudSwitchLoading && !isStale) return;
+
+  if (_agonCloudSwitchSafetyTimer) {
+    clearTimeout(_agonCloudSwitchSafetyTimer);
+    _agonCloudSwitchSafetyTimer = null;
+  }
+  _agonCloudSwitchLoading = false;
+  _detachAgonCloudScrollBlockers();
+  _agonCloudFrameTopLocked = false;
+  try { delete document.body.dataset.agonCloudSwitchStartedAt; } catch (error) {}
+  document.body.classList.remove("agon-cloud-switch-loading");
+  container?.classList.remove("agon-cloud-switching");
+  hideBubbleCloudLoadingSpinner();
+}
+
+function initAgonCloudSwitchBlockerRecovery() {
+  if (document.documentElement.dataset.agonCloudSwitchBlockerRecoveryInitialized === "true") return;
+  document.documentElement.dataset.agonCloudSwitchBlockerRecoveryInitialized = "true";
+
+  window.addEventListener("pageshow", () => cleanupStaleAgonCloudSwitchBlockers(true), true);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) cleanupStaleAgonCloudSwitchBlockers(true);
+  }, true);
+  document.addEventListener("pointerdown", () => cleanupStaleAgonCloudSwitchBlockers(false), true);
+  document.addEventListener("touchstart", () => cleanupStaleAgonCloudSwitchBlockers(false), { passive: true, capture: true });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAgonCloudSwitchBlockerRecovery);
+} else {
+  initAgonCloudSwitchBlockerRecovery();
 }
 
 function afterAgonCloudSpinnerPaint(callback) {
@@ -31502,3 +31638,97 @@ function syncCloudSectionHeight(recomputeBase) {
 
   if (!section.hidden) syncCloudSectionHeight();
 })();
+
+try {
+  Object.assign(window, {
+    activateIdeaInstagramShell,
+    activateIdeaXEmbed,
+    activateIdeaYouTubeShell,
+    activateIndexLocalVideoShell,
+    activateIndexYouTubeShell,
+    adminAddDebateTag,
+    adminBroadcastDaily,
+    adminCreateAndSelectStory,
+    adminFilterStorySelect,
+    adminLogin,
+    adminLogout,
+    adminPromoteDebateTag,
+    adminRemoveDebateTag,
+    adminToggleEditPanel,
+    adminUploadMediaFile,
+    applyIndexFilters,
+    applyIndexSearch,
+    bumpAdminDebate,
+    closeAdminEditPanel,
+    closeAllCardOptionsMenus,
+    closeHomeBottomShareMenu,
+    closeHomeTopbarMenu,
+    closeIndexExplorerMenu,
+    closePushDeniedModal,
+    closeReportBox,
+    copyDebateLink,
+    copyIdeaLink,
+    copyIndexDebateLink,
+    deleteAllNotifications,
+    deleteArgument,
+    deleteComment,
+    deleteDebate,
+    deleteReport,
+    handleHomeBottomShareAction,
+    handleIdeaShareAction,
+    jumpToStartOfCarousel,
+    loadMoreArguments,
+    loadMoreComments,
+    loadMoreOtherDebates,
+    loadMoreSimilarDebates,
+    loadMoreVisitedDebates,
+    openDebateIframeModal,
+    closeDebateIframeModal,
+    openIndexDebateFromMedia,
+    openInstallModalFallback,
+    openNotificationsInDebateIframeModal,
+    openReportBox,
+    requestIdeaSocialEmbedLoad,
+    requestIndexSocialEmbedLoad,
+    resetNotifications,
+    saveAdminCardEdit,
+    saveAdminMediaExtras,
+    saveAndPublishAdminCard,
+    scrollIndexThemeRowFromButton,
+    scrollToArgumentFromSummary,
+    scrollToIndexDebateCard,
+    scrollToTheme,
+    scrollToVoicesSummary,
+    selectArenaType,
+    setCurrentCategoryFilters,
+    setDebateColumnFocus,
+    setDebateViewMode,
+    setIndexMobileTypeFilter,
+    setPoliticalCloudGroup,
+    shareIndexDebateByEmail,
+    shareIndexDebateOnInstagram,
+    shareIndexDebateOnLinkedIn,
+    shareIndexDebateOnMastodon,
+    shareIndexDebateOnReddit,
+    shareIndexDebateOnWhatsApp,
+    shareIndexDebateOnX,
+    showIndexDebateQrCode,
+    submitArgument,
+    submitComment,
+    submitListArgument,
+    toggleAgonCloud,
+    toggleCardOptionsMenu,
+    toggleDebateTitleShareMenu,
+    toggleHomeBottomShareMenu,
+    toggleHomeTopbarMenu,
+    toggleIdeaShareMenu,
+    toggleIndexContextPreview,
+    toggleIndexExplorerMenu,
+    vote
+  });
+  window.__agonWindowHandlersRestored = true;
+} catch (error) {
+  window.__agonWindowHandlersRestored = false;
+  window.__agonWindowHandlersRestoreError = String(error?.message || error || "");
+  console.error("[Agon] impossible d'exposer les handlers globaux", error);
+}
