@@ -6025,12 +6025,14 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
     const sharedDebateId = resolveSharedDebateId(debate_id) || debate_id;
     const sourceDebateRow = await getDebateById(requestedDebateId);
     const maxBodyLength = sourceDebateRow?.long_arguments ? 1800 : 600;
+    const isOpenDebate = !String(sourceDebateRow?.option_a || "").trim() && !String(sourceDebateRow?.option_b || "").trim();
+    const normalizedSide = isOpenDebate ? "A" : side;
 
     const { data, error } = await supabase
       .from("arguments")
       .insert({
         debate_id: sharedDebateId,
-        side,
+        side: normalizedSide,
         title: limitText(title, 180),
         body: limitText(body, maxBodyLength),
         source_url: limitText(source_url, 1000),
@@ -6074,7 +6076,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
 
     res.json({ success: true, id: data.id });
 
-    snapshotAndWatchMajority(sharedDebateId, data.id, side, authorKey).catch(console.error);
+    snapshotAndWatchMajority(sharedDebateId, data.id, normalizedSide, authorKey).catch(console.error);
     _scheduleAnalysisIfNeeded(sharedDebateId).catch(console.error);
   } catch (error) {
     console.error(error);

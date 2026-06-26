@@ -444,6 +444,11 @@
             <i class="fa-solid fa-bell" aria-hidden="true"></i>
             <span>Arènes du jour</span>
           </button>
+
+          <button type="button" id="admin-diagnostic-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="openDiagnosticModal()">
+            <i class="fa-solid fa-bug" aria-hidden="true"></i>
+            <span>Diagnostic refresh</span>
+          </button>
         </div>
       </div>
     </div>
@@ -908,7 +913,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260625-no-return-loader" defer></script>
+<script src="/script.min.js?v=20260626-safari-debate-iframe-clean-nav" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1478,5 +1483,73 @@
     <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
   </div>
 </div>
+
+<div id="agon-diagnostic-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeDiagnosticModal()">
+  <div style="background:#1a2730;border:1px solid #2d3f4a;border-radius:16px;margin:20px auto;max-width:680px;width:calc(100% - 32px);padding:20px 18px 24px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <span style="color:#e8f0f5;font-weight:700;font-size:16px;">Diagnostic refresh</span>
+      <button onclick="closeDiagnosticModal()" style="background:none;border:none;color:#7a9aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 2px;">&times;</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <button onclick="showDiagTab('startup')" id="diag-tab-startup" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;font-weight:600;">Startups</button>
+      <button onclick="showDiagTab('refresh')" id="diag-tab-refresh" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Events</button>
+      <button onclick="clearDiagLogs()" style="padding:6px 14px;border-radius:20px;border:1px solid #5a2020;background:#2a1010;color:#e07070;font-size:13px;cursor:pointer;margin-left:auto;">Effacer</button>
+    </div>
+    <div id="agon-diagnostic-content" style="font-size:12px;line-height:1.6;"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function fmt(entry) {
+    var ts = entry.timestamp ? entry.timestamp.replace("T"," ").replace(/\.\d+Z$/," UTC") : "?";
+    var lines = [];
+    Object.keys(entry).forEach(function(k){
+      if (k === "userAgent" || k === "timestamp") return;
+      var v = entry[k];
+      if (v === null || v === undefined) return;
+      var color = k === "likelyCause" ? "#7ecfa0" : k === "source" || k === "navigationType" ? "#7ab4e0" : "#a8c0cc";
+      lines.push('<span style="color:#4a6a7a;min-width:160px;display:inline-block;">' + k + '</span><span style="color:' + color + ';">' + String(v) + '</span>');
+    });
+    return '<div style="background:#0f1c24;border-radius:10px;padding:10px 12px;margin-bottom:10px;">'
+      + '<div style="color:#4a7a8a;font-size:11px;margin-bottom:6px;">' + ts + ' — <span style="color:#c0d8e0;">' + (entry.url || entry.source || "") + '</span></div>'
+      + lines.join('<br>') + '</div>';
+  }
+
+  var currentTab = "startup";
+
+  window.showDiagTab = function(tab) {
+    currentTab = tab;
+    document.getElementById("diag-tab-startup").style.fontWeight = tab === "startup" ? "700" : "400";
+    document.getElementById("diag-tab-refresh").style.fontWeight = tab === "refresh" ? "700" : "400";
+    var key = tab === "startup" ? "agon_startup_log" : "agon_refresh_log";
+    var entries = [];
+    try { entries = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
+    var el = document.getElementById("agon-diagnostic-content");
+    if (!entries.length) {
+      el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Aucun log enregistré pour le moment.</p>';
+      return;
+    }
+    el.innerHTML = entries.map(fmt).join("");
+  };
+
+  window.openDiagnosticModal = function() {
+    document.getElementById("agon-diagnostic-modal").style.display = "block";
+    document.body.style.overflow = "hidden";
+    showDiagTab(currentTab);
+  };
+
+  window.closeDiagnosticModal = function() {
+    document.getElementById("agon-diagnostic-modal").style.display = "none";
+    document.body.style.overflow = "";
+  };
+
+  window.clearDiagLogs = function() {
+    try { localStorage.removeItem("agon_startup_log"); } catch(e) {}
+    try { localStorage.removeItem("agon_refresh_log"); } catch(e) {}
+    showDiagTab(currentTab);
+  };
+})();
+</script>
 </body>
 </html>

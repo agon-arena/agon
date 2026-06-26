@@ -1,4 +1,4 @@
-const SW_VERSION = "20260625-analysis-progress-after-ready";
+const SW_VERSION = "20260626-sw-recovery-reason-tracing";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
@@ -40,7 +40,12 @@ function buildRecoveryResponse(targetUrl) {
     var target = ${JSON.stringify(safeUrl)};
     function retry(){
       fetch('/ping?sw-recover=' + Date.now(), { cache: 'no-store' })
-        .then(function(r){ if (r.ok) location.replace(target); })
+        .then(function(r){
+          if (r.ok) {
+            try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "sw-recovery-page (serveur indisponible puis revenu)", at: Date.now() })); } catch(e) {}
+            location.replace(target);
+          }
+        })
         .catch(function(){});
     }
     setInterval(retry, 2500);

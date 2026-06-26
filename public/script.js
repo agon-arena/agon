@@ -63,7 +63,7 @@ const COLOR_B_BORDER   = '#AEC0CC';
 // Trace tous les déclencheurs suspects de reload/navigation/loader/rerender.
 function __agonDebugRefreshLog(source, type, extra = {}) {
   try {
-    console.log("[AGON DEBUG REFRESH]", {
+    const entry = {
       source,
       type,
       timestamp: new Date().toISOString(),
@@ -71,7 +71,15 @@ function __agonDebugRefreshLog(source, type, extra = {}) {
       scrollY: Math.round(window.scrollY || 0),
       modalOpen: window.__agonDebateModalOpen === true,
       ...extra
-    });
+    };
+    console.log("[AGON DEBUG REFRESH]", entry);
+    try {
+      const KEY = "agon_refresh_log";
+      const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
+      prev.unshift(entry);
+      if (prev.length > 30) prev.length = 30;
+      localStorage.setItem(KEY, JSON.stringify(prev));
+    } catch (e2) {}
   } catch (e) {}
 }
 
@@ -124,7 +132,7 @@ function __agonRecordReloadReason(reason) {
       likelyCause = "navigateur mobile : onglet déchargé pour mémoire (tab discard)";
     }
 
-    console.log("[AGON DEBUG STARTUP]", {
+    const entry = {
       navigationType,
       wasDiscarded,
       lastReloadReason: lastReloadReason ? lastReloadReason.reason : null,
@@ -134,7 +142,15 @@ function __agonRecordReloadReason(reason) {
       timestamp: new Date().toISOString(),
       url: String(window.location.href || ""),
       userAgent: String(navigator.userAgent || "")
-    });
+    };
+    console.log("[AGON DEBUG STARTUP]", entry);
+    try {
+      const KEY = "agon_startup_log";
+      const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
+      prev.unshift(entry);
+      if (prev.length > 20) prev.length = 20;
+      localStorage.setItem(KEY, JSON.stringify(prev));
+    } catch (e2) {}
   } catch (e) {}
 })();
 
@@ -3538,8 +3554,7 @@ function markDebateIframeParentLoadingStuck() {
       try { retryPathname = new URL(retryUrl, window.location.origin).pathname; } catch (e) {}
       setDebateIframeModalLoadingState(true, "Chargement en cours");
       if (retryUrl && frame) {
-        frame.src = "about:blank";
-        requestAnimationFrame(() => { frame.src = retryUrl; });
+        navigateDebateIframeModalFrame(frame, retryUrl);
       }
       armDebateIframeParentLoadingFallback(retryPathname);
     };
@@ -3785,6 +3800,73 @@ function initIframePageContextBridge() {
   }, true);
 }
 
+let debateIframeModalNavigationToken = 0;
+
+function normalizeDebateIframeModalUrl(url = "") {
+  try {
+    const parsed = new URL(String(url || ""), window.location.origin);
+    if (parsed.origin !== window.location.origin) return "";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch (error) {
+    return "";
+  }
+}
+
+function concealDebateIframeModalFrame(frame) {
+  if (!(frame instanceof HTMLIFrameElement)) return;
+  frame.classList.add("debate-iframe-modal-frame-loading");
+  frame.setAttribute("aria-busy", "true");
+}
+
+function revealDebateIframeModalFrame(frame = document.getElementById("debate-iframe-modal-frame")) {
+  if (!(frame instanceof HTMLIFrameElement)) return;
+  frame.classList.remove("debate-iframe-modal-frame-loading");
+  frame.removeAttribute("aria-busy");
+}
+
+function isCurrentDebateIframeModalNavigation(frame, href = "", pathname = "") {
+  if (!(frame instanceof HTMLIFrameElement)) return true;
+  const expectedUrl = String(frame.dataset.agonExpectedSrc || "").trim();
+  if (!expectedUrl) return true;
+
+  const readyUrl = normalizeDebateIframeModalUrl(href);
+  if (readyUrl) return readyUrl === expectedUrl;
+
+  const expectedPath = normalizeDebateIframeModalUrl(expectedUrl).split("?")[0].split("#")[0];
+  const readyPath = String(pathname || "").trim();
+  return !!readyPath && readyPath === expectedPath;
+}
+
+function navigateDebateIframeModalFrame(frame, url = "") {
+  if (!(frame instanceof HTMLIFrameElement)) return;
+  const targetUrl = String(url || "").trim();
+  const expectedUrl = normalizeDebateIframeModalUrl(targetUrl);
+  const token = String(++debateIframeModalNavigationToken);
+
+  frame.dataset.agonNavigationToken = token;
+  frame.dataset.agonExpectedSrc = expectedUrl || targetUrl;
+  concealDebateIframeModalFrame(frame);
+
+  try {
+    frame.src = "about:blank";
+  } catch (error) {}
+
+  requestAnimationFrame(() => {
+    if (frame.dataset.agonNavigationToken !== token) return;
+    try {
+      frame.src = targetUrl;
+    } catch (error) {}
+  });
+}
+
+function reloadDebateIframeModalFrame() {
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  if (!(frame instanceof HTMLIFrameElement)) return;
+  const currentUrl = String(frame.getAttribute("src") || frame.src || "").trim();
+  if (!currentUrl || currentUrl === "about:blank") return;
+  navigateDebateIframeModalFrame(frame, currentUrl);
+}
+
 function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours") {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
@@ -3795,6 +3877,7 @@ function setDebateIframeModalLoadingState(isLoading, message = "Chargement en co
   if (isLoading) {
     showDebateIframeParentLoadingOverlay(message);
   } else {
+    revealDebateIframeModalFrame();
     hideDebateIframeParentLoadingOverlay();
   }
 }
@@ -4148,6 +4231,20 @@ function ensureDebateIframeModal() {
       height: 100%;
       border: none;
       flex: 1;
+      display: block;
+      background: #243038;
+      opacity: 1;
+      visibility: visible;
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      contain: paint;
+    }
+    #debate-iframe-modal-frame.debate-iframe-modal-frame-loading {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
   `;
   document.head.appendChild(style);
@@ -4160,7 +4257,7 @@ function ensureDebateIframeModal() {
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
       <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#e5edf3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser" onclick="document.getElementById('debate-iframe-modal-frame').src=document.getElementById('debate-iframe-modal-frame').src"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
+      <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
   `;
@@ -4176,6 +4273,10 @@ function ensureDebateIframeModal() {
 
   const debateIframeModalCloseButton = document.getElementById("debate-iframe-modal-close");
   debateIframeModalCloseButton.addEventListener("click", closeDebateIframeModal);
+  const debateIframeModalRefreshButton = document.getElementById("debate-iframe-modal-refresh");
+  if (debateIframeModalRefreshButton) {
+    debateIframeModalRefreshButton.addEventListener("click", reloadDebateIframeModalFrame);
+  }
   setDebateIframeModalCloseButtonVisible(true);
 
   // Écoute le postMessage envoyé par les flèches retour de la page débat
@@ -4225,6 +4326,8 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:debate-iframe-ready") {
       const readyPathname = String(e.data.pathname || "/debate");
       const readyHref = String(e.data.href || "").trim();
+      const readyFrame = document.getElementById("debate-iframe-modal-frame");
+      if (!isCurrentDebateIframeModalNavigation(readyFrame, readyHref, readyPathname)) return;
       window.__agonIframeCurrentPathname = readyPathname;
       syncDebateIframeModalPageClass(readyPathname);
 
@@ -4266,6 +4369,7 @@ function ensureDebateIframeModal() {
 
     if (e.data.type === "agon:notification-target-ready") {
       window.__agonIframeCurrentPathname = String(e.data.pathname || "/debate");
+      revealDebateIframeModalFrame();
       if (debateIframeParentLoadingFallbackTimer) {
         clearTimeout(debateIframeParentLoadingFallbackTimer);
         debateIframeParentLoadingFallbackTimer = null;
@@ -4365,6 +4469,24 @@ function ensureDebateIframeModal() {
     frame.dataset.closeButtonSyncBound = "true";
     frame.addEventListener("load", () => {
       syncDebateIframeModalCloseButtonWithFramePage(frame);
+      const frameSrc = String(frame.getAttribute("src") || frame.src || "").trim();
+      if (!frameSrc || frameSrc === "about:blank") return;
+      let expectedPathname = "";
+      try {
+        expectedPathname = new URL(frame.dataset.agonExpectedSrc || frameSrc, window.location.origin).pathname;
+      } catch (error) {}
+      let loadedHref = "";
+      let loadedPathname = "";
+      try {
+        loadedHref = frame.contentWindow?.location?.href || "";
+        loadedPathname = frame.contentWindow?.location?.pathname || "";
+      } catch (error) {}
+      if (!isCurrentDebateIframeModalNavigation(frame, loadedHref, loadedPathname)) return;
+      if (expectedPathname && expectedPathname !== "/debate") {
+        requestAnimationFrame(() => {
+          setDebateIframeModalLoadingState(false);
+        });
+      }
     });
   }
 }
@@ -4690,7 +4812,7 @@ function openDebateIframeModal(url, options = {}) {
   modal.classList.add("open");
   lockPageScrollForDebateModal(_debateModalSavedScrollY);
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
-  frame.src = url;
+  navigateDebateIframeModalFrame(frame, url);
 
   armDebateIframeParentLoadingFallback(iframeUrlPathname);
 }
@@ -13638,7 +13760,9 @@ function initAdminTopbarMenu() {
     document.body.classList.add("admin-menu-is-open");
     const rect = toggle.getBoundingClientRect();
     panel.style.top = (rect.bottom + 8) + 'px';
-    panel.style.right = (window.innerWidth - rect.right) + 'px';
+    panel.style.right = '';
+    panel.style.left = '50%';
+    panel.style.transform = 'translateX(-50%)';
   };
 
   toggle.addEventListener("click", (event) => {
@@ -16435,6 +16559,7 @@ let _agonCloudOriginalCaptionHtml = null;
 let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
 let _agonCloudFrameTopLocked = false;
+let _agonCloudSwitchSafetyTimer = null;
 
 function preventAgonCloudSwitchScroll(event) {
   if (!_agonCloudSwitchLoading) return;
@@ -16457,10 +16582,15 @@ window.addEventListener("keydown", preventAgonCloudSwitchKeys, { capture: true }
 function beginAgonCloudSwitchLoading(container) {
   _agonCloudSwitchLoading = true;
   const token = ++_agonCloudSwitchToken;
+  if (_agonCloudSwitchSafetyTimer) clearTimeout(_agonCloudSwitchSafetyTimer);
   lockAgonCloudFrameTop(container);
   document.body.classList.add("agon-cloud-switch-loading");
   container?.classList.add("agon-cloud-switching");
   showBubbleCloudLoadingSpinner({ switchMode: true });
+  _agonCloudSwitchSafetyTimer = window.setTimeout(() => {
+    if (token !== _agonCloudSwitchToken) return;
+    finishAgonCloudSwitchLoading(token, container);
+  }, 6500);
   return token;
 }
 
@@ -16468,6 +16598,10 @@ function finishAgonCloudSwitchLoading(token, container) {
   requestAnimationFrame(() => {
     window.setTimeout(() => {
       if (token !== _agonCloudSwitchToken) return;
+      if (_agonCloudSwitchSafetyTimer) {
+        clearTimeout(_agonCloudSwitchSafetyTimer);
+        _agonCloudSwitchSafetyTimer = null;
+      }
       _agonCloudSwitchLoading = false;
       _agonCloudFrameTopLocked = false;
       document.body.classList.remove("agon-cloud-switch-loading");
@@ -16620,7 +16754,18 @@ function toggleAgonCloud() {
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
       syncCloudSectionHeight();
-      window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || [], () => {
+      const trends = window.AGON_TAG_TRENDS || [];
+      if (!trends.length) {
+        window._tagTrendCloudModule.renderTagTrendCloud(container, trends);
+        if (currentTypeFilter !== "agon") {
+          setTypeFilter("agon");
+        } else {
+          applyIndexFilters();
+        }
+        finishAgonCloudSwitchLoading(token, container);
+        return;
+      }
+      window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
         // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par agôn"
         // retiré temporairement par le mode Bulles Agôn.
         if (currentTypeFilter !== "agon") {
@@ -18082,7 +18227,7 @@ function buildIndexThematicSectionsHtml(debates) {
     // Mode Bulles Agôn (mobile) : le bandeau "Arènes sous tension" est la cible
     // des bulles → 10 cartes d'emblée ; les autres bandeaux sont réduits à 1.
     const agonCloudActive = isMobile && _agonCloudMode;
-    const carouselInitial = isMobile ? 1 : _CAROUSEL_INITIAL;
+    const carouselInitial = isMobile ? 2 : _CAROUSEL_INITIAL;
     const alaUneInitial = isMobile ? (agonCloudActive ? 1 : 15) : 20;
     const tensionInitial = agonCloudActive ? 10 : carouselInitial;
 

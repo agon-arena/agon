@@ -45,6 +45,7 @@
     sessionStorage.removeItem(KEY);
     if (!isHomePath()) {
       hideForRedirect();
+      try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (notifications)", at: Date.now() })); } catch(e) {}
       location.replace("/");
       return true;
     }
@@ -440,7 +441,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.min.js?v=20260625-context-signature-spacing"></script>
+	<script src="/script.min.js?v=20260626-safari-debate-iframe-clean-nav"></script>
   <script src="/ai-analysis-animation.js?v=20260622-argument-card-unit-wrap"></script>
 <script>
 (function() {
