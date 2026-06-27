@@ -224,6 +224,26 @@
     }
   } catch (_) {}
 
+  // Tab discard iOS (onglet tué en arrière-plan puis restauré) ou reload après
+  // page de récupération SW (serveur 5xx puis revenu) : pas besoin de rejouer l'intro.
+  try {
+    if (!shouldSkipStartup && document.wasDiscarded === true) {
+      shouldSkipStartup = true;
+    }
+  } catch (_) {}
+  try {
+    if (!shouldSkipStartup) {
+      var raw = sessionStorage.getItem('agon_last_reload_reason');
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && parsed.reason && parsed.reason.indexOf('sw-recovery-page') !== -1) {
+          shouldSkipStartup = true;
+        }
+        // Ne pas consommer la clé ici : __agonDebugStartupDiagnostic la lit aussi
+      }
+    }
+  } catch (_) {}
+
   try {
     var params = new URLSearchParams(window.location.search);
     if (params.get('skipStartup') === '1') {

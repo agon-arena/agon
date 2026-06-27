@@ -5861,12 +5861,12 @@ app.get("/api/debates/:id", async (req, res) => {
     const canonicalId = resolveSharedDebateId(id);
     const isShared = canonicalId && canonicalId !== String(id);
 
-    const [debate, args, canonicalStatus] = await Promise.all([
+    const [debate, args, canonicalDebate] = await Promise.all([
       getDebateById(id),
       getArgumentsByDebateId(id),
-      isShared
-        ? supabase.from("debates").select("ai_analysis_status").eq("id", canonicalId).maybeSingle().then(r => r.data)
-        : Promise.resolve(null)
+      // Arène fusionnée : on charge le canonique en parallèle pour récupérer
+      // son ai_analysis_status sans requête supplémentaire (getDebateById est mis en cache).
+      isShared ? getDebateById(canonicalId) : Promise.resolve(null)
     ]);
 
     if (!debate) {
@@ -5875,8 +5875,8 @@ app.get("/api/debates/:id", async (req, res) => {
 
     // Arène fusionnée : l'analyse est stockée sur le canonique — on reflète
     // son statut dans la réponse pour que le client déclenche bien le fetch.
-    if (isShared && canonicalStatus?.ai_analysis_status && canonicalStatus.ai_analysis_status !== "none") {
-      debate.ai_analysis_status = canonicalStatus.ai_analysis_status;
+    if (isShared && canonicalDebate?.ai_analysis_status && canonicalDebate.ai_analysis_status !== "none") {
+      debate.ai_analysis_status = canonicalDebate.ai_analysis_status;
     }
 
     const optionA = args.filter((a) => a.side === "A");

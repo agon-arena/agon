@@ -68,8 +68,9 @@ const COLOR_B_BORDER   = '#AEC0CC';
 // DIAGNOSTIC TEMPORAIRE — à retirer une fois le bug du "refresh" de l'index résolu.
 // Trace tous les déclencheurs suspects de reload/navigation/loader/rerender.
 // Mettre __AGON_DEBUG_REFRESH_ENABLED = true pour réactiver (désactivé en prod
+// Activé temporairement pour diagnostiquer les rechargements spontanés mobile.
 // pour éviter console.log + localStorage synchrone à chaque interaction).
-const __AGON_DEBUG_REFRESH_ENABLED = false;
+const __AGON_DEBUG_REFRESH_ENABLED = true;
 function __agonDebugRefreshLog(source, type, extra = {}) {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
   try {
@@ -16822,8 +16823,8 @@ let _politicalCloudGroup = 'mixed';
 const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>';
 const POLITICAL_CLOUD_CAPTION_TEXT = {
   mixed: "Les tendances de l'actualité française ces dernières heures.",
-  left: "Les tendances de l'actualité française dans les médias plutôt orientés à gauche ces dernières heures.",
-  right: "Les tendances de l'actualité française dans les médias plutôt orientés à droite ces dernières heures."
+  left: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à gauche ces dernières heures.",
+  right: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à droite ces dernières heures."
 };
 
 function applyPoliticalCloudCaption(group) {
@@ -22990,6 +22991,7 @@ function initDebateMediaHistory(debate) {
     'alternatives-economiques.fr': 'gauche',
     'regards.fr': 'gauche',
     'mondediplomatique.fr': 'gauche / géopolitique',
+    'linsoumission.fr': 'gauche',
     // ── Presse droite / souverainiste ──
     'valeursactuelles.com': 'droite / conservateur',
     'causeur.fr': 'droite / souverainiste',
@@ -25537,8 +25539,13 @@ if (data.debate.ai_analysis_status !== 'none') {
   // status peut être "scheduled"/"generating"/"failed" tout en ayant déjà
   // un ai_analysis valide en base (re-génération en attente) : on affiche
   // ce rapport existant plutôt que de masquer les notes pendant l'attente.
-  fetch(API + '/debates/' + id + '/analysis')
-    .then(function(r) { return r.ok ? r.json() : null; })
+  // Utiliser le fetch partagé de admin-debate-analysis.js si disponible
+  // (même cache + même in-flight promise → 1 seule requête réseau au lieu de 2).
+  var analysisFetchPromise = typeof window.__agonFetchAnalysis === 'function'
+    ? window.__agonFetchAnalysis(id).then(function(res) { return res && res.r && res.r.ok ? res.json : null; })
+    : fetch(API + '/debates/' + id + '/analysis').then(function(r) { return r.ok ? r.json() : null; });
+
+  analysisFetchPromise
     .then(function(json) {
       if (!json || !json.raw) return;
       try {

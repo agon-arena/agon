@@ -18920,6 +18920,9 @@ body.page-home #debates-list .theme-row-section:first-child {
 }
 
 
+.caption-mobile-br { display: none; }
+@media (max-width: 768px) { .caption-mobile-br { display: block; } }
+
 .agon-tag-trends-caption {
   position: relative;
   z-index: 135;
@@ -18990,6 +18993,17 @@ body.page-home #debates-list .theme-row-section:first-child {
   padding: 4px 11px;
   min-width: 64px;
   font-size: 10px;
+  position: relative;
+}
+#agon-political-cloud-switch .agon-cloud-mode-segment:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
 }
 
 /* .agon-cloud-mode-switch impose display:flex, qui écrase sinon l'attribut natif
@@ -19101,6 +19115,8 @@ body.page-home #debates-list .theme-row-section:first-child {
   justify-content: center;
   pointer-events: none;
   z-index: 200;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 #agon-cloud-loading-spinner.agon-cloud-loading-switch {

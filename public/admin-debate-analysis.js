@@ -80,6 +80,11 @@
     });
   }
 
+  // Exposé globalement pour que script.js partage le même cache et la même
+  // promise in-flight, évitant tout double aller-retour réseau.
+  window.__agonRememberAnalysis = rememberStoredAnalysis;
+  window.__agonFetchAnalysis = fetchStoredAnalysis;
+
   // ── Styles ──────────────────────────────────────────────────────────
   function injectStyles() {
     const css = `
