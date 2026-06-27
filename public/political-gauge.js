@@ -17,7 +17,9 @@
     const total = leftCount + rightCount;
     const leftPct = total === 0 ? 50 : Math.round((leftCount / total) * 100);
     const rightPct = total === 0 ? 50 : 100 - leftPct;
-    const needleAngle = Math.round(((rightPct - leftPct) / 100) * 74);
+    const diff = (rightPct - leftPct) / 100;
+    const sign = diff >= 0 ? 1 : -1;
+    const needleAngle = Math.round(sign * Math.pow(Math.abs(diff), 0.65) * 85);
 
     const wrap = document.createElement("div");
     wrap.className = "political-gauge-wrap";
@@ -47,8 +49,8 @@
         <div class="political-gauge-pivot"></div>
       </div>
       <div class="political-gauge-labels">
-        <span class="political-gauge-label-left">Idées<br>de gauche ${leftPct} %</span>
-        <span class="political-gauge-label-right">Idées<br>de droite ${rightPct} %</span>
+        <span class="political-gauge-label-left">Idées<br>plutôt de gauche ${leftPct} %</span>
+        <span class="political-gauge-label-right">Idées<br>plutôt de droite ${rightPct} %</span>
       </div>
     `;
 

@@ -9178,6 +9178,16 @@ padding:4px 14px 12px 14px;
     right: auto;
     min-width: 172px;
   }
+
+  /* Le menu Généraliste se centre sous son bouton (right:0 le décalerait trop à gauche) */
+  .debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-menu {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  .debate-media-source-group[data-source-orientation="neutral"].open .debate-media-source-menu {
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* Bouton Droite : aligner le menu à droite pour éviter le débordement */
