@@ -2849,6 +2849,14 @@ const TREND_RECENT_SUBJECTS_LIMIT = 20;
 // une évolution réelle de l'actu dans le temps, elles doivent rester visibles séparément.
 const MIN_TREND_MATCH_GAP_MS = 60 * 60 * 1000;
 
+// Fusion automatique Certamen : fenêtre de recherche (1h–24h avant la publication)
+// et nombre maximal de candidats examinés.
+const CERTAMEN_MERGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const CERTAMEN_MERGE_CANDIDATES_LIMIT = 50;
+// Seuil de confiance GPT plus élevé qu'en mode tendance (0.65) car aucune relecture
+// humaine : en dessous de 0.80 l'arène reste indépendante.
+const CERTAMEN_MERGE_CONFIDENCE_THRESHOLD = 0.80;
+
 /**
  * Compare un nouveau sujet avec les publications récentes pour détecter
  * s'il appartient à une même séquence d'actualité.
@@ -2966,6 +2974,134 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Tente de fusionner automatiquement une arène créée par Certamen avec une arène
+ * similaire publiée dans la fenêtre de 1h–24h précédente.
+ *
+ * Règles :
+ *  - Confiance GPT ≥ CERTAMEN_MERGE_CONFIDENCE_THRESHOLD (0.80).
+ *  - Types compatibles (open↔open ou debate↔debate).
+ *  - Pour les arènes à positions, alignement coherent, ambiguous ou inverted.
+ *  - Si inverted : permutation des positions de la nouvelle arène en base avant
+ *    la liaison (option A validée explicitement).
+ *  - Toutes les erreurs sont non-bloquantes.
+ */
+async function tryCertamenAutoMerge(newDebateId, { question, content, option_a, option_b }) {
+  try {
+    const now = Date.now();
+    const windowStart = new Date(now - CERTAMEN_MERGE_WINDOW_MS).toISOString();
+    const windowEnd   = new Date(now - MIN_TREND_MATCH_GAP_MS).toISOString();
+
+    const { data: recentRows } = await supabase
+      .from("debates")
+      .select("id, question, content, source_url, media_extras, created_at, keywords, type, option_a, option_b")
+      .neq("id", String(newDebateId))
+      .gte("created_at", windowStart)
+      .lte("created_at", windowEnd)
+      .order("created_at", { ascending: false })
+      .limit(CERTAMEN_MERGE_CANDIDATES_LIMIT);
+
+    if (!recentRows?.length) {
+      console.log("[certamen-merge] aucun candidat dans la fenêtre 1h–24h");
+      return;
+    }
+
+    const recentSubjects = recentRows.map((d) => {
+      const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
+      const srcExtras = extras.filter((e) => e && typeof e === "object" &&
+        String(e.type || "source").trim() === "source" &&
+        (e.url || e.source_url || e.source || e.media || e.publisher));
+      const srcKeys = new Set(srcExtras.map((e) =>
+        String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase()
+      ).filter(Boolean));
+      if (!srcKeys.size && d.source_url) srcKeys.add(String(d.source_url).trim().toLowerCase());
+      return {
+        id: String(d.id),
+        question: String(d.question || ""),
+        resume: String(d.content || "").slice(0, 200),
+        tags: normalizeKeywordList(d.keywords || [], 10, 60),
+        sourceCount: srcKeys.size,
+        created_at: d.created_at,
+      };
+    });
+
+    const newSubject = {
+      id: String(newDebateId),
+      question: String(question || ""),
+      resume: String(content || "").slice(0, 200),
+      tags: [],
+      sourceCount: 0,
+    };
+
+    const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
+    if (!matched) {
+      console.log("[certamen-merge] aucun sujet similaire → pas de fusion");
+      return;
+    }
+
+    const confidence = Number(matched.confidence ?? 0);
+    if (confidence < CERTAMEN_MERGE_CONFIDENCE_THRESHOLD) {
+      console.log(`[certamen-merge] confiance ${confidence} < ${CERTAMEN_MERGE_CONFIDENCE_THRESHOLD} → pas de fusion`);
+      return;
+    }
+
+    // Résoudre le canonique de l'arène matchée et charger ses données complètes
+    const canonicalId = resolveSharedDebateId(matched.id) || String(matched.id);
+    const { data: canonical, error: canonErr } = await supabase
+      .from("debates")
+      .select("id, type, option_a, option_b, question")
+      .eq("id", canonicalId)
+      .single();
+    if (canonErr || !canonical) {
+      console.log(`[certamen-merge] arène canonique ${canonicalId} introuvable → pas de fusion`);
+      return;
+    }
+
+    // Vérification de compatibilité des types
+    const newType    = inferVeilleDebateType(option_a, option_b);
+    const canonType  = inferVeilleDebateType(canonical.option_a, canonical.option_b);
+    if (newType !== canonType) {
+      console.log(`[certamen-merge] types incompatibles (${newType} vs ${canonType}) → pas de fusion`);
+      return;
+    }
+
+    // Pour les arènes à positions, vérifier l'alignement A/B
+    if (newType === "debate") {
+      const alignment = await evaluateVeilleMergeAlignment(canonical, {
+        positionA: String(option_a || "").trim(),
+        positionB: String(option_b || "").trim(),
+      });
+
+      if (!alignment.ok && alignment.verdict !== "inverted") {
+        console.log(`[certamen-merge] alignement refusé (${alignment.verdict}) → pas de fusion`);
+        return;
+      }
+
+      if (alignment.verdict === "inverted") {
+        // Permuter option_a / option_b de la nouvelle arène en base avant liaison
+        const { error: swapErr } = await supabase
+          .from("debates")
+          .update({
+            option_a: String(option_b || "").trim(),
+            option_b: String(option_a || "").trim(),
+          })
+          .eq("id", String(newDebateId));
+        if (swapErr) {
+          console.error(`[certamen-merge] erreur permutation positions (${newDebateId}) : ${swapErr.message} → pas de fusion`);
+          return;
+        }
+        console.log(`[certamen-merge] positions permutées pour l'arène ${newDebateId}`);
+      }
+    }
+
+    linkDebateToSharedSpace(newDebateId, canonicalId);
+    clearDebatesApiResponseCache();
+    console.log(`[certamen-merge] fusion automatique : ${newDebateId} → canonique ${canonicalId} | confiance ${confidence} | raison : "${matched.reason || "—"}" | "${String(canonical.question || "").slice(0, 60)}"`);
+  } catch (err) {
+    console.error("[certamen-merge] erreur non bloquante :", err.message);
   }
 }
 
@@ -5505,7 +5641,15 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
       try {
         // Certamen (pipeline bot veille) publie ses arènes communauté via cet endpoint
         // avec ce creatorKey fixe : jamais de badge de tendance sur ces cartes.
+        // En revanche, une tentative de fusion automatique est faite si une arène
+        // similaire existe dans la fenêtre de 1h–24h précédente.
         if (creatorKey === CERTAMEN_CREATOR_KEY) {
+          await tryCertamenAutoMerge(data.id, {
+            question,
+            content: normalizedContent,
+            option_a,
+            option_b,
+          });
           await rebuildCloudBubblesAfterPublish("create-debate", data.id);
           return;
         }

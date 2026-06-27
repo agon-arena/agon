@@ -10858,12 +10858,16 @@ body.is-standalone .agon-tag-trends-section {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-bottom: 120px;
+  padding-bottom: 70px;
 }
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: 18px;
+  margin-top: 4px;
+}
+
+body.is-standalone #agon-political-cloud-switch {
+  margin-bottom: 4px;
 }
 
 @media (min-width: 769px) {
@@ -19877,6 +19881,15 @@ body.index-background-suspended #agon-tag-trends-section *,
 body.index-background-suspended .home-bottom-nav *,
 body.index-background-suspended .topbar * {
   animation-play-state: paused !important;
+}
+
+@media (max-width: 768px) {
+  body.index-background-suspended #debates-list,
+  body.index-background-suspended #agon-tag-trends-section {
+    visibility: hidden !important;
+    pointer-events: none !important;
+    content-visibility: hidden;
+  }
 }
 
 /* Loading X/Instagram dans le carousel desktop : version compacte avec sablier */

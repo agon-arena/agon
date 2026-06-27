@@ -7445,15 +7445,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
 
         ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
 
-        <iframe
-          class="debate-card-youtube-iframe"
-          title="Vidéo YouTube"
-          referrerpolicy="strict-origin-when-cross-origin"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
-          allowfullscreen
-          onclick="event.stopPropagation()"
-          style="position:absolute; inset:0; z-index:0; display:block; width:100%; height:100%; border:0;"
-        ></iframe>
+        <span data-index-youtube-iframe-slot aria-hidden="true"></span>
 
         <button
           type="button"
@@ -8529,6 +8521,47 @@ function postMessageToIndexYouTubeIframe(iframe, command) {
   }
 }
 
+function ensureIndexYouTubeIframe(shell) {
+  if (!shell) return null;
+
+  const existing = Array.from(shell.children).find((child) => child.classList?.contains('debate-card-youtube-iframe'));
+  if (existing instanceof HTMLIFrameElement) return existing;
+
+  const iframe = document.createElement('iframe');
+  iframe.className = 'debate-card-youtube-iframe';
+  iframe.title = 'Vidéo YouTube';
+  iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+  iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share';
+  iframe.allowFullscreen = true;
+  iframe.onclick = (event) => event.stopPropagation();
+  iframe.style.cssText = 'position:absolute; inset:0; z-index:0; display:block; width:100%; height:100%; border:0;';
+
+  const slot = shell.querySelector('[data-index-youtube-iframe-slot]');
+  if (slot) {
+    slot.replaceWith(iframe);
+  } else {
+    const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+    shell.insertBefore(iframe, soundButton || null);
+  }
+
+  return iframe;
+}
+
+function removeIndexYouTubeIframe(shell) {
+  if (!shell) return;
+  const iframe = Array.from(shell.children).find((child) => child.classList?.contains('debate-card-youtube-iframe'));
+  if (!(iframe instanceof HTMLIFrameElement)) return;
+
+  iframe.onload = null;
+  iframe.removeAttribute('src');
+  iframe.src = 'about:blank';
+
+  const slot = document.createElement('span');
+  slot.setAttribute('data-index-youtube-iframe-slot', '');
+  slot.setAttribute('aria-hidden', 'true');
+  iframe.replaceWith(slot);
+}
+
 function updateYtSourceSoundButton(button, isSoundEnabled) {
   if (!button) return;
 
@@ -8725,13 +8758,8 @@ function updateIndexYouTubeShellOverlay(shell) {
 function unloadIndexYouTubeShell(shell) {
   if (!shell) return;
   if (Date.now() - Number(shell.dataset.lastUserActivation || 0) < 1500) return;
-  const iframe = shell.querySelector('.debate-card-youtube-iframe');
   const poster = shell.querySelector('[data-index-youtube-poster]');
-  if (!iframe) return;
-
-  iframe.onload = null;
-  iframe.removeAttribute('src');
-  iframe.src = 'about:blank';
+  removeIndexYouTubeIframe(shell);
   shell.dataset.active = 'false';
   shell.dataset.userActivated = 'false';
   shell.dataset.soundEnabled = 'false';
@@ -8743,7 +8771,7 @@ function unloadIndexYouTubeShell(shell) {
 
 function activateIndexYouTubeShell(shell, options = {}) {
   if (!shell) return;
-  const iframe = shell.querySelector('.debate-card-youtube-iframe');
+  const iframe = ensureIndexYouTubeIframe(shell);
   const poster = shell.querySelector('[data-index-youtube-poster]');
   const baseUrl = String(shell.dataset.embedBase || '').trim();
   if (!iframe || !baseUrl) return;
@@ -9712,7 +9740,7 @@ function initIndexYouTubeObserver(root = document) {
       shell.dataset.active = 'true';
       shell.dataset.userActivated = 'true';
       shell.dataset.soundEnabled = 'true';
-      const iframe = shell.querySelector('.debate-card-youtube-iframe');
+      const iframe = ensureIndexYouTubeIframe(shell);
       if (iframe && !iframe.getAttribute('src')) {
         const base = String(shell.dataset.embedBase || '').trim();
         if (base) iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
@@ -9816,7 +9844,7 @@ function initIndexYouTubeObserver(root = document) {
       shell.dataset.active = 'true';
       shell.dataset.userActivated = 'true';
       shell.dataset.soundEnabled = 'true';
-      const iframe = shell.querySelector('.debate-card-youtube-iframe');
+      const iframe = ensureIndexYouTubeIframe(shell);
       if (iframe && !iframe.getAttribute('src')) {
         const base = String(shell.dataset.embedBase || '').trim();
         if (base) iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=0&mute=0&controls=1`;
@@ -16955,6 +16983,13 @@ function toggleAgonCloud() {
     // les compteurs de cartes du mode Agôn (10 en tension, 1 ailleurs sur mobile).
     _agonCloudMode = true;
 
+    // Bulles Agôn utilise son propre nuage communautaire : on sort d'abord des
+    // états propres aux Bulles Actu pour éviter qu'un re-render intermédiaire
+    // filtre tout puis vide le nuage.
+    _politicalCloudGroup = 'mixed';
+    syncPoliticalCloudSwitch();
+    clearActiveBubbles();
+
     // Les bandeaux thématiques sous les Bulles Agôn ne montrent que les arènes
     // ouvertes par la communauté, quel que soit le filtre actif avant le switch.
     setTypeFilter("community");
@@ -16963,7 +16998,6 @@ function toggleAgonCloud() {
     _tagCloudSecondaryMode = false;
     _tagCloudOriginalTrends = null;
     _tagCloudSecondaryTrends = null;
-    clearActiveBubbles();
     container.classList.add('agon-cloud-mode-agon');
     container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
     syncAgonCloudModeSwitch();
@@ -18524,7 +18558,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260624-hide-zero-trend");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260627-agon-switch-guard");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -18596,6 +18630,9 @@ function updateIndexTagTrends(items) {
   const cloudContainer = document.querySelector("#agon-tag-trends-cloud");
 
   if (!Array.isArray(items) || !items.length) {
+    if ((_agonCloudMode || _agonCloudSwitchLoading) && cloudContainer?.querySelector(".agon-tag-bubble")) {
+      return;
+    }
     window.AGON_TAG_TRENDS = [];
     if (trendsSection) trendsSection.hidden = true;
     if (cloudContainer) cloudContainer.innerHTML = "";
@@ -23961,12 +23998,7 @@ function cleanupDebateYouTubeShells() {
 
   const shell = container.querySelector('[data-index-youtube-shell]');
   if (shell) {
-    const iframe = shell.querySelector('.debate-card-youtube-iframe');
-    if (iframe) {
-      iframe.onload = null;
-      iframe.removeAttribute('src');
-      iframe.src = 'about:blank';
-    }
+    removeIndexYouTubeIframe(shell);
     shell.dataset.active = 'false';
     shell.dataset.userActivated = 'false';
     shell.dataset.soundEnabled = 'false';

@@ -772,15 +772,24 @@ function renderTagTrendCloud(container, trends, onReady) {
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      layoutTagTrendCloud(container);
-      container.classList.remove("agon-cloud-layout-pending");
-      if (!keepVisibleDuringSwitch) container.style.visibility = "";
-      if (onReady) onReady();
+      try {
+        layoutTagTrendCloud(container);
+      } catch (error) {
+        console.warn("[Agôn] Placement du nuage interrompu:", error);
+      } finally {
+        container.classList.remove("agon-cloud-layout-pending");
+        if (!keepVisibleDuringSwitch) container.style.visibility = "";
+        if (onReady) onReady();
+      }
 
       if (document.fonts?.ready) {
         document.fonts.ready.then(() => {
           if (!container.isConnected || !container.querySelector(".agon-tag-bubble")) return;
-          layoutTagTrendCloud(container);
+          try {
+            layoutTagTrendCloud(container);
+          } catch (error) {
+            console.warn("[Agôn] Repositionnement du nuage interrompu:", error);
+          }
         }).catch(() => {});
       }
     });
