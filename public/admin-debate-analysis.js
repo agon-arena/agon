@@ -226,6 +226,17 @@
         margin: 2px 0 -6px;
         min-height: 0;
       }
+      @media (max-width: 768px), (display-mode: standalone) {
+        body.page-debate .ada-countdown-badge,
+        body.page-debate .ada-countdown-ready {
+          position: relative;
+          top: -6px;
+        }
+        body.page-debate .ada-countdown-progress {
+          position: relative;
+          top: -2px;
+        }
+      }
 
       /* ── Report container ── */
       .ada-scoring-report { padding: 2px 0; }

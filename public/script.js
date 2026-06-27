@@ -52,6 +52,12 @@
 
 const API = "/api";
 
+// Cache du breakpoint 768px : évite de créer/interroger un MediaQueryList
+// à chaque appel dans les IntersectionObserver callbacks et handlers scroll.
+const _mq768 = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 768px)") : null;
+let _isMobile768 = _mq768 ? _mq768.matches : false;
+if (_mq768) _mq768.addEventListener("change", (e) => { _isMobile768 = e.matches; });
+
 const COLOR_A          = '#516776';
 const COLOR_A_BG       = '#a0c6d4';
 const COLOR_A_BORDER   = '#516776';
@@ -195,7 +201,7 @@ registerServiceWorker();
 
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(e => e.target.classList.toggle(PAUSE_CLASS, !e.isIntersecting));
-  }, { rootMargin: '150px 0px' });
+  }, { rootMargin: '0px' });
 
   const observe = (root) => {
     SELECTORS.forEach(sel => root.querySelectorAll(sel).forEach(el => observer.observe(el)));
@@ -1663,8 +1669,8 @@ function initPageArrivalLoadingOverlay() {
     requestAnimationFrame(updatePageArrivalLoadingOverlayBounds);
   };
 
-  window.addEventListener("resize", refreshBounds);
-  window.addEventListener("orientationchange", refreshBounds);
+  window.addEventListener("resize", refreshBounds, { passive: true });
+  window.addEventListener("orientationchange", refreshBounds, { passive: true });
   window.addEventListener("scroll", refreshBounds, { passive: true });
 
   const finish = (force = false) => {
@@ -3298,11 +3304,19 @@ function ensureDebateIframeParentLoadingStyles() {
       transform: translateZ(0);
     }
 
-    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
-      will-change: transform;
-      -webkit-backface-visibility: hidden;
-      transform: translateZ(0);
-    }
+	    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
+	      will-change: transform;
+	      -webkit-backface-visibility: hidden;
+	      transform: translateZ(0);
+	    }
+
+	    @media (max-width: 768px) {
+	      #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-enter-debate {
+	        top: 0 !important;
+	        bottom: 0 !important;
+	        transition: opacity 0.18s ease;
+	      }
+	    }
 
     body.debate-iframe-parent-loading-open #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-overlay-visible {
       opacity: 1;
@@ -3432,7 +3446,11 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   // Toute (re)mise en route d'un chargement repart d'un état propre : on efface
   // un éventuel état "bloqué" (sablier arrêté + actions de récupération) laissé
   // par un chargement précédent.
-  overlay.classList.remove("debate-iframe-parent-loading-stuck");
+	  overlay.classList.remove("debate-iframe-parent-loading-stuck");
+	  overlay.classList.toggle(
+	    "debate-iframe-parent-loading-enter-debate",
+	    String(message || "").includes("Entrée dans l'arène")
+	  );
   const actions = document.getElementById("debate-iframe-parent-loading-actions");
   if (actions) actions.hidden = true;
 
@@ -4262,7 +4280,7 @@ function ensureDebateIframeModal() {
         border-radius: 0;
       }
       #debate-iframe-modal-close {
-        bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(6px + env(safe-area-inset-bottom, 0px));
         left: auto;
         right: 322px;
         width: 42px;
@@ -4520,8 +4538,8 @@ function ensureDebateIframeModal() {
     }
   };
 
-  window.addEventListener("resize", refreshModalLoadingBounds);
-  window.addEventListener("orientationchange", refreshModalLoadingBounds);
+  window.addEventListener("resize", refreshModalLoadingBounds, { passive: true });
+  window.addEventListener("orientationchange", refreshModalLoadingBounds, { passive: true });
   window.addEventListener("scroll", refreshModalLoadingBounds, { passive: true });
 
   const frame = document.getElementById("debate-iframe-modal-frame");
@@ -6610,7 +6628,7 @@ function initIndexCardShareMenus(root = document) {
           initIndexCardShareMenus._activeDropdown
         );
       }
-    });
+    }, { passive: true });
 
     window.addEventListener('scroll', () => {
       if (initIndexCardShareMenus._scrolling) return;
@@ -9408,7 +9426,7 @@ function initMobileIndexCardHighlight() {
   }
 
   window.addEventListener('scroll', scheduleMobileIndexCardHighlightUpdate, { passive: true });
-  window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate);
+  window.addEventListener('resize', scheduleMobileIndexCardHighlightUpdate, { passive: true });
   let _resizeHeavyRaf = null;
   window.addEventListener('resize', () => {
     if (_resizeHeavyRaf) return;
@@ -10086,7 +10104,7 @@ function bindIndexXTabletRefresh() {
 function shouldDeferSocialEmbedUntilTap(shell) {
   return !!(
     shell
-    && window.matchMedia("(max-width: 768px)").matches
+    && _isMobile768
     && shell.dataset.socialLoadRequested !== 'true'
   );
 }
@@ -10255,7 +10273,7 @@ function unloadIndexInstagramShell(shell) {
 }
 
 function getSocialEmbedUnloadRootMargin() {
-  return window.matchMedia("(max-width: 768px)").matches
+  return _isMobile768
     ? '650px 0px 650px 0px'
     : '1500px 0px 1500px 0px';
 }
@@ -10287,7 +10305,7 @@ function initIndexEmbedUnloadObserver(root = document) {
         if (shell.dataset.rendered !== 'true') return;
         if (shell.hasAttribute('data-index-og-image-shell')) {
           if (shell.dataset.keepAliveUntil && Date.now() < Number(shell.dataset.keepAliveUntil)) return;
-          if (window.matchMedia("(max-width: 768px)").matches) {
+          if (_isMobile768) {
             if (shell.dataset.mobileUnloadTimer) return;
             shell.dataset.mobileUnloadTimer = String(window.setTimeout(() => {
               delete shell.dataset.mobileUnloadTimer;
@@ -10701,11 +10719,16 @@ function initIndexInstagramObserver(root = document) {
 
   if (!window.__indexInstagramDesktopResizeBound) {
     window.__indexInstagramDesktopResizeBound = true;
+    let _igResizeRaf = null;
     window.addEventListener('resize', () => {
-      document.querySelectorAll('[data-index-instagram-shell]').forEach((shell) => {
-        applyIndexInstagramDesktopSizing(shell);
+      if (_igResizeRaf) return;
+      _igResizeRaf = requestAnimationFrame(() => {
+        _igResizeRaf = null;
+        document.querySelectorAll('[data-index-instagram-shell]').forEach((shell) => {
+          applyIndexInstagramDesktopSizing(shell);
+        });
       });
-    });
+    }, { passive: true });
   }
 }
 
@@ -17243,7 +17266,7 @@ function initIndexExplorerControls() {
 
   window.addEventListener("resize", () => {
     syncIndexExplorerControlButtons(controls.style.display !== "none");
-  });
+  }, { passive: true });
 }
 
 document.addEventListener("click", function(event) {
@@ -22775,28 +22798,72 @@ function initDebateMediaHistory(debate) {
 
     const displayNames = {
       "20minutes": "20 Minutes",
-      alternativeseconomiques: "Alternatives Economiques",
+      alternativeseconomiques: "Alternatives Eco.",
+      arretsurimages: "Arrêt sur Images",
+      atlantico: "Atlantico",
+      bastamag: "Basta!",
+      basta: "Basta!",
+      bbc: "BBC",
       bfmtv: "BFM TV",
+      blastinfo: "Blast Info",
+      boulevard: "Bld Voltaire",
+      brut: "Brut.",
+      capital: "Capital",
+      causeur: "Causeur",
+      challenges: "Challenges",
       cnews: "CNews",
+      contrepoints: "Contrepoints",
+      courrierinternational: "Courrier International",
+      europe1: "Europe 1",
       euronews: "Euronews",
       france24: "France 24",
+      franceculture: "France Culture",
       franceinfo: "France Info",
+      franceinter: "France Inter",
       francetvinfo: "France TV Info",
       huffingtonpost: "HuffPost",
       huffpost: "HuffPost",
-      humanite: "L'Humanite",
+      humanite: "L'Humanité",
+      konbini: "Konbini",
       lacroix: "La Croix",
+      ladepeche: "La Dépêche",
+      lalibre: "La Libre",
+      latribune: "La Tribune",
+      lavoixdunord: "La Voix du Nord",
+      lci: "LCI",
+      ledauphine: "Le Dauphiné",
       lefigaro: "Le Figaro",
       lemonde: "Le Monde",
       lepoint: "Le Point",
+      lesechos: "Les Échos",
+      lesjours: "Les Jours",
+      lesoir: "Le Soir",
+      letelegramme: "Le Télégramme",
+      letemps: "Le Temps",
       lexpress: "L'Express",
-      liberation: "Liberation",
+      liberation: "Libération",
+      lopinion: "L'Opinion",
       marianne: "Marianne",
       mediapart: "Mediapart",
+      mondediplomatique: "Le Monde Diplo.",
+      nicematin: "Nice-Matin",
       nouvelobs: "Le Nouvel Obs",
-      publicsenat: "Public Senat",
+      nytimes: "NY Times",
+      ouestfrance: "Ouest-France",
+      politis: "Politis",
+      publicsenat: "Public Sénat",
+      reporterre: "Reporterre",
+      republicainlorrain: "Républicain Lorrain",
+      reuters: "Reuters",
       rfi: "RFI",
+      rmc: "RMC",
+      rtbf: "RTBF",
+      rtl: "RTL",
       slate: "Slate",
+      streetpress: "StreetPress",
+      sudouest: "Sud Ouest",
+      telerama: "Télérama",
+      theguardian: "The Guardian",
       valeursactuelles: "Valeurs Actuelles",
       youtube: "YouTube",
       youtu: "YouTube"
@@ -22810,16 +22877,39 @@ function initDebateMediaHistory(debate) {
       .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Source";
   }
 
+  // Extrait le nom de chaîne YouTube depuis le chemin de l'URL (@handle, /c/Name, /user/Name)
+  function extractYouTubeChannelName(url) {
+    try {
+      const parsed = new URL(url);
+      const h = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (h !== 'youtube.com' && h !== 'm.youtube.com') return '';
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if (!parts.length) return '';
+      if (parts[0].startsWith('@')) return decodeURIComponent(parts[0].slice(1));
+      if ((parts[0] === 'c' || parts[0] === 'user') && parts[1]) return decodeURIComponent(parts[1]);
+      // /channel/UCxxxx → ID opaque, inutilisable comme nom
+    } catch {}
+    return '';
+  }
+
+  // Retourne true si le sourceHint est un artefact bot inutilisable (ID de playlist, etc.)
+  function isBotArtifactSourceHint(hint) {
+    const h = String(hint || '').trim();
+    return /^Playlist YouTube PL[A-Z0-9_-]+/i.test(h);
+  }
+
   // --- Nom du média depuis l'URL ou les previews ---
   function getMediaName(url, sourceHint) {
     const previews = debate.index_source_previews || {};
     const preview = previews[url];
-    // YouTube : utilise sourceHint (nom stocké dans l'extra) ou preview.author
+    const cleanHint = isBotArtifactSourceHint(sourceHint) ? '' : sourceHint;
+    // YouTube : utilise sourceHint (nom stocké dans l'extra), preview.author, ou le handle de l'URL
     try {
       const h = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-      if (h === 'youtube.com' || h === 'youtu.be') {
-        const name = String(sourceHint || preview?.author || '').trim();
+      if (h === 'youtube.com' || h === 'm.youtube.com' || h === 'youtu.be') {
+        const name = String(cleanHint || preview?.author || extractYouTubeChannelName(url) || '').trim();
         if (name) return name;
+        return 'YouTube';
       }
     } catch {}
     if (preview?.domain) return formatMediaDisplayName(preview.domain, url);
@@ -22839,40 +22929,107 @@ function initDebateMediaHistory(debate) {
   }
 
   const mediaOrientationByDomain = {
-    'franceinfo.fr': 'centre / service public',
-    'francetvinfo.fr': 'centre / service public',
+    // ── Presse nationale généraliste ──
     'lemonde.fr': 'centre-gauche / généraliste',
+    'leparisien.fr': 'généraliste / populaire',
+    'lefigaro.fr': 'droite',
+    '20minutes.fr': 'généraliste populaire',
     'liberation.fr': 'gauche',
     'humanite.fr': 'gauche',
-    'mediapart.fr': 'gauche / investigation',
+    'la-croix.com': 'centre / chrétien-social',
+    'marianne.net': 'souverainiste / républicain',
+    // ── Magazines et hebdos ──
     'nouvelobs.com': 'centre-gauche',
-    'politis.fr': 'gauche',
-    'basta.media': 'gauche / écologie sociale',
-    'reporterre.net': 'écologie / gauche',
-    'lefigaro.fr': 'droite',
-    'valeursactuelles.com': 'droite / conservateur',
     'lepoint.fr': 'centre-droit',
     'lexpress.fr': 'centre / centre-droit',
-    'marianne.net': 'souverainiste / républicain',
-    'la-croix.com': 'centre / chrétien-social',
-    'publicsenat.fr': 'institutionnel / politique',
+    'lopinion.fr': 'droite / libéral',
+    'telerama.fr': 'centre-gauche / culture',
+    'challenges.fr': 'économie / centre',
+    'latribune.fr': 'économie / centre',
+    'lesechos.fr': 'économie / libéral',
+    'capital.fr': 'économie / libéral',
+    // ── TV et info continue ──
     'bfmtv.com': 'généraliste / info continue',
     'cnews.fr': 'droite / info continue',
+    'lci.fr': 'généraliste / TV info',
+    'tf1info.fr': 'généraliste / TV',
+    'tf1.fr': 'généraliste / TV',
+    'france2.fr': 'centre / service public',
+    'france3.fr': 'centre / service public',
+    'france5.fr': 'centre / service public',
+    'publicsenat.fr': 'institutionnel / politique',
+    // ── Radio ──
+    'rtl.fr': 'généraliste / radio',
+    'europe1.fr': 'centre-droit / radio',
+    'rmc.fr': 'généraliste / radio',
+    'franceinter.fr': 'centre-gauche / radio',
+    'franceculture.fr': 'centre-gauche / radio',
+    // ── Service public ──
+    'franceinfo.fr': 'centre / service public',
+    'francetvinfo.fr': 'centre / service public',
     'france24.com': 'international / service public',
     'rfi.fr': 'international / service public',
+    // ── International ──
     'euronews.com': 'international / européen',
-    '20minutes.fr': 'généraliste populaire',
+    'bbc.com': 'international / service public',
+    'bbc.co.uk': 'international / service public',
+    'theguardian.com': 'international / centre-gauche',
+    'nytimes.com': 'international / centre-gauche',
+    'reuters.com': 'agence presse / international',
+    'afp.com': 'agence presse / généraliste',
+    // ── Médias alternatifs et investigation ──
+    'mediapart.fr': 'gauche / investigation',
+    'blast-info.fr': 'gauche / investigation',
+    'lesjours.fr': 'gauche / investigation',
+    'arretsurimages.net': 'gauche / critique médias',
+    'streetpress.com': 'gauche / société',
+    'politis.fr': 'gauche',
+    'basta.media': 'gauche / écologie sociale',
+    'bastamag.net': 'gauche',
+    'reporterre.net': 'écologie / gauche',
+    'alternatives-economiques.fr': 'gauche',
+    'regards.fr': 'gauche',
+    'mondediplomatique.fr': 'gauche / géopolitique',
+    // ── Presse droite / souverainiste ──
+    'valeursactuelles.com': 'droite / conservateur',
+    'causeur.fr': 'droite / souverainiste',
+    'atlantico.fr': 'droite / libéral',
+    'contrepoints.org': 'droite / libéral',
+    'boulevard-voltaire.fr': 'droite / souverainiste',
+    // ── Presse société / numérique ──
     'huffingtonpost.fr': 'centre-gauche / société',
     'huffpost.fr': 'centre-gauche / société',
     'slate.fr': 'centre-gauche / analyse',
-    'alternatives-economiques.fr': 'gauche',
-    'ledauphine.com': 'généraliste / régional'
+    'courrierinternational.com': 'centre-gauche / international',
+    'brut.media': 'généraliste / numérique',
+    'konbini.com': 'culture / jeunesse',
+    // ── Presse régionale ──
+    'ledauphine.com': 'généraliste / régional',
+    'ouest-france.fr': 'généraliste / régional',
+    'ladepeche.fr': 'généraliste / régional',
+    'sudouest.fr': 'généraliste / régional',
+    'nicematin.com': 'généraliste / régional',
+    'letelegramme.fr': 'généraliste / régional',
+    'lavoixdunord.fr': 'généraliste / régional',
+    'estrepublicain.fr': 'généraliste / régional',
+    'republicain-lorrain.fr': 'généraliste / régional',
+    'actu.fr': 'généraliste / régional',
+    // ── Presse belge et suisse ──
+    'rtbf.be': 'centre / service public',
+    'lesoir.be': 'centre-gauche / Belgique',
+    'rtl.be': 'généraliste / Belgique',
+    'lalibre.be': 'centre / Belgique',
+    'letemps.ch': 'centre / Suisse',
+    'rts.ch': 'centre / service public',
+    // ── Radio / podcasts France ──
+    'radiofrance.fr': 'centre / service public',
+    'tv5monde.com': 'francophonie / international',
   };
 
   function getOrientationGroupFromBotLabel(orientation) {
     const value = String(orientation || '').toLowerCase();
-    if (value.includes('gauche')) return 'left';
-    if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste')) return 'right';
+    if (value.includes('gauche') || value.includes('écolog')) return 'left';
+    if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste') || value.includes('libéral')) return 'right';
     return 'neutral';
   }
 
@@ -22927,7 +23084,13 @@ function initDebateMediaHistory(debate) {
       'HuffPost': 'HuffPost France',
       'France Info': 'Franceinfo',
       'TF1 : infos': 'TF1',
-      'Oncle Obs': "L'Obs"
+      'Oncle Obs': "L'Obs",
+      // i-Télé est l'ancien nom de CNews
+      'i-télé': 'CNEWS',
+      'itélé': 'CNEWS',
+      'itele': 'CNEWS',
+      // "ici" est la marque régionale de France 3 (service public)
+      'ici': 'Franceinfo',
     };
     Object.entries(youtubeNameAliases).forEach(function([alias, canonicalName]) {
       const orientation = veilleYouTubeChannelMap[normalizeMediaIdentity(canonicalName)];
@@ -22935,11 +23098,19 @@ function initDebateMediaHistory(debate) {
     });
   } catch (_) {}
 
+  // Orientations YouTube codées en dur pour les chaînes absentes du bot de veille
+  const youtubeOrientationOverrides = {
+    'radio nova': 'gauche / culture',
+  };
+
   function getSourceOrientation(url, author) {
     const hostname = getSourceHostname(url);
     // YouTube : cherche par nom de chaîne (author) dans les médias bot veille
     if (['youtube.com', 'm.youtube.com', 'youtu.be', 'youtube-nocookie.com'].includes(hostname) && author) {
       const key = normalizeMediaIdentity(author);
+      // 1. Override codé en dur (priorité maximale)
+      if (youtubeOrientationOverrides[key]) return getOrientationGroupFromBotLabel(youtubeOrientationOverrides[key]);
+      // 2. Bot de veille
       const matchedName = Object.keys(veilleYouTubeChannelMap)
         .find((n) => key === n || (n.length >= 4 && key.includes(n)) || (key.length >= 4 && n.includes(key)));
       if (matchedName) return getOrientationGroupFromBotLabel(veilleYouTubeChannelMap[matchedName]);
@@ -22977,7 +23148,8 @@ function initDebateMediaHistory(debate) {
         .map((src, i) => {
           const preview = (debate.index_source_previews || {})[src.url];
           const sourceHint = String(src.source || '').trim();
-          const _author = sourceHint || preview?.author || '';
+          const cleanHint = isBotArtifactSourceHint(sourceHint) ? '' : sourceHint;
+          const _author = cleanHint || preview?.author || extractYouTubeChannelName(src.url) || '';
           return { ...src, index: i, name: getMediaName(src.url, sourceHint), _author };
         })
         .filter((src) => getSourceOrientation(src.url, src._author) === group.key);
@@ -24940,7 +25112,7 @@ function attachPageScrollFadeHint(fadeColor) {
     hint.classList.toggle('is-hidden', !hasOverflow || atBottom);
   }
   window.addEventListener('scroll', update, { passive: true });
-  window.addEventListener('resize', update);
+  window.addEventListener('resize', update, { passive: true });
   requestAnimationFrame(update);
 
   let mutationFrame = null;
@@ -28622,7 +28794,7 @@ function resetArgumentFormScroll(form) {
 // (c'est le clavier, pas le scroll programmatique, qui recadre la vue).
 // On évite donc l'auto-focus sur mobile pour garder le haut de la modale visible.
 function isMobileViewport() {
-  return window.matchMedia('(max-width: 768px)').matches;
+  return _isMobile768;
 }
 
 function toggleForm(side) {
@@ -31268,8 +31440,15 @@ const notificationsLink = document.getElementById("home-topbar-notifications-lin
     }, { passive: false });
   }
 
-  window.addEventListener("resize", positionHomeTopbarMenu);
-  window.addEventListener("scroll", positionHomeTopbarMenu, { passive: true });
+  window.addEventListener("resize", positionHomeTopbarMenu, { passive: true });
+  let _positionTopbarMenuRaf = null;
+  window.addEventListener("scroll", () => {
+    if (_positionTopbarMenuRaf) return;
+    _positionTopbarMenuRaf = requestAnimationFrame(() => {
+      _positionTopbarMenuRaf = null;
+      positionHomeTopbarMenu();
+    });
+  }, { passive: true });
 
 
 }

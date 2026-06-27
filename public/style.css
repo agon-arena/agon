@@ -12939,7 +12939,7 @@ body.admin-edit-open::after {
        refresh de l'index (lui-même en position fixe, voir plus bas dans ce
        fichier), qui ne peut pas dépendre de la safe-area sans bouger pendant
        le scroll ni se désaligner du bandeau du bas en mode standalone. */
-    bottom: 32px !important;
+    bottom: 6px !important;
     left: auto !important;
     right: 322px !important;
     width: 42px !important;
@@ -13661,7 +13661,7 @@ body.page-debate .argument-url-field small.argument-url-ia-hint {
     position: absolute !important;
     top: auto !important;
     right: 10px !important;
-    bottom: 10px !important;
+    bottom: 6px !important;
     z-index: 30 !important;
     display: inline-flex;
   }
@@ -14253,6 +14253,7 @@ body.page-debate .argument-card-unit {
   border: 1px solid #d1d5db;
   border-radius: 14px;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 body.page-debate .argument-card-unit.flash-green,
@@ -14403,6 +14404,14 @@ body.page-debate .comments-block::before {
    se voient comme une seule carte, sans démarcation de couleur. */
 body.page-debate .argument-card-unified + .comments-block {
   background: #f5f5f4;
+}
+
+body.page-debate .argument-card-unified.argument-card-a + .comments-block {
+  background-color: var(--color-a-bg);
+}
+
+body.page-debate .argument-card-unified.argument-card-b + .comments-block {
+  background-color: var(--color-b-bg);
 }
 
 /* Vue pour/contre (débat binaire) : les cartes #arguments-a/#arguments-b
@@ -16922,7 +16931,7 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
   #voices-float-badge {
     /* Pas d'env(safe-area-inset-bottom), pour rester aligné avec le bouton
        refresh de l'index et #debate-iframe-modal-close (même raisonnement). */
-    bottom: 32px !important;
+    bottom: 10px !important;
   }
 
   #voices-panel {
@@ -22444,9 +22453,9 @@ body.page-create-mobile .create-card .create-submit-helper {
 }
 
 @media (max-width: 768px) {
-  /* Remplacement breathe : scale(1.035–1.095) → opacity légère */
+  /* Restaure l'animation scale visible sur mobile. */
   .agon-tag-bubble {
-    animation: agonBubbleBreatheLight 4s ease-in-out infinite;
+    animation: agonBubbleBreathe 3.5s ease-in-out infinite;
   }
 
   /* Flash : translateX + rotate coûteux sur 10 pseudos-éléments simultanés */
@@ -22487,5 +22496,97 @@ body.page-create-mobile .create-card .create-submit-helper {
   .my-argument-chip-stepper-btn-guided,
   .my-argument-chip-stepper-btn-guided::after {
     animation: none !important;
+  }
+}
+
+/* ── Animations bulles : pause quand une bulle est active ── */
+
+/* La bulle sélectionnée arrête de pulser (elle est déjà visuellement marquée) */
+.agon-tag-bubble.agon-tag-bubble-active {
+  animation: none;
+}
+
+/* Toutes les autres bulles se figent pendant qu'une est active :
+   réduit la chauffe et focalise l'attention sur le contenu chargé */
+.agon-tag-trends-cloud:has(.agon-tag-bubble-active) .agon-tag-bubble:not(.agon-tag-bubble-active) {
+  animation-play-state: paused;
+}
+
+
+/* ── Optimisations performance mobile — passe 2 ── */
+@media (max-width: 768px) {
+  /* Badge "écrit à la main" : blur(4px) permanent sur chaque argument visible
+     → remplacé par fond opaque léger pour éviter la couche de composition */
+  body.page-debate .argument-manual-writing-badge {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  /* Spinner de switch de catégorie : blur(1.5px) sur overlay semi-transparent
+     → supprimé, l'opacité seule suffit à indiquer le chargement */
+  #agon-cloud-loading-spinner.agon-cloud-switch {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Mobile navigateur standard : baisse légèrement le dock flottant débat. */
+@media (max-width: 768px) {
+  body:not(.is-standalone) #debate-iframe-modal-close,
+  body:not(.is-standalone) #voices-float-badge {
+    bottom: 6px !important;
+  }
+
+  body.page-debate:not(.is-standalone) .debate-floating-refresh-btn,
+  body.debate-embedded-frame:not(.is-standalone) .debate-floating-refresh-btn {
+    bottom: calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Standalone : remonte de 2px les boutons flottants bas de la page débat. */
+@media (max-width: 768px), (display-mode: standalone) {
+  body.is-standalone #debate-iframe-modal-close,
+  body.is-standalone #voices-float-badge {
+    bottom: 34px !important;
+  }
+
+  body.is-standalone.page-debate .debate-floating-refresh-btn,
+  body.is-standalone.debate-embedded-frame .debate-floating-refresh-btn {
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (min-width: 769px) {
+  body.is-standalone #debate-iframe-modal-close,
+  body.is-standalone #voices-float-badge {
+    bottom: 80px !important;
+  }
+
+  body.is-standalone #debate-iframe-modal-refresh {
+    bottom: calc(5vh + 18px) !important;
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 768px) {
+  #debate-iframe-modal-close,
+  #voices-float-badge {
+    bottom: 34px !important;
+  }
+
+  body.page-debate .debate-floating-refresh-btn,
+  body.debate-embedded-frame .debate-floating-refresh-btn {
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (display-mode: standalone) and (min-width: 769px) {
+  #debate-iframe-modal-close,
+  #voices-float-badge {
+    bottom: 80px !important;
+  }
+
+  #debate-iframe-modal-refresh {
+    bottom: calc(5vh + 18px) !important;
   }
 }

@@ -2242,7 +2242,7 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "political_group"
 ].join(",");
 const debateDetailResponseCache = new Map();
-const DEBATE_DETAIL_CACHE_TTL_MS = 30 * 1000;
+const DEBATE_DETAIL_CACHE_TTL_MS = 3 * 60 * 1000;
 const DEBATE_DETAIL_CACHE_MAX = 500;
 const notificationsApiResponseCache = new Map();
 const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
@@ -2296,10 +2296,10 @@ function getCachedDebateDetailResponse(debateId) {
   return entry.value;
 }
 
-function setCachedDebateDetailResponse(debateId, value) {
+function setCachedDebateDetailResponse(debateId, value, ttlMs = DEBATE_DETAIL_CACHE_TTL_MS) {
   const key = getDebateDetailCacheKey(debateId);
   if (!key) return;
-  _cacheSet(debateDetailResponseCache, key, { value, expiresAt: Date.now() + DEBATE_DETAIL_CACHE_TTL_MS }, DEBATE_DETAIL_CACHE_MAX);
+  _cacheSet(debateDetailResponseCache, key, { value, expiresAt: Date.now() + ttlMs }, DEBATE_DETAIL_CACHE_MAX);
 }
 
 function clearDebateDetailResponseCache(debateId = null) {
@@ -5858,21 +5858,45 @@ app.get("/api/debates/:id", async (req, res) => {
       return res.json(sanitizeDebateDetailPayload(cachedResponse, clientKey, isAdminRequest));
     }
 
-    const [debate, args] = await Promise.all([
+    const canonicalId = resolveSharedDebateId(id);
+    const isShared = canonicalId && canonicalId !== String(id);
+
+    const [debate, args, canonicalStatus] = await Promise.all([
       getDebateById(id),
-      getArgumentsByDebateId(id)
+      getArgumentsByDebateId(id),
+      isShared
+        ? supabase.from("debates").select("ai_analysis_status").eq("id", canonicalId).maybeSingle().then(r => r.data)
+        : Promise.resolve(null)
     ]);
 
     if (!debate) {
       return res.status(404).json({ error: "Débat introuvable." });
     }
 
+    // Arène fusionnée : l'analyse est stockée sur le canonique — on reflète
+    // son statut dans la réponse pour que le client déclenche bien le fetch.
+    if (isShared && canonicalStatus?.ai_analysis_status && canonicalStatus.ai_analysis_status !== "none") {
+      debate.ai_analysis_status = canonicalStatus.ai_analysis_status;
+    }
+
     const optionA = args.filter((a) => a.side === "A");
     const optionB = args.filter((a) => a.side === "B");
     const argumentIds = args.map((a) => a.id);
 
+    // Preview : lecture synchrone du cache uniquement (mémoire puis disque).
+    // Si absent, on répond immédiatement avec null et on lance le fetch en arrière-plan
+    // pour que les prochaines requêtes bénéficient du cache.
+    const sourcePreview = debate.source_url ? getCachedExternalLinkPreview(debate.source_url) : null;
+    const previewSkipped = !!debate.source_url && sourcePreview === null;
+    if (previewSkipped) {
+      console.log(`[debate-detail] source preview skipped for fast response (id=${id})`);
+      getExternalLinkPreview(debate.source_url).catch(() => {});
+    }
+    // TTL court si le preview manque : le cache expire avant la fin du fetch background,
+    // donc la prochaine requête profitera du preview fraîchement mis en cache.
+    const detailCacheTtlMs = previewSkipped ? 30 * 1000 : DEBATE_DETAIL_CACHE_TTL_MS;
+
     if (!argumentIds.length) {
-      const sourcePreview = debate.source_url ? await getExternalLinkPreview(debate.source_url) : null;
       const payload = {
         debate,
         optionA,
@@ -5880,14 +5904,11 @@ app.get("/api/debates/:id", async (req, res) => {
         commentsByArgument: {},
         sourcePreview
       };
-      setCachedDebateDetailResponse(id, payload);
+      setCachedDebateDetailResponse(id, payload, detailCacheTtlMs);
       return res.json(sanitizeDebateDetailPayload(payload, clientKey, isAdminRequest));
     }
 
-    const [sourcePreview, comments] = await Promise.all([
-      debate.source_url ? getExternalLinkPreview(debate.source_url) : Promise.resolve(null),
-      getCommentsByArgumentIds(argumentIds)
-    ]);
+    const comments = await getCommentsByArgumentIds(argumentIds);
 
     const commentsByArgument = {};
 
@@ -5906,7 +5927,7 @@ app.get("/api/debates/:id", async (req, res) => {
       sourcePreview
     };
 
-    setCachedDebateDetailResponse(id, payload);
+    setCachedDebateDetailResponse(id, payload, detailCacheTtlMs);
     res.json(sanitizeDebateDetailPayload(payload, clientKey, isAdminRequest));
   } catch (error) {
     console.error(error);
