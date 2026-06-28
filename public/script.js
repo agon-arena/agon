@@ -71,6 +71,75 @@ const COLOR_B_BORDER   = '#AEC0CC';
 // Activé temporairement pour diagnostiquer les rechargements spontanés mobile.
 // pour éviter console.log + localStorage synchrone à chaque interaction).
 const __AGON_DEBUG_REFRESH_ENABLED = true;
+const AGON_LAST_LIFECYCLE_SNAPSHOT_KEY = "agon_last_lifecycle_snapshot";
+let __agonLastHiddenAt = 0;
+let __agonLastVisibleAt = Date.now();
+let __agonLastUserInputAt = 0;
+let __agonLastRuntimeError = null;
+
+function __agonGetDebugRuntimeContext(extra = {}) {
+  const now = Date.now();
+  let memory = null;
+  try {
+    if (performance.memory) {
+      memory = {
+        usedJSHeapSize: performance.memory.usedJSHeapSize || null,
+        totalJSHeapSize: performance.memory.totalJSHeapSize || null,
+        jsHeapSizeLimit: performance.memory.jsHeapSizeLimit || null
+      };
+    }
+  } catch (e) {}
+
+  let connection = null;
+  try {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (c) {
+      connection = {
+        effectiveType: c.effectiveType || null,
+        downlink: c.downlink || null,
+        rtt: c.rtt || null,
+        saveData: c.saveData === true
+      };
+    }
+  } catch (e) {}
+
+  return {
+    visibilityState: document.visibilityState || "",
+    hidden: document.hidden === true,
+    online: navigator.onLine !== false,
+    wasDiscarded: document.wasDiscarded === true,
+    standalone: !!(window.navigator.standalone || window.matchMedia?.("(display-mode: standalone)")?.matches),
+    timeSinceHiddenMs: __agonLastHiddenAt ? now - __agonLastHiddenAt : null,
+    timeSinceVisibleMs: __agonLastVisibleAt ? now - __agonLastVisibleAt : null,
+    timeSinceUserInputMs: __agonLastUserInputAt ? now - __agonLastUserInputAt : null,
+    viewport: {
+      width: window.innerWidth || null,
+      height: window.innerHeight || null,
+      devicePixelRatio: window.devicePixelRatio || null
+    },
+    deviceMemory: navigator.deviceMemory || null,
+    hardwareConcurrency: navigator.hardwareConcurrency || null,
+    memory,
+    connection,
+    lastRuntimeError: __agonLastRuntimeError,
+    ...extra
+  };
+}
+
+function __agonStoreLifecycleSnapshot(reason, extra = {}) {
+  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  try {
+    localStorage.setItem(AGON_LAST_LIFECYCLE_SNAPSHOT_KEY, JSON.stringify({
+      reason,
+      timestamp: new Date().toISOString(),
+      url: String(window.location.href || ""),
+      scrollY: Math.round(window.scrollY || 0),
+      modalOpen: window.__agonDebateModalOpen === true,
+      ...__agonGetDebugRuntimeContext(extra)
+    }));
+  } catch (e) {}
+}
+
 function __agonDebugRefreshLog(source, type, extra = {}) {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
   try {
@@ -81,6 +150,7 @@ function __agonDebugRefreshLog(source, type, extra = {}) {
       url: String(window.location.href || ""),
       scrollY: Math.round(window.scrollY || 0),
       modalOpen: window.__agonDebateModalOpen === true,
+      ...__agonGetDebugRuntimeContext(),
       ...extra
     };
     console.log("[AGON DEBUG REFRESH]", entry);
@@ -120,6 +190,11 @@ function __agonRecordReloadReason(reason) {
     } catch (e) {}
 
     const wasDiscarded = document.wasDiscarded === true;
+    let lastLifecycleSnapshot = null;
+    try {
+      const rawLifecycle = localStorage.getItem(AGON_LAST_LIFECYCLE_SNAPSHOT_KEY);
+      if (rawLifecycle) lastLifecycleSnapshot = JSON.parse(rawLifecycle);
+    } catch (e) {}
 
     let lastReloadReason = null;
     try {
@@ -153,7 +228,15 @@ function __agonRecordReloadReason(reason) {
         likelyCause,
         timestamp: new Date().toISOString(),
         url: String(window.location.href || ""),
-        userAgent: String(navigator.userAgent || "")
+        userAgent: String(navigator.userAgent || ""),
+        previousLifecycleReason: lastLifecycleSnapshot?.reason || null,
+        previousLifecycleAt: lastLifecycleSnapshot?.timestamp || null,
+        previousLifecycleHidden: lastLifecycleSnapshot?.hidden ?? null,
+        previousLifecyclePagehidePersisted: lastLifecycleSnapshot?.pagehidePersisted ?? null,
+        previousLifecycleTimeSinceHiddenMs: lastLifecycleSnapshot?.timeSinceHiddenMs ?? null,
+        previousLifecycleLastRuntimeError: lastLifecycleSnapshot?.lastRuntimeError || null,
+        previousLifecycleMemory: lastLifecycleSnapshot?.memory || null,
+        ...__agonGetDebugRuntimeContext()
       };
       console.log("[AGON DEBUG STARTUP]", entry);
       try {
@@ -167,7 +250,62 @@ function __agonRecordReloadReason(reason) {
   } catch (e) {}
 })();
 
+["pointerdown", "touchstart", "keydown", "click"].forEach((eventName) => {
+  window.addEventListener(eventName, () => {
+    __agonLastUserInputAt = Date.now();
+  }, { passive: true, capture: true });
+});
+
+window.addEventListener("error", (event) => {
+  __agonLastRuntimeError = {
+    type: "error",
+    message: String(event.message || ""),
+    source: String(event.filename || ""),
+    line: event.lineno || null,
+    column: event.colno || null,
+    at: new Date().toISOString()
+  };
+  __agonDebugRefreshLog("window-error", "error", { error: __agonLastRuntimeError });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  __agonLastRuntimeError = {
+    type: "unhandledrejection",
+    message: String(reason?.message || reason || ""),
+    at: new Date().toISOString()
+  };
+  __agonDebugRefreshLog("window-unhandledrejection", "error", { error: __agonLastRuntimeError });
+});
+
+window.addEventListener("pagehide", (event) => {
+  __agonStoreLifecycleSnapshot("pagehide", { pagehidePersisted: event.persisted === true });
+  __agonDebugRefreshLog("window-pagehide", "lifecycle", { persisted: event.persisted === true });
+}, true);
+
+window.addEventListener("beforeunload", () => {
+  __agonStoreLifecycleSnapshot("beforeunload");
+  __agonDebugRefreshLog("window-beforeunload", "lifecycle");
+}, true);
+
+document.addEventListener("freeze", () => {
+  __agonStoreLifecycleSnapshot("document-freeze");
+  __agonDebugRefreshLog("document-freeze", "lifecycle");
+}, true);
+
+document.addEventListener("resume", () => {
+  __agonLastVisibleAt = Date.now();
+  __agonDebugRefreshLog("document-resume", "lifecycle");
+}, true);
+
 document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    __agonLastHiddenAt = Date.now();
+    __agonStoreLifecycleSnapshot("visibility-hidden");
+  } else {
+    __agonLastVisibleAt = Date.now();
+    __agonStoreLifecycleSnapshot("visibility-visible");
+  }
   __agonDebugRefreshLog("document-visibilitychange", "rerender", { hidden: document.hidden });
 });
 
@@ -4897,7 +5035,6 @@ function openDebateIframeModal(url, options = {}) {
 }
 
 const prefetchedDebateUrls = new Set();
-
 function prewarmDebateUrl(url) {
   const href = String(url || "").trim();
   if (!href) return;
@@ -17658,14 +17795,19 @@ function updateIndexThemeRowSwipeButtons(row) {
   if (jumpStart) jumpStart.classList.toggle("is-hidden", !canScroll || isAtStart);
 }
 
-function syncIndexCarouselDots(row) {
+function syncIndexCarouselDots(row, options = {}) {
   const section = row?.closest?.(".theme-row-section");
   if (!section) return;
 
-  const cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
-  const total = Math.max(cards.length, Number(row.dataset.carouselTotal || cards.length) || cards.length);
-  const dotCount = Math.min(10, total);
+  const lightweight = options.lightweight === true;
   let dots = section.querySelector(":scope > .theme-carousel-dots");
+  let cards = [];
+  let total = Number(row.dataset.carouselTotal || 0);
+  if (!lightweight || !dots || !total) {
+    cards = Array.from(row.querySelectorAll(".theme-horizontal-inner > .debate-card"));
+    total = Math.max(cards.length, Number(row.dataset.carouselTotal || cards.length) || cards.length);
+  }
+  const dotCount = Math.min(10, total);
 
   if (dotCount <= 1) {
     dots?.remove();
@@ -18014,7 +18156,7 @@ function initThematicRowDragScroll() {
           scrollToIndexRowAfterContextClose(row);
         }
         if (_isMobileCache) {
-          syncIndexThemeRowHeight(row);
+          syncIndexCarouselDots(row, { lightweight: true });
         } else {
           const prevActive = row.querySelector(".theme-horizontal-inner > .debate-card.index-card-active");
           updateCarouselCardHighlight(row);
@@ -18023,7 +18165,6 @@ function initThematicRowDragScroll() {
           if (newActive && newActive !== prevActive) {}
         }
         updateIndexThemeRowSwipeButtons(row);
-        syncIndexCarouselDots(row);
 
         // Update final après arrêt du scroll
         clearTimeout(scrollEndTimer);
@@ -18421,8 +18562,9 @@ function buildIndexThematicSectionsHtml(debates) {
     // Mode Bulles Agôn (mobile) : le bandeau "Arènes sous tension" est la cible
     // des bulles → 10 cartes d'emblée ; les autres bandeaux sont réduits à 1.
     const agonCloudActive = isMobile && _agonCloudMode;
+    const politicalActive = _politicalCloudGroup === 'left' || _politicalCloudGroup === 'right';
     const carouselInitial = isMobile ? 2 : _CAROUSEL_INITIAL;
-    const alaUneInitial = isMobile ? (agonCloudActive ? 1 : 15) : 20;
+    const alaUneInitial = isMobile ? (agonCloudActive ? 2 : 12) : 12;
     const tensionInitial = agonCloudActive ? 10 : carouselInitial;
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
@@ -25567,6 +25709,11 @@ currentDebateShareData = {
 };
 applyArgumentBodyCharacterLimit(data.debate);
 
+// La page est utilisable dès que le débat, les idées et les compteurs sont rendus.
+// Les traitements secondaires (arènes similaires, analyse IA, admin) peuvent suivre
+// sans garder le loader parent affiché plus longtemps.
+markPageArrivalLoadingOverlayReady();
+
 if (data.debate.ai_analysis_status !== 'none') {
   // status peut être "scheduled"/"generating"/"failed" tout en ayant déjà
   // un ai_analysis valide en base (re-génération en attente) : on affiche
@@ -25598,13 +25745,18 @@ renderCurrentDebateAdminEditPanel(currentDebateCache, false);
 if (Array.isArray(similarDebatesCache)) {
   renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
 } else {
-  ensureSimilarDebatesCacheLoaded()
-    .then(() => {
-      if (currentDebateCache && String(currentDebateCache.id) === String(data.debate.id)) {
-        renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
-      }
-    })
-    .catch(() => {});
+  const scheduleSimilarDebatesLoad = window.requestIdleCallback
+    ? (fn) => window.requestIdleCallback(fn, { timeout: 1800 })
+    : (fn) => window.setTimeout(fn, 700);
+  scheduleSimilarDebatesLoad(() => {
+    ensureSimilarDebatesCacheLoaded()
+      .then(() => {
+        if (currentDebateCache && String(currentDebateCache.id) === String(data.debate.id)) {
+          renderBottomSimilarDebates(currentDebateCache, similarDebatesCache);
+        }
+      })
+      .catch(() => {});
+  });
 }
 
 refreshAdminUI();
@@ -29700,7 +29852,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initNotificationTransitionOverlay();
   attachAdminButtons();
-  loadNotifications();
+  if (location.pathname !== "/notifications") {
+    loadNotifications();
+  }
   renderGlobalShareBar();
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
