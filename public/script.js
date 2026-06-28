@@ -466,10 +466,10 @@ registerServiceWorker();
   async function runIntroSequence() {
     // Pause sur le logo avant les messages
     if (window.__agonStartupInlineStarted !== true) {
-      await wait(900);
+      await wait(400);
     }
 
-    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 2800);
+    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 1600);
 
     introSequenceDone = true;
     tryHide();
@@ -19828,6 +19828,9 @@ function renderDebateEpisodeNavigation(debate) {
     }
     return;
   }
+
+  if (nextUrl) prewarmDebateUrl(nextUrl);
+  if (previousUrl) prewarmDebateUrl(previousUrl);
 
   const buttons = [];
 
