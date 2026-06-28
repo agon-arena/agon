@@ -3354,6 +3354,16 @@ body.page-debate #score-b {
   background: #2e3d47;
   border-color: rgba(255, 255, 255, 0.14);
 }
+@keyframes aiScoreBadgeBreathe {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.96); }
+}
+.argument-ai-score-badge.is-new {
+  animation: aiScoreBadgeBreathe 1.8s ease-in-out 4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .argument-ai-score-badge.is-new { animation: none; }
+}
 
 .arg-ai-detail-overlay {
   position: fixed;

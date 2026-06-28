@@ -25469,8 +25469,9 @@ function renderArgumentAiScoreBadges() {
       return;
     }
     const badge = document.createElement('div');
-    badge.className = 'argument-ai-score-badge';
+    badge.className = 'argument-ai-score-badge is-new';
     badge.textContent = entry.final_score + '/100';
+    badge.addEventListener('animationend', function() { badge.classList.remove('is-new'); }, { once: true });
     badge.addEventListener('click', function(e) {
       e.stopPropagation();
       showArgumentAiDetail(argId, badge);
