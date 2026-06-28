@@ -5310,6 +5310,12 @@ function closeDebateIframeModal(options = {}) {
   };
 
   unlockPageScrollForDebateModal();
+  // Restauration synchrone immédiate pour éviter le flash du haut de page :
+  // le navigateur ne doit pas avoir le temps de peindre scrollY=0 entre le
+  // retrait de position:fixed et le scrollTo.
+  if (restoredScrollY !== null) {
+    restoreScrollPosition();
+  }
   if (shouldShowReturnLoader) {
     // Pendant un vrai rafraîchissement de l'index, on bloque brièvement le scroll
     // derrière l'overlay pour éviter un déplacement sous la couche de chargement.
@@ -5323,6 +5329,7 @@ function closeDebateIframeModal(options = {}) {
   scheduleDebateIframeFrameTeardown(frame, modal);
 
   if (restoredScrollY !== null) {
+    // Correction fine par ancre après que le DOM a eu le temps de se stabiliser.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         restoreScrollPosition();
