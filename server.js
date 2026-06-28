@@ -3662,7 +3662,7 @@ app.get("/create", (req, res) => {
 });
 
 app.get("/notifications", (req, res) => {
-  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/notifications.html"));
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
 app.get("/contact", (req, res) => {

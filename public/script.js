@@ -5499,11 +5499,29 @@ function openNotificationsInDebateIframeModal(event = null) {
   return false;
 }
 
+function _prewarmNotificationsHtml() {
+  if (prefetchedDebateUrls.has("/notifications")) return;
+  prefetchedDebateUrls.add("/notifications");
+  const link = document.createElement("link");
+  link.rel = "prefetch";
+  link.as = "document";
+  link.href = "/notifications";
+  document.head.appendChild(link);
+}
+
 function bindDebateNotificationIframeTrigger(selector) {
   const element = document.querySelector(selector);
   if (!element || element.dataset.debateNotificationIframeBound === "true") return;
 
   element.dataset.debateNotificationIframeBound = "true";
+
+  element.addEventListener("pointerenter", _prewarmNotificationsHtml, { once: true });
+  element.addEventListener("touchstart", _prewarmNotificationsHtml, { once: true, passive: true });
+
+  // Si l'élément a déjà un onclick inline, le listener JS est redondant et
+  // provoquerait un double appel à navigateDebateIframeModalFrame.
+  if (element.hasAttribute("onclick")) return;
+
   element.addEventListener("click", (event) => {
     if (!isTopLevelIframeModalPage()) return;
     openNotificationsInDebateIframeModal(event);
