@@ -14232,6 +14232,7 @@ if (unreadCount > previousCount) {
 }
 
 setStoredUnreadNotificationCount(unreadCount);
+_saveNotifPageCache(notifications);
 
    if (!notifications.length) {
   if (list) {
@@ -29921,115 +29922,56 @@ if (location.pathname === "/debate") {
   }
 });
 
-let notificationsPageLoadInFlight = null;
-async function loadNotificationsPage() {
-  markPageArrivalLoadingOverlayReady();
-  const list = document.getElementById("notifications-page-list");
-  if (!list) return;
-  if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;
+const NOTIF_PAGE_CACHE_KEY = 'agon_notif_page_cache';
+const NOTIF_PAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
-  notificationsPageLoadInFlight = (async () => {
-    try {
-      const notifications = await fetchJSON(
-        API + "/notifications?userKey=" + encodeURIComponent(getKey())
-      );
-const unread = notifications.filter(n => !n.is_read && !isNotifLocallyRead(n.id)).length;
-
-const previous = getStoredUnreadNotificationCount();
-
-if (unread > previous) {
-  const bell = document.querySelector(".notifications-button");
-  if (bell) {
-    bell.classList.add("bell-ring");
-    setTimeout(() => bell.classList.remove("bell-ring"), 2000);
-  }
+function _saveNotifPageCache(data) {
+  try { lsSet(NOTIF_PAGE_CACHE_KEY, JSON.stringify({ ts: Date.now(), key: getKey(), data })); } catch {}
 }
 
-setStoredUnreadNotificationCount(unread);
+function _getNotifPageCache() {
+  try {
+    const raw = lsGet(NOTIF_PAGE_CACHE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (!p || p.key !== getKey()) return null;
+    if (Date.now() - (p.ts || 0) > NOTIF_PAGE_CACHE_TTL_MS) return null;
+    return Array.isArray(p.data) ? p.data : null;
+  } catch { return null; }
+}
 
-    if (!notifications.length) {
-      list.innerHTML = `<div class="empty-state">Aucune notification.</div>`;
-      return;
-    }
-
-    list.innerHTML = notifications.map((notification) => {
+function _buildNotifPageItemHtml(notification) {
   let link = "#";
-let icon = "🔔";
-let title = notification.message || "Nouvelle notification";
-let subtitle = "Ouvrir";
+  let icon = "🔔";
+  let title = notification.message || "Nouvelle notification";
+  let subtitle = "Ouvrir";
 
-if (notification.type === "analysis_ready" && notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}&openAiScore=1`;
-} else if (notification.type === "replacement_accepted" && notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
-} else if (notification.comment_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=comment-${notification.comment_id}`;
-} else if (notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
-} else if (notification.debate_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
-}
+  if (notification.type === "analysis_ready" && notification.argument_id) {
+    link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}&openAiScore=1`;
+  } else if (notification.type === "replacement_accepted" && notification.argument_id) {
+    link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
+  } else if (notification.comment_id) {
+    link = `/debate?id=${notification.debate_id}&highlight=comment-${notification.comment_id}`;
+  } else if (notification.argument_id) {
+    link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
+  } else if (notification.debate_id) {
+    link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
+  }
 
-if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {
-  icon = "🗳️";
-  title = "Votre idée a reçu une voix";
-  subtitle = "Ouvrir l'idée";
-}
-if (notification.type === "replacement_accepted") {
-  icon = "🏆";
-  title = "Votre proposition a remplacé l'idée initiale";
-  subtitle = "Voir l'idée remplacée";
-}
+  if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") { icon = "🗳️"; title = "Votre idée a reçu une voix"; subtitle = "Ouvrir l'idée"; }
+  if (notification.type === "replacement_accepted") { icon = "🏆"; title = "Votre proposition a remplacé l'idée initiale"; subtitle = "Voir l'idée remplacée"; }
+  if (notification.type === "comment_on_argument") { icon = "💬"; title = "Quelqu'un a commenté votre idée"; subtitle = "Ouvrir le commentaire"; }
+  if (notification.type === "argument_in_my_debate") { icon = "🧠"; title = "Une nouvelle idée a été postée dans votre arène"; subtitle = "Ouvrir l'arène"; }
+  if (notification.type === "like_on_comment") { icon = "👍"; title = "Votre commentaire a été apprécié"; subtitle = "Ouvrir le commentaire"; }
+  if (notification.type === "dislike_on_comment") { icon = "👎"; title = "Votre commentaire n'a pas été apprécié"; subtitle = "Ouvrir le commentaire"; }
+  if (notification.type === "reply_to_comment") { icon = "↩️"; title = "Quelqu'un a répondu à votre commentaire"; subtitle = "Ouvrir la réponse"; }
+  if (notification.type === "majority_gained") { icon = "💪"; title = "Votre camp vient de prendre la majorité"; subtitle = "Ouvrir le débat"; }
+  if (notification.type === "majority_lost") { icon = "😬"; title = "Votre camp vient de perdre la majorité"; subtitle = "Ouvrir le débat"; }
+  if (notification.type === "analysis_scheduled") { icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">'; title = "L'arbitrage IA démarre dans 24h"; subtitle = "Ouvrir le débat"; }
+  if (notification.type === "analysis_ready") { icon = "⚖️"; title = "L'arbitrage IA est disponible"; subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse"; }
 
-      if (notification.type === "comment_on_argument") {
-        icon = "💬";
-        title = "Quelqu'un a commenté votre idée";
-        subtitle = "Ouvrir le commentaire";
-      }
-
-      if (notification.type === "argument_in_my_debate") {
-        icon = "🧠";
-        title = "Une nouvelle idée a été postée dans votre arène";
-        subtitle = "Ouvrir l'arène";
-      }
-
-if (notification.type === "like_on_comment") {
-  icon = "👍";
-  title = "Votre commentaire a été apprécié";
-  subtitle = "Ouvrir le commentaire";
-}
-if (notification.type === "dislike_on_comment") {
-  icon = "👎";
-  title = "Votre commentaire n'a pas été apprécié";
-  subtitle = "Ouvrir le commentaire";
-}
-if (notification.type === "reply_to_comment") {
-  icon = "↩️";
-  title = "Quelqu'un a répondu à votre commentaire";
-  subtitle = "Ouvrir la réponse";
-}
-if (notification.type === "majority_gained") {
-  icon = "💪";
-  title = "Votre camp vient de prendre la majorité";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "majority_lost") {
-  icon = "😬";
-  title = "Votre camp vient de perdre la majorité";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "analysis_scheduled") {
-  icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
-  title = "L'arbitrage IA démarre dans 24h";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "analysis_ready") {
-  icon = "⚖️";
-  title = "L'arbitrage IA est disponible";
-  subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse";
-}
-      title = getNotificationDisplayTitle(notification, title);
-     return `
+  title = getNotificationDisplayTitle(notification, title);
+  return `
  <a
   class="notification-item ${(Number(notification.is_read) === 0 && !isNotifLocallyRead(notification.id)) ? "notification-item-unread" : "notification-item-read-local"}"
   href="${link}"
@@ -30046,13 +29988,59 @@ if (notification.type === "analysis_ready") {
           <div class="notification-date">${escapeHtml(formatDebateDate(notification.created_at))}</div>
         </a>
       `;
-    }).join("");
+}
 
-  } catch (error) {
-    list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
-  } finally {
-    notificationsPageLoadInFlight = null;
+function _applyNotifPageList(notifications, list) {
+  if (!list) return;
+  if (!notifications.length) { list.innerHTML = `<div class="empty-state">Aucune notification.</div>`; return; }
+  list.innerHTML = notifications.map(_buildNotifPageItemHtml).join("");
+}
+
+let notificationsPageLoadInFlight = null;
+async function loadNotificationsPage() {
+  const list = document.getElementById("notifications-page-list");
+
+  // Rendu immédiat depuis le cache → overlay parent disparaît sans attendre le réseau
+  let readySignaled = false;
+  const cached = _getNotifPageCache();
+  if (cached && list) {
+    _applyNotifPageList(cached, list);
+    markPageArrivalLoadingOverlayReady();
+    readySignaled = true;
   }
+
+  if (!list) {
+    if (!readySignaled) markPageArrivalLoadingOverlayReady();
+    return;
+  }
+  if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;
+
+  notificationsPageLoadInFlight = (async () => {
+    try {
+      const notifications = await fetchJSON(
+        API + "/notifications?userKey=" + encodeURIComponent(getKey())
+      );
+
+      const unread = notifications.filter(n => !n.is_read && !isNotifLocallyRead(n.id)).length;
+      const previous = getStoredUnreadNotificationCount();
+      if (unread > previous) {
+        const bell = document.querySelector(".notifications-button");
+        if (bell) { bell.classList.add("bell-ring"); setTimeout(() => bell.classList.remove("bell-ring"), 2000); }
+      }
+      setStoredUnreadNotificationCount(unread);
+
+      _saveNotifPageCache(notifications);
+      _applyNotifPageList(notifications, list);
+
+      if (!readySignaled) { markPageArrivalLoadingOverlayReady(); readySignaled = true; }
+    } catch (error) {
+      if (!readySignaled) {
+        list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+        markPageArrivalLoadingOverlayReady();
+      }
+    } finally {
+      notificationsPageLoadInFlight = null;
+    }
   })();
 
   return notificationsPageLoadInFlight;
