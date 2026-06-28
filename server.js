@@ -57,7 +57,25 @@ process.on("uncaughtException", (err) => {
   console.error("[uncaughtException]", err);
 });
 
-const adminTokens = new Set();
+const ADMIN_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+function createAdminToken() {
+  const ts = Date.now().toString();
+  const sig = crypto.createHmac("sha256", ADMIN_PASSWORD).update(ts).digest("hex");
+  return `${ts}.${sig}`;
+}
+function verifyAdminToken(token) {
+  if (!token || typeof token !== "string") return false;
+  const dot = token.indexOf(".");
+  if (dot === -1) return false;
+  const ts = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const timestamp = parseInt(ts, 10);
+  if (!Number.isFinite(timestamp) || Date.now() - timestamp > ADMIN_TOKEN_TTL_MS) return false;
+  const expected = crypto.createHmac("sha256", ADMIN_PASSWORD).update(ts).digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
+  } catch { return false; }
+}
 const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 // Identifiant fixe envoyé par le pipeline Certamen (bot veille) sur POST /api/debates
 // pour publier des arènes communauté. Ces arènes ne doivent jamais afficher de badge
@@ -2642,8 +2660,7 @@ function sendServerError(res, message = "Erreur serveur.") {
 }
 
 function isAdmin(req) {
-  const token = req.headers["x-admin-token"];
-  return !!token && adminTokens.has(token);
+  return verifyAdminToken(req.headers["x-admin-token"]);
 }
 
 function requireAdmin(req, res, next) {
@@ -4010,17 +4027,11 @@ app.post("/api/admin/login", rateLimit("admin-login", 5), (req, res) => {
     return res.status(401).json({ error: "Mot de passe incorrect." });
   }
 
-  const token = crypto.randomBytes(24).toString("hex");
-  adminTokens.add(token);
-
+  const token = createAdminToken();
   res.json({ success: true, token });
 });
 
 app.post("/api/admin/logout", (req, res) => {
-  const token = req.headers["x-admin-token"];
-  if (token) {
-    adminTokens.delete(token);
-  }
   res.json({ success: true });
 });
 
