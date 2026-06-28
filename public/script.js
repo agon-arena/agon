@@ -24427,11 +24427,10 @@ async function loadDebate(id) {
     if (p && String(p.id || "") === String(id) && p.debate) {
       window.parent.__agonPrefetchedDebateData = null;
       applyDebateCachedPreview(p.debate);
-      if (window.self !== window.top) {
-        await loadDebateFullData(id);
-      } else {
-        loadDebateFullData(id).catch(() => {});
-      }
+      // Preview visible → on ne bloque plus sur le chargement complet.
+      // markPageArrivalLoadingOverlayReady() sera appelé par le finally
+      // de initDebate() dès que loadDebate() retourne.
+      loadDebateFullData(id).catch(() => {});
       return;
     }
   } catch(e) {}
