@@ -29994,6 +29994,23 @@ function _applyNotifPageList(notifications, list) {
   if (!list) return;
   if (!notifications.length) { list.innerHTML = `<div class="empty-state">Aucune notification.</div>`; return; }
   list.innerHTML = notifications.map(_buildNotifPageItemHtml).join("");
+
+  // Prefetch immédiat des 3 premiers liens débat (les plus susceptibles d'être cliqués)
+  const topLinks = list.querySelectorAll('a.notification-item[href*="/debate"]');
+  Array.from(topLinks).slice(0, 3).forEach(a => prewarmDebateUrl(a.getAttribute('href')));
+
+  // Prefetch au touch/survol pour les autres items
+  if (!list.dataset.notifPrewarmBound) {
+    list.dataset.notifPrewarmBound = '1';
+    list.addEventListener('pointerenter', (e) => {
+      const a = e.target instanceof Element ? e.target.closest('a.notification-item[href]') : null;
+      if (a) prewarmDebateUrl(a.getAttribute('href'));
+    }, true);
+    list.addEventListener('touchstart', (e) => {
+      const a = e.target instanceof Element ? e.target.closest('a.notification-item[href]') : null;
+      if (a) prewarmDebateUrl(a.getAttribute('href'));
+    }, { passive: true, capture: true });
+  }
 }
 
 let notificationsPageLoadInFlight = null;
