@@ -1570,7 +1570,8 @@
     const total = sA + sB;
     const pctA  = total === 0 ? 50 : sA / total * 100;
     const pctB  = total === 0 ? 50 : 100 - pctA;
-    const angle = Math.round(((pctB - pctA) / 100) * 74);
+    const rawDiff = (pctB - pctA) / 100; // -1 à +1
+    const angle = Math.round(Math.sign(rawDiff) * Math.pow(Math.abs(rawDiff), 0.6) * 82);
     const label = (s) => esc(s);
     const ticks = [
       { side: 'left', pct: '18%',  deg: -28 },
