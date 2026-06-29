@@ -1938,7 +1938,7 @@
     }
 
     const isOpen = analysis && analysis.isOpen;
-    const labelA = isOpen ? 'Contributions' : ((analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A');
+    const labelA = isOpen ? 'Idées partagées' : ((analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A');
     const labelB = isOpen ? '' : ((analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label) || (analysis && analysis.positionB) || 'Camp B');
 
     let inner = '';
