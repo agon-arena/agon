@@ -5678,7 +5678,18 @@ function initIndexReturnNavigation() {
 }
 
 async function fetchJSON(url, opt = {}) {
-  const r = await fetch(url, opt);
+  let _timeoutId;
+  if (!opt.signal && typeof AbortController !== "undefined") {
+    const ctrl = new AbortController();
+    _timeoutId = setTimeout(() => ctrl.abort(), 12000);
+    opt = { ...opt, signal: ctrl.signal };
+  }
+  let r;
+  try {
+    r = await fetch(url, opt);
+  } finally {
+    if (_timeoutId !== undefined) clearTimeout(_timeoutId);
+  }
   const data = await r.json().catch(() => ({}));
 
   if (!r.ok) {
@@ -30029,6 +30040,14 @@ async function loadNotificationsPage() {
     if (!readySignaled) markPageArrivalLoadingOverlayReady();
     return;
   }
+
+  // Sans cache, on signale le prêt au parent immédiatement (l'iframe est visible,
+  // la liste se remplira dès que l'API répond — évite le fallback 9s sur mobile lent).
+  if (!readySignaled) {
+    markPageArrivalLoadingOverlayReady();
+    readySignaled = true;
+  }
+
   if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;
 
   notificationsPageLoadInFlight = (async () => {
