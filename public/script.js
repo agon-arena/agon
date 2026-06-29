@@ -1201,7 +1201,7 @@ const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache_paged_v2";
 const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time_paged_v2";
 const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta_paged_v2";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 60;
+const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 120;
 const INDEX_DEBATES_PAGE_SIZE = 60;
 const INDEX_SIMILAR_DEBATES_FETCH_LIMIT = 120;
 const IDEA_OG_PREVIEW_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -18671,6 +18671,14 @@ function initCarouselLazyLoad() {
         if (!pending.length && _carouselApiHasMore.get(key) === false) {
           row.removeEventListener('scroll', onScroll);
           sentinel.remove();
+        } else if (!pending.length && !rafPending) {
+          // Pool mémoire épuisé : enchaîne le fetch API immédiatement si le
+          // carousel est visible à l'écran (évite 14 requêtes simultanées).
+          const rect = row.getBoundingClientRect();
+          if (rect.top < window.innerHeight && rect.bottom > 0) {
+            rafPending = true;
+            requestAnimationFrame(loadBatchIfNeeded);
+          }
         }
         return;
       }
