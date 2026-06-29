@@ -1730,6 +1730,9 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
   setTimeout(() => {
     updatePageArrivalLoadingOverlayBounds();
   }, 120);
+  setTimeout(() => {
+    updatePageArrivalLoadingOverlayBounds();
+  }, 350);
   requestAnimationFrame(() => {
     overlay.classList.add("page-arrival-loading-overlay-visible");
   });
