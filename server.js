@@ -120,6 +120,26 @@ app.use((req, res, next) => {
   next();
 });
 
+function shouldTraceSlowUserRoute(req) {
+  const pathname = String(req.path || "").trim();
+  if (pathname === "/notifications" || pathname === "/debate") return true;
+  if (pathname === "/api/notifications") return true;
+  return /^\/api\/debates\/[^/]+$/.test(pathname);
+}
+
+app.use((req, res, next) => {
+  if (!shouldTraceSlowUserRoute(req)) return next();
+
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 700) {
+      console.warn(`[slow-route] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs}ms`);
+    }
+  });
+  next();
+});
+
 function escapeMetaContent(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -2265,6 +2285,7 @@ const DEBATE_DETAIL_CACHE_MAX = 500;
 const notificationsApiResponseCache = new Map();
 const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
 const NOTIFICATIONS_API_CACHE_MAX = 200;
+const NOTIFICATIONS_API_SELECT_COLUMNS = "id,type,message,debate_id,argument_id,comment_id,is_read,created_at";
 
 function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular", search = "" } = {}) {
   const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
@@ -4747,7 +4768,7 @@ app.get("/api/notifications", rateLimit("notifications", 180), async (req, res) 
 
     const { data, error } = await supabase
       .from("notifications")
-      .select("*")
+      .select(NOTIFICATIONS_API_SELECT_COLUMNS)
       .eq("user_key", userKey)
       .order("is_read", { ascending: true })
       .order("created_at", { ascending: false })
