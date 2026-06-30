@@ -21475,8 +21475,11 @@ if (resourceInputs.length) {
   toggleCreateContextField(false);
   updateCreateSubmitAvailability();
   if (questionInput) {
+    let _similarDebatesTimer = null;
     questionInput.addEventListener("input", (e) => {
-      renderSimilarDebates(e.target.value);
+      clearTimeout(_similarDebatesTimer);
+      const val = e.target.value;
+      _similarDebatesTimer = setTimeout(() => renderSimilarDebates(val), 150);
     });
   }
 if (cancelPublishButton) {

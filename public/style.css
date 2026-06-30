@@ -22502,9 +22502,9 @@ body.page-create-mobile .create-card .create-submit-helper {
 }
 
 @media (max-width: 768px) {
-  /* Restaure l'animation scale visible sur mobile. */
+  /* Remplace l'animation scale (recomposition GPU par bulle) par opacity seule. */
   .agon-tag-bubble {
-    animation: agonBubbleBreathe 3.5s ease-in-out infinite;
+    animation: agonBubbleBreatheLight 3.5s ease-in-out infinite;
   }
 
   /* Flash : translateX + rotate coûteux sur 10 pseudos-éléments simultanés */
