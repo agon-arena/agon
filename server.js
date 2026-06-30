@@ -6220,9 +6220,9 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         manual_writing_badge: manualWritingBadge === true || manualWritingBadge === "true",
         used_microphone: usedMicrophone === true || usedMicrophone === "true",
         auto_vote_wave1_status: "pending",
-        auto_vote_wave1_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        auto_vote_wave1_at: new Date(Date.now() + (7 + Math.random() * (12 * 60 - 7)) * 60 * 1000).toISOString(),
         auto_vote_wave2_status: "pending",
-        auto_vote_wave2_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        auto_vote_wave2_at: new Date(Date.now() + (24 + Math.random() * 24) * 60 * 60 * 1000).toISOString()
       })
       .select("id")
       .single();
