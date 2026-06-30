@@ -2283,7 +2283,7 @@ const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 3 * 60 * 1000;
 const DEBATE_DETAIL_CACHE_MAX = 500;
 const notificationsApiResponseCache = new Map();
-const NOTIFICATIONS_API_CACHE_TTL_MS = 15 * 1000;
+const NOTIFICATIONS_API_CACHE_TTL_MS = 120 * 1000;
 const NOTIFICATIONS_API_CACHE_MAX = 200;
 const NOTIFICATIONS_API_SELECT_COLUMNS = "id,type,message,debate_id,argument_id,comment_id,is_read,created_at";
 
@@ -2402,8 +2402,13 @@ function setCachedNotificationsApiResponse(userKey, value) {
   _cacheSet(notificationsApiResponseCache, key, { value, expiresAt: Date.now() + NOTIFICATIONS_API_CACHE_TTL_MS }, NOTIFICATIONS_API_CACHE_MAX);
 }
 
-function clearNotificationsApiResponseCache() {
-  notificationsApiResponseCache.clear();
+function clearNotificationsApiResponseCache(userKey = null) {
+  if (userKey) {
+    const key = getNotificationsApiCacheKey(userKey);
+    if (key) notificationsApiResponseCache.delete(key);
+  } else {
+    notificationsApiResponseCache.clear();
+  }
 }
 
 function ensureExternalPreviewCacheDir() {
@@ -4806,7 +4811,7 @@ app.post("/api/notifications/read-all", rateLimit("notifications", 180), async (
       return sendServerError(res, "Erreur mise à jour notifications.");
     }
 
-    clearNotificationsApiResponseCache();
+    clearNotificationsApiResponseCache(userKey);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -4832,7 +4837,7 @@ app.post("/api/notifications/delete-all", rateLimit("notifications", 180), async
       return sendServerError(res, "Erreur suppression notifications.");
     }
 
-    clearNotificationsApiResponseCache();
+    clearNotificationsApiResponseCache(userKey);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -4859,7 +4864,7 @@ app.post("/api/notifications/read-one", rateLimit("notifications", 180), async (
       return sendServerError(res, "Erreur mise à jour notification.");
     }
 
-    clearNotificationsApiResponseCache();
+    clearNotificationsApiResponseCache(userKey);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
