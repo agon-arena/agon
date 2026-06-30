@@ -4610,7 +4610,16 @@ function ensureDebateIframeModal() {
     }
 
     if (e.data.type === "agon:iframe-page-context") {
-      const newPathname = String(e.data.pathname || e.data.page || "");
+      const rawPathname = String(e.data.pathname || e.data.page || "");
+      const knownPagePaths = {
+        notifications: "/notifications",
+        create: "/create",
+        about: "/about",
+        contact: "/contact"
+      };
+      const newPathname = rawPathname && !rawPathname.startsWith("/")
+        ? (knownPagePaths[rawPathname] || `/${rawPathname.replace(/^\/+/, "")}`)
+        : rawPathname;
       const newHref = String(e.data.href || "").trim();
       syncDebateIframeModalPageClass(newPathname);
       setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(newPathname));
@@ -4637,6 +4646,13 @@ function ensureDebateIframeModal() {
       }
       if (newPathname === "/debate") {
         window.__agonDebateModalOpenedFromNotifications = false;
+      } else if (newPathname) {
+        const frame = document.getElementById("debate-iframe-modal-frame");
+        if (isCurrentDebateIframeModalNavigation(frame, newHref, newPathname)) {
+          requestAnimationFrame(() => {
+            setDebateIframeModalLoadingState(false);
+          });
+        }
       }
       return;
     }

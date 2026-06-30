@@ -409,17 +409,27 @@
 <script>
 (function() {
   if (window.self === window.top) return;
-  window.__agonPageArrivalReady = true;
-  try {
-    window.parent.postMessage({
-      type: "agon:debate-iframe-ready",
-      pathname: String(location.pathname || "/notifications"),
-      href: String(location.href || "")
-    }, "*");
-  } catch (error) {}
-  try {
-    window.parent.postMessage({ type: "agon:iframe-page-context", page: "notifications" }, "*");
-  } catch (error) {}
+  function notifyNotificationsIframeReady() {
+    window.__agonPageArrivalReady = true;
+    try {
+      window.parent.postMessage({
+        type: "agon:debate-iframe-ready",
+        pathname: String(location.pathname || "/notifications"),
+        href: String(location.href || "")
+      }, "*");
+    } catch (error) {}
+    try {
+      window.parent.postMessage({
+        type: "agon:iframe-page-context",
+        page: "notifications",
+        pathname: String(location.pathname || "/notifications"),
+        href: String(location.href || "")
+      }, "*");
+    } catch (error) {}
+  }
+  notifyNotificationsIframeReady();
+  window.addEventListener("pageshow", notifyNotificationsIframeReady);
+  window.addEventListener("load", notifyNotificationsIframeReady);
 })();
 </script>
 
