@@ -8413,17 +8413,40 @@ setInterval(async () => {
 // (anciens prompts _buildAnalysisPrompt1 / _PROMPT2 / _buildPrompt3 déplacés dans lib/debate-analysis.js)
 
 async function _callOpenAI(apiKey, messages, opts = {}) {
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-    body: JSON.stringify({ model: opts.model || "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 })
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => "");
-    throw Object.assign(new Error(body || "Erreur OpenAI."), { status: 502 });
+  const MAX_ATTEMPTS = 3;
+  const TIMEOUT_MS   = 45_000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let r;
+    try {
+      r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body:    JSON.stringify({ model: opts.model || "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 }),
+        signal:  AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (fetchErr) {
+      // Timeout (AbortError) ou réseau — on retente sauf au dernier essai
+      if (attempt === MAX_ATTEMPTS) throw Object.assign(fetchErr, { status: 502 });
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+      continue;
+    }
+
+    // 429 rate-limit ou 5xx transitoire → retente avec backoff
+    if ((r.status === 429 || r.status >= 500) && attempt < MAX_ATTEMPTS) {
+      const retryAfter = parseInt(r.headers.get("retry-after") || "0", 10) || attempt * 2;
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      throw Object.assign(new Error(body || "Erreur OpenAI."), { status: 502 });
+    }
+
+    const data = await r.json();
+    return data?.choices?.[0]?.message?.content || "";
   }
-  const data = await r.json();
-  return data?.choices?.[0]?.message?.content || "";
 }
 
 app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate", 5), express.json(), async (req, res) => {
