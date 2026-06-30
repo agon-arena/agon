@@ -27,6 +27,7 @@ html {
 
 html {
   overflow-x: clip;
+  scrollbar-gutter: stable;
 }
 
 /* ── Page index : masque la boîte blanche du loader global derrière le cloud spinner ── */
@@ -19015,9 +19016,10 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 #agon-political-cloud-switch .agon-cloud-mode-segment {
   padding: 4px 11px;
-  min-width: 64px;
+  min-width: 120px;
   font-size: 10px;
   position: relative;
+  text-align: center;
 }
 #agon-political-cloud-switch .agon-cloud-mode-segment:not(:last-child)::after {
   content: '';
