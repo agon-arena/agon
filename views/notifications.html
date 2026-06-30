@@ -306,7 +306,9 @@
       </div>
     </div>
 
-    <section id="notifications-page-list" class="notifications-page-list"></section>
+    <section id="notifications-page-list" class="notifications-page-list">
+      <div class="empty-state">Chargement des alertes...</div>
+    </section>
   </section>
 </main>
 
@@ -404,6 +406,22 @@
   </a>
 </nav>
 
+<script>
+(function() {
+  if (window.self === window.top) return;
+  window.__agonPageArrivalReady = true;
+  try {
+    window.parent.postMessage({
+      type: "agon:debate-iframe-ready",
+      pathname: String(location.pathname || "/notifications"),
+      href: String(location.href || "")
+    }, "*");
+  } catch (error) {}
+  try {
+    window.parent.postMessage({ type: "agon:iframe-page-context", page: "notifications" }, "*");
+  } catch (error) {}
+})();
+</script>
 
 <!-- QR Code Modal -->
 <div id="qrcode-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;" onclick="closeQRModal()">
@@ -414,9 +432,17 @@
     <button onclick="closeQRModal()" style="margin-top:20px; padding:10px 28px; border:none; border-radius:12px; background:#111; color:#fff; cursor:pointer; font-size:14px; font-weight:600;">Fermer</button>
   </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script>
 function showQRCode() {
+  if (typeof QRCode !== 'function') {
+    showQRCode._retryCount = (showQRCode._retryCount || 0) + 1;
+    if (showQRCode._retryCount <= 20) {
+      setTimeout(showQRCode, 100);
+    }
+    return;
+  }
+  showQRCode._retryCount = 0;
   var url = window.location.href;
   var modal = document.getElementById('qrcode-modal');
   var container = document.getElementById('qrcode-container');
