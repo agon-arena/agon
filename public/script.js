@@ -29800,6 +29800,18 @@ function shouldRunBackgroundRefresh() {
   return !document.hidden && window.__agonDebateModalOpen !== true;
 }
 
+function hasNotificationBadgeTargets() {
+  return !!(
+    document.getElementById("notifications-count") ||
+    document.getElementById("notifications-count-compact") ||
+    document.getElementById("notifications-count-bottom")
+  );
+}
+
+function hasReportsBadgeTarget() {
+  return !!document.getElementById("reports-count");
+}
+
 
 function ensureProgressSortOption() {
   const menu = document.getElementById("sort-menu");
@@ -29888,13 +29900,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   initNotificationTransitionOverlay();
   attachAdminButtons();
-  if (location.pathname !== "/notifications") {
+  if (location.pathname !== "/notifications" && hasNotificationBadgeTargets()) {
     loadNotifications();
   }
   renderGlobalShareBar();
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
-  initDebateTitleAutoHide();
   initDebateFloatingDockAutoReveal();
   initHomeTopbarAutoHide();
   initHomeBottomShareMenu();
@@ -29924,17 +29935,23 @@ if (location.pathname === "/debate") {
 }  if (location.pathname === "/admin-reports") initAdminReports();
   if (location.pathname === "/notifications") loadNotificationsPage();
 
-  loadReportsBadge();
-
-  setInterval(() => {
-    if (!shouldRunBackgroundRefresh()) return;
-    loadNotifications();
-  }, 60000);
-
-  setInterval(() => {
-    if (!shouldRunBackgroundRefresh()) return;
+  if (hasReportsBadgeTarget()) {
     loadReportsBadge();
-  }, 60000);
+  }
+
+  if (hasNotificationBadgeTargets()) {
+    setInterval(() => {
+      if (!shouldRunBackgroundRefresh()) return;
+      loadNotifications();
+    }, 60000);
+  }
+
+  if (hasReportsBadgeTarget()) {
+    setInterval(() => {
+      if (!shouldRunBackgroundRefresh()) return;
+      loadReportsBadge();
+    }, 60000);
+  }
   const resetNotificationsBtn = document.getElementById("reset-notifications-btn");
   if (resetNotificationsBtn) {
     resetNotificationsBtn.addEventListener("click", resetNotifications);
@@ -31018,6 +31035,7 @@ function handleHomeBottomShareAction(event, callback) {
 
 function initHomeBottomShareMenu() {
   if (window.__homeBottomShareMenuInitialized) return;
+  if (!document.getElementById("home-bottom-share-menu")) return;
   window.__homeBottomShareMenuInitialized = true;
 
   document.addEventListener("click", (event) => {
@@ -31646,6 +31664,7 @@ function toggleHomeTopbarMenu(event) {
 
 function initHomeTopbarMenu() {
   if (window.__homeTopbarMenuInitDone) return;
+  if (!document.getElementById("home-topbar-menu")) return;
   window.__homeTopbarMenuInitDone = true;
   ensureHomeTopbarContactLink();
   ensureHomeTopbarAboutLink();

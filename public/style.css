@@ -6311,7 +6311,6 @@ body.page-debate .topbar::after {
     transform: translateX(50%);
     min-width: 200px;
   }
-}
 
 @media (max-width: 480px) {
   .container {
@@ -7284,7 +7283,6 @@ body.page-debate .topbar::after {
     flex-wrap: wrap;
     gap: 10px;
   }
-}
 @media (max-width: 480px) {
   .page-home-mobile .container {
     width: 100%;
@@ -17336,7 +17334,6 @@ body.voices-panel-open {
   #voices-panel {
     box-shadow: 0 12px 30px rgba(0,0,0,0.28) !important;
   }
-}
 
 /* ===================================================
    BANDEAU TITRE — cartes index (mobile + desktop)
