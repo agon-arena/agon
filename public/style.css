@@ -3591,6 +3591,64 @@ body.page-debate #score-b {
   line-height: 1.6;
 }
 .arg-ai-detail-list li { margin-bottom: 5px; }
+.arg-ai-source-analysis {
+  margin: 12px 0 14px;
+  padding: 12px 13px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #334155;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.arg-ai-source-analysis-none {
+  border-color: #e5e7eb;
+  background: #f8fafc;
+}
+.arg-ai-source-analysis-title {
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #1d4ed8;
+}
+.arg-ai-source-analysis-none .arg-ai-source-analysis-title {
+  color: #64748b;
+}
+.arg-ai-source-score {
+  margin-bottom: 5px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.arg-ai-source-analysis p {
+  margin: 0 0 8px;
+}
+.arg-ai-source-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.arg-ai-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.arg-ai-source-chip strong {
+  font-weight: 800;
+}
+.arg-ai-source-issue {
+  margin-top: 9px !important;
+  color: #7f1d1d;
+}
 .arg-ai-detail-bottom-close {
   display: block;
   width: 100%;

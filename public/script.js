@@ -25140,7 +25140,15 @@ function buildArgumentScoreMap(analysis) {
         final_category:    a.final_category    || a.category                 || null,
         scores_without_sources: a.scores_without_sources && typeof a.scores_without_sources === 'object' ? a.scores_without_sources : null,
         source_score:      a.source_score      != null ? a.source_score      : null,
+        has_url_source:    !!a.has_url_source,
+        source_level:      a.source_level                                    || '',
+        source_relevance:  a.source_relevance                                || '',
+        source_reliability:a.source_reliability                              || '',
+        source_supports_argument: a.source_supports_argument || a.supports_argument || '',
+        source_verification_level: a.source_verification_level || a.verification_level || '',
+        source_main_issue: a.source_main_issue || a.main_issue               || '',
         short_explanation: a.short_explanation                                || '',
+        source_explanation: a.source_explanation                              || '',
         custom_rubric_report: a.custom_rubric_report && typeof a.custom_rubric_report === 'object' ? a.custom_rubric_report : null,
         strengths:         Array.isArray(a.strengths)  ? a.strengths         : [],
         weaknesses:        Array.isArray(a.weaknesses) ? a.weaknesses        : []
@@ -25187,7 +25195,15 @@ function buildArgumentScoreMap(analysis) {
         final_category:    'copie',
         scores_without_sources: null,
         source_score:      null,
+        has_url_source:    false,
+        source_level:      '',
+        source_relevance:  '',
+        source_reliability:'',
+        source_supports_argument: '',
+        source_verification_level: '',
+        source_main_issue: '',
         short_explanation: '☠️ Idée décapitée dès l\'entrée dans l\'arène : on utilise sa cervelle pour s\'engager dans le combat, pas l\'IA.',
+        source_explanation: '',
         custom_rubric_report: null,
         strengths:         [],
         weaknesses:        []
@@ -25321,6 +25337,79 @@ function renderCustomRubricDetailHtml(report) {
     + '</div>';
 }
 
+function formatSourceAnalysisLabel(value, labels) {
+  const key = String(value || '').trim();
+  return labels[key] || key.replace(/_/g, ' ') || '';
+}
+
+function renderSourceAnalysisDetailHtml(entry) {
+  if (!entry) return '';
+  const sourceScore = Number(entry.source_score || 0);
+  const hasSource = !!entry.has_url_source;
+  const explanation = String(entry.source_explanation || '').trim();
+  if (!hasSource) {
+    return '<div class="arg-ai-source-analysis arg-ai-source-analysis-none">'
+      + '<div class="arg-ai-source-analysis-title">Analyse des sources</div>'
+      + '<div class="arg-ai-source-score">Source : 0/10</div>'
+      + '<p>Aucune URL fournie dans le champ source : aucun bonus source n’est appliqué.</p>'
+      + '</div>';
+  }
+
+  const meta = [];
+  const level = formatSourceAnalysisLabel(entry.source_level, {
+    faible: 'faible',
+    correcte: 'correcte',
+    solide: 'solide',
+    excellente: 'excellente',
+    aucune: 'aucune'
+  });
+  const relevance = formatSourceAnalysisLabel(entry.source_relevance, {
+    aucune: 'aucune',
+    hors_sujet: 'hors sujet',
+    partielle: 'partielle',
+    directe: 'directe'
+  });
+  const reliability = formatSourceAnalysisLabel(entry.source_reliability, {
+    inconnue: 'inconnue',
+    faible: 'faible',
+    moyenne: 'moyenne',
+    forte: 'forte'
+  });
+  const verification = formatSourceAnalysisLabel(entry.source_verification_level, {
+    aucune_url: 'aucune URL',
+    url_seule: 'URL seule',
+    contenu_partiel: 'contenu partiel',
+    contenu_complet: 'contenu complet'
+  });
+  const support = formatSourceAnalysisLabel(entry.source_supports_argument, {
+    non_verifiable: 'non vérifiable',
+    non: 'non',
+    partiellement: 'partiel',
+    oui: 'oui'
+  });
+  if (level) meta.push(['Niveau', level]);
+  if (relevance) meta.push(['Pertinence', relevance]);
+  if (reliability) meta.push(['Fiabilité', reliability]);
+  if (verification) meta.push(['Vérification', verification]);
+  if (support) meta.push(['Appui', support]);
+
+  const metaHtml = meta.length
+    ? '<div class="arg-ai-source-meta">' + meta.map(function(item) {
+        return '<span class="arg-ai-source-chip"><strong>' + escapeHtml(item[0]) + '</strong> ' + escapeHtml(item[1]) + '</span>';
+      }).join('') + '</div>'
+    : '';
+  const issue = String(entry.source_main_issue || '').trim();
+  const issueHtml = issue ? '<p class="arg-ai-source-issue"><strong>Limite :</strong> ' + escapeHtml(issue) + '</p>' : '';
+
+  return '<div class="arg-ai-source-analysis">'
+    + '<div class="arg-ai-source-analysis-title">Analyse des sources</div>'
+    + '<div class="arg-ai-source-score">Bonus source : +' + sourceScore + '/10</div>'
+    + (explanation ? '<p>' + escapeHtml(explanation) + '</p>' : '<p>Source prise en compte dans le bonus, sans commentaire détaillé disponible pour cette analyse.</p>')
+    + metaHtml
+    + issueHtml
+    + '</div>';
+}
+
 function renderDefaultRubricDetailHtml(entry, isOpen) {
   const scores = entry && entry.scores_without_sources && typeof entry.scores_without_sources === 'object'
     ? entry.scores_without_sources
@@ -25357,6 +25446,7 @@ function renderDefaultRubricDetailHtml(entry, isOpen) {
   return '<div class="arg-ai-detail-section">'
     + '<div class="arg-ai-detail-section-title">Détail du barème</div>'
     + '<ul class="arg-ai-detail-list">' + criteriaHtml + '</ul>'
+    + renderSourceAnalysisDetailHtml(entry)
     + totalHtml
     + '</div>';
 }
