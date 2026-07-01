@@ -92,10 +92,11 @@
     el.textContent = `
       #aala-overlay {
         --aala-bottom-bleed: 0px;
+        --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
         position: fixed; top: 0; right: 0; bottom: 0 !important; left: 0; z-index: 100000;
         width: 100vw;
-        height: var(--aala-vvh, 100vh);
-        min-height: var(--aala-vvh, 100vh);
+        height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px);
+        min-height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px);
         --aala-center-y: calc(var(--aala-vvh, 100vh) / 2);
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
@@ -110,8 +111,8 @@
       }
       @supports (height: 100dvh) {
         #aala-overlay {
-          height: var(--aala-vvh, 100dvh);
-          min-height: var(--aala-vvh, 100dvh);
+          height: calc(var(--aala-vvh, 100dvh) + var(--aala-safe-bottom, 0px) + 96px);
+          min-height: calc(var(--aala-vvh, 100dvh) + var(--aala-safe-bottom, 0px) + 96px);
         }
       }
       #aala-overlay::before {
@@ -128,11 +129,11 @@
       }
       #aala-overlay::after {
         content: "";
-        position: fixed;
+        position: absolute;
         left: 0;
         right: 0;
-        bottom: -96px;
-        height: calc(96px + env(safe-area-inset-bottom, 0px));
+        bottom: 0;
+        height: calc(160px + var(--aala-safe-bottom, 0px));
         z-index: 1;
         pointer-events: none;
         background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;

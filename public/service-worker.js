@@ -1,4 +1,4 @@
-const SW_VERSION = "20260701-political-filter-labels";
+const SW_VERSION = "20260701-standalone-bottom-cover";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en

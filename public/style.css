@@ -22741,3 +22741,71 @@ body.page-create-mobile .create-card .create-submit-helper {
     bottom: calc(5vh + 18px) !important;
   }
 }
+
+/* Standalone iOS : couvre explicitement la safe-area basse. Les anciens iPhone
+   peuvent laisser apparaitre le fond racine sous le viewport visible, surtout
+   sur /debate ou pendant l'animation IA. */
+@media (display-mode: standalone), (max-width: 768px) {
+  :root {
+    --agon-standalone-bottom-cover: env(safe-area-inset-bottom, 0px);
+  }
+
+  @supports (height: max(1px, 2px)) {
+    :root {
+      --agon-standalone-bottom-cover: max(env(safe-area-inset-bottom, 0px), var(--agon-mobile-bottom-fill, 0px));
+    }
+  }
+
+  body.is-standalone.page-debate::before,
+  body.is-standalone.page-home-mobile::before,
+  body.is-standalone.page-create-mobile::before,
+  body.is-standalone.page-notifications-mobile::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--agon-standalone-bottom-cover, 0px);
+    min-height: env(safe-area-inset-bottom, 0px);
+    z-index: 2;
+    pointer-events: none;
+    background:
+      linear-gradient(
+        90deg,
+        #f3f4f6 0%,
+        #d1d5db 25%,
+        #9ca3af 50%,
+        #374151 75%,
+        #111827 100%
+      ) bottom / 100% 5px no-repeat,
+      #e9ebec;
+    transform: translateZ(0);
+  }
+
+  body.ai-loading-animation-open-in-child::before,
+  html.aala-overlay-active body::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--agon-standalone-bottom-cover, 0px);
+    min-height: env(safe-area-inset-bottom, 0px);
+    z-index: 100002;
+    pointer-events: none;
+    background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
+    transform: translateZ(0);
+  }
+
+  #aala-overlay {
+    --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
+    height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px) !important;
+    min-height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px) !important;
+  }
+
+  #debate-ai-parent-animation-overlay {
+    --debate-ai-parent-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
+    height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px) !important;
+    min-height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px) !important;
+  }
+}

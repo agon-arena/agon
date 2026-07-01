@@ -4240,6 +4240,7 @@ function ensureDebateIframeModal() {
     #debate-ai-parent-animation-overlay {
       --debate-ai-parent-bleed: 0px;
       --debate-ai-parent-vvh: 100vh;
+      --debate-ai-parent-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
       position: fixed;
       top: 0;
       right: 0;
@@ -4247,8 +4248,8 @@ function ensureDebateIframeModal() {
       left: 0;
       z-index: 100000;
       width: 100vw;
-      height: var(--debate-ai-parent-vvh, 100vh);
-      min-height: var(--debate-ai-parent-vvh, 100vh);
+      height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px);
+      min-height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px);
       overflow: hidden;
       pointer-events: none;
       background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
@@ -4260,8 +4261,8 @@ function ensureDebateIframeModal() {
     }
     @supports (height: 100dvh) {
       #debate-ai-parent-animation-overlay {
-        height: var(--debate-ai-parent-vvh, 100dvh);
-        min-height: var(--debate-ai-parent-vvh, 100dvh);
+        height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px);
+        min-height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px);
       }
     }
     #debate-ai-parent-animation-overlay::before {
@@ -4275,11 +4276,11 @@ function ensureDebateIframeModal() {
     }
     #debate-ai-parent-animation-overlay::after {
       content: "";
-      position: fixed;
+      position: absolute;
       left: 0;
       right: 0;
-      bottom: -96px;
-      height: calc(96px + env(safe-area-inset-bottom, 0px));
+      bottom: 0;
+      height: calc(160px + var(--debate-ai-parent-safe-bottom, 0px));
       z-index: 1;
       pointer-events: none;
       background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
