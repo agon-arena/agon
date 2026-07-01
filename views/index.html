@@ -391,6 +391,11 @@
             <i class="fa-regular fa-user"></i>
             <span>Se connecter / s'inscrire</span>
           </button>
+
+          <button type="button" class="home-topbar-menu-item" id="home-topbar-admin-login-button" onclick="closeHomeTopbarMenu(); adminLogin();">
+            <i class="fa-solid fa-gear"></i>
+            <span>Mode admin</span>
+          </button>
         </div>
       </div>
 
@@ -933,7 +938,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260701-standalone-bottom-cover" defer></script>
+<script src="/script.min.js?v=20260701-sablier-desktop-center-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1555,7 +1560,7 @@
     var el = document.getElementById("agon-diagnostic-content");
     if (tab === "server") {
       el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Chargement…</p>';
-      fetch("/api/admin/diag/logs", { headers: getAdminHeaders() })
+      fetch("/api/admin/diag/logs", { headers: { "x-admin-token": localStorage.getItem("admin_token") || "" } })
         .then(function(r){ return r.json(); })
         .then(function(batches){
           if (!batches || !batches.length) {
@@ -1594,7 +1599,7 @@
     try { refresh_log = JSON.parse(localStorage.getItem("agon_refresh_log") || "[]"); } catch(e) {}
     fetch("/api/admin/diag/push-logs", {
       method: "POST",
-      headers: Object.assign({ "Content-Type": "application/json" }, getAdminHeaders()),
+      headers: Object.assign({ "Content-Type": "application/json" }, { "x-admin-token": localStorage.getItem("admin_token") || "" }),
       body: JSON.stringify({ startup_log: startup_log, refresh_log: refresh_log, sent_at: new Date().toISOString() })
     }).then(function(r){ return r.json(); })
       .then(function(d){
