@@ -11266,10 +11266,11 @@ function renderIdeaSourceCardHtml(url) {
   `;
 }
 
-function renderArgumentBodyAndSourceHtml(bodyValue) {
+function renderArgumentBodyAndSourceHtml(bodyValue, sourceUrlValue = "") {
   const source = extractIdeaSourceFromText(bodyValue);
+  const sourceUrl = normalizeIdeaSourceUrl(sourceUrlValue) || source.url;
   const cleanHtml = source.cleanText ? `<p class="argument-body">${linkifyText(source.cleanText)}</p>` : "";
-  return cleanHtml + renderIdeaSourceCardHtml(source.url);
+  return cleanHtml + renderIdeaSourceCardHtml(sourceUrl);
 }
 
 function normalizeIdeaOpenGraphPreview(data, url) {
@@ -26374,7 +26375,7 @@ return `
 
   <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
-  ${renderArgumentBodyAndSourceHtml(a.body || "")}
+  ${renderArgumentBodyAndSourceHtml(a.body || "", a.source_url || "")}
   ${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
@@ -26829,7 +26830,7 @@ return `
 
 <h3 class="argument-title">${escapeHtml(a.title || "")}</h3>
 
-${renderArgumentBodyAndSourceHtml(a.body || "")}
+${renderArgumentBodyAndSourceHtml(a.body || "", a.source_url || "")}
 ${renderManualWritingBadge(a)}
 
 <div class="argument-actions argument-actions-vertical">
@@ -27212,17 +27213,6 @@ function extractArgumentSourceFromBody(bodyValue) {
   return source;
 }
 
-function appendArgumentSourceUrlToBody(bodyValue, sourceUrl) {
-  const existingSource = extractArgumentSourceFromBody(bodyValue);
-  const normalizedUrl = normalizeArgumentSourceUrl(sourceUrl) || existingSource.url;
-  const cleanBody = String(existingSource.cleanBody || "").trimEnd();
-
-  if (!normalizedUrl) return cleanBody.trim();
-  if (!cleanBody) return `↗ Source : ${normalizedUrl}`;
-
-  return `${cleanBody}\n\n↗ Source : ${normalizedUrl}`.trim();
-}
-
 function clearArgumentUrlDraft(normalizedSide) {
   const urlInput = document.getElementById(`${normalizedSide}-url`);
   if (urlInput) {
@@ -27251,8 +27241,9 @@ async function submitArgument(debateId, side) {
   const title = titleField.value.trim();
   const rawBody = bodyField.value.trim();
   const sourceUrlInput = document.getElementById(`${normalizedSide}-url`);
-  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "");
-  let body = appendArgumentSourceUrlToBody(rawBody, sourceUrl);
+  const extractedSource = extractArgumentSourceFromBody(rawBody);
+  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "") || extractedSource.url;
+  let body = String(extractedSource.cleanBody || "").trim();
   const pasteMeta = computeArgumentPasteMeta(normalizedSide, title, rawBody);
 
   if (sourceUrlInput && String(sourceUrlInput.value || "").trim() && !sourceUrl) {
@@ -27344,6 +27335,7 @@ async function submitArgument(debateId, side) {
         side: apiSide,
         title,
         body,
+        source_url: sourceUrl || "",
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,
         manualWritingBadge: pasteMeta.manualWritingBadge,
@@ -27385,8 +27377,9 @@ async function submitListArgument(debateId) {
   const title = titleField.value.trim();
   const rawBody = bodyField.value.trim();
   const sourceUrlInput = document.getElementById("list-url");
-  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "");
-  let body = appendArgumentSourceUrlToBody(rawBody, sourceUrl);
+  const extractedSource = extractArgumentSourceFromBody(rawBody);
+  const sourceUrl = normalizeArgumentSourceUrl(sourceUrlInput?.value || "") || extractedSource.url;
+  let body = String(extractedSource.cleanBody || "").trim();
   const pasteMeta = computeArgumentPasteMeta("list", title, rawBody);
 
   if (sourceUrlInput && String(sourceUrlInput.value || "").trim() && !sourceUrl) {
@@ -27492,6 +27485,7 @@ async function submitListArgument(debateId) {
         side,
         title,
         body,
+        source_url: sourceUrl || "",
         pasteRatio: pasteMeta.pasteRatio,
         pastedChars: pasteMeta.pastedChars,
         manualWritingBadge: pasteMeta.manualWritingBadge,
@@ -27767,6 +27761,7 @@ function insertLocalArgumentAfterPublish(debateId, argumentData = {}) {
     side: String(argumentData.side || "A"),
     title: String(argumentData.title || ""),
     body: String(argumentData.body || ""),
+    source_url: String(argumentData.source_url || ""),
     votes: Number(argumentData.votes || 0),
     is_owner: true,
     created_at: argumentData.created_at || nowIsoString,

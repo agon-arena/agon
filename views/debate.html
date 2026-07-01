@@ -919,7 +919,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260701-create-source-preview2" defer></script>
+	<script src="/script.min.js?v=20260701-idea-source-separated" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1866,7 +1866,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     b: { form: 'form-b', body: 'b-body', url: 'b-url', count: 'count-body-b' }
   };
 
-  var SOURCE_MARKER_LABEL = '↗ Source : ';
   var PREVIEW_CACHE_PREFIX = 'agon_idea_url_preview_';
   var previewMemoryCache = Object.create(null);
   var previewPendingCache = Object.create(null);
@@ -2003,9 +2002,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     var cfg = CONFIG[key];
     if(!cfg) return;
 
-    var body = document.getElementById(cfg.body);
     var urlInput = document.getElementById(cfg.url);
-    if(!body || !urlInput) return;
+    if(!urlInput) return;
 
     var rawUrl = String(urlInput.value || '').trim();
     if(!rawUrl) return;
@@ -2019,28 +2017,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
       alert('Le lien URL semble invalide. Utilise un format du type https://exemple.com');
       urlInput.focus();
       return;
-    }
-
-    var current = String(body.value || '').trimEnd();
-    var source = extractIdeaSource(current);
-    current = source.cleanText;
-
-    var nextValue = current + '\n\n' + SOURCE_MARKER_LABEL + normalizedUrl;
-    var max = Number(body.getAttribute('maxlength') || 600);
-    if(current.length > max){
-      if(event){
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-      alert('Ton idée est trop longue. Raccourcis légèrement le développement avant de publier.');
-      body.focus();
-      return;
-    }
-
-    body.value = nextValue;
-    body.dispatchEvent(new Event('input', { bubbles: true }));
-    if(typeof window.updateCounter === 'function'){
-      window.updateCounter(cfg.body, cfg.count, max);
     }
   }
 
