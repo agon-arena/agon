@@ -3809,12 +3809,13 @@ function syncDebateIframeAiParentAnimationViewport() {
   const overlay = document.getElementById("debate-ai-parent-animation-overlay");
   if (!overlay) return;
   const height = Math.ceil(
-    Math.max(
-      window.visualViewport?.height || 0,
-      window.innerHeight || 0,
-      document.documentElement.clientHeight || 0
-    )
-  );
+      Math.max(
+        window.visualViewport?.height || 0,
+        window.innerHeight || 0,
+        document.documentElement.clientHeight || 0,
+        window.screen?.height || 0
+      )
+    );
   if (height) overlay.style.setProperty("--debate-ai-parent-vvh", `${height}px`);
 }
 
@@ -4270,6 +4271,18 @@ function ensureDebateIframeModal() {
       z-index: 0;
       background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
       pointer-events: none;
+      transform: translateZ(0);
+    }
+    #debate-ai-parent-animation-overlay::after {
+      content: "";
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: -96px;
+      height: calc(96px + env(safe-area-inset-bottom, 0px));
+      z-index: 1;
+      pointer-events: none;
+      background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
       transform: translateZ(0);
     }
     #debate-ai-parent-animation-overlay.is-hiding {
