@@ -13840,7 +13840,7 @@ body.page-debate .debate-context-text .context-latin-question {
   text-indent: 0;
   font-weight: 800 !important;
   font-style: normal !important;
-  margin: 0 !important;
+  margin: 0.45em 0 0 !important;
 }
 
 body.page-debate .debate-context-text .context-debate-question {
