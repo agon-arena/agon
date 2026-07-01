@@ -13792,7 +13792,7 @@ body.page-debate .debate-context-text {
   padding-left: 6px;
   padding-right: 6px;
   box-sizing: border-box;
-  text-indent: 0;
+  text-indent: 1.1em;
   font-weight: 400 !important;
   font-size: 23px !important;
 }
@@ -13816,6 +13816,10 @@ body.page-debate .debate-context-text::first-letter {
   font-size: 1.3em;
   font-weight: 800;
   line-height: 1;
+}
+
+body.page-debate .debate-context-text .context-first-letter {
+  color: #e8e8e8 !important;
 }
 
 /* Sous-textes / méta sur fond sombre */
