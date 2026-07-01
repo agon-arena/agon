@@ -3574,12 +3574,23 @@ body.page-debate #score-b {
 .arg-ai-detail-section {
   margin-top: 14px;
 }
+.arg-ai-appreciation-section {
+  padding: 12px 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fbfbf8;
+}
 .arg-ai-detail-section-title {
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 8px;
+}
+.arg-ai-appreciation-text {
+  color: #374151;
+  font-size: 16px;
+  line-height: 1.55;
 }
 .arg-ai-strengths-title  { color: #16a34a; }
 .arg-ai-weaknesses-title { color: #dc2626; }

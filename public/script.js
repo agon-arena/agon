@@ -25580,6 +25580,13 @@ function showArgumentAiDetail(argId, triggerEl) {
   if (mainExplanation) {
     html += '<div class="arg-ai-detail-expl' + (publicComment ? ' arg-ai-detail-public-comment' : '') + (isCopie ? ' arg-ai-detail-expl-copie' : '') + '">' + escapeHtml(mainExplanation) + '</div>';
   }
+  const aiAppreciation = String(entry.short_explanation || '').trim();
+  if (publicComment && aiAppreciation && aiAppreciation !== publicComment && !isCopie) {
+    html += '<div class="arg-ai-detail-section arg-ai-appreciation-section">'
+      + '<div class="arg-ai-detail-section-title">Appréciation IA</div>'
+      + '<div class="arg-ai-appreciation-text">' + escapeHtml(aiAppreciation) + '</div>'
+      + '</div>';
+  }
 
   const customRubricHtml = renderCustomRubricDetailHtml(entry.custom_rubric_report);
   if (customRubricHtml) {
