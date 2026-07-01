@@ -8581,6 +8581,34 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
 
 app.get("/ping", (req, res) => res.json({ ok: true }));
 
+/* ---- Diagnostic refresh logs (client → serveur) ---- */
+const DIAG_LOGS_FILE = path.join(__dirname, "diag-refresh-logs.json");
+
+app.post("/api/admin/diag/push-logs", requireAdmin, express.json(), (req, res) => {
+  try {
+    const { startup_log, refresh_log, sent_at } = req.body || {};
+    let existing = [];
+    try { existing = JSON.parse(fs.readFileSync(DIAG_LOGS_FILE, "utf8")); } catch (_) {}
+    existing.unshift({ sent_at: sent_at || new Date().toISOString(), startup_log: startup_log || [], refresh_log: refresh_log || [] });
+    if (existing.length > 5) existing.length = 5;
+    fs.writeFileSync(DIAG_LOGS_FILE, JSON.stringify(existing, null, 2), "utf8");
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[diag] push-logs error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/diag/logs", requireAdmin, (req, res) => {
+  try {
+    let data = [];
+    try { data = JSON.parse(fs.readFileSync(DIAG_LOGS_FILE, "utf8")); } catch (_) {}
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   purgeExternalPreviewCacheDir(500);

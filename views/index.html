@@ -1513,8 +1513,11 @@
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
       <button onclick="showDiagTab('startup')" id="diag-tab-startup" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;font-weight:600;">Startups</button>
       <button onclick="showDiagTab('refresh')" id="diag-tab-refresh" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Events</button>
+      <button onclick="showDiagTab('server')" id="diag-tab-server" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Serveur</button>
+      <button onclick="pushDiagToServer()" id="diag-push-btn" style="padding:6px 14px;border-radius:20px;border:1px solid #1a4a2a;background:#0e2818;color:#7ecfa0;font-size:13px;cursor:pointer;">Envoyer</button>
       <button onclick="clearDiagLogs()" style="padding:6px 14px;border-radius:20px;border:1px solid #5a2020;background:#2a1010;color:#e07070;font-size:13px;cursor:pointer;margin-left:auto;">Effacer</button>
     </div>
+    <div id="agon-diagnostic-status" style="font-size:12px;margin-bottom:10px;min-height:18px;"></div>
     <div id="agon-diagnostic-content" style="font-size:12px;line-height:1.6;"></div>
   </div>
 </div>
@@ -1536,21 +1539,76 @@
       + lines.join('<br>') + '</div>';
   }
 
+  function setStatus(msg, color) {
+    var el = document.getElementById("agon-diagnostic-status");
+    if (el) el.innerHTML = '<span style="color:' + (color||"#7a9aaa") + ';">' + msg + '</span>';
+  }
+
   var currentTab = "startup";
 
   window.showDiagTab = function(tab) {
     currentTab = tab;
     document.getElementById("diag-tab-startup").style.fontWeight = tab === "startup" ? "700" : "400";
     document.getElementById("diag-tab-refresh").style.fontWeight = tab === "refresh" ? "700" : "400";
+    document.getElementById("diag-tab-server").style.fontWeight = tab === "server" ? "700" : "400";
+    setStatus("");
+    var el = document.getElementById("agon-diagnostic-content");
+    if (tab === "server") {
+      el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Chargement…</p>';
+      fetch("/api/admin/diag/logs", { headers: getAdminHeaders() })
+        .then(function(r){ return r.json(); })
+        .then(function(batches){
+          if (!batches || !batches.length) {
+            el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Aucun log envoyé au serveur.</p>';
+            return;
+          }
+          el.innerHTML = batches.map(function(b){
+            var sentAt = b.sent_at ? b.sent_at.replace("T"," ").replace(/\.\d+Z$/," UTC") : "?";
+            var startups = (b.startup_log || []).map(fmt).join("") || '<p style="color:#4a6a7a;">—</p>';
+            return '<div style="border:1px solid #2d3f4a;border-radius:10px;padding:12px;margin-bottom:14px;">'
+              + '<div style="color:#7ab4e0;font-size:11px;margin-bottom:8px;">Envoyé le ' + sentAt + '</div>'
+              + '<div style="color:#a8c4d0;font-size:11px;font-weight:700;margin-bottom:6px;">Startups :</div>'
+              + startups + '</div>';
+          }).join("");
+        })
+        .catch(function(){ el.innerHTML = '<p style="color:#e07070;font-size:13px;">Erreur de chargement.</p>'; });
+      return;
+    }
     var key = tab === "startup" ? "agon_startup_log" : "agon_refresh_log";
     var entries = [];
     try { entries = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
-    var el = document.getElementById("agon-diagnostic-content");
     if (!entries.length) {
       el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Aucun log enregistré pour le moment.</p>';
       return;
     }
     el.innerHTML = entries.map(fmt).join("");
+  };
+
+  window.pushDiagToServer = function() {
+    var btn = document.getElementById("diag-push-btn");
+    if (btn) btn.disabled = true;
+    setStatus("Envoi en cours…", "#7ab4e0");
+    var startup_log = [];
+    var refresh_log = [];
+    try { startup_log = JSON.parse(localStorage.getItem("agon_startup_log") || "[]"); } catch(e) {}
+    try { refresh_log = JSON.parse(localStorage.getItem("agon_refresh_log") || "[]"); } catch(e) {}
+    fetch("/api/admin/diag/push-logs", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, getAdminHeaders()),
+      body: JSON.stringify({ startup_log: startup_log, refresh_log: refresh_log, sent_at: new Date().toISOString() })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+        if (btn) btn.disabled = false;
+        if (d.ok) {
+          setStatus("Envoyé ! Consulte l'onglet Serveur.", "#7ecfa0");
+        } else {
+          setStatus("Erreur : " + (d.error || "?"), "#e07070");
+        }
+      })
+      .catch(function(e){
+        if (btn) btn.disabled = false;
+        setStatus("Erreur réseau.", "#e07070");
+      });
   };
 
   window.openDiagnosticModal = function() {
