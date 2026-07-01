@@ -1,4 +1,4 @@
-const SW_VERSION = "20260701-standalone-debate-breaks";
+const SW_VERSION = "20260701-standalone-latin-spacing";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
