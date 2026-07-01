@@ -19042,7 +19042,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 /* Sélecteur gauche/général/droite (filtre du nuage Actu) : volontairement plus
    petit que le sélecteur Bulles Actu/Bulles Agôn au-dessus, pour rester secondaire. */
 #agon-political-cloud-switch {
-  margin: 0 auto 12px;
+  margin: -6px auto 8px;
 }
 
 #agon-political-cloud-switch .agon-cloud-mode-segment {
