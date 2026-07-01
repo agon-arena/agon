@@ -13831,6 +13831,7 @@ body.page-debate .debate-context-text .context-body-paragraph {
   text-align: left;
   text-indent: 1.1em;
   white-space: pre-line;
+  margin: 0 0 0.65em;
 }
 
 body.page-debate .debate-context-text .context-latin-question {
@@ -19111,7 +19112,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 /* Sélecteur gauche/général/droite (filtre du nuage Actu) : volontairement plus
    petit que le sélecteur Bulles Actu/Bulles Agôn au-dessus, pour rester secondaire. */
 #agon-political-cloud-switch {
-  margin: -6px auto 8px;
+  margin: -8px auto 8px;
 }
 
 #agon-political-cloud-switch .agon-cloud-mode-segment {
@@ -20302,6 +20303,17 @@ body.page-home-mobile .topbar-social {
     font-size: 23px !important;
     padding-left: 10px;
     padding-right: 10px;
+  }
+  body.page-debate .debate-context-text .context-body-paragraph {
+    display: block;
+    margin: 0 0 0.85em !important;
+    white-space: pre-line;
+  }
+  body.page-debate .debate-context-text .context-latin-question,
+  body.page-debate .debate-context-text .context-debate-question,
+  body.page-debate .debate-context-text .context-reflection-question,
+  body.page-debate .debate-context-text .context-signature {
+    display: block;
   }
   body.page-debate .debate-context-text .context-signature {
     margin-top: 0.9em;

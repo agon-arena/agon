@@ -17047,7 +17047,7 @@ let _politicalCloudGroup = 'mixed';
 
 // Légende adaptée au nuage affiché : même lien "en savoir plus" dans les 3 cas,
 // seule la phrase d'intro change.
-const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><span class="agon-tag-trends-caption-link-wrap"><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a></span>';
+const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>';
 const POLITICAL_CLOUD_CAPTION_TEXT = {
   mixed: "Les tendances de l'actualité française ces dernières heures.",
   left: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à gauche ces dernières heures.",
@@ -19792,7 +19792,7 @@ function renderDebateContext(content, isOpen = false) {
     return;
   }
 
-  text.innerHTML = renderAgonArticleContextHtml(safeContent, isOpen);
+  text.innerHTML = renderIndexContextPreviewText(safeContent, true, isOpen);
   wrap.style.display = "block";
   positionDebateContextBelowSources();
 }
