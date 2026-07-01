@@ -17047,7 +17047,7 @@ let _politicalCloudGroup = 'mixed';
 
 // Légende adaptée au nuage affiché : même lien "en savoir plus" dans les 3 cas,
 // seule la phrase d'intro change.
-const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>';
+const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><span class="agon-tag-trends-caption-link-wrap"><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a></span>';
 const POLITICAL_CLOUD_CAPTION_TEXT = {
   mixed: "Les tendances de l'actualité française ces dernières heures.",
   left: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à gauche ces dernières heures.",
@@ -19721,12 +19721,16 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
     .filter(Boolean);
   if (!parts.length) return "";
 
+  const renderContextPart = (part, className) => {
+    return `<div class="${className}">${escapeHtmlNl(part)}</div>`;
+  };
+
   if (isOpen) {
     const lastPart = parts[parts.length - 1] || "";
     const latinMotto = parts[parts.length - 2] || "";
     const hasOpenTail = parts.length >= 2;
     if (!hasOpenTail) {
-      return parts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("");
+      return parts.map((part) => renderContextPart(part, "context-body-paragraph")).join("");
     }
     const bodyParts = parts.slice(0, parts.length - 2);
     const lastLooksLikeSignature = /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(lastPart);
@@ -19735,15 +19739,15 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
       : /[?？]$/.test(lastPart)
         ? "context-reflection-question"
         : "context-body-paragraph";
-    return bodyParts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("")
-      + `<div class="context-latin-question">${escapeHtml(latinMotto)}</div>`
-      + `<div class="${lastClass}">${escapeHtml(lastPart)}</div>`;
+    return bodyParts.map((part) => renderContextPart(part, "context-body-paragraph")).join("")
+      + renderContextPart(latinMotto, "context-latin-question")
+      + renderContextPart(lastPart, lastClass);
   }
 
   const signature = parts[parts.length - 1] || "";
   const isSignature = parts.length >= 2 && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
   if (!isSignature) {
-    return parts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("");
+    return parts.map((part) => renderContextPart(part, "context-body-paragraph")).join("");
   }
 
   const isLatinMotto = (text) => {
@@ -19768,10 +19772,10 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
     bodyParts = rest.slice(0, rest.length - 1);
   }
 
-  return bodyParts.map((part) => `<div class="context-body-paragraph">${escapeHtml(part)}</div>`).join("")
-    + (latinQuestion ? `<div class="context-latin-question">${escapeHtml(latinQuestion)}</div>` : "")
-    + (question ? `<div class="context-debate-question">${escapeHtml(question)}</div>` : "")
-    + `<div class="context-signature">${escapeHtml(signature)}</div>`;
+  return bodyParts.map((part) => renderContextPart(part, "context-body-paragraph")).join("")
+    + (latinQuestion ? renderContextPart(latinQuestion, "context-latin-question") : "")
+    + (question ? renderContextPart(question, "context-debate-question") : "")
+    + renderContextPart(signature, "context-signature");
 }
 
 function renderDebateContext(content, isOpen = false) {

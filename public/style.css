@@ -7124,8 +7124,12 @@ body.page-debate .topbar::after {
     z-index: 30;
     margin-left: auto;
     margin-right: auto;
-    margin-top: 210px;
     text-align: center !important;
+  }
+
+  .page-home-mobile .agon-tag-trends-caption-link-wrap {
+    display: block;
+    margin-top: 145px;
   }
 
   .page-home-mobile .index-sort-toggle {
@@ -10947,7 +10951,12 @@ body.is-standalone .agon-tag-trends-section {
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: 210px;
+  margin-top: 4px;
+}
+
+body.is-standalone.page-home-mobile .agon-tag-trends-caption-link-wrap {
+  display: block;
+  margin-top: 145px;
 }
 
 body.is-standalone #agon-political-cloud-switch {
@@ -13776,6 +13785,15 @@ body.page-debate {
   background-color: #243038;
 }
 
+/* Le contenu réel de la page débat est clair (cartes blanches / #f3f4f6).
+   Le padding-bottom de .debate-page laisse un vide transparent après la
+   dernière carte quand on scrolle jusqu'en bas : sans ce fond, l'anthracite
+   du body remonte à travers ce vide (bande sombre visible en fin de page,
+   confirmé via inspection live sur iPhone standalone le 2026-07-01). */
+body.page-debate main {
+  background-color: #f3f4f6;
+}
+
 body.page-debate {
   min-height: 100dvh;
 }
@@ -13837,6 +13855,7 @@ body.page-debate .debate-context-text .context-body-paragraph {
   text-align: left;
   text-indent: 1.1em;
   white-space: pre-line;
+  margin: 0 0 0.65em;
 }
 
 body.page-debate .debate-context-text .context-latin-question {
