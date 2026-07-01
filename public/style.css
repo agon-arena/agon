@@ -7124,7 +7124,7 @@ body.page-debate .topbar::after {
     z-index: 30;
     margin-left: auto;
     margin-right: auto;
-    margin-top: 128px;
+    margin-top: 210px;
     text-align: center !important;
   }
 
@@ -10947,7 +10947,7 @@ body.is-standalone .agon-tag-trends-section {
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: 4px;
+  margin-top: 210px;
 }
 
 body.is-standalone #agon-political-cloud-switch {
@@ -21540,12 +21540,7 @@ body.page-home-mobile .theme-horizontal-row {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
-  body.page-debate {
-    background-color: #f3f4f6 !important;
-  }
-
-  /* .page-contact et .page-about ont un vrai fond sombre (#243038) par design
-     (voir règles non-media plus haut) : ne pas les repasser en clair ici. */
+  body.page-debate,
   body.page-contact,
   body.page-about {
     background-color: #243038 !important;
@@ -21594,7 +21589,7 @@ body.page-home-mobile .theme-horizontal-row {
 
 @media (max-width: 768px), (display-mode: standalone) {
   html {
-    background: #f3f4f6 !important;
+    background: #243038 !important;
   }
 
   .home-bottom-nav {
@@ -22291,7 +22286,7 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   html {
     min-height: 100% !important;
-    background: #f3f4f6 !important;
+    background: #243038 !important;
   }
 
   body.page-home-mobile,
