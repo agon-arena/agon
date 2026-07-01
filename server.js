@@ -8094,7 +8094,7 @@ const { generatePopularityAnalysis }  = require('./lib/popularity-analysis');
 // Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin).
 // Toujours écrite sur l'arène canonique uniquement (cf. _scheduleAnalysisIfNeeded) :
 // les arènes fusionnées la relisent via resolveSharedDebateId, pas de duplication.
-async function _generateAndSaveAnalysis(debateId) {
+async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
@@ -8107,7 +8107,7 @@ async function _generateAndSaveAnalysis(debateId) {
     const generationScoreScope = groupIds.length > 1 ? groupIds : null;
     const { score: generationScore } = await _computeAnalysisScore(canonicalId, generationScoreScope);
     const payload = await _fetchDebatePayload(canonicalId, groupIds.length > 1 ? groupIds : null);
-    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts));
+    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts), { forceRescore });
     const raw     = JSON.stringify(result);
 
     const { error: saveError } = await supabase.from("debates").update({
@@ -8478,11 +8478,11 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
 app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate", 5), express.json(), async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
 
-  const { debateId } = req.body || {};
+  const { debateId, force = false } = req.body || {};
   if (!debateId) return res.status(400).json({ error: "debateId manquant." });
 
   try {
-    const raw = await _generateAndSaveAnalysis(debateId);
+    const raw = await _generateAndSaveAnalysis(debateId, { forceRescore: !!force });
     const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
     const { data: popData } = await supabase.from("debates").select("popularity_analysis").eq("id", canonicalId).single();
     return res.json({ raw, popularityRaw: popData?.popularity_analysis || null });
