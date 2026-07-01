@@ -22772,7 +22772,6 @@ body.page-create-mobile .create-card .create-submit-helper {
     }
   }
 
-  body.is-standalone.page-debate::before,
   body.is-standalone.page-home-mobile::before,
   body.is-standalone.page-create-mobile::before,
   body.is-standalone.page-notifications-mobile::before {
@@ -22795,6 +22794,20 @@ body.page-create-mobile .create-card .create-submit-helper {
         #111827 100%
       ) bottom / 100% 5px no-repeat,
       #e9ebec;
+    transform: translateZ(0);
+  }
+
+  body.is-standalone.page-debate::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--agon-standalone-bottom-cover, 0px);
+    min-height: env(safe-area-inset-bottom, 0px);
+    z-index: 2;
+    pointer-events: none;
+    background: #243038;
     transform: translateZ(0);
   }
 
