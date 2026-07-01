@@ -1656,7 +1656,7 @@
         });
         if (summaryOut) {
           out += '<details class="ada-summary-details">' +
-            '<summary class="ada-section-h2"><span class="ada-section-icon">📋</span> Synthèse par camp</summary>' +
+            '<summary class="ada-section-h2"><span class="ada-section-icon">📋</span> ' + (d.isOpen ? 'Synthèse des idées' : 'Synthèse par camp') + '</summary>' +
             '<div class="ada-summary-list">' + summaryOut + '</div>' +
           '</details>';
         }
@@ -2058,6 +2058,14 @@
     const isOpen = analysis && analysis.isOpen;
     const labelA = isOpen ? 'Idées partagées' : ((analysis && analysis.camps && analysis.camps.A && analysis.camps.A.label) || (analysis && analysis.positionA) || 'Camp A');
     const labelB = isOpen ? '' : ((analysis && analysis.camps && analysis.camps.B && analysis.camps.B.label) || (analysis && analysis.positionB) || 'Camp B');
+    function cleanOpenArenaPositionText(text) {
+      if (!isOpen) return text;
+      return String(text || '')
+        .replace(/\b(?:dans|sur)\s+le\s+camp\s+[«"“]?idées partagées[»"”]?/gi, 'dans les idées partagées')
+        .replace(/\ble\s+camp\s+[«"“]?idées partagées[»"”]?/gi, 'les idées partagées')
+        .replace(/\bcamp\s+[«"“]?idées partagées[»"”]?/gi, 'Idées partagées')
+        .replace(/[«"“]idées partagées[»"”]/gi, 'Idées partagées');
+    }
 
     let inner = '';
 
@@ -2086,7 +2094,7 @@
         if (hasCampA) {
           card += '<div class="ada-pop-position-row">' +
                     '<span class="ada-finale-label">' + esc(labelA) + '</span>' +
-                    '<div class="ada-pop-position-text">' + esc(pop.campAObservation) + '</div>' +
+                    '<div class="ada-pop-position-text">' + esc(cleanOpenArenaPositionText(pop.campAObservation)) + '</div>' +
                   '</div>';
         }
         if (hasCampB) {
