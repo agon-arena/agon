@@ -19778,6 +19778,16 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
     + renderContextPart(signature, "context-signature");
 }
 
+function trimDebateContextLatinBreaks(html) {
+  return String(html || "")
+    .replace(/(?:<br>){2,}(<span class="context-latin-question">)/g, "<br>$1")
+    .replace(/(<span class="context-latin-question">[^<]*<\/span>)(?:<br>)+/g, "$1");
+}
+
+function renderDebateContextArticleHtml(content, isOpen = false) {
+  return trimDebateContextLatinBreaks(renderIndexContextPreviewText(content, true, isOpen));
+}
+
 function renderDebateContext(content, isOpen = false) {
   const wrap = document.getElementById("debate-context-wrap");
   const text = document.getElementById("debate-context-text");
@@ -19792,7 +19802,7 @@ function renderDebateContext(content, isOpen = false) {
     return;
   }
 
-  text.innerHTML = renderIndexContextPreviewText(safeContent, true, isOpen);
+  text.innerHTML = renderDebateContextArticleHtml(safeContent, isOpen);
   wrap.style.display = "block";
   positionDebateContextBelowSources();
 }
