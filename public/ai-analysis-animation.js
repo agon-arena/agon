@@ -13,13 +13,17 @@
   var _bgPromise = null;
   var _viewportBound = false;
 
+  function isStandaloneAnimationMode() {
+    return !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+  }
+
   function getViewportHeight() {
     var vvHeight = window.visualViewport && window.visualViewport.height;
     return Math.ceil(Math.max(
       vvHeight || 0,
       window.innerHeight || 0,
       document.documentElement.clientHeight || 0,
-      window.screen && window.screen.height || 0
+      isStandaloneAnimationMode() ? (window.screen && window.screen.height || 0) : 0
     ));
   }
 

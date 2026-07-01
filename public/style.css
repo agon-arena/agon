@@ -6144,6 +6144,11 @@ body.page-debate .topbar::after {
     width: 100%;
   }
 
+  .admin-topbar-menu-toggle {
+    position: relative;
+    top: -2px;
+  }
+
 .debate-page {
   padding-bottom:120px;
 }
@@ -21123,244 +21128,10 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 /* Override final iOS/PWA : supprime la bande basse globale en prolongeant
    le contenu fixe et le fond de page dans la safe-area. Ce bloc doit rester
-   tout en bas du fichier pour recouvrir les anciens correctifs mobiles. */
-@media (max-width: 768px), (display-mode: standalone) {
-  html {
-    min-height: 100% !important;
-    background: #243038 !important;
-  }
-
-  body.page-home-mobile,
-  body.page-create-mobile,
-  body.page-notifications-mobile,
-  body.page-debate,
-  body.page-contact,
-  body.page-about {
-    min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
-    background-clip: border-box !important;
-  }
-
-  @supports (min-height: 100dvh) {
-    body.page-home-mobile,
-    body.page-create-mobile,
-    body.page-notifications-mobile,
-    body.page-debate,
-    body.page-contact,
-    body.page-about {
-      min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
-    }
-  }
-
-  @supports (-webkit-touch-callout: none) {
-    html {
-      height: -webkit-fill-available;
-    }
-
-    body.page-home-mobile,
-    body.page-create-mobile,
-    body.page-notifications-mobile,
-    body.page-debate,
-    body.page-contact,
-    body.page-about {
-      min-height: -webkit-fill-available !important;
-    }
-  }
-
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after,
-  body.page-contact::after,
-  body.page-about::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-    height: env(safe-area-inset-bottom, 0px);
-    z-index: 1;
-    pointer-events: none;
-    background: inherit;
-    transform: translateZ(0);
-  }
-
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after {
-    z-index: 144;
-    background:
-      linear-gradient(
-        90deg,
-        #f3f4f6 0%,
-        #d1d5db 25%,
-        #9ca3af 50%,
-        #374151 75%,
-        #111827 100%
-      ) bottom / 100% 5px no-repeat,
-      #e9ebec;
-  }
-
-  body.ai-loading-animation-open-in-child::after,
-  html.aala-overlay-active body::after {
-    bottom: 0;
-    height: env(safe-area-inset-bottom, 0px);
-    z-index: 99999;
-    background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
-  }
-
-  .home-bottom-nav {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
-    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  #debate-iframe-modal.open {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  #debate-iframe-modal.ai-loading-animation-open-in-child,
-  #debate-ai-parent-animation-overlay,
-  #aala-overlay {
-    bottom: 0 !important;
-  }
-}
-
-/* Correctif global iOS/PWA : le bas de l'ecran ne doit jamais etre une
-   bande racine separee. On prolonge la page et les elements fixes dans la
-   safe-area basse, au lieu de laisser html peindre un fond distinct. */
-@media (max-width: 768px), (display-mode: standalone) {
-  html {
-    min-height: 100% !important;
-    background: transparent !important;
-  }
-
-  body.page-home-mobile,
-  body.page-create-mobile,
-  body.page-notifications-mobile,
-  body.page-debate,
-  body.page-contact,
-  body.page-about {
-    min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
-    background-clip: border-box !important;
-  }
-
-  @supports (min-height: 100dvh) {
-    body.page-home-mobile,
-    body.page-create-mobile,
-    body.page-notifications-mobile,
-    body.page-debate,
-    body.page-contact,
-    body.page-about {
-      min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
-    }
-  }
-
-  @supports (-webkit-touch-callout: none) {
-    html {
-      height: -webkit-fill-available;
-    }
-
-    body.page-home-mobile,
-    body.page-create-mobile,
-    body.page-notifications-mobile,
-    body.page-debate,
-    body.page-contact,
-    body.page-about {
-      min-height: -webkit-fill-available !important;
-    }
-  }
-
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after,
-  body.page-contact::after,
-  body.page-about::after {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-    height: env(safe-area-inset-bottom, 0px);
-    z-index: 1;
-    pointer-events: none;
-    background: inherit;
-    transform: translateZ(0);
-  }
-
-  body.page-home-mobile::after,
-  body.page-create-mobile::after,
-  body.page-notifications-mobile::after,
-  body.page-debate::after {
-    z-index: 144;
-    background:
-      linear-gradient(
-        90deg,
-        #f3f4f6 0%,
-        #d1d5db 25%,
-        #9ca3af 50%,
-        #374151 75%,
-        #111827 100%
-      ) bottom / 100% 5px no-repeat,
-      #e9ebec;
-  }
-
-  body.ai-loading-animation-open-in-child::after,
-  html.aala-overlay-active body::after {
-    bottom: 0;
-    height: env(safe-area-inset-bottom, 0px);
-    z-index: 99999;
-    background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
-  }
-
-  .home-bottom-nav {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
-    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  #debate-iframe-modal.open {
-    bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  #debate-iframe-modal.ai-loading-animation-open-in-child,
-  #debate-ai-parent-animation-overlay,
-  #aala-overlay {
-    bottom: 0 !important;
-  }
-}
-
-/* Correctif final app/iOS : ne jamais laisser la safe-area basse reprendre
-   le gris global du body. */
-@media (max-width: 768px), (display-mode: standalone) {
-  html {
-    background-color: #243038 !important;
-  }
-
-  body.page-home-mobile,
-  body.page-create-mobile,
-  body.page-notifications-mobile,
-  body.page-debate,
-  body.page-contact,
-  body.page-about {
-    min-height: 100vh !important;
-    background-color: #243038 !important;
-  }
-
-  @supports (min-height: 100dvh) {
-    body.page-home-mobile,
-    body.page-create-mobile,
-    body.page-notifications-mobile,
-    body.page-debate,
-    body.page-contact,
-    body.page-about {
-      min-height: 100dvh !important;
-    }
-  }
-
-  .home-bottom-nav {
-    padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-}
+   tout en bas du fichier pour recouvrir les anciens correctifs mobiles.
+   (Version consolidée : 3 blocs quasi identiques successifs ont été fusionnés
+   ici le 2026-07-01 ; le comportement final était déjà entièrement porté par
+   le bloc "Override ultime iOS/PWA" plus bas dans le fichier.) */
 
 .about-accordion {
   border-top: 1px solid #e5e7eb;
@@ -22553,18 +22324,6 @@ body.page-create-mobile .create-card .create-submit-helper {
     }
   }
 
-  body.page-home-mobile:not(.admin-edit-open)::after,
-  body.page-create-mobile:not(.admin-edit-open)::after,
-  body.page-notifications-mobile:not(.admin-edit-open)::after,
-  body.page-debate:not(.admin-edit-open):not(.argument-form-open)::after,
-  body.page-contact:not(.admin-edit-open)::after,
-  body.page-about:not(.admin-edit-open)::after,
-  body.ai-loading-animation-open-in-child::after,
-  html.aala-overlay-active body::after {
-    content: none !important;
-    display: none !important;
-  }
-
   .home-bottom-nav {
     bottom: calc(0px - var(--agon-safe-bottom)) !important;
     padding-bottom: calc(3px + var(--agon-safe-bottom)) !important;
@@ -22769,16 +22528,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     min-height: env(safe-area-inset-bottom, 0px);
     z-index: 2;
     pointer-events: none;
-    background:
-      linear-gradient(
-        90deg,
-        #f3f4f6 0%,
-        #d1d5db 25%,
-        #9ca3af 50%,
-        #374151 75%,
-        #111827 100%
-      ) bottom / 100% 5px no-repeat,
-      #e9ebec;
+    background: #f3f4f6;
     transform: translateZ(0);
   }
 

@@ -3813,7 +3813,7 @@ function syncDebateIframeAiParentAnimationViewport() {
         window.visualViewport?.height || 0,
         window.innerHeight || 0,
         document.documentElement.clientHeight || 0,
-        window.screen?.height || 0
+        isStandaloneMode() ? (window.screen?.height || 0) : 0
       )
     );
   if (height) overlay.style.setProperty("--debate-ai-parent-vvh", `${height}px`);
@@ -13812,6 +13812,7 @@ function refreshAdminUI() {
   const adminMode = isAdmin();
   const root = document.documentElement;
   const loginBtn = document.getElementById("admin-login-btn");
+  const mobileLoginBtn = document.getElementById("home-topbar-admin-login-button");
   const logoutBtn = document.getElementById("admin-logout-btn");
   const badge = document.getElementById("admin-badge");
 
@@ -13822,6 +13823,10 @@ function refreshAdminUI() {
 
   if (loginBtn) {
     loginBtn.style.display = adminMode ? "none" : "inline-block";
+  }
+
+  if (mobileLoginBtn) {
+    mobileLoginBtn.style.display = adminMode ? "none" : "";
   }
 
   if (logoutBtn) {
