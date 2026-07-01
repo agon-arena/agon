@@ -13785,12 +13785,10 @@ body.page-debate {
   background-color: #243038;
 }
 
-/* Le contenu réel de la page débat est clair (cartes blanches / #f3f4f6).
-   Le padding-bottom de .debate-page laisse un vide transparent après la
-   dernière carte quand on scrolle jusqu'en bas : sans ce fond, l'anthracite
-   du body remonte à travers ce vide (bande sombre visible en fin de page,
-   confirmé via inspection live sur iPhone standalone le 2026-07-01). */
-body.page-debate main {
+/* Le contenu réel de la page débat est clair (cartes blanches / #f3f4f6),
+   mais le fond racine/safe-area doit rester anthracite. On cible donc
+   uniquement le main de contenu, pas tous les <main> de la page. */
+body.page-debate main.debate-page {
   background-color: #f3f4f6;
 }
 
@@ -17077,6 +17075,10 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
 @media (max-width: 768px) {
   body.page-debate .home-bottom-nav {
     display: none !important;
+  }
+
+  body.is-standalone.page-debate main.debate-page {
+    padding-bottom: 28px !important;
   }
 
   #voices-float-badge {
@@ -22535,7 +22537,6 @@ body.page-create-mobile .create-card .create-submit-helper {
     }
   }
 
-  body.is-standalone.page-debate::before,
   body.is-standalone.page-home-mobile::before,
   body.is-standalone.page-create-mobile::before,
   body.is-standalone.page-notifications-mobile::before {
@@ -22552,6 +22553,20 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: translateZ(0);
   }
 
+  body.is-standalone.page-debate::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--agon-standalone-bottom-cover, 0px);
+    min-height: env(safe-area-inset-bottom, 0px);
+    z-index: 2;
+    pointer-events: none;
+    background: #243038;
+    transform: translateZ(0);
+  }
+
   body.ai-loading-animation-open-in-child::before,
   html.aala-overlay-active body::before {
     content: "";
@@ -22565,6 +22580,12 @@ body.page-create-mobile .create-card .create-submit-helper {
     pointer-events: none;
     background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
     transform: translateZ(0);
+  }
+
+  body.is-standalone.page-debate.ai-loading-animation-open-in-child::before,
+  html.aala-overlay-active body.is-standalone.page-debate::before {
+    z-index: 100002;
+    background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
   }
 
   #aala-overlay {
