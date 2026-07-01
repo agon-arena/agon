@@ -31480,17 +31480,32 @@ function getAgonCssSafeAreaBottomFill() {
   return Math.max(0, Math.round(parseFloat(window.getComputedStyle(agonSafeAreaBottomProbe).paddingBottom) || 0));
 }
 
-function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOffset) {
+function getAgonLegacyStandaloneBottomFallback(cssSafeOffset = 0) {
+  if (!isStandaloneMode() || !isIOSDevice() || !isAgonStandaloneMobileScreen()) return 0;
+  if (Math.round(Number(cssSafeOffset) || 0) > 0) return 0;
+
+  const shortSide = Math.min(
+    Number(screen.width) || window.innerWidth || 9999,
+    Number(screen.height) || window.innerHeight || 9999
+  );
+  return shortSide <= 430 ? 36 : 0;
+}
+
+function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOffset, legacyOffset = 0) {
   const viewportValue = Math.max(0, Math.round(Number(viewportOffset) || 0));
   const safeValue = Math.max(0, Math.round(Number(safeOffset) || 0));
+  const legacyValue = Math.max(0, Math.round(Number(legacyOffset) || 0));
   document.documentElement.style.setProperty('--agon-mobile-bottom-fill', `${viewportValue}px`);
   document.documentElement.style.setProperty('--agon-safe-bottom', `${safeValue}px`);
+  document.documentElement.style.setProperty('--agon-legacy-standalone-bottom-fill', `${legacyValue}px`);
 }
 
 function updateHomeBottomNavViewportOffset() {
   const viewportBottomFill = getAgonMobileViewportBottomFill();
-  const safeBottomFill = Math.max(viewportBottomFill, getAgonCssSafeAreaBottomFill());
-  setAgonMobileViewportBottomFill(viewportBottomFill, safeBottomFill);
+  const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
+  const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
+  const safeBottomFill = Math.max(viewportBottomFill, cssSafeBottomFill, legacyBottomFill);
+  setAgonMobileViewportBottomFill(viewportBottomFill, safeBottomFill, legacyBottomFill);
 
   if (window.innerWidth > 768) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
