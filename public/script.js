@@ -19780,7 +19780,7 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
 
 function trimDebateContextLatinBreaks(html) {
   return String(html || "")
-    .replace(/(?:<br>){2,}(<span class="context-latin-question">)/g, "<br>$1")
+    .replace(/(?:<br>)+(<span class="context-latin-question">)/g, "$1")
     .replace(/(<span class="context-latin-question">[^<]*<\/span>)(?:<br>)+/g, "$1");
 }
 
