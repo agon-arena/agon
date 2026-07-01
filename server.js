@@ -5236,7 +5236,7 @@ app.get("/api/debates", async (req, res) => {
       debatesQuery = debatesQuery.eq("category", categoryQuery);
     }
 
-    // Pagination par catégorie du nuage Bulles Gauche/Droite (carousels du front) :
+    // Pagination par catégorie du filtre Gauche/Droite (carousels du front) :
     // sans ce filtre, le "load more" d'une rubrique thématique réinjecte des
     // arènes générales pendant qu'un nuage gauche/droite est actif.
     if (politicalGroupQuery) {

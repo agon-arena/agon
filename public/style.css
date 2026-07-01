@@ -19290,14 +19290,14 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   -webkit-user-select: none;
 }
 
-/* Nuage "Bulles Droite" : même bulle, légèrement plus bleutée pour la distinguer
+/* Nuage "Droite" : même bulle, légèrement plus bleutée pour la distinguer
    du nuage général. */
 .agon-cloud-political-right .agon-tag-bubble {
   background:
     radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(200,222,255,1) 40%, rgba(150,190,250,1) 70%, rgba(95,150,235,1) 100%);
 }
 
-/* Nuage "Bulles Gauche" : même bulle, légèrement rougie pour la distinguer du
+/* Nuage "Gauche" : même bulle, légèrement rougie pour la distinguer du
    nuage général. */
 .agon-cloud-political-left .agon-tag-bubble {
   background:

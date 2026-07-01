@@ -17660,7 +17660,7 @@ function getFilteredDebatesForIndex(baseDebates) {
     filteredDebates = filteredDebates.filter((debate) => !isAgonGeneratedDebate(debate));
   }
 
-  // Tant que le nuage Bulles Gauche/Droite est actif, les thématiques sous le nuage
+  // Tant que le filtre Gauche/Droite est actif, les thématiques sous le nuage
   // ne doivent jamais remélanger les arènes générales avec les arènes gauche/droite —
   // appliqué indépendamment du sous-filtre (Toutes/Débats/Questions/catégorie) pour
   // que ça reste vrai même si l'utilisateur change de filtre sans revenir à "Général".
@@ -18587,7 +18587,7 @@ function buildIndexGlobalLoadMoreSentinelHtml() {
 
 function getAlaUneSourceForCurrentFilters(filteredDebates) {
   const source = Array.isArray(debatesCache) && debatesCache.length ? debatesCache : filteredDebates;
-  // Bulles Gauche/Droite : "À la une" ignore volontairement les bulles de sujet
+  // Filtre Gauche/Droite : "À la une" ignore volontairement les bulles de sujet
   // (cf. commentaire plus haut), mais doit quand même respecter la séparation des
   // 3 nuages — sinon les arènes générales y réapparaissent malgré le filtre actif.
   if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {

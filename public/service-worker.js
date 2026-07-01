@@ -1,4 +1,4 @@
-const SW_VERSION = "20260626-sw-recovery-reason-tracing";
+const SW_VERSION = "20260701-political-filter-labels";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
