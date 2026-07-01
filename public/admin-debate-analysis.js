@@ -19,6 +19,123 @@
     try { return localStorage.getItem('admin_token') || ''; } catch { return ''; }
   }
   function isAdmin() { return !!getAdminToken(); }
+
+  // Jeton obtenu en tapant le mot de passe uniquement pour générer un rapport IA
+  // (cf. ensureAdminForGeneration) : jamais persisté, jamais associé au mode admin
+  // du site, perdu au rechargement de la page.
+  let generationAccessToken = null;
+  function getGenerationToken() { return getAdminToken() || generationAccessToken || ''; }
+
+  // Overlay de contact entièrement autonome (son propre iframe, sa propre croix
+  // de fermeture) : ne passe pas par openDebateIframeModal, qui réutilise le
+  // conteneur déjà occupé par le débat en cours et remplacerait son contenu —
+  // fermer cette overlay-ci laisse donc la page débat intacte en dessous.
+  function showContactOverlay() {
+    const existing = document.getElementById('ada-contact-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ada-contact-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(16,24,32,.6);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+
+    const box = document.createElement('div');
+    box.style.cssText = 'position:relative;width:min(94vw,520px);height:min(88vh,640px);background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.35);';
+
+    // Masque la flèche de fermeture/rafraîchissement du chrome du parent (même
+    // mécanisme que le popup de détail de score IA, cf. argument-ai-detail-overlay)
+    // pendant que cette overlay de contact est ouverte, pour éviter toute confusion
+    // avec deux boutons de fermeture superposés.
+    try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: true }, '*'); } catch (e) {}
+
+    const closeOverlay = () => {
+      overlay.remove();
+      try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: false }, '*'); } catch (e) {}
+    };
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', 'Fermer');
+    closeBtn.style.cssText = 'position:absolute;top:8px;right:8px;z-index:1;width:32px;height:32px;border:none;border-radius:50%;background:rgba(16,24,32,.08);font-size:16px;cursor:pointer;';
+    closeBtn.addEventListener('click', closeOverlay);
+
+    const iframe = document.createElement('iframe');
+    iframe.src = '/contact';
+    iframe.title = 'Contact agôn';
+    iframe.style.cssText = 'width:100%;height:100%;border:0;';
+
+    box.appendChild(closeBtn);
+    box.appendChild(iframe);
+    overlay.appendChild(box);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeOverlay(); });
+
+    document.body.appendChild(overlay);
+  }
+
+  // Modale dédiée (distincte de celle du mode admin) : vocabulaire "code d'accès"
+  // plutôt que "mot de passe administrateur", avec un lien vers le formulaire de
+  // contact pour les visiteurs qui n'ont pas encore de code.
+  function showReportCodeModal() {
+    return new Promise((resolve) => {
+      const existing = document.getElementById('ada-code-modal');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'ada-code-modal';
+      overlay.className = 'custom-modal-overlay';
+      overlay.innerHTML = `
+        <div class="custom-modal-box" style="max-width:420px; width:min(92vw,420px);">
+          <div class="custom-modal-title">Générer le rapport IA</div>
+          <div class="custom-modal-text">Saisis ton code d'accès.</div>
+          <input
+            id="ada-code-input"
+            type="password"
+            autocomplete="off"
+            placeholder="Code d'accès"
+            class="admin-edit-input"
+            style="margin-top:12px;"
+          >
+          <div class="custom-modal-text" style="margin-top:10px;">
+            Pas de code ? <button type="button" id="ada-code-contact-link" style="background:none;border:none;padding:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;">Contacte agôn pour en obtenir un</button>.
+          </div>
+          <div class="custom-modal-actions" style="margin-top:16px;">
+            <button type="button" class="button button-secondary" id="ada-code-cancel">Annuler</button>
+            <button type="button" class="button" id="ada-code-confirm">Valider</button>
+          </div>
+        </div>
+      `;
+
+      const close = (value = '') => {
+        overlay.remove();
+        resolve(String(value || ''));
+      };
+
+      document.body.appendChild(overlay);
+
+      const input = document.getElementById('ada-code-input');
+      const cancelBtn = document.getElementById('ada-code-cancel');
+      const confirmBtn = document.getElementById('ada-code-confirm');
+      const contactLink = document.getElementById('ada-code-contact-link');
+
+      const submit = () => close(input?.value || '');
+
+      cancelBtn?.addEventListener('click', () => close(''));
+      confirmBtn?.addEventListener('click', submit);
+      contactLink?.addEventListener('click', () => {
+        close('');
+        showContactOverlay();
+      });
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) close('');
+      });
+      input?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); submit(); }
+        if (event.key === 'Escape') { event.preventDefault(); close(''); }
+      });
+
+      setTimeout(() => input?.focus(), 0);
+    });
+  }
   function getDebateId() {
     try { return new URLSearchParams(location.search).get('id') || ''; } catch { return ''; }
   }
@@ -2130,7 +2247,7 @@
     try {
       const r    = await fetch('/api/admin/analyze-debate', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': getGenerationToken() },
         body:    JSON.stringify({ debateId })
       });
       const json = await r.json().catch(() => ({}));
@@ -2449,15 +2566,30 @@
         </div>
       </div>`;
 
-    // La génération (coûteuse, appels OpenAI) reste protégée par le mot de passe
-    // admin côté serveur (requireAdmin sur /api/admin/analyze-debate) — mais le
-    // bouton est visible pour tous : si le visiteur n'est pas encore admin, on lui
-    // demande le mot de passe au clic plutôt que de masquer le bouton. La simple
-    // consultation d'un rapport déjà généré (openReport) reste libre, sans mot de passe.
+    // La génération (coûteuse, appels OpenAI) reste protégée par le même mot de
+    // passe que le mode admin (requireAdmin sur /api/admin/analyze-debate) — mais
+    // saisir ce code ici ne doit pas basculer tout le site en mode admin : on
+    // vérifie le mot de passe et on garde le jeton obtenu seulement en mémoire
+    // (generationAccessToken), sans le stocker en localStorage ni appeler
+    // adminLogin()/refreshAdminUI(). La simple consultation d'un rapport déjà
+    // généré (openReport) reste libre, sans mot de passe.
     async function ensureAdminForGeneration() {
-      if (isAdmin()) return true;
-      if (typeof window.adminLogin === 'function') await window.adminLogin();
-      return isAdmin();
+      if (isAdmin() || generationAccessToken) return true;
+      const password = await showReportCodeModal();
+      if (!password) return false;
+      try {
+        const r = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const json = await r.json().catch(() => ({}));
+        if (!r.ok || !json.token) return false;
+        generationAccessToken = json.token;
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
 
     const triggerBtn = document.getElementById('ada-trigger-btn');

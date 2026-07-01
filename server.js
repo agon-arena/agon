@@ -2086,6 +2086,15 @@ function buildBrowserLikeHeaders(url, profile = "browser") {
     };
   }
 
+  if (profile === "googlebot") {
+    return {
+      "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+      "Referer": "https://www.google.com/"
+    };
+  }
+
   return {
     ...commonHeaders,
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
@@ -8094,6 +8103,82 @@ const { generatePopularityAnalysis }  = require('./lib/popularity-analysis');
 // Génère et sauvegarde l'analyse (utilisé par le scheduler et la route admin).
 // Toujours écrite sur l'arène canonique uniquement (cf. _scheduleAnalysisIfNeeded) :
 // les arènes fusionnées la relisent via resolveSharedDebateId, pas de duplication.
+function _extractTextFromHtml(html) {
+  // Supprimer scripts, styles, balises, puis décoder les entités HTML
+  let text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Limiter à ~2500 caractères pour ne pas surcharger le contexte GPT
+  return text.length > 2500 ? text.slice(0, 2500) + '…' : text;
+}
+
+function _isJsChallengePage(text) {
+  if (!text || text.length < 100) return true;
+  const lower = text.toLowerCase();
+  return lower.includes('enable javascript') ||
+         lower.includes('just a moment') ||
+         lower.includes('checking your browser') ||
+         lower.includes('security verification') ||
+         lower.includes('cf-browser-verification') ||
+         (lower.includes('please wait') && lower.includes('cloudflare'));
+}
+
+async function _fetchViaJina(url) {
+  try {
+    const jinaUrl = `https://r.jina.ai/${url}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch(jinaUrl, {
+        headers: { 'Accept': 'text/plain', 'User-Agent': 'Mozilla/5.0' },
+        signal: controller.signal
+      });
+      if (!resp.ok) return null;
+      const text = (await resp.text()).trim();
+      // Jina retourne du Markdown — on filtre les lignes d'en-tête/navigation parasites
+      const lines = text.split('\n').filter(l => l.trim().length > 0);
+      const meaningful = lines.slice(3).join(' ').replace(/\s+/g, ' ').trim();
+      return meaningful.length > 50 ? meaningful.slice(0, 2500) : null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function _fetchSourceContent(url) {
+  try {
+    // 1er essai : profil navigateur standard
+    const r1 = await fetchPreviewHtml(url, 5000, 'browser');
+    if (r1.ok && r1.html) {
+      const t1 = _extractTextFromHtml(r1.html);
+      if (!_isJsChallengePage(t1)) return t1.length > 20 ? t1 : '(non disponible)';
+    }
+    // 2e essai : Jina Reader (gère les sites JS-rendered)
+    const jina = await _fetchViaJina(url);
+    if (jina && !_isJsChallengePage(jina)) return jina;
+    // 3e essai : Googlebot
+    const r3 = await fetchPreviewHtml(url, 6000, 'googlebot');
+    if (r3.ok && r3.html) {
+      const t3 = _extractTextFromHtml(r3.html);
+      if (!_isJsChallengePage(t3)) return t3.length > 20 ? t3 : '(non disponible)';
+    }
+    return '(non disponible)';
+  } catch {
+    return '(non disponible)';
+  }
+}
+
 async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
@@ -8107,7 +8192,7 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {})
     const generationScoreScope = groupIds.length > 1 ? groupIds : null;
     const { score: generationScore } = await _computeAnalysisScore(canonicalId, generationScoreScope);
     const payload = await _fetchDebatePayload(canonicalId, groupIds.length > 1 ? groupIds : null);
-    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts), { forceRescore });
+    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts), { forceRescore, fetchContent: _fetchSourceContent });
     const raw     = JSON.stringify(result);
 
     const { error: saveError } = await supabase.from("debates").update({

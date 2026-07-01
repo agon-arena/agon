@@ -4223,7 +4223,7 @@ function ensureDebateIframeModal() {
       display: none !important;
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
-      inset: 0 0 -180px 0 !important;
+      inset: 0 !important;
       padding: 0 !important;
       align-items: stretch !important;
       justify-content: stretch !important;
@@ -4237,17 +4237,17 @@ function ensureDebateIframeModal() {
       background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat !important;
     }
     #debate-ai-parent-animation-overlay {
-      --debate-ai-parent-bleed: 220px;
+      --debate-ai-parent-bleed: 0px;
       --debate-ai-parent-vvh: 100vh;
       position: fixed;
       top: 0;
       right: 0;
-      bottom: calc(-1 * var(--debate-ai-parent-bleed));
+      bottom: 0 !important;
       left: 0;
       z-index: 100000;
       width: 100vw;
-      height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-bleed));
-      min-height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-bleed));
+      height: var(--debate-ai-parent-vvh, 100vh);
+      min-height: var(--debate-ai-parent-vvh, 100vh);
       overflow: hidden;
       pointer-events: none;
       background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
@@ -4259,8 +4259,8 @@ function ensureDebateIframeModal() {
     }
     @supports (height: 100dvh) {
       #debate-ai-parent-animation-overlay {
-        height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-bleed));
-        min-height: calc(var(--debate-ai-parent-vvh, 100dvh) + var(--debate-ai-parent-bleed));
+        height: var(--debate-ai-parent-vvh, 100dvh);
+        min-height: var(--debate-ai-parent-vvh, 100dvh);
       }
     }
     #debate-ai-parent-animation-overlay::before {
@@ -19924,6 +19924,7 @@ function updateCreateResourceModeUI() {
     sourceInput.required = mode === "source";
     if (mode !== "source") {
       sourceInput.value = "";
+      clearCreateSourceUrlPreview();
     }
   }
 
@@ -19949,6 +19950,66 @@ function updateCreateResourceModeUI() {
     if (mode !== "video") {
       videoInput.value = "";
     }
+  }
+}
+
+function clearCreateSourceUrlPreview() {
+  const container = document.getElementById("create-source-url-preview");
+  if (container) container.innerHTML = "";
+}
+
+let _createSourcePreviewToken = 0;
+async function renderCreateSourceUrlPreview(rawUrl) {
+  const container = document.getElementById("create-source-url-preview");
+  if (!container) return;
+  const token = ++_createSourcePreviewToken;
+
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const safeUrl = normalizeArgumentSourceUrl(trimmed);
+  if (!safeUrl) {
+    container.innerHTML = '<p class="create-source-preview-error">Lien invalide.</p>';
+    return;
+  }
+
+  // YouTube / X / Instagram : rendu enrichi déjà géré par les observers globaux
+  // (hydrateIdeaSourceEmbeds) une fois inséré dans le DOM — même logique que
+  // pour les sources d'idées dans le débat.
+  if (getIdeaYouTubeId(safeUrl) || isIdeaXUrl(safeUrl) || isIdeaInstagramUrl(safeUrl)) {
+    // renderIdeaSourceCardHtml renvoie déjà son propre .idea-source-card-wrap
+    // (avec les attributs data-idea-x-shell / data-idea-instagram-shell requis
+    // par les observers) — pas besoin de le réenvelopper.
+    container.innerHTML = renderIdeaSourceCardHtml(safeUrl);
+    hydrateIdeaSourceEmbeds(container);
+    return;
+  }
+
+  container.innerHTML = '<p class="create-source-preview-loading">Chargement de l’aperçu…</p>';
+
+  const preview = await fetchIdeaOpenGraphPreview(safeUrl);
+  if (token !== _createSourcePreviewToken) return; // une saisie plus récente a pris le relais
+
+  // Le serveur renvoie toujours un objet (jamais null) même quand le site n'a
+  // pas pu être joint : dans ce cas il retombe sur un aperçu générique
+  // (description "Source externe", pas d'image) — c'est le seul signal
+  // disponible côté client pour distinguer "site inaccessible" d'un vrai aperçu.
+  const isUnreachable = !preview || (!preview.image && preview.description === "Source externe");
+  if (isUnreachable) {
+    container.innerHTML = '<p class="create-source-preview-error">Ce lien semble inaccessible : impossible de récupérer un aperçu.</p>';
+    return;
+  }
+
+  container.innerHTML = renderIdeaOpenGraphPreviewHtml(safeUrl, preview);
+  const img = container.querySelector(".idea-source-image");
+  if (img) {
+    img.onerror = () => {
+      const wrap = img.closest(".idea-source-image-wrap");
+      if (wrap) wrap.outerHTML = '<p class="create-source-preview-error create-source-preview-image-error">Image indisponible.</p>';
+    };
   }
 }
 
@@ -21500,6 +21561,15 @@ if (resourceInputs.length) {
       clearTimeout(_similarDebatesTimer);
       const val = e.target.value;
       _similarDebatesTimer = setTimeout(() => renderSimilarDebates(val), 150);
+    });
+  }
+  const createSourceUrlInput = document.getElementById("source_url");
+  if (createSourceUrlInput) {
+    let _createSourcePreviewTimer = null;
+    createSourceUrlInput.addEventListener("input", (e) => {
+      clearTimeout(_createSourcePreviewTimer);
+      const val = e.target.value;
+      _createSourcePreviewTimer = setTimeout(() => renderCreateSourceUrlPreview(val), 400);
     });
   }
 if (cancelPublishButton) {

@@ -90,11 +90,11 @@
     var el = document.createElement('style');
     el.textContent = `
       #aala-overlay {
-        --aala-bottom-bleed: 180px;
-        position: fixed; top: 0; right: 0; bottom: calc(-1 * var(--aala-bottom-bleed)); left: 0; z-index: 100000;
+        --aala-bottom-bleed: 0px;
+        position: fixed; top: 0; right: 0; bottom: 0 !important; left: 0; z-index: 100000;
         width: 100vw;
-        height: auto;
-        min-height: calc(var(--aala-vvh, 100vh) + var(--aala-bottom-bleed));
+        height: var(--aala-vvh, 100vh);
+        min-height: var(--aala-vvh, 100vh);
         --aala-center-y: calc(var(--aala-vvh, 100vh) / 2);
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
@@ -109,8 +109,8 @@
       }
       @supports (height: 100dvh) {
         #aala-overlay {
-          height: auto;
-          min-height: calc(var(--aala-vvh, 100dvh) + var(--aala-bottom-bleed));
+          height: var(--aala-vvh, 100dvh);
+          min-height: var(--aala-vvh, 100dvh);
         }
       }
       #aala-overlay::before {

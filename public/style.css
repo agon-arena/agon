@@ -15810,6 +15810,15 @@ body.page-debate .idea-source-card-wrap {
   margin-top: 10px;
 }
 
+/* Le placeholder de chargement (.index-social-loading-placeholder, partagé avec
+   le carousel X/Instagram de l'index, hauteur verrouillée là-bas — voir mémoire)
+   n'a pas box-sizing:border-box ; avec padding+border ça dépasse de la largeur
+   de la carte tant que la source n'est pas chargée. Correctif borné à cette
+   carte-ci uniquement, sans toucher le carousel de l'index. */
+body.page-debate .idea-source-card-wrap .index-social-loading-placeholder {
+  box-sizing: border-box;
+}
+
 /* Création d'arène : textes légèrement agrandis sans changer la logique du formulaire. */
 body.page-create .arena-type-choice-intro,
 body.page-create-mobile .arena-type-choice-intro {
@@ -15927,6 +15936,31 @@ body.page-create-mobile #toggle-axis-button {
 body.page-create .axis-strictness-option span,
 body.page-create-mobile .axis-strictness-option span {
   font-size: 15px !important;
+}
+
+.create-source-url-preview:not(:empty) {
+  margin-top: 10px;
+}
+
+.create-source-preview-loading {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.create-source-preview-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed rgba(220, 38, 38, 0.35);
+  border-radius: 12px;
+  background: rgba(254, 226, 226, 0.4);
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.create-source-preview-image-error {
+  margin: 0;
 }
 
 @media (max-width: 768px) {
@@ -21100,8 +21134,8 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.ai-loading-animation-open-in-child::after,
   html.aala-overlay-active body::after {
-    bottom: -220px;
-    height: calc(env(safe-area-inset-bottom, 0px) + 220px);
+    bottom: 0;
+    height: env(safe-area-inset-bottom, 0px);
     z-index: 99999;
     background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
   }
@@ -21118,7 +21152,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   #debate-iframe-modal.ai-loading-animation-open-in-child,
   #debate-ai-parent-animation-overlay,
   #aala-overlay {
-    bottom: -220px !important;
+    bottom: 0 !important;
   }
 }
 
@@ -21204,8 +21238,8 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.ai-loading-animation-open-in-child::after,
   html.aala-overlay-active body::after {
-    bottom: -220px;
-    height: calc(env(safe-area-inset-bottom, 0px) + 220px);
+    bottom: 0;
+    height: env(safe-area-inset-bottom, 0px);
     z-index: 99999;
     background: #06161e url("/visuels/fondanimation.webp") center center / cover no-repeat;
   }
@@ -21222,7 +21256,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   #debate-iframe-modal.ai-loading-animation-open-in-child,
   #debate-ai-parent-animation-overlay,
   #aala-overlay {
-    bottom: -220px !important;
+    bottom: 0 !important;
   }
 }
 
@@ -22479,7 +22513,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   #debate-iframe-modal.ai-loading-animation-open-in-child,
   #debate-ai-parent-animation-overlay,
   #aala-overlay {
-    bottom: calc(-220px - var(--agon-safe-bottom)) !important;
+    bottom: 0 !important;
   }
 
   html.ai-loading-animation-open-in-child,
