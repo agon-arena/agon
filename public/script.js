@@ -5189,6 +5189,7 @@ function restoreIndexScrollFromAnchor(anchor = null, fallbackScrollY = null) {
   const anchorTop = Number(anchor?.top || 0);
   const nextTop = Math.max(0, Math.round((window.scrollY || 0) + (rect.top - anchorTop)));
 
+  if (Math.abs(nextTop - (window.scrollY || 0)) < 6) return true;
   window.scrollTo(0, nextTop);
   return true;
 }
