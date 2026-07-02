@@ -4369,8 +4369,8 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       title: "L'arène des idées",
       body: "Les arènes du jour sont ouvertes.",
       url: "/",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png"
+      icon: "/icon-192-optimized.png",
+      badge: "/icon-192-optimized.png"
     });
 
     return res.json({ success: true, ...result });
