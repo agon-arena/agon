@@ -22590,7 +22590,20 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-body,
   body.is-standalone.agon-mobile-cloud-viewport.page-debate .debate-source-fallback .debate-source-card .debate-source-card-body {
-    padding-bottom: calc(14px + var(--agon-debate-source-bottom-fill, 0px)) !important;
+    padding-bottom: 14px !important;
+  }
+
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-image-wrap,
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate .debate-source-fallback .debate-source-card .debate-source-card-image-wrap {
+    aspect-ratio: auto !important;
+    height: calc((100vw - 28px) * 0.5625 + var(--agon-debate-source-bottom-fill, 0px)) !important;
+    min-height: calc((100vw - 28px) * 0.5625 + var(--agon-debate-source-bottom-fill, 0px)) !important;
+  }
+
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-image,
+  body.is-standalone.agon-mobile-cloud-viewport.page-debate .debate-source-fallback .debate-source-card .debate-source-card-image {
+    height: 100% !important;
+    object-fit: cover !important;
   }
 
   #debate-iframe-modal.open {
