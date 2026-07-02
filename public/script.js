@@ -31680,6 +31680,14 @@ function isAgonVisibleElement(el) {
 
 function getAgonDebateBottomSurface() {
   const selectors = [
+    "#debate-source-fallback .debate-source-card-image-wrap",
+    "#debate-source-fallback .debate-source-card-image",
+    "#debate-source-preview-poster-img",
+    "#debate-source-preview-poster",
+    "#debate-source-preview",
+    "#debate-image",
+    "#debate-image-wrap img",
+    "#debate-video-wrap video",
     "#debate-source-fallback .debate-source-card",
     "#debate-source-fallback",
     "#debate-source-preview-wrap",
