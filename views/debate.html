@@ -122,6 +122,81 @@ try {
   }
 } catch (e) {}
 </script>
+<script>
+/* AGON-DEBUG-VP : diagnostic temporaire du viewport standalone (à retirer). */
+(function () {
+  var isStandalone = false;
+  try {
+    isStandalone = !!(navigator.standalone || window.matchMedia("(display-mode: standalone)").matches);
+  } catch (e) {}
+  if (!isStandalone && window.location.search.indexOf("debugvp") === -1) return;
+
+  function px(v) { return Math.round(v * 10) / 10 + "px"; }
+
+  var panel = document.createElement("div");
+  panel.id = "agon-debug-vp";
+  panel.style.cssText = "position:fixed;left:6px;bottom:60px;z-index:2147483647;background:rgba(0,0,0,.82);color:#0f0;font:10px/1.5 monospace;padding:6px 8px;border-radius:6px;pointer-events:auto;white-space:pre;max-width:92vw;";
+  panel.addEventListener("click", function () { panel.style.display = "none"; });
+
+  // Ligne rouge = bas du layout viewport (fixed bottom:0)
+  var redLine = document.createElement("div");
+  redLine.style.cssText = "position:fixed;left:0;right:0;bottom:0;height:3px;background:red;z-index:2147483647;pointer-events:none;";
+
+  // Ligne jaune = bas repoussé de env(safe-area-inset-bottom)
+  var yellowLine = document.createElement("div");
+  yellowLine.style.cssText = "position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom,0px);height:3px;background:yellow;z-index:2147483647;pointer-events:none;";
+
+  // Sonde env(safe-area-inset-bottom)
+  var probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;left:0;bottom:0;width:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none;";
+
+  // Sondes d'unités viewport
+  function unitProbe(h) {
+    var d = document.createElement("div");
+    d.style.cssText = "position:fixed;left:0;top:0;width:0;visibility:hidden;pointer-events:none;height:" + h + ";";
+    return d;
+  }
+  var pVh = unitProbe("100vh"), pDvh = unitProbe("100dvh"), pLvh = unitProbe("100lvh"), pSvh = unitProbe("100svh"), pFill = unitProbe("-webkit-fill-available");
+
+  function mount() {
+    var b = document.body;
+    [panel, redLine, yellowLine, probe, pVh, pDvh, pLvh, pSvh, pFill].forEach(function (el) { b.appendChild(el); });
+    update();
+    setInterval(update, 700);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", update);
+      window.visualViewport.addEventListener("scroll", update);
+    }
+  }
+
+  function cssVar(name) {
+    try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "(vide)"; } catch (e) { return "?"; }
+  }
+
+  function update() {
+    var vv = window.visualViewport;
+    var envBottom = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    var lines = [
+      "inner: " + window.innerWidth + "x" + window.innerHeight,
+      "clientH: " + document.documentElement.clientHeight,
+      "screen: " + screen.width + "x" + screen.height + " dpr:" + window.devicePixelRatio,
+      "vv: " + (vv ? Math.round(vv.width) + "x" + Math.round(vv.height) + " top:" + Math.round(vv.offsetTop) + " scale:" + vv.scale : "absent"),
+      "env(bottom): " + px(envBottom),
+      "100vh:" + Math.round(pVh.offsetHeight) + " dvh:" + Math.round(pDvh.offsetHeight) + " lvh:" + Math.round(pLvh.offsetHeight) + " svh:" + Math.round(pSvh.offsetHeight) + " fill:" + Math.round(pFill.offsetHeight),
+      "scrollY: " + Math.round(window.scrollY) + " docH: " + Math.round(document.documentElement.scrollHeight),
+      "--agon-safe-bottom: " + cssVar("--agon-safe-bottom"),
+      "--legacy-fill: " + cssVar("--agon-legacy-standalone-bottom-fill"),
+      "--source-fill: " + cssVar("--agon-debate-source-bottom-fill"),
+      "standalone: " + (navigator.standalone === undefined ? "n/a" : navigator.standalone) + " / mq:" + (window.matchMedia("(display-mode: standalone)").matches)
+    ];
+    panel.textContent = lines.join("\n");
+  }
+
+  if (document.body) { mount(); } else { document.addEventListener("DOMContentLoaded", mount); }
+})();
+</script>
 
 <button type="button" class="mobile-back-button" aria-label="Retour aux arènes">
   <i class="fa-solid fa-arrow-left"></i>
