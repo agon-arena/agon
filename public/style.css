@@ -22926,3 +22926,26 @@ body.page-create-mobile .create-card .create-submit-helper {
     min-height: calc(var(--debate-ai-parent-vvh, 100vh) + var(--debate-ai-parent-safe-bottom, 0px) + 96px) !important;
   }
 }
+
+/* Dernier essai iPhone standalone ancien : au lieu de peindre un fond en bas,
+   on descend le média/source visible dans la zone que l'ancien viewport laisse
+   découverte. La variable vaut 0 sur les appareils où la safe-area est fiable. */
+@media (display-mode: standalone) and (max-width: 768px) {
+  body.is-standalone.page-debate {
+    --agon-debate-legacy-media-shift-y: var(--agon-legacy-standalone-bottom-fill, 0px);
+  }
+
+  body.is-standalone.page-debate #debate-source-fallback,
+  body.is-standalone.page-debate .debate-source-fallback,
+  body.is-standalone.page-debate #debate-image-wrap,
+  body.is-standalone.page-debate .debate-image-wrap,
+  body.is-standalone.page-debate #debate-source-preview-wrap,
+  body.is-standalone.page-debate .debate-source-preview-wrap,
+  body.is-standalone.page-debate #debate-video-wrap,
+  body.is-standalone.page-debate .debate-video-wrap {
+    position: relative;
+    top: var(--agon-debate-legacy-media-shift-y, 0px);
+    z-index: 3;
+    margin-bottom: var(--agon-debate-legacy-media-shift-y, 0px) !important;
+  }
+}
