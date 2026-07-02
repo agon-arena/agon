@@ -112,6 +112,20 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    /* Quirk WebKit des iPhone X/XS/11 Pro en standalone (constaté encore sous
+       iOS 18.7) : sans calque background-attachment:fixed sur <html>, le
+       compositeur n'affiche pas les ~44 derniers px de l'écran (zone du
+       home-indicator) alors que le layout les croit visibles — d'où la bande
+       de la couleur du manifest en bas. Le calque force le compositing pleine
+       surface tout en restant invisible (même couleur que le fond). Exclu
+       pendant l'animation IA, dont le fond de <html> doit reprendre la main
+       (il déclenche lui-même le même effet). Doit rester après style.min.css
+       pour gagner l'égalité de !important sur la règle html du bloc final. */
+    html.is-standalone:not(.aala-overlay-active):not(.ai-loading-animation-open-in-child) {
+      background: linear-gradient(#243038, #243038) left bottom / 100% 24px no-repeat fixed, #243038 !important;
+    }
+  </style>
 </head>
 <body class="page-debate">
 <script>
@@ -151,20 +165,6 @@ try {
   // Ligne jaune = bas repoussé de env(safe-area-inset-bottom)
   var yellowLine = document.createElement("div");
   yellowLine.style.cssText = "position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom,0px);height:3px;background:yellow;z-index:2147483647;pointer-events:none;";
-
-  // Bloc cyan = fixed accroché à <html> (hors body) : détecte un clip posé sur body.
-  var cyanBlock = document.createElement("div");
-  cyanBlock.style.cssText = "position:fixed;left:0;bottom:0;width:44px;height:80px;background:cyan;z-index:2147483646;pointer-events:none;";
-  document.documentElement.appendChild(cyanBlock);
-
-  // Test canvas : le fond de <html> est propagé sur toute la surface système
-  // (c'est lui qui couvrait la bande pendant l'animation IA). Bande orange de
-  // 24px collée au bas du viewport en attachment fixed.
-  document.documentElement.style.setProperty(
-    "background",
-    "linear-gradient(#f80,#f80) left bottom / 100% 24px no-repeat fixed, #243038",
-    "important"
-  );
 
   // Sonde env(safe-area-inset-bottom)
   var probe = document.createElement("div");
