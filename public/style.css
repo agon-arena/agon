@@ -22778,9 +22778,22 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.is-standalone.page-debate {
+    --agon-standalone-bottom-cover: max(
+      36px,
+      env(safe-area-inset-bottom, 0px),
+      var(--agon-safe-bottom, 0px),
+      var(--agon-mobile-bottom-fill, 0px),
+      var(--agon-legacy-standalone-bottom-fill, 0px)
+    );
     min-height: calc(100dvh + var(--agon-standalone-bottom-cover, 0px)) !important;
     padding-bottom: var(--agon-standalone-bottom-cover, 0px);
     background: #243038 !important;
+  }
+
+  body.is-standalone.page-debate:not(.admin-edit-open):not(.argument-form-open)::after {
+    content: none !important;
+    display: none !important;
+    background: transparent !important;
   }
 
   body.is-standalone.page-home-mobile::before,
@@ -22815,7 +22828,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     right: 0;
     bottom: 0;
     height: var(--agon-standalone-bottom-cover, 0px);
-    min-height: env(safe-area-inset-bottom, 0px);
+    min-height: max(36px, env(safe-area-inset-bottom, 0px));
     z-index: 2;
     pointer-events: none;
     background: #243038;

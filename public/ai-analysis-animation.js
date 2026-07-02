@@ -34,6 +34,14 @@
     if (height) overlay.style.setProperty('--aala-vvh', height + 'px');
   }
 
+  function refreshStandaloneBottomSurfaces() {
+    try {
+      if (typeof window.__agonRefreshStandaloneBottomSurfaces === 'function') {
+        window.__agonRefreshStandaloneBottomSurfaces();
+      }
+    } catch (e) {}
+  }
+
   function bindViewportSync() {
     if (_viewportBound) return;
     _viewportBound = true;
@@ -312,8 +320,10 @@
       document.documentElement.classList.add('aala-overlay-active');
       document.body.appendChild(buildOverlay());
       syncOverlayViewportSize();
+      refreshStandaloneBottomSurfaces();
       requestAnimationFrame(syncOverlayViewportSize);
       setTimeout(syncOverlayViewportSize, 120);
+      setTimeout(refreshStandaloneBottomSurfaces, 180);
       try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: true }, '*'); } catch (e) {}
     });
   }
@@ -345,11 +355,14 @@
           setTimeout(function () {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             document.documentElement.classList.remove('aala-overlay-active');
+            refreshStandaloneBottomSurfaces();
+            setTimeout(refreshStandaloneBottomSurfaces, 180);
             try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: false }, '*'); } catch (e) {}
             if (callback) callback();
           }, FADE_MS);
         } else {
           document.documentElement.classList.remove('aala-overlay-active');
+          refreshStandaloneBottomSurfaces();
           if (callback) callback();
         }
       }, remaining);
