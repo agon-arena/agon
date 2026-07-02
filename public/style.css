@@ -13848,10 +13848,12 @@ body.page-debate .debate-context-text .context-latin-question {
 }
 
 body.page-debate .debate-context-text .context-debate-question {
+  display: block;
   text-align: center;
   text-indent: 0;
   font-style: italic;
   margin-top: 1em;
+  margin-bottom: 0;
 }
 
 body.page-debate .debate-context-text .context-reflection-question {
@@ -13866,7 +13868,7 @@ body.page-debate .debate-context-text .context-signature {
   text-align: left;
   text-indent: 0 !important;
   font-weight: 400 !important;
-  margin-top: 0.55em;
+  margin-top: 0.65em;
   margin-bottom: 0.45em;
 }
 

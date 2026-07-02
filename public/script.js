@@ -16173,8 +16173,17 @@ function renderIndexContextExpandedText(text, isOpen = false) {
   }
   const beforeLatin = rawText.slice(0, latinStart);
   const afterLatin = rawText.slice(latinStart + latinQuestion.length, questionStart).replace(/^\n{2,}/, "\n");
-  const afterQuestion = rawText.slice(questionStart + question.length).replace(/^\n{2,}/, "\n");
-  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="context-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}`;
+  const signatureStart = hasAgonTail
+    ? rawText.indexOf(signature, questionStart + question.length)
+    : -1;
+  const rawAfterQuestion = rawText.slice(questionStart + question.length, signatureStart >= 0 ? signatureStart : undefined);
+  const afterQuestion = signatureStart >= 0 && !rawAfterQuestion.trim()
+    ? ""
+    : rawAfterQuestion.replace(/^\n{2,}/, "\n");
+  const afterSignature = signatureStart >= 0
+    ? rawText.slice(signatureStart + signature.length).replace(/^\n{2,}/, "\n")
+    : "";
+  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="context-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}${signatureStart >= 0 ? `<span class="context-signature">${escapeHtml(signature)}</span>${escapeHtmlNl(afterSignature)}` : ""}`;
 }
 
 function closeIndexContextPreview(button) {
@@ -19821,7 +19830,8 @@ function renderAgonArticleContextHtml(content, isOpen = false) {
 function trimDebateContextLatinBreaks(html) {
   return String(html || "")
     .replace(/(?:<br>)+(<span class="context-latin-question">)/g, "$1")
-    .replace(/(<span class="context-latin-question">[^<]*<\/span>)(?:<br>)+/g, "$1");
+    .replace(/(<span class="context-latin-question">[^<]*<\/span>)(?:<br>)+/g, "$1")
+    .replace(/(<span class="context-debate-question">[^<]*<\/span>)(?:<br>)+(?=(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+)/g, "$1");
 }
 
 function renderDebateContextArticleHtml(content, isOpen = false) {

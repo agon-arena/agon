@@ -1,4 +1,4 @@
-const SW_VERSION = "20260702-index-og-loaded-cache";
+const SW_VERSION = "20260702-debate-context-signature-gap";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
