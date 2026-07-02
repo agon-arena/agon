@@ -1,4 +1,4 @@
-const SW_VERSION = "20260702-debate-dynamic-bottom-fill";
+const SW_VERSION = "20260702-index-og-loaded-cache";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en

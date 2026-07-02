@@ -7269,6 +7269,31 @@ function setDebateSourcePreviewLoadingElement(sourceLoading, isVisible, label = 
   sourceLoading.style.justifyContent = 'center';
 }
 
+const INDEX_OG_IMAGE_LOADED_CACHE_MAX = 120;
+const indexOpenGraphLoadedImageUrls = new Set();
+
+function normalizeIndexOpenGraphImageCacheUrl(url) {
+  return String(url || '').trim();
+}
+
+function hasLoadedIndexOpenGraphImage(url) {
+  const key = normalizeIndexOpenGraphImageCacheUrl(url);
+  return !!key && indexOpenGraphLoadedImageUrls.has(key);
+}
+
+function markIndexOpenGraphImageLoaded(url) {
+  const key = normalizeIndexOpenGraphImageCacheUrl(url);
+  if (!key) return;
+  if (indexOpenGraphLoadedImageUrls.has(key)) {
+    indexOpenGraphLoadedImageUrls.delete(key);
+  }
+  indexOpenGraphLoadedImageUrls.add(key);
+  while (indexOpenGraphLoadedImageUrls.size > INDEX_OG_IMAGE_LOADED_CACHE_MAX) {
+    const oldestKey = indexOpenGraphLoadedImageUrls.keys().next().value;
+    indexOpenGraphLoadedImageUrls.delete(oldestKey);
+  }
+}
+
 function renderIndexOpenGraphImageShell(shell) {
   if (!shell || shell.dataset.rendered === 'true' || shell.dataset.rendering === 'true') return;
 
@@ -7295,6 +7320,7 @@ function renderIndexOpenGraphImageShell(shell) {
 
   const finish = () => {
     clearTimer();
+    markIndexOpenGraphImageLoaded(imageUrl);
     img.style.display = 'block';
     img.style.opacity = '1';
     if (loading) loading.style.display = 'none';
@@ -10972,6 +10998,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const title = normalizedPreview.title || domain;
   const description = normalizedPreview.description || "";
   const image = normalizedPreview.image || "";
+  const imageAlreadyLoaded = hasLoadedIndexOpenGraphImage(image);
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
   const badgeLabel = String(options?.badgeLabel || '').trim() || domain;
@@ -11010,11 +11037,11 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
       ${showImageArea ? `
       <div
         class="debate-source-card-image-wrap"
-        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"` : ''}
+        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"${imageAlreadyLoaded ? ' data-rendered="true"' : ''}` : ''}
         style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
       >
         ${image ? `
-        <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:flex; width:100%; height:100%;">
+        <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:${imageAlreadyLoaded ? 'none' : 'flex'}; width:100%; height:100%;">
           ${buildIndexOpenGraphImageLoadingHtml()}
         </div>
         ` : ''}
@@ -11022,9 +11049,10 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
         <img
           class="debate-source-card-image"
           data-index-og-image
+          ${imageAlreadyLoaded ? `src="${escapeAttribute(image)}"` : ''}
           alt="${escapeAttribute(title)}"
           decoding="async"
-          style="display:none; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity 0.18s ease;"
+          style="display:${imageAlreadyLoaded ? 'block' : 'none'}; width:100%; height:100%; object-fit:cover; opacity:${imageAlreadyLoaded ? '1' : '0'}; transition:opacity 0.18s ease;"
         >
         ` : ''}
         <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
