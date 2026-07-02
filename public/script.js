@@ -16161,7 +16161,7 @@ function renderIndexContextExpandedText(text, isOpen = false) {
     const afterLast = rawText.slice(lastStart + lastPart.length).replace(/^\n{2,}/, "\n");
     const lastHtml = /[?？]$/.test(lastPart)
       ? `<span class="context-reflection-question">${escapeHtml(lastPart)}</span>`
-      : escapeHtml(lastPart);
+      : escapeHtmlNl(lastPart);
     return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndLast)}${lastHtml}${escapeHtmlNl(afterLast)}`;
   }
 
@@ -31709,10 +31709,13 @@ function updateAgonStandaloneBottomSurfaceFill() {
     return;
   }
 
+  const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
+  const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
+  const minimumBottomFill = Math.max(cssSafeBottomFill, legacyBottomFill);
   const surface = getAgonDebateBottomSurface();
   const viewportBottom = getAgonViewportBottomY();
   if (!surface || !viewportBottom) {
-    setAgonDebateSourceBottomFill(0);
+    setAgonDebateSourceBottomFill(minimumBottomFill);
     return;
   }
 
@@ -31721,12 +31724,12 @@ function updateAgonStandaloneBottomSurfaceFill() {
 
   const current = agonDebateSourceBottomFillPx;
   const gap = Math.round(viewportBottom - rect.bottom);
-  let next = current;
+  let next = Math.max(current, minimumBottomFill);
 
   if (gap > 1 && gap <= 220) {
-    next = Math.min(220, current + gap);
+    next = Math.min(220, next + gap);
   } else if (gap < -2) {
-    next = Math.max(0, current + gap);
+    next = Math.max(minimumBottomFill, current + gap);
   }
 
   setAgonDebateSourceBottomFill(next);
