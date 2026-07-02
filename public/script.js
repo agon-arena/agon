@@ -207,6 +207,18 @@ function __agonRecordReloadReason(reason) {
 
     const skipStartup = window.__agonSkipStartupOnce === true;
 
+    // Un déchargement normal (navigation, fermeture) écrit toujours un snapshot
+    // "pagehide"/"beforeunload" en dernier. Si le dernier snapshot est un simple
+    // changement de visibilité récent, la page précédente est morte sans être
+    // déchargée proprement : processus WebKit tué (mémoire) ou crashé.
+    const lifecycleAgeMs = lastLifecycleSnapshot?.timestamp
+      ? Date.now() - new Date(lastLifecycleSnapshot.timestamp).getTime()
+      : null;
+    const lifecycleWasCleanUnload =
+      lastLifecycleSnapshot?.reason === "pagehide" ||
+      lastLifecycleSnapshot?.reason === "beforeunload";
+    const isStandaloneDisplay = !!(window.navigator.standalone || window.matchMedia?.("(display-mode: standalone)")?.matches);
+
     let likelyCause = "navigation normale (premier chargement ou lien cliqué)";
     if (lastReloadReason) {
       likelyCause = "code Agôn : " + lastReloadReason.reason;
@@ -216,6 +228,17 @@ function __agonRecordReloadReason(reason) {
       likelyCause = "reload sans motif connu de notre code : navigateur/OS, crash, ou erreur réseau/surcharge indéterminée";
     } else if (wasDiscarded) {
       likelyCause = "navigateur mobile : onglet déchargé pour mémoire (tab discard)";
+    } else if (
+      navigationType === "navigate" &&
+      lastLifecycleSnapshot &&
+      !lifecycleWasCleanUnload &&
+      lifecycleAgeMs !== null &&
+      lifecycleAgeMs >= 0 &&
+      lifecycleAgeMs < 10 * 60 * 1000
+    ) {
+      likelyCause = isStandaloneDisplay
+        ? "processus WebKit tué/crashé sans pagehide (mémoire probable) puis relance de la PWA standalone sur son URL de départ"
+        : "page précédente morte sans pagehide (kill mémoire ou crash) puis nouvelle navigation";
     }
 
     if (__AGON_DEBUG_REFRESH_ENABLED) {
@@ -231,6 +254,9 @@ function __agonRecordReloadReason(reason) {
         userAgent: String(navigator.userAgent || ""),
         previousLifecycleReason: lastLifecycleSnapshot?.reason || null,
         previousLifecycleAt: lastLifecycleSnapshot?.timestamp || null,
+        previousLifecycleAgeMs: lifecycleAgeMs,
+        previousLifecycleUrl: lastLifecycleSnapshot?.url || null,
+        previousLifecycleModalOpen: lastLifecycleSnapshot?.modalOpen ?? null,
         previousLifecycleHidden: lastLifecycleSnapshot?.hidden ?? null,
         previousLifecyclePagehidePersisted: lastLifecycleSnapshot?.pagehidePersisted ?? null,
         previousLifecycleTimeSinceHiddenMs: lastLifecycleSnapshot?.timeSinceHiddenMs ?? null,
@@ -4778,9 +4804,25 @@ function findIndexDebateCardById(debateId = "") {
   }) || null;
 }
 
+// Reprise étalée des embeds X/Instagram après fermeture de la modale débat :
+// recharger toutes les iframes d'un coup pendant que l'iframe débat est encore
+// en mémoire provoque un pic mémoire qui peut faire tuer le processus WebKit
+// sur les vieux iPhones en standalone (relance PWA + animation de démarrage).
+const INDEX_EMBED_RESUME_STAGGER_MS = 350;
+let __agonIndexEmbedResumeTimer = null;
+
+function cancelStaggeredIndexEmbedResume() {
+  if (__agonIndexEmbedResumeTimer !== null) {
+    clearTimeout(__agonIndexEmbedResumeTimer);
+    __agonIndexEmbedResumeTimer = null;
+  }
+}
+
 function suspendIndexEmbedsForDebateModal() {
   // Toujours exécuter même si déjà suspendu : l'ouverture d'iframe doit
   // éteindre la vidéo index à chaque fois, sans exception.
+  cancelStaggeredIndexEmbedResume();
+  const pendingState = window.__agonSuspendedIndexEmbeds;
   window.__agonSuspendedIndexEmbeds = null;
 
   const state = {
@@ -4817,7 +4859,15 @@ function suspendIndexEmbedsForDebateModal() {
   document.querySelectorAll('[data-index-x-shell] iframe, [data-index-instagram-shell] iframe').forEach((iframe) => {
     if (!(iframe instanceof HTMLIFrameElement)) return;
     const currentSrc = String(iframe.getAttribute('src') || '').trim();
-    if (!currentSrc || currentSrc === 'about:blank') return;
+    if (!currentSrc || currentSrc === 'about:blank') {
+      // Iframe dont la reprise étalée n'avait pas encore eu lieu : récupérer
+      // son src sauvegardé dans l'état précédent pour ne pas le perdre.
+      const pending = (pendingState?.iframes || []).find((entry) => entry.iframe === iframe);
+      if (pending && String(pending.src || '').trim()) {
+        state.iframes.push({ iframe, src: pending.src });
+      }
+      return;
+    }
     state.iframes.push({ iframe, src: currentSrc });
     try { iframe.setAttribute('src', 'about:blank'); } catch (error) {}
   });
@@ -4826,17 +4876,9 @@ function suspendIndexEmbedsForDebateModal() {
 }
 
 function resumeIndexEmbedsAfterDebateModal() {
+  cancelStaggeredIndexEmbedResume();
   const state = window.__agonSuspendedIndexEmbeds;
-  window.__agonSuspendedIndexEmbeds = null;
   if (!state) return;
-
-  (state.iframes || []).forEach(({ iframe, src }) => {
-    if (!(iframe instanceof HTMLIFrameElement) || !iframe.isConnected) return;
-    if (!String(src || '').trim()) return;
-    try {
-      iframe.setAttribute('src', src);
-    } catch (error) {}
-  });
 
   (state.localVideos || []).forEach(({ video }) => {
     if (!(video instanceof HTMLVideoElement) || !video.isConnected) return;
@@ -4844,6 +4886,41 @@ function resumeIndexEmbedsAfterDebateModal() {
       video.pause();
     } catch (error) {}
   });
+  state.localVideos = [];
+
+  // Distance au viewport : les embeds visibles ou proches reviennent d'abord.
+  const distanceToViewport = (iframe) => {
+    try {
+      const rect = iframe.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || 0;
+      if (rect.bottom < 0) return -rect.bottom;
+      if (rect.top > viewportHeight) return rect.top - viewportHeight;
+      return 0;
+    } catch (error) {
+      return Infinity;
+    }
+  };
+
+  state.iframes = (state.iframes || [])
+    .filter(({ iframe, src }) => iframe instanceof HTMLIFrameElement && String(src || '').trim())
+    .sort((a, b) => distanceToViewport(a.iframe) - distanceToViewport(b.iframe));
+
+  // L'état reste dans window.__agonSuspendedIndexEmbeds tant que la file n'est
+  // pas vidée : si une arène est rouverte pendant la reprise, la suspension
+  // suivante y retrouve les src pas encore restaurés.
+  const restoreNext = () => {
+    __agonIndexEmbedResumeTimer = null;
+    const entry = state.iframes.shift();
+    if (entry && entry.iframe.isConnected) {
+      try { entry.iframe.setAttribute('src', entry.src); } catch (error) {}
+    }
+    if (!state.iframes.length) {
+      if (window.__agonSuspendedIndexEmbeds === state) window.__agonSuspendedIndexEmbeds = null;
+      return;
+    }
+    __agonIndexEmbedResumeTimer = setTimeout(restoreNext, INDEX_EMBED_RESUME_STAGGER_MS);
+  };
+  restoreNext();
 }
 
 function pauseDebatePageMediaForIframeClose() {
@@ -4875,7 +4952,12 @@ function pauseDebatePageMediaForIframeClose() {
 }
 
 function scheduleDebateIframeFrameTeardown(frame, modal) {
-  if (!(frame instanceof HTMLIFrameElement)) return;
+  // La reprise des embeds index attend que l'iframe débat soit vidée : la
+  // mémoire du débat est libérée avant de recharger les iframes X/Instagram.
+  if (!(frame instanceof HTMLIFrameElement)) {
+    resumeIndexEmbedsAfterDebateModal();
+    return;
+  }
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -4884,6 +4966,7 @@ function scheduleDebateIframeFrameTeardown(frame, modal) {
         frame.removeAttribute('src');
         frame.src = 'about:blank';
       } catch (error) {}
+      resumeIndexEmbedsAfterDebateModal();
     });
   });
 }
@@ -5349,7 +5432,8 @@ function closeDebateIframeModal(options = {}) {
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
   document.body.classList.remove("index-background-suspended");
-  resumeIndexEmbedsAfterDebateModal();
+  // Reprise des embeds différée : déclenchée par scheduleDebateIframeFrameTeardown
+  // ci-dessous, une fois l'iframe débat vidée.
 
   const restoredScrollY = _debateModalSavedScrollY !== null
     ? Math.max(0, Math.round(_debateModalSavedScrollY))
