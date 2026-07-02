@@ -1,4 +1,4 @@
-const SW_VERSION = "20260702-debate-context-signature-gap";
+const SW_VERSION = "20260702-standalone-root-bottom-cover";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en

@@ -542,7 +542,21 @@ function isStandaloneMode() {
   return false;
 }
 
-if (isStandaloneMode()) document.body.classList.add("is-standalone");
+if (isStandaloneMode()) {
+  document.documentElement.classList.add("is-standalone");
+  document.body.classList.add("is-standalone");
+}
+
+function ensureAgonStandaloneBottomCover() {
+  const body = document.body;
+  if (!body || !body.classList.contains("page-debate") || !isAgonStandaloneMobileScreen()) return;
+  if (document.getElementById("agon-standalone-bottom-cover")) return;
+  const cover = document.createElement("div");
+  cover.id = "agon-standalone-bottom-cover";
+  cover.className = "agon-standalone-bottom-cover";
+  cover.setAttribute("aria-hidden", "true");
+  body.appendChild(cover);
+}
 
 if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
   fetch(API + "/users/mark-app-installed", {
@@ -3808,8 +3822,17 @@ function syncDebateIframeModalPageClass(pathname = "") {
 function syncDebateIframeAiParentAnimationViewport() {
   const overlay = document.getElementById("debate-ai-parent-animation-overlay");
   if (!overlay) return;
+  const visibleHeight = Math.ceil(
+      Math.max(
+        window.visualViewport?.height || 0,
+        window.innerHeight || 0,
+        document.documentElement.clientHeight || 0
+      )
+    );
+  const visibleOffsetTop = Math.max(0, Math.round(Number(window.visualViewport?.offsetTop || 0)));
   const height = Math.ceil(
       Math.max(
+        visibleHeight || 0,
         window.visualViewport?.height || 0,
         window.innerHeight || 0,
         document.documentElement.clientHeight || 0,
@@ -3817,6 +3840,7 @@ function syncDebateIframeAiParentAnimationViewport() {
       )
     );
   if (height) overlay.style.setProperty("--debate-ai-parent-vvh", `${height}px`);
+  if (visibleHeight) overlay.style.setProperty("--debate-ai-parent-center-y", `${Math.round(visibleOffsetTop + (visibleHeight / 2))}px`);
 }
 
 function bindDebateIframeAiParentAnimationViewportSync() {
@@ -3878,6 +3902,7 @@ function hideDebateIframeAiParentAnimationOverlay() {
 
 function refreshAgonStandaloneBottomSurfacesAfterViewportChange() {
   const refresh = () => {
+    try { ensureAgonStandaloneBottomCover(); } catch {}
     try { scheduleHomeBottomNavViewportOffsetUpdate(); } catch {}
     try { scheduleAgonStandaloneBottomSurfaceFillUpdate(); } catch {}
   };
@@ -4252,6 +4277,7 @@ function ensureDebateIframeModal() {
     #debate-ai-parent-animation-overlay {
       --debate-ai-parent-bleed: 0px;
       --debate-ai-parent-vvh: 100vh;
+      --debate-ai-parent-center-y: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
       --debate-ai-parent-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
       position: fixed;
       top: 0;
@@ -4303,7 +4329,7 @@ function ensureDebateIframeModal() {
     }
     .debate-ai-parent-sablier {
       position: absolute;
-      top: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
+      top: var(--debate-ai-parent-center-y, calc(var(--debate-ai-parent-vvh, 100vh) / 2));
       left: 50%;
       width: 140px;
       height: 140px;
@@ -4318,7 +4344,7 @@ function ensureDebateIframeModal() {
     }
     .debate-ai-parent-brain {
       position: absolute;
-      top: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
+      top: var(--debate-ai-parent-center-y, calc(var(--debate-ai-parent-vvh, 100vh) / 2));
       left: 50%;
       z-index: 2;
       pointer-events: none;
@@ -31790,6 +31816,7 @@ function bindAgonStandaloneBottomSurfaceFillSync() {
 
 bindAgonMobileViewportBottomFillSync();
 bindAgonStandaloneBottomSurfaceFillSync();
+ensureAgonStandaloneBottomCover();
 window.__agonRefreshStandaloneBottomSurfaces = refreshAgonStandaloneBottomSurfacesAfterViewportChange;
 
 function ensureHomeTopbarContactLink() {

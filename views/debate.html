@@ -29,6 +29,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
+<script>
+(function(){
+  document.documentElement.classList.add("page-debate-root");
+  try {
+    if (window.navigator.standalone || window.matchMedia("(display-mode: standalone)").matches) {
+      document.documentElement.classList.add("is-standalone");
+    }
+  } catch (e) {}
+})();
+</script>
 <style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
 <script id="agon-idle-home-guard">
 (function(){
@@ -106,7 +116,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260702-debate-context-signature-gap" />
+<link rel="stylesheet" href="/style.min.css?v=20260702-standalone-root-bottom-cover" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -917,7 +927,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260702-debate-context-signature-gap" defer></script>
+	<script src="/script.min.js?v=20260702-standalone-root-bottom-cover" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

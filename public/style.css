@@ -22837,6 +22837,31 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: translateZ(0);
   }
 
+  html.is-standalone.page-debate-root::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: max(56px, var(--agon-standalone-bottom-cover, 0px));
+    z-index: 48;
+    pointer-events: none;
+    background: #243038;
+    transform: translateZ(0);
+  }
+
+  body.is-standalone.page-debate .agon-standalone-bottom-cover {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: max(56px, var(--agon-standalone-bottom-cover, 0px));
+    z-index: 49;
+    pointer-events: none;
+    background: #243038;
+    transform: translateZ(0);
+  }
+
   body.ai-loading-animation-open-in-child::before,
   html.aala-overlay-active body::before {
     content: "";
@@ -22850,6 +22875,13 @@ body.page-create-mobile .create-card .create-submit-helper {
     pointer-events: none;
     background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
     transform: translateZ(0);
+  }
+
+  html.is-standalone.page-debate-root.ai-loading-animation-open-in-child::before,
+  html.is-standalone.page-debate-root.aala-overlay-active::before,
+  body.is-standalone.page-debate.ai-loading-animation-open-in-child .agon-standalone-bottom-cover,
+  html.aala-overlay-active body.is-standalone.page-debate .agon-standalone-bottom-cover {
+    background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
   }
 
   #aala-overlay {
