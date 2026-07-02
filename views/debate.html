@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260702-debate-legacy-media-shift" />
+<link rel="stylesheet" href="/style.min.css?v=20260702-context-signature-block" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -151,6 +151,20 @@ try {
   // Ligne jaune = bas repoussé de env(safe-area-inset-bottom)
   var yellowLine = document.createElement("div");
   yellowLine.style.cssText = "position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom,0px);height:3px;background:yellow;z-index:2147483647;pointer-events:none;";
+
+  // Bloc cyan = fixed accroché à <html> (hors body) : détecte un clip posé sur body.
+  var cyanBlock = document.createElement("div");
+  cyanBlock.style.cssText = "position:fixed;left:0;bottom:0;width:44px;height:80px;background:cyan;z-index:2147483646;pointer-events:none;";
+  document.documentElement.appendChild(cyanBlock);
+
+  // Test canvas : le fond de <html> est propagé sur toute la surface système
+  // (c'est lui qui couvrait la bande pendant l'animation IA). Bande orange de
+  // 24px collée au bas du viewport en attachment fixed.
+  document.documentElement.style.setProperty(
+    "background",
+    "linear-gradient(#f80,#f80) left bottom / 100% 24px no-repeat fixed, #243038",
+    "important"
+  );
 
   // Sonde env(safe-area-inset-bottom)
   var probe = document.createElement("div");
@@ -222,7 +236,8 @@ try {
       "pt(h-5): " + describeAt(midX, h - 5),
       "pt(h-25): " + describeAt(midX, h - 25),
       "pt(h-45): " + describeAt(midX, h - 45),
-      "standalone: " + (navigator.standalone === undefined ? "n/a" : navigator.standalone) + " / mq:" + (window.matchMedia("(display-mode: standalone)").matches)
+      "standalone: " + (navigator.standalone === undefined ? "n/a" : navigator.standalone) + " / mq:" + (window.matchMedia("(display-mode: standalone)").matches),
+      "ua: " + navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 80)
     ];
     panel.textContent = lines.join("\n");
   }
