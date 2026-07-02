@@ -112,20 +112,6 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-    /* Quirk WebKit des iPhone X/XS/11 Pro en standalone (constaté encore sous
-       iOS 18.7) : sans calque background-attachment:fixed sur <html>, le
-       compositeur n'affiche pas les ~44 derniers px de l'écran (zone du
-       home-indicator) alors que le layout les croit visibles — d'où la bande
-       de la couleur du manifest en bas. Le calque force le compositing pleine
-       surface tout en restant invisible (même couleur que le fond). Exclu
-       pendant l'animation IA, dont le fond de <html> doit reprendre la main
-       (il déclenche lui-même le même effet). Doit rester après style.min.css
-       pour gagner l'égalité de !important sur la règle html du bloc final. */
-    html.is-standalone:not(.aala-overlay-active):not(.ai-loading-animation-open-in-child) {
-      background: linear-gradient(#243038, #243038) left bottom / 100% 24px no-repeat fixed, #243038 !important;
-    }
-  </style>
 </head>
 <body class="page-debate">
 <script>
@@ -133,6 +119,41 @@ try {
   if (navigator.standalone || window.matchMedia("(display-mode: standalone)").matches) {
     document.documentElement.classList.add("is-standalone");
     document.body.classList.add("is-standalone");
+
+    /* Quirk WebKit des iPhone X/XS/11 Pro en standalone (constaté encore sous
+       iOS 18.7) : le compositeur n'affiche pas les ~44 derniers px de l'écran
+       (zone du home-indicator) alors que le layout les croit visibles — d'où
+       une bande de la couleur du manifest en bas. Poser DYNAMIQUEMENT un
+       calque background-attachment:fixed sur le style inline de <html> force
+       le re-compositing pleine surface (une règle CSS statique équivalente ne
+       suffit pas, testé sur appareil). Le calque est invisible : même couleur
+       que le fond. L'inline !important battrait le fond de l'animation IA,
+       donc on le retire pendant qu'elle est active (elle produit elle-même le
+       même effet en changeant le fond de <html>). */
+    (function () {
+      var CANVAS_FIX = "linear-gradient(#243038,#243038) left bottom / 100% 24px no-repeat fixed, #243038";
+
+      function aiAnimationActive() {
+        var h = document.documentElement.classList;
+        var b = document.body.classList;
+        return h.contains("aala-overlay-active") ||
+          h.contains("ai-loading-animation-open-in-child") ||
+          b.contains("ai-loading-animation-open-in-child");
+      }
+
+      function applyCanvasFix() {
+        if (aiAnimationActive()) {
+          document.documentElement.style.removeProperty("background");
+        } else {
+          document.documentElement.style.setProperty("background", CANVAS_FIX, "important");
+        }
+      }
+
+      applyCanvasFix();
+      var observer = new MutationObserver(applyCanvasFix);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    })();
   }
 } catch (e) {}
 </script>
