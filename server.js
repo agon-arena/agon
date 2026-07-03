@@ -1029,7 +1029,7 @@ const CLOUD_GENERIC_LABELS_SET = new Set([
 
 function normalizeCloudLabel(tag) {
   return String(tag || "")
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/#/g, "")
     .replace(/[^a-z0-9\s]/g, " ")
@@ -3064,6 +3064,74 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
   }
 }
 
+function normalizeQuestionForMergeComparison(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Garde-fou final avant toute fusion automatique d'arènes : vérifie en tête-à-tête
+ * que les deux questions posent bien LE MÊME débat, et pas seulement le même thème
+ * ou la même séquence d'actualité. Contrairement au match initial (choix parmi ~50
+ * candidats), c'est une comparaison binaire entre deux textes, et elle porte sur le
+ * canonique RÉSOLU — un lien erroné existant ne peut donc plus se propager en chaîne.
+ *
+ * Fail-closed : toute erreur, réponse ambiguë ou refus → pas de fusion. Une fusion
+ * manquée est bénigne (l'arène reste indépendante) ; une fusion fausse affiche des
+ * idées hors sujet de façon durable (cf. arènes 1131/1173 « police et pouvoir »
+ * fusionnées à tort avec 1114 « soutien des ministres »).
+ */
+async function confirmSameDebateQuestionForMerge(newQuestion, canonicalQuestion, logLabel = "merge-guard") {
+  const q1 = String(newQuestion || "").trim();
+  const q2 = String(canonicalQuestion || "").trim();
+  if (!q1 || !q2) return false;
+
+  // Fast-path déterministe : questions identiques (ex : variantes gauche/droite/générale
+  // d'une même publication) → fusion autorisée sans appel IA.
+  if (normalizeQuestionForMergeComparison(q1) === normalizeQuestionForMergeComparison(q2)) return true;
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return false;
+
+  try {
+    const prompt = [
+      "Tu vérifies une fusion automatique entre deux arènes de débat. Si elles fusionnent, elles partageront exactement le même pot d'idées : chaque idée écrite pour l'une s'affichera sous l'autre.",
+      "La fusion n'est correcte QUE si les deux questions posent LE MÊME débat : même objet, mêmes acteurs, même choix à trancher. Une idée répondant à l'une doit être une réponse naturelle et pertinente à l'autre.",
+      "Même thème général, même actualité, même famille politique ou même axe abstrait (liberté/obéissance, sécurité/liberté...) ne suffisent PAS : si l'objet du débat diffère, réponds false.",
+      'Réponds UNIQUEMENT en JSON strict : {"sameDebate":true|false,"reason":"courte justification"}',
+      "",
+      "Question 1 : " + q1,
+      "Question 2 : " + q2
+    ].join("\n");
+
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 120,
+        temperature: 0
+      })
+    });
+    if (!r.ok) return false;
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) return false;
+    const parsed = JSON.parse(content);
+    const sameDebate = parsed?.sameDebate === true;
+    console.log(`[${logLabel}] vérification questions : ${sameDebate ? "OK" : "REFUS"} | "${q1.slice(0, 60)}" vs "${q2.slice(0, 60)}" | raison : ${String(parsed?.reason || "").slice(0, 140)}`);
+    return sameDebate;
+  } catch (err) {
+    console.error(`[${logLabel}] erreur vérification questions (fail-closed → pas de fusion) :`, err.message);
+    return false;
+  }
+}
+
 /**
  * Tente de fusionner automatiquement une arène créée par Certamen avec une arène
  * similaire publiée dans la fenêtre de 1h–24h précédente.
@@ -3144,6 +3212,14 @@ async function tryCertamenAutoMerge(newDebateId, { question, content, option_a, 
       .single();
     if (canonErr || !canonical) {
       console.log(`[certamen-merge] arène canonique ${canonicalId} introuvable → pas de fusion`);
+      return;
+    }
+
+    // Garde-fou : les deux questions doivent poser le même débat (comparaison directe
+    // avec le canonique résolu, avant toute modification en base).
+    const sameDebate = await confirmSameDebateQuestionForMerge(question, canonical.question, "certamen-merge");
+    if (!sameDebate) {
+      console.log(`[certamen-merge] questions différentes (${newDebateId} vs canonique ${canonicalId}) → pas de fusion`);
       return;
     }
 
@@ -7678,6 +7754,12 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
         .maybeSingle();
       if (pendingError) throw new Error(pendingError.message);
       pendingRow = pr;
+      // Garde-fou anti-doublon : si la ligne d'attente n'existe plus, c'est qu'elle a déjà
+      // été publiée (ou supprimée) par un autre passage — republier créerait un débat en
+      // double qui retomberait silencieusement dans le groupe "mixed" (général).
+      if (!pendingRow) {
+        return res.status(409).json({ ok: false, error: "Sujet introuvable dans la liste d'attente : déjà publié ou supprimé.", alreadyPublished: true });
+      }
     }
     const pendingResume = String(pendingRow?.resume || "").trim();
     let pendingPoliticalOrientation = pendingRow?.political_orientation || null;
@@ -7700,7 +7782,7 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
     let normalizedPositionB = String(positionB || "").trim();
     const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
     const requestedLinkedDebateId = String(linkedDebateId || pendingRow?.pending_linked_debate_id || "").trim();
-    const canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
+    let canonicalLinkedDebateId = requestedLinkedDebateId ? resolveSharedDebateId(requestedLinkedDebateId) : "";
     const pendingStorySelection = normalizeStorySelection(req.body?.storySelection || pendingRow?.pending_story_selection);
     const resolvedContent = normalizeDebateContent(String(resume || "").trim() || pendingResume || String(question || "").trim());
     const resolvedKeywords = normalizeKeywordList(Array.isArray(keywords) ? keywords : (pendingRow?.pending_keywords || []));
@@ -7724,33 +7806,42 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
         return res.status(404).json({ ok: false, error: "Arène partagée introuvable." });
       }
 
-      const existingType = inferVeilleDebateType(existingLinkedDebate.option_a, existingLinkedDebate.option_b);
-      if (existingType !== debateType) {
-        return res.status(400).json({
-          ok: false,
-          error: existingType === "open"
-            ? "Fusion impossible : tu ne peux pas rattacher une arène à positions à une arène libre."
-            : "Fusion impossible : tu ne peux pas rattacher une arène libre à une arène à positions."
-        });
-      }
-
-      const alignment = await evaluateVeilleMergeAlignment(existingLinkedDebate, {
-        positionA: normalizedPositionA,
-        positionB: normalizedPositionB
-      });
-      if (alignment.verdict === "inverted") {
-        // Permute les positions (et l'étiquette gauche/droite associée) pour qu'elles
-        // correspondent au sens de l'arène existante, au lieu de bloquer la fusion.
-        [normalizedPositionA, normalizedPositionB] = [normalizedPositionB, normalizedPositionA];
-        if (pendingPoliticalOrientation && pendingPoliticalOrientation.isPolitical) {
-          pendingPoliticalOrientation = {
-            ...pendingPoliticalOrientation,
-            positionA: pendingPoliticalOrientation.positionB,
-            positionB: pendingPoliticalOrientation.positionA
-          };
+      // Garde-fou : les deux questions doivent poser le même débat. En cas de refus,
+      // on ne bloque pas la publication (le pipeline auto n'a pas de relecture humaine) :
+      // l'arène est simplement publiée indépendante, sans fusion.
+      const sameDebate = await confirmSameDebateQuestionForMerge(safeQuestion, existingLinkedDebate.question, "veille-merge");
+      if (!sameDebate) {
+        console.warn(`[veille publish] fusion refusée (questions différentes) avec l'arène ${canonicalLinkedDebateId} : "${safeQuestion.slice(0, 60)}" vs "${String(existingLinkedDebate.question || "").slice(0, 60)}" → publication indépendante`);
+        canonicalLinkedDebateId = "";
+      } else {
+        const existingType = inferVeilleDebateType(existingLinkedDebate.option_a, existingLinkedDebate.option_b);
+        if (existingType !== debateType) {
+          return res.status(400).json({
+            ok: false,
+            error: existingType === "open"
+              ? "Fusion impossible : tu ne peux pas rattacher une arène à positions à une arène libre."
+              : "Fusion impossible : tu ne peux pas rattacher une arène libre à une arène à positions."
+          });
         }
-      } else if (!alignment.ok && !(forcePublishOnAlignmentWarning && alignment.verdict === "ambiguous")) {
-        return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
+
+        const alignment = await evaluateVeilleMergeAlignment(existingLinkedDebate, {
+          positionA: normalizedPositionA,
+          positionB: normalizedPositionB
+        });
+        if (alignment.verdict === "inverted") {
+          // Permute les positions (et l'étiquette gauche/droite associée) pour qu'elles
+          // correspondent au sens de l'arène existante, au lieu de bloquer la fusion.
+          [normalizedPositionA, normalizedPositionB] = [normalizedPositionB, normalizedPositionA];
+          if (pendingPoliticalOrientation && pendingPoliticalOrientation.isPolitical) {
+            pendingPoliticalOrientation = {
+              ...pendingPoliticalOrientation,
+              positionA: pendingPoliticalOrientation.positionB,
+              positionB: pendingPoliticalOrientation.positionA
+            };
+          }
+        } else if (!alignment.ok && !(forcePublishOnAlignmentWarning && alignment.verdict === "ambiguous")) {
+          return res.status(400).json({ ok: false, error: alignment.message, verdict: alignment.verdict });
+        }
       }
     }
 
