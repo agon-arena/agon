@@ -22906,21 +22906,6 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: translateZ(0);
   }
 
-  body.ai-loading-animation-open-in-child::before,
-  html.aala-overlay-active body::before {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--agon-standalone-bottom-cover, 0px);
-    min-height: env(safe-area-inset-bottom, 0px);
-    z-index: 100002;
-    pointer-events: none;
-    background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
-    transform: translateZ(0);
-  }
-
   #aala-overlay {
     --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
     height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px) !important;

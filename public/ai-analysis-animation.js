@@ -139,18 +139,6 @@
         background: url("/visuels/fondanimation.webp") center center / cover no-repeat;
         transform: translateZ(0);
       }
-      #aala-overlay::after {
-        content: "";
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: calc(160px + var(--aala-safe-bottom, 0px));
-        z-index: 1;
-        pointer-events: none;
-        background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
-        transform: translateZ(0);
-      }
       #aala-overlay.is-hiding { opacity: 0; pointer-events: none; }
 
       html.aala-overlay-active,

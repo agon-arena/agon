@@ -4353,18 +4353,6 @@ function ensureDebateIframeModal() {
       pointer-events: none;
       transform: translateZ(0);
     }
-    #debate-ai-parent-animation-overlay::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: calc(160px + var(--debate-ai-parent-safe-bottom, 0px));
-      z-index: 1;
-      pointer-events: none;
-      background: #06161e url("/visuels/fondanimation.webp") center bottom / cover no-repeat;
-      transform: translateZ(0);
-    }
     #debate-ai-parent-animation-overlay.is-hiding {
       opacity: 0;
     }
