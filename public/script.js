@@ -241,6 +241,28 @@ function __agonRecordReloadReason(reason) {
         : "page précédente morte sans pagehide (kill mémoire ou crash) puis nouvelle navigation";
     }
 
+    // Après un kill WebKit sans pagehide en standalone, iOS relance toujours la
+    // PWA sur son start_url ("/"), quelle que soit la page affichée avant le kill.
+    // On restaure la page précédente pour éviter à l'utilisateur de perdre sa
+    // place (perçu comme un "refresh intempestif"). Ciblé strictement sur ce cas
+    // précis (pas un clean unload, pas un skipStartup volontaire vers l'accueil,
+    // pas déjà sur la bonne page) pour ne jamais interférer avec une navigation
+    // normale ou l'ouverture d'un lien de notification.
+    let restoredTo = null;
+    const isLikelyStandaloneKillRelaunch =
+      isStandaloneDisplay &&
+      likelyCause === "processus WebKit tué/crashé sans pagehide (mémoire probable) puis relance de la PWA standalone sur son URL de départ";
+    if (isLikelyStandaloneKillRelaunch && !skipStartup && window.location.pathname === "/" && lastLifecycleSnapshot?.url) {
+      try {
+        const previousUrl = new URL(lastLifecycleSnapshot.url, window.location.origin);
+        const target = previousUrl.pathname + previousUrl.search + previousUrl.hash;
+        const current = window.location.pathname + window.location.search + window.location.hash;
+        if (previousUrl.origin === window.location.origin && target !== "/" && target !== current) {
+          restoredTo = target;
+        }
+      } catch (e) {}
+    }
+
     if (__AGON_DEBUG_REFRESH_ENABLED) {
       const entry = {
         navigationType,
@@ -249,6 +271,7 @@ function __agonRecordReloadReason(reason) {
         lastReloadReasonAt: lastReloadReason ? new Date(lastReloadReason.at).toISOString() : null,
         skipStartup,
         likelyCause,
+        restoredTo,
         timestamp: new Date().toISOString(),
         url: String(window.location.href || ""),
         userAgent: String(navigator.userAgent || ""),
@@ -272,6 +295,10 @@ function __agonRecordReloadReason(reason) {
         if (prev.length > 20) prev.length = 20;
         localStorage.setItem(KEY, JSON.stringify(prev));
       } catch (e2) {}
+    }
+
+    if (restoredTo) {
+      window.location.replace(restoredTo);
     }
   } catch (e) {}
 })();
