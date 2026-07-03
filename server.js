@@ -2288,6 +2288,41 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "bumped_at",
   "political_group"
 ].join(",");
+
+// PostgREST (Supabase) plafonne chaque réponse à 1000 lignes, silencieusement :
+// au-delà, les lignes excédentaires sont absentes sans erreur (compteurs
+// faussés, listes tronquées). Ces helpers paginent par .range() jusqu'à la
+// dernière page. buildQuery doit produire une requête NEUVE à chaque appel
+// (un builder Supabase ne se réexécute pas) et inclure un .order() stable,
+// sinon les pages successives peuvent se chevaucher.
+const SUPABASE_ROWS_PAGE_SIZE = 1000;
+
+async function fetchAllSupabaseRows(buildQuery) {
+  const rows = [];
+  for (let offset = 0; ; offset += SUPABASE_ROWS_PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(offset, offset + SUPABASE_ROWS_PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    if (data && data.length) rows.push(...data);
+    if (!data || data.length < SUPABASE_ROWS_PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
+// Variante pour .in() sur de longues listes d'ids : la liste part dans l'URL
+// PostgREST (longueur limitée), donc on la découpe en tranches, chacune
+// paginée à son tour.
+const SUPABASE_IN_FILTER_CHUNK_SIZE = 400;
+
+async function fetchAllSupabaseRowsIn(ids, buildChunkQuery) {
+  const rows = [];
+  for (let i = 0; i < ids.length; i += SUPABASE_IN_FILTER_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + SUPABASE_IN_FILTER_CHUNK_SIZE);
+    const { data, error } = await fetchAllSupabaseRows(() => buildChunkQuery(chunk));
+    if (error) return { data: null, error };
+    rows.push(...data);
+  }
+  return { data: rows, error: null };
+}
+
 const debateDetailResponseCache = new Map();
 const DEBATE_DETAIL_CACHE_TTL_MS = 3 * 60 * 1000;
 const DEBATE_DETAIL_CACHE_MAX = 500;
@@ -5222,28 +5257,25 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const canPageInDatabase = !searchQuery && (categoryQuery || effectiveSortMode === "recent" || effectiveSortMode === "old");
-    let debatesQuery = supabase
-      .from("debates")
-      .select(DEBATES_LIST_SELECT_COLUMNS);
+    const buildDebatesQuery = () => {
+      let q = supabase.from("debates").select(DEBATES_LIST_SELECT_COLUMNS);
+      if (categoryQuery) {
+        q = q.eq("category", categoryQuery);
+      }
+      // Pagination par catégorie du filtre Gauche/Droite (carousels du front) :
+      // sans ce filtre, le "load more" d'une rubrique thématique réinjecte des
+      // arènes générales pendant qu'un nuage gauche/droite est actif.
+      if (politicalGroupQuery) {
+        q = q.eq("political_group", politicalGroupQuery);
+      }
+      return q;
+    };
 
-    if (canPageInDatabase) {
-      debatesQuery = debatesQuery
-        .order("created_at", { ascending: effectiveSortMode === "old" })
-        .range(safeOffset, safeOffset + safeLimit - 1);
-    }
-
-    if (categoryQuery) {
-      debatesQuery = debatesQuery.eq("category", categoryQuery);
-    }
-
-    // Pagination par catégorie du filtre Gauche/Droite (carousels du front) :
-    // sans ce filtre, le "load more" d'une rubrique thématique réinjecte des
-    // arènes générales pendant qu'un nuage gauche/droite est actif.
-    if (politicalGroupQuery) {
-      debatesQuery = debatesQuery.eq("political_group", politicalGroupQuery);
-    }
-
-    const { data: debates, error } = await debatesQuery;
+    const { data: debates, error } = canPageInDatabase
+      ? await buildDebatesQuery()
+          .order("created_at", { ascending: effectiveSortMode === "old" })
+          .range(safeOffset, safeOffset + safeLimit - 1)
+      : await fetchAllSupabaseRows(() => buildDebatesQuery().order("id", { ascending: true }));
 
     if (error) {
       console.error(error);
@@ -5264,10 +5296,12 @@ app.get("/api/debates", async (req, res) => {
     const debateIds = debateRows.map((d) => d.id);
     const sharedDebateIds = [...new Set(debateIds.map((id) => resolveSharedDebateId(id) || String(id)))];
 
-    const { data: args, error: argsErr } = await supabase
-      .from("arguments")
-      .select("id,debate_id,side,votes,created_at,last_voted_at")
-      .in("debate_id", sharedDebateIds);
+    const { data: args, error: argsErr } = await fetchAllSupabaseRowsIn(sharedDebateIds, (idsChunk) =>
+      supabase
+        .from("arguments")
+        .select("id,debate_id,side,votes,created_at,last_voted_at")
+        .in("debate_id", idsChunk)
+        .order("id", { ascending: true }));
 
     if (argsErr) {
       console.error(argsErr);
@@ -5305,10 +5339,12 @@ app.get("/api/debates", async (req, res) => {
     }
 
     if (argumentIds.length) {
-      const commentsResult = await supabase
-        .from("comments")
-        .select("argument_id,created_at")
-        .in("argument_id", argumentIds);
+      const commentsResult = await fetchAllSupabaseRowsIn(argumentIds, (idsChunk) =>
+        supabase
+          .from("comments")
+          .select("argument_id,created_at")
+          .in("argument_id", idsChunk)
+          .order("id", { ascending: true }));
 
       if (commentsResult.error) {
         console.error(commentsResult.error);
@@ -5344,10 +5380,12 @@ app.get("/api/debates", async (req, res) => {
     const vote48hCountByDebate = new Map();
     const vote7dCountByDebate = new Map();
     if (argumentIds.length) {
-      const { data: recentVotes, error: recentVotesError } = await supabase
-        .from("votes")
-        .select("argument_id,vote_count,created_at")
-        .gte("created_at", new Date(cutoff7d).toISOString());
+      const { data: recentVotes, error: recentVotesError } = await fetchAllSupabaseRows(() =>
+        supabase
+          .from("votes")
+          .select("argument_id,vote_count,created_at")
+          .gte("created_at", new Date(cutoff7d).toISOString())
+          .order("id", { ascending: true }));
       if (recentVotesError) {
         console.error("[recent votes]", recentVotesError.message);
       } else {
@@ -7253,16 +7291,18 @@ async function computeAgonBubbleTrends() {
     return agonBubbleTrendsCache.value;
   }
 
-  const { data: debateRows, error: debatesError } = await supabase
-    .from("debates")
-    .select("id, question, keywords, cloud_label, creator_key, created_at")
-    .not("creator_key", "is", null)
-    .neq("creator_key", AGON_ADMIN_CREATOR_KEY)
-    // Les arènes gauche/droite issues de la veille mixte ont leurs 2 nuages dédiés
-    // (cf. rebuildCloudBubblesForGroup) — elles ne doivent jamais se mélanger ici
-    // avec le nuage communautaire partagé (ex: Certamen).
-    .or("political_group.is.null,political_group.eq.mixed")
-    .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS));
+  const { data: debateRows, error: debatesError } = await fetchAllSupabaseRows(() =>
+    supabase
+      .from("debates")
+      .select("id, question, keywords, cloud_label, creator_key, created_at")
+      .not("creator_key", "is", null)
+      .neq("creator_key", AGON_ADMIN_CREATOR_KEY)
+      // Les arènes gauche/droite issues de la veille mixte ont leurs 2 nuages dédiés
+      // (cf. rebuildCloudBubblesForGroup) — elles ne doivent jamais se mélanger ici
+      // avec le nuage communautaire partagé (ex: Certamen).
+      .or("political_group.is.null,political_group.eq.mixed")
+      .order("id", { ascending: true })
+      .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)));
 
   if (debatesError) throw debatesError;
   if (!debateRows || !debateRows.length) return [];
@@ -7270,11 +7310,13 @@ async function computeAgonBubbleTrends() {
   const debateIds = debateRows.map((d) => d.id);
   const sharedDebateIds = [...new Set(debateIds.map((id) => resolveSharedDebateId(id) || String(id)))];
 
-  const { data: args, error: argsError } = await supabase
-    .from("arguments")
-    .select("id, debate_id, votes, created_at")
-    .in("debate_id", sharedDebateIds)
-    .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS));
+  const { data: args, error: argsError } = await fetchAllSupabaseRowsIn(sharedDebateIds, (idsChunk) =>
+    supabase
+      .from("arguments")
+      .select("id, debate_id, votes, created_at")
+      .in("debate_id", idsChunk)
+      .order("id", { ascending: true })
+      .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)));
 
   if (argsError) throw argsError;
 
@@ -7304,16 +7346,20 @@ async function computeAgonBubbleTrends() {
     // Indépendantes l'une de l'autre : lancées en parallèle plutôt qu'en
     // série pour ne pas cumuler deux allers-retours réseau.
     const [{ data: comments, error: commentsError }, { data: recentVotes, error: recentVotesError }] = await Promise.all([
-      supabase
-        .from("comments")
-        .select("argument_id, created_at")
-        .in("argument_id", argumentIds)
-        .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)),
-      supabase
-        .from("votes")
-        .select("argument_id, vote_count, created_at")
-        .gte("created_at", new Date(cutoff7d).toISOString())
-        .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS))
+      fetchAllSupabaseRowsIn(argumentIds, (idsChunk) =>
+        supabase
+          .from("comments")
+          .select("argument_id, created_at")
+          .in("argument_id", idsChunk)
+          .order("id", { ascending: true })
+          .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS))),
+      fetchAllSupabaseRows(() =>
+        supabase
+          .from("votes")
+          .select("argument_id, vote_count, created_at")
+          .gte("created_at", new Date(cutoff7d).toISOString())
+          .order("id", { ascending: true })
+          .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)))
     ]);
 
     if (commentsError) throw commentsError;
