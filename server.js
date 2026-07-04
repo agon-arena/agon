@@ -39,8 +39,26 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
+// Sans plafond, une requête vers un Supabase dégradé peut pendre indéfiniment
+// (33 minutes observées le 04/07/2026 pendant l'incident plateforme Supabase)
+// et engorger tout le process. Chaque appel est donc borné. Le Storage garde
+// une limite large : un upload de vidéo peut légitimement dépasser 10 s.
+const SUPABASE_DB_TIMEOUT_MS = 10000;
+const SUPABASE_STORAGE_TIMEOUT_MS = 120000;
+function supabaseFetchWithTimeout(input, init = {}) {
+  const url = typeof input === "string" ? input : String(input?.url || "");
+  const timeoutMs = url.includes("/storage/v1/") ? SUPABASE_STORAGE_TIMEOUT_MS : SUPABASE_DB_TIMEOUT_MS;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  // AbortSignal.any : Node ≥ 20.3. À défaut, on préserve le signal appelant.
+  const signal = init.signal
+    ? (typeof AbortSignal.any === "function" ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal)
+    : timeoutSignal;
+  return fetch(input, { ...init, signal });
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false }
+  auth: { persistSession: false },
+  global: { fetch: supabaseFetchWithTimeout }
 });
 
 // Filet de sécurité : une coupure réseau/DNS ponctuelle vers Supabase (ex. getaddrinfo
@@ -3788,6 +3806,23 @@ async function getVoteRow(argumentId, voterKey) {
   return enrichDebateWithStoredImage(data);
 }
 
+// Les pages HTML ne doivent jamais rester suspendues à une lecture Supabase
+// lente : au-delà de ce délai, la route bascule dans son catch et sert le
+// gabarit avec des meta génériques (seuls les aperçus sociaux y perdent).
+const HTML_META_DB_TIMEOUT_MS = 3000;
+function withHtmlMetaDbTimeout(promise) {
+  return Promise.race([
+    promise,
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`Lecture Supabase > ${HTML_META_DB_TIMEOUT_MS}ms, meta génériques servies`)),
+        HTML_META_DB_TIMEOUT_MS
+      );
+      if (typeof timer.unref === "function") timer.unref();
+    })
+  ]);
+}
+
 app.get("/", (req, res) => {
   const template = readViewTemplate("index.html");
   const html = replaceMetaPlaceholders(template, buildIndexMeta(req));
@@ -3804,7 +3839,7 @@ app.get("/debates/:id", async (req, res) => {
   const template = readViewTemplate("index.html");
   const debateId = String(req.params.id || "").trim();
   try {
-    const debate = debateId ? await getDebateById(debateId) : null;
+    const debate = debateId ? await withHtmlMetaDbTimeout(getDebateById(debateId)) : null;
     if (debate) {
       const meta = buildDebateMeta(req, debate);
       meta.url = buildAbsoluteUrl(req, `/debates/${encodeURIComponent(debateId)}`);
@@ -3901,7 +3936,7 @@ app.get("/debate", async (req, res) => {
   }
 
   try {
-    const debate = await getDebateById(debateId);
+    const debate = await withHtmlMetaDbTimeout(getDebateById(debateId));
     if (!debate) {
       const html = replaceMetaPlaceholders(template, {
         title: "Débat introuvable | agôn",

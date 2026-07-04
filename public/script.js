@@ -388,7 +388,9 @@ registerServiceWorker();
     '.theme-carousel-next-hint',
     '.theme-carousel-prev-hint',
     '.index-social-loading-placeholder',
-    '.index-social-loading-placeholder-box'
+    '.index-social-loading-placeholder-box',
+    '.voice-stepper',
+    '.my-argument-chip-stepper'
   ];
 
   const observer = new IntersectionObserver((entries) => {
@@ -428,7 +430,7 @@ registerServiceWorker();
     if (!_mutTimer) _mutTimer = setTimeout(_flushMutations, 200);
   });
   const _observeCarousels = () => {
-    document.querySelectorAll('.theme-horizontal-inner, .debates-section').forEach(el => {
+    document.querySelectorAll('.theme-horizontal-inner, .debates-section, #arguments-a, #arguments-b, #arguments-unified').forEach(el => {
       _carouselObserver.observe(el, { childList: true, subtree: true });
     });
   };
@@ -3649,8 +3651,15 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
 	    "debate-iframe-parent-loading-enter-debate",
 	    String(message || "").includes("Entrée dans l'arène")
 	  );
+  // Porte de sortie permanente : même face à un backend muet qui laisse le
+  // chargement pendre, « Fermer » reste disponible dès la première seconde au
+  // lieu d'attendre l'état bloqué. « Réessayer » n'apparaît qu'en état bloqué.
   const actions = document.getElementById("debate-iframe-parent-loading-actions");
-  if (actions) actions.hidden = true;
+  if (actions) actions.hidden = false;
+  const retryButton = document.getElementById("debate-iframe-parent-loading-retry");
+  if (retryButton) retryButton.hidden = true;
+  const dismissButton = document.getElementById("debate-iframe-parent-loading-dismiss");
+  if (dismissButton) dismissButton.onclick = () => { closeDebateIframeModal(); };
 
   const title = document.getElementById("debate-iframe-parent-loading-title");
   if (title) {
@@ -3768,10 +3777,12 @@ function armDebateIframeParentLoadingFallback(expectedPathname, onResolved, atte
   debateIframeParentLoadingFallbackTimer = setTimeout(() => {
     debateIframeParentLoadingFallbackTimer = null;
     resolveStuckDebateIframeParentLoading(expected, onResolved, attempt);
-  }, 6000);
+  }, 4000);
 }
 
-const DEBATE_IFRAME_PARENT_LOADING_MAX_RETRIES = 3;
+// 1 relance de 4 s après la première vérification : verdict « bloqué » en ~8 s
+// (contre ~24 s avec l'ancien réglage 4 × 6 s, trop long face à un backend muet).
+const DEBATE_IFRAME_PARENT_LOADING_MAX_RETRIES = 1;
 
 function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved, attempt = 0) {
   const modal = document.getElementById("debate-iframe-modal");
@@ -3825,6 +3836,7 @@ function markDebateIframeParentLoadingStuck() {
 
   const retryButton = document.getElementById("debate-iframe-parent-loading-retry");
   if (retryButton) {
+    retryButton.hidden = false;
     retryButton.onclick = () => {
       let retryPathname = "";
       try { retryPathname = new URL(retryUrl, window.location.origin).pathname; } catch (e) {}
@@ -12664,7 +12676,7 @@ function isDebateNew(debateOrCreatedAt) {
 
   if (!referenceTimestamp) return false;
 
-  return (Date.now() - referenceTimestamp) < 24 * 60 * 60 * 1000;
+  return (Date.now() - referenceTimestamp) < 12 * 60 * 60 * 1000;
 }
 
 function formatLastActivityDate(dateString) {

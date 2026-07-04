@@ -1,5 +1,6 @@
-const SW_VERSION = "20260703-context-signature-gap";
+const SW_VERSION = "20260704-navigation-timeout";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
+const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
 // cache-first, une nouvelle version a une URL différente donc pas de risque de
@@ -84,14 +85,24 @@ self.addEventListener("fetch", (event) => {
   // Force les pages HTML à être toujours rechargées depuis le réseau (contourne le cache iOS PWA).
   // Si le serveur répond 5xx pendant un redémarrage, on ne laisse pas iOS standalone
   // mémoriser une page d'erreur brute : on sert une page de récupération non cachable.
+  // Un serveur muet (Mac en veille, Supabase dégradé qui suspend les routes) ne doit
+  // pas laisser iOS afficher le snapshot figé de l'app pendant des minutes : au-delà
+  // de ce délai, on abandonne la navigation et on sert la page de récupération, qui
+  // se recharge d'elle-même dès que le serveur répond.
   if (request.mode === "navigate") {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), NAVIGATION_FETCH_TIMEOUT_MS);
     event.respondWith(
-      fetch(request, { cache: "no-store" }).then((response) => {
+      fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
+        clearTimeout(timeoutId);
         if (response && response.status >= 500) {
           return buildRecoveryResponse(request.url);
         }
         return response;
-      }).catch(() => buildRecoveryResponse(request.url))
+      }).catch(() => {
+        clearTimeout(timeoutId);
+        return buildRecoveryResponse(request.url);
+      })
     );
     return;
   }
