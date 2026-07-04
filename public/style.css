@@ -22940,4 +22940,18 @@ body.page-create-mobile .create-card .create-submit-helper {
     z-index: 3;
     margin-bottom: var(--agon-debate-legacy-media-shift-y, 0px) !important;
   }
+
+  /* Quand le swipe multi-sources est actif, les boutons ‹ › dépassent de 34px
+     sous la carte : re-réserver cet espace en plus du décalage legacy, sinon
+     ils recouvrent le bloc « Comment l'IA évalue les contributions ». */
+  body.is-standalone.page-debate #debate-source-fallback.debate-source-swipe-enabled,
+  body.is-standalone.page-debate .debate-source-fallback.debate-source-swipe-enabled,
+  body.is-standalone.page-debate #debate-image-wrap.debate-source-swipe-enabled,
+  body.is-standalone.page-debate .debate-image-wrap.debate-source-swipe-enabled,
+  body.is-standalone.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
+  body.is-standalone.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
+  body.is-standalone.page-debate #debate-video-wrap.debate-source-swipe-enabled,
+  body.is-standalone.page-debate .debate-video-wrap.debate-source-swipe-enabled {
+    margin-bottom: calc(var(--agon-debate-legacy-media-shift-y, 0px) + 42px) !important;
+  }
 }
