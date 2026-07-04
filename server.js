@@ -682,8 +682,31 @@ function _getSharedLinksMap() {
   return _sharedLinksCache;
 }
 
+// Charge la source de vérité (app_config) dès le démarrage. Le fichier local n'est
+// qu'un fallback de migration : sans ce chargement, chaque restart repartait de la
+// map périmée du fichier puis l'écrasait dans Supabase à la première fusion — c'est
+// ce qui a annulé la réparation des liens du 03/07 (re-empoisonnement de 16:57) et
+// perdait tous les liens créés depuis le dernier commit du fichier.
+(async () => {
+  try {
+    const { data, error } = await supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", "shared_debate_links")
+      .maybeSingle();
+    if (!error && data?.value && typeof data.value === "object") {
+      _sharedLinksCache = data.value;
+    }
+  } catch (e) {
+    console.error("[shared_debate_links] chargement Supabase impossible (fallback fichier) :", e.message);
+  }
+})();
+
 function _persistSharedLinksMap(map) {
   _sharedLinksCache = map;
+  // Garde aussi le fichier local à jour : il reste le fallback si Supabase est
+  // injoignable au prochain démarrage.
+  try { fs.writeFileSync(sharedDebateLinksMetaPath, JSON.stringify(map, null, 2)); } catch {}
   supabase.from("app_config")
     .upsert({ key: "shared_debate_links", value: map, updated_at: new Date().toISOString() })
     .then(({ error }) => { if (error) console.error("[shared_debate_links] save error:", error.message); })
