@@ -82,6 +82,22 @@ const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 // de tendance sur les cartes (demande explicite de Kevin) : voir le garde-fou autour
 // de setDebateTrend dans POST /api/debates.
 const CERTAMEN_CREATOR_KEY = process.env.CERTAMEN_CREATOR_KEY || "certamen-bot";
+// Garde anti-double-insert Certamen : le pipeline peut émettre deux POST /api/debates
+// concurrents pour le même sujet (retry réseau, double déclenchement) — cf. les paires
+// du 27/06/2026 insérées à la même milliseconde (1088/1089, 1090/1091...). Le verrou
+// mémoire est posé de façon synchrone avant tout await pour fermer cette course ;
+// la vérification en base couvre le cas d'un restart entre les deux requêtes.
+const CERTAMEN_DUPLICATE_WINDOW_MS = 15 * 60 * 1000;
+const _certamenRecentQuestionKeys = new Map();
+function claimCertamenQuestionKey(normalizedQuestion) {
+  const now = Date.now();
+  for (const [key, at] of _certamenRecentQuestionKeys) {
+    if (now - at > CERTAMEN_DUPLICATE_WINDOW_MS) _certamenRecentQuestionKeys.delete(key);
+  }
+  if (_certamenRecentQuestionKeys.has(normalizedQuestion)) return false;
+  _certamenRecentQuestionKeys.set(normalizedQuestion, now);
+  return true;
+}
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
@@ -621,7 +637,6 @@ const debateAssetsMetaPath = path.join(__dirname, "data", "debate-assets.json");
 const sharedDebateLinksMetaPath = path.join(__dirname, "data", "debate-shared-links.json");
 const storiesMetaPath = path.join(__dirname, "data", "stories.json");
 const debateKeywordsMetaPath = path.join(__dirname, "data", "debate-keywords.json");
-const cloudBubblesPath = path.join(__dirname, "data", "cloud-bubbles.json");
 const tagExclusionsMetaPath = path.join(__dirname, "data", "tag-exclusions.json");
 const publicTagExclusionsMetaPath = path.join(__dirname, "public", "tag-exclusions.json");
 const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
@@ -924,13 +939,12 @@ const DEFAULT_CLOUD_BUBBLES_KEY = "cloud_bubbles";
 // piétinent jamais en mémoire.
 let _cloudBubblesCacheByKey = new Map();
 let _cloudBubblesRefreshPromiseByKey = new Map();
-
-function loadCloudBubblesFromFile() {
-  if (!fs.existsSync(cloudBubblesPath)) return null;
-  const parsed = JSON.parse(fs.readFileSync(cloudBubblesPath, "utf8"));
-  if (!parsed || typeof parsed !== "object") return null;
-  return Array.isArray(parsed.bubbles) ? parsed : { bubbles: [], lastUpdatedAt: null };
-}
+// TTL du cache mémoire : les publications de veille peuvent être traitées par une
+// autre instance (ex: pipeline local) qui réécrit app_config dans Supabase — sans
+// expiration, cette instance servirait son vieux nuage jusqu'au prochain restart.
+// Stale-while-revalidate : on sert le cache immédiatement, on relit Supabase en fond.
+const CLOUD_BUBBLES_CACHE_TTL_MS = 60 * 1000;
+let _cloudBubblesCacheFreshUntilByKey = new Map();
 
 async function refreshCloudBubblesFromSupabase(storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
   if (_cloudBubblesRefreshPromiseByKey.has(storageKey)) return _cloudBubblesRefreshPromiseByKey.get(storageKey);
@@ -943,6 +957,7 @@ async function refreshCloudBubblesFromSupabase(storageKey = DEFAULT_CLOUD_BUBBLE
         .maybeSingle();
       if (!error && data?.value && typeof data.value === "object") {
         _cloudBubblesCacheByKey.set(storageKey, data.value);
+        _cloudBubblesCacheFreshUntilByKey.set(storageKey, Date.now() + CLOUD_BUBBLES_CACHE_TTL_MS);
       }
     } catch {}
   })().finally(() => {
@@ -953,41 +968,17 @@ async function refreshCloudBubblesFromSupabase(storageKey = DEFAULT_CLOUD_BUBBLE
 }
 
 async function loadCloudBubbles(storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
-  if (_cloudBubblesCacheByKey.has(storageKey)) return _cloudBubblesCacheByKey.get(storageKey);
-
-  // Le fallback fichier local ne concerne que le nuage historique "mixed" (migration
-  // one-shot) ; les nouveaux pools gauche/droite n'ont pas de fichier équivalent.
-  if (storageKey === DEFAULT_CLOUD_BUBBLES_KEY) {
-    // Sert vite la dernière version connue du serveur, puis rafraîchit Supabase
-    // en arrière-plan pour éviter un délai de cold cache au chargement des bulles.
-    try {
-      const localData = loadCloudBubblesFromFile();
-      if (localData) {
-        _cloudBubblesCacheByKey.set(storageKey, localData);
-        refreshCloudBubblesFromSupabase(storageKey).catch(() => {});
-        return localData;
-      }
-    } catch {}
+  if (_cloudBubblesCacheByKey.has(storageKey)) {
+    if (Date.now() >= (_cloudBubblesCacheFreshUntilByKey.get(storageKey) || 0)) {
+      refreshCloudBubblesFromSupabase(storageKey).catch(() => {});
+    }
+    return _cloudBubblesCacheByKey.get(storageKey);
   }
 
-  // Fallback si aucun fichier local n'est disponible.
   try {
     await refreshCloudBubblesFromSupabase(storageKey);
     if (_cloudBubblesCacheByKey.has(storageKey)) return _cloudBubblesCacheByKey.get(storageKey);
   } catch {}
-
-  // Fallback / migration one-shot : fichier JSON local (pool "mixed" uniquement)
-  if (storageKey === DEFAULT_CLOUD_BUBBLES_KEY) {
-    try {
-      const localData = loadCloudBubblesFromFile();
-      if (localData) {
-        _cloudBubblesCacheByKey.set(storageKey, localData);
-        // Tente de migrer dans Supabase silencieusement si la table existe
-        if (localData.bubbles.length) saveCloudBubbles(localData, storageKey).catch(() => {});
-        return localData;
-      }
-    } catch {}
-  }
 
   const empty = { bubbles: [], lastUpdatedAt: null };
   _cloudBubblesCacheByKey.set(storageKey, empty);
@@ -1002,6 +993,7 @@ async function saveCloudBubbles(data, storageKey = DEFAULT_CLOUD_BUBBLES_KEY) {
       .upsert({ key: storageKey, value: safe, updated_at: new Date().toISOString() });
     if (error) throw error;
     _cloudBubblesCacheByKey.set(storageKey, safe);
+    _cloudBubblesCacheFreshUntilByKey.set(storageKey, Date.now() + CLOUD_BUBBLES_CACHE_TTL_MS);
   } catch (e) {
     console.error("[cloud-bubbles] save error:", e.message);
   }
@@ -5315,7 +5307,7 @@ app.get("/api/debates", async (req, res) => {
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
     const categoryQuery = String(req.query.category || "").trim();
     const rawPoliticalGroupQuery = String(req.query.politicalGroup || "").trim();
-    const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right") ? rawPoliticalGroupQuery : "";
+    const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right" || rawPoliticalGroupQuery === "mixed") ? rawPoliticalGroupQuery : "";
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
@@ -5338,10 +5330,14 @@ app.get("/api/debates", async (req, res) => {
       if (categoryQuery) {
         q = q.eq("category", categoryQuery);
       }
-      // Pagination par catégorie du filtre Gauche/Droite (carousels du front) :
-      // sans ce filtre, le "load more" d'une rubrique thématique réinjecte des
-      // arènes générales pendant qu'un nuage gauche/droite est actif.
-      if (politicalGroupQuery) {
+      // Pagination par catégorie des 3 nuages (carousels du front) : sans ce filtre,
+      // le "load more" d'une rubrique thématique réinjecte des arènes d'un autre
+      // groupe — arènes générales dans un nuage gauche/droite, ou variantes
+      // gauche/droite (doublons visuels) dans la vue générale. "mixed" inclut les
+      // arènes historiques et communautaires sans political_group.
+      if (politicalGroupQuery === "mixed") {
+        q = q.or("political_group.is.null,political_group.eq.mixed");
+      } else if (politicalGroupQuery) {
         q = q.eq("political_group", politicalGroupQuery);
       }
       return q;
@@ -5675,6 +5671,31 @@ async function assignDebateCloudLabel(debateId, fields) {
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
     const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
+
+    if (creatorKey === CERTAMEN_CREATOR_KEY) {
+      const certamenQuestionKey = normalizeQuestionForMergeComparison(question);
+      // Verrou synchrone (avant le premier await) : deux POST simultanés du même sujet
+      // ne peuvent pas passer tous les deux, même à la même milliseconde.
+      if (certamenQuestionKey && !claimCertamenQuestionKey(certamenQuestionKey)) {
+        console.warn(`[certamen anti-doublon] POST refusé (verrou mémoire) : "${String(question || "").slice(0, 80)}"`);
+        return res.status(409).json({ error: "Sujet identique déjà reçu il y a moins de 15 minutes." });
+      }
+      if (certamenQuestionKey) {
+        const { data: recentCertamen } = await supabase
+          .from("debates")
+          .select("id, question")
+          .eq("creator_key", CERTAMEN_CREATOR_KEY)
+          .gte("created_at", new Date(Date.now() - CERTAMEN_DUPLICATE_WINDOW_MS).toISOString())
+          .order("created_at", { ascending: false })
+          .limit(50);
+        const certamenDuplicate = (recentCertamen || []).find((d) => normalizeQuestionForMergeComparison(d.question) === certamenQuestionKey);
+        if (certamenDuplicate) {
+          console.warn(`[certamen anti-doublon] POST refusé (arène ${certamenDuplicate.id} déjà en base) : "${String(question || "").slice(0, 80)}"`);
+          return res.status(409).json({ error: "Sujet identique déjà publié il y a moins de 15 minutes.", duplicateOfDebateId: certamenDuplicate.id });
+        }
+      }
+    }
+
     const normalizedLongArguments = long_arguments === true;
     const normalizedContent = normalizeDebateContent(content);
     // Préserve la mise en page (sauts de ligne) telle que tapée par le créateur
@@ -5772,6 +5793,11 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
 
     if (error) {
       console.error(error);
+      // Rien n'a été inséré : libère le verrou anti-doublon pour qu'un retry
+      // légitime du pipeline Certamen ne soit pas bloqué pendant 15 minutes.
+      if (creatorKey === CERTAMEN_CREATOR_KEY) {
+        _certamenRecentQuestionKeys.delete(normalizeQuestionForMergeComparison(question));
+      }
       return res.status(500).json({ error: "Erreur création débat." });
     }
 
@@ -5879,6 +5905,10 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     res.json({ id: data.id });
   } catch (error) {
     console.error(error);
+    // Même logique que l'échec d'insert : exception avant/pendant l'insert → verrou libéré.
+    if (req.body?.creatorKey === CERTAMEN_CREATOR_KEY) {
+      _certamenRecentQuestionKeys.delete(normalizeQuestionForMergeComparison(req.body?.question));
+    }
     return res.status(500).json({ error: "Erreur création débat." });
   }
 });
@@ -7279,7 +7309,10 @@ app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
+// Bucket dédié : pendant un lot d'auto-publication, le bot enchaîne check-similar +
+// merge + publish pour chaque sujet. Sur le bucket partagé "admin-ai" (10/min), les
+// check-similar se faisaient limiter en silence → fusions sautées → doublons.
+app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("veille-similar", 30), async (req, res) => {
   const { question, positionA, positionB, resume } = req.body || {};
   if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
 
@@ -7741,7 +7774,7 @@ app.delete("/api/admin/veille/:id", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
+app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 30), async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning, politicalGroup } = req.body || {};
   try {
     const safeQuestion = String(question || "").trim().slice(0, 110);
@@ -7765,6 +7798,41 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("admin-ai", 10), a
     let pendingPoliticalOrientation = pendingRow?.political_orientation || null;
     const rawPublishPoliticalGroup = politicalGroup || pendingRow?.political_group;
     const resolvedPoliticalGroup = (rawPublishPoliticalGroup === "left" || rawPublishPoliticalGroup === "right") ? rawPublishPoliticalGroup : "mixed";
+
+    // Garde anti-doublon intra-groupe : un même sujet peut exister en variante
+    // générale/gauche/droite (une par groupe), mais jamais deux fois dans le même
+    // groupe. Couvre les publications faites hors pipeline bot (bouton admin, crash
+    // du bot avant écriture de son historique sent-to-agon) que la dédup côté bot ne
+    // voit pas — cf. doublons 1237/1255 (left) et 1220/1221 (mixed) du 03/07/2026.
+    // Comparaison déterministe (question normalisée), aucun appel IA.
+    const normalizedPublishQuestion = normalizeQuestionForMergeComparison(safeQuestion);
+    if (normalizedPublishQuestion) {
+      const dupCutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentDebatesForDupCheck, error: dupCheckError } = await supabase
+        .from("debates")
+        .select("id, question, political_group")
+        .gte("created_at", dupCutoffIso)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (dupCheckError) {
+        console.warn(`[veille publish] vérification anti-doublon impossible (${dupCheckError.message}) : publication autorisée.`);
+      } else {
+        const sameGroupDuplicate = (recentDebatesForDupCheck || []).find((d) =>
+          ((d.political_group === "left" || d.political_group === "right") ? d.political_group : "mixed") === resolvedPoliticalGroup &&
+          normalizeQuestionForMergeComparison(d.question) === normalizedPublishQuestion
+        );
+        if (sameGroupDuplicate) {
+          if (id) await deleteVeillePending(Number(id));
+          console.warn(`[veille publish] doublon refusé : l'arène ${sameGroupDuplicate.id} (${resolvedPoliticalGroup}) pose déjà la même question — "${safeQuestion.slice(0, 80)}"`);
+          return res.status(409).json({
+            ok: false,
+            error: `Doublon : l'arène ${sameGroupDuplicate.id} pose déjà la même question dans le groupe ${resolvedPoliticalGroup} (fenêtre 24h).`,
+            alreadyPublished: true,
+            duplicateOfDebateId: sameGroupDuplicate.id
+          });
+        }
+      }
+    }
 
     const linksMeta = Array.isArray(links) ? links : [];
     const firstLink = linksMeta[0] || null;
@@ -8020,7 +8088,7 @@ const previousSourceCount = previousSourceKeys.size;
   }
 });
 
-app.post("/api/admin/veille/merge", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
+app.post("/api/admin/veille/merge", requireAdmin, rateLimit("veille-publish", 30), async (req, res) => {
   const { id, debateId, question, positionA, positionB, resume, links } = req.body || {};
   if (!id || !debateId) return res.status(400).json({ ok: false, error: "id et debateId requis" });
   try {

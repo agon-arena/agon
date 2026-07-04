@@ -17835,6 +17835,12 @@ function getFilteredDebatesForIndex(baseDebates) {
   // que ça reste vrai même si l'utilisateur change de filtre sans revenir à "Général".
   if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
     filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
+  } else {
+    // Vue Générale : symétriquement, les variantes gauche/droite d'un même sujet
+    // (une arène par groupe, fusionnées entre elles) ne doivent pas s'afficher ici,
+    // sinon le même article apparaît en double/triple. Les arènes communautaires et
+    // historiques (sans political_group) comptent comme "mixed" et restent visibles.
+    filteredDebates = filteredDebates.filter((debate) => getDebatePoliticalGroup(debate) === "mixed");
   }
 
   const activeCategoryFilters = getCurrentCategoryFilters();
@@ -18762,13 +18768,15 @@ function getAlaUneSourceForCurrentFilters(filteredDebates) {
   if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
     return source.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
   }
+  // Vue Générale : exclut les variantes gauche/droite (cf. getFilteredDebatesForIndex).
+  const generalSource = source.filter((debate) => getDebatePoliticalGroup(debate) === "mixed");
   if (currentTypeFilter === "agon") {
-    return source.filter((debate) => isAgonGeneratedDebate(debate));
+    return generalSource.filter((debate) => isAgonGeneratedDebate(debate));
   }
   if (currentTypeFilter === "community") {
-    return source.filter((debate) => !isAgonGeneratedDebate(debate));
+    return generalSource.filter((debate) => !isAgonGeneratedDebate(debate));
   }
-  return source;
+  return generalSource;
 }
 
 function getTensionSourceForCurrentFilters(filteredDebates) {
@@ -18899,7 +18907,7 @@ function initCarouselLazyLoad() {
       apiFetching = true;
       const offset = _carouselApiOffsets.get(key) || 0;
       const renderedIds = new Set(Array.from(row.querySelectorAll('.debate-card[data-debate-id]')).map(function(el) { return el.dataset.debateId; }));
-      fetchJSON(API + '/debates?category=' + encodeURIComponent(key) + '&sort=recent&limit=' + _CAROUSEL_BATCH + '&offset=' + offset + '&key=' + encodeURIComponent(getKey()) + ((_politicalCloudGroup === 'left' || _politicalCloudGroup === 'right') ? '&politicalGroup=' + _politicalCloudGroup : ''))
+      fetchJSON(API + '/debates?category=' + encodeURIComponent(key) + '&sort=recent&limit=' + _CAROUSEL_BATCH + '&offset=' + offset + '&key=' + encodeURIComponent(getKey()) + '&politicalGroup=' + encodeURIComponent((_politicalCloudGroup === 'left' || _politicalCloudGroup === 'right') ? _politicalCloudGroup : 'mixed'))
         .then(function(fetched) {
           var safe = Array.isArray(fetched) ? fetched : [];
           _carouselApiOffsets.set(key, offset + safe.length);
