@@ -14838,6 +14838,16 @@ body.page-debate.argument-form-open .debate-floating-refresh-btn {
   pointer-events: none !important;
 }
 
+/* Rédaction d'une idée : fige les pulses des steppers guidés restés visibles
+   sous le voile semi-transparent — ces dizaines d'animations infinies
+   continuaient de chauffer le GPU pendant toute la saisie. */
+body.argument-form-open .voice-stepper-btn-guided,
+body.argument-form-open .voice-stepper-btn-guided::after,
+body.argument-form-open .my-argument-chip-stepper-btn-guided,
+body.argument-form-open .my-argument-chip-stepper-btn-guided::after {
+  animation-play-state: paused !important;
+}
+
 body.page-debate .argument-form {
   position: fixed;
   left: 50%;
@@ -19996,9 +20006,15 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   }
 }
 
-/* Pause toutes les animations des éléments hors viewport */
+/* Pause toutes les animations des éléments hors viewport. Les pseudo-éléments
+   sont listés explicitement : `*` ne les matche pas et animation-play-state
+   n'est pas héritée (ex. halo ::after des steppers guidés). */
 .agon-anim-paused,
-.agon-anim-paused * {
+.agon-anim-paused *,
+.agon-anim-paused::before,
+.agon-anim-paused::after,
+.agon-anim-paused *::before,
+.agon-anim-paused *::after {
   animation-play-state: paused !important;
 }
 
