@@ -6422,7 +6422,7 @@ app.post("/api/arguments", rateLimit("arguments", 10), async (req, res) => {
         manual_writing_badge: manualWritingBadge === true || manualWritingBadge === "true",
         used_microphone: usedMicrophone === true || usedMicrophone === "true",
         auto_vote_wave1_status: "pending",
-        auto_vote_wave1_at: new Date(Date.now() + (7 + Math.random() * (12 * 60 - 7)) * 60 * 1000).toISOString(),
+        auto_vote_wave1_at: new Date(Date.now() + (35 + Math.random() * (16 * 60 - 35)) * 60 * 1000).toISOString(),
         auto_vote_wave2_status: "pending",
         auto_vote_wave2_at: new Date(Date.now() + (24 + Math.random() * 24) * 60 * 60 * 1000).toISOString()
       })
@@ -6663,11 +6663,14 @@ app.delete("/api/arguments/:id", async (req, res) => {
   }
 });
 
-// Attribution automatique de voix par vagues : +2min (1 à 8 votes) puis +24h (1 à 12 votes)
+// Attribution automatique de voix par vagues : vague 1 entre +35 min et +16 h
+// (0 à 8 voix), vague 2 entre +24 h et +48 h (0 à 5 voix). Un tirage à 0 voix
+// marque quand même la vague "done" (sans notification) : c'est voulu, toutes
+// les idées ne doivent pas systématiquement gagner des voix.
 async function _applyAutoVoteWave(argument, wave) {
   const amount = wave === 1
-    ? Math.floor(Math.random() * 8) + 1
-    : Math.floor(Math.random() * 12) + 1;
+    ? Math.floor(Math.random() * 9)
+    : Math.floor(Math.random() * 6);
   const statusField = wave === 1 ? "auto_vote_wave1_status" : "auto_vote_wave2_status";
   const newVotes = Number(argument.votes || 0) + amount;
 
@@ -6681,8 +6684,10 @@ async function _applyAutoVoteWave(argument, wave) {
     return;
   }
 
-  invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
   console.log(`[auto-vote wave${wave}] argument ${argument.id} +${amount} votes (total ${newVotes})`);
+  if (amount === 0) return;
+
+  invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
 
   if (argument.author_key) {
     try {
