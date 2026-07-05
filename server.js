@@ -664,12 +664,20 @@ const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json"
 const debateTrendsMetaPath = path.join(__dirname, "data", "debate-trends.json");
 
 
+// Postgres refuse le caractère nul dans les colonnes text/jsonb (erreur 22P05
+// "unsupported Unicode escape sequence") : on le retire de tout texte entrant,
+// il peut arriver via du contenu scrapé ou généré (incident du 05/07/2026 sur
+// un POST /api/debates Certamen).
+function stripNullChars(value) {
+  return String(value || "").replace(/\u0000/g, "");
+}
+
 function normalizeDebateContent(value) {
-  return String(value || "").trim().slice(0, 1800);
+  return stripNullChars(value).trim().slice(0, 1800);
 }
 
 function limitText(value, max) {
-  return String(value || "").trim().slice(0, max);
+  return stripNullChars(value).trim().slice(0, max);
 }
 
 
@@ -3043,9 +3051,9 @@ const TREND_RECENT_SUBJECTS_LIMIT = 20;
 // une évolution réelle de l'actu dans le temps, elles doivent rester visibles séparément.
 const MIN_TREND_MATCH_GAP_MS = 60 * 60 * 1000;
 
-// Fusion automatique Certamen : fenêtre de recherche (1h–24h avant la publication)
+// Fusion automatique Certamen : fenêtre de recherche (1h–36h avant la publication)
 // et nombre maximal de candidats examinés.
-const CERTAMEN_MERGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const CERTAMEN_MERGE_WINDOW_MS = 36 * 60 * 60 * 1000;
 const CERTAMEN_MERGE_CANDIDATES_LIMIT = 50;
 // Seuil de confiance GPT plus élevé qu'en mode tendance (0.65) car aucune relecture
 // humaine : en dessous de 0.80 l'arène reste indépendante.
@@ -3241,7 +3249,7 @@ async function confirmSameDebateQuestionForMerge(newQuestion, canonicalQuestion,
 
 /**
  * Tente de fusionner automatiquement une arène créée par Certamen avec une arène
- * similaire publiée dans la fenêtre de 1h–24h précédente.
+ * similaire publiée dans la fenêtre de 1h–36h précédente.
  *
  * Règles :
  *  - Confiance GPT ≥ CERTAMEN_MERGE_CONFIDENCE_THRESHOLD (0.80).
@@ -3267,7 +3275,7 @@ async function tryCertamenAutoMerge(newDebateId, { question, content, option_a, 
       .limit(CERTAMEN_MERGE_CANDIDATES_LIMIT);
 
     if (!recentRows?.length) {
-      console.log("[certamen-merge] aucun candidat dans la fenêtre 1h–24h");
+      console.log("[certamen-merge] aucun candidat dans la fenêtre 1h–36h");
       return;
     }
 
@@ -5802,7 +5810,14 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { question, category, source_url, content, resource_mode, image_upload, type, option_a, option_b, creatorKey, evaluation_axis, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
+    const { source_url, resource_mode, image_upload, type, creatorKey, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
+    // Champs texte libres : caractères nuls retirés dès l'entrée (cf. stripNullChars).
+    const question = stripNullChars(req.body?.question);
+    const category = stripNullChars(req.body?.category);
+    const content = stripNullChars(req.body?.content);
+    const option_a = stripNullChars(req.body?.option_a);
+    const option_b = stripNullChars(req.body?.option_b);
+    const evaluation_axis = stripNullChars(req.body?.evaluation_axis);
 
     if (creatorKey === CERTAMEN_CREATOR_KEY) {
       const certamenQuestionKey = normalizeQuestionForMergeComparison(question);
@@ -5960,7 +5975,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         // Certamen (pipeline bot veille) publie ses arènes communauté via cet endpoint
         // avec ce creatorKey fixe : jamais de badge de tendance sur ces cartes.
         // En revanche, une tentative de fusion automatique est faite si une arène
-        // similaire existe dans la fenêtre de 1h–24h précédente.
+        // similaire existe dans la fenêtre de 1h–36h précédente.
         if (creatorKey === CERTAMEN_CREATOR_KEY) {
           await tryCertamenAutoMerge(data.id, {
             question,
