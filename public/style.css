@@ -22859,12 +22859,6 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.is-standalone.page-debate {
-    --agon-standalone-bottom-cover: max(
-      env(safe-area-inset-bottom, 0px),
-      var(--agon-safe-bottom, 0px),
-      var(--agon-mobile-bottom-fill, 0px),
-      var(--agon-legacy-standalone-bottom-fill, 0px)
-    );
     min-height: calc(100vh + var(--agon-standalone-bottom-cover, 0px)) !important;
     padding-bottom: var(--agon-standalone-bottom-cover, 0px);
     background: #243038 !important;
@@ -22907,19 +22901,8 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: translateZ(0);
   }
 
-  body.is-standalone.page-debate::before {
-    content: "";
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--agon-standalone-bottom-cover, 0px);
-    min-height: env(safe-area-inset-bottom, 0px);
-    z-index: 2;
-    pointer-events: none;
-    background: #243038;
-    transform: translateZ(0);
-  }
+  /* Pas de calque fixe de couverture sur /debate : le contenu qui défile doit
+     pouvoir se peindre jusqu'au bord bas de l'écran (le fond du body suffit). */
 
   #aala-overlay {
     --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
