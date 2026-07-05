@@ -557,6 +557,18 @@ try {
   }
 } catch {}
 
+// Capture globale (toutes les pages) du prompt d'installation Android/Chrome ;
+// consommé par shouldShowPushInvite et window.triggerAndroidInstall (index.html)
+window.deferredInstallPrompt = window.deferredInstallPrompt || null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  window.deferredInstallPrompt = e;
+  ["install-pwa-btn", "install-pwa-btn-desktop"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.style.display = "flex";
+  });
+});
+
 function isMobilePushInviteSurface() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;

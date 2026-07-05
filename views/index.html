@@ -384,7 +384,7 @@
           </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
-            <span>Installer l'application</span>
+            <span>Télécharger l'application</span>
           </button>
 
           <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-login-button">
@@ -938,7 +938,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260704-anim-pause-pseudo" defer></script>
+<script src="/script.min.js?v=20260705-anim-pause-pseudo" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1384,16 +1384,7 @@
 
 <script>
 (function() {
-  var deferredInstallPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    ['install-pwa-btn','install-pwa-btn-desktop'].forEach(function(id) {
-      var btn = document.getElementById(id);
-      if (btn) btn.style.display = 'flex';
-    });
-  });
+  // beforeinstallprompt est capturé globalement dans script.js (window.deferredInstallPrompt)
 
   window.openInstallModal = function() {
     var ua = navigator.userAgent || '';
@@ -1411,7 +1402,7 @@
     if (isDesktop) {
       if (desktopEl) desktopEl.style.display = 'block';
       var desktopBtn = document.getElementById('install-pwa-btn-desktop');
-      if (desktopBtn) desktopBtn.style.display = deferredInstallPrompt ? 'flex' : 'none';
+      if (desktopBtn) desktopBtn.style.display = window.deferredInstallPrompt ? 'flex' : 'none';
     } else if (isIOS) {
       if (iphoneEl) iphoneEl.style.display = 'block';
     } else {
@@ -1428,10 +1419,10 @@
   };
 
   window.triggerAndroidInstall = function() {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    deferredInstallPrompt.userChoice.then(function() {
-      deferredInstallPrompt = null;
+    if (!window.deferredInstallPrompt) return;
+    window.deferredInstallPrompt.prompt();
+    window.deferredInstallPrompt.userChoice.then(function() {
+      window.deferredInstallPrompt = null;
       closeInstallModal();
     });
   };

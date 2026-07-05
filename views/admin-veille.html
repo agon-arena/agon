@@ -386,13 +386,107 @@ function countPendingSources(item) {
   return names.size;
 }
 
+// ── Orientation des sources (gauche/droite) pour le classement ──
+// Même logique que le front public : la liste veille_medias (nom, orientation,
+// domain) est chargée via /api/about/medias, puis chaque libellé d'orientation
+// est ramené à un camp ('left'/'right'/'neutral').
+let _mediaGroupByDomain = null;
+let _mediaGroupByName = null;
+
+function orientationGroupFromLabel(orientation) {
+  const value = String(orientation || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (value.includes('gauche') || value.includes('ecolog')) return 'left';
+  if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste') || value.includes('liberal')) return 'right';
+  return 'neutral';
+}
+
+function normalizeMediaIdentity(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/^@/, '')
+    .replace(/\b(?:youtube|officiel|chaine|channel|tv)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function loadMediaOrientations() {
+  if (_mediaGroupByDomain) return;
+  _mediaGroupByDomain = {};
+  _mediaGroupByName = {};
+  try {
+    const r = await fetch('/api/about/medias');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const medias = (await r.json()).medias || [];
+    medias.forEach(function(media) {
+      const group = orientationGroupFromLabel(media.orientation);
+      if (group === 'neutral') return;
+      if (media.domain && media.domain !== 'youtube.com') _mediaGroupByDomain[media.domain] = group;
+      const nameKey = normalizeMediaIdentity(media.nom);
+      if (nameKey) _mediaGroupByName[nameKey] = group;
+      const handleKey = normalizeMediaIdentity(media.handle || '');
+      if (handleKey) _mediaGroupByName[handleKey] = group;
+    });
+  } catch (e) {
+    console.error('Orientations médias indisponibles (classement gauche/droite dégradé) :', e.message);
+  }
+}
+
+function getPendingLinkOrientationGroup(link) {
+  const nameKey = normalizeMediaIdentity(link && link.source || '');
+  if (nameKey && _mediaGroupByName) {
+    if (_mediaGroupByName[nameKey]) return _mediaGroupByName[nameKey];
+    const matched = Object.keys(_mediaGroupByName).find(function(known) {
+      return (known.length >= 4 && nameKey.includes(known)) || (nameKey.length >= 4 && known.includes(nameKey));
+    });
+    if (matched) return _mediaGroupByName[matched];
+  }
+  try {
+    const hostname = new URL(String(link && link.url || '')).hostname.replace(/^www\./, '').toLowerCase();
+    const domains = _mediaGroupByDomain || {};
+    const matchedDomain = Object.keys(domains).find(function(domain) {
+      return hostname === domain || hostname.endsWith('.' + domain);
+    });
+    if (matchedDomain) return domains[matchedDomain];
+  } catch (_) {}
+  return 'neutral';
+}
+
+// Compte les sources distinctes d'un camp ('left'/'right'), avec le même
+// dédoublonnage par nom que countPendingSources.
+function countPendingSourcesForGroup(item, group) {
+  const byName = new Map();
+  (Array.isArray(item && item.links) ? item.links : []).forEach(function(link) {
+    const source = String(link && link.source || '').trim().toLowerCase();
+    if (!source || byName.has(source)) return;
+    byName.set(source, getPendingLinkOrientationGroup(link));
+  });
+  if (!byName.size) {
+    String(item && item.sources || '').split(/[,;\n]+/).forEach(function(source) {
+      const normalized = source.trim().toLowerCase();
+      if (!normalized || byName.has(normalized)) return;
+      byName.set(normalized, getPendingLinkOrientationGroup({ source: normalized }));
+    });
+  }
+  let count = 0;
+  byName.forEach(function(g) { if (g === group) count++; });
+  return count;
+}
+
 function renderItem(item) {
   const catOptions = CATEGORIES.map(function(c) {
     return '<option value="' + esc(c) + '"' + (c === item.theme ? ' selected' : '') + '>' + esc(c) + '</option>';
   }).join('');
 
-  return '<div class="pending-item" data-id="' + item.id + '" data-source-count="' + countPendingSources(item) + '" data-linked-debate-id="' + esc(item.linkedDebateId || '') + '">' +
-    '<div class="pending-meta"><span class="pending-number"></span><span>Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</span><span>· ' + countPendingSources(item) + ' source(s)</span></div>' +
+  const leftSourceCount = countPendingSourcesForGroup(item, 'left');
+  const rightSourceCount = countPendingSourcesForGroup(item, 'right');
+  const sourceCountDetail = (leftSourceCount || rightSourceCount)
+    ? ' <span style="color:#888">(' + leftSourceCount + ' G · ' + rightSourceCount + ' D)</span>'
+    : '';
+  return '<div class="pending-item" data-id="' + item.id + '" data-source-count="' + countPendingSources(item) + '" data-source-count-left="' + leftSourceCount + '" data-source-count-right="' + rightSourceCount + '" data-linked-debate-id="' + esc(item.linkedDebateId || '') + '">' +
+    '<div class="pending-meta"><span class="pending-number"></span><span>Reçu le ' + new Date(item.addedAt).toLocaleString('fr-FR') + '</span><span>· ' + countPendingSources(item) + ' source(s)' + sourceCountDetail + '</span></div>' +
     '<div class="similar-checking" id="similar-' + item.id + '">Vérification des doublons…</div>' +
     renderLinkedDebateNotice(item) +
     '<div class="generated-title-label">Titre généré par IA</div>' +
@@ -538,7 +632,10 @@ async function loadPending() {
   document.getElementById('btn-publish-all').addEventListener('click', publishAll);
 
   try {
-    const r = await fetch('/api/admin/veille', { headers: headers() });
+    const [r] = await Promise.all([
+      fetch('/api/admin/veille', { headers: headers() }),
+      loadMediaOrientations()
+    ]);
     if (!r.ok) throw new Error(await readApiError(r, 'Erreur serveur'));
     const items = await r.json();
     const list = document.getElementById('list');
@@ -620,10 +717,18 @@ function sortPendingBySources() {
   // sont publiés en premier (donc plus anciens) et ceux avec le plus de sources
   // en bas sont publiés en dernier (donc plus récents), ce qui les place en
   // tête du carousel "À la une" (trié par created_at décroissant).
+  // Les sujets Gauche/Droite ne comptent que les sources de leur propre camp :
+  // chaque nuage/carousel étant filtré par political_group, seul l'ordre relatif
+  // au sein d'un même camp compte.
   const items = [].slice.call(list.querySelectorAll('.pending-item'));
   items
     .map(function(item, index) {
-      return { item: item, index: index, sourceCount: Number(item.dataset.sourceCount) || 0 };
+      const groupSelect = item.querySelector('.f-political-group');
+      const group = groupSelect ? groupSelect.value : 'mixed';
+      const sourceCount = group === 'left' ? (Number(item.dataset.sourceCountLeft) || 0)
+        : group === 'right' ? (Number(item.dataset.sourceCountRight) || 0)
+        : (Number(item.dataset.sourceCount) || 0);
+      return { item: item, index: index, sourceCount: sourceCount };
     })
     .sort(function(a, b) {
       if (b.sourceCount !== a.sourceCount) return a.sourceCount - b.sourceCount;

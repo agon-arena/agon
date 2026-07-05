@@ -1124,12 +1124,86 @@ function countCloudSources(debate) {
   return sources.size;
 }
 
+// Orientation d'un média ("left"/"right"/"neutral") — même règle que le front
+// public (getOrientationGroupFromBotLabel) et que le bouton Classer de l'admin
+// veille, pour que nuages, carousels et classement admin restent cohérents.
+function getCloudOrientationGroupFromLabel(orientation) {
+  const value = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (value.includes("gauche") || value.includes("ecolog")) return "left";
+  if (value.includes("droite") || value.includes("conservateur") || value.includes("souverainiste") || value.includes("liberal")) return "right";
+  return "neutral";
+}
+
+function buildCloudMediaOrientationMaps() {
+  const byDomain = new Map();
+  const byName = new Map();
+  for (const media of readVeilleMedias()) {
+    const group = getCloudOrientationGroupFromLabel(media.orientation);
+    if (group === "neutral") continue;
+    if (media.domain && media.domain !== "youtube.com") byDomain.set(media.domain, group);
+    const nameKey = normalizeCloudSourceName(media.nom);
+    if (nameKey) byName.set(nameKey, group);
+    const handleKey = normalizeCloudSourceName(media.handle || "");
+    if (handleKey) byName.set(handleKey, group);
+  }
+  return { byDomain, byName };
+}
+
+function getCloudSourceOrientationGroup(name, url, orientationMaps) {
+  const nameKey = normalizeCloudSourceName(name);
+  if (nameKey) {
+    if (orientationMaps.byName.has(nameKey)) return orientationMaps.byName.get(nameKey);
+    for (const [known, group] of orientationMaps.byName) {
+      if ((known.length >= 4 && nameKey.includes(known)) || (nameKey.length >= 4 && known.includes(nameKey))) return group;
+    }
+  }
+  const hostname = normalizeCloudSourceUrl(url);
+  if (hostname) {
+    for (const [domain, group] of orientationMaps.byDomain) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) return group;
+    }
+  }
+  return "neutral";
+}
+
+// Variante de countCloudSources restreinte à un camp : les nuages gauche/droite
+// ne comptent que les sources de leur propre camp (poids ET éligibilité des
+// bulles), contrairement au nuage général qui compte toutes les sources.
+function countCloudSourcesForGroup(debate, politicalGroup, orientationMaps) {
+  if (politicalGroup !== "left" && politicalGroup !== "right") return countCloudSources(debate);
+  const sources = new Map();
+  (Array.isArray(debate?.media_extras) ? debate.media_extras : []).forEach((extra) => {
+    if (!extra || typeof extra !== "object") return;
+    if (String(extra.type || "source").trim() !== "source") return;
+    const url = String(extra.url || extra.source_url || "").trim();
+    const rawName = String(extra.source || extra.media || extra.publisher || "").trim();
+    const sourceKey = normalizeCloudSourceName(rawName) || normalizeCloudSourceUrl(url);
+    if (sourceKey && !sources.has(sourceKey)) {
+      sources.set(sourceKey, getCloudSourceOrientationGroup(rawName, url, orientationMaps));
+    }
+  });
+
+  if (!sources.size && debate?.source_url) {
+    const sourceKey = normalizeCloudSourceUrl(debate.source_url);
+    if (sourceKey) sources.set(sourceKey, getCloudSourceOrientationGroup("", debate.source_url, orientationMaps));
+  }
+
+  let count = 0;
+  sources.forEach((group) => { if (group === politicalGroup) count++; });
+  return count;
+}
+
 // politicalGroup ("mixed" par défaut) sépare le nuage officiel en 3 pools indépendants
 // (général / gauche / droite) sans dupliquer cette logique — cf. rebuildCloudBubbles()
 // ci-dessous, conservé comme alias "mixed" pour ne rien changer aux appelants existants.
 async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
   const now = new Date().toISOString();
   const storageKey = politicalGroup === "mixed" ? "cloud_bubbles" : `cloud_bubbles_${politicalGroup}`;
+
+  // Nuages gauche/droite : seules les sources du camp comptent — il faut la
+  // liste veille_medias (orientations) avant de compter quoi que ce soit.
+  if (politicalGroup !== "mixed" && !_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+  const orientationMaps = politicalGroup === "mixed" ? null : buildCloudMediaOrientationMaps();
 
   const { data: allDebates, error } = await supabase
     .from("debates")
@@ -1176,7 +1250,7 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
 
     const label = getCloudLabelFromDebate(debate);
     if (!label) continue;
-    const sourceCount = countCloudSources(debate);
+    const sourceCount = countCloudSourcesForGroup(debate, politicalGroup, orientationMaps);
     if (sourceCount <= 0) continue;
     const normTag = normalizeTag(label);
     if (seenTags.has(normTag)) continue;
@@ -1213,7 +1287,7 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
   bubbles = bubbles
     .map((bubble) => {
       const debate = debateMap.get(String(bubble.subjectId));
-      const refreshedCount = debate ? countCloudSources(debate) : Number(bubble.count || 0);
+      const refreshedCount = debate ? countCloudSourcesForGroup(debate, politicalGroup, orientationMaps) : Number(bubble.count || 0);
       const tag = (debate ? getCloudLabelFromDebate(debate) : "") || bubble.tag;
       return {
         tag,
@@ -5899,58 +5973,64 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         }
 
         const currentSourceCount = normalizedSourceUrl ? 1 : 0;
-        const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
-        const { data: recentRows } = await supabase
-          .from("debates")
-          .select("id, question, content, source_url, media_extras, created_at, keywords")
-          .neq("id", data.id)
-          .lte("created_at", new Date(matchCutoff).toISOString())
-          .order("created_at", { ascending: false })
-          .limit(TREND_RECENT_SUBJECTS_LIMIT);
-        const recentSubjects = (recentRows || [])
-          .map((d) => {
-          const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
-          const srcExtras = extras.filter((e) => e && typeof e === "object" &&
-            String(e.type || "source").trim() === "source" &&
-            (e.url || e.source_url || e.source || e.media || e.publisher));
-          const previousSourceKeys = new Set(
-            srcExtras.map((e) => String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase()).filter(Boolean)
-          );
-          if (!previousSourceKeys.size && d.source_url) previousSourceKeys.add(String(d.source_url).trim().toLowerCase());
-          return {
-            id: String(d.id),
-            question: String(d.question || ""),
-            resume: String(d.content || "").slice(0, 200),
-            tags: normalizeKeywordList(d.keywords || [], 10, 60),
-            sourceCount: previousSourceKeys.size,
-            created_at: d.created_at
-          };
-        });
-        const newSubject = {
-          id: String(data.id),
-          question: String(question || ""),
-          resume: String(normalizedContent || "").slice(0, 200),
-          tags: [],
-          sourceCount: currentSourceCount
-        };
-        const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
-        let computedTrend = 0;
+        // Sans source, la tendance (croissance du nombre de sources sur une même
+        // séquence d'actualité) n'a pas de sens : on évite l'appel IA de comparaison.
         let trendEntry;
-        if (!matched) {
+        if (!normalizedSourceUrl) {
           trendEntry = { trend: 0, sourceCount: currentSourceCount, matchedSubjectId: null };
         } else {
-          const previousSourceCount = matched.sourceCount || 0;
-          if (previousSourceCount === 0 && currentSourceCount === 0) computedTrend = 0;
-          else if (previousSourceCount === 0) computedTrend = 100;
-          else computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);
-          trendEntry = {
-            trend: computedTrend,
-            sourceCount: currentSourceCount,
-            matchedSubjectId: matched.id,
-            matchedSubjectTitle: matched.question,
-            previousSourceCount: matched.sourceCount || 0,
-            reason: matched.reason || ""
+          const matchCutoff = Date.now() - MIN_TREND_MATCH_GAP_MS;
+          const { data: recentRows } = await supabase
+            .from("debates")
+            .select("id, question, content, source_url, media_extras, created_at, keywords")
+            .neq("id", data.id)
+            .lte("created_at", new Date(matchCutoff).toISOString())
+            .order("created_at", { ascending: false })
+            .limit(TREND_RECENT_SUBJECTS_LIMIT);
+          const recentSubjects = (recentRows || [])
+            .map((d) => {
+            const extras = Array.isArray(d.media_extras) ? d.media_extras : [];
+            const srcExtras = extras.filter((e) => e && typeof e === "object" &&
+              String(e.type || "source").trim() === "source" &&
+              (e.url || e.source_url || e.source || e.media || e.publisher));
+            const previousSourceKeys = new Set(
+              srcExtras.map((e) => String(e.url || e.source_url || e.source || e.media || e.publisher || "").trim().toLowerCase()).filter(Boolean)
+            );
+            if (!previousSourceKeys.size && d.source_url) previousSourceKeys.add(String(d.source_url).trim().toLowerCase());
+            return {
+              id: String(d.id),
+              question: String(d.question || ""),
+              resume: String(d.content || "").slice(0, 200),
+              tags: normalizeKeywordList(d.keywords || [], 10, 60),
+              sourceCount: previousSourceKeys.size,
+              created_at: d.created_at
+            };
+          });
+          const newSubject = {
+            id: String(data.id),
+            question: String(question || ""),
+            resume: String(normalizedContent || "").slice(0, 200),
+            tags: [],
+            sourceCount: currentSourceCount
           };
+          const matched = await findSimilarRecentSubjectForTrend(newSubject, recentSubjects);
+          let computedTrend = 0;
+          if (!matched) {
+            trendEntry = { trend: 0, sourceCount: currentSourceCount, matchedSubjectId: null };
+          } else {
+            const previousSourceCount = matched.sourceCount || 0;
+            if (previousSourceCount === 0 && currentSourceCount === 0) computedTrend = 0;
+            else if (previousSourceCount === 0) computedTrend = 100;
+            else computedTrend = Math.round(((currentSourceCount - previousSourceCount) / previousSourceCount) * 100);
+            trendEntry = {
+              trend: computedTrend,
+              sourceCount: currentSourceCount,
+              matchedSubjectId: matched.id,
+              matchedSubjectTitle: matched.question,
+              previousSourceCount: matched.sourceCount || 0,
+              reason: matched.reason || ""
+            };
+          }
         }
         setDebateTrend(data.id, trendEntry);
         await rebuildCloudBubblesAfterPublish("create-debate", data.id);
@@ -7909,6 +7989,26 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       date: typeof l === "object" ? (l.date || "") : "",
       added_at: nowIsoExtras
     })).filter(e => e.url);
+
+    // Un sujet sans aucune source de son camp n'a pas sa place dans le nuage
+    // gauche/droite : publication refusée, le sujet reste en attente pour être
+    // corrigé (autre groupe ou autres sources).
+    if (resolvedPoliticalGroup !== "mixed") {
+      if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+      const campSourceCount = countCloudSourcesForGroup(
+        { media_extras: allExtras, source_url: sourceUrl },
+        resolvedPoliticalGroup,
+        buildCloudMediaOrientationMaps()
+      );
+      if (campSourceCount <= 0) {
+        const campLabel = resolvedPoliticalGroup === "left" ? "de gauche" : "de droite";
+        console.warn(`[veille publish] refus ${resolvedPoliticalGroup} : aucune source ${campLabel} — "${safeQuestion.slice(0, 80)}"`);
+        return res.status(400).json({
+          ok: false,
+          error: `Aucune source ${campLabel} parmi les liens cochés : ce sujet ne peut pas être publié dans le nuage ${resolvedPoliticalGroup === "left" ? "Gauche" : "Droite"}.`
+        });
+      }
+    }
     let normalizedPositionA = String(positionA || "").trim();
     let normalizedPositionB = String(positionB || "").trim();
     const debateType = inferVeilleDebateType(normalizedPositionA, normalizedPositionB);
