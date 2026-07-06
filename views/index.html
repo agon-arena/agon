@@ -374,6 +374,10 @@
             <i class="fa-regular fa-folder-open"></i>
             <span>Mes contributions</span>
           </a>
+          <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <span>Télécharger l'application</span>
+          </button>
           <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
             <i id="push-menu-icon" class="fa-regular fa-bell"></i>
             <span id="push-menu-label">Activer les alertes</span>
@@ -386,10 +390,6 @@
             <i class="fa-regular fa-envelope"></i>
             <span>Contact</span>
           </a>
-          <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
-            <i class="fa-solid fa-mobile-screen"></i>
-            <span>Télécharger l'application</span>
-          </button>
 
           <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-login-button">
             <i class="fa-regular fa-user"></i>
@@ -942,7 +942,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260706-dock-unifie" defer></script>
+<script src="/script.min.js?v=20260706-alertes-menu" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

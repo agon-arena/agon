@@ -32276,7 +32276,7 @@ function initPushMenuItem() {
 
   if (!standalone && !browserHasNotificationSurface()) {
     if (icon) icon.className = "fa-regular fa-bell";
-    if (label) label.textContent = "Installer pour les alertes";
+    if (label) label.textContent = "Activer les alertes";
     return;
   }
 
@@ -32294,7 +32294,7 @@ function initPushMenuItem() {
 
   if (!standalone && !browserCanUsePushNotifications()) {
     if (icon) icon.className = "fa-regular fa-bell";
-    if (label) label.textContent = "Installer pour les alertes";
+    if (label) label.textContent = "Activer les alertes";
     return;
   }
 

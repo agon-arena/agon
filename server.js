@@ -3955,7 +3955,7 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
   if (!key) return res.status(400).json({ error: "Clé manquante." });
 
   try {
-    const [debatesRes, argumentsRes, commentsRes] = await Promise.all([
+    const [debatesRes, argumentsRes, commentsRes, votesRes] = await Promise.all([
       supabase
         .from("debates")
         .select("id, question, type, category, created_at, creator_key")
@@ -3973,18 +3973,30 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
         .select("id, argument_id, content, created_at, author_key")
         .eq("author_key", key)
         .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("votes")
+        .select("argument_id, vote_count, created_at")
+        .eq("voter_key", key)
+        .gt("vote_count", 0)
+        .order("created_at", { ascending: false })
         .limit(200)
     ]);
     if (debatesRes.error) throw debatesRes.error;
     if (argumentsRes.error) throw argumentsRes.error;
     if (commentsRes.error) throw commentsRes.error;
+    if (votesRes.error) throw votesRes.error;
 
     const myDebates = debatesRes.data || [];
     const myArguments = argumentsRes.data || [];
     const myComments = commentsRes.data || [];
+    const myVotes = votesRes.data || [];
 
-    // Contexte des commentaires : idée parente, puis arène de cette idée.
-    const parentArgumentIds = [...new Set(myComments.map((c) => c.argument_id).filter(Boolean))];
+    // Contexte des commentaires et des voix : idée parente, puis son arène.
+    const parentArgumentIds = [...new Set([
+      ...myComments.map((c) => c.argument_id),
+      ...myVotes.map((v) => v.argument_id)
+    ].filter(Boolean))];
     let parentArguments = [];
     if (parentArgumentIds.length) {
       const { data, error } = await supabase
@@ -4012,13 +4024,41 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
     }
     const debateById = new Map(referencedDebates.map((d) => [String(d.id), d]));
 
+    // Notes IA des idées du visiteur : le scoring par idée vit dans
+    // debates.ai_analysis (arènes où il a posté, analyses générées uniquement).
+    const argDebateIds = [...new Set(myArguments.map((a) => String(a.debate_id)).filter(Boolean))];
+    const scoreByArgumentId = new Map();
+    if (argDebateIds.length) {
+      const { data, error } = await supabase
+        .from("debates")
+        .select("id, ai_analysis")
+        .in("id", argDebateIds)
+        .not("ai_analysis", "is", null);
+      if (error) throw error;
+      for (const row of data || []) {
+        const rawScoring = extractAnalysisScoringRaw(row.ai_analysis);
+        if (!rawScoring) continue;
+        try {
+          const parsedScoring = JSON.parse(rawScoring);
+          for (const [argId, entry] of _getAnalysisScoreByArgumentId(parsedScoring)) {
+            scoreByArgumentId.set(argId, entry);
+          }
+        } catch (e) {}
+      }
+    }
+
     res.json({
       debates: myDebates.map((d) => sanitizeDebateForClient(d, key)),
-      arguments: myArguments.map((a) => ({
-        ...sanitizeArgumentForClient(a, key),
-        debate_question: debateById.get(String(a.debate_id))?.question || "",
-        debate_type: debateById.get(String(a.debate_id))?.type || ""
-      })),
+      arguments: myArguments.map((a) => {
+        const scoreEntry = scoreByArgumentId.get(String(a.id));
+        return {
+          ...sanitizeArgumentForClient(a, key),
+          debate_question: debateById.get(String(a.debate_id))?.question || "",
+          debate_type: debateById.get(String(a.debate_id))?.type || "",
+          ai_score: scoreEntry ? scoreEntry.score : null,
+          ai_category: scoreEntry ? scoreEntry.category : ""
+        };
+      }),
       comments: myComments.map((c) => {
         const parentArgument = parentArgumentById.get(String(c.argument_id));
         const parentDebate = parentArgument ? debateById.get(String(parentArgument.debate_id)) : null;
@@ -4027,6 +4067,18 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
           argument_title: parentArgument?.title || "",
           debate_id: parentArgument?.debate_id || null,
           debate_question: parentDebate?.question || ""
+        };
+      }),
+      votes: myVotes.map((v) => {
+        const votedArgument = parentArgumentById.get(String(v.argument_id));
+        const votedDebate = votedArgument ? debateById.get(String(votedArgument.debate_id)) : null;
+        return {
+          argument_id: v.argument_id,
+          vote_count: v.vote_count,
+          created_at: v.created_at,
+          argument_title: votedArgument?.title || "",
+          debate_id: votedArgument?.debate_id || null,
+          debate_question: votedDebate?.question || ""
         };
       })
     });
@@ -8431,18 +8483,7 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
     return res.status(404).json({ error: error?.message || "Débat introuvable." });
   }
   const fullAnalysis = data.ai_analysis || null;
-  let raw = null;
-  if (fullAnalysis) {
-    if (fullAnalysis.trimStart().startsWith("{")) {
-      // Nouveau format : JSON direct
-      raw = fullAnalysis;
-    } else {
-      // Ancien format : extrait le bloc scoring après le marqueur
-      const marker = "\n%%AGON_SCORING%%\n";
-      const idx = fullAnalysis.indexOf(marker);
-      if (idx !== -1) raw = fullAnalysis.slice(idx + marker.length).trim();
-    }
-  }
+  const raw = extractAnalysisScoringRaw(fullAnalysis);
   // Barème caché par le créateur : le détail (orientation + règles dérivées)
   // ne doit fuiter ni vers les autres visiteurs ni vers le rapport IA public —
   // seul le créateur peut le consulter (cf. sanitizeDebateForClient).
@@ -8710,6 +8751,17 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {})
     await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
     throw err;
   }
+}
+
+// Extrait le bloc JSON de scoring d'une colonne debates.ai_analysis :
+// nouveau format = JSON direct ; ancien format = après le marqueur
+// %%AGON_SCORING%% qui suit l'article markdown.
+function extractAnalysisScoringRaw(fullAnalysis) {
+  if (!fullAnalysis) return null;
+  if (fullAnalysis.trimStart().startsWith("{")) return fullAnalysis;
+  const marker = "\n%%AGON_SCORING%%\n";
+  const idx = fullAnalysis.indexOf(marker);
+  return idx !== -1 ? fullAnalysis.slice(idx + marker.length).trim() : null;
 }
 
 // Vérifie si le seuil est atteint et programme l'analyse si besoin

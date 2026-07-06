@@ -44,22 +44,66 @@
     .page-contributions .section-header h3 {
       color: #e8e8e8;
     }
-    .page-contributions .contributions-section-title {
-      color: #e8e8e8;
-      font-size: 17px;
-      font-weight: 700;
-      margin: 26px 0 10px;
+    .page-contributions .contributions-accordion {
+      background: #2e3d47;
+      border: 1px solid #3a4a55;
+      border-radius: 14px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .page-contributions .contributions-accordion summary {
+      list-style: none;
+      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 16px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    .page-contributions .contributions-section-title:first-child {
-      margin-top: 0;
+    .page-contributions .contributions-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+    .page-contributions .contributions-accordion-label {
+      color: #e8e8e8;
+      font-size: 16px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .page-contributions .contributions-count {
+      color: #9cc3f0;
+      background: #1e3a5f;
+      border-radius: 999px;
+      padding: 1px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 18px;
+      text-align: center;
+    }
+    .page-contributions .contributions-count:empty {
+      display: none;
+    }
+    .page-contributions .contributions-accordion-chevron {
+      color: #7a8a94;
+      font-size: 13px;
+      transition: transform 0.18s ease;
+      flex: 0 0 auto;
+    }
+    .page-contributions .contributions-accordion[open] .contributions-accordion-chevron {
+      transform: rotate(180deg);
+    }
+    .page-contributions .contributions-accordion-body {
+      padding: 2px 12px 12px;
+      border-top: 1px solid #3a4a55;
+      padding-top: 12px;
     }
     .page-contributions .contribution-item {
       display: block;
       color: #e8e8e8;
-      background: #2e3d47;
+      background: #243038;
       border: 1px solid #3a4a55;
       border-radius: 12px;
       padding: 13px 15px;
@@ -68,7 +112,10 @@
       transition: background 0.12s ease;
     }
     .page-contributions .contribution-item:hover {
-      background: #344853;
+      background: #2a3843;
+    }
+    .page-contributions .contribution-item:last-child {
+      margin-bottom: 2px;
     }
     .page-contributions .contribution-title {
       color: #e8e8e8;
@@ -106,9 +153,141 @@
       font-size: 11px;
       font-weight: 700;
     }
+    .page-contributions .contributions-pager {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 4px 0 2px;
+    }
+    .page-contributions .contributions-pager-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border: 1px solid #3a4a55;
+      background: #243038;
+      color: #e8e8e8;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-contributions .contributions-pager-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .page-contributions .contributions-pager-info {
+      color: #a0b0bb;
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 44px;
+      text-align: center;
+    }
+    .notes-evolution-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e3a5f;
+      color: #9cc3f0;
+      border: 1px solid #2c4d78;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .notes-evolution-btn:hover {
+      background: #234570;
+    }
+    #notes-evolution-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      box-sizing: border-box;
+    }
+    #notes-evolution-overlay.open {
+      display: flex;
+    }
+    .notes-evolution-panel {
+      position: relative;
+      width: min(100%, 420px);
+      background: #2e3d47;
+      border: 1px solid #3a4a55;
+      border-radius: 18px;
+      padding: 20px 16px 16px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      box-sizing: border-box;
+    }
+    .notes-evolution-title {
+      color: #e8e8e8;
+      font-size: 16px;
+      font-weight: 800;
+      margin: 0 34px 2px 4px;
+    }
+    .notes-evolution-subtitle {
+      color: #7a8a94;
+      font-size: 12px;
+      margin: 0 0 12px 4px;
+    }
+    .notes-evolution-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid #3a4a55;
+      background: #243038;
+      color: #a0b0bb;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #notes-evolution-chart {
+      width: 100%;
+      display: block;
+      touch-action: pan-y;
+    }
+    .notes-evolution-tooltip {
+      position: absolute;
+      background: #243038;
+      border: 1px solid #3a4a55;
+      border-radius: 10px;
+      padding: 8px 11px;
+      pointer-events: none;
+      display: none;
+      max-width: 210px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
+    .notes-evolution-tooltip .tt-title {
+      color: #e8e8e8;
+      font-size: 12px;
+      font-weight: 700;
+      margin: 0 0 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .notes-evolution-tooltip .tt-meta {
+      color: #a0b0bb;
+      font-size: 11px;
+      margin: 0;
+    }
     .page-contributions .empty-state {
       color: #a0b0bb;
-      background: #2e3d47;
+      background: #243038;
       border: 1px dashed #3a4a55;
       border-radius: 12px;
       padding: 14px 16px;
@@ -157,14 +336,53 @@
       </div>
     </div>
 
-    <div class="contributions-section-title"><i class="fa-solid fa-landmark"></i> Mes arènes</div>
-    <div id="contributions-debates"><div class="empty-state">Chargement…</div></div>
+    <details class="contributions-accordion">
+      <summary>
+        <span class="contributions-accordion-label"><i class="fa-solid fa-landmark"></i> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
+        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+      </summary>
+      <div class="contributions-accordion-body" id="contributions-debates"><div class="empty-state">Chargement…</div></div>
+    </details>
 
-    <div class="contributions-section-title"><i class="fa-regular fa-lightbulb"></i> Mes idées</div>
-    <div id="contributions-arguments"><div class="empty-state">Chargement…</div></div>
+    <details class="contributions-accordion">
+      <summary>
+        <span class="contributions-accordion-label"><i class="fa-regular fa-lightbulb"></i> Mes idées <span class="contributions-count" id="contributions-arguments-count"></span></span>
+        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+      </summary>
+      <div class="contributions-accordion-body" id="contributions-arguments"><div class="empty-state">Chargement…</div></div>
+    </details>
 
-    <div class="contributions-section-title"><i class="fa-regular fa-comment"></i> Mes commentaires</div>
-    <div id="contributions-comments"><div class="empty-state">Chargement…</div></div>
+    <details class="contributions-accordion">
+      <summary>
+        <span class="contributions-accordion-label"><i class="fa-solid fa-graduation-cap"></i> Mes notes <span class="contributions-count" id="contributions-notes-count"></span></span>
+        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+      </summary>
+      <div class="contributions-accordion-body">
+        <div id="contributions-notes-actions" style="display:none; margin-bottom:10px;">
+          <button type="button" id="notes-evolution-btn" class="notes-evolution-btn">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Voir l'évolution</span>
+          </button>
+        </div>
+        <div id="contributions-notes"><div class="empty-state">Chargement…</div></div>
+      </div>
+    </details>
+
+    <details class="contributions-accordion">
+      <summary>
+        <span class="contributions-accordion-label"><i class="fa-regular fa-comment"></i> Mes commentaires <span class="contributions-count" id="contributions-comments-count"></span></span>
+        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+      </summary>
+      <div class="contributions-accordion-body" id="contributions-comments"><div class="empty-state">Chargement…</div></div>
+    </details>
+
+    <details class="contributions-accordion">
+      <summary>
+        <span class="contributions-accordion-label"><i class="fa-solid fa-bolt"></i> Mes voix <span class="contributions-count" id="contributions-votes-count"></span></span>
+        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+      </summary>
+      <div class="contributions-accordion-body" id="contributions-votes"><div class="empty-state">Chargement…</div></div>
+    </details>
   </section>
 </main>
 
@@ -177,6 +395,21 @@
 >
   <i class="fa-solid fa-rotate-right"></i>
 </button>
+
+<div id="notes-evolution-overlay" aria-modal="true" role="dialog" aria-label="Évolution de mes notes IA">
+  <div class="notes-evolution-panel">
+    <button type="button" class="notes-evolution-close" id="notes-evolution-close" aria-label="Fermer">✕</button>
+    <p class="notes-evolution-title">Évolution de mes notes IA</p>
+    <p class="notes-evolution-subtitle" id="notes-evolution-subtitle"></p>
+    <div style="position:relative;">
+      <svg id="notes-evolution-chart" viewBox="0 0 340 240" role="img" aria-label="Courbe des notes IA dans le temps"></svg>
+      <div class="notes-evolution-tooltip" id="notes-evolution-tooltip">
+        <p class="tt-title"></p>
+        <p class="tt-meta"></p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -197,62 +430,272 @@
     }
   }
 
+  function setCount(id, n) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = String(n);
+  }
+
   function renderEmpty(container, message) {
     container.innerHTML = '<div class="empty-state">' + esc(message) + '</div>';
   }
 
-  function renderDebates(container, debates) {
-    if (!debates.length) return renderEmpty(container, "Tu n'as pas encore ouvert d'arène.");
-    container.innerHTML = debates.map(function(d) {
-      return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(d.id) + '">' +
-        '<p class="contribution-title">' + esc(d.question) + '</p>' +
-        '<div class="contribution-meta">' +
-          '<span class="contribution-badge"><i class="fa-solid fa-landmark"></i> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
-          (d.category ? '<span>' + esc(d.category) + '</span>' : '') +
-          '<span>' + esc(formatDate(d.created_at)) + '</span>' +
-        '</div>' +
-      '</a>';
-    }).join("");
-  }
+  var PAGE_SIZE = 5;
 
-  function renderArguments(container, args) {
-    if (!args.length) return renderEmpty(container, "Tu n'as pas encore proposé d'idée.");
-    container.innerHTML = args.map(function(a) {
-      var votes = Number(a.votes) || 0;
-      return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(a.debate_id) + '">' +
-        '<p class="contribution-title">' + esc(a.title || "(sans titre)") + '</p>' +
-        (a.body ? '<p class="contribution-subtitle">' + esc(a.body) + '</p>' : '') +
-        '<div class="contribution-meta">' +
-          '<span class="contribution-badge"><i class="fa-solid fa-bolt"></i> ' + votes + ' voix</span>' +
-          (a.debate_question ? '<span>dans « ' + esc(a.debate_question) + ' »</span>' : '') +
-          '<span>' + esc(formatDate(a.created_at)) + '</span>' +
-        '</div>' +
-      '</a>';
-    }).join("");
-  }
+  function renderPaginated(container, items, renderItem, emptyMessage) {
+    if (!items.length) return renderEmpty(container, emptyMessage);
+    var pages = Math.ceil(items.length / PAGE_SIZE);
+    var page = 0;
 
-  function renderComments(container, comments) {
-    if (!comments.length) return renderEmpty(container, "Tu n'as pas encore commenté d'idée.");
-    container.innerHTML = comments.map(function(c) {
-      var inner =
-        '<p class="contribution-subtitle">' + esc(c.content) + '</p>' +
-        '<div class="contribution-meta">' +
-          (c.argument_title ? '<span>sous « ' + esc(c.argument_title) + ' »</span>' : '') +
-          (c.debate_question ? '<span>dans « ' + esc(c.debate_question) + ' »</span>' : '') +
-          '<span>' + esc(formatDate(c.created_at)) + '</span>' +
+    function draw() {
+      var slice = items.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      var html = slice.map(renderItem).join("");
+      if (pages > 1) {
+        html += '<div class="contributions-pager">' +
+          '<button type="button" class="contributions-pager-btn" data-dir="-1" aria-label="Page précédente"' + (page === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
+          '<span class="contributions-pager-info">' + (page + 1) + ' / ' + pages + '</span>' +
+          '<button type="button" class="contributions-pager-btn" data-dir="1" aria-label="Page suivante"' + (page === pages - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
         '</div>';
-      if (c.debate_id) {
-        return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(c.debate_id) + '">' + inner + '</a>';
       }
-      return '<div class="contribution-item">' + inner + '</div>';
-    }).join("");
+      container.innerHTML = html;
+      if (pages > 1) {
+        container.querySelectorAll(".contributions-pager-btn").forEach(function(btn) {
+          btn.addEventListener("click", function(event) {
+            event.preventDefault();
+            page = Math.min(pages - 1, Math.max(0, page + Number(btn.getAttribute("data-dir"))));
+            draw();
+          });
+        });
+      }
+    }
+
+    draw();
+  }
+
+  function debateItemHtml(d) {
+    return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(d.id) + '">' +
+      '<p class="contribution-title">' + esc(d.question) + '</p>' +
+      '<div class="contribution-meta">' +
+        '<span class="contribution-badge"><i class="fa-solid fa-landmark"></i> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
+        (d.category ? '<span>' + esc(d.category) + '</span>' : '') +
+        '<span>' + esc(formatDate(d.created_at)) + '</span>' +
+      '</div>' +
+    '</a>';
+  }
+
+  function argumentItemHtml(a) {
+    var votes = Number(a.votes) || 0;
+    return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(a.debate_id) + '">' +
+      '<p class="contribution-title">' + esc(a.title || "(sans titre)") + '</p>' +
+      (a.body ? '<p class="contribution-subtitle">' + esc(a.body) + '</p>' : '') +
+      '<div class="contribution-meta">' +
+        '<span class="contribution-badge"><i class="fa-solid fa-bolt"></i> ' + votes + ' voix</span>' +
+        (a.debate_question ? '<span>dans « ' + esc(a.debate_question) + ' »</span>' : '') +
+        '<span>' + esc(formatDate(a.created_at)) + '</span>' +
+      '</div>' +
+    '</a>';
+  }
+
+  function noteItemHtml(a) {
+    return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(a.debate_id) + '">' +
+      '<p class="contribution-title">' + esc(a.title || "(sans titre)") + '</p>' +
+      '<div class="contribution-meta">' +
+        '<span class="contribution-badge"><i class="fa-solid fa-graduation-cap"></i> ' + (Number(a.ai_score) || 0) + '/100</span>' +
+        (a.ai_category ? '<span>' + esc(a.ai_category) + '</span>' : '') +
+        (a.debate_question ? '<span>dans « ' + esc(a.debate_question) + ' »</span>' : '') +
+        '<span>' + esc(formatDate(a.created_at)) + '</span>' +
+      '</div>' +
+    '</a>';
+  }
+
+  function commentItemHtml(c) {
+    var inner =
+      '<p class="contribution-subtitle">' + esc(c.content) + '</p>' +
+      '<div class="contribution-meta">' +
+        (c.argument_title ? '<span>sous « ' + esc(c.argument_title) + ' »</span>' : '') +
+        (c.debate_question ? '<span>dans « ' + esc(c.debate_question) + ' »</span>' : '') +
+        '<span>' + esc(formatDate(c.created_at)) + '</span>' +
+      '</div>';
+    if (c.debate_id) {
+      return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(c.debate_id) + '">' + inner + '</a>';
+    }
+    return '<div class="contribution-item">' + inner + '</div>';
+  }
+
+  function voteItemHtml(v) {
+    var count = Number(v.vote_count) || 0;
+    var inner =
+      '<p class="contribution-title">' + esc(v.argument_title || "(idée supprimée)") + '</p>' +
+      '<div class="contribution-meta">' +
+        '<span class="contribution-badge"><i class="fa-solid fa-bolt"></i> ' + count + (count > 1 ? ' voix données' : ' voix donnée') + '</span>' +
+        (v.debate_question ? '<span>dans « ' + esc(v.debate_question) + ' »</span>' : '') +
+        '<span>' + esc(formatDate(v.created_at)) + '</span>' +
+      '</div>';
+    if (v.debate_id) {
+      return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(v.debate_id) + '">' + inner + '</a>';
+    }
+    return '<div class="contribution-item">' + inner + '</div>';
+  }
+
+  // ===== Évolution des notes IA (modale graphique) =====
+  var SERIES_COLOR = "#3987e5";   // slot 1 sombre, validé ≥3:1 sur #2e3d47
+  var SURFACE = "#2e3d47";
+  var GRID = "#3a4a55";
+  var TEXT_MUTED = "#7a8a94";
+  var TEXT_PRIMARY = "#e8e8e8";
+
+  function shortDate(iso) {
+    try {
+      return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "2-digit" });
+    } catch (e) { return ""; }
+  }
+
+  function setupNotesEvolution(notedIdeas) {
+    var actions = document.getElementById("contributions-notes-actions");
+    var btn = document.getElementById("notes-evolution-btn");
+    var overlay = document.getElementById("notes-evolution-overlay");
+    var closeBtn = document.getElementById("notes-evolution-close");
+    if (!actions || !btn || !overlay || !closeBtn) return;
+
+    // L'évolution n'a de sens qu'à partir de 2 idées notées.
+    var points = notedIdeas.slice().sort(function(a, b) {
+      return new Date(a.created_at) - new Date(b.created_at);
+    });
+    if (points.length < 2) return;
+
+    actions.style.display = "block";
+    btn.onclick = function() {
+      overlay.classList.add("open");
+      drawNotesEvolutionChart(points);
+    };
+    closeBtn.onclick = function() { overlay.classList.remove("open"); };
+    overlay.addEventListener("click", function(e) {
+      if (e.target === overlay) overlay.classList.remove("open");
+    });
+  }
+
+  function drawNotesEvolutionChart(points) {
+    var svg = document.getElementById("notes-evolution-chart");
+    var tooltip = document.getElementById("notes-evolution-tooltip");
+    var subtitle = document.getElementById("notes-evolution-subtitle");
+    if (!svg || !tooltip) return;
+
+    var W = 340, H = 240;
+    var M = { top: 18, right: 16, bottom: 30, left: 32 };
+    var innerW = W - M.left - M.right;
+    var innerH = H - M.top - M.bottom;
+
+    function xAt(i) {
+      return points.length === 1 ? M.left + innerW / 2 : M.left + (innerW * i) / (points.length - 1);
+    }
+    function yAt(score) { return M.top + innerH * (1 - (Number(score) || 0) / 100); }
+
+    if (subtitle) {
+      subtitle.textContent = points.length + " idées notées · " + shortDate(points[0].created_at) + " → " + shortDate(points[points.length - 1].created_at);
+    }
+
+    var ns = "http://www.w3.org/2000/svg";
+    function el(tag, attrs) {
+      var node = document.createElementNS(ns, tag);
+      for (var k in attrs) node.setAttribute(k, attrs[k]);
+      return node;
+    }
+
+    svg.textContent = "";
+
+    // Grille horizontale : hairline pleine, discrète
+    [0, 25, 50, 75, 100].forEach(function(tick) {
+      var y = yAt(tick);
+      svg.appendChild(el("line", { x1: M.left, y1: y, x2: W - M.right, y2: y, stroke: GRID, "stroke-width": 1 }));
+      var label = el("text", { x: M.left - 6, y: y + 3.5, "text-anchor": "end", fill: TEXT_MUTED, "font-size": 10 });
+      label.textContent = String(tick);
+      svg.appendChild(label);
+    });
+
+    // Libellés de temps aux extrémités
+    var startLabel = el("text", { x: M.left, y: H - 10, "text-anchor": "start", fill: TEXT_MUTED, "font-size": 10 });
+    startLabel.textContent = shortDate(points[0].created_at);
+    svg.appendChild(startLabel);
+    var endLabel = el("text", { x: W - M.right, y: H - 10, "text-anchor": "end", fill: TEXT_MUTED, "font-size": 10 });
+    endLabel.textContent = shortDate(points[points.length - 1].created_at);
+    svg.appendChild(endLabel);
+
+    // Ligne 2px, jointures rondes
+    var d = points.map(function(pt, i) {
+      return (i === 0 ? "M" : "L") + xAt(i).toFixed(1) + " " + yAt(pt.ai_score).toFixed(1);
+    }).join(" ");
+    svg.appendChild(el("path", {
+      d: d, fill: "none", stroke: SERIES_COLOR, "stroke-width": 2,
+      "stroke-linecap": "round", "stroke-linejoin": "round"
+    }));
+
+    // Marqueurs ≥8px avec anneau de surface (2px)
+    var markers = [];
+    points.forEach(function(pt, i) {
+      var dot = el("circle", {
+        cx: xAt(i), cy: yAt(pt.ai_score), r: 4.5,
+        fill: SERIES_COLOR, stroke: SURFACE, "stroke-width": 2
+      });
+      svg.appendChild(dot);
+      markers.push(dot);
+    });
+
+    // Étiquettes directes sélectives : première et dernière note (jamais toutes)
+    [[0, "start"], [points.length - 1, "end"]].forEach(function(pair) {
+      var i = pair[0];
+      var label = el("text", {
+        x: xAt(i), y: yAt(points[i].ai_score) - 9, "text-anchor": pair[1] === "start" && i === 0 ? "start" : "end",
+        fill: TEXT_PRIMARY, "font-size": 11, "font-weight": 700
+      });
+      label.textContent = String(points[i].ai_score);
+      svg.appendChild(label);
+    });
+
+    // Survol / toucher : point le plus proche → tooltip
+    var activeIndex = -1;
+    function setActive(i) {
+      if (i === activeIndex) return;
+      if (markers[activeIndex]) markers[activeIndex].setAttribute("r", 4.5);
+      activeIndex = i;
+      var pt = points[i];
+      markers[i].setAttribute("r", 6);
+      tooltip.querySelector(".tt-title").textContent = pt.title || "(sans titre)";
+      tooltip.querySelector(".tt-meta").textContent = pt.ai_score + "/100 · " + shortDate(pt.created_at);
+      var rect = svg.getBoundingClientRect();
+      var px = (xAt(i) / W) * rect.width;
+      var py = (yAt(pt.ai_score) / H) * rect.height;
+      tooltip.style.display = "block";
+      tooltip.style.left = Math.max(0, Math.min(rect.width - 150, px - 60)) + "px";
+      tooltip.style.top = Math.max(0, py - tooltip.offsetHeight - 14) + "px";
+    }
+    function clearActive() {
+      if (markers[activeIndex]) markers[activeIndex].setAttribute("r", 4.5);
+      activeIndex = -1;
+      tooltip.style.display = "none";
+    }
+    function onPointer(e) {
+      var rect = svg.getBoundingClientRect();
+      var clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+      var x = ((clientX - rect.left) / rect.width) * W;
+      var best = 0, bestDist = Infinity;
+      points.forEach(function(pt, i) {
+        var dist = Math.abs(xAt(i) - x);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      });
+      setActive(best);
+    }
+    svg.onmousemove = onPointer;
+    svg.ontouchstart = onPointer;
+    svg.ontouchmove = onPointer;
+    svg.onmouseleave = clearActive;
   }
 
   function load() {
     var debatesEl = document.getElementById("contributions-debates");
     var argumentsEl = document.getElementById("contributions-arguments");
     var commentsEl = document.getElementById("contributions-comments");
-    if (!debatesEl || !argumentsEl || !commentsEl) return;
+    var votesEl = document.getElementById("contributions-votes");
+    var notesEl = document.getElementById("contributions-notes");
+    if (!debatesEl || !argumentsEl || !commentsEl || !votesEl || !notesEl) return;
 
     var key = null;
     try { key = localStorage.getItem("key"); } catch (e) {}
@@ -260,6 +703,8 @@
       renderEmpty(debatesEl, "Tu n'as pas encore ouvert d'arène.");
       renderEmpty(argumentsEl, "Tu n'as pas encore proposé d'idée.");
       renderEmpty(commentsEl, "Tu n'as pas encore commenté d'idée.");
+      renderEmpty(votesEl, "Tu n'as pas encore soutenu d'idée avec tes voix.");
+      renderEmpty(notesEl, "Aucune de tes idées n'a encore été évaluée par l'IA.");
       return;
     }
 
@@ -269,15 +714,27 @@
         return r.json();
       })
       .then(function(data) {
-        renderDebates(debatesEl, data.debates || []);
-        renderArguments(argumentsEl, data.arguments || []);
-        renderComments(commentsEl, data.comments || []);
+        renderPaginated(debatesEl, data.debates || [], debateItemHtml, "Tu n'as pas encore ouvert d'arène.");
+        renderPaginated(argumentsEl, data.arguments || [], argumentItemHtml, "Tu n'as pas encore proposé d'idée.");
+        var notedIdeas = (data.arguments || []).filter(function(a) { return a.ai_score != null; })
+          .sort(function(x, y) { return (Number(y.ai_score) || 0) - (Number(x.ai_score) || 0); });
+        renderPaginated(notesEl, notedIdeas, noteItemHtml, "Aucune de tes idées n'a encore été évaluée par l'IA.");
+        setCount("contributions-notes-count", notedIdeas.length);
+        setupNotesEvolution(notedIdeas);
+        renderPaginated(commentsEl, data.comments || [], commentItemHtml, "Tu n'as pas encore commenté d'idée.");
+        renderPaginated(votesEl, data.votes || [], voteItemHtml, "Tu n'as pas encore soutenu d'idée avec tes voix.");
+        setCount("contributions-debates-count", (data.debates || []).length);
+        setCount("contributions-arguments-count", (data.arguments || []).length);
+        setCount("contributions-comments-count", (data.comments || []).length);
+        setCount("contributions-votes-count", (data.votes || []).length);
       })
       .catch(function() {
         var message = "Impossible de charger tes contributions. Réessaie dans un instant.";
         renderEmpty(debatesEl, message);
         renderEmpty(argumentsEl, message);
         renderEmpty(commentsEl, message);
+        renderEmpty(votesEl, message);
+        renderEmpty(notesEl, message);
       });
   }
 
@@ -316,6 +773,6 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260706-dock-unifie" defer></script>
+<script src="/script.min.js?v=20260706-alertes-menu" defer></script>
 </body>
 </html>

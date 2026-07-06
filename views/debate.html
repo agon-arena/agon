@@ -183,13 +183,13 @@ try {
       <i id="push-menu-icon" class="fa-regular fa-bell"></i>
       <span id="push-menu-label">Activer les alertes</span>
     </button>
-<a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')">
-  <i class="fa-regular fa-envelope"></i>
-  <span>Contact</span>
-</a>
 <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')">
   <i class="fa-regular fa-circle-question"></i>
   <span>À propos</span>
+</a>
+<a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')">
+  <i class="fa-regular fa-envelope"></i>
+  <span>Contact</span>
 </a>
 
 
@@ -929,7 +929,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260706-dock-unifie" defer></script>
+	<script src="/script.min.js?v=20260706-alertes-menu" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
