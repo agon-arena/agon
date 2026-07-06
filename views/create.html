@@ -86,7 +86,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260705-standalone-band2">
+<link rel="stylesheet" href="/style.min.css?v=20260706-dock-centres">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -225,6 +225,10 @@
           <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
+          </a>
+          <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
+            <i class="fa-regular fa-folder-open"></i>
+            <span>Mes contributions</span>
           </a>
 <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); openDebateIframeModal('/contact')">
   <i class="fa-regular fa-envelope"></i>
@@ -793,7 +797,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260706-install-success" defer></script>
+<script src="/script.min.js?v=20260706-dock-unifie" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

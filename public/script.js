@@ -659,6 +659,58 @@ if (isStandaloneMode()) {
   document.body.classList.add("is-standalone");
 }
 
+// Alignement du dock flottant bas débat (retour/fermeture, refresh, compteur
+// de voix) : voir le bloc CSS "Dock flottant bas débat unifié".
+// --agon-dock-lift : dégagement au-dessus du bord bas visible. 0 en Safari
+//   (barre d'outils) et sur les vieux iPhones PWA au viewport tronqué
+//   (screen.height - innerHeight >> 0 en standalone) ; sinon safe-area.
+//   Calculé dans le document parent, hérité tel quel par l'iframe du modal.
+// --agon-embedded-bottom-ext : débordement de l'iframe du modal sous le
+//   viewport parent (bottom négatif posé par le parent pour la safe-area).
+(function initAgonDockAlignment() {
+  const root = document.documentElement;
+  let topWin = window;
+  try { if (window.top && window.top.document) topWin = window.top; } catch {}
+  const isEmbedded = topWin !== window;
+
+  let envProbe = null;
+  const readEnvBottom = () => {
+    if (!envProbe) {
+      envProbe = document.createElement("div");
+      envProbe.setAttribute("aria-hidden", "true");
+      envProbe.style.cssText = "position:fixed;left:0;bottom:0;width:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none;z-index:-1;";
+      (document.body || root).appendChild(envProbe);
+    }
+    return Math.max(0, Math.round(parseFloat(getComputedStyle(envProbe).paddingBottom) || 0));
+  };
+
+  const update = () => {
+    let lift = 0;
+    let ext = 0;
+    try {
+      if (isEmbedded) {
+        ext = Math.max(0, Math.round((Number(window.innerHeight) || 0) - (Number(topWin.innerHeight) || 0)));
+        const inherited = parseFloat(topWin.document.documentElement.style.getPropertyValue("--agon-dock-lift"));
+        lift = Number.isFinite(inherited) ? Math.max(0, Math.round(inherited)) : 0;
+      } else if (isStandaloneMode()) {
+        const portrait = (Number(window.innerHeight) || 0) >= (Number(window.innerWidth) || 0);
+        const screenAlong = portrait
+          ? Math.max(Number(screen.height) || 0, Number(screen.width) || 0)
+          : Math.min(Number(screen.height) || 0, Number(screen.width) || 0);
+        const truncated = screenAlong > 0 && screenAlong - (Number(window.innerHeight) || 0) > 20;
+        if (!truncated) lift = readEnvBottom();
+      }
+    } catch {}
+    root.style.setProperty("--agon-dock-lift", `${lift}px`);
+    root.style.setProperty("--agon-embedded-bottom-ext", `${ext}px`);
+  };
+
+  update();
+  window.addEventListener("resize", update);
+  window.addEventListener("orientationchange", update);
+  setTimeout(update, 1000);
+})();
+
 if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
   fetch(API + "/users/mark-app-installed", {
     method: "POST",
@@ -32653,3 +32705,4 @@ try {
   window.__agonWindowHandlersRestoreError = String(error?.message || error || "");
   console.error("[Agon] impossible d'exposer les handlers globaux", error);
 }
+

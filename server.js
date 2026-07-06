@@ -3943,6 +3943,99 @@ app.get("/notifications", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
+app.get("/contributions", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/contributions.html"));
+});
+
+// Contributions du visiteur : tout est retrouvé via sa clé de navigateur
+// (creator_key des arènes, author_key des idées et commentaires). Lectures
+// bornées par utilisateur (limit), pas besoin de fetchAllSupabaseRows.
+app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, res) => {
+  const key = String(req.query.key || "").trim();
+  if (!key) return res.status(400).json({ error: "Clé manquante." });
+
+  try {
+    const [debatesRes, argumentsRes, commentsRes] = await Promise.all([
+      supabase
+        .from("debates")
+        .select("id, question, type, category, created_at, creator_key")
+        .eq("creator_key", key)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("arguments")
+        .select("id, debate_id, side, title, body, votes, created_at, author_key")
+        .eq("author_key", key)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("comments")
+        .select("id, argument_id, content, created_at, author_key")
+        .eq("author_key", key)
+        .order("created_at", { ascending: false })
+        .limit(200)
+    ]);
+    if (debatesRes.error) throw debatesRes.error;
+    if (argumentsRes.error) throw argumentsRes.error;
+    if (commentsRes.error) throw commentsRes.error;
+
+    const myDebates = debatesRes.data || [];
+    const myArguments = argumentsRes.data || [];
+    const myComments = commentsRes.data || [];
+
+    // Contexte des commentaires : idée parente, puis arène de cette idée.
+    const parentArgumentIds = [...new Set(myComments.map((c) => c.argument_id).filter(Boolean))];
+    let parentArguments = [];
+    if (parentArgumentIds.length) {
+      const { data, error } = await supabase
+        .from("arguments")
+        .select("id, debate_id, title")
+        .in("id", parentArgumentIds);
+      if (error) throw error;
+      parentArguments = data || [];
+    }
+    const parentArgumentById = new Map(parentArguments.map((a) => [String(a.id), a]));
+
+    const referencedDebateIds = [...new Set(
+      [...myArguments.map((a) => a.debate_id), ...parentArguments.map((a) => a.debate_id)]
+        .filter(Boolean)
+        .map(String)
+    )];
+    let referencedDebates = [];
+    if (referencedDebateIds.length) {
+      const { data, error } = await supabase
+        .from("debates")
+        .select("id, question, type")
+        .in("id", referencedDebateIds);
+      if (error) throw error;
+      referencedDebates = data || [];
+    }
+    const debateById = new Map(referencedDebates.map((d) => [String(d.id), d]));
+
+    res.json({
+      debates: myDebates.map((d) => sanitizeDebateForClient(d, key)),
+      arguments: myArguments.map((a) => ({
+        ...sanitizeArgumentForClient(a, key),
+        debate_question: debateById.get(String(a.debate_id))?.question || "",
+        debate_type: debateById.get(String(a.debate_id))?.type || ""
+      })),
+      comments: myComments.map((c) => {
+        const parentArgument = parentArgumentById.get(String(c.argument_id));
+        const parentDebate = parentArgument ? debateById.get(String(parentArgument.debate_id)) : null;
+        return {
+          ...sanitizeCommentForClient(c, key),
+          argument_title: parentArgument?.title || "",
+          debate_id: parentArgument?.debate_id || null,
+          debate_question: parentDebate?.question || ""
+        };
+      })
+    });
+  } catch (e) {
+    console.error("Erreur /api/my-contributions:", e);
+    res.status(500).json({ error: "Erreur lors du chargement des contributions." });
+  }
+});
+
 app.get("/contact", (req, res) => {
   res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/contact.html"));
 });

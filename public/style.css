@@ -22779,29 +22779,37 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 }
 
-/* Mobile navigateur standard : baisse légèrement le dock flottant débat. */
+/* ===== Dock flottant bas débat unifié (retour/fermeture, refresh, compteur
+   de voix) : même niveau visuel partout — bande ou pas, standalone ou pas.
+   - --agon-dock-lift (posée en JS, héritée par l'iframe depuis le parent) :
+     dégagement au-dessus du bord bas visible. Safari mobile : 0 (la barre
+     d'outils protège déjà, et env() y fluctue pendant le scroll) ; standalone
+     sain : safe-area (barre home) ; vieux iPhone PWA au viewport tronqué
+     (iPhone X/XS/11 Pro) : 0, le dock affleure la limite d'affichage.
+   - --agon-embedded-bottom-ext (JS) : débordement de l'iframe du modal sous
+     le viewport parent, pour exprimer le même niveau dans ses coordonnées. */
 @media (max-width: 768px) {
-  body:not(.is-standalone) #debate-iframe-modal-close,
-  body:not(.is-standalone) #voices-float-badge {
-    bottom: 6px !important;
+  /* Les hauteurs diffèrent (refresh 44px, retour/fermeture 42px, compteur
+     ~36px) : les bottom sont compensés pour aligner les CENTRES des trois
+     boutons sur la même ligne (28px au-dessus de la ligne de référence). */
+
+  /* Bouton fermeture du modal (42px) : vit dans le document parent. */
+  #debate-iframe-modal-close {
+    bottom: calc(7px + var(--agon-dock-lift, 0px)) !important;
   }
 
-  body.page-debate:not(.is-standalone) .debate-floating-refresh-btn,
-  body.debate-embedded-frame:not(.is-standalone) .debate-floating-refresh-btn {
-    bottom: calc(6px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-}
-
-/* Standalone : remonte de 2px les boutons flottants bas de la page débat. */
-@media (max-width: 768px), (display-mode: standalone) {
-  body.is-standalone #debate-iframe-modal-close,
-  body.is-standalone #voices-float-badge {
-    bottom: 34px !important;
+  /* Boutons du document débat (direct ou embarqué dans l'iframe). */
+  .page-debate .mobile-back-button {
+    bottom: calc(7px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 
-  body.is-standalone.page-debate .debate-floating-refresh-btn,
-  body.is-standalone.debate-embedded-frame .debate-floating-refresh-btn {
-    bottom: 34px !important;
+  body.page-debate .debate-floating-refresh-btn,
+  body.debate-embedded-frame .debate-floating-refresh-btn {
+    bottom: calc(6px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
+  }
+
+  #voices-float-badge {
+    bottom: calc(10px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 }
 
@@ -22813,18 +22821,6 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.is-standalone #debate-iframe-modal-refresh {
     bottom: calc(5vh + 18px) !important;
-  }
-}
-
-@media (display-mode: standalone) and (max-width: 768px) {
-  #debate-iframe-modal-close,
-  #voices-float-badge {
-    bottom: 34px !important;
-  }
-
-  body.page-debate .debate-floating-refresh-btn,
-  body.debate-embedded-frame .debate-floating-refresh-btn {
-    bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 
@@ -22859,15 +22855,23 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.is-standalone.page-debate {
-    min-height: calc(100vh + var(--agon-standalone-bottom-cover, 0px)) !important;
-    padding-bottom: var(--agon-standalone-bottom-cover, 0px);
+    min-height: 100vh !important;
+    /* Seul le remplissage legacy (vieux iPhone au bas non peint) est conservé :
+       il vaut 0 sur les appareils sains, donc la page s'étend jusqu'en bas. */
+    padding-bottom: var(--agon-legacy-standalone-bottom-fill, 0px);
     background: #243038 !important;
   }
 
   @supports (min-height: 100dvh) {
     body.is-standalone.page-debate {
-      min-height: calc(100dvh + var(--agon-standalone-bottom-cover, 0px)) !important;
+      min-height: 100dvh !important;
     }
+  }
+
+  /* Standalone : plus de réserve pour la nav basse (masquée sur /debate
+     mobile) — le contenu défile jusqu'au bord bas de l'écran. */
+  body.is-standalone.page-debate main.debate-page {
+    padding-bottom: 0;
   }
 
   body.is-standalone.page-debate:not(.admin-edit-open):not(.argument-form-open)::after {
@@ -22903,6 +22907,36 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   /* Pas de calque fixe de couverture sur /debate : le contenu qui défile doit
      pouvoir se peindre jusqu'au bord bas de l'écran (le fond du body suffit). */
+
+  /* Liseré dégradé (même motif que le bandeau bas de l'index) posé au ras de
+     la limite basse d'affichage : sur les vieux iPhones au viewport tronqué,
+     il coiffe la bande grise résiduelle ; sur les appareils sains, il souligne
+     le bord bas de l'écran. Dans l'iframe du modal, le cadre déborde de
+     env(safe-area-inset-bottom) sous le viewport parent, d'où le décalage. */
+  body.is-standalone.page-debate:not(.argument-form-open):not(.admin-edit-open)::before {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 5px;
+    /* Sous le dock flottant : refresh 96, compteur de voix 900, fermeture
+       10000 — le liseré ne doit jamais recouvrir les boutons. */
+    z-index: 90;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      #f3f4f6 0%,
+      #d1d5db 25%,
+      #9ca3af 50%,
+      #374151 75%,
+      #111827 100%
+    );
+  }
+
+  body.is-standalone.page-debate.debate-embedded-frame:not(.argument-form-open):not(.admin-edit-open)::before {
+    bottom: env(safe-area-inset-bottom, 0px);
+  }
 
   #aala-overlay {
     --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
@@ -22953,3 +22987,4 @@ body.page-create-mobile .create-card .create-submit-helper {
     margin-bottom: calc(var(--agon-debate-legacy-media-shift-y, 0px) + 42px) !important;
   }
 }
+
