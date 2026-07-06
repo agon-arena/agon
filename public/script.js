@@ -569,6 +569,51 @@ window.addEventListener("beforeinstallprompt", (e) => {
   });
 });
 
+// Dès que l'installation se termine (Android/Chrome), on confirme et on guide
+// l'ouverture : aucune API web ne permet de lancer l'app installée automatiquement.
+// (Safari iOS n'émet pas cet événement : la modale d'instructions reste le guide.)
+window.addEventListener("appinstalled", () => {
+  window.deferredInstallPrompt = null;
+  ["install-pwa-btn", "install-pwa-btn-desktop"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.style.display = "none";
+  });
+  ["install-modal-overlay", "agon-install-modal-fallback"].forEach((id) => {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "none";
+  });
+
+  let overlay = document.getElementById("agon-install-success-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "agon-install-success-overlay";
+    overlay.className = "install-modal-overlay";
+    overlay.innerHTML = `
+      <div class="install-modal" onclick="event.stopPropagation()">
+        <div class="install-modal-brand">
+          <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+        </div>
+        <h3 class="install-modal-title">Agôn est installé&nbsp;!</h3>
+        <div class="install-modal-section">
+          <p class="install-modal-text">L'icône <strong>Agôn</strong> vient d'être ajoutée à ton écran d'accueil. Appuie dessus pour ouvrir l'application en plein écran.</p>
+        </div>
+        <button class="install-modal-android-btn" type="button" style="display:flex"
+          onclick="document.getElementById('agon-install-success-overlay').style.display='none';document.body.style.overflow='';">
+          Compris
+        </button>
+      </div>`;
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.style.display = "none";
+        document.body.style.overflow = "";
+      }
+    });
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = "flex";
+  document.body.style.overflow = "hidden";
+});
+
 function isMobilePushInviteSurface() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
