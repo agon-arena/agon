@@ -8886,23 +8886,61 @@ async function _scheduleAnalysisIfNeeded(debateId) {
   }
 }
 
-// Scheduler : vérifie toutes les 15 min les analyses à générer
-setInterval(async () => {
-  try {
-    const now = new Date().toISOString();
-    const { data: pending } = await supabase
-      .from("debates")
-      .select("id")
-      .eq("ai_analysis_status", "scheduled")
-      .lte("ai_analysis_scheduled_at", now);
+// Scheduler : vérifie toutes les 15 min les analyses à générer. Seule l'instance
+// Render l'exécute (Render définit automatiquement la variable RENDER) : le pm2
+// local peut être coupé en pleine génération et laisserait l'analyse bloquée en
+// "generating" — statut que le scheduler ne reprend jamais. Même logique que
+// AUTO_PIPELINES_ENABLED côté bot veille. AGON_ANALYSIS_SCHEDULER=on|off force
+// le comportement (ex. =on en local pour reprendre la main si Render est down).
+// Les routes manuelles de (re)génération restent utilisables sur les deux instances.
+const ANALYSIS_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_ANALYSIS_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
 
-    for (const row of (pending || [])) {
-      await _generateAndSaveAnalysis(row.id);
+if (ANALYSIS_SCHEDULER_ENABLED) {
+  // Au démarrage : libère les analyses restées en "generating" après un crash ou un
+  // redeploy survenu en pleine génération. Marge de 60 min sur l'échéance pour ne pas
+  // toucher une génération réellement en cours sur l'ancienne instance pendant un
+  // deploy sans coupure (une génération dure quelques minutes après son échéance).
+  supabase
+    .from("debates")
+    .update({ ai_analysis_status: "scheduled" })
+    .eq("ai_analysis_status", "generating")
+    .lt("ai_analysis_scheduled_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    .then(({ error }) => {
+      if (error) console.error("[auto-analysis] reset des analyses bloquées :", error.message);
+    });
+
+  setInterval(async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data: pending } = await supabase
+        .from("debates")
+        .select("id")
+        .eq("ai_analysis_status", "scheduled")
+        .lte("ai_analysis_scheduled_at", now);
+
+      for (const row of (pending || [])) {
+        // Claim atomique : seule l'instance qui réussit à basculer scheduled→generating
+        // lance la génération. Sans cette condition, deux instances qui pollent au même
+        // moment généraient (et payaient) la même analyse deux fois.
+        const { data: claimed, error: claimError } = await supabase
+          .from("debates")
+          .update({ ai_analysis_status: "generating" })
+          .eq("id", row.id)
+          .eq("ai_analysis_status", "scheduled")
+          .select("id");
+        if (claimError || !claimed || !claimed.length) continue;
+        await _generateAndSaveAnalysis(row.id);
+      }
+    } catch (err) {
+      console.error("[auto-analysis scheduler]", err.message);
     }
-  } catch (err) {
-    console.error("[auto-analysis scheduler]", err.message);
-  }
-}, 15 * 60 * 1000).unref();
+  }, 15 * 60 * 1000).unref();
+}
 
 // (anciens prompts _buildAnalysisPrompt1 / _PROMPT2 / _buildPrompt3 déplacés dans lib/debate-analysis.js)
 
