@@ -8296,7 +8296,8 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null, op
   return buildSourcePreviewCardHtml(sourcePreview, itemUrl, {
     debateId: safeDebateId,
     badgeLabel: sourceLabel,
-    showSourceBadgeWithoutImage: options.showSourceBadgeWithoutImage === true
+    showSourceBadgeWithoutImage: options.showSourceBadgeWithoutImage === true,
+    fallbackImage: getIndexDefaultFallbackImage(safeDebateId)
   });
 }
 
@@ -11251,7 +11252,9 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const domain = normalizedPreview.domain || "Source externe";
   const title = normalizedPreview.title || domain;
   const description = normalizedPreview.description || "";
-  const image = normalizedPreview.image || "";
+  // Aperçu sans image (site qui bloque la récupération, ex. 403 anti-bot) :
+  // le visuel Agôn par défaut prend le relais pour ne jamais laisser une carte sans image.
+  const image = normalizedPreview.image || String(options?.fallbackImage || "").trim();
   const imageAlreadyLoaded = hasLoadedIndexOpenGraphImage(image);
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
@@ -24738,7 +24741,9 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   const fallbackPreview = normalizeSourcePreviewData(preview, sourceUrl);
 
-  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl);
+  sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl, {
+    fallbackImage: getIndexDefaultFallbackImage(getDebateId())
+  });
   sourceFallback.style.display = "block";
 
   initIndexOpenGraphImageObserver(sourceFallback);

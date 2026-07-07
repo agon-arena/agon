@@ -13752,6 +13752,21 @@ body.page-debate .argument-url-field small.argument-url-ia-hint {
   border-radius: 20px;
 }
 
+/* FIX page débat mobile : même correctif que la version desktop ci-dessus, jamais reporté
+   sur mobile. Contrairement aux cartes OG/X/Instagram (contenu en position:absolute qui ne
+   pousse pas la hauteur du conteneur), l'embed YouTube est un bloc normal qui a déjà sa
+   propre hauteur 16/9 : le double contrainte aspect-ratio + min-height du wrapper crée un
+   espace parasite sous la vidéo sur certains rendus mobiles. On neutralise le wrapper
+   uniquement quand il contient l'embed YouTube et on laisse le contenu dicter la hauteur. */
+@media (max-width: 768px) {
+  body.page-debate #debate-source-preview-wrap:has(#debate-source-yt-container),
+  body.page-debate .debate-source-preview-wrap:has(#debate-source-yt-container) {
+    aspect-ratio: auto;
+    min-height: 0;
+    height: auto;
+  }
+}
+
 
 
 /* Bouton son YouTube dans le rectangle vidéo des cartes arènes */
