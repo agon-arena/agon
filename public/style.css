@@ -10344,7 +10344,9 @@ body.page-home.page-home-mobile {
   z-index: 145;
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Colonnes auto : le bandeau accepte 4 ou 5 items selon la page. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
   min-height: 58px;
@@ -10707,6 +10709,7 @@ body.page-home.page-home-mobile {
 
   .home-bottom-nav-item span {
     font-size: 9px;
+    white-space: nowrap;
   }
 
   .home-bottom-nav-item-notifications .notifications-count-bottom {
@@ -13034,11 +13037,8 @@ body.admin-edit-open::after {
 @media (max-width: 768px) {
   #debate-iframe-modal-close {
     top: auto !important;
-    /* Pas d'env(safe-area-inset-bottom) : doit rester aligné avec le bouton
-       refresh de l'index (lui-même en position fixe, voir plus bas dans ce
-       fichier), qui ne peut pas dépendre de la safe-area sans bouger pendant
-       le scroll ni se désaligner du bandeau du bas en mode standalone. */
-    bottom: 6px !important;
+    /* bottom : géré par le bloc "Dock flottant bas débat unifié" en fin de
+       fichier (compense le débordement --agon-safe-bottom de la modale). */
     left: auto !important;
     right: 322px !important;
     width: 42px !important;
@@ -22791,25 +22791,31 @@ body.page-create-mobile .create-card .create-submit-helper {
 @media (max-width: 768px) {
   /* Les hauteurs diffèrent (refresh 44px, retour/fermeture 42px, compteur
      ~36px) : les bottom sont compensés pour aligner les CENTRES des trois
-     boutons sur la même ligne (28px au-dessus de la ligne de référence). */
+     boutons sur la même ligne (24px au-dessus de la ligne de référence —
+     ne pas descendre plus : bande morte des vieux iPhones PWA en dessous). */
 
-  /* Bouton fermeture du modal (42px) : vit dans le document parent. */
+  /* Bouton fermeture du modal (42px) : vit dans le document parent, mais son
+     containing block est #debate-iframe-modal (backdrop-filter), dont le bas
+     déborde de --agon-safe-bottom sous le viewport (#debate-iframe-modal.open,
+     correctif bande du bas plus haut). On ré-ajoute ce même débordement pour
+     que le bouton retombe sur la ligne du dock (refresh/compteur, compensés
+     eux via --agon-embedded-bottom-ext dans l'iframe). */
   #debate-iframe-modal-close {
-    bottom: calc(7px + var(--agon-dock-lift, 0px)) !important;
+    bottom: calc(3px + var(--agon-dock-lift, 0px) + var(--agon-safe-bottom, 0px)) !important;
   }
 
   /* Boutons du document débat (direct ou embarqué dans l'iframe). */
   .page-debate .mobile-back-button {
-    bottom: calc(7px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
+    bottom: calc(3px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 
   body.page-debate .debate-floating-refresh-btn,
   body.debate-embedded-frame .debate-floating-refresh-btn {
-    bottom: calc(6px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
+    bottom: calc(2px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 
   #voices-float-badge {
-    bottom: calc(10px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
+    bottom: calc(6px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 }
 

@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260706-dock-centres">
+  <link rel="stylesheet" href="/style.min.css?v=20260707-dock-lift-fix3">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -474,6 +474,11 @@
             <span>Arènes du jour</span>
           </button>
 
+          <button type="button" id="admin-analysis-queue-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="openAnalysisQueueModal()">
+            <span aria-hidden="true">⏳</span>
+            <span>Comptes à rebours</span>
+          </button>
+
           <button type="button" id="admin-diagnostic-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="openDiagnosticModal()">
             <i class="fa-solid fa-bug" aria-hidden="true"></i>
             <span>Diagnostic refresh</span>
@@ -678,67 +683,12 @@
     <span>Ouvrir</span>
   </a>
 
-  <div class="home-bottom-nav-item-wrap">
-    <button
-      type="button"
-      class="home-bottom-nav-item"
-      aria-label="Partager"
-      aria-haspopup="true"
-      aria-expanded="false"
-      onclick="toggleHomeBottomShareMenu(event)"
-    >
-      <i class="fa-solid fa-share-nodes"></i>
-      <span>Partager</span>
-    </button>
+  
 
-    <div
-      id="home-bottom-share-menu"
-      class="home-bottom-share-menu"
-      onclick="event.stopPropagation()"
-      aria-label="Options de partage"
-    >
-      <button type="button" class="home-bottom-share-copy" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
-        <i class="fa-solid fa-link"></i>
-        <span>Copier le lien</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-x" onclick="handleHomeBottomShareAction(event, shareOnX)">
-        <i class="fa-brands fa-x-twitter"></i>
-        <span>X</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-instagram" onclick="handleHomeBottomShareAction(event, shareOnInstagram)">
-        <i class="fa-brands fa-instagram"></i>
-        <span>Instagram</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-whatsapp" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
-        <i class="fa-brands fa-whatsapp"></i>
-        <span>WhatsApp</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-email" onclick="handleHomeBottomShareAction(event, shareByEmail)">
-        <i class="fa-solid fa-envelope"></i>
-        <span>Email</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-linkedin" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
-        <i class="fa-brands fa-linkedin-in"></i>
-        <span>LinkedIn</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-mastodon" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
-        <i class="fa-brands fa-mastodon"></i>
-        <span>Mastodon</span>
-      </button>
-
-      <button type="button" class="home-bottom-share-reddit" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
-        <i class="fa-brands fa-reddit-alien"></i>
-        <span>Reddit</span>
-      </button>
-    </div>
-  </div>
-
+  <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
+    <i class="fa-regular fa-folder-open"></i>
+    <span>Contributions</span>
+  </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
@@ -942,7 +892,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260706-alertes-menu" defer></script>
+<script src="/script.min.js?v=20260707-dock-lift-fix3" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1504,6 +1454,115 @@
   </div>
 </div>
 
+<div id="agon-analysis-queue-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeAnalysisQueueModal()">
+  <div style="max-width:640px;margin:40px auto;background:#16242e;border:1px solid #2d3f4a;border-radius:14px;padding:18px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="color:#c0d8e0;font-size:15px;font-weight:700;">⏳ Comptes à rebours d'analyse</div>
+      <button type="button" onclick="closeAnalysisQueueModal()" style="background:#0f1c24;border:1px solid #2d3f4a;color:#7a9aaa;border-radius:8px;padding:5px 12px;cursor:pointer;">Fermer</button>
+    </div>
+    <div id="agon-analysis-queue-content" style="font-size:13px;line-height:1.6;color:#a8c4d0;">Chargement…</div>
+  </div>
+</div>
+<script>
+(function() {
+  var _aqTimer = null;
+  var _aqItems = [];
+
+  function aqFormatRemaining(ms) {
+    if (ms <= 0) return "échéance atteinte — lancement au prochain cycle";
+    var s = Math.round(ms / 1000);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    return (h ? h + "h " : "") + (h || m ? String(m).padStart(h ? 2 : 1, "0") + "min " : "") + String(sec).padStart(2, "0") + "s";
+  }
+
+  function aqEsc(v) {
+    return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function aqTick() {
+    _aqItems.forEach(function(item) {
+      var el = document.getElementById("aq-remaining-" + item.id);
+      if (!el) return;
+      if (item.status === "generating") {
+        el.textContent = "génération en cours…";
+        el.style.color = "#7ab4e0";
+      } else if (item.scheduledAt) {
+        el.textContent = aqFormatRemaining(new Date(item.scheduledAt).getTime() - Date.now());
+      } else {
+        el.textContent = "échéance inconnue";
+      }
+    });
+  }
+
+  window.openAnalysisQueueModal = function() {
+    if (typeof closeHomeTopbarMenu === "function") closeHomeTopbarMenu();
+    var modal = document.getElementById("agon-analysis-queue-modal");
+    var content = document.getElementById("agon-analysis-queue-content");
+    modal.style.display = "block";
+    content.innerHTML = "Chargement…";
+
+    fetch("/api/admin/analysis-queue", { headers: { "x-admin-token": localStorage.getItem("admin_token") || "" } })
+      .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function(items) {
+        _aqItems = items || [];
+        if (!_aqItems.length) {
+          content.innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+          return;
+        }
+        content.innerHTML = _aqItems.map(function(item) {
+          var cancelBtn = item.status === "scheduled"
+            ? '<button type="button" onclick="event.preventDefault(); event.stopPropagation(); cancelAnalysisCountdown(\'' + aqEsc(item.id) + '\', this)" '
+              + 'style="flex:0 0 auto;background:#3a1c1c;border:1px solid #6a2d2d;color:#e09090;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ Annuler</button>'
+            : '';
+          return '<a id="aq-row-' + aqEsc(item.id) + '" href="/debate?id=' + encodeURIComponent(item.id) + '" onclick="event.preventDefault(); closeAnalysisQueueModal(); openDebateIframeModal(\'/debate?id=' + encodeURIComponent(item.id) + '\');" '
+            + 'style="display:flex;align-items:center;gap:10px;background:#0f1c24;border:1px solid #2d3f4a;border-radius:10px;padding:10px 12px;margin-bottom:8px;text-decoration:none;">'
+            + '<div style="flex:1 1 auto;min-width:0;">'
+            + '<div style="color:#c0d8e0;font-weight:700;margin-bottom:3px;">' + aqEsc(item.question) + '</div>'
+            + '<div style="color:#7a9aaa;font-size:12px;">Arène ' + aqEsc(item.id) + ' · <span id="aq-remaining-' + aqEsc(item.id) + '" style="color:#e8c76a;font-weight:700;"></span></div>'
+            + '</div>'
+            + cancelBtn
+            + '</a>';
+        }).join("");
+        aqTick();
+        if (_aqTimer) clearInterval(_aqTimer);
+        _aqTimer = setInterval(aqTick, 1000);
+      })
+      .catch(function() {
+        content.innerHTML = '<p style="color:#e07070;">Erreur de chargement (mode admin requis).</p>';
+      });
+  };
+
+  window.cancelAnalysisCountdown = function(debateId, btn) {
+    if (!window.confirm("Annuler le compte à rebours de l'arène " + debateId + " ? L'analyse ne sera pas générée.")) return;
+    if (btn) { btn.disabled = true; btn.textContent = "Annulation…"; }
+    fetch("/api/admin/analysis-queue/" + encodeURIComponent(debateId) + "/cancel", {
+      method: "POST",
+      headers: { "x-admin-token": localStorage.getItem("admin_token") || "" }
+    })
+      .then(function(r) { return r.json().then(function(json) { return { ok: r.ok, json: json }; }); })
+      .then(function(res) {
+        if (!res.ok) throw new Error(res.json && res.json.error ? res.json.error : "Erreur");
+        var row = document.getElementById("aq-row-" + debateId);
+        if (row) row.remove();
+        _aqItems = _aqItems.filter(function(item) { return String(item.id) !== String(debateId); });
+        if (!_aqItems.length) {
+          document.getElementById("agon-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+        }
+      })
+      .catch(function(err) {
+        if (btn) { btn.disabled = false; btn.textContent = "✕ Annuler"; }
+        window.alert("Annulation impossible : " + err.message);
+      });
+  };
+
+  window.closeAnalysisQueueModal = function() {
+    document.getElementById("agon-analysis-queue-modal").style.display = "none";
+    if (_aqTimer) { clearInterval(_aqTimer); _aqTimer = null; }
+  };
+})();
+</script>
 <div id="agon-diagnostic-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeDiagnosticModal()">
   <div style="background:#1a2730;border:1px solid #2d3f4a;border-radius:16px;margin:20px auto;max-width:680px;width:calc(100% - 32px);padding:20px 18px 24px;box-sizing:border-box;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">

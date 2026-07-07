@@ -1137,8 +1137,40 @@ function countCloudSources(debate) {
 // veille, pour que nuages, carousels et classement admin restent cohérents.
 function getCloudOrientationGroupFromLabel(orientation) {
   const value = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (value.includes("gauche") || value.includes("ecolog")) return "left";
-  if (value.includes("droite") || value.includes("conservateur") || value.includes("souverainiste") || value.includes("liberal")) return "right";
+  if (
+    value.includes("gauche") ||
+    value.includes("ecolog") ||
+    value.includes("ecolo") ||
+    value.includes("libertaire") ||
+    value.includes("altermondialiste") ||
+    value.includes("alter-mondialiste") ||
+    value.includes("anticapitaliste") ||
+    value.includes("anti-capitaliste") ||
+    value.includes("socialiste") ||
+    value.includes("social-democrate") ||
+    value.includes("social democrate") ||
+    value.includes("progressiste") ||
+    value.includes("insoumis") ||
+    value.includes("insoumission") ||
+    value.includes("communiste") ||
+    value.includes("marxiste") ||
+    value.includes("feministe") ||
+    value.includes("syndical") ||
+    value.includes("alternatif") ||
+    value.includes("alternative")
+  ) return "left";
+  if (
+    value.includes("droite") ||
+    value.includes("centre-droit") ||
+    value.includes("centre droit") ||
+    value.includes("droite-centre") ||
+    value.includes("droite centre") ||
+    value.includes("conservateur") ||
+    value.includes("souverainiste") ||
+    value.includes("liberal") ||
+    value.includes("republicain") ||
+    value.includes("identitaire")
+  ) return "right";
   return "neutral";
 }
 
@@ -6457,6 +6489,53 @@ app.post("/api/debates/:id/video-file", express.raw({
 });
 
 // Map id → { status, scheduledAt } — doit être AVANT /api/debates/:id
+// Admin : arènes dont le compte à rebours d'analyse est lancé (ou génération
+// en cours), avec la question — pour la liste du menu admin.
+app.get("/api/admin/analysis-queue", requireAdmin, async (req, res) => {
+  const { data, error } = await supabase
+    .from("debates")
+    .select("id, question, ai_analysis_status, ai_analysis_scheduled_at")
+    .in("ai_analysis_status", ["scheduled", "generating"])
+    .order("ai_analysis_scheduled_at", { ascending: true })
+    .limit(100);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json((data || []).map((row) => ({
+    id: row.id,
+    question: row.question || "",
+    status: row.ai_analysis_status,
+    scheduledAt: row.ai_analysis_scheduled_at || null
+  })));
+});
+
+// Admin : annule un compte à rebours d'analyse pas encore parti. La condition
+// eq("ai_analysis_status", "scheduled") est le pendant du claim atomique du
+// scheduler : si la génération a démarré (generating), elle ira à son terme.
+app.post("/api/admin/analysis-queue/:id/cancel", requireAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  const canonicalId = resolveSharedDebateId(id) || id;
+
+  const { data: row } = await supabase
+    .from("debates")
+    .select("id, ai_analysis")
+    .eq("id", canonicalId)
+    .maybeSingle();
+  if (!row) return res.status(404).json({ error: "Arène introuvable." });
+
+  // Une régénération annulée ne doit pas faire disparaître le rapport existant.
+  const restoredStatus = row.ai_analysis ? "ready" : "none";
+  const { data: updated, error } = await supabase
+    .from("debates")
+    .update({ ai_analysis_status: restoredStatus, ai_analysis_scheduled_at: null })
+    .eq("id", canonicalId)
+    .eq("ai_analysis_status", "scheduled")
+    .select("id");
+  if (error) return res.status(500).json({ error: error.message });
+  if (!updated || !updated.length) {
+    return res.status(409).json({ error: "Plus annulable : la génération a probablement déjà démarré." });
+  }
+  return res.json({ ok: true, status: restoredStatus });
+});
+
 app.get("/api/debates/analysis-statuses", rateLimit("analysis-read", 240), async (req, res) => {
   const { data, error } = await supabase
     .from("debates")

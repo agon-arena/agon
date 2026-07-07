@@ -395,8 +395,40 @@ let _mediaGroupByName = null;
 
 function orientationGroupFromLabel(orientation) {
   const value = String(orientation || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  if (value.includes('gauche') || value.includes('ecolog')) return 'left';
-  if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste') || value.includes('liberal')) return 'right';
+  if (
+    value.includes('gauche') ||
+    value.includes('ecolog') ||
+    value.includes('ecolo') ||
+    value.includes('libertaire') ||
+    value.includes('altermondialiste') ||
+    value.includes('alter-mondialiste') ||
+    value.includes('anticapitaliste') ||
+    value.includes('anti-capitaliste') ||
+    value.includes('socialiste') ||
+    value.includes('social-democrate') ||
+    value.includes('social democrate') ||
+    value.includes('progressiste') ||
+    value.includes('insoumis') ||
+    value.includes('insoumission') ||
+    value.includes('communiste') ||
+    value.includes('marxiste') ||
+    value.includes('feministe') ||
+    value.includes('syndical') ||
+    value.includes('alternatif') ||
+    value.includes('alternative')
+  ) return 'left';
+  if (
+    value.includes('droite') ||
+    value.includes('centre-droit') ||
+    value.includes('centre droit') ||
+    value.includes('droite-centre') ||
+    value.includes('droite centre') ||
+    value.includes('conservateur') ||
+    value.includes('souverainiste') ||
+    value.includes('liberal') ||
+    value.includes('republicain') ||
+    value.includes('identitaire')
+  ) return 'right';
   return 'neutral';
 }
 

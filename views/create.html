@@ -86,7 +86,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260706-dock-centres">
+<link rel="stylesheet" href="/style.min.css?v=20260707-dock-lift-fix3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -677,72 +677,12 @@
     <span>Ouvrir</span>
   </a>
 
-  <div class="home-bottom-nav-item-wrap">
-    <button
-      type="button"
-      class="home-bottom-nav-item"
-      aria-label="Partager"
-      aria-haspopup="true"
-      aria-expanded="false"
-      onclick="toggleHomeBottomShareMenu(event)"
-    >
-      <i class="fa-solid fa-share-nodes"></i>
-      <span>Partager</span>
-    </button>
+  
 
-    <div
-      id="home-bottom-share-menu"
-      class="home-bottom-share-menu"
-      onclick="event.stopPropagation()"
-      aria-label="Options de partage"
-    >
-      <button type="button" onclick="handleHomeBottomShareAction(event, copyDebateLink)">
-        <i class="fa-solid fa-link"></i>
-        <span>Copier le lien</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnX)">
-        <i class="fa-brands fa-x-twitter"></i>
-        <span>X</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnFacebook)">
-        <i class="fa-brands fa-facebook-f"></i>
-        <span>Facebook</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnWhatsApp)">
-        <i class="fa-brands fa-whatsapp"></i>
-        <span>WhatsApp</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareByEmail)">
-        <i class="fa-solid fa-envelope"></i>
-        <span>Email</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnLinkedIn)">
-        <i class="fa-brands fa-linkedin-in"></i>
-        <span>LinkedIn</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnMastodon)">
-        <i class="fa-brands fa-mastodon"></i>
-        <span>Mastodon</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, shareOnReddit)">
-        <i class="fa-brands fa-reddit-alien"></i>
-        <span>Reddit</span>
-      </button>
-
-      <button type="button" onclick="handleHomeBottomShareAction(event, showQRCode)">
-        <i class="fa-solid fa-qrcode"></i>
-        <span>QR Code</span>
-      </button>
-    </div>
-  </div>
-
+  <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
+    <i class="fa-regular fa-folder-open"></i>
+    <span>Contributions</span>
+  </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
@@ -797,7 +737,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260706-alertes-menu" defer></script>
+<script src="/script.min.js?v=20260707-dock-lift-fix3" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

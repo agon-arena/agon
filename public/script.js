@@ -684,6 +684,7 @@ if (isStandaloneMode()) {
     return Math.max(0, Math.round(parseFloat(getComputedStyle(envProbe).paddingBottom) || 0));
   };
 
+  const applied = { lift: null, ext: null };
   const update = () => {
     let lift = 0;
     let ext = 0;
@@ -701,6 +702,9 @@ if (isStandaloneMode()) {
         if (!truncated) lift = readEnvBottom();
       }
     } catch {}
+    if (applied.lift === lift && applied.ext === ext) return;
+    applied.lift = lift;
+    applied.ext = ext;
     root.style.setProperty("--agon-dock-lift", `${lift}px`);
     root.style.setProperty("--agon-embedded-bottom-ext", `${ext}px`);
   };
@@ -708,7 +712,23 @@ if (isStandaloneMode()) {
   update();
   window.addEventListener("resize", update);
   window.addEventListener("orientationchange", update);
+  window.addEventListener("pageshow", update);
+  window.visualViewport?.addEventListener("resize", update);
+  if (isEmbedded) {
+    // La valeur héritée peut changer côté parent après l'init de l'iframe.
+    try {
+      topWin.addEventListener("resize", update);
+      topWin.visualViewport?.addEventListener("resize", update);
+    } catch {}
+  }
+  // Au lancement standalone, iOS peut rapporter une hauteur provisoire (ex.
+  // 802 puis 768 sur iPhone X/XS/11 Pro) sans émettre de resize : la détection
+  // "viewport tronqué" figeait alors un lift erroné. Relances différées +
+  // filet périodique (no-op grâce au garde applied si rien n'a bougé).
   setTimeout(update, 1000);
+  setTimeout(update, 3000);
+  setTimeout(update, 7000);
+  setInterval(update, 4000);
 })();
 
 if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
@@ -23659,10 +23679,46 @@ function initDebateMediaHistory(debate) {
     'tv5monde.com': 'francophonie / international',
   };
 
+  const mediaOrientationOverrideByDomain = {
+    'rue89bordeaux.com': 'gauche / local indépendant',
+  };
+
   function getOrientationGroupFromBotLabel(orientation) {
-    const value = String(orientation || '').toLowerCase();
-    if (value.includes('gauche') || value.includes('écolog')) return 'left';
-    if (value.includes('droite') || value.includes('conservateur') || value.includes('souverainiste') || value.includes('libéral')) return 'right';
+    const value = String(orientation || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (
+      value.includes('gauche') ||
+      value.includes('ecolog') ||
+      value.includes('ecolo') ||
+      value.includes('libertaire') ||
+      value.includes('altermondialiste') ||
+      value.includes('alter-mondialiste') ||
+      value.includes('anticapitaliste') ||
+      value.includes('anti-capitaliste') ||
+      value.includes('socialiste') ||
+      value.includes('social-democrate') ||
+      value.includes('social democrate') ||
+      value.includes('progressiste') ||
+      value.includes('insoumis') ||
+      value.includes('insoumission') ||
+      value.includes('communiste') ||
+      value.includes('marxiste') ||
+      value.includes('feministe') ||
+      value.includes('syndical') ||
+      value.includes('alternatif') ||
+      value.includes('alternative')
+    ) return 'left';
+    if (
+      value.includes('droite') ||
+      value.includes('centre-droit') ||
+      value.includes('centre droit') ||
+      value.includes('droite-centre') ||
+      value.includes('droite centre') ||
+      value.includes('conservateur') ||
+      value.includes('souverainiste') ||
+      value.includes('liberal') ||
+      value.includes('republicain') ||
+      value.includes('identitaire')
+    ) return 'right';
     return 'neutral';
   }
 
@@ -23749,17 +23805,16 @@ function initDebateMediaHistory(debate) {
       if (matchedName) return getOrientationGroupFromBotLabel(veilleYouTubeChannelMap[matchedName]);
     }
     // Presse : cherche par domaine
-    const allDomains = Object.assign({}, mediaOrientationByDomain, veilleMediasMap);
+    const allDomains = Object.assign({}, mediaOrientationByDomain, veilleMediasMap, mediaOrientationOverrideByDomain);
     const matchedDomain = Object.keys(allDomains)
       .find((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
-    return matchedDomain ? getOrientationGroupFromBotLabel(allDomains[matchedDomain]) : 'other';
+    return matchedDomain ? getOrientationGroupFromBotLabel(allDomains[matchedDomain]) : 'neutral';
   }
 
   const sourceOrientationGroups = [
     { key: 'left', label: 'Gauche', icon: null },
     { key: 'neutral', label: 'Généraliste', icon: 'fa-scale-balanced' },
-    { key: 'right', label: 'Droite', icon: null },
-    { key: 'other', label: 'Autres médias', icon: 'fa-newspaper' }
+    { key: 'right', label: 'Droite', icon: null }
   ];
 
   // Aplatir toutes les sources de tous les batches en une liste unique
@@ -31475,71 +31530,6 @@ function closeHomeBottomShareMenu() {
   removeHomeBottomShareAutoCloseListeners();
 }
 
-function toggleHomeBottomShareMenu(event) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  const menu = document.getElementById("home-bottom-share-menu");
-  const trigger = document.querySelector('.home-bottom-nav-item-wrap > .home-bottom-nav-item[aria-haspopup="true"]');
-
-  if (!menu) return;
-
-  const shouldOpen = !homeBottomShareMenuOpen;
-
-  closeHomeBottomShareMenu();
-
-  if (shouldOpen) {
-    menu.classList.add("home-bottom-share-menu-open");
-    if (trigger) {
-      trigger.setAttribute("aria-expanded", "true");
-    }
-    homeBottomShareMenuOpen = true;
-    _homeBottomShareOpenedAt = Date.now();
-
-    // Ajuster la position si le menu dépasse en haut du viewport
-    requestAnimationFrame(() => {
-      const menuRect = menu.getBoundingClientRect();
-      const safeMargin = 8;
-      if (menuRect.top < safeMargin) {
-        _homeBottomShareScrolling = true;
-        window.scrollBy({ top: menuRect.top - safeMargin, behavior: 'smooth' });
-        setTimeout(() => { _homeBottomShareScrolling = false; }, 600);
-      }
-    });
-
-    // Fermeture uniquement sur touch volontaire (> 10px) — pas de scroll listener
-    // pour éviter les faux positifs du défilement automatique des sources.
-    let _homeBottomShareTouchStartY = 0;
-    let _homeBottomShareTouchStartX = 0;
-    window.__homeBottomShareTouchStartHandler = (e) => {
-      _homeBottomShareTouchStartY = e.touches[0]?.clientY ?? 0;
-      _homeBottomShareTouchStartX = e.touches[0]?.clientX ?? 0;
-    };
-    window.__homeBottomShareTouchMoveHandler = (e) => {
-      const dy = Math.abs((e.touches[0]?.clientY ?? 0) - _homeBottomShareTouchStartY);
-      const dx = Math.abs((e.touches[0]?.clientX ?? 0) - _homeBottomShareTouchStartX);
-      if (dy > 10 && dy > dx) closeHomeBottomShareMenu();
-    };
-    window.addEventListener("touchstart", window.__homeBottomShareTouchStartHandler, { passive: true, capture: true });
-    window.addEventListener("touchmove", window.__homeBottomShareTouchMoveHandler, { passive: true, capture: true });
-  }
-}
-
-function handleHomeBottomShareAction(event, callback) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  closeHomeBottomShareMenu();
-
-  if (typeof callback === "function") {
-    callback();
-  }
-}
-
 function initHomeBottomShareMenu() {
   if (window.__homeBottomShareMenuInitialized) return;
   if (!document.getElementById("home-bottom-share-menu")) return;
@@ -31610,8 +31600,6 @@ function initHomeTopbarAutoHide() {
   updateTopbar();
 }
 
-window.toggleHomeBottomShareMenu = toggleHomeBottomShareMenu;
-window.handleHomeBottomShareAction = handleHomeBottomShareAction;
 window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
 
 function closeIndexExplorerMenu() {
@@ -32647,7 +32635,6 @@ try {
     deleteComment,
     deleteDebate,
     deleteReport,
-    handleHomeBottomShareAction,
     handleIdeaShareAction,
     jumpToStartOfCarousel,
     loadMoreArguments,
@@ -32692,7 +32679,6 @@ try {
     toggleAgonCloud,
     toggleCardOptionsMenu,
     toggleDebateTitleShareMenu,
-    toggleHomeBottomShareMenu,
     toggleHomeTopbarMenu,
     toggleIdeaShareMenu,
     toggleIndexContextPreview,
@@ -32705,4 +32691,3 @@ try {
   window.__agonWindowHandlersRestoreError = String(error?.message || error || "");
   console.error("[Agon] impossible d'exposer les handlers globaux", error);
 }
-
