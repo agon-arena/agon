@@ -4102,10 +4102,29 @@ async function computeUserScores() {
     noteAvgByAuthorKey.set(authorKey, sum / noteCountByAuthorKey.get(authorKey));
   }
 
+  // Tailles de population par axe (pédagogique : affichées dans la modale
+  // avec le score). Chaque axe a sa propre population (Orator = auteurs avec
+  // ≥1 idée postée, Logos = auteurs avec ≥1 idée notée), donc son propre
+  // total et sa propre taille de palier — pas les mêmes effectifs.
+  const votesTierSizeByTier = new Map();
+  for (const authorKey of votesTotalByAuthorKey.keys()) {
+    const tier = tierByAuthorKey.get(authorKey) || 1;
+    votesTierSizeByTier.set(tier, (votesTierSizeByTier.get(tier) || 0) + 1);
+  }
+  const notesTierSizeByTier = new Map();
+  for (const authorKey of noteAvgByAuthorKey.keys()) {
+    const tier = tierByAuthorKey.get(authorKey) || 1;
+    notesTierSizeByTier.set(tier, (notesTierSizeByTier.get(tier) || 0) + 1);
+  }
+
   return {
     votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
     notesScoreByAuthorKey: buildTieredPercentileScoreMap(noteAvgByAuthorKey, tierByAuthorKey),
-    tierByAuthorKey
+    tierByAuthorKey,
+    votesTotalUsers: votesTotalByAuthorKey.size,
+    notesTotalUsers: noteAvgByAuthorKey.size,
+    votesTierSizeByTier,
+    notesTierSizeByTier
   };
 }
 
@@ -4142,12 +4161,19 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
   if (!key) return res.status(400).json({ error: "Clé manquante." });
 
   try {
-    const { votesScoreByAuthorKey, notesScoreByAuthorKey, tierByAuthorKey } = await getUserScoreData();
+    const {
+      votesScoreByAuthorKey, notesScoreByAuthorKey, tierByAuthorKey,
+      votesTotalUsers, notesTotalUsers, votesTierSizeByTier, notesTierSizeByTier
+    } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
     res.json({
       votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
       notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null,
-      tierLabel: tier ? getUserContributionTierLabel(tier) : null
+      tierLabel: tier ? getUserContributionTierLabel(tier) : null,
+      votesTotalUsers,
+      notesTotalUsers,
+      votesTierUsers: tier ? (votesTierSizeByTier.get(tier) || 0) : null,
+      notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);

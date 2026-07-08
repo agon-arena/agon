@@ -906,6 +906,12 @@ function renderUserScoreWidget(data) {
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
   const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
   const tierLabel = String(data?.tierLabel || "").trim();
+  const stats = {
+    votesTotalUsers: Number.isFinite(Number(data?.votesTotalUsers)) ? Number(data.votesTotalUsers) : null,
+    notesTotalUsers: Number.isFinite(Number(data?.notesTotalUsers)) ? Number(data.notesTotalUsers) : null,
+    votesTierUsers: Number.isFinite(Number(data?.votesTierUsers)) ? Number(data.votesTierUsers) : null,
+    notesTierUsers: Number.isFinite(Number(data?.notesTierUsers)) ? Number(data.notesTierUsers) : null
+  };
   if (votesScore === null && notesScore === null) return;
 
   if (!document.getElementById("agon-user-score-styles")) {
@@ -950,7 +956,7 @@ function renderUserScoreWidget(data) {
   widget.setAttribute("aria-label", "Mes scores");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
-    showUserScoreModal(votesScore, notesScore, tierLabel);
+    showUserScoreModal(votesScore, notesScore, tierLabel, stats);
   });
 
   const parts = [];
@@ -967,13 +973,19 @@ function renderUserScoreWidget(data) {
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
 // classique (Agôn = joute oratoire) : Orator pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
-function showUserScoreModal(votesScore, notesScore, tierLabel) {
+function formatUserCount(n) {
+  return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
+}
+
+function showUserScoreModal(votesScore, notesScore, tierLabel, stats) {
   const existing = document.getElementById("agon-user-score-overlay");
   if (existing) existing.remove();
 
   const overlay = document.createElement("div");
   overlay.id = "agon-user-score-overlay";
   overlay.className = "install-modal-overlay";
+
+  const s = stats || {};
 
   const tierSection = tierLabel
     ? '<div class="install-modal-section">' +
@@ -984,18 +996,26 @@ function showUserScoreModal(votesScore, notesScore, tierLabel) {
 
   const sections = [];
   if (votesScore !== null) {
+    const countHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
+      ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
+      : '';
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
         '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi.</p>' +
+        countHint +
       '</div>'
     );
   }
   if (notesScore !== null) {
+    const countHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
+      ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
+      : '';
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
         '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi.</p>' +
+        countHint +
       '</div>'
     );
   }
