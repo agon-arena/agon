@@ -591,7 +591,7 @@ window.addEventListener("appinstalled", () => {
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
-          <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+          <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
         </div>
         <h3 class="install-modal-title">Agôn est installé&nbsp;!</h3>
         <div class="install-modal-section">
@@ -1218,7 +1218,7 @@ function openInstallModalFallback() {
         <i class="fa-solid fa-xmark"></i>
       </button>
       <div class="install-modal-brand">
-        <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+        <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
       </div>
       <h3 class="install-modal-title">Installer l'icône Agôn</h3>
       <div class="install-modal-section">
@@ -1304,7 +1304,7 @@ function showPushInvite(reason = "action", options = {}) {
 
   const icon = document.createElement("div");
   icon.className = "push-invite-icon";
-  icon.innerHTML = '<img src="/appagon-192.png" alt="Agôn">';
+  icon.innerHTML = '<img src="/icon-192-optimized.png" alt="Agôn">';
 
   copy.append(title, text);
   actions.append(primaryButton, laterButton);
