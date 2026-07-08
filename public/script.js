@@ -760,6 +760,20 @@ const OPEN_APP_BANNER_LAST_SHOWN_KEY = "openAppBannerLastShownAt";
 const OPEN_APP_BANNER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 function maybeShowOpenAppBanner() {
+  // ?debugFlags=1 (insensible à la casse) : affiche l'état réel des flags via
+  // alert() — diagnostic terrain sans outils de développement (utile sur iOS
+  // Safari où le storage peut ne pas se comporter comme sur Android Chrome).
+  if (/(?:^|[?&])debugflags=1(?:&|$)/i.test(location.search)) {
+    alert(
+      "agonStandaloneSeen: " + lsGet("agonStandaloneSeen") +
+      "\nappInstallPinged: " + lsGet("appInstallPinged") +
+      "\nopenAppBannerLastShownAt: " + lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) +
+      "\nisStandaloneMode(): " + isStandaloneMode() +
+      "\nnavigator.standalone: " + window.navigator.standalone +
+      "\ndisplay-mode standalone: " + window.matchMedia("(display-mode: standalone)").matches
+    );
+  }
+
   // ?debugBanner=1 (insensible à la casse) : force l'affichage pour vérifier
   // isolément le rendu visuel, sans dépendre des flags standalone/cooldown.
   const forceDebug = /(?:^|[?&])debugbanner=1(?:&|$)/i.test(location.search);
