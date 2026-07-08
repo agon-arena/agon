@@ -912,12 +912,12 @@ function renderUserScoreWidget(data) {
     const style = document.createElement("style");
     style.id = "agon-user-score-styles";
     style.textContent = `
+      .agon-user-score-row {
+        display: flex;
+        justify-content: center;
+        padding: 0 12px 6px;
+      }
       .agon-user-score-widget {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 5;
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -929,7 +929,7 @@ function renderUserScoreWidget(data) {
         font-weight: 700;
         white-space: nowrap;
         text-decoration: none;
-        max-width: calc(100vw - 220px);
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -938,7 +938,6 @@ function renderUserScoreWidget(data) {
         .agon-user-score-widget {
           font-size: 9.5px;
           padding: 3px 9px;
-          max-width: calc(100vw - 130px);
         }
       }
     `;
@@ -958,7 +957,11 @@ function renderUserScoreWidget(data) {
   if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + votesScore + '% (Orator)');
   if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
   widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
-  topbar.appendChild(widget);
+
+  const row = document.createElement("div");
+  row.className = "agon-user-score-row";
+  row.appendChild(widget);
+  topbar.appendChild(row);
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
