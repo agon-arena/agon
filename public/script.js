@@ -760,12 +760,17 @@ const OPEN_APP_BANNER_LAST_SHOWN_KEY = "openAppBannerLastShownAt";
 const OPEN_APP_BANNER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 function maybeShowOpenAppBanner() {
-  if (isStandaloneMode() || window !== window.top) return;
-  if (lsGet("agonStandaloneSeen") !== "1") return;
+  // ?debugBanner=1 : force l'affichage pour vérifier isolément le rendu visuel,
+  // sans dépendre des flags standalone/cooldown (diagnostic terrain).
+  const forceDebug = new URLSearchParams(location.search).get("debugBanner") === "1";
+  if (!forceDebug) {
+    if (isStandaloneMode() || window !== window.top) return;
+    if (lsGet("agonStandaloneSeen") !== "1") return;
 
-  const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
-  if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
-  lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+    const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
+    if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
+    lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+  }
 
   if (!document.getElementById("agon-open-app-banner-styles")) {
     const style = document.createElement("style");
