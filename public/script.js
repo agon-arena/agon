@@ -741,6 +741,80 @@ if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
   }).catch(() => {});
 }
 
+// Bandeau "ouvre l'app installée" : aucune API web ne permet de relancer une
+// PWA automatiquement (ni sur iOS ni sur Android sans wrapper natif), donc on
+// se contente d'un rappel visuel quelques secondes quand ce navigateur a déjà
+// installé l'app (flag posé ci-dessus) mais qu'on navigue hors standalone.
+const OPEN_APP_BANNER_LAST_SHOWN_KEY = "openAppBannerLastShownAt";
+const OPEN_APP_BANNER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function maybeShowOpenAppBanner() {
+  if (isStandaloneMode() || window !== window.top) return;
+  if (lsGet("appInstallPinged") !== "1") return;
+
+  const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
+  if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
+  lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+
+  if (!document.getElementById("agon-open-app-banner-styles")) {
+    const style = document.createElement("style");
+    style.id = "agon-open-app-banner-styles";
+    style.textContent = `
+      .agon-open-app-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        padding-top: calc(10px + env(safe-area-inset-top, 0px));
+        background: #16181d;
+        color: #fff;
+        font-size: 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.25);
+        transform: translateY(-100%);
+        transition: transform .35s ease;
+      }
+      .agon-open-app-banner.agon-open-app-banner-visible { transform: translateY(0); }
+      .agon-open-app-banner img { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; }
+      .agon-open-app-banner span { flex: 1; line-height: 1.3; }
+      .agon-open-app-banner button {
+        background: none;
+        border: none;
+        color: #9aa0aa;
+        font-size: 20px;
+        line-height: 1;
+        padding: 4px;
+        cursor: pointer;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const banner = document.createElement("div");
+  banner.className = "agon-open-app-banner";
+  banner.innerHTML = `
+    <img src="/appagon-192.png" alt="">
+    <span>Tu as l'app Agôn installée&nbsp;: ouvre-la depuis ton écran d'accueil.</span>
+    <button type="button" aria-label="Fermer">&times;</button>
+  `;
+  document.body.appendChild(banner);
+
+  const hide = () => {
+    banner.classList.remove("agon-open-app-banner-visible");
+    setTimeout(() => banner.remove(), 400);
+  };
+
+  banner.querySelector("button").addEventListener("click", hide);
+  requestAnimationFrame(() => banner.classList.add("agon-open-app-banner-visible"));
+  setTimeout(hide, 5000);
+}
+
+maybeShowOpenAppBanner();
+
 function isAgonMobileCloudViewport() {
   const viewportWidth = Math.min(
     window.innerWidth || Number.POSITIVE_INFINITY,
