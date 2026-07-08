@@ -1032,7 +1032,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi.</p>' +
+        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + (100 - votesScore) + '% en ont reçu moins.</p>' +
         countHint +
       '</div>'
     );
@@ -1048,7 +1048,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi.</p>' +
+        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + (100 - notesScore) + '% ont une moyenne inférieure.</p>' +
         countHint +
       '</div>'
     );
