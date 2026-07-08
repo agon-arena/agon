@@ -905,6 +905,7 @@ function renderUserScoreWidget(data) {
 
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
   const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
+  const tierLabel = String(data?.tierLabel || "").trim();
   if (votesScore === null && notesScore === null) return;
 
   if (!document.getElementById("agon-user-score-styles")) {
@@ -944,7 +945,7 @@ function renderUserScoreWidget(data) {
   widget.setAttribute("aria-label", "Mes scores");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
-    showUserScoreModal(votesScore, notesScore);
+    showUserScoreModal(votesScore, notesScore, tierLabel);
   });
 
   const pills = [];
@@ -961,7 +962,7 @@ function renderUserScoreWidget(data) {
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
 // classique (Agôn = joute oratoire) : Orator pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
-function showUserScoreModal(votesScore, notesScore) {
+function showUserScoreModal(votesScore, notesScore, tierLabel) {
   const existing = document.getElementById("agon-user-score-overlay");
   if (existing) existing.remove();
 
@@ -969,12 +970,16 @@ function showUserScoreModal(votesScore, notesScore) {
   overlay.id = "agon-user-score-overlay";
   overlay.className = "install-modal-overlay";
 
+  const comparisonSuffix = tierLabel
+    ? ' (comparé aux contributeurs ayant, comme toi, ' + tierLabel.charAt(0).toLowerCase() + tierLabel.slice(1) + ')'
+    : '';
+
   const sections = [];
   if (votesScore !== null) {
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs actifs ont reçu plus de voix que toi.</p>' +
+        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs actifs ont reçu plus de voix que toi' + comparisonSuffix + '.</p>' +
       '</div>'
     );
   }
@@ -982,7 +987,7 @@ function showUserScoreModal(votesScore, notesScore) {
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs actifs ont une meilleure moyenne que toi.</p>' +
+        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs actifs ont une meilleure moyenne que toi' + comparisonSuffix + '.</p>' +
       '</div>'
     );
   }

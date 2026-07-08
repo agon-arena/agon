@@ -4012,18 +4012,65 @@ function buildPercentileScoreMap(valueByAuthorKey) {
   return result;
 }
 
+// Paliers de volume (nombre d'idées postées, même compteur pour les 2 axes) :
+// un contributeur n'est comparé qu'à d'autres de volume similaire, pour ne
+// pas laisser un gros contributeur écraser mécaniquement les petits (surtout
+// sur l'axe voix, basé sur un total qui grossit avec le nombre d'idées).
+const USER_SCORE_TIERS = [
+  { tier: 1, max: 1, label: "1 idée postée" },
+  { tier: 2, max: 3, label: "2 à 3 idées postées" },
+  { tier: 3, max: 9, label: "4 à 9 idées postées" },
+  { tier: 4, max: Infinity, label: "10 idées postées ou plus" }
+];
+
+function getUserContributionTier(count) {
+  for (const t of USER_SCORE_TIERS) {
+    if (count <= t.max) return t.tier;
+  }
+  return USER_SCORE_TIERS[USER_SCORE_TIERS.length - 1].tier;
+}
+
+function getUserContributionTierLabel(tier) {
+  return USER_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
+}
+
+// Applique buildPercentileScoreMap indépendamment à l'intérieur de chaque
+// palier plutôt que sur toute la population d'un coup.
+function buildTieredPercentileScoreMap(valueByAuthorKey, tierByAuthorKey) {
+  const byTier = new Map(USER_SCORE_TIERS.map((t) => [t.tier, new Map()]));
+  for (const [authorKey, value] of valueByAuthorKey) {
+    const tier = tierByAuthorKey.get(authorKey) || 1;
+    byTier.get(tier).set(authorKey, value);
+  }
+
+  const result = new Map();
+  for (const tierMap of byTier.values()) {
+    for (const [authorKey, score] of buildPercentileScoreMap(tierMap)) {
+      result.set(authorKey, score);
+    }
+  }
+  return result;
+}
+
 async function computeUserScores() {
   const { data: allArguments, error: argsError } = await fetchAllSupabaseRows(() =>
     supabase.from("arguments").select("id, author_key, votes").not("author_key", "is", null));
   if (argsError) throw argsError;
 
   const votesTotalByAuthorKey = new Map();
+  const contributionCountByAuthorKey = new Map();
   const authorKeyByArgumentId = new Map();
   for (const arg of allArguments || []) {
     const authorKey = String(arg.author_key || "").trim();
     if (!authorKey) continue;
     votesTotalByAuthorKey.set(authorKey, (votesTotalByAuthorKey.get(authorKey) || 0) + Number(arg.votes || 0));
+    contributionCountByAuthorKey.set(authorKey, (contributionCountByAuthorKey.get(authorKey) || 0) + 1);
     authorKeyByArgumentId.set(String(arg.id), authorKey);
+  }
+
+  const tierByAuthorKey = new Map();
+  for (const [authorKey, count] of contributionCountByAuthorKey) {
+    tierByAuthorKey.set(authorKey, getUserContributionTier(count));
   }
 
   const { data: analyzedDebates, error: debatesError } = await fetchAllSupabaseRows(() =>
@@ -4056,8 +4103,9 @@ async function computeUserScores() {
   }
 
   return {
-    votesScoreByAuthorKey: buildPercentileScoreMap(votesTotalByAuthorKey),
-    notesScoreByAuthorKey: buildPercentileScoreMap(noteAvgByAuthorKey)
+    votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
+    notesScoreByAuthorKey: buildTieredPercentileScoreMap(noteAvgByAuthorKey, tierByAuthorKey),
+    tierByAuthorKey
   };
 }
 
@@ -4094,10 +4142,12 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
   if (!key) return res.status(400).json({ error: "Clé manquante." });
 
   try {
-    const { votesScoreByAuthorKey, notesScoreByAuthorKey } = await getUserScoreData();
+    const { votesScoreByAuthorKey, notesScoreByAuthorKey, tierByAuthorKey } = await getUserScoreData();
+    const tier = tierByAuthorKey.get(key) || null;
     res.json({
       votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
-      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null
+      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null,
+      tierLabel: tier ? getUserContributionTierLabel(tier) : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);
