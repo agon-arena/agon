@@ -7773,14 +7773,34 @@ const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 30 * 1000;
 // explicite, ces requêtes traîneraient la requête HTTP entrante avec elles.
 const AGON_BUBBLE_QUERY_TIMEOUT_MS = 8000;
 
-// Top 10 des arènes communautaires par score d'activité (idées ×1 + commentaires
-// ×0,5 + votes ×0,2), priorité à l'activité récente : 48h, puis 7j, puis historique.
+// Top 10 des arènes communautaires par score d'activité décroissant dans le temps
+// (idées ×1 + commentaires ×0,5 + votes ×0,2, chaque contribution pondérée par
+// 0,5^(âge / demi-vie)). Remplace l'ancien classement en paliers 48h → 7j → total :
+// le palier "total" ne redescendait jamais, donc une arène ayant eu un pic
+// d'activité une fois pouvait squatter le nuage indéfiniment même totalement
+// retombée, au détriment des arènes plus récentes. Un score qui décroît dans le
+// temps (ranking "hot" classique) fait naturellement sortir les arènes mortes et
+// laisse entrer les nouvelles dès qu'elles ont un peu d'activité récente.
+const AGON_BUBBLE_DECAY_HALF_LIFE_HOURS = 36;
+// Au-delà, le poids décayé d'un vote est < 0,1% de sa valeur initiale — borne la
+// fenêtre de la requête votes sans fausser le classement.
+const AGON_BUBBLE_DECAY_CUTOFF_MS = 15 * 24 * 60 * 60 * 1000;
+
+function agonBubbleDecayWeight(createdAt, now) {
+  if (!createdAt) return 0;
+  const ageHours = (now - new Date(createdAt).getTime()) / (60 * 60 * 1000);
+  if (!Number.isFinite(ageHours) || ageHours <= 0) return 1;
+  return Math.pow(0.5, ageHours / AGON_BUBBLE_DECAY_HALF_LIFE_HOURS);
+}
+
 // Calculé en base — contrairement au calcul client précédent, on n'a plus besoin
 // de charger toutes les arènes dans le navigateur pour obtenir ce classement.
 async function computeAgonBubbleTrends() {
   if (agonBubbleTrendsCache && Date.now() < agonBubbleTrendsCache.expiresAt) {
     return agonBubbleTrendsCache.value;
   }
+
+  const now = Date.now();
 
   const { data: debateRows, error: debatesError } = await fetchAllSupabaseRows(() =>
     supabase
@@ -7821,17 +7841,16 @@ async function computeAgonBubbleTrends() {
   }
 
   const argumentIds = (args || []).map((arg) => arg.id);
-  const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
-  const cutoff96h = Date.now() - 96 * 60 * 60 * 1000;
-  const cutoff7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const cutoff48h = now - 48 * 60 * 60 * 1000;
+  const cutoff96h = now - 96 * 60 * 60 * 1000;
+  const cutoffDecay = now - AGON_BUBBLE_DECAY_CUTOFF_MS;
 
-  const commentCountByDebate = new Map();
   const comment48hCountByDebate = new Map();
   const commentPrev48hCountByDebate = new Map();
-  const comment7dCountByDebate = new Map();
   const vote48hCountByDebate = new Map();
   const votePrev48hCountByDebate = new Map();
-  const vote7dCountByDebate = new Map();
+  const commentDecayByDebate = new Map();
+  const voteDecayByDebate = new Map();
 
   if (argumentIds.length) {
     // Indépendantes l'une de l'autre : lancées en parallèle plutôt qu'en
@@ -7848,7 +7867,7 @@ async function computeAgonBubbleTrends() {
         supabase
           .from("votes")
           .select("argument_id, vote_count, created_at")
-          .gte("created_at", new Date(cutoff7d).toISOString())
+          .gte("created_at", new Date(cutoffDecay).toISOString())
           .order("id", { ascending: true })
           .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)))
     ]);
@@ -7858,22 +7877,20 @@ async function computeAgonBubbleTrends() {
 
     for (const comment of comments || []) {
       const debateId = debateIdByArgumentId.get(String(comment.argument_id));
-      if (!debateId) continue;
-      commentCountByDebate.set(debateId, Number(commentCountByDebate.get(debateId) || 0) + 1);
+      if (!debateId || !comment.created_at) continue;
+      commentDecayByDebate.set(debateId, Number(commentDecayByDebate.get(debateId) || 0) + agonBubbleDecayWeight(comment.created_at, now));
 
-      if (comment.created_at) {
-        const commentTime = new Date(comment.created_at).getTime();
-        if (commentTime > cutoff48h) comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
-        else if (commentTime > cutoff96h) commentPrev48hCountByDebate.set(debateId, Number(commentPrev48hCountByDebate.get(debateId) || 0) + 1);
-        if (commentTime > cutoff7d) comment7dCountByDebate.set(debateId, Number(comment7dCountByDebate.get(debateId) || 0) + 1);
-      }
+      const commentTime = new Date(comment.created_at).getTime();
+      if (commentTime > cutoff48h) comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
+      else if (commentTime > cutoff96h) commentPrev48hCountByDebate.set(debateId, Number(commentPrev48hCountByDebate.get(debateId) || 0) + 1);
     }
 
     for (const vote of recentVotes || []) {
       const debateId = debateIdByArgumentId.get(String(vote.argument_id));
       if (!debateId || !vote.created_at) continue;
       const voteWeight = Math.max(1, Number(vote.vote_count) || 1);
-      vote7dCountByDebate.set(debateId, Number(vote7dCountByDebate.get(debateId) || 0) + voteWeight);
+      voteDecayByDebate.set(debateId, Number(voteDecayByDebate.get(debateId) || 0) + voteWeight * agonBubbleDecayWeight(vote.created_at, now));
+
       const voteTime = new Date(vote.created_at).getTime();
       if (voteTime > cutoff48h) {
         vote48hCountByDebate.set(debateId, Number(vote48hCountByDebate.get(debateId) || 0) + voteWeight);
@@ -7889,44 +7906,28 @@ async function computeAgonBubbleTrends() {
   const items = debateRows.map((debate) => {
     const sharedDebateId = resolveSharedDebateId(debate.id) || String(debate.id);
     const debateArgs = argsByDebate.get(sharedDebateId) || [];
-    const argument_count = debateArgs.length;
     const argument_count_48h = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff48h).length;
     const argument_count_prev48h = debateArgs.filter((a) => {
       if (!a.created_at) return false;
       const t = new Date(a.created_at).getTime();
       return t > cutoff96h && t <= cutoff48h;
     }).length;
-    const argument_count_7d = debateArgs.filter((a) => a.created_at && new Date(a.created_at).getTime() > cutoff7d).length;
-    const comment_count = Number(commentCountByDebate.get(sharedDebateId) || 0);
-    const vote_count = debateArgs.reduce((sum, a) => sum + Number(a.votes || 0), 0);
+    const argumentDecay = debateArgs.reduce((sum, a) => sum + agonBubbleDecayWeight(a.created_at, now), 0);
 
     return {
       debate,
+      decayedScore: activityScore(argumentDecay, commentDecayByDebate.get(sharedDebateId), voteDecayByDebate.get(sharedDebateId)),
       score48h: activityScore(argument_count_48h, comment48hCountByDebate.get(sharedDebateId), vote48hCountByDebate.get(sharedDebateId)),
-      scorePrev48h: activityScore(argument_count_prev48h, commentPrev48hCountByDebate.get(sharedDebateId), votePrev48hCountByDebate.get(sharedDebateId)),
-      score7d: activityScore(argument_count_7d, comment7dCountByDebate.get(sharedDebateId), vote7dCountByDebate.get(sharedDebateId)),
-      scoreTotal: activityScore(argument_count, comment_count, vote_count)
+      scorePrev48h: activityScore(argument_count_prev48h, commentPrev48hCountByDebate.get(sharedDebateId), votePrev48hCountByDebate.get(sharedDebateId))
     };
   });
 
-  const selected = [];
-  const selectedIds = new Set();
-  const pushTier = (tier) => {
-    for (const item of tier) {
-      if (selected.length >= 10) return;
-      const id = String(item.debate?.id || "").trim();
-      if (!id || selectedIds.has(id)) continue;
-      selectedIds.add(id);
-      selected.push(item);
-    }
-  };
-  pushTier(items.filter((i) => i.score48h > 0).sort((a, b) => b.score48h - a.score48h));
-  pushTier(items.filter((i) => i.score7d > 0).sort((a, b) => b.score7d - a.score7d));
-  pushTier(items.filter((i) => i.scoreTotal > 0).sort((a, b) => b.scoreTotal - a.scoreTotal));
+  const selected = items
+    .filter((item) => item.decayedScore > 0)
+    .sort((a, b) => b.decayedScore - a.decayedScore)
+    .slice(0, 10);
 
-  const max7d = selected.reduce((max, item) => Math.max(max, item.score7d), 0);
-  const sizeScoreOf = max7d > 0 ? (item) => item.score7d : (item) => item.scoreTotal;
-  const maxSizeScore = max7d > 0 ? max7d : selected.reduce((max, item) => Math.max(max, item.scoreTotal), 0);
+  const maxDecayedScore = selected.reduce((max, item) => Math.max(max, item.decayedScore), 0);
 
   // Tendance = évolution de l'activité des dernières 48h par rapport aux 48h précédentes (48h-96h).
   const computeTrend = (current, previous) => {
@@ -7939,8 +7940,8 @@ async function computeAgonBubbleTrends() {
     .map((item) => ({
       tag: getAgonBubbleLabel(item.debate),
       subjectId: String(item.debate.id),
-      count: sizeScoreOf(item),
-      sizeWeight: maxSizeScore > 0 ? sizeScoreOf(item) / maxSizeScore : 0,
+      count: item.decayedScore,
+      sizeWeight: maxDecayedScore > 0 ? item.decayedScore / maxDecayedScore : 0,
       trend: computeTrend(item.score48h, item.scorePrev48h)
     }))
     .filter((item) => item.tag);
