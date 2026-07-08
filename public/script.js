@@ -731,6 +731,17 @@ if (isStandaloneMode()) {
   setInterval(update, 4000);
 })();
 
+// Flag purement local (posé dès la détection standalone, sans dépendre du
+// réseau) : c'est lui qui doit déclencher le bandeau "ouvre l'app installée"
+// ci-dessous. Le posait auparavant sur "appInstallPinged", qui n'est fixé que
+// si le ping serveur réussit — un aléa réseau au lancement de l'app suffisait
+// alors à empêcher le bandeau de s'afficher pour toujours sur cet appareil.
+if (isStandaloneMode() && lsGet("agonStandaloneSeen") !== "1") {
+  lsSet("agonStandaloneSeen", "1");
+}
+
+// Ping serveur (stats d'installation) : indépendant du flag ci-dessus, peut
+// échouer/réessayer sans jamais affecter l'affichage du bandeau.
 if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
   fetch(API + "/users/mark-app-installed", {
     method: "POST",
@@ -744,13 +755,13 @@ if (isStandaloneMode() && lsGet("appInstallPinged") !== "1") {
 // Bandeau "ouvre l'app installée" : aucune API web ne permet de relancer une
 // PWA automatiquement (ni sur iOS ni sur Android sans wrapper natif), donc on
 // se contente d'un rappel visuel quelques secondes quand ce navigateur a déjà
-// installé l'app (flag posé ci-dessus) mais qu'on navigue hors standalone.
+// tourné en standalone (flag posé ci-dessus) mais qu'on navigue hors standalone.
 const OPEN_APP_BANNER_LAST_SHOWN_KEY = "openAppBannerLastShownAt";
 const OPEN_APP_BANNER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 function maybeShowOpenAppBanner() {
   if (isStandaloneMode() || window !== window.top) return;
-  if (lsGet("appInstallPinged") !== "1") return;
+  if (lsGet("agonStandaloneSeen") !== "1") return;
 
   const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
   if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
