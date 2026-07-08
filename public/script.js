@@ -895,6 +895,80 @@ function showOpenAppHowToModal() {
 
 maybeShowOpenAppBanner();
 
+// Widget de score percentile (voix reçues / notes IA), injecté dans la topbar
+// de toutes les pages (.topbar-inner, présent sur les 8 templates). N'affiche
+// rien tant que l'utilisateur n'a pas au moins un score (aucune idée postée /
+// aucune idée notée par l'IA pour l'instant).
+function renderUserScoreWidget(data) {
+  const container = document.querySelector(".topbar-inner");
+  if (!container || document.querySelector(".agon-user-score-widget")) return;
+
+  const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
+  const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
+  if (votesScore === null && notesScore === null) return;
+
+  if (!document.getElementById("agon-user-score-styles")) {
+    const style = document.createElement("style");
+    style.id = "agon-user-score-styles";
+    style.textContent = `
+      .agon-user-score-widget {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        text-decoration: none;
+      }
+      .agon-user-score-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #111827;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .agon-user-score-pill i { font-size: 10px; color: #9cc3f0; }
+      @media (max-width: 480px) {
+        .agon-user-score-pill .agon-user-score-label { display: none; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const widget = document.createElement("a");
+  widget.className = "agon-user-score-widget";
+  widget.href = "/contributions";
+  widget.setAttribute("aria-label", "Mes scores");
+  widget.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (typeof openDebateIframeModal === "function") openDebateIframeModal("/contributions");
+    else window.location.href = "/contributions";
+  });
+
+  const pills = [];
+  if (votesScore !== null) {
+    pills.push('<span class="agon-user-score-pill"><i class="fa-solid fa-bolt"></i>Top ' + votesScore + '%<span class="agon-user-score-label">&nbsp;voix</span></span>');
+  }
+  if (notesScore !== null) {
+    pills.push('<span class="agon-user-score-pill"><i class="fa-solid fa-graduation-cap"></i>Top ' + notesScore + '%<span class="agon-user-score-label">&nbsp;notes</span></span>');
+  }
+  widget.innerHTML = pills.join("");
+  container.appendChild(widget);
+}
+
+(function initUserScoreWidget() {
+  if (window !== window.top) return; // pas dans les iframes de modales internes
+  const key = getKey();
+  if (!key) return;
+  fetch(API + "/my-score?key=" + encodeURIComponent(key))
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => { if (data) renderUserScoreWidget(data); })
+    .catch(() => {});
+})();
+
 function isAgonMobileCloudViewport() {
   const viewportWidth = Math.min(
     window.innerWidth || Number.POSITIVE_INFINITY,

@@ -3979,6 +3979,132 @@ app.get("/contributions", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/contributions.html"));
 });
 
+// Score percentile d'un utilisateur ("top X%") sur 2 axes indépendants :
+// voix reçues (total sur toutes ses idées) et note IA (moyenne des idées
+// notées). Population = seulement les auteurs actifs sur l'axe concerné
+// (au moins 1 idée postée / au moins 1 idée notée par l'IA), pour ne pas
+// gonfler artificiellement le classement avec des comptes jamais actifs.
+// Calcul lourd (scan de toutes les idées + tous les débats analysés) :
+// caché en mémoire process, servi immédiatement puis rafraîchi en fond une
+// fois périmé (même logique stale-while-revalidate que les cloud bubbles).
+let _userScoreCache = null;
+let _userScoreCacheComputedAt = 0;
+let _userScoreRefreshPromise = null;
+const USER_SCORE_CACHE_TTL_MS = 15 * 60 * 1000;
+
+// Score% = part de la population dont la valeur est strictement supérieure
+// à celle de l'utilisateur — ex: 2% signifie que 98% des autres ont moins.
+function buildPercentileScoreMap(valueByAuthorKey) {
+  const entries = [...valueByAuthorKey.entries()];
+  const n = entries.length;
+  const result = new Map();
+  if (!n) return result;
+
+  const sortedDesc = entries.map(([, value]) => value).sort((a, b) => b - a);
+  for (const [authorKey, value] of entries) {
+    let lo = 0, hi = n;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sortedDesc[mid] > value) lo = mid + 1; else hi = mid;
+    }
+    result.set(authorKey, Math.round((lo / n) * 100));
+  }
+  return result;
+}
+
+async function computeUserScores() {
+  const { data: allArguments, error: argsError } = await fetchAllSupabaseRows(() =>
+    supabase.from("arguments").select("id, author_key, votes").not("author_key", "is", null));
+  if (argsError) throw argsError;
+
+  const votesTotalByAuthorKey = new Map();
+  const authorKeyByArgumentId = new Map();
+  for (const arg of allArguments || []) {
+    const authorKey = String(arg.author_key || "").trim();
+    if (!authorKey) continue;
+    votesTotalByAuthorKey.set(authorKey, (votesTotalByAuthorKey.get(authorKey) || 0) + Number(arg.votes || 0));
+    authorKeyByArgumentId.set(String(arg.id), authorKey);
+  }
+
+  const { data: analyzedDebates, error: debatesError } = await fetchAllSupabaseRows(() =>
+    supabase.from("debates").select("id, ai_analysis").not("ai_analysis", "is", null));
+  if (debatesError) throw debatesError;
+
+  const scoreByArgumentId = new Map();
+  for (const row of analyzedDebates || []) {
+    const rawScoring = extractAnalysisScoringRaw(row.ai_analysis);
+    if (!rawScoring) continue;
+    try {
+      const parsedScoring = JSON.parse(rawScoring);
+      for (const [argId, entry] of _getAnalysisScoreByArgumentId(parsedScoring)) {
+        scoreByArgumentId.set(argId, entry);
+      }
+    } catch (e) {}
+  }
+
+  const noteSumByAuthorKey = new Map();
+  const noteCountByAuthorKey = new Map();
+  for (const [argumentId, entry] of scoreByArgumentId) {
+    const authorKey = authorKeyByArgumentId.get(String(argumentId));
+    if (!authorKey) continue;
+    noteSumByAuthorKey.set(authorKey, (noteSumByAuthorKey.get(authorKey) || 0) + entry.score);
+    noteCountByAuthorKey.set(authorKey, (noteCountByAuthorKey.get(authorKey) || 0) + 1);
+  }
+  const noteAvgByAuthorKey = new Map();
+  for (const [authorKey, sum] of noteSumByAuthorKey) {
+    noteAvgByAuthorKey.set(authorKey, sum / noteCountByAuthorKey.get(authorKey));
+  }
+
+  return {
+    votesScoreByAuthorKey: buildPercentileScoreMap(votesTotalByAuthorKey),
+    notesScoreByAuthorKey: buildPercentileScoreMap(noteAvgByAuthorKey)
+  };
+}
+
+async function refreshUserScoreCache() {
+  if (_userScoreRefreshPromise) return _userScoreRefreshPromise;
+  _userScoreRefreshPromise = computeUserScores()
+    .then((result) => {
+      _userScoreCache = result;
+      _userScoreCacheComputedAt = Date.now();
+      return result;
+    })
+    .catch((e) => {
+      console.error("[user-score] refresh error:", e.message);
+      throw e;
+    })
+    .finally(() => {
+      _userScoreRefreshPromise = null;
+    });
+  return _userScoreRefreshPromise;
+}
+
+async function getUserScoreData() {
+  if (_userScoreCache) {
+    if (Date.now() - _userScoreCacheComputedAt >= USER_SCORE_CACHE_TTL_MS) {
+      refreshUserScoreCache().catch(() => {});
+    }
+    return _userScoreCache;
+  }
+  return refreshUserScoreCache();
+}
+
+app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
+  const key = String(req.query.key || "").trim();
+  if (!key) return res.status(400).json({ error: "Clé manquante." });
+
+  try {
+    const { votesScoreByAuthorKey, notesScoreByAuthorKey } = await getUserScoreData();
+    res.json({
+      votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
+      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null
+    });
+  } catch (e) {
+    console.error("Erreur /api/my-score:", e);
+    res.status(500).json({ error: "Erreur lors du calcul du score." });
+  }
+});
+
 // Contributions du visiteur : tout est retrouvé via sa clé de navigateur
 // (creator_key des arènes, author_key des idées et commentaires). Lectures
 // bornées par utilisateur (limit), pas besoin de fetchAllSupabaseRows.
