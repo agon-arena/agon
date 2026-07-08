@@ -900,8 +900,8 @@ maybeShowOpenAppBanner();
 // rien tant que l'utilisateur n'a pas au moins un score (aucune idée postée /
 // aucune idée notée par l'IA pour l'instant).
 function renderUserScoreWidget(data) {
-  const container = document.querySelector(".topbar-inner");
-  if (!container || document.querySelector(".agon-user-score-widget")) return;
+  const topbar = document.querySelector(".topbar");
+  if (!topbar || document.querySelector(".agon-user-score-widget")) return;
 
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
   const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
@@ -913,27 +913,33 @@ function renderUserScoreWidget(data) {
     style.id = "agon-user-score-styles";
     style.textContent = `
       .agon-user-score-widget {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex: 0 0 auto;
-        text-decoration: none;
-      }
-      .agon-user-score-pill {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 5;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        padding: 4px 10px;
+        gap: 6px;
+        padding: 4px 12px;
         border-radius: 999px;
         background: #111827;
         color: #fff;
         font-size: 11px;
         font-weight: 700;
         white-space: nowrap;
+        text-decoration: none;
+        max-width: calc(100vw - 220px);
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .agon-user-score-pill i { font-size: 10px; color: #9cc3f0; }
+      .agon-user-score-widget i { font-size: 10px; color: #9cc3f0; }
       @media (max-width: 480px) {
-        .agon-user-score-pill .agon-user-score-label { display: none; }
+        .agon-user-score-widget {
+          font-size: 9.5px;
+          padding: 3px 9px;
+          max-width: calc(100vw - 130px);
+        }
       }
     `;
     document.head.appendChild(style);
@@ -948,15 +954,11 @@ function renderUserScoreWidget(data) {
     showUserScoreModal(votesScore, notesScore, tierLabel);
   });
 
-  const pills = [];
-  if (votesScore !== null) {
-    pills.push('<span class="agon-user-score-pill"><i class="fa-solid fa-bolt"></i>Top ' + votesScore + '%<span class="agon-user-score-label">&nbsp;Orator</span></span>');
-  }
-  if (notesScore !== null) {
-    pills.push('<span class="agon-user-score-pill"><i class="fa-solid fa-graduation-cap"></i>Top ' + notesScore + '%<span class="agon-user-score-label">&nbsp;Logos</span></span>');
-  }
-  widget.innerHTML = pills.join("");
-  container.appendChild(widget);
+  const parts = [];
+  if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + votesScore + '% (Orator)');
+  if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
+  widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
+  topbar.appendChild(widget);
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
