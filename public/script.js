@@ -783,10 +783,12 @@ function maybeShowOpenAppBanner() {
         right: 0;
         z-index: 9999;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 10px;
-        padding: 10px 16px;
-        padding-top: calc(10px + env(safe-area-inset-top, 0px));
+        text-align: center;
+        gap: 6px;
+        padding: 14px 42px 14px 16px;
+        padding-top: calc(14px + env(safe-area-inset-top, 0px));
         background: #16181d;
         color: #fff;
         font-size: 14px;
@@ -795,13 +797,26 @@ function maybeShowOpenAppBanner() {
         transition: transform .35s ease;
       }
       .agon-open-app-banner.agon-open-app-banner-visible { transform: translateY(0); }
-      .agon-open-app-banner img { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; }
-      .agon-open-app-banner span { flex: 1; line-height: 1.3; }
-      .agon-open-app-banner button {
+      .agon-open-app-banner img { width: 28px; height: 28px; border-radius: 7px; }
+      .agon-open-app-banner span { line-height: 1.35; }
+      .agon-open-app-banner-link {
+        background: none;
+        border: none;
+        color: #fff;
+        text-decoration: underline;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 2px 0;
+        cursor: pointer;
+      }
+      .agon-open-app-banner-close {
+        position: absolute;
+        top: calc(8px + env(safe-area-inset-top, 0px));
+        right: 8px;
         background: none;
         border: none;
         color: #9aa0aa;
-        font-size: 20px;
+        font-size: 22px;
         line-height: 1;
         padding: 4px;
         cursor: pointer;
@@ -813,9 +828,10 @@ function maybeShowOpenAppBanner() {
   const banner = document.createElement("div");
   banner.className = "agon-open-app-banner";
   banner.innerHTML = `
+    <button type="button" class="agon-open-app-banner-close" aria-label="Fermer">&times;</button>
     <img src="/appagon-192.png" alt="">
     <span>Tu as l'app Agôn installée&nbsp;: ouvre-la depuis ton écran d'accueil.</span>
-    <button type="button" aria-label="Fermer">&times;</button>
+    <button type="button" class="agon-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
   `;
   document.body.appendChild(banner);
 
@@ -824,9 +840,43 @@ function maybeShowOpenAppBanner() {
     setTimeout(() => banner.remove(), 400);
   };
 
-  banner.querySelector("button").addEventListener("click", hide);
+  banner.querySelector(".agon-open-app-banner-close").addEventListener("click", hide);
+  banner.querySelector(".agon-open-app-banner-link").addEventListener("click", showOpenAppHowToModal);
   requestAnimationFrame(() => banner.classList.add("agon-open-app-banner-visible"));
-  setTimeout(hide, 5000);
+  // Pas de disparition automatique : seul le bouton de fermeture masque le bandeau,
+  // pour laisser le temps de lire et de cliquer sur "Comment l'ouvrir ?".
+}
+
+// Rappel des étapes pour ouvrir l'app installée : aucune API web ne permet de
+// la relancer depuis un lien (ni iOS ni Android sans wrapper natif), donc le
+// lien du bandeau ouvre ces instructions plutôt qu'une tentative de lancement.
+function showOpenAppHowToModal() {
+  let overlay = document.getElementById("agon-open-app-howto-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "agon-open-app-howto-overlay";
+    overlay.className = "install-modal-overlay";
+    overlay.innerHTML = `
+      <div class="install-modal" onclick="event.stopPropagation()">
+        <div class="install-modal-brand">
+          <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+        </div>
+        <h3 class="install-modal-title">Ouvrir l'app Agôn</h3>
+        <div class="install-modal-section">
+          <p class="install-modal-text">Aucun lien ne peut lancer l'app installée depuis le navigateur. Va sur ton <strong>écran d'accueil</strong> et appuie sur l'icône <strong>Agôn</strong> pour l'ouvrir en plein écran.</p>
+        </div>
+        <button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>
+      </div>`;
+    const close = () => {
+      overlay.style.display = "none";
+      document.body.style.overflow = "";
+    };
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector(".install-modal-android-btn").addEventListener("click", close);
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = "flex";
+  document.body.style.overflow = "hidden";
 }
 
 maybeShowOpenAppBanner();
