@@ -901,6 +901,8 @@ maybeShowOpenAppBanner();
 // aucune idée notée par l'IA pour l'instant).
 function renderUserScoreWidget(data) {
   const topbar = document.querySelector(".topbar");
+  const topbarInner = document.querySelector(".topbar-inner");
+  const brandBlock = document.querySelector(".home-brand-block");
   if (!topbar || document.querySelector(".agon-user-score-widget")) return;
 
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
@@ -940,6 +942,9 @@ function renderUserScoreWidget(data) {
         text-overflow: ellipsis;
       }
       .agon-user-score-widget i { font-size: 10px; color: #9cc3f0; }
+      .agon-user-score-widget-inline {
+        flex: 0 0 auto;
+      }
       @media (max-width: 480px) {
         .agon-user-score-widget {
           font-size: 9.5px;
@@ -964,10 +969,22 @@ function renderUserScoreWidget(data) {
   if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
   widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
 
-  const row = document.createElement("div");
-  row.className = "agon-user-score-row";
-  row.appendChild(widget);
-  topbar.appendChild(row);
+  const isDesktop = window.matchMedia("(min-width: 769px)").matches;
+  if (isDesktop && brandBlock && topbarInner && brandBlock.parentElement === topbarInner) {
+    // Desktop : en ligne juste après le logo, avant les icônes réseau / le
+    // reste de la barre (flex:1 sur .home-brand-block pousse tout ce qui
+    // suit contre le cluster de droite — donc "juste après" = collé au
+    // cluster, entre le logo et les icônes réseau).
+    widget.classList.add("agon-user-score-widget-inline");
+    brandBlock.insertAdjacentElement("afterend", widget);
+  } else {
+    // Mobile : nouvelle ligne dédiée sous le logo, pour ne jamais chevaucher
+    // le reste de la barre (menu, icônes) qui reste très compact sur mobile.
+    const row = document.createElement("div");
+    row.className = "agon-user-score-row";
+    row.appendChild(widget);
+    topbar.appendChild(row);
+  }
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
