@@ -980,10 +980,14 @@ function renderUserScoreWidget(data) {
   } else {
     // Mobile : nouvelle ligne dédiée sous le logo, pour ne jamais chevaucher
     // le reste de la barre (menu, icônes) qui reste très compact sur mobile.
+    // Insérée juste après .topbar-inner (pas à la fin de .topbar, qui peut
+    // contenir d'autres blocs après — ex: admin-controls-row) pour rester
+    // collée au logo au lieu de dériver plus bas dans la page.
     const row = document.createElement("div");
     row.className = "agon-user-score-row";
     row.appendChild(widget);
-    topbar.appendChild(row);
+    if (topbarInner) topbarInner.insertAdjacentElement("afterend", row);
+    else topbar.appendChild(row);
   }
 }
 
