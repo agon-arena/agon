@@ -970,8 +970,11 @@ function showUserScoreModal(votesScore, notesScore, tierLabel) {
   overlay.id = "agon-user-score-overlay";
   overlay.className = "install-modal-overlay";
 
-  const comparisonSuffix = tierLabel
-    ? ' (comparé aux contributeurs ayant, comme toi, ' + tierLabel.charAt(0).toLowerCase() + tierLabel.slice(1) + ')'
+  const tierSection = tierLabel
+    ? '<div class="install-modal-section">' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier — ' + tierLabel + '</h4>' +
+        '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien — sinon un gros contributeur écraserait mécaniquement les petits.</p>' +
+      '</div><div class="install-modal-divider"></div>'
     : '';
 
   const sections = [];
@@ -979,7 +982,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel) {
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs actifs ont reçu plus de voix que toi' + comparisonSuffix + '.</p>' +
+        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi.</p>' +
       '</div>'
     );
   }
@@ -987,7 +990,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel) {
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs actifs ont une meilleure moyenne que toi' + comparisonSuffix + '.</p>' +
+        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi.</p>' +
       '</div>'
     );
   }
@@ -995,6 +998,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel) {
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
       '<h3 class="install-modal-title">Tes scores</h3>' +
+      tierSection +
       sections.join('<div class="install-modal-divider"></div>') +
       '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
