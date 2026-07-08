@@ -843,7 +843,7 @@ function maybeShowOpenAppBanner() {
   banner.className = "agon-open-app-banner";
   banner.innerHTML = `
     <button type="button" class="agon-open-app-banner-close" aria-label="Fermer">&times;</button>
-    <img src="/appagon-192.png" alt="">
+    <img src="/icon-192-optimized.png" alt="">
     <span>Tu as l'app Agôn installée&nbsp;: ouvre-la depuis ton écran d'accueil.</span>
     <button type="button" class="agon-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
   `;
@@ -873,7 +873,7 @@ function showOpenAppHowToModal() {
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
-          <img src="/appagon-192.png" alt="" class="install-modal-app-icon">
+          <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
         </div>
         <h3 class="install-modal-title">Ouvrir l'app Agôn</h3>
         <div class="install-modal-section">
