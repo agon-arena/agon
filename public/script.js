@@ -908,11 +908,15 @@ function renderUserScoreWidget(data) {
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
   const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
   const tierLabel = String(data?.tierLabel || "").trim();
+  const tier = Number.isFinite(Number(data?.tier)) ? Number(data.tier) : null;
+  const tierCount = Number.isFinite(Number(data?.tierCount)) ? Number(data.tierCount) : null;
   const stats = {
     votesTotalUsers: Number.isFinite(Number(data?.votesTotalUsers)) ? Number(data.votesTotalUsers) : null,
     notesTotalUsers: Number.isFinite(Number(data?.notesTotalUsers)) ? Number(data.notesTotalUsers) : null,
     votesTierUsers: Number.isFinite(Number(data?.votesTierUsers)) ? Number(data.votesTierUsers) : null,
-    notesTierUsers: Number.isFinite(Number(data?.notesTierUsers)) ? Number(data.notesTierUsers) : null
+    notesTierUsers: Number.isFinite(Number(data?.notesTierUsers)) ? Number(data.notesTierUsers) : null,
+    votesValue: Number.isFinite(Number(data?.votesValue)) ? Number(data.votesValue) : null,
+    notesValue: Number.isFinite(Number(data?.notesValue)) ? Number(data.notesValue) : null
   };
   if (votesScore === null && notesScore === null) return;
 
@@ -961,7 +965,7 @@ function renderUserScoreWidget(data) {
   widget.setAttribute("aria-label", "Mes scores");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
-    showUserScoreModal(votesScore, notesScore, tierLabel, stats);
+    showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tierCount);
   });
 
   const parts = [];
@@ -998,7 +1002,7 @@ function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
 }
 
-function showUserScoreModal(votesScore, notesScore, tierLabel, stats) {
+function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tierCount) {
   const existing = document.getElementById("agon-user-score-overlay");
   if (existing) existing.remove();
 
@@ -1007,11 +1011,12 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats) {
   overlay.className = "install-modal-overlay";
 
   const s = stats || {};
+  const tierRank = (Number.isFinite(tier) && Number.isFinite(tierCount)) ? (' (' + tier + '/' + tierCount + ')') : '';
 
   const tierSection = tierLabel
     ? '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier — ' + tierLabel + '</h4>' +
-        '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien — sinon un gros contributeur écraserait mécaniquement les petits.</p>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier' + tierRank + ' — ' + tierLabel + '</h4>' +
+        '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien.</p>' +
       '</div><div class="install-modal-divider"></div>'
     : '';
 
@@ -1020,9 +1025,13 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats) {
     const countHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
       ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
       : '';
+    const valueLine = Number.isFinite(s.votesValue)
+      ? '<p class="install-modal-text"><strong>' + s.votesValue.toLocaleString("fr-FR") + (s.votesValue > 1 ? ' voix reçues' : ' voix reçue') + '</strong> au total sur toutes tes idées.</p>'
+      : '';
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
+        valueLine +
         '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. Top ' + votesScore + '% signifie que ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi.</p>' +
         countHint +
       '</div>'
@@ -1032,9 +1041,13 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats) {
     const countHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
       ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
       : '';
+    const valueLine = Number.isFinite(s.notesValue)
+      ? '<p class="install-modal-text"><strong>Moyenne de ' + s.notesValue.toLocaleString("fr-FR") + '/100</strong> sur tes idées notées par l\'IA.</p>'
+      : '';
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
+        valueLine +
         '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. Top ' + notesScore + '% signifie que ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi.</p>' +
         countHint +
       '</div>'

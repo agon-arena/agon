@@ -4124,7 +4124,11 @@ async function computeUserScores() {
     votesTotalUsers: votesTotalByAuthorKey.size,
     notesTotalUsers: noteAvgByAuthorKey.size,
     votesTierSizeByTier,
-    notesTierSizeByTier
+    notesTierSizeByTier,
+    // Valeurs brutes (pas seulement le percentile) — affichées telles quelles
+    // dans la modale à côté du "Top X%".
+    votesTotalByAuthorKey,
+    noteAvgByAuthorKey
   };
 }
 
@@ -4163,17 +4167,22 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
   try {
     const {
       votesScoreByAuthorKey, notesScoreByAuthorKey, tierByAuthorKey,
-      votesTotalUsers, notesTotalUsers, votesTierSizeByTier, notesTierSizeByTier
+      votesTotalUsers, notesTotalUsers, votesTierSizeByTier, notesTierSizeByTier,
+      votesTotalByAuthorKey, noteAvgByAuthorKey
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
     res.json({
       votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
       notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null,
       tierLabel: tier ? getUserContributionTierLabel(tier) : null,
+      tier: tier || null,
+      tierCount: USER_SCORE_TIERS.length,
       votesTotalUsers,
       notesTotalUsers,
       votesTierUsers: tier ? (votesTierSizeByTier.get(tier) || 0) : null,
-      notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null
+      notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null,
+      votesValue: votesTotalByAuthorKey.has(key) ? votesTotalByAuthorKey.get(key) : null,
+      notesValue: noteAvgByAuthorKey.has(key) ? Math.round(noteAvgByAuthorKey.get(key) * 10) / 10 : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);
