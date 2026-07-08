@@ -1274,7 +1274,13 @@ function showPushInvite(reason = "action", options = {}) {
     title.textContent = "On te prévient quand ça réagit à tes publications ?";
     text.textContent = "Juste les réponses à tes posts — rien d'autre, jamais.";
     primaryButton.textContent = "Activer";
-    primaryButton.addEventListener("click", enablePushNotificationsFromInvite);
+    // Ferme la modale immédiatement au clic : la chaîne async qui suit (permission
+    // navigateur, service worker, sauvegarde serveur) prenait jusque-là un temps de
+    // latence visible avant que la modale ne disparaisse.
+    primaryButton.addEventListener("click", () => {
+      hidePushInvite();
+      enablePushNotificationsFromInvite();
+    });
   } else if (isIOSDevice()) {
     // iPhone / iPad → guide install PWA
     toast.setAttribute("aria-label", "Installer Agôn");
