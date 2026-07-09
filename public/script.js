@@ -919,7 +919,7 @@ function renderUserScoreWidget(data) {
     votesValue: Number.isFinite(Number(data?.votesValue)) ? Number(data.votesValue) : null,
     notesValue: Number.isFinite(Number(data?.notesValue)) ? Number(data.notesValue) : null
   };
-  if (votesScore === null && notesScore === null) return;
+  const hasScore = votesScore !== null || notesScore !== null;
 
   if (!document.getElementById("agon-user-score-styles")) {
     const style = document.createElement("style");
@@ -947,6 +947,8 @@ function renderUserScoreWidget(data) {
         text-overflow: ellipsis;
       }
       .agon-user-score-widget i { font-size: 10px; color: #9cc3f0; }
+      .agon-user-score-widget-empty { opacity: .82; }
+      .agon-user-score-widget-empty i { color: #f0c96a; }
       .agon-user-score-widget-inline {
         flex: 0 0 auto;
       }
@@ -994,18 +996,25 @@ function renderUserScoreWidget(data) {
   }
 
   const widget = document.createElement("a");
-  widget.className = "agon-user-score-widget";
+  widget.className = "agon-user-score-widget" + (hasScore ? "" : " agon-user-score-widget-empty");
   widget.href = "/contributions";
-  widget.setAttribute("aria-label", "Mes scores");
+  widget.setAttribute("aria-label", hasScore ? "Mes scores" : "Débloquer mes scores Orator et Logos");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
     showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tierCount);
   });
 
-  const parts = [];
-  if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + votesScore + '% (Orator)');
-  if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
-  widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
+  if (hasScore) {
+    const parts = [];
+    if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + votesScore + '% (Orator)');
+    if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
+    widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
+  } else {
+    // Aucune idée postée pour l'instant : incite à contribuer plutôt que de masquer
+    // le widget (l'ancien comportement) — les scores Orator/Logos n'existent qu'une
+    // fois qu'on a posté au moins une idée.
+    widget.innerHTML = '<i class="fa-solid fa-bolt"></i>Poste une idée pour débloquer ton score';
+  }
 
   const isDesktop = window.matchMedia("(min-width: 769px)").matches;
   const isIndexPage = document.body.classList.contains("page-home") || document.body.classList.contains("page-home-mobile");
@@ -1089,6 +1098,25 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         valueLine +
         '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + (100 - notesScore) + '% ont une moyenne inférieure.</p>' +
         countHint +
+      '</div>'
+    );
+  }
+
+  // Ni idée postée, ni vote reçu, ni note IA : les deux scores n'existent pas encore
+  // (calculés uniquement à partir des idées postées) — explique le principe et incite
+  // à poster une idée plutôt que de laisser la modale vide.
+  if (votesScore === null && notesScore === null) {
+    sections.push(
+      '<div class="install-modal-section">' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator</h4>' +
+        '<p class="install-modal-text">Mesure les voix récoltées sur tes idées.</p>' +
+      '</div><div class="install-modal-divider"></div>' +
+      '<div class="install-modal-section">' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos</h4>' +
+        '<p class="install-modal-text">Mesure la qualité de tes idées, notée par l\'IA.</p>' +
+      '</div><div class="install-modal-divider"></div>' +
+      '<div class="install-modal-section">' +
+        '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée</strong> : ces deux scores se débloquent dès ta première contribution à un débat.</p>' +
       '</div>'
     );
   }

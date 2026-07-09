@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <script src="/no-zoom.js?v=20260603" defer></script>
 
-<title>Mes contributions</title>
+<title>Mes scores et contributions</title>
 <link rel="icon" type="image/png" href="/favicon-64.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icon-192-optimized.png">
@@ -293,6 +293,44 @@
       padding: 14px 16px;
       font-size: 13.5px;
     }
+    .contributions-scores {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .contributions-scores.contributions-scores-empty {
+      grid-template-columns: 1fr;
+    }
+    .contributions-score-card {
+      background: #2e3d47;
+      border: 1px solid #3a4a55;
+      border-radius: 14px;
+      padding: 14px 15px;
+    }
+    .contributions-score-card-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #e8e8e8;
+      font-weight: 700;
+      font-size: 14px;
+      margin: 0 0 4px;
+    }
+    .contributions-score-card-title i { color: #9cc3f0; font-size: 13px; }
+    .contributions-score-card-value {
+      color: #9cc3f0;
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0 0 2px;
+    }
+    .contributions-score-card-hint {
+      color: #a0b0bb;
+      font-size: 12px;
+      margin: 0;
+      line-height: 1.4;
+    }
+    .contributions-scores-empty .contributions-score-card-title i { color: #f0c96a; }
   </style>
 </head>
 <body class="page-notifications page-notifications-mobile page-contributions">
@@ -332,8 +370,12 @@
   <section class="debates-section">
     <div class="section-header section-header-home">
       <div>
-        <h3>Mes contributions</h3>
+        <h3>Mes scores et contributions</h3>
       </div>
+    </div>
+
+    <div class="contributions-scores" id="contributions-scores">
+      <div class="empty-state">Chargement…</div>
     </div>
 
     <details class="contributions-accordion">
@@ -689,6 +731,66 @@
     svg.onmouseleave = clearActive;
   }
 
+  // Scores Orator (voix reçues) / Logos (notes IA) — même endpoint que le
+  // widget de la topbar, affichés ici en cartes fixes plutôt qu'en popup.
+  function renderScores(key) {
+    var container = document.getElementById("contributions-scores");
+    if (!container) return;
+
+    function renderIncentive(message) {
+      container.classList.add("contributions-scores-empty");
+      container.innerHTML =
+        '<div class="contributions-score-card">' +
+          '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Orator &amp; Logos</p>' +
+          '<p class="contributions-score-card-hint">' + esc(message) + '</p>' +
+        '</div>';
+    }
+
+    if (!key) {
+      renderIncentive("Poste une idée pour débloquer tes scores.");
+      return;
+    }
+
+    fetch("/api/my-score?key=" + encodeURIComponent(key))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) throw new Error("no data");
+        var votesScore = Number.isFinite(Number(data.votesScore)) ? Math.round(Number(data.votesScore)) : null;
+        var notesScore = Number.isFinite(Number(data.notesScore)) ? Math.round(Number(data.notesScore)) : null;
+        if (votesScore === null && notesScore === null) {
+          renderIncentive("Tu n'as encore posté aucune idée : ces deux scores se débloquent dès ta première contribution.");
+          return;
+        }
+
+        container.classList.remove("contributions-scores-empty");
+        var cards = [];
+        if (votesScore !== null) {
+          var votesValue = Number.isFinite(Number(data.votesValue)) ? Number(data.votesValue) : null;
+          cards.push(
+            '<div class="contributions-score-card">' +
+              '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Orator</p>' +
+              '<p class="contributions-score-card-value">Top ' + votesScore + '%</p>' +
+              '<p class="contributions-score-card-hint">' + (votesValue !== null ? esc(votesValue.toLocaleString("fr-FR") + (votesValue > 1 ? " voix reçues" : " voix reçue")) : "Voix récoltées sur tes idées") + '</p>' +
+            '</div>'
+          );
+        }
+        if (notesScore !== null) {
+          var notesValue = Number.isFinite(Number(data.notesValue)) ? Number(data.notesValue) : null;
+          cards.push(
+            '<div class="contributions-score-card">' +
+              '<p class="contributions-score-card-title"><i class="fa-solid fa-graduation-cap"></i> Logos</p>' +
+              '<p class="contributions-score-card-value">Top ' + notesScore + '%</p>' +
+              '<p class="contributions-score-card-hint">' + (notesValue !== null ? esc("Moyenne de " + notesValue.toLocaleString("fr-FR") + "/100") : "Qualité de tes idées, notée par l'IA") + '</p>' +
+            '</div>'
+          );
+        }
+        container.innerHTML = cards.join("");
+      })
+      .catch(function() {
+        renderIncentive("Impossible de charger tes scores pour l'instant.");
+      });
+  }
+
   function load() {
     var debatesEl = document.getElementById("contributions-debates");
     var argumentsEl = document.getElementById("contributions-arguments");
@@ -699,6 +801,7 @@
 
     var key = null;
     try { key = localStorage.getItem("key"); } catch (e) {}
+    renderScores(key);
     if (!key) {
       renderEmpty(debatesEl, "Tu n'as pas encore ouvert d'arène.");
       renderEmpty(argumentsEl, "Tu n'as pas encore proposé d'idée.");
