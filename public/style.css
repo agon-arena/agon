@@ -6842,7 +6842,7 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   width: min(920px, 100%);
-  margin: -14px auto 0;
+  margin: -8px auto 0;
   position: relative;
   z-index: 140;
 }
@@ -7106,6 +7106,7 @@ body.page-debate .topbar::after {
 
   .page-home-mobile .index-explorer-topbar {
     width: 100%;
+    margin-top: -8px;
     transform: none;
   }
 
@@ -20174,31 +20175,15 @@ body.page-home .home-logo {
   max-height: 180px !important;
   object-fit: contain !important;
 }
+body.page-home .topbar-social,
+body.page-home-mobile .topbar-social {
+  display: none !important;
+}
 @media (min-width: 769px) {
   body.page-home .home-brand-main {
     transform: translateX(83px) !important;
   }
 }
-body.page-home .topbar-social .share-icon-button {
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 10px !important;
-}
-body.page-home .topbar-social {
-  margin-top: 0 !important;
-  gap: 4px !important;
-}
-@media (min-width: 769px) {
-  body.page-home .topbar-social {
-    position: absolute !important;
-    top: -38px !important;
-    left: 50% !important;
-    width: auto !important;
-    transform: translateX(-50%) !important;
-    margin: 0 !important;
-  }
-}
-
 body.page-home .theme-row-title,
 body.page-home .theme-row-title-text,
 body.page-home-mobile .theme-row-title,
@@ -23008,4 +22993,3 @@ body.page-create-mobile .create-card .create-submit-helper {
     margin-bottom: calc(var(--agon-debate-legacy-media-shift-y, 0px) + 42px) !important;
   }
 }
-

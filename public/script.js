@@ -903,6 +903,7 @@ function renderUserScoreWidget(data) {
   const topbar = document.querySelector(".topbar");
   const topbarInner = document.querySelector(".topbar-inner");
   const brandBlock = document.querySelector(".home-brand-block");
+  const brandMain = document.querySelector(".home-brand-main");
   if (!topbar || document.querySelector(".agon-user-score-widget")) return;
 
   const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
@@ -949,10 +950,43 @@ function renderUserScoreWidget(data) {
       .agon-user-score-widget-inline {
         flex: 0 0 auto;
       }
+      .agon-user-score-anchor {
+        position: relative;
+        overflow: visible;
+      }
+      .agon-user-score-widget-logo-overlay {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        z-index: 18;
+        transform: translateX(-50%);
+        justify-content: center;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+      }
+      body.page-home .agon-user-score-widget-logo-overlay,
+      body.page-home-mobile .agon-user-score-widget-logo-overlay {
+        max-width: min(210px, calc(100vw - 120px));
+      }
+      @media (max-width: 768px) {
+        body.page-home-mobile .agon-user-score-widget-logo-overlay {
+          bottom: 12px;
+        }
+      }
       @media (max-width: 480px) {
         .agon-user-score-widget {
           font-size: 9.5px;
           padding: 3px 9px;
+        }
+        body.page-home-mobile .agon-user-score-widget-logo-overlay {
+          bottom: 11px;
+          transform: translateX(-50%);
+          max-width: min(168px, calc(100vw - 116px));
+          font-size: 8.5px;
+          padding: 2px 7px;
+          gap: 4px;
+        }
+        body.page-home-mobile .agon-user-score-widget-logo-overlay i {
+          font-size: 8px;
         }
       }
     `;
@@ -974,7 +1008,12 @@ function renderUserScoreWidget(data) {
   widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
 
   const isDesktop = window.matchMedia("(min-width: 769px)").matches;
-  if (isDesktop && brandBlock && topbarInner && brandBlock.parentElement === topbarInner) {
+  const isIndexPage = document.body.classList.contains("page-home") || document.body.classList.contains("page-home-mobile");
+  if (isIndexPage && brandMain) {
+    brandMain.classList.add("agon-user-score-anchor");
+    widget.classList.add("agon-user-score-widget-logo-overlay");
+    brandMain.appendChild(widget);
+  } else if (isDesktop && brandBlock && topbarInner && brandBlock.parentElement === topbarInner) {
     // Desktop : en ligne juste après le logo, avant les icônes réseau / le
     // reste de la barre (flex:1 sur .home-brand-block pousse tout ce qui
     // suit contre le cluster de droite — donc "juste après" = collé au
