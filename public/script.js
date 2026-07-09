@@ -1139,7 +1139,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         '<p class="install-modal-text">Mesure la qualité de tes idées, notée par l\'IA.</p>' +
       '</div><div class="install-modal-divider"></div>' +
       '<div class="install-modal-section">' +
-        '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée</strong> : ces deux scores se débloquent dès ta première contribution à un débat.</p>' +
+        '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée</strong> : ces deux scores se débloquent dès ta première contribution à une arène.</p>' +
       '</div>'
     );
   }
