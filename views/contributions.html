@@ -44,6 +44,10 @@
     .page-contributions .section-header h3 {
       color: #e8e8e8;
     }
+    .page-contributions .section-header-home {
+      justify-content: center;
+      text-align: center;
+    }
     .page-contributions .contributions-accordion {
       background: #2e3d47;
       border: 1px solid #3a4a55;
@@ -307,10 +311,12 @@
       border: 1px solid #3a4a55;
       border-radius: 14px;
       padding: 14px 15px;
+      text-align: center;
     }
     .contributions-score-card-title {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 7px;
       color: #e8e8e8;
       font-weight: 700;
@@ -461,6 +467,21 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  // Number(null) vaut 0 en JS : un champ serveur explicitement `null` (pas de
+  // score) ne doit pas être lu comme un vrai 0.
+  function numOrNull(value) {
+    if (value === null || value === undefined) return null;
+    var n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Affichage FR (virgule) d'un pourcentage borné à 1 décimale (0,1 % / 99,9 %
+  // aux extrêmes, cf. buildPercentileScoreMap côté serveur).
+  function formatPct(n) {
+    if (n === null || n === undefined || !Number.isFinite(Number(n))) return "";
+    return Number(n).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
   }
 
   function formatDate(iso) {
@@ -737,17 +758,34 @@
     var container = document.getElementById("contributions-scores");
     if (!container) return;
 
-    function renderIncentive(message) {
+    var modalArgs = null; // rempli une fois les données connues, lu au clic
+    container.style.cursor = "pointer";
+    container.setAttribute("role", "button");
+    container.setAttribute("aria-label", "Voir le détail de mes scores");
+    container.addEventListener("click", function() {
+      if (!modalArgs || typeof window.showUserScoreModal !== "function") return;
+      window.showUserScoreModal(modalArgs.votesScore, modalArgs.notesScore, modalArgs.tierLabel, modalArgs.stats, modalArgs.tier, modalArgs.tierCount);
+    });
+
+    function renderIncentive(message, data) {
       container.classList.add("contributions-scores-empty");
       container.innerHTML =
         '<div class="contributions-score-card">' +
           '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Orator &amp; Logos</p>' +
           '<p class="contributions-score-card-hint">' + esc(message) + '</p>' +
         '</div>';
+      modalArgs = {
+        votesScore: null,
+        notesScore: null,
+        tierLabel: data ? (data.tierLabel || "") : "",
+        stats: data || {},
+        tier: data ? data.tier : null,
+        tierCount: data ? data.tierCount : null
+      };
     }
 
     if (!key) {
-      renderIncentive("Poste une idée pour débloquer tes scores.");
+      renderIncentive("Poste une idée pour débloquer tes scores.", null);
       return;
     }
 
@@ -755,39 +793,51 @@
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(data) {
         if (!data) throw new Error("no data");
-        var votesScore = Number.isFinite(Number(data.votesScore)) ? Math.round(Number(data.votesScore)) : null;
-        var notesScore = Number.isFinite(Number(data.notesScore)) ? Math.round(Number(data.notesScore)) : null;
+        var votesScoreRaw = numOrNull(data.votesScore);
+        var notesScoreRaw = numOrNull(data.notesScore);
+        // 1 décimale (pas d'arrondi entier) : préserve les bornes 0,1 / 99,9 des
+        // extrêmes posées côté serveur.
+        var votesScore = votesScoreRaw === null ? null : Math.round(votesScoreRaw * 10) / 10;
+        var notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
         if (votesScore === null && notesScore === null) {
-          renderIncentive("Tu n'as encore posté aucune idée : ces deux scores se débloquent dès ta première contribution.");
+          renderIncentive("Tu n'as encore posté aucune idée : ces deux scores se débloquent dès ta première contribution.", data);
           return;
         }
 
         container.classList.remove("contributions-scores-empty");
         var cards = [];
         if (votesScore !== null) {
-          var votesValue = Number.isFinite(Number(data.votesValue)) ? Number(data.votesValue) : null;
+          var votesValue = numOrNull(data.votesValue);
           cards.push(
             '<div class="contributions-score-card">' +
               '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Orator</p>' +
-              '<p class="contributions-score-card-value">Top ' + votesScore + '%</p>' +
+              '<p class="contributions-score-card-value">Top ' + formatPct(votesScore) + '%</p>' +
               '<p class="contributions-score-card-hint">' + (votesValue !== null ? esc(votesValue.toLocaleString("fr-FR") + (votesValue > 1 ? " voix reçues" : " voix reçue")) : "Voix récoltées sur tes idées") + '</p>' +
             '</div>'
           );
         }
         if (notesScore !== null) {
-          var notesValue = Number.isFinite(Number(data.notesValue)) ? Number(data.notesValue) : null;
+          var notesValue = numOrNull(data.notesValue);
           cards.push(
             '<div class="contributions-score-card">' +
               '<p class="contributions-score-card-title"><i class="fa-solid fa-graduation-cap"></i> Logos</p>' +
-              '<p class="contributions-score-card-value">Top ' + notesScore + '%</p>' +
+              '<p class="contributions-score-card-value">Top ' + formatPct(notesScore) + '%</p>' +
               '<p class="contributions-score-card-hint">' + (notesValue !== null ? esc("Moyenne de " + notesValue.toLocaleString("fr-FR") + "/100") : "Qualité de tes idées, notée par l'IA") + '</p>' +
             '</div>'
           );
         }
         container.innerHTML = cards.join("");
+        modalArgs = {
+          votesScore: votesScore,
+          notesScore: notesScore,
+          tierLabel: data.tierLabel || "",
+          stats: data,
+          tier: data.tier,
+          tierCount: data.tierCount
+        };
       })
       .catch(function() {
-        renderIncentive("Impossible de charger tes scores pour l'instant.");
+        renderIncentive("Impossible de charger tes scores pour l'instant.", null);
       });
   }
 

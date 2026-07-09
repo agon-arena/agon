@@ -899,6 +899,25 @@ maybeShowOpenAppBanner();
 // de toutes les pages (.topbar-inner, présent sur les 8 templates). N'affiche
 // rien tant que l'utilisateur n'a pas au moins un score (aucune idée postée /
 // aucune idée notée par l'IA pour l'instant).
+// Number(null) vaut 0 en JS (piège classique) : un champ serveur explicitement
+// `null` (pas de score) se faisait donc lire comme un vrai score de 0 par
+// `Number.isFinite(Number(x)) ? Number(x) : null`, qui ne filtre que
+// undefined/NaN/chaînes invalides, pas null. Résultat : "Top 0%" s'affichait
+// pour des comptes n'ayant jamais rien publié. Ce helper distingue explicitement
+// "absent" de "zéro".
+function numOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Affichage FR (virgule) d'un pourcentage borné à 1 décimale (0,1 % / 99,9 %
+// aux extrêmes, cf. buildPercentileScoreMap côté serveur).
+function formatPct(n) {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return "";
+  return Number(n).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
 function renderUserScoreWidget(data) {
   const topbar = document.querySelector(".topbar");
   const topbarInner = document.querySelector(".topbar-inner");
@@ -906,18 +925,22 @@ function renderUserScoreWidget(data) {
   const brandMain = document.querySelector(".home-brand-main");
   if (!topbar || document.querySelector(".agon-user-score-widget")) return;
 
-  const votesScore = Number.isFinite(Number(data?.votesScore)) ? Math.round(Number(data.votesScore)) : null;
-  const notesScore = Number.isFinite(Number(data?.notesScore)) ? Math.round(Number(data.notesScore)) : null;
+  const votesScoreRaw = numOrNull(data?.votesScore);
+  const notesScoreRaw = numOrNull(data?.notesScore);
+  // 1 décimale (pas Math.round entier) : préserve les bornes 0,1 / 99,9 posées
+  // côté serveur pour les extrêmes, sinon Math.round(0.1) = 0 les efface.
+  const votesScore = votesScoreRaw === null ? null : Math.round(votesScoreRaw * 10) / 10;
+  const notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
   const tierLabel = String(data?.tierLabel || "").trim();
-  const tier = Number.isFinite(Number(data?.tier)) ? Number(data.tier) : null;
-  const tierCount = Number.isFinite(Number(data?.tierCount)) ? Number(data.tierCount) : null;
+  const tier = numOrNull(data?.tier);
+  const tierCount = numOrNull(data?.tierCount);
   const stats = {
-    votesTotalUsers: Number.isFinite(Number(data?.votesTotalUsers)) ? Number(data.votesTotalUsers) : null,
-    notesTotalUsers: Number.isFinite(Number(data?.notesTotalUsers)) ? Number(data.notesTotalUsers) : null,
-    votesTierUsers: Number.isFinite(Number(data?.votesTierUsers)) ? Number(data.votesTierUsers) : null,
-    notesTierUsers: Number.isFinite(Number(data?.notesTierUsers)) ? Number(data.notesTierUsers) : null,
-    votesValue: Number.isFinite(Number(data?.votesValue)) ? Number(data.votesValue) : null,
-    notesValue: Number.isFinite(Number(data?.notesValue)) ? Number(data.notesValue) : null
+    votesTotalUsers: numOrNull(data?.votesTotalUsers),
+    notesTotalUsers: numOrNull(data?.notesTotalUsers),
+    votesTierUsers: numOrNull(data?.votesTierUsers),
+    notesTierUsers: numOrNull(data?.notesTierUsers),
+    votesValue: numOrNull(data?.votesValue),
+    notesValue: numOrNull(data?.notesValue)
   };
   const hasScore = votesScore !== null || notesScore !== null;
 
@@ -1006,8 +1029,8 @@ function renderUserScoreWidget(data) {
 
   if (hasScore) {
     const parts = [];
-    if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + votesScore + '% (Orator)');
-    if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + notesScore + '% (Logos)');
+    if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Orator)');
+    if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + formatPct(notesScore) + '% (Logos)');
     widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
   } else {
     // Aucune idée postée pour l'instant : incite à contribuer plutôt que de masquer
@@ -1078,9 +1101,9 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
       : '';
     sections.push(
       '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + votesScore + '%</h4>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + formatPct(votesScore) + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + votesScore + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + (100 - votesScore) + '% en ont reçu moins.</p>' +
+        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.</p>' +
         countHint +
       '</div>'
     );
@@ -1094,9 +1117,9 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
       : '';
     sections.push(
       '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + notesScore + '%</h4>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + notesScore + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + (100 - notesScore) + '% ont une moyenne inférieure.</p>' +
+        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>' +
         countHint +
       '</div>'
     );

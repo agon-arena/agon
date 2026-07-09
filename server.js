@@ -4007,7 +4007,13 @@ function buildPercentileScoreMap(valueByAuthorKey) {
       const mid = (lo + hi) >> 1;
       if (sortedDesc[mid] > value) lo = mid + 1; else hi = mid;
     }
-    result.set(authorKey, Math.round((lo / n) * 100));
+    let pct = Math.round((lo / n) * 100);
+    // "Top 0%" (meilleur absolu) et "Top 100%" (dernier absolu) sonnent comme un
+    // bug plutôt qu'un vrai classement : on borne les deux extrêmes à 0,1 % et
+    // 99,9 % au lieu de 0 et 100 pile.
+    if (pct <= 0) pct = 0.1;
+    else if (pct >= 100) pct = 99.9;
+    result.set(authorKey, pct);
   }
   return result;
 }
