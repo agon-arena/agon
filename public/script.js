@@ -13246,7 +13246,7 @@ function isDebateNew(debateOrCreatedAt) {
 
   if (!referenceTimestamp) return false;
 
-  return (Date.now() - referenceTimestamp) < 12 * 60 * 60 * 1000;
+  return (Date.now() - referenceTimestamp) < 9 * 60 * 60 * 1000;
 }
 
 function formatLastActivityDate(dateString) {
