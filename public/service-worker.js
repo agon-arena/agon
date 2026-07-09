@@ -1,4 +1,4 @@
-const SW_VERSION = "20260704-navigation-timeout";
+const SW_VERSION = "20260709-topbar-cache-fix";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
