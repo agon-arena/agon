@@ -8232,7 +8232,7 @@ app.post("/api/admin/link-supersession", requireAdmin, express.json(), async (re
 
   const { data: debates, error } = await supabase
     .from("debates")
-    .select("id, source_url, media_extras")
+    .select("id, source_url, media_extras, political_group")
     .in("id", [Number(newId), Number(oldId)]);
   if (error) return res.status(500).json({ ok: false, error: error.message });
 
@@ -8256,8 +8256,13 @@ app.post("/api/admin/link-supersession", requireAdmin, express.json(), async (re
     reason: "lien manuel admin"
   });
 
-  const rebuildResult = await rebuildCloudBubblesAfterPublish("link-supersession", newId);
-  res.json({ ok: true, trend, currentSourceCount, previousSourceCount, rebuildResult });
+  // Sans ce 3e argument, rebuildCloudBubblesAfterPublish retombait sur son défaut
+  // ("mixed") : un lien manuel entre deux arènes gauche/droite mettait bien à jour
+  // le trend, mais le nuage gauche/droite affiché restait sur l'ancien doublon
+  // jusqu'à un recalcul complet fortuit (cf. incident nuages Le Pen/Iran du 9 juillet).
+  const politicalGroup = newDebate.political_group || "mixed";
+  const rebuildResult = await rebuildCloudBubblesAfterPublish("link-supersession", newId, politicalGroup);
+  res.json({ ok: true, trend, currentSourceCount, previousSourceCount, politicalGroup, rebuildResult });
 });
 
 app.get("/admin/veille", (req, res) => {
