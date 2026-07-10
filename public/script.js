@@ -2390,6 +2390,25 @@ function hidePageArrivalLoadingOverlay() {
 }
 
 function markPageArrivalLoadingOverlayReady() {
+  if (
+    location.pathname === "/create" &&
+    isIframeDebateLoadingOverlayContext() &&
+    document.fonts &&
+    window.__agonCreateFontsReady !== true
+  ) {
+    if (window.__agonCreateFontsReady !== "pending") {
+      window.__agonCreateFontsReady = "pending";
+      Promise.race([
+        document.fonts.ready,
+        new Promise(resolve => setTimeout(resolve, 1200))
+      ]).finally(() => {
+        window.__agonCreateFontsReady = true;
+        markPageArrivalLoadingOverlayReady();
+      });
+    }
+    return;
+  }
+
   pageArrivalLoadingOverlayReady = true;
   window.__agonPageArrivalReady = true;
 
