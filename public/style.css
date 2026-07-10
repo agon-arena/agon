@@ -21053,25 +21053,6 @@ body.page-contact.in-iframe .contact-page-shell {
   margin-bottom: 0;
 }
 
-.page-tribunes {
-  background: #dce6e2;
-}
-
-.page-tribunes .about-page-shell {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 28%),
-    linear-gradient(135deg, #eef4f1 0%, #dce6e2 52%, #d6dfe7 100%);
-}
-
-.page-tribunes .about-panel {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.34)),
-    #e3ece8;
-  border-color: rgba(36, 48, 56, 0.12);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
-}
-
-
 /* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
 body.page-debate .argument-form h3,
 body.page-debate .argument-form-body > h3,
@@ -21692,8 +21673,9 @@ body.page-create-mobile .create-card .create-submit-helper {
   border: 1px solid rgba(36, 48, 56, 0.08);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.18)),
-    rgba(36, 48, 56, 0.04);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.10)),
+    #dbe5e1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 @media (max-width: 520px) {
