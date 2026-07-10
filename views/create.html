@@ -737,7 +737,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260709-stance-mobile-fix" defer></script>
+<script src="/script.min.js?v=20260710-source-preview-image" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
@@ -797,6 +797,59 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeExtPanel();
+  });
+})();
+</script>
+<script>
+(function() {
+  // Pré-remplissage depuis Autres sources (?question=...&source_url=...) : le visiteur
+  // garde le choix du type d'arène (écran de choix inchangé) et peut tout modifier avant
+  // de publier. Attend DOMContentLoaded pour être sûr que script.min.js (defer) a fini
+  // d'initialiser les listeners (resource-mode, compteurs, etc.) avant de simuler la saisie.
+  document.addEventListener('DOMContentLoaded', function() {
+    var params = new URLSearchParams(location.search);
+    var prefillQuestion = params.get('question');
+    var prefillSource = params.get('source_url');
+    if (!prefillQuestion && !prefillSource) return;
+
+    function fireEvents(el, types) {
+      types.forEach(function(type) {
+        el.dispatchEvent(new Event(type, { bubbles: true }));
+      });
+    }
+
+    if (prefillQuestion) {
+      var questionEl = document.getElementById('question');
+      if (questionEl) {
+        questionEl.value = prefillQuestion.slice(0, 110);
+        fireEvents(questionEl, ['input', 'change']);
+      }
+    }
+
+    if (prefillSource) {
+      var sourceRadio = document.querySelector('input[name="resource-mode"][value="source"]');
+      var sourceInput = document.getElementById('source_url');
+      if (sourceRadio && sourceInput) {
+        sourceRadio.checked = true;
+        fireEvents(sourceRadio, ['change']);
+        sourceInput.value = prefillSource.slice(0, 500);
+        fireEvents(sourceInput, ['input', 'change']);
+      }
+    }
+
+    // autoResizeTextarea(this) (déclenché par le "input" ci-dessus) mesure scrollHeight
+    // pendant que #create-form-fields est encore display:none (écran de choix du type
+    // affiché en premier) : la hauteur calculée est donc fausse (trop petite) et ne se
+    // recalcule pas toute seule. On la redéclenche une fois le formulaire réellement
+    // visible, juste après le choix du type d'arène.
+    if (prefillQuestion) {
+      document.querySelectorAll('.arena-type-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+          var questionEl = document.getElementById('question');
+          if (questionEl && typeof autoResizeTextarea === 'function') autoResizeTextarea(questionEl);
+        });
+      });
+    }
   });
 })();
 </script>

@@ -2842,6 +2842,69 @@ async function getExternalLinkPreview(sourceUrl) {
   return previewPromise;
 }
 
+async function seedExternalLinkPreviewFromClient(sourceUrl, rawPreview) {
+  const safeUrl = normalizeExternalUrl(sourceUrl);
+  if (!safeUrl || !rawPreview || typeof rawPreview !== "object") return null;
+
+  let parsedSource;
+  try {
+    parsedSource = new URL(safeUrl);
+  } catch {
+    return null;
+  }
+
+  let image = normalizeExternalUrl(
+    rawPreview.image ||
+    rawPreview.imageUrl ||
+    rawPreview.thumbnail ||
+    rawPreview.thumbnailUrl ||
+    rawPreview.ogImage ||
+    ""
+  );
+
+  if (image) {
+    try {
+      await assertSafeExternalUrl(image);
+    } catch {
+      image = "";
+    }
+  }
+
+  const clean = (value, max = 500) => String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+
+  const domain = clean(
+    rawPreview.domain ||
+    rawPreview.siteName ||
+    rawPreview.publisher ||
+    rawPreview.provider ||
+    parsedSource.hostname.replace(/^www\./i, ""),
+    200
+  );
+  const title = clean(rawPreview.title || rawPreview.ogTitle || rawPreview.headline || domain, 500);
+  const description = clean(rawPreview.description || rawPreview.ogDescription || rawPreview.summary || "", 500);
+
+  if (!image) return null;
+
+  const preview = {
+    url: safeUrl,
+    finalUrl: safeUrl,
+    canonicalUrl: safeUrl,
+    domain,
+    siteName: domain,
+    title: title || domain || "Source externe",
+    description,
+    image
+  };
+
+  setCachedPreview(safeUrl, preview, 1000 * 60 * 60 * 24);
+  writePersistentPreview(safeUrl, preview);
+  return preview;
+}
+
 function computeDebatePercents(args) {
   let votesA = 0;
   let votesB = 0;
@@ -4012,8 +4075,8 @@ app.get("/contributions", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/contributions.html"));
 });
 
-app.get("/tribunes", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/tribunes.html"));
+app.get("/autres-sources", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/autres-sources.html"));
 });
 
 // Score percentile d'un utilisateur ("top X%") sur 2 axes indépendants :
@@ -6241,7 +6304,7 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { source_url, resource_mode, image_upload, type, creatorKey, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
+    const { source_url, source_preview, resource_mode, image_upload, type, creatorKey, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
     // Champs texte libres : caractères nuls retirés dès l'entrée (cf. stripNullChars).
     const question = stripNullChars(req.body?.question);
     const category = stripNullChars(req.body?.category);
@@ -6311,6 +6374,14 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
 
     if (normalizedSourceUrl && image_upload) {
       return res.status(400).json({ error: "Choisis soit un lien source, soit une image importée." });
+    }
+
+    if (normalizedSourceUrl && source_preview) {
+      try {
+        await seedExternalLinkPreviewFromClient(normalizedSourceUrl, source_preview);
+      } catch (error) {
+        console.error("Erreur cache aperçu source fourni par le client:", error);
+      }
     }
 
     if (normalizedSourceUrl) {
@@ -7374,6 +7445,11 @@ if (AUTO_VOTE_SCHEDULERS_ENABLED) {
 // plus d'utilité une fois le push traité, hormis pour du débogage récent.
 const PAGE_VISITS_RETENTION_DAYS = 90;
 const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
+// Volume élevé (jusqu'à ~300-600 lignes/jour depuis qu'Autres sources couvre tous les articles
+// non encore publiés en débat, pas seulement la presse d'opinion) et sans intérêt passé
+// quelques jours — GET /api/opinion-articles ne montre de toute façon que les 200 plus
+// récentes.
+const OPINION_ARTICLES_RETENTION_DAYS = 2;
 const RETENTION_DELETE_BATCH_SIZE = 500;
 const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
 
@@ -7414,6 +7490,7 @@ async function pruneOldRows(table, retentionDays) {
 async function runDataRetentionCleanup() {
   await pruneOldRows("page_visits", PAGE_VISITS_RETENTION_DAYS);
   await pruneOldRows("notification_events", NOTIFICATION_EVENTS_RETENTION_DAYS);
+  await pruneOldRows("opinion_articles", OPINION_ARTICLES_RETENTION_DAYS);
 }
 
 runDataRetentionCleanup().catch((err) => console.error("[retention] purge initiale :", err.message));
@@ -7820,6 +7897,7 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
       title: String(item.title).slice(0, 500),
       link: String(item.link).slice(0, 1000),
       summary: item.summary ? String(item.summary).slice(0, 2000) : null,
+      type: item.type === "youtube" ? "youtube" : "article",
       published_at: item.date ? new Date(item.date).toISOString() : new Date().toISOString()
     }));
 

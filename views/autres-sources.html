@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script src="/no-zoom.js?v=20260603" defer></script>
+  <title>Autres sources | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192-optimized.png">
+  <meta name="theme-color" content="#243038">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agôn">
+  <link rel="stylesheet" href="/style.min.css?v=20260710-arena-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.self !== window.top) {
+        document.body.classList.add('in-iframe');
+        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+      }
+    });
+  </script>
+</head>
+<body class="page-tribunes">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+    <div class="home-brand-block">
+      <div class="home-brand-main">
+        <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+      </div>
+    </div>
+  </div>
+</header>
+<main class="about-page-shell">
+  <section class="about-panel">
+    <h1>Autres sources</h1>
+    <p>Articles qui n'ont pas (encore) donné lieu à une arène sur Agôn.</p>
+
+    <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
+      <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
+      <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Général</button>
+      <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
+    </div>
+
+    <div class="tribunes-filters-row">
+      <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
+        <option value="">Tous les médias</option>
+      </select>
+      <select id="tribunes-theme-filter" class="tribunes-media-filter" aria-label="Filtrer par thématique">
+        <option value="">Toutes les thématiques</option>
+      </select>
+      <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
+        <option value="">Articles et vidéos</option>
+        <option value="article">Articles seulement</option>
+        <option value="youtube">Vidéos seulement</option>
+      </select>
+    </div>
+
+    <ul class="tribunes-list" id="tribunes-list">
+      <li class="tribunes-empty">Chargement…</li>
+    </ul>
+  </section>
+</main>
+<script src="/script.min.js?v=20260710-source-preview-image" defer></script>
+<script>
+(function() {
+  var list = document.getElementById('tribunes-list');
+  if (!list) return;
+
+  var allArticles = [];
+  var currentFilter = 'mixed';
+  var currentMedia = '';
+  var currentTheme = '';
+  var currentType = '';
+
+  // Thématique dérivée du champ orientation (ex. "gauche / investigation" -> investigation),
+  // dont le deuxième segment décrit souvent un genre éditorial plutôt qu'un positionnement
+  // politique. Classement approximatif par mots-clés (premier qui matche gagne) : les
+  // sources sans second segment (ex. simplement "droite") n'ont pas de thématique.
+  var THEME_RULES = [
+    { key: 'investigation', label: 'Investigation', match: ['investigation', 'enquête'] },
+    { key: 'ecologie', label: 'Écologie', match: ['écolog', 'ecolog'] },
+    { key: 'economie', label: 'Économie', match: ['économi', 'economi'] },
+    { key: 'international', label: 'International / Géopolitique', match: ['international', 'géopolitique', 'geopolitique'] },
+    { key: 'medias', label: 'Critique des médias', match: ['critique médias', 'critique medias'] },
+    { key: 'societe', label: 'Société', match: ['société', 'societe', 'social'] },
+    { key: 'debats', label: 'Débats / Entretiens', match: ['débat', 'debat', 'entretien', 'interview'] },
+    { key: 'idees', label: 'Idées / Analyse', match: ['idées', 'idees', 'analyse', 'pédagogie', 'pedagogie', 'chronique'] },
+    { key: 'identitaire', label: 'Identitaire / Nouvelle droite', match: ['identitaire', 'nouvelle droite', 'réinformation', 'reinformation'] },
+    { key: 'conservateur', label: 'Conservateur / Souverainiste', match: ['conservat', 'souverainis', 'catholique'] },
+    { key: 'complotiste', label: 'Complotiste', match: ['complotiste'] },
+    { key: 'militant', label: 'Militant', match: ['militant', 'radical', 'antifascisme', 'altermondialiste', 'libertaire'] },
+    { key: 'local', label: 'Local / Régional', match: ['local', 'régional', 'regional', 'bretagne'] },
+    { key: 'satire', label: 'Satire', match: ['satir'] }
+  ];
+  var THEME_LABEL_BY_KEY = {};
+  THEME_RULES.forEach(function(rule) { THEME_LABEL_BY_KEY[rule.key] = rule.label; });
+
+  function themeClass(orientation) {
+    var o = String(orientation || '').toLowerCase();
+    for (var i = 0; i < THEME_RULES.length; i++) {
+      var rule = THEME_RULES[i];
+      for (var j = 0; j < rule.match.length; j++) {
+        if (o.indexOf(rule.match[j]) !== -1) return rule.key;
+      }
+    }
+    return '';
+  }
+
+  function escapeHtml(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function orientationClass(orientation) {
+    var o = String(orientation || '').toLowerCase();
+    if (o.indexOf('gauche') !== -1 || o.indexOf('ecolog') !== -1 || o.indexOf('écolog') !== -1) return 'left';
+    if (o.indexOf('droite') !== -1) return 'right';
+    return 'center';
+  }
+
+  function formatDate(iso) {
+    try {
+      return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function formatDateMachine(iso) {
+    try {
+      var date = new Date(iso);
+      return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Même seuil que isDebateNew() côté script.js (9h depuis publication).
+  var NEW_BADGE_DURATION_MS = 9 * 60 * 60 * 1000;
+
+  function isArticleNew(article) {
+    var t = article.published_at ? new Date(article.published_at).getTime() : 0;
+    return t > 0 && (Date.now() - t) < NEW_BADGE_DURATION_MS;
+  }
+
+  function renderItem(article) {
+    var badge = article.orientation
+      ? '<span class="tribunes-badge ' + orientationClass(article.orientation) + '">' + escapeHtml(article.orientation) + '</span>'
+      : '';
+    var summary = article.summary ? '<p class="tribunes-summary">' + escapeHtml(article.summary) + '</p>' : '';
+    var newBadge = isArticleNew(article)
+      ? '<div class="debate-card-top-badges"><div class="debate-card-new-badge">Nouveau</div></div>'
+      : '';
+    var dateLabel = formatDate(article.published_at);
+    var dateIso = formatDateMachine(article.published_at);
+    return '' +
+      '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '">' +
+        '<div class="tribunes-thumb" style="display:none">' + newBadge + '<img alt=""></div>' +
+        '<div class="tribunes-item-body">' +
+          '<div class="tribunes-meta">' +
+            '<div class="tribunes-meta-main">' +
+              '<strong>' + escapeHtml(article.source) + '</strong>' + badge +
+            '</div>' +
+            (dateLabel ? '<time class="tribunes-date" datetime="' + escapeHtml(dateIso) + '">' + escapeHtml(dateLabel) + '</time>' : '') +
+          '</div>' +
+          '<a class="tribunes-title" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(article.title) + '</a>' +
+          summary +
+          '<div class="tribunes-arena-actions">' +
+            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Créer une arène</a>' +
+          '</div>' +
+        '</div>' +
+      '</li>';
+  }
+
+  // Le champ "Sujet de l'arène" est limité à 110 caractères côté Agôn — un titre plus
+  // long serait tronqué silencieusement. On coupe nous-mêmes avec une ellipse visible,
+  // pour que l'utilisateur comprenne que ce n'est pas le titre exact de l'article et
+  // pense à le retoucher si besoin (il peut tout modifier une fois sur /create).
+  function truncateWithEllipsis(text, maxLen) {
+    if (text.length <= maxLen) return text;
+    return text.slice(0, maxLen - 1).trim() + '…';
+  }
+
+  // Ouvre /create pré-rempli (titre + lien source) avec possibilité de tout modifier —
+  // le visiteur choisit lui-même le type d'arène (libre/positions) et peut changer
+  // n'importe quel champ avant de publier. Voir le script de pré-remplissage dans create.html.
+  function createArenaHref(article) {
+    var params = new URLSearchParams();
+    if (article.title) params.set('question', truncateWithEllipsis(article.title, 110));
+    if (article.link) params.set('source_url', article.link);
+    var preview = article.source_preview || {};
+    var sourceImage = article.source_image || preview.image || preview.imageUrl || preview.thumbnail || '';
+    var sourceTitle = preview.title || article.title || '';
+    var sourceSite = preview.siteName || preview.domain || article.source || '';
+    var sourceDescription = preview.description || article.summary || '';
+    if (sourceImage) params.set('source_image', String(sourceImage).slice(0, 1200));
+    if (sourceTitle) params.set('source_title', String(sourceTitle).slice(0, 500));
+    if (sourceSite) params.set('source_site', String(sourceSite).slice(0, 200));
+    if (sourceDescription) params.set('source_description', String(sourceDescription).slice(0, 500));
+    return '/create?' + params.toString();
+  }
+
+  // Pagination : évite de charger d'un coup les aperçus Open Graph de tous les articles
+  // (potentiellement des centaines à terme, 2 collectes/jour qui s'accumulent) — seule la
+  // page affichée déclenche des requêtes /api/link-preview, ce qui reste large sous la
+  // limite de 120 req/min/IP de cette route et ménage aussi les sites d'origine.
+  var TRIBUNES_PAGE_SIZE = 12;
+  var currentPage = 0;
+
+  function render(articles) {
+    if (!articles.length) {
+      list.innerHTML = '<li class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</li>';
+      return;
+    }
+    var pages = Math.ceil(articles.length / TRIBUNES_PAGE_SIZE);
+    currentPage = Math.min(currentPage, pages - 1);
+    var slice = articles.slice(currentPage * TRIBUNES_PAGE_SIZE, (currentPage + 1) * TRIBUNES_PAGE_SIZE);
+
+    var html = slice.map(renderItem).join('');
+    if (pages > 1) {
+      html += '<li class="tribunes-pager">' +
+        '<button type="button" class="tribunes-pager-btn" data-dir="-1" aria-label="Page précédente"' + (currentPage === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
+        '<span class="tribunes-pager-info">' + (currentPage + 1) + ' / ' + pages + '</span>' +
+        '<button type="button" class="tribunes-pager-btn" data-dir="1" aria-label="Page suivante"' + (currentPage === pages - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
+      '</li>';
+    }
+    list.innerHTML = html;
+
+    if (pages > 1) {
+      list.querySelectorAll('.tribunes-pager-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          currentPage = Math.min(pages - 1, Math.max(0, currentPage + Number(btn.dataset.dir)));
+          render(articles);
+          list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    }
+
+    loadPreviewImages(slice);
+  }
+
+  // Vignette Open Graph par article, via le système de preview de liens déjà utilisé
+  // pour les sources de débats (/api/link-preview, cache disque côté serveur — aucun
+  // impact Supabase).
+  var PREVIEW_CONCURRENCY = 4;
+
+  function loadPreviewImages(articles) {
+    var queue = articles.filter(function(a) { return a.link; });
+    var index = 0;
+
+    function next() {
+      if (index >= queue.length) return;
+      var article = queue[index++];
+      fetch('/api/link-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: article.link })
+      })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+          var preview = data && data.preview;
+          var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
+          if (preview) {
+            article.source_preview = preview;
+            article.source_image = preview.image || '';
+            var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
+            if (arenaBtn) arenaBtn.href = createArenaHref(article);
+          }
+          if (!preview || !preview.image) return;
+          if (!li) return;
+          var thumb = li.querySelector('.tribunes-thumb');
+          var img = thumb && thumb.querySelector('img');
+          if (!img) return;
+          img.src = preview.image;
+          img.onload = function() { thumb.style.display = ''; };
+          img.onerror = function() { thumb.style.display = 'none'; };
+        })
+        .catch(function() {})
+        .then(next);
+    }
+
+    for (var i = 0; i < PREVIEW_CONCURRENCY; i++) next();
+  }
+
+  function cssEscape(value) {
+    return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
+  }
+
+  function articlesInScope() {
+    return currentFilter === 'mixed'
+      ? allArticles
+      : allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+  }
+
+  // Listes déroulantes (média / thématique) construites à partir des articles de
+  // l'orientation actuellement sélectionnée — repeuplées à chaque changement de filtre
+  // gauche/général/droite pour ne jamais proposer une option hors du groupe affiché
+  // (général = tout, sans distinction). Le filtre type (article/vidéo) est fixe, pas besoin
+  // de le repeupler.
+  var mediaFilterEl = document.getElementById('tribunes-media-filter');
+  var themeFilterEl = document.getElementById('tribunes-theme-filter');
+  var typeFilterEl = document.getElementById('tribunes-type-filter');
+
+  function populateSelectFromValues(selectEl, values, currentValue, defaultLabel, labelFor) {
+    if (!selectEl) return currentValue;
+    if (values.indexOf(currentValue) === -1) currentValue = '';
+    selectEl.innerHTML = '<option value="">' + defaultLabel + '</option>' +
+      values.map(function(value) {
+        var label = labelFor ? labelFor(value) : value;
+        return '<option value="' + escapeHtml(value) + '"' + (value === currentValue ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }).join('');
+    selectEl.disabled = values.length === 0;
+    return currentValue;
+  }
+
+  function populateMediaFilter() {
+    var mediaNames = Array.from(new Set(
+      articlesInScope().map(function(a) { return a.source; }).filter(Boolean)
+    )).sort(function(a, b) { return a.localeCompare(b, 'fr'); });
+    currentMedia = populateSelectFromValues(mediaFilterEl, mediaNames, currentMedia, 'Tous les médias');
+  }
+
+  function populateThemeFilter() {
+    var themeKeys = Array.from(new Set(
+      articlesInScope().map(function(a) { return themeClass(a.orientation); }).filter(Boolean)
+    )).sort(function(a, b) { return THEME_LABEL_BY_KEY[a].localeCompare(THEME_LABEL_BY_KEY[b], 'fr'); });
+    currentTheme = populateSelectFromValues(themeFilterEl, themeKeys, currentTheme, 'Toutes les thématiques', function(key) { return THEME_LABEL_BY_KEY[key]; });
+  }
+
+  function computeFiltered() {
+    var filtered = articlesInScope();
+    if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
+    if (currentTheme) filtered = filtered.filter(function(article) { return themeClass(article.orientation) === currentTheme; });
+    if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
+    return filtered;
+  }
+
+  function applyFilter() {
+    populateMediaFilter();
+    populateThemeFilter();
+    currentPage = 0;
+    render(computeFiltered());
+  }
+
+  var switchEl = document.getElementById('tribunes-filter-switch');
+  if (switchEl) {
+    switchEl.addEventListener('click', function(event) {
+      var btn = event.target.closest('[data-filter]');
+      if (!btn) return;
+      currentFilter = btn.dataset.filter;
+      currentMedia = '';
+      currentTheme = '';
+      switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
+        seg.classList.toggle('tribunes-filter-segment-active', seg === btn);
+      });
+      applyFilter();
+    });
+  }
+
+  [mediaFilterEl, themeFilterEl, typeFilterEl].forEach(function(el) {
+    if (!el) return;
+    el.addEventListener('change', function() {
+      currentMedia = mediaFilterEl.value;
+      currentTheme = themeFilterEl.value;
+      currentType = typeFilterEl.value;
+      currentPage = 0;
+      render(computeFiltered());
+    });
+  });
+
+  fetch('/api/opinion-articles', { cache: 'no-store' })
+    .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+    .then(function(data) { allArticles = Array.isArray(data.articles) ? data.articles : []; applyFilter(); })
+    .catch(function() { list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>'; });
+})();
+</script>
+</body>
+</html>

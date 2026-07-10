@@ -338,10 +338,6 @@
             <i class="fa-regular fa-folder-open"></i>
             <span>Mes scores et contributions</span>
           </a>
-          <a href="/tribunes" class="home-topbar-menu-item" id="home-topbar-tribunes-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/tribunes')">
-            <i class="fa-solid fa-newspaper"></i>
-            <span>Tribunes</span>
-          </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
             <span>Télécharger l'application</span>
@@ -563,10 +559,6 @@
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Général</button>
   <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite</button>
 </div>
-<a href="/tribunes" class="agon-tribunes-btn" onclick="event.preventDefault(); openDebateIframeModal('/tribunes')">
-  <i class="fa-solid fa-newspaper"></i>
-  <span>Tribunes</span>
-</a>
 <p class="agon-tag-trends-caption" style="text-align: center;">
   Les tendances de l'actualité française ces dernières heures.<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>
 </p>
@@ -632,7 +624,7 @@
       <button type="button" onclick="scrollToTheme('Arènes sous tension')"><i class="fa-solid fa-bolt"></i><span>Arènes sous tension</span></button>
       <div class="index-explorer-menu-divider"></div>
       <div class="index-explorer-menu-label">Thématiques</div>
-      <button type="button" onclick="scrollToTheme('Politique')"><i class="fa-solid fa-landmark"></i><span>Politique</span></button>
+      <button type="button" onclick="scrollToTheme('Politique')"><i class="fa-solid fa-scale-balanced"></i><span>Politique</span></button>
       <button type="button" onclick="scrollToTheme('International')"><i class="fa-solid fa-globe"></i><span>International</span></button>
       <button type="button" onclick="scrollToTheme('Économie - emploi')"><i class="fa-solid fa-briefcase"></i><span>Économie - emploi</span></button>
       <button type="button" onclick="scrollToTheme('Société - éducation')"><i class="fa-solid fa-users"></i><span>Société - éducation</span></button>
@@ -660,10 +652,6 @@
   <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
     <i class="fa-regular fa-folder-open"></i>
     <span>Contributions</span>
-  </a>
-  <a href="/tribunes" class="home-bottom-nav-item" aria-label="Tribunes" onclick="event.preventDefault(); openDebateIframeModal('/tribunes')">
-    <i class="fa-solid fa-newspaper"></i>
-    <span>Tribunes</span>
   </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>

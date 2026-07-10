@@ -22192,6 +22192,46 @@ function getCreateValidationError() {
   return null;
 }
 
+function normalizeCreateSourceUrlForCompare(value) {
+  let normalized = String(value || "").trim();
+  if (!normalized) return "";
+  if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
+  try {
+    return new URL(normalized).href;
+  } catch (error) {
+    return normalized;
+  }
+}
+
+function getCreatePrefilledSourcePreview(sourceUrl) {
+  const params = new URLSearchParams(window.location.search || "");
+  const sourceImage = String(params.get("source_image") || "").trim();
+  if (!sourceImage) return null;
+
+  const currentSource = normalizeCreateSourceUrlForCompare(sourceUrl);
+  const originalSource = normalizeCreateSourceUrlForCompare(params.get("source_url") || "");
+  if (currentSource && originalSource && currentSource !== originalSource) return null;
+
+  const sourceTitle = String(params.get("source_title") || "").trim();
+  const sourceSite = String(params.get("source_site") || "").trim();
+  const sourceDescription = String(params.get("source_description") || "").trim();
+  let domain = sourceSite;
+  try {
+    domain = domain || new URL(currentSource || originalSource).hostname.replace(/^www\./i, "");
+  } catch (error) {}
+
+  return {
+    url: currentSource || originalSource || sourceUrl,
+    finalUrl: currentSource || originalSource || sourceUrl,
+    canonicalUrl: currentSource || originalSource || sourceUrl,
+    image: sourceImage,
+    title: sourceTitle || domain || "Source externe",
+    description: sourceDescription,
+    siteName: sourceSite || domain || "Source externe",
+    domain: domain || sourceSite || "Source externe"
+  };
+}
+
 function focusCreateValidationField(element) {
   if (!element || typeof element.focus !== "function") return;
 
@@ -22535,10 +22575,12 @@ form.addEventListener("submit", async e => {
     const correctionStrictness = selectedType === "open"
       ? (document.querySelector('input[name="correction_strictness"]:checked')?.value || "normal")
       : "normal";
+    const prefilledSourcePreview = getCreatePrefilledSourcePreview(source_url);
     const createPayload = JSON.stringify({
       question,
       category,
       source_url,
+      ...(prefilledSourcePreview ? { source_preview: prefilledSourcePreview } : {}),
       content,
       resource_mode: resourceMode,
       image_upload,

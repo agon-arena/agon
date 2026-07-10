@@ -7120,6 +7120,14 @@ body.page-debate .topbar::after {
     margin-top: -59px;
   }
 
+  /* Sur mobile, le switch Bulles Actu/Agôn a un margin-bottom de 8px (au lieu de 12px
+     en desktop) et #agon-political-cloud-switch garde son margin-top de -8px : écart net
+     de 0px entre les deux. Le bouton Tribunes doit suivre le même écart avec le switch
+     gauche/général/droite (base : -4px, calibré pour le 4px d'écart desktop). */
+  .page-home-mobile .agon-tribunes-btn {
+    margin-top: -8px;
+  }
+
   .page-home-mobile .agon-tag-trends-caption {
     transform: none;
     font-size: 11px;
@@ -10957,6 +10965,13 @@ body.is-standalone.page-home-mobile .agon-tag-trends-caption {
 
 body.is-standalone #agon-political-cloud-switch {
   margin-bottom: 4px;
+}
+
+/* PWA installée sur mobile : le switch gauche/général/droite a un margin-bottom de 4px
+   (au lieu de 8px) ici, donc le bouton Tribunes a besoin d'un décalage plus faible que
+   le -8px du mode mobile navigateur pour garder le même écart net (0px). */
+body.is-standalone.page-home-mobile .agon-tribunes-btn {
+  margin-top: -4px;
 }
 
 @media (min-width: 769px) {
@@ -19195,7 +19210,9 @@ body.page-home #debates-list .theme-row-section:first-child {
   justify-content: center;
   gap: 6px;
   width: max-content;
-  margin: 0 auto 12px;
+  /* -4px : même écartement net que celui entre le switch Bulles Actu/Agôn au-dessus
+     et le switch Gauche/Général/Droite (12px de margin-bottom + -8px de margin-top = 4px). */
+  margin: -4px auto 12px;
   padding: 5px 14px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 999px;
@@ -20935,6 +20952,23 @@ body.page-contact.in-iframe .contact-page-shell {
   margin: 112px auto 48px;
 }
 
+.page-tribunes {
+  min-height: 100vh;
+  background: #243038;
+  color: #111827;
+}
+
+.page-tribunes.in-iframe .topbar {
+  display: none !important;
+}
+
+.page-tribunes.in-iframe .about-page-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  margin: 24px auto;
+}
+
 .page-about.in-iframe .about-page-shell {
   min-height: 100vh;
   display: flex;
@@ -21541,6 +21575,39 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #374151;
 }
 
+.agon-arena-icon {
+  position: relative;
+  display: inline-block;
+  width: 1.08em;
+  height: 0.72em;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  vertical-align: -0.08em;
+}
+
+.agon-arena-icon::before {
+  content: "";
+  position: absolute;
+  inset: 2px 4px;
+  border: 1.5px solid currentColor;
+  border-radius: inherit;
+  opacity: 0.72;
+}
+
+.agon-arena-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
 @media (max-width: 520px) {
   .about-media-list {
     grid-template-columns: 1fr;
@@ -21549,10 +21616,10 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-list {
   list-style: none;
-  margin: 16px 0 0;
+  margin: 18px 0 0;
   padding: 0;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .tribunes-empty {
@@ -21560,38 +21627,152 @@ body.page-create-mobile .create-card .create-submit-helper {
 }
 
 .tribunes-item {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid rgba(36, 48, 56, 0.22);
+  border-radius: 8px;
+  overflow: hidden;
   font-size: 0.9rem;
   color: #374151;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
 }
 
-.tribunes-item a {
-  color: #1a56db;
+.tribunes-item-body {
+  display: grid;
+  gap: 10px;
+  padding: 13px 14px 15px;
+}
+
+/* Ratio 1.91:1 : format standard des images og:image, évite tout rognage
+   agressif sur la plupart des aperçus récupérés. Une seule bordure sur
+   .tribunes-item (le cadre entoure image + texte ensemble, comme un seul
+   bloc) ; border-bottom ici sépare juste visuellement l'image du texte. */
+.tribunes-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.91 / 1;
+  border-bottom: 1px solid #e5e7eb;
+  background: #e5e7eb;
+}
+
+.tribunes-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tribunes-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+  font-size: 0.8rem;
+}
+
+.tribunes-meta-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tribunes-meta strong {
+  color: #111827;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+.tribunes-date {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.tribunes-title {
+  display: block;
+  margin: 0;
+  color: #111827;
+  font-family: "Barlow Condensed", Impact, sans-serif;
+  font-weight: 800;
+  font-size: 1.2rem;
+  line-height: 1.12;
+  letter-spacing: 0;
   text-decoration: none;
 }
 
-.tribunes-item a:hover {
+.tribunes-title:hover {
+  color: #1a56db;
   text-decoration: underline;
 }
 
-.tribunes-item small {
-  color: #9ca3af;
-}
-
 .tribunes-summary {
-  margin: 6px 0 0;
+  margin: 0;
   color: #4b5563;
   font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.tribunes-arena-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.tribunes-arena-btn {
+  box-sizing: border-box;
+  width: min(100%, 210px);
+  min-height: 36px;
+  border: 1px solid #243038;
+  background: #243038;
+  color: #fff;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 6px 14px rgba(36, 48, 56, 0.16);
+}
+
+.tribunes-arena-btn:hover {
+  background: #111827;
+  color: #fff;
 }
 
 .tribunes-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
   background: #f1f1f1;
   border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 0.78rem;
+  padding: 2px 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1;
   color: #555;
   vertical-align: middle;
 }
@@ -21606,14 +21787,107 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #003399;
 }
 
+@media (min-width: 560px) {
+  .tribunes-item-body {
+    padding: 14px 16px 16px;
+  }
+
+  .tribunes-meta {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+  }
+
+  .tribunes-date {
+    justify-self: end;
+  }
+
+  .tribunes-title {
+    font-size: 1.26rem;
+  }
+}
+
 .tribunes-filter-switch {
   display: flex;
   width: max-content;
-  margin: 14px 0 0;
+  margin: 14px auto 0;
   border: 1px solid #e5e7eb;
   border-radius: 999px;
   background: #f3f4f6;
   overflow: hidden;
+}
+
+.page-tribunes .about-panel h1,
+.page-tribunes .about-panel > p {
+  text-align: center;
+}
+
+.tribunes-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px auto 0;
+}
+
+.tribunes-media-filter {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 30px 6px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+.tribunes-media-filter:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tribunes-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 4px 0 2px;
+}
+
+.tribunes-pager-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid #243038;
+  background: #243038;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tribunes-pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tribunes-pager-info {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: center;
 }
 
 .tribunes-filter-segment {

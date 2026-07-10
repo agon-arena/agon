@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="stylesheet" href="/style.min.css?v=20260709-stance-mobile-fix" />
+<link rel="stylesheet" href="/style.min.css?v=20260710-arena-icon" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -386,7 +386,7 @@
 
     <details class="contributions-accordion">
       <summary>
-        <span class="contributions-accordion-label"><i class="fa-solid fa-landmark"></i> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
+        <span class="contributions-accordion-label"><span class="agon-arena-icon" aria-hidden="true"></span> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body" id="contributions-debates"><div class="empty-state">Chargement…</div></div>
@@ -538,7 +538,7 @@
     return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(d.id) + '">' +
       '<p class="contribution-title">' + esc(d.question) + '</p>' +
       '<div class="contribution-meta">' +
-        '<span class="contribution-badge"><i class="fa-solid fa-landmark"></i> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
+        '<span class="contribution-badge"><span class="agon-arena-icon" aria-hidden="true"></span> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
         (d.category ? '<span>' + esc(d.category) + '</span>' : '') +
         '<span>' + esc(formatDate(d.created_at)) + '</span>' +
       '</div>' +
