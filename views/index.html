@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260709-badge-new-9h">
+  <link rel="stylesheet" href="/style.min.css?v=20260709-stance-mobile-fix">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -337,6 +337,10 @@
           <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
             <i class="fa-regular fa-folder-open"></i>
             <span>Mes scores et contributions</span>
+          </a>
+          <a href="/tribunes" class="home-topbar-menu-item" id="home-topbar-tribunes-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/tribunes')">
+            <i class="fa-solid fa-newspaper"></i>
+            <span>Tribunes</span>
           </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
@@ -653,6 +657,10 @@
     <i class="fa-regular fa-folder-open"></i>
     <span>Contributions</span>
   </a>
+  <a href="/tribunes" class="home-bottom-nav-item" aria-label="Tribunes" onclick="event.preventDefault(); openDebateIframeModal('/tribunes')">
+    <i class="fa-solid fa-newspaper"></i>
+    <span>Tribunes</span>
+  </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
@@ -856,7 +864,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260709-badge-new-9h" defer></script>
+<script src="/script.min.js?v=20260709-stance-mobile-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -30096,7 +30096,7 @@ function ensureCommentStanceMobileStyles() {
   style.id = "comment-stance-mobile-style";
   style.textContent = `
     @media (max-width: 768px) {
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option {
         padding: 5px 9px !important;
         border-radius: 999px !important;
         border: 1px solid transparent !important;
@@ -30106,7 +30106,7 @@ function ensureCommentStanceMobileStyles() {
         gap: 4px !important;
       }
 
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
         background: transparent !important;
         border-color: transparent !important;
         outline: none !important;
@@ -30114,7 +30114,7 @@ function ensureCommentStanceMobileStyles() {
         font-weight: 900 !important;
       }
 
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"] {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"] {
         appearance: none !important;
         -webkit-appearance: none !important;
         width: 10px !important;
@@ -30133,12 +30133,12 @@ function ensureCommentStanceMobileStyles() {
         transform: none !important;
       }
 
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option input[type="radio"]:checked {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
         background: currentColor !important;
         box-shadow: inset 0 0 0 3px #ffffff !important;
       }
 
-      body.page-debate .debate-columns .argument-card .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
         border-color: currentColor !important;
         background: currentColor !important;
         box-shadow: inset 0 0 0 3px #ffffff !important;

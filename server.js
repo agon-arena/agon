@@ -3383,6 +3383,7 @@ async function tryCertamenAutoMerge(newDebateId, { question, content, option_a, 
       const alignment = await evaluateVeilleMergeAlignment(canonical, {
         positionA: String(option_a || "").trim(),
         positionB: String(option_b || "").trim(),
+        question: String(question || "").trim(),
       });
 
       if (!alignment.ok && alignment.verdict !== "inverted") {
@@ -3471,21 +3472,28 @@ function getPositionAlignmentHeuristic(existingA, existingB, newA, newB) {
   };
 }
 
-async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions) {
+async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions, attempt = 1) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
   try {
+    // Le contexte des questions aide l'IA à trancher quand les libellés de position
+    // sont reformulés sans aucun mot commun (cf. incident Le Pen du 9 juillet où le
+    // pool lexical direct/inversé valait 0 des deux côtés) : la question donne le sens
+    // de "A" et "B" même si le vocabulaire des positions diffère totalement.
     const prompt = [
-      "Tu vérifies la cohérence d'une fusion entre deux arènes à positions.",
+      "Tu vérifies la cohérence d'une fusion entre deux arènes à positions qui portent sur le même sujet.",
       "Dis si la nouvelle position A correspond plutôt à l'ancienne position A, à l'ancienne position B, ou si c'est ambigu.",
+      "Base-toi sur le sens (pour/contre, favorable/opposé), pas sur la formulation littérale : deux positions peuvent être reformulées entièrement différemment tout en visant le même camp.",
       'Réponds uniquement en JSON: {"verdict":"coherent|inverted|ambiguous","reason":"..."}',
       '',
       'Arène existante :',
+      'Question: ' + String(existingDebate.question || '').trim(),
       'A: ' + String(existingDebate.option_a || '').trim(),
       'B: ' + String(existingDebate.option_b || '').trim(),
       '',
       'Nouvelle arène :',
+      'Question: ' + String(incomingPositions.question || '').trim(),
       'A: ' + String(incomingPositions.positionA || '').trim(),
       'B: ' + String(incomingPositions.positionB || '').trim()
     ].join("\n");
@@ -3505,10 +3513,10 @@ async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositi
       })
     });
 
-    if (!r.ok) return null;
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
     const data = await r.json();
     const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
-    if (!content) return null;
+    if (!content) throw new Error('openai empty content');
     const parsed = JSON.parse(content);
     const verdict = ['coherent', 'inverted', 'ambiguous'].includes(parsed && parsed.verdict) ? parsed.verdict : 'ambiguous';
     return {
@@ -3516,6 +3524,14 @@ async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositi
       reason: String((parsed && parsed.reason) || '').trim()
     };
   } catch (error) {
+    // Une panne réseau/quota transitoire ne doit pas se traduire silencieusement par
+    // un "ambiguous" qui laisse passer une fusion mal alignée (cf. incident Le Pen) :
+    // on retente une fois avant d'abandonner.
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions, attempt + 1);
+    }
+    console.error('[alignment-ai] échec après retry :', error.message);
     return null;
   }
 }
@@ -3544,11 +3560,13 @@ async function evaluateVeilleMergeAlignment(existingDebate, incomingPositions) {
 
   let finalVerdict = heuristic.verdict;
   let aiReason = '';
+  let aiAnswered = false;
   if (heuristic.verdict === 'ambiguous' || heuristic.confidence < 0.12) {
     const aiResult = await evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositions);
     if (aiResult && aiResult.verdict) {
       finalVerdict = aiResult.verdict;
       aiReason = aiResult.reason || '';
+      aiAnswered = true;
     }
   }
 
@@ -3561,6 +3579,21 @@ async function evaluateVeilleMergeAlignment(existingDebate, incomingPositions) {
       ok: false,
       verdict: 'inverted',
       message: aiReason || "La nouvelle position A semble correspondre à l'ancienne position B. Vérifie ou inverse les positions avant la fusion.",
+      directScore: heuristic.directScore,
+      swappedScore: heuristic.swappedScore
+    };
+  }
+
+  // Signal lexical nul des deux côtés (aucun mot commun, direct/inversé à 0) : c'est
+  // exactement le cas qui a fusionné l'arène 1594 avec des positions inversées le 9
+  // juillet, car l'ambiguïté "par défaut" était traitée comme un feu vert silencieux.
+  // Si l'IA n'a pas pu trancher non plus, on refuse la fusion auto plutôt que de deviner.
+  const noLexicalSignal = heuristic.directScore < 0.05 && heuristic.swappedScore < 0.05;
+  if (noLexicalSignal && !aiAnswered) {
+    return {
+      ok: false,
+      verdict: 'ambiguous',
+      message: "Aucun mot commun entre les positions existantes et nouvelles, et la vérification IA n'a pas pu trancher : fusion refusée pour éviter d'inverser les positions par erreur.",
       directScore: heuristic.directScore,
       swappedScore: heuristic.swappedScore
     };
@@ -3977,6 +4010,10 @@ app.get("/notifications", (req, res) => {
 
 app.get("/contributions", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/contributions.html"));
+});
+
+app.get("/tribunes", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/tribunes.html"));
 });
 
 // Score percentile d'un utilisateur ("top X%") sur 2 axes indépendants :
@@ -7766,6 +7803,50 @@ app.post("/api/veille/receive", rateLimit("veille-receive", 20), async (req, res
   res.json({ ok: true });
 });
 
+// Articles de presse d'opinion à source unique (cf. extractOpinionItems côté bot veille) :
+// pas de fiche débat (pas de camp adverse), juste un lien vers l'article d'origine.
+// Même modèle que /api/veille/receive ci-dessus : pas d'auth admin, juste rate-limité,
+// puisque c'est le bot veille (pas un utilisateur) qui appelle cette route.
+app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20), async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  console.log(`[veille/opinion-articles] payload: ${items.length} article(s)`);
+  if (!items.length) return res.json({ ok: true, inserted: 0 });
+
+  const rows = items
+    .filter(item => item && item.title && item.link)
+    .map(item => ({
+      source: String(item.source || "").slice(0, 200),
+      orientation: item.orientation ? String(item.orientation).slice(0, 200) : null,
+      title: String(item.title).slice(0, 500),
+      link: String(item.link).slice(0, 1000),
+      summary: item.summary ? String(item.summary).slice(0, 2000) : null,
+      published_at: item.date ? new Date(item.date).toISOString() : new Date().toISOString()
+    }));
+
+  if (!rows.length) return res.json({ ok: true, inserted: 0 });
+
+  const { error } = await supabase
+    .from("opinion_articles")
+    .upsert(rows, { onConflict: "link", ignoreDuplicates: true });
+
+  if (error) { console.error("veille/opinion-articles:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
+  res.json({ ok: true, inserted: rows.length });
+});
+
+app.get("/api/opinion-articles", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("opinion_articles")
+      .select("*")
+      .order("published_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    res.json({ articles: data || [] });
+  } catch (error) {
+    res.status(500).json({ articles: [], error: error.message });
+  }
+});
+
 app.get("/api/veille/stories", async (req, res) => {
   try {
     const { data, error } = await supabase.from("stories").select("*").neq("status", "archived").order("updated_at", { ascending: false });
@@ -8519,7 +8600,8 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
 
         const alignment = await evaluateVeilleMergeAlignment(existingLinkedDebate, {
           positionA: normalizedPositionA,
-          positionB: normalizedPositionB
+          positionB: normalizedPositionB,
+          question: safeQuestion
         });
         if (alignment.verdict === "inverted") {
           // Permute les positions (et l'étiquette gauche/droite associée) pour qu'elles
