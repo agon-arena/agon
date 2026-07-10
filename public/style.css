@@ -21606,6 +21606,44 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #003399;
 }
 
+.tribunes-filter-switch {
+  display: flex;
+  width: max-content;
+  margin: 14px 0 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+
+.tribunes-filter-segment {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  padding: 6px 16px;
+  min-width: 90px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tribunes-filter-segment:hover {
+  color: #111827;
+}
+
+.tribunes-filter-segment-active {
+  background: #1a1f24;
+  color: #ffffff;
+}
+
+.tribunes-filter-segment-active:hover {
+  color: #ffffff;
+}
+
 @keyframes agon-card-highlight {
   0%, 100% { opacity: 0; }
   50%       { opacity: 1; }

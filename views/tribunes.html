@@ -43,6 +43,12 @@
     <h1>Tribunes</h1>
     <p>Prises de position de médias d'opinion (à gauche comme à droite) sur des sujets qu'aucun autre média suivi par Agôn n'a repris — donc sans camp adverse à confronter dans une arène. Chaque lien renvoie vers l'article original.</p>
 
+    <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les tribunes par orientation">
+      <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
+      <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Général</button>
+      <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
+    </div>
+
     <ul class="tribunes-list" id="tribunes-list">
       <li class="tribunes-empty">Chargement…</li>
     </ul>
@@ -53,6 +59,9 @@
 (function() {
   var list = document.getElementById('tribunes-list');
   if (!list) return;
+
+  var allArticles = [];
+  var currentFilter = 'mixed';
 
   function escapeHtml(text) {
     return String(text == null ? '' : text)
@@ -91,15 +100,35 @@
 
   function render(articles) {
     if (!articles.length) {
-      list.innerHTML = '<li class="tribunes-empty">Aucune tribune pour le moment.</li>';
+      list.innerHTML = '<li class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucune tribune pour le moment.' : 'Aucune tribune de ce côté pour le moment.') + '</li>';
       return;
     }
     list.innerHTML = articles.map(renderItem).join('');
   }
 
+  function applyFilter() {
+    var filtered = currentFilter === 'mixed'
+      ? allArticles
+      : allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+    render(filtered);
+  }
+
+  var switchEl = document.getElementById('tribunes-filter-switch');
+  if (switchEl) {
+    switchEl.addEventListener('click', function(event) {
+      var btn = event.target.closest('[data-filter]');
+      if (!btn) return;
+      currentFilter = btn.dataset.filter;
+      switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
+        seg.classList.toggle('tribunes-filter-segment-active', seg === btn);
+      });
+      applyFilter();
+    });
+  }
+
   fetch('/api/opinion-articles', { cache: 'no-store' })
     .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-    .then(function(data) { render(Array.isArray(data.articles) ? data.articles : []); })
+    .then(function(data) { allArticles = Array.isArray(data.articles) ? data.articles : []; applyFilter(); })
     .catch(function() { list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>'; });
 })();
 </script>
