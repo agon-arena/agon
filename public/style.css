@@ -21053,6 +21053,10 @@ body.page-contact.in-iframe .contact-page-shell {
   margin-bottom: 0;
 }
 
+.page-tribunes .about-panel {
+  background: #dbe5e1;
+}
+
 /* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
 body.page-debate .argument-form h3,
 body.page-debate .argument-form-body > h3,
