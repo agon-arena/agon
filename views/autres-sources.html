@@ -224,6 +224,48 @@
   var TRIBUNES_PAGE_SIZE = 12;
   var currentPage = 0;
 
+  function buildPagerPages(current, total) {
+    var pages = [];
+    var seen = {};
+    function add(value) {
+      if (value < 0 || value >= total || seen[value]) return;
+      seen[value] = true;
+      pages.push(value);
+    }
+
+    add(0);
+    for (var i = current - 2; i <= current + 2; i++) add(i);
+    add(total - 1);
+    pages.sort(function(a, b) { return a - b; });
+    return pages;
+  }
+
+  function buildPagerHtml(current, total) {
+    var pageButtons = buildPagerPages(current, total);
+    var inner = '';
+    var previous = -1;
+    var select = '';
+
+    pageButtons.forEach(function(pageIndex) {
+      if (previous >= 0 && pageIndex - previous > 1) {
+        inner += '<span class="tribunes-pager-ellipsis" aria-hidden="true">…</span>';
+      }
+      inner += '<button type="button" class="tribunes-pager-page' + (pageIndex === current ? ' tribunes-pager-page-active' : '') + '" data-page="' + pageIndex + '" aria-label="Aller à la page ' + (pageIndex + 1) + '"' + (pageIndex === current ? ' aria-current="page"' : '') + '>' + (pageIndex + 1) + '</button>';
+      previous = pageIndex;
+    });
+
+    for (var i = 0; i < total; i++) {
+      select += '<option value="' + i + '"' + (i === current ? ' selected' : '') + '>Page ' + (i + 1) + '</option>';
+    }
+
+    return '<li class="tribunes-pager">' +
+      '<button type="button" class="tribunes-pager-btn" data-page="' + Math.max(0, current - 1) + '" aria-label="Page précédente"' + (current === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
+      '<div class="tribunes-pager-pages" aria-label="Pagination des autres sources">' + inner + '</div>' +
+      '<select class="tribunes-pager-select" aria-label="Aller à la page">' + select + '</select>' +
+      '<button type="button" class="tribunes-pager-btn" data-page="' + Math.min(total - 1, current + 1) + '" aria-label="Page suivante"' + (current === total - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
+    '</li>';
+  }
+
   function render(articles) {
     if (!articles.length) {
       list.innerHTML = '<li class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</li>';
@@ -235,22 +277,26 @@
 
     var html = slice.map(renderItem).join('');
     if (pages > 1) {
-      html += '<li class="tribunes-pager">' +
-        '<button type="button" class="tribunes-pager-btn" data-dir="-1" aria-label="Page précédente"' + (currentPage === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
-        '<span class="tribunes-pager-info">' + (currentPage + 1) + ' / ' + pages + '</span>' +
-        '<button type="button" class="tribunes-pager-btn" data-dir="1" aria-label="Page suivante"' + (currentPage === pages - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
-      '</li>';
+      html += buildPagerHtml(currentPage, pages);
     }
     list.innerHTML = html;
 
     if (pages > 1) {
-      list.querySelectorAll('.tribunes-pager-btn').forEach(function(btn) {
+      list.querySelectorAll('[data-page]').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          currentPage = Math.min(pages - 1, Math.max(0, currentPage + Number(btn.dataset.dir)));
+          currentPage = Math.min(pages - 1, Math.max(0, Number(btn.dataset.page) || 0));
           render(articles);
           list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
+      var pagerSelect = list.querySelector('.tribunes-pager-select');
+      if (pagerSelect) {
+        pagerSelect.addEventListener('change', function() {
+          currentPage = Math.min(pages - 1, Math.max(0, Number(pagerSelect.value) || 0));
+          render(articles);
+          list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
     }
 
     loadPreviewImages(slice);
