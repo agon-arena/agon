@@ -21706,7 +21706,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   display: flex;
   flex-direction: column;
   background: #fff;
-  border: 2px solid rgba(36, 48, 56, 0.55);
+  border: 3px solid #111827;
   border-radius: 8px;
   overflow: hidden;
   font-size: 0.9rem;
@@ -22047,30 +22047,6 @@ body.page-create-mobile .create-card .create-submit-helper {
   padding: 0 2px;
 }
 
-.tribunes-pager-select {
-  height: 32px;
-  padding: 0 28px 0 10px;
-  border: 1px solid rgba(36, 48, 56, 0.22);
-  border-radius: 999px;
-  background-color: #ffffff;
-  color: #243038;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23243038'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 9px center;
-  background-size: 13px;
-}
-
-.tribunes-pager-select:hover,
-.tribunes-pager-select:focus-visible {
-  border-color: #243038;
-  outline: none;
-}
-
 .tribunes-pager-info {
   color: #6b7280;
   font-size: 13px;
@@ -22092,11 +22068,6 @@ body.page-create-mobile .create-card .create-submit-helper {
     min-width: 30px;
     height: 30px;
     padding: 0 8px;
-  }
-
-  .tribunes-pager-select {
-    height: 30px;
-    max-width: 112px;
   }
 }
 

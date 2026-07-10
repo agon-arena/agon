@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260710-autres-sources-no-white-bg">
+  <link rel="stylesheet" href="/style.min.css?v=20260710-autres-sources-no-select">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -244,7 +244,6 @@
     var pageButtons = buildPagerPages(current, total);
     var inner = '';
     var previous = -1;
-    var select = '';
 
     pageButtons.forEach(function(pageIndex) {
       if (previous >= 0 && pageIndex - previous > 1) {
@@ -254,14 +253,9 @@
       previous = pageIndex;
     });
 
-    for (var i = 0; i < total; i++) {
-      select += '<option value="' + i + '"' + (i === current ? ' selected' : '') + '>Page ' + (i + 1) + '</option>';
-    }
-
     return '<li class="tribunes-pager">' +
       '<button type="button" class="tribunes-pager-btn" data-page="' + Math.max(0, current - 1) + '" aria-label="Page précédente"' + (current === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
       '<div class="tribunes-pager-pages" aria-label="Pagination des autres sources">' + inner + '</div>' +
-      '<select class="tribunes-pager-select" aria-label="Aller à la page">' + select + '</select>' +
       '<button type="button" class="tribunes-pager-btn" data-page="' + Math.min(total - 1, current + 1) + '" aria-label="Page suivante"' + (current === total - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
     '</li>';
   }
@@ -289,14 +283,6 @@
           list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
-      var pagerSelect = list.querySelector('.tribunes-pager-select');
-      if (pagerSelect) {
-        pagerSelect.addEventListener('change', function() {
-          currentPage = Math.min(pages - 1, Math.max(0, Number(pagerSelect.value) || 0));
-          render(articles);
-          list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      }
     }
 
     loadPreviewImages(slice);
