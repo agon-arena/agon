@@ -197,6 +197,7 @@
     var params = new URLSearchParams();
     if (article.title) params.set('question', truncateWithEllipsis(article.title, 110));
     if (article.link) params.set('source_url', article.link);
+    params.set('community', '1');
     var preview = article.source_preview || {};
     var sourceImage = article.source_image || preview.image || preview.imageUrl || preview.thumbnail || '';
     var sourceTitle = preview.title || article.title || '';

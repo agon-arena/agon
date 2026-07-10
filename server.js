@@ -6304,7 +6304,7 @@ async function assignDebateCloudLabel(debateId, fields) {
 
 app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
   try {
-    const { source_url, source_preview, resource_mode, image_upload, type, creatorKey, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
+    const { source_url, source_preview, resource_mode, image_upload, type, creatorKey, force_community, evaluation_axis_hidden, long_arguments, correction_strictness, politicalOrientation } = req.body || {};
     // Champs texte libres : caractères nuls retirés dès l'entrée (cf. stripNullChars).
     const question = stripNullChars(req.body?.question);
     const category = stripNullChars(req.body?.category);
@@ -6363,6 +6363,10 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     const normalizedResourceMode = ["none", "source", "image", "video"].includes(String(resource_mode || ""))
       ? String(resource_mode)
       : "none";
+    const shouldCreateCommunityDebate = force_community === true;
+    const debateCreatorKey = shouldCreateCommunityDebate
+      ? (creatorKey || null)
+      : (isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null));
 
     if (normalizedResourceMode === "source" && !normalizedSourceUrl) {
       return res.status(400).json({ error: "Lien source manquant." });
@@ -6406,7 +6410,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
         ...(normalizedLongArguments ? { long_arguments: true } : {}),
         ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
-        creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
+        creator_key: debateCreatorKey,
         created_at: nowIso(),
         political_orientation: politicalOrientation || null
       })
@@ -6429,7 +6433,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             ...(normalizedAxisHidden ? { evaluation_axis_hidden: true } : {}),
             ...(normalizedLongArguments ? { long_arguments: true } : {}),
             ...(normalizedStrictness ? { correction_strictness: normalizedStrictness } : {}),
-            creator_key: isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null),
+            creator_key: debateCreatorKey,
             created_at: nowIso(),
             political_orientation: politicalOrientation || null
           })
@@ -6486,6 +6490,11 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
             option_b,
           });
           await rebuildCloudBubblesAfterPublish("create-debate", data.id);
+          return;
+        }
+
+        if (shouldCreateCommunityDebate) {
+          agonBubbleTrendsCache = null;
           return;
         }
 

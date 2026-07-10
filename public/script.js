@@ -22279,6 +22279,11 @@ function getCreatePrefilledSourcePreview(sourceUrl) {
   };
 }
 
+function isCreateForcedCommunityMode() {
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get("community") === "1" || params.get("community") === "true";
+}
+
 function focusCreateValidationField(element) {
   if (!element || typeof element.focus !== "function") return;
 
@@ -22615,6 +22620,7 @@ form.addEventListener("submit", async e => {
       ? (document.querySelector('input[name="correction_strictness"]:checked')?.value || "normal")
       : "normal";
     const prefilledSourcePreview = getCreatePrefilledSourcePreview(source_url);
+    const forceCommunity = isCreateForcedCommunityMode();
     const createPayload = JSON.stringify({
       question,
       category,
@@ -22630,6 +22636,7 @@ form.addEventListener("submit", async e => {
       ...(evaluationAxisHidden ? { evaluation_axis_hidden: true } : {}),
       ...(longArguments ? { long_arguments: true } : {}),
       ...(correctionStrictness !== "normal" ? { correction_strictness: correctionStrictness } : {}),
+      ...(forceCommunity ? { force_community: true } : {}),
       creatorKey
     });
 
@@ -22641,7 +22648,7 @@ form.addEventListener("submit", async e => {
 
     const r = await createXhrRequest(API + "/debates", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(isAdmin() ? { "x-admin-token": getAdminToken() } : {}) },
+      headers: { "Content-Type": "application/json", ...(!forceCommunity && isAdmin() ? { "x-admin-token": getAdminToken() } : {}) },
       body: createPayload,
       responseType: "json",
       onUploadProgress: (progress) => {
