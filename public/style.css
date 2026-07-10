@@ -21724,6 +21724,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   aspect-ratio: 1.91 / 1;
   border-bottom: 1px solid #e5e7eb;
   background: #e5e7eb;
+  overflow: hidden;
 }
 
 .tribunes-thumb img {
@@ -21731,6 +21732,48 @@ body.page-create-mobile .create-card .create-submit-helper {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.tribunes-thumb-img {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.tribunes-thumb-loaded .tribunes-thumb-img {
+  opacity: 1;
+}
+
+.tribunes-thumb-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(36,48,56,0.10), rgba(36,48,56,0.18)), #e9ebec;
+  color: #243038;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tribunes-thumb-loader-img {
+  width: 42px !important;
+  height: 42px !important;
+  object-fit: contain !important;
+  opacity: 0.86;
+  animation: createSubmitSpin 0.9s linear infinite;
+}
+
+.tribunes-thumb-loaded .tribunes-thumb-loader {
+  display: none;
+}
+
+.tribunes-thumb .debate-card-top-badges {
+  z-index: 4;
 }
 
 .tribunes-meta {

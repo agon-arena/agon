@@ -164,7 +164,14 @@
     var dateIso = formatDateMachine(article.published_at);
     return '' +
       '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '">' +
-        '<div class="tribunes-thumb" style="display:none">' + newBadge + '<img alt=""></div>' +
+        '<div class="tribunes-thumb tribunes-thumb-loading">' +
+          newBadge +
+          '<div class="tribunes-thumb-loader" aria-label="Chargement de l’image">' +
+            '<img class="tribunes-thumb-loader-img" src="/sablier-96.png" alt="">' +
+            '<span>Chargement de l’image…</span>' +
+          '</div>' +
+          '<img class="tribunes-thumb-img" alt="">' +
+        '</div>' +
         '<div class="tribunes-item-body">' +
           '<div class="tribunes-meta">' +
             '<div class="tribunes-meta-main">' +
@@ -276,16 +283,33 @@
             var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
             if (arenaBtn) arenaBtn.href = createArenaHref(article);
           }
-          if (!preview || !preview.image) return;
           if (!li) return;
           var thumb = li.querySelector('.tribunes-thumb');
-          var img = thumb && thumb.querySelector('img');
-          if (!img) return;
+          if (!thumb) return;
+          if (!preview || !preview.image) {
+            thumb.style.display = 'none';
+            return;
+          }
+          var img = thumb.querySelector('.tribunes-thumb-img');
+          if (!img) {
+            thumb.style.display = 'none';
+            return;
+          }
+          thumb.style.display = '';
+          thumb.classList.add('tribunes-thumb-loading');
+          thumb.classList.remove('tribunes-thumb-loaded');
           img.src = preview.image;
-          img.onload = function() { thumb.style.display = ''; };
+          img.onload = function() {
+            thumb.classList.remove('tribunes-thumb-loading');
+            thumb.classList.add('tribunes-thumb-loaded');
+          };
           img.onerror = function() { thumb.style.display = 'none'; };
         })
-        .catch(function() {})
+        .catch(function() {
+          var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
+          var thumb = li && li.querySelector('.tribunes-thumb');
+          if (thumb) thumb.style.display = 'none';
+        })
         .then(next);
     }
 
