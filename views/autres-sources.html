@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260710-autres-sources-no-select">
+  <link rel="stylesheet" href="/style.min.css?v=20260710-autres-sources-card-link">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -163,7 +163,7 @@
     var dateLabel = formatDate(article.published_at);
     var dateIso = formatDateMachine(article.published_at);
     return '' +
-      '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '">' +
+      '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '" role="link" tabindex="0">' +
         '<div class="tribunes-thumb tribunes-thumb-loading">' +
           newBadge +
           '<div class="tribunes-thumb-loader" aria-label="Chargement de l’image">' +
@@ -260,6 +260,31 @@
     '</li>';
   }
 
+  function shouldIgnoreCardOpen(target) {
+    return Boolean(target && target.closest('a, button, input, select, textarea'));
+  }
+
+  function openCardArticle(card) {
+    var link = card && card.dataset ? card.dataset.link : '';
+    if (!link) return;
+    window.open(link, '_blank', 'noopener,noreferrer');
+  }
+
+  function attachCardLinkHandlers() {
+    list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
+      card.addEventListener('click', function(event) {
+        if (shouldIgnoreCardOpen(event.target)) return;
+        openCardArticle(card);
+      });
+      card.addEventListener('keydown', function(event) {
+        if (shouldIgnoreCardOpen(event.target)) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openCardArticle(card);
+      });
+    });
+  }
+
   function render(articles) {
     if (!articles.length) {
       list.innerHTML = '<li class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</li>';
@@ -274,6 +299,7 @@
       html += buildPagerHtml(currentPage, pages);
     }
     list.innerHTML = html;
+    attachCardLinkHandlers();
 
     if (pages > 1) {
       list.querySelectorAll('[data-page]').forEach(function(btn) {
