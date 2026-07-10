@@ -21006,7 +21006,7 @@ body.page-contact.in-iframe .contact-page-shell {
 }
 
 .page-tribunes .about-page-shell {
-  width: min(100% - 20px, 760px);
+  width: min(100% - 16px, 820px);
 }
 
 .page-tribunes.in-iframe .topbar {
@@ -21055,6 +21055,7 @@ body.page-contact.in-iframe .contact-page-shell {
 
 .page-tribunes .about-panel {
   background: #dbe5e1;
+  padding: 16px;
 }
 
 /* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
@@ -21670,12 +21671,12 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-list {
   list-style: none;
-  margin: 18px 0 0;
-  padding: 16px;
+  margin: 14px 0 0;
+  padding: 8px;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   border: 1px solid rgba(36, 48, 56, 0.08);
-  border-radius: 14px;
+  border-radius: 10px;
   background: #dbe5e1;
 }
 
