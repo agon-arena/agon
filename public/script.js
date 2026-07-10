@@ -20234,7 +20234,15 @@ function isSafeInternalModalUrl(modalUrl = "") {
 
   try {
     const parsedUrl = new URL(rawUrl, window.location.origin);
-    return parsedUrl.origin === window.location.origin && ["/debate", "/notifications"].includes(parsedUrl.pathname);
+    return parsedUrl.origin === window.location.origin && [
+      "/debate",
+      "/notifications",
+      "/create",
+      "/autres-sources",
+      "/contributions",
+      "/about",
+      "/contact"
+    ].includes(parsedUrl.pathname);
   } catch (error) {
     return false;
   }
@@ -20760,6 +20768,21 @@ async function renderCreateSourceUrlPreview(rawUrl) {
   const safeUrl = normalizeArgumentSourceUrl(trimmed);
   if (!safeUrl) {
     container.innerHTML = '<p class="create-source-preview-error">Lien invalide.</p>';
+    return;
+  }
+
+  const prefilledPreview = typeof getCreatePrefilledSourcePreview === "function"
+    ? getCreatePrefilledSourcePreview(safeUrl)
+    : null;
+  if (prefilledPreview?.image) {
+    container.innerHTML = renderIdeaOpenGraphPreviewHtml(safeUrl, prefilledPreview);
+    const prefilledImg = container.querySelector(".idea-source-image");
+    if (prefilledImg) {
+      prefilledImg.onerror = () => {
+        const wrap = prefilledImg.closest(".idea-source-image-wrap");
+        if (wrap) wrap.outerHTML = '<p class="create-source-preview-error create-source-preview-image-error">Image indisponible.</p>';
+      };
+    }
     return;
   }
 

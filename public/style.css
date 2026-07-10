@@ -20958,6 +20958,10 @@ body.page-contact.in-iframe .contact-page-shell {
   color: #111827;
 }
 
+.page-tribunes .about-page-shell {
+  width: min(100% - 20px, 640px);
+}
+
 .page-tribunes.in-iframe .topbar {
   display: none !important;
 }
@@ -21622,20 +21626,39 @@ body.page-create-mobile .create-card .create-submit-helper {
   gap: 14px;
 }
 
+@media (max-width: 520px) {
+  .page-tribunes .about-page-shell {
+    width: min(100% - 18px, 640px);
+  }
+
+  .page-tribunes .about-panel {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .page-tribunes .tribunes-list {
+    margin-left: -12px;
+    margin-right: -12px;
+  }
+}
+
 .tribunes-empty {
   color: #6b7280;
 }
 
 .tribunes-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #fff;
-  border: 1px solid rgba(36, 48, 56, 0.22);
+  border: 2px solid rgba(36, 48, 56, 0.55);
   border-radius: 8px;
   overflow: hidden;
   font-size: 0.9rem;
   color: #374151;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+  box-shadow:
+    0 14px 30px rgba(15, 23, 42, 0.18),
+    0 0 0 4px rgba(36, 48, 56, 0.06);
 }
 
 .tribunes-item-body {
