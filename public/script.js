@@ -20753,6 +20753,29 @@ function clearCreateSourceUrlPreview() {
   if (container) container.innerHTML = "";
 }
 
+function initCreateSourceUrlPreviewInput() {
+  const createSourceUrlInput = document.getElementById("source_url");
+  if (!createSourceUrlInput || createSourceUrlInput.dataset.sourcePreviewBound === "true") return;
+
+  createSourceUrlInput.dataset.sourcePreviewBound = "true";
+  let createSourcePreviewTimer = null;
+  const scheduleCreateSourcePreview = (value) => {
+    clearTimeout(createSourcePreviewTimer);
+    createSourcePreviewTimer = setTimeout(() => renderCreateSourceUrlPreview(value), 400);
+  };
+
+  createSourceUrlInput.addEventListener("input", (event) => {
+    scheduleCreateSourcePreview(event.target.value);
+  });
+  createSourceUrlInput.addEventListener("change", (event) => {
+    scheduleCreateSourcePreview(event.target.value);
+  });
+
+  if (String(createSourceUrlInput.value || "").trim()) {
+    renderCreateSourceUrlPreview(createSourceUrlInput.value);
+  }
+}
+
 let _createSourcePreviewToken = 0;
 async function renderCreateSourceUrlPreview(rawUrl) {
   const container = document.getElementById("create-source-url-preview");
@@ -21820,6 +21843,7 @@ async function initCreate() {
   markPageArrivalLoadingOverlayReady();
   const form = document.getElementById("create-form");
   if (!form) return;
+  initCreateSourceUrlPreviewInput();
 
   const questionInput = document.getElementById("question");
   const similarBox = document.getElementById("similar-debates-box");
@@ -22413,15 +22437,7 @@ if (resourceInputs.length) {
       _similarDebatesTimer = setTimeout(() => renderSimilarDebates(val), 150);
     });
   }
-  const createSourceUrlInput = document.getElementById("source_url");
-  if (createSourceUrlInput) {
-    let _createSourcePreviewTimer = null;
-    createSourceUrlInput.addEventListener("input", (e) => {
-      clearTimeout(_createSourcePreviewTimer);
-      const val = e.target.value;
-      _createSourcePreviewTimer = setTimeout(() => renderCreateSourceUrlPreview(val), 400);
-    });
-  }
+  initCreateSourceUrlPreviewInput();
 if (cancelPublishButton) {
   cancelPublishButton.addEventListener("click", cancelCreatePublishSession);
 }
