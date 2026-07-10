@@ -4076,7 +4076,7 @@ app.get("/contributions", (req, res) => {
 });
 
 app.get("/autres-sources", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/autres-sources.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/autres-sources.html"));
 });
 
 // Score percentile d'un utilisateur ("top X%") sur 2 axes indépendants :
@@ -6364,9 +6364,12 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
       ? String(resource_mode)
       : "none";
     const shouldCreateCommunityDebate = force_community === true;
+    const requestedCreatorKey = String(creatorKey || "").trim();
     const debateCreatorKey = shouldCreateCommunityDebate
-      ? (creatorKey || null)
-      : (isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (creatorKey || null));
+      ? (requestedCreatorKey && requestedCreatorKey !== AGON_ADMIN_CREATOR_KEY
+        ? requestedCreatorKey
+        : `community-${crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`)
+      : (isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (requestedCreatorKey || null));
 
     if (normalizedResourceMode === "source" && !normalizedSourceUrl) {
       return res.status(400).json({ error: "Lien source manquant." });

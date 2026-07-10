@@ -7322,7 +7322,12 @@ function syncIndexBubbleTrendBadges(root = document) {
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
-  const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
+  const isCommunityCard = !!d.is_community;
+  const communitySourceOnlyCard = isCommunityCard
+    && String(d.source_url || "").trim()
+    && !String(d.image_url || "").trim()
+    && !String(d.video_url || "").trim();
+  const mediaHtml = communitySourceOnlyCard ? "" : buildIndexSwipeableMediaHtml(d, options);
   const mediaOutsideLink = !!mediaHtml;
   const prevEpUrl = String(d.previous_episode_url || "").trim();
   const nextEpUrl = String(d.next_episode_url || "").trim();
@@ -7366,7 +7371,6 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const includeDeleteButton = options.includeDeleteButton === true;
   const categoryBadgesHtml = buildIndexCardCategoryBadgesHtml(d.category);
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
-  const isCommunityCard = !!d.is_community;
 
   return `
     <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
@@ -13012,6 +13016,18 @@ function getKey() {
   }
 
   return k;
+}
+
+function getCommunityCreatorKey() {
+  const currentKey = String(getKey() || "").trim();
+  if (currentKey && currentKey !== "__AGON_ADMIN__") return currentKey;
+
+  let communityKey = String(lsGet("communityKey") || "").trim();
+  if (!communityKey || communityKey === "__AGON_ADMIN__") {
+    communityKey = `community-${Math.random().toString(36).slice(2)}`;
+    lsSet("communityKey", communityKey);
+  }
+  return communityKey;
 }
 
 let currentUserResolvePromise = null;
@@ -22610,7 +22626,8 @@ form.addEventListener("submit", async e => {
       };
     }
 
-    const creatorKey = getKey();
+    const forceCommunity = isCreateForcedCommunityMode();
+    const creatorKey = forceCommunity ? getCommunityCreatorKey() : getKey();
     const evaluationAxis = selectedType === "open"
       ? (document.getElementById("evaluation_axis")?.value.trim() || "")
       : undefined;
@@ -22620,7 +22637,6 @@ form.addEventListener("submit", async e => {
       ? (document.querySelector('input[name="correction_strictness"]:checked')?.value || "normal")
       : "normal";
     const prefilledSourcePreview = getCreatePrefilledSourcePreview(source_url);
-    const forceCommunity = isCreateForcedCommunityMode();
     const createPayload = JSON.stringify({
       question,
       category,
