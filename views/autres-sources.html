@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260711-video-modal">
+  <link rel="stylesheet" href="/style.min.css?v=20260711-theme-carousels">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -53,9 +53,6 @@
       <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
         <option value="">Tous les médias</option>
       </select>
-      <select id="tribunes-theme-filter" class="tribunes-media-filter" aria-label="Filtrer par thématique">
-        <option value="">Toutes les thématiques</option>
-      </select>
       <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
         <option value="">Articles et vidéos</option>
         <option value="article">Articles seulement</option>
@@ -63,9 +60,9 @@
       </select>
     </div>
 
-    <ul class="tribunes-list" id="tribunes-list">
-      <li class="tribunes-empty">Chargement…</li>
-    </ul>
+    <div class="tribunes-list" id="tribunes-list">
+      <p class="tribunes-empty">Chargement…</p>
+    </div>
   </section>
 </main>
 <div class="tribunes-video-modal" id="tribunes-video-modal" role="dialog" aria-modal="true" aria-label="Lecture de la vidéo">
@@ -83,7 +80,6 @@
   var allArticles = [];
   var currentFilter = 'mixed';
   var currentMedia = '';
-  var currentTheme = '';
   var currentType = '';
 
   // Thématique dérivée du champ orientation (ex. "gauche / investigation" -> investigation),
@@ -104,7 +100,9 @@
     { key: 'complotiste', label: 'Complotiste', match: ['complotiste'] },
     { key: 'militant', label: 'Militant', match: ['militant', 'radical', 'antifascisme', 'altermondialiste', 'libertaire'] },
     { key: 'local', label: 'Local / Régional', match: ['local', 'régional', 'regional', 'bretagne'] },
-    { key: 'satire', label: 'Satire', match: ['satir'] }
+    { key: 'satire', label: 'Satire', match: ['satir'] },
+    { key: 'culture', label: 'Culture', match: ['culture'] },
+    { key: 'jeunesse', label: 'Jeunesse', match: ['jeunesse'] }
   ];
   var THEME_LABEL_BY_KEY = {};
   THEME_RULES.forEach(function(rule) { THEME_LABEL_BY_KEY[rule.key] = rule.label; });
@@ -288,49 +286,6 @@
     return '/create?' + params.toString();
   }
 
-  // Pagination : évite de charger d'un coup les aperçus Open Graph de tous les articles
-  // (potentiellement des centaines à terme, 2 collectes/jour qui s'accumulent) — seule la
-  // page affichée déclenche des requêtes /api/link-preview, ce qui reste large sous la
-  // limite de 120 req/min/IP de cette route et ménage aussi les sites d'origine.
-  var TRIBUNES_PAGE_SIZE = 12;
-  var currentPage = 0;
-
-  function buildPagerPages(current, total) {
-    var pages = [];
-    var seen = {};
-    function add(value) {
-      if (value < 0 || value >= total || seen[value]) return;
-      seen[value] = true;
-      pages.push(value);
-    }
-
-    add(0);
-    for (var i = current - 2; i <= current + 2; i++) add(i);
-    add(total - 1);
-    pages.sort(function(a, b) { return a - b; });
-    return pages;
-  }
-
-  function buildPagerHtml(current, total) {
-    var pageButtons = buildPagerPages(current, total);
-    var inner = '';
-    var previous = -1;
-
-    pageButtons.forEach(function(pageIndex) {
-      if (previous >= 0 && pageIndex - previous > 1) {
-        inner += '<span class="tribunes-pager-ellipsis" aria-hidden="true">…</span>';
-      }
-      inner += '<button type="button" class="tribunes-pager-page' + (pageIndex === current ? ' tribunes-pager-page-active' : '') + '" data-page="' + pageIndex + '" aria-label="Aller à la page ' + (pageIndex + 1) + '"' + (pageIndex === current ? ' aria-current="page"' : '') + '>' + (pageIndex + 1) + '</button>';
-      previous = pageIndex;
-    });
-
-    return '<li class="tribunes-pager">' +
-      '<button type="button" class="tribunes-pager-btn" data-page="' + Math.max(0, current - 1) + '" aria-label="Page précédente"' + (current === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
-      '<div class="tribunes-pager-pages" aria-label="Pagination des autres sources">' + inner + '</div>' +
-      '<button type="button" class="tribunes-pager-btn" data-page="' + Math.min(total - 1, current + 1) + '" aria-label="Page suivante"' + (current === total - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
-    '</li>';
-  }
-
   function shouldIgnoreCardOpen(target) {
     return Boolean(target && target.closest('a, button, input, select, textarea'));
   }
@@ -358,93 +313,140 @@
     });
   }
 
+  function attachCarouselArrows() {
+    list.querySelectorAll('.tribunes-carousel-arrow').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var row = document.getElementById(btn.dataset.row);
+        if (!row) return;
+        var amount = Math.max(240, Math.round(row.clientWidth * 0.9));
+        row.scrollBy({ left: btn.classList.contains('tribunes-carousel-arrow-left') ? -amount : amount, behavior: 'smooth' });
+      });
+    });
+  }
+
+  // Regroupe par thématique (dérivée de l'orientation, cf. themeClass) : les thématiques
+  // nommées d'abord (les plus fournies en premier), puis un carrousel "Actualité générale"
+  // pour tout le reste — la majorité des sources généralistes n'ont pas de second segment
+  // dans leur orientation (juste "généraliste", "régional"...), donc pas de thématique
+  // détectable ; ce carrousel fourre-tout reste volontairement le plus gros.
+  function groupByTheme(articles) {
+    var buckets = {};
+    var order = [];
+    articles.forEach(function(a) {
+      var key = themeClass(a.orientation) || '_general';
+      if (!buckets[key]) { buckets[key] = []; order.push(key); }
+      buckets[key].push(a);
+    });
+    var namedKeys = order.filter(function(k) { return k !== '_general'; });
+    namedKeys.sort(function(a, b) { return buckets[b].length - buckets[a].length; });
+    var groups = namedKeys.map(function(k) { return { key: k, label: THEME_LABEL_BY_KEY[k], items: buckets[k] }; });
+    if (buckets._general) groups.push({ key: '_general', label: 'Actualité générale', items: buckets._general });
+    return groups;
+  }
+
+  function renderThemeSection(group) {
+    var rowId = 'tribunes-row-' + group.key;
+    return '' +
+      '<section class="tribunes-theme-section">' +
+        '<div class="tribunes-theme-heading">' +
+          '<h2>' + escapeHtml(group.label) + '</h2>' +
+          '<span class="tribunes-theme-count">' + group.items.length + '</span>' +
+        '</div>' +
+        '<div class="tribunes-carousel-wrap">' +
+          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents"><i class="fa-solid fa-chevron-left"></i></button>' +
+          '<ul class="tribunes-carousel" id="' + rowId + '">' +
+            group.items.map(renderItem).join('') +
+          '</ul>' +
+          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants"><i class="fa-solid fa-chevron-right"></i></button>' +
+        '</div>' +
+      '</section>';
+  }
+
   function render(articles) {
     if (!articles.length) {
-      list.innerHTML = '<li class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</li>';
+      list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>';
       return;
     }
-    var pages = Math.ceil(articles.length / TRIBUNES_PAGE_SIZE);
-    currentPage = Math.min(currentPage, pages - 1);
-    var slice = articles.slice(currentPage * TRIBUNES_PAGE_SIZE, (currentPage + 1) * TRIBUNES_PAGE_SIZE);
+    var articleByLink = {};
+    articles.forEach(function(a) { if (a.link) articleByLink[a.link] = a; });
 
-    var html = slice.map(renderItem).join('');
-    if (pages > 1) {
-      html += buildPagerHtml(currentPage, pages);
-    }
-    list.innerHTML = html;
+    list.innerHTML = groupByTheme(articles).map(renderThemeSection).join('');
     attachCardLinkHandlers();
+    attachCarouselArrows();
 
-    if (pages > 1) {
-      list.querySelectorAll('[data-page]').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          currentPage = Math.min(pages - 1, Math.max(0, Number(btn.dataset.page) || 0));
-          render(articles);
-          list.closest('.about-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      });
-    }
-
-    loadPreviewImages(slice);
+    list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
+      var article = articleByLink[card.dataset.link];
+      if (article) observeForPreview(card, article);
+    });
   }
 
   // Vignette Open Graph par article, via le système de preview de liens déjà utilisé
   // pour les sources de débats (/api/link-preview, cache disque côté serveur — aucun
-  // impact Supabase).
-  var PREVIEW_CONCURRENCY = 4;
+  // impact Supabase). Chargement paresseux au scroll (IntersectionObserver) plutôt
+  // qu'au rendu : avec des carrousels qui peuvent contenir des dizaines de cartes par
+  // thématique, tout précharger d'un coup gaspillerait des requêtes vers /api/link-preview
+  // (limite 120 req/min/IP) et vers les sites d'origine pour des cartes jamais vues.
+  var previewObserver = null;
 
-  function loadPreviewImages(articles) {
-    var queue = articles.filter(function(a) { return a.link; });
-    var index = 0;
-
-    function next() {
-      if (index >= queue.length) return;
-      var article = queue[index++];
-      fetch('/api/link-preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: article.link })
-      })
-        .then(function(res) { return res.ok ? res.json() : null; })
-        .then(function(data) {
-          var preview = data && data.preview;
-          var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
-          if (preview) {
-            article.source_preview = preview;
-            article.source_image = preview.image || '';
-            var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
-            if (arenaBtn) arenaBtn.href = createArenaHref(article);
-          }
-          if (!li) return;
-          var thumb = li.querySelector('.tribunes-thumb');
-          if (!thumb) return;
-          if (!preview || !preview.image) {
-            thumb.style.display = 'none';
-            return;
-          }
-          var img = thumb.querySelector('.tribunes-thumb-img');
-          if (!img) {
-            thumb.style.display = 'none';
-            return;
-          }
-          thumb.style.display = '';
-          thumb.classList.add('tribunes-thumb-loading');
-          thumb.classList.remove('tribunes-thumb-loaded');
-          img.src = preview.image;
-          img.onload = function() {
-            thumb.classList.remove('tribunes-thumb-loading');
-            thumb.classList.add('tribunes-thumb-loaded');
-          };
-          img.onerror = function() { thumb.style.display = 'none'; };
-        })
-        .catch(function() {
-          var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
-          var thumb = li && li.querySelector('.tribunes-thumb');
-          if (thumb) thumb.style.display = 'none';
-        })
-        .then(next);
+  function observeForPreview(card, article) {
+    card.__article = article;
+    if (!('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
+    if (!previewObserver) {
+      previewObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return;
+          previewObserver.unobserve(entry.target);
+          if (entry.target.__article) fetchPreviewFor(entry.target.__article);
+        });
+      }, { rootMargin: '300px' });
     }
+    previewObserver.observe(card);
+  }
 
-    for (var i = 0; i < PREVIEW_CONCURRENCY; i++) next();
+  function fetchPreviewFor(article) {
+    if (!article.link) return;
+    fetch('/api/link-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: article.link })
+    })
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(data) {
+        var preview = data && data.preview;
+        var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
+        if (preview) {
+          article.source_preview = preview;
+          article.source_image = preview.image || '';
+          var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
+          if (arenaBtn) arenaBtn.href = createArenaHref(article);
+        }
+        if (!li) return;
+        var thumb = li.querySelector('.tribunes-thumb');
+        if (!thumb) return;
+        if (!preview || !preview.image) {
+          thumb.style.display = 'none';
+          return;
+        }
+        var img = thumb.querySelector('.tribunes-thumb-img');
+        if (!img) {
+          thumb.style.display = 'none';
+          return;
+        }
+        thumb.style.display = '';
+        thumb.classList.add('tribunes-thumb-loading');
+        thumb.classList.remove('tribunes-thumb-loaded');
+        img.src = preview.image;
+        img.onload = function() {
+          thumb.classList.remove('tribunes-thumb-loading');
+          thumb.classList.add('tribunes-thumb-loaded');
+        };
+        img.onerror = function() { thumb.style.display = 'none'; };
+      })
+      .catch(function() {
+        var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
+        var thumb = li && li.querySelector('.tribunes-thumb');
+        if (thumb) thumb.style.display = 'none';
+      });
   }
 
   function cssEscape(value) {
@@ -463,7 +465,6 @@
   // (général = tout, sans distinction). Le filtre type (article/vidéo) est fixe, pas besoin
   // de le repeupler.
   var mediaFilterEl = document.getElementById('tribunes-media-filter');
-  var themeFilterEl = document.getElementById('tribunes-theme-filter');
   var typeFilterEl = document.getElementById('tribunes-type-filter');
 
   function populateSelectFromValues(selectEl, values, currentValue, defaultLabel, labelFor) {
@@ -485,25 +486,15 @@
     currentMedia = populateSelectFromValues(mediaFilterEl, mediaNames, currentMedia, 'Tous les médias');
   }
 
-  function populateThemeFilter() {
-    var themeKeys = Array.from(new Set(
-      articlesInScope().map(function(a) { return themeClass(a.orientation); }).filter(Boolean)
-    )).sort(function(a, b) { return THEME_LABEL_BY_KEY[a].localeCompare(THEME_LABEL_BY_KEY[b], 'fr'); });
-    currentTheme = populateSelectFromValues(themeFilterEl, themeKeys, currentTheme, 'Toutes les thématiques', function(key) { return THEME_LABEL_BY_KEY[key]; });
-  }
-
   function computeFiltered() {
     var filtered = articlesInScope();
     if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
-    if (currentTheme) filtered = filtered.filter(function(article) { return themeClass(article.orientation) === currentTheme; });
     if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
     return filtered;
   }
 
   function applyFilter() {
     populateMediaFilter();
-    populateThemeFilter();
-    currentPage = 0;
     render(computeFiltered());
   }
 
@@ -514,7 +505,6 @@
       if (!btn) return;
       currentFilter = btn.dataset.filter;
       currentMedia = '';
-      currentTheme = '';
       switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
         seg.classList.toggle('tribunes-filter-segment-active', seg === btn);
       });
@@ -522,13 +512,11 @@
     });
   }
 
-  [mediaFilterEl, themeFilterEl, typeFilterEl].forEach(function(el) {
+  [mediaFilterEl, typeFilterEl].forEach(function(el) {
     if (!el) return;
     el.addEventListener('change', function() {
       currentMedia = mediaFilterEl.value;
-      currentTheme = themeFilterEl.value;
       currentType = typeFilterEl.value;
-      currentPage = 0;
       render(computeFiltered());
     });
   });

@@ -21670,14 +21670,90 @@ body.page-create-mobile .create-card .create-submit-helper {
 }
 
 .tribunes-list {
-  list-style: none;
   margin: 14px 0 0;
-  padding: 8px;
-  display: grid;
-  gap: 12px;
+  padding: 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
   border: 1px solid rgba(36, 48, 56, 0.08);
   border-radius: 10px;
   background: #dbe5e1;
+}
+
+.tribunes-theme-section {
+  min-width: 0;
+}
+
+.tribunes-theme-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 6px 8px;
+}
+
+.tribunes-theme-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #243038;
+}
+
+.tribunes-theme-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.tribunes-carousel-wrap {
+  position: relative;
+}
+
+.tribunes-carousel {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px 8px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tribunes-carousel .tribunes-item {
+  flex: 0 0 auto;
+  width: 240px;
+  scroll-snap-align: start;
+}
+
+.tribunes-carousel-arrow {
+  display: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(36, 48, 56, 0.82);
+  color: #fff;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.tribunes-carousel-arrow:hover {
+  background: rgba(36, 48, 56, 0.96);
+}
+
+.tribunes-carousel-arrow-left { left: -4px; }
+.tribunes-carousel-arrow-right { right: -4px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .tribunes-carousel-arrow {
+    display: flex;
+  }
 }
 
 @media (max-width: 520px) {
@@ -22069,101 +22145,6 @@ body.page-create-mobile .create-card .create-submit-helper {
 .tribunes-media-filter:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.tribunes-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 0 2px;
-}
-
-.tribunes-pager-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid #243038;
-  background: #243038;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tribunes-pager-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.tribunes-pager-pages {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.tribunes-pager-page {
-  min-width: 32px;
-  height: 32px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(36, 48, 56, 0.18);
-  background: #ffffff;
-  color: #243038;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.tribunes-pager-page:hover,
-.tribunes-pager-page:focus-visible {
-  border-color: #243038;
-  outline: none;
-}
-
-.tribunes-pager-page-active {
-  border-color: #243038;
-  background: #243038;
-  color: #ffffff;
-  cursor: default;
-}
-
-.tribunes-pager-ellipsis {
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 0 2px;
-}
-
-.tribunes-pager-info {
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 700;
-  min-width: 44px;
-  text-align: center;
-}
-
-@media (max-width: 520px) {
-  .tribunes-pager {
-    gap: 6px;
-  }
-
-  .tribunes-pager-pages {
-    gap: 4px;
-  }
-
-  .tribunes-pager-page {
-    min-width: 30px;
-    height: 30px;
-    padding: 0 8px;
-  }
 }
 
 .tribunes-filter-segment {
