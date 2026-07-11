@@ -32485,6 +32485,15 @@ function getAgonDebateBottomSurface() {
   return null;
 }
 
+function hasAgonDebateYouTubeSourcePreview() {
+  const wrap = document.getElementById("debate-source-preview-wrap");
+  return !!(
+    wrap &&
+    isAgonVisibleElement(wrap) &&
+    wrap.querySelector("#debate-source-yt-container")
+  );
+}
+
 function setAgonDebateSourceBottomFill(value) {
   const next = Math.max(0, Math.round(Number(value) || 0));
   if (Math.abs(next - agonDebateSourceBottomFillPx) < 1) return;
@@ -32502,6 +32511,10 @@ function updateAgonStandaloneBottomSurfaceFill() {
   const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
   const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
   const minimumBottomFill = Math.max(cssSafeBottomFill, legacyBottomFill);
+  if (hasAgonDebateYouTubeSourcePreview()) {
+    setAgonDebateSourceBottomFill(0);
+    return;
+  }
   const surface = getAgonDebateBottomSurface();
   const viewportBottom = getAgonViewportBottomY();
   if (!surface || !viewportBottom) {

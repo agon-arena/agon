@@ -23596,3 +23596,25 @@ body.page-create-mobile .create-card .create-submit-helper {
     margin-bottom: calc(var(--agon-debate-legacy-media-shift-y, 0px) + 42px) !important;
   }
 }
+
+/* YouTube page débat mobile : ne pas appliquer l'extension de hauteur réservée
+   aux Open Graph/images, sinon un grand vide apparaît sous la vidéo. */
+@media (max-width: 768px), (display-mode: standalone) {
+  body.page-debate #debate-source-preview-wrap:has(#debate-source-yt-container),
+  body.page-debate .debate-source-preview-wrap:has(#debate-source-yt-container) {
+    aspect-ratio: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin-bottom: 8px !important;
+    overflow: visible !important;
+    --agon-debate-source-image-bottom-fill: 0px !important;
+  }
+
+  body.page-debate #debate-source-preview-wrap:has(#debate-source-yt-container) #debate-source-yt-container,
+  body.page-debate .debate-source-preview-wrap:has(#debate-source-yt-container) #debate-source-yt-container,
+  body.page-debate #debate-source-preview-wrap:has(#debate-source-yt-container) .debate-card-media-youtube,
+  body.page-debate .debate-source-preview-wrap:has(#debate-source-yt-container) .debate-card-media-youtube {
+    margin-bottom: 0 !important;
+  }
+}
