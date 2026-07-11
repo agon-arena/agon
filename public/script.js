@@ -7363,7 +7363,6 @@ function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
     return buildIndexSourcePreviewLoadingCardHtml(debateId);
   }
 
-  const imageAlreadyLoaded = hasLoadedIndexOpenGraphImage(image);
   const safeDebateId = escapeAttribute(debateId);
   const title = normalizedPreview.title || d.question || "Image de la source";
   const clickAttr = safeDebateId
@@ -7374,20 +7373,14 @@ function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
     <div class="debate-card-media debate-card-media-local-image debate-card-media-community-source-image"${clickAttr}>
       <div
         class="debate-card-local-image-shell debate-card-community-source-image-shell"
-        data-index-og-image-shell
-        data-image-src="${escapeAttribute(image)}"
-        ${imageAlreadyLoaded ? 'data-rendered="true"' : ''}
       >
-        <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:${imageAlreadyLoaded ? 'none' : 'flex'}; width:100%; height:100%;">
-          ${buildIndexOpenGraphImageLoadingHtml()}
-        </div>
         <img
           class="debate-card-local-image debate-card-community-source-image"
-          data-index-og-image
-          ${imageAlreadyLoaded ? `src="${escapeAttribute(image)}"` : ''}
+          src="${escapeAttribute(image)}"
           alt="${escapeAttribute(title)}"
+          loading="eager"
           decoding="async"
-          style="display:${imageAlreadyLoaded ? 'block' : 'none'}; opacity:${imageAlreadyLoaded ? '1' : '0'}; transition:opacity 0.18s ease;"
+          onerror="this.onerror=null; this.src='/fondchargement-256.png';"
         >
       </div>
     </div>
@@ -7396,8 +7389,6 @@ function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
 
 function buildIndexCardMediaHtmlForDebate(debate, options = {}) {
   if (isIndexCommunitySourceOnlyCard(debate)) {
-    if (String(currentTypeFilter || "") === "community") return "";
-    if (typeof _agonCloudMode !== "undefined" && _agonCloudMode) return "";
     return buildIndexCommunitySourceImageMediaHtml(debate, options);
   }
   return buildIndexSwipeableMediaHtml(debate, options);

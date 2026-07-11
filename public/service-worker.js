@@ -1,4 +1,4 @@
-const SW_VERSION = "20260709-topbar-cache-fix";
+const SW_VERSION = "20260711-bulles-agon-images-clean";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -8,6 +8,10 @@ const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 // externes de polices/icônes) à chaque ouverture froide de l'app installée.
 function isCacheableStaticAsset(url) {
   return /\.(?:css|js|png|jpe?g|svg|webp|woff2?|ttf)(?:\?.*)?$/i.test(url);
+}
+
+function isMutableStaticAsset(url) {
+  return /\.(?:css|js)(?:\?.*)?$/i.test(url);
 }
 
 function buildRecoveryResponse(targetUrl) {
@@ -107,10 +111,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Assets statiques (CSS/JS/images/polices, même origine ou CDN) : cache-first
-  // avec revalidation en arrière-plan, pour accélérer les ouvertures suivantes
-  // de l'app sans jamais bloquer sur le réseau si une copie est déjà en cache.
+  // CSS/JS : réseau d'abord, cache en secours. Ces fichiers pilotent le rendu
+  // et doivent refléter immédiatement les corrections visuelles après reload.
+  // Images/polices : cache-first avec revalidation arrière-plan pour garder
+  // l'ouverture froide de l'app rapide.
   if (request.method === "GET" && isCacheableStaticAsset(request.url)) {
+    if (isMutableStaticAsset(request.url)) {
+      event.respondWith(
+        caches.open(STATIC_CACHE).then((cache) =>
+          fetch(request, { cache: "no-store" }).then((response) => {
+            if (response && response.ok) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(() => cache.match(request))
+        )
+      );
+      return;
+    }
+
     event.respondWith(
       caches.open(STATIC_CACHE).then((cache) =>
         cache.match(request).then((cached) => {

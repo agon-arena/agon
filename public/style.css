@@ -22948,11 +22948,12 @@ body.page-home-mobile .debate-card.debate-card--community .debate-source-card-im
 .debate-card.debate-card--community .debate-card-media-community-source-image,
 body.page-home .debate-card.debate-card--community .debate-card-media-community-source-image,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-media-community-source-image {
-  margin: 2px 0 0 !important;
+  margin: 2px 0 4px !important;
   border: none !important;
   border-radius: 10px !important;
   background: transparent !important;
   box-shadow: none !important;
+  overflow: hidden !important;
 }
 
 .debate-card.debate-card--community .debate-card-community-source-image-shell,
@@ -22960,14 +22961,36 @@ body.page-home .debate-card.debate-card--community .debate-card-community-source
 body.page-home-mobile .debate-card.debate-card--community .debate-card-community-source-image-shell {
   position: relative !important;
   border-radius: 10px !important;
-  background: #d8dcde !important;
+  background: transparent !important;
+  overflow: hidden !important;
 }
 
-body.page-home .theme-horizontal-inner > .debate-card.debate-card--community .debate-card-media-community-source-image,
-body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community .debate-card-media-community-source-image,
-body.page-home .theme-horizontal-inner > .debate-card.debate-card--community .index-source-preview-loading-card,
-body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community .index-source-preview-loading-card {
-  display: none !important;
+.debate-card.debate-card--community .debate-card-community-source-image,
+body.page-home .debate-card.debate-card--community .debate-card-community-source-image,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-community-source-image {
+  border-radius: 10px !important;
+}
+
+.debate-card.debate-card--community .index-source-preview-loading-card,
+body.page-home .debate-card.debate-card--community .index-source-preview-loading-card,
+body.page-home-mobile .debate-card.debate-card--community .index-source-preview-loading-card {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.debate-card.debate-card--community .index-source-preview-loading-card .debate-card-local-image-shell,
+body.page-home .debate-card.debate-card--community .index-source-preview-loading-card .debate-card-local-image-shell,
+body.page-home-mobile .debate-card.debate-card--community .index-source-preview-loading-card .debate-card-local-image-shell {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.debate-card.debate-card--community .index-source-preview-loading-card .index-social-loading-placeholder,
+body.page-home .debate-card.debate-card--community .index-source-preview-loading-card .index-social-loading-placeholder,
+body.page-home-mobile .debate-card.debate-card--community .index-source-preview-loading-card .index-social-loading-placeholder {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::before {
