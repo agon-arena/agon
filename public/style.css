@@ -18319,6 +18319,12 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 .theme-horizontal-inner > .debate-card:has([data-index-context-toggle][aria-expanded="true"]) {
   background: #ffffff;
 }
+
+.theme-horizontal-inner > .debate-card.debate-card--community.index-card-active,
+.theme-horizontal-inner > .debate-card.debate-card--community.index-card-context-open,
+.theme-horizontal-inner > .debate-card.debate-card--community:has([data-index-context-toggle][aria-expanded="true"]) {
+  background: #e9ebec !important;
+}
 .debate-card.index-card-context-open .debate-card-context {
   cursor: pointer;
 }

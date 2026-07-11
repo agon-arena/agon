@@ -9354,13 +9354,24 @@ function rerenderIndexCardMedia(debateId) {
     existingWrapper.querySelectorAll('.index-media-swipe-shell, .debate-card-media, .debate-source-card, .debate-card-source').forEach((node) => node.remove());
   }
   card.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source').forEach((node) => node.remove());
+  const cardLink = card.querySelector(':scope > .debate-card-link');
+  if (cardLink) {
+    cardLink.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source').forEach((node) => node.remove());
+  }
 
   if (!mediaHtml) {
     refreshIndexCardMediaEnhancements(card);
     return true;
   }
 
-  if (existingWrapper) {
+  if (isIndexCommunitySourceOnlyCard(debate) && cardLink) {
+    const title = cardLink.querySelector(':scope > h2');
+    if (title) {
+      title.insertAdjacentHTML('beforebegin', mediaHtml);
+    } else {
+      cardLink.insertAdjacentHTML('beforeend', mediaHtml);
+    }
+  } else if (existingWrapper) {
     existingWrapper.insertAdjacentHTML('afterbegin', mediaHtml);
   } else {
     const anchor = card.querySelector(':scope > .debate-card-context, :scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
