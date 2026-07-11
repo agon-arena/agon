@@ -22963,6 +22963,13 @@ body.page-home-mobile .debate-card.debate-card--community .debate-card-community
   background: #d8dcde !important;
 }
 
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community .debate-card-media-community-source-image,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community .debate-card-media-community-source-image,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community .index-source-preview-loading-card,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community .index-source-preview-loading-card {
+  display: none !important;
+}
+
 .debate-card.debate-card--community .index-card-media-with-title::before {
   background: linear-gradient(to top, transparent, #e9ebec) !important;
 }

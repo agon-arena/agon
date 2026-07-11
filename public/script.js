@@ -7396,6 +7396,8 @@ function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
 
 function buildIndexCardMediaHtmlForDebate(debate, options = {}) {
   if (isIndexCommunitySourceOnlyCard(debate)) {
+    if (String(currentTypeFilter || "") === "community") return "";
+    if (typeof _agonCloudMode !== "undefined" && _agonCloudMode) return "";
     return buildIndexCommunitySourceImageMediaHtml(debate, options);
   }
   return buildIndexSwipeableMediaHtml(debate, options);
