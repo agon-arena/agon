@@ -7923,15 +7923,35 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   res.json({ ok: true, inserted: rows.length });
 });
 
+// Un simple ORDER BY published_at + LIMIT 200 laisse les onglets Gauche/Droite du front
+// (cf. orientationClass dans autres-sources.html) vides dès que les sources généralistes
+// à fort débit (Le Parisien, BFMTV, La Dépêche...) dominent la fenêtre récente : elles
+// représentent la majorité du volume collecté, donc la totalité des 200 lignes les plus
+// récentes peut être généraliste. On exclut donc le généraliste de cette route : deux
+// requêtes bornées (gauche + droite), fusionnées et dédupliquées, sans dépasser le budget
+// de lecture de l'ancien LIMIT 200 (cf. OPINION_ARTICLES_RETENTION_DAYS et l'incident de
+// quota Supabase du 20/06/2026).
+const OPINION_ARTICLES_LEAN_LIMIT = 100;
+
 app.get("/api/opinion-articles", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("opinion_articles")
-      .select("*")
-      .order("published_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    res.json({ articles: data || [] });
+    // Un query builder Supabase est mutable : le réutiliser pour deux requêtes lancées
+    // en parallèle (Promise.all) fait que les filtres se marchent dessus. D'où la factory,
+    // qui repart d'un builder neuf à chaque appel.
+    const table = () => supabase.from("opinion_articles").select("*").order("published_at", { ascending: false });
+    const [left, right] = await Promise.all([
+      table().or("orientation.ilike.%gauche%,orientation.ilike.%ecolog%,orientation.ilike.%écolog%").limit(OPINION_ARTICLES_LEAN_LIMIT),
+      table().ilike("orientation", "%droite%").limit(OPINION_ARTICLES_LEAN_LIMIT)
+    ]);
+    if (left.error) throw new Error(left.error.message);
+    if (right.error) throw new Error(right.error.message);
+
+    const byId = new Map();
+    for (const row of [...(left.data || []), ...(right.data || [])]) {
+      byId.set(row.id, row);
+    }
+    const articles = [...byId.values()].sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+    res.json({ articles });
   } catch (error) {
     res.status(500).json({ articles: [], error: error.message });
   }
