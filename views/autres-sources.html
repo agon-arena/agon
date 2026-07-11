@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260710-autres-sources-tighter-cards">
+  <link rel="stylesheet" href="/style.min.css?v=20260711-video-modal">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -68,6 +68,12 @@
     </ul>
   </section>
 </main>
+<div class="tribunes-video-modal" id="tribunes-video-modal" role="dialog" aria-modal="true" aria-label="Lecture de la vidéo">
+  <div class="tribunes-video-modal-inner">
+    <button type="button" class="tribunes-video-modal-close" id="tribunes-video-modal-close" aria-label="Fermer">✕</button>
+    <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
+  </div>
+</div>
 <script src="/script.min.js?v=20260710-source-preview-image" defer></script>
 <script>
 (function() {
@@ -127,6 +133,64 @@
     return 'center';
   }
 
+  // Lecture des vidéos "Autres sources" directement dans la page, sans quitter le site.
+  // Purement client (iframe YouTube) : ne touche jamais Supabase, ne coûte donc rien sur
+  // le budget Disk IO/egress de la base — seul le clic charge le player, pas le rendu de
+  // la liste (pas d'iframe préchargée pour chaque carte).
+  function getYouTubeVideoId(url) {
+    if (!url) return '';
+    try {
+      var parsed = new URL(url);
+      var hostname = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      if (hostname === 'youtu.be') {
+        return parsed.pathname.split('/').filter(Boolean)[0] || '';
+      }
+      if (hostname === 'youtube.com' || hostname === 'm.youtube.com') {
+        if (parsed.pathname === '/watch') return parsed.searchParams.get('v') || '';
+        var parts = parsed.pathname.split('/').filter(Boolean);
+        if (parts.length && ['embed', 'shorts', 'live'].indexOf(parts[0]) !== -1) return parts[1] || '';
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  var videoModal = document.getElementById('tribunes-video-modal');
+  var videoModalFrameWrap = document.getElementById('tribunes-video-modal-frame-wrap');
+  var videoModalClose = document.getElementById('tribunes-video-modal-close');
+
+  function openVideoModal(videoId) {
+    if (!videoId || !videoModal || !videoModalFrameWrap) return;
+    var iframe = document.createElement('iframe');
+    iframe.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(videoId) + '?autoplay=1&rel=0&modestbranding=1&playsinline=1';
+    iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+    iframe.allowFullscreen = true;
+    iframe.title = 'Lecteur vidéo';
+    videoModalFrameWrap.innerHTML = '';
+    videoModalFrameWrap.appendChild(iframe);
+    videoModal.classList.add('open');
+    document.body.classList.add('index-background-suspended');
+  }
+
+  function closeVideoModal() {
+    if (!videoModal) return;
+    videoModal.classList.remove('open');
+    // Vide l'iframe pour arrêter réellement la lecture (masquer seul laisserait le son tourner).
+    if (videoModalFrameWrap) videoModalFrameWrap.innerHTML = '';
+    document.body.classList.remove('index-background-suspended');
+  }
+
+  if (videoModalClose) videoModalClose.addEventListener('click', closeVideoModal);
+  if (videoModal) {
+    videoModal.addEventListener('click', function(event) {
+      if (event.target === videoModal) closeVideoModal();
+    });
+  }
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && videoModal && videoModal.classList.contains('open')) closeVideoModal();
+  });
+
   function formatDate(iso) {
     try {
       return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -162,10 +226,17 @@
       : '';
     var dateLabel = formatDate(article.published_at);
     var dateIso = formatDateMachine(article.published_at);
+    var videoId = article.type === 'youtube' ? getYouTubeVideoId(article.link) : '';
+    var videoAttr = videoId ? ' data-video-id="' + escapeHtml(videoId) + '"' : '';
+    var playBadge = videoId ? '<div class="tribunes-play-badge" aria-hidden="true"></div>' : '';
+    var titleClick = videoId
+      ? ' onclick="event.preventDefault(); openVideoModal(this.dataset.videoId)"'
+      : '';
     return '' +
-      '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '" role="link" tabindex="0">' +
+      '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '"' + videoAttr + ' role="link" tabindex="0">' +
         '<div class="tribunes-thumb tribunes-thumb-loading">' +
           newBadge +
+          playBadge +
           '<div class="tribunes-thumb-loader" aria-label="Chargement de l’image">' +
             '<img class="tribunes-thumb-loader-img" src="/sablier-96.png" alt="">' +
             '<span>Chargement de l’image…</span>' +
@@ -179,7 +250,7 @@
             '</div>' +
             (dateLabel ? '<time class="tribunes-date" datetime="' + escapeHtml(dateIso) + '">' + escapeHtml(dateLabel) + '</time>' : '') +
           '</div>' +
-          '<a class="tribunes-title" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(article.title) + '</a>' +
+          '<a class="tribunes-title" href="' + escapeHtml(article.link) + '"' + videoAttr + (videoId ? '' : ' target="_blank" rel="noopener noreferrer"') + titleClick + '>' + escapeHtml(article.title) + '</a>' +
           summary +
           '<div class="tribunes-arena-actions">' +
             '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir une arène</a>' +
@@ -265,7 +336,9 @@
   }
 
   function openCardArticle(card) {
-    var link = card && card.dataset ? card.dataset.link : '';
+    if (!card || !card.dataset) return;
+    if (card.dataset.videoId) { openVideoModal(card.dataset.videoId); return; }
+    var link = card.dataset.link;
     if (!link) return;
     window.open(link, '_blank', 'noopener,noreferrer');
   }
