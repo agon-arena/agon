@@ -22945,23 +22945,22 @@ body.page-home-mobile .debate-card.debate-card--community .debate-source-card-im
   box-shadow: none !important;
 }
 
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card {
+.debate-card.debate-card--community .debate-card-media-community-source-image,
+body.page-home .debate-card.debate-card--community .debate-card-media-community-source-image,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-media-community-source-image {
   margin: 2px 0 0 !important;
+  border: none !important;
   border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body {
-  display: none !important;
-}
-
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap {
+.debate-card.debate-card--community .debate-card-community-source-image-shell,
+body.page-home .debate-card.debate-card--community .debate-card-community-source-image-shell,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-community-source-image-shell {
+  position: relative !important;
   border-radius: 10px !important;
+  background: #d8dcde !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::before {
