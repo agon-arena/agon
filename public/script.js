@@ -33306,6 +33306,7 @@ try {
     setCurrentCategoryFilters,
     setDebateColumnFocus,
     setDebateViewMode,
+    setAgonCloudMode,
     setIndexMobileTypeFilter,
     setPoliticalCloudGroup,
     shareIndexDebateByEmail,

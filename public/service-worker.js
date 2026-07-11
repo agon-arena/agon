@@ -1,4 +1,4 @@
-const SW_VERSION = "20260711-bulles-agon-dedupe";
+const SW_VERSION = "20260711-bulles-agon-loader-fit";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

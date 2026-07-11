@@ -22997,6 +22997,14 @@ body.page-home .debate-card.debate-card--community .index-source-preview-loading
 body.page-home-mobile .debate-card.debate-card--community .index-source-preview-loading-card .index-social-loading-placeholder {
   background: transparent !important;
   box-shadow: none !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::before {
