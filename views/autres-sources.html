@@ -12,13 +12,68 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260711-theme-carousels">
+  <link rel="stylesheet" href="/style.min.css?v=20260712-header-always-visible">
+  <style>
+    .tribunes-page-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      margin: -16px -16px 0;
+      padding: 16px 16px 12px;
+      background: #dbe5e1;
+      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
+      border-radius: 8px 8px 0 0;
+    }
+    .tribunes-page-header h1,
+    .tribunes-page-header p {
+      display: block !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    .tribunes-page-header #tribunes-filter-switch,
+    .tribunes-page-header .tribunes-filters-row {
+      display: flex !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    .tribunes-page-header + .tribunes-list {
+      margin-top: 14px;
+    }
+    body.page-tribunes.in-iframe {
+      overflow-x: hidden;
+    }
+    body.page-tribunes.in-iframe .about-page-shell {
+      display: block !important;
+      width: min(100% - 16px, 820px) !important;
+      min-height: auto !important;
+      margin: 24px auto !important;
+    }
+    body.page-tribunes.in-iframe .about-panel {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    body.page-tribunes.in-iframe .tribunes-list,
+    body.page-tribunes.in-iframe .tribunes-theme-section,
+    body.page-tribunes.in-iframe .tribunes-carousel-wrap,
+    body.page-tribunes.in-iframe .tribunes-carousel {
+      max-width: 100%;
+      min-width: 0;
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script>
+    // Les autres pages du site posent ce marqueur pour signaler qu'elles sont bien
+    // arrivées ; autres-sources.html ne le faisait pas, ce qui peut faire croire au
+    // parent (modale iframe) que le chargement est resté bloqué alors que la page est
+    // affichée — et masquer titre + filtres derrière l'overlay "chargement plus long
+    // que prévu" (cf. resolveStuckDebateIframeParentLoading côté script.js).
+    window.__agonPageArrivalReady = true;
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
     document.addEventListener('DOMContentLoaded', function(){
       if (window.self !== window.top) {
@@ -40,24 +95,26 @@
 </header>
 <main class="about-page-shell">
   <section class="about-panel">
-    <h1>Autres sources</h1>
-    <p>Articles qui n'ont pas (encore) donné lieu à une arène sur Agôn.</p>
+    <div class="tribunes-page-header">
+      <h1>Autres sources</h1>
+      <p>Articles qui n'ont pas (encore) donné lieu à une arène sur Agôn.</p>
 
-    <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
-      <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
-      <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Général</button>
-      <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
-    </div>
+      <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
+        <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
+        <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Général</button>
+        <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
+      </div>
 
-    <div class="tribunes-filters-row">
-      <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
-        <option value="">Tous les médias</option>
-      </select>
-      <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
-        <option value="">Articles et vidéos</option>
-        <option value="article">Articles seulement</option>
-        <option value="youtube">Vidéos seulement</option>
-      </select>
+      <div class="tribunes-filters-row">
+        <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
+          <option value="">Tous les médias</option>
+        </select>
+        <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
+          <option value="">Articles et vidéos</option>
+          <option value="article">Articles seulement</option>
+          <option value="youtube">Vidéos seulement</option>
+        </select>
+      </div>
     </div>
 
     <div class="tribunes-list" id="tribunes-list">
@@ -81,6 +138,7 @@
   var currentFilter = 'mixed';
   var currentMedia = '';
   var currentType = '';
+  var initialHeaderScrollRestored = false;
 
   // Thématique dérivée du champ orientation (ex. "gauche / investigation" -> investigation),
   // dont le deuxième segment décrit souvent un genre éditorial plutôt qu'un positionnement
@@ -498,6 +556,16 @@
     render(computeFiltered());
   }
 
+  function restoreInitialHeaderPosition() {
+    if (initialHeaderScrollRestored) return;
+    initialHeaderScrollRestored = true;
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      });
+    });
+  }
+
   var switchEl = document.getElementById('tribunes-filter-switch');
   if (switchEl) {
     switchEl.addEventListener('click', function(event) {
@@ -523,7 +591,7 @@
 
   fetch('/api/opinion-articles', { cache: 'no-store' })
     .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-    .then(function(data) { allArticles = Array.isArray(data.articles) ? data.articles : []; applyFilter(); })
+    .then(function(data) { allArticles = Array.isArray(data.articles) ? data.articles : []; applyFilter(); restoreInitialHeaderPosition(); })
     .catch(function() { list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>'; });
 })();
 </script>
