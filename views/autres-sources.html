@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260712-header-always-visible">
+  <link rel="stylesheet" href="/style.min.css?v=20260712-cards-edge6">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -403,8 +403,21 @@
       .tribunes-carousel-dot--pill:not(.is-active) {
         width: 14px;
       }
+      .tribunes-carousel-wrap {
+        margin-left: -24px;
+        margin-right: -24px;
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      body.page-tribunes.in-iframe .tribunes-carousel-wrap {
+        max-width: none;
+      }
+      .tribunes-carousel {
+        padding-left: 0;
+        padding-right: 0;
+      }
       .tribunes-carousel .tribunes-item {
-        width: min(82vw, 330px);
+        width: 100%;
       }
       .tribunes-thumb {
         aspect-ratio: 1.45 / 1;
