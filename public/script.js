@@ -7389,6 +7389,8 @@ function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
 
 function buildIndexCardMediaHtmlForDebate(debate, options = {}) {
   if (isIndexCommunitySourceOnlyCard(debate)) {
+    if (String(currentTypeFilter || "") === "community") return "";
+    if (typeof _agonCloudMode !== "undefined" && _agonCloudMode) return "";
     return buildIndexCommunitySourceImageMediaHtml(debate, options);
   }
   return buildIndexSwipeableMediaHtml(debate, options);
@@ -7445,7 +7447,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
 
   return `
-    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${communitySourceOnlyCard ? ' debate-card--community-source' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
       <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
