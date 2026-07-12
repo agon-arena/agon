@@ -29,6 +29,7 @@
       display: block !important;
       opacity: 1 !important;
       visibility: visible !important;
+      text-align: center !important;
     }
     .tribunes-page-header #tribunes-filter-switch,
     .tribunes-page-header .tribunes-filters-row {
@@ -41,18 +42,28 @@
     }
     body.page-tribunes.in-iframe {
       overflow-x: hidden;
+      background: #dbe5e1 !important;
     }
     body.page-tribunes.in-iframe .about-page-shell {
       display: block !important;
-      width: min(100% - 16px, 820px) !important;
+      width: 100vw !important;
+      max-width: none !important;
       min-height: auto !important;
-      margin: 24px auto !important;
+      margin: 0 0 24px !important;
     }
     body.page-tribunes.in-iframe .about-panel {
       box-sizing: border-box;
       width: 100%;
       max-width: 100%;
       overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    body.page-tribunes.in-iframe .tribunes-page-header {
+      padding-top: 6px;
+      border-bottom: 0;
+      border-radius: 0;
     }
     body.page-tribunes.in-iframe .tribunes-list,
     body.page-tribunes.in-iframe .tribunes-theme-section,
@@ -60,6 +71,311 @@
     body.page-tribunes.in-iframe .tribunes-carousel {
       max-width: 100%;
       min-width: 0;
+    }
+    body.page-tribunes.in-iframe .tribunes-list {
+      border: 0;
+      border-radius: 0;
+    }
+    .tribunes-theme-section {
+      padding-top: 4px;
+    }
+    .tribunes-theme-section + .tribunes-theme-section {
+      padding-top: 14px;
+    }
+    .tribunes-theme-heading {
+      position: relative;
+      z-index: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 0;
+      margin: 0 -8px 12px;
+      padding: 10px 58px 12px;
+      overflow: visible;
+      box-sizing: border-box;
+    }
+    .tribunes-theme-heading::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(50% - 50vw);
+      right: calc(50% - 50vw);
+      z-index: -1;
+      background:
+        linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
+        linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
+        #e9ebec;
+    }
+    .tribunes-theme-heading h2 {
+      margin: 0;
+      color: #000000;
+      font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 900;
+      line-height: 0.98;
+      letter-spacing: 0;
+      text-align: center;
+      text-transform: uppercase;
+      text-shadow: none;
+    }
+    .tribunes-theme-heading .tribunes-carousel-arrow {
+      position: static;
+      top: auto;
+      left: auto;
+      right: auto;
+      z-index: 2;
+      flex: 0 0 auto;
+      display: flex;
+      width: 32px;
+      height: 32px;
+      border: 1px solid rgba(17, 24, 39, 0.22);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #111827;
+      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.14);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+      transform: none;
+    }
+    .tribunes-theme-heading .tribunes-carousel-arrow:hover,
+    .tribunes-theme-heading .tribunes-carousel-arrow:focus-visible {
+      background: #ffffff;
+      color: #000000;
+    }
+    .tribunes-theme-heading .tribunes-row-jump-start {
+      position: static;
+      z-index: 2;
+      flex: 0 0 auto;
+      border: none;
+      background: transparent;
+      color: rgba(17, 24, 39, 0.44);
+      cursor: pointer;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 25px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.05em;
+      padding: 2px 3px;
+      transition: color 0.15s ease;
+    }
+    .tribunes-theme-heading .tribunes-row-jump-start:hover,
+    .tribunes-theme-heading .tribunes-row-jump-start:focus-visible {
+      color: #000000;
+    }
+    .tribunes-theme-heading .tribunes-carousel-arrow.is-hidden,
+    .tribunes-theme-heading .tribunes-row-jump-start.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .tribunes-carousel-wrap > .tribunes-carousel-arrow.is-hidden {
+      display: none !important;
+    }
+    .tribunes-carousel-wrap::before,
+    .tribunes-carousel-wrap::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      z-index: 2;
+      width: clamp(54px, 7vw, 112px);
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.16s ease;
+    }
+    .tribunes-carousel-wrap::before {
+      left: 0;
+      background: linear-gradient(
+        to right,
+        rgba(219, 229, 225, 0.98) 0%,
+        rgba(219, 229, 225, 0.72) 34%,
+        rgba(219, 229, 225, 0.26) 70%,
+        rgba(219, 229, 225, 0) 100%
+      );
+    }
+    .tribunes-carousel-wrap::after {
+      right: 0;
+      background: linear-gradient(
+        to left,
+        rgba(219, 229, 225, 0.98) 0%,
+        rgba(219, 229, 225, 0.72) 34%,
+        rgba(219, 229, 225, 0.26) 70%,
+        rgba(219, 229, 225, 0) 100%
+      );
+    }
+    .tribunes-theme-section.tribunes-row-at-start .tribunes-carousel-wrap::before,
+    .tribunes-theme-section.tribunes-row-at-end .tribunes-carousel-wrap::after,
+    .tribunes-theme-section:not(.tribunes-row-can-scroll) .tribunes-carousel-wrap::before,
+    .tribunes-theme-section:not(.tribunes-row-can-scroll) .tribunes-carousel-wrap::after {
+      opacity: 0;
+    }
+    .tribunes-carousel-dots {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 22px;
+      width: 100%;
+      min-height: 10px;
+      margin: 5px auto 12px;
+    }
+    .tribunes-carousel-dot {
+      position: relative;
+      width: 12px;
+      height: 12px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(36, 48, 56, 0.28);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.34);
+      opacity: 0.76;
+      transform: scale(1);
+      transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
+      cursor: pointer;
+    }
+    .tribunes-carousel-dot::before {
+      content: "";
+      position: absolute;
+      top: -4px;
+      right: -12px;
+      bottom: -12px;
+      left: -12px;
+    }
+    .tribunes-carousel-dot.is-active {
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 0 0 2px rgba(36, 48, 56, 0.32);
+      opacity: 1 !important;
+      transform: scale(1.35);
+    }
+    .tribunes-carousel-dot--fade-1 {
+      opacity: 0.55;
+    }
+    .tribunes-carousel-dot--fade-2 {
+      opacity: 0.32;
+    }
+    .tribunes-carousel-dot--fade-3 {
+      opacity: 0.1;
+    }
+    .tribunes-carousel-dot--pill:not(.is-active) {
+      width: 22px;
+      border-radius: 999px;
+    }
+    .tribunes-carousel {
+      gap: 14px;
+    }
+    .tribunes-carousel .tribunes-item {
+      width: clamp(320px, 24vw, 390px);
+    }
+    .tribunes-thumb {
+      aspect-ratio: 1.65 / 1;
+    }
+    .tribunes-item-body {
+      min-height: 218px;
+      align-content: start;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 7px;
+      padding: 11px 14px 12px;
+    }
+    .tribunes-meta {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+    }
+    .tribunes-date {
+      justify-self: end;
+    }
+    .tribunes-image-date {
+      position: absolute;
+      top: 6px;
+      right: 7px;
+      z-index: 5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 16px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.78);
+      color: #000000;
+      font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      box-shadow: none;
+      white-space: nowrap;
+    }
+    .tribunes-thumb .debate-card-top-badges {
+      top: 8px;
+      right: auto;
+      left: 8px;
+    }
+    .tribunes-title {
+      font-size: 1.28rem;
+      line-height: 1.02;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-height: 3.1em;
+    }
+    .tribunes-summary {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.32;
+      max-height: 3.96em;
+    }
+    .tribunes-arena-actions {
+      align-self: end;
+      margin-top: 0;
+      padding-top: 8px;
+    }
+    @media (max-width: 520px) {
+      .tribunes-theme-heading {
+        margin-left: -10px;
+        margin-right: -10px;
+        padding: 9px 44px 10px;
+      }
+      .tribunes-theme-heading h2 {
+        font-size: clamp(22px, 7vw, 30px);
+      }
+      .tribunes-theme-heading .tribunes-carousel-arrow {
+        width: 28px;
+        height: 28px;
+        font-size: 20px;
+      }
+      .tribunes-theme-heading .tribunes-row-jump-start {
+        font-size: 21px;
+        padding-left: 2px;
+        padding-right: 2px;
+      }
+      .tribunes-carousel-dots {
+        gap: 18px;
+        margin-top: 4px;
+        margin-bottom: 10px;
+      }
+      .tribunes-carousel-dot {
+        width: 7px;
+        height: 7px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+      }
+      .tribunes-carousel-dot--pill:not(.is-active) {
+        width: 14px;
+      }
+      .tribunes-carousel .tribunes-item {
+        width: min(82vw, 330px);
+      }
+      .tribunes-thumb {
+        aspect-ratio: 1.45 / 1;
+      }
+      .tribunes-item-body {
+        min-height: 238px;
+      }
     }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -264,6 +580,16 @@
     }
   }
 
+  function formatBadgeDate(iso) {
+    try {
+      var date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  }
+
   // Même seuil que isDebateNew() côté script.js (9h depuis publication).
   var NEW_BADGE_DURATION_MS = 9 * 60 * 60 * 1000;
 
@@ -280,7 +606,7 @@
     var newBadge = isArticleNew(article)
       ? '<div class="debate-card-top-badges"><div class="debate-card-new-badge">Nouveau</div></div>'
       : '';
-    var dateLabel = formatDate(article.published_at);
+    var dateBadgeLabel = formatBadgeDate(article.published_at);
     var dateIso = formatDateMachine(article.published_at);
     var videoId = article.type === 'youtube' ? getYouTubeVideoId(article.link) : '';
     var videoAttr = videoId ? ' data-video-id="' + escapeHtml(videoId) + '"' : '';
@@ -292,19 +618,19 @@
       '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '"' + videoAttr + ' role="link" tabindex="0">' +
         '<div class="tribunes-thumb tribunes-thumb-loading">' +
           newBadge +
+          (dateBadgeLabel ? '<time class="tribunes-image-date" datetime="' + escapeHtml(dateIso) + '">' + escapeHtml(dateBadgeLabel) + '</time>' : '') +
           playBadge +
           '<div class="tribunes-thumb-loader" aria-label="Chargement de l’image">' +
             '<img class="tribunes-thumb-loader-img" src="/sablier-96.png" alt="">' +
             '<span>Chargement de l’image…</span>' +
           '</div>' +
-          '<img class="tribunes-thumb-img" alt="">' +
+          '<img class="tribunes-thumb-img" loading="lazy" decoding="async" alt="">' +
         '</div>' +
         '<div class="tribunes-item-body">' +
           '<div class="tribunes-meta">' +
             '<div class="tribunes-meta-main">' +
               '<strong>' + escapeHtml(article.source) + '</strong>' + badge +
             '</div>' +
-            (dateLabel ? '<time class="tribunes-date" datetime="' + escapeHtml(dateIso) + '">' + escapeHtml(dateLabel) + '</time>' : '') +
           '</div>' +
           '<a class="tribunes-title" href="' + escapeHtml(article.link) + '"' + videoAttr + (videoId ? '' : ' target="_blank" rel="noopener noreferrer"') + titleClick + '>' + escapeHtml(article.title) + '</a>' +
           summary +
@@ -378,7 +704,141 @@
         if (!row) return;
         var amount = Math.max(240, Math.round(row.clientWidth * 0.9));
         row.scrollBy({ left: btn.classList.contains('tribunes-carousel-arrow-left') ? -amount : amount, behavior: 'smooth' });
+        scheduleCarouselStateUpdate(row);
       });
+    });
+    list.querySelectorAll('.tribunes-row-jump-start').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var row = document.getElementById(btn.dataset.row);
+        if (!row) return;
+        row.scrollTo({ left: 0, behavior: 'smooth' });
+        scheduleCarouselStateUpdate(row);
+      });
+    });
+    list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
+      row.__tribunesControls = collectCarouselControls(row);
+      row.addEventListener('scroll', function() { scheduleCarouselStateUpdate(row); }, { passive: true });
+      updateCarouselArrowState(row);
+      syncCarouselDots(row);
+    });
+  }
+
+  function collectCarouselControls(row) {
+    var section = row && row.closest('.tribunes-theme-section');
+    if (!section || !row.id) return null;
+    var selector = '[data-row="' + cssEscape(row.id) + '"]';
+    return {
+      section: section,
+      arrows: Array.prototype.slice.call(section.querySelectorAll('.tribunes-carousel-arrow' + selector)),
+      jumpButtons: Array.prototype.slice.call(section.querySelectorAll('.tribunes-row-jump-start' + selector)),
+      dots: section.querySelector('.tribunes-carousel-dots' + selector)
+    };
+  }
+
+  function scheduleCarouselStateUpdate(row) {
+    if (!row) return;
+    if (row.__tribunesScrollRaf) return;
+    row.__tribunesScrollRaf = requestAnimationFrame(function() {
+      row.__tribunesScrollRaf = 0;
+      updateCarouselArrowState(row);
+    });
+  }
+
+  function updateCarouselArrowState(row) {
+    if (!row || !row.id) return;
+    var controls = row.__tribunesControls || collectCarouselControls(row);
+    row.__tribunesControls = controls;
+    var section = controls && controls.section ? controls.section : (row.closest('.tribunes-theme-section') || list);
+    var maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+    var scrollLeft = Math.min(Math.max(0, row.scrollLeft), maxScrollLeft);
+    var edgeTolerance = 12;
+    var canScroll = maxScrollLeft > edgeTolerance;
+    var isAtStart = scrollLeft <= edgeTolerance;
+    var isAtEnd = maxScrollLeft - scrollLeft <= edgeTolerance;
+    section.classList.toggle('tribunes-row-can-scroll', canScroll);
+    section.classList.toggle('tribunes-row-at-start', !canScroll || isAtStart);
+    section.classList.toggle('tribunes-row-at-end', !canScroll || isAtEnd);
+    (controls && controls.arrows ? controls.arrows : []).forEach(function(btn) {
+      var hideLeft = btn.classList.contains('tribunes-carousel-arrow-left') && (!canScroll || isAtStart);
+      var hideRight = btn.classList.contains('tribunes-carousel-arrow-right') && (!canScroll || isAtEnd);
+      btn.classList.toggle('is-hidden', hideLeft || hideRight);
+      btn.setAttribute('aria-hidden', hideLeft || hideRight ? 'true' : 'false');
+      btn.tabIndex = hideLeft || hideRight ? -1 : 0;
+    });
+    (controls && controls.jumpButtons ? controls.jumpButtons : []).forEach(function(btn) {
+      var hidden = !canScroll || isAtStart;
+      btn.classList.toggle('is-hidden', hidden);
+      btn.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+      btn.tabIndex = hidden ? -1 : 0;
+    });
+    syncCarouselDots(row, { lightweight: true });
+  }
+
+  function updateAllCarouselArrowStates() {
+    list.querySelectorAll('.tribunes-carousel').forEach(updateCarouselArrowState);
+  }
+
+  var allCarouselStateRaf = 0;
+  function scheduleAllCarouselArrowStates() {
+    if (allCarouselStateRaf) return;
+    allCarouselStateRaf = requestAnimationFrame(function() {
+      allCarouselStateRaf = 0;
+      updateAllCarouselArrowStates();
+    });
+  }
+
+  window.addEventListener('resize', scheduleAllCarouselArrowStates, { passive: true });
+
+  function syncCarouselDots(row, options) {
+    if (!row || !row.id) return;
+    var section = row.closest('.tribunes-theme-section');
+    if (!section) return;
+    options = options || {};
+    var controls = row.__tribunesControls || collectCarouselControls(row);
+    row.__tribunesControls = controls;
+    var dots = controls && controls.dots ? controls.dots : section.querySelector('.tribunes-carousel-dots[data-row="' + cssEscape(row.id) + '"]');
+    var cards = [];
+    if (!options.lightweight || !dots) cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+    var cardCount = Number(row.dataset.carouselTotal || 0) || Number(dots && dots.dataset.count || 0) || cards.length;
+    var maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+    if (cardCount <= 1 || maxScrollLeft <= 12) {
+      if (dots) dots.style.display = 'none';
+      return;
+    }
+    if (!dots) return;
+    dots.style.display = '';
+    var dotCount = Math.min(10, Math.max(2, cardCount));
+    if (Number(dots.dataset.count || '0') !== dotCount) {
+      dots.dataset.count = String(dotCount);
+      dots.innerHTML = '';
+      for (var i = 0; i < dotCount; i += 1) {
+        var dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'tribunes-carousel-dot';
+        dot.setAttribute('aria-label', 'Aller à la page ' + (i + 1));
+        dot.dataset.index = String(i);
+        dot.addEventListener('click', function() {
+          var index = Number(this.dataset.index || '0');
+          var currentMaxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+          var targetLeft = dotCount <= 1 ? 0 : Math.round(index * currentMaxScrollLeft / (dotCount - 1));
+          row.scrollTo({ left: targetLeft, behavior: 'smooth' });
+          scheduleCarouselStateUpdate(row);
+        });
+        dots.appendChild(dot);
+      }
+      var dotEls = Array.prototype.slice.call(dots.querySelectorAll('.tribunes-carousel-dot'));
+      if (dotCount >= 4) {
+        dotEls[dotCount - 1].classList.add('tribunes-carousel-dot--fade-3', 'tribunes-carousel-dot--pill');
+        if (dotCount >= 5) dotEls[dotCount - 2].classList.add('tribunes-carousel-dot--fade-2');
+        if (dotCount >= 6) dotEls[dotCount - 3].classList.add('tribunes-carousel-dot--fade-1');
+      }
+    }
+    var scrollLeft = Math.min(Math.max(0, row.scrollLeft), maxScrollLeft);
+    var activeIndex = maxScrollLeft > 12 ? Math.round(scrollLeft / maxScrollLeft * (dotCount - 1)) : 0;
+    if (dots.dataset.activeIndex === String(activeIndex)) return;
+    dots.dataset.activeIndex = String(activeIndex);
+    dots.querySelectorAll('.tribunes-carousel-dot').forEach(function(dot, index) {
+      dot.classList.toggle('is-active', index === activeIndex);
     });
   }
 
@@ -407,8 +867,10 @@
     return '' +
       '<section class="tribunes-theme-section">' +
         '<div class="tribunes-theme-heading">' +
+          '<button type="button" class="tribunes-row-jump-start is-hidden" data-row="' + rowId + '" aria-label="Revenir au premier article">«</button>' +
+          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left tribunes-heading-arrow tribunes-heading-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents">‹</button>' +
           '<h2>' + escapeHtml(group.label) + '</h2>' +
-          '<span class="tribunes-theme-count">' + group.items.length + '</span>' +
+          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right tribunes-heading-arrow tribunes-heading-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants">›</button>' +
         '</div>' +
         '<div class="tribunes-carousel-wrap">' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents"><i class="fa-solid fa-chevron-left"></i></button>' +
@@ -417,10 +879,15 @@
           '</ul>' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants"><i class="fa-solid fa-chevron-right"></i></button>' +
         '</div>' +
+        '<div class="tribunes-carousel-dots" data-row="' + rowId + '" aria-hidden="true"></div>' +
       '</section>';
   }
 
   function render(articles) {
+    if (previewObserver) {
+      previewObserver.disconnect();
+      previewObserver = null;
+    }
     if (!articles.length) {
       list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>';
       return;
@@ -431,6 +898,8 @@
     list.innerHTML = groupByTheme(articles).map(renderThemeSection).join('');
     attachCardLinkHandlers();
     attachCarouselArrows();
+    requestAnimationFrame(updateAllCarouselArrowStates);
+    setTimeout(updateAllCarouselArrowStates, 120);
 
     list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
       var article = articleByLink[card.dataset.link];
@@ -445,9 +914,20 @@
   // thématique, tout précharger d'un coup gaspillerait des requêtes vers /api/link-preview
   // (limite 120 req/min/IP) et vers les sites d'origine pour des cartes jamais vues.
   var previewObserver = null;
+  var previewCacheByLink = {};
+  var previewRequestByLink = {};
 
   function observeForPreview(card, article) {
     card.__article = article;
+    if (Object.prototype.hasOwnProperty.call(previewCacheByLink, article.link)) {
+      applyPreviewToCard(article, previewCacheByLink[article.link], card);
+      return;
+    }
+    if (article.source_preview) {
+      previewCacheByLink[article.link] = article.source_preview;
+      applyPreviewToCard(article, article.source_preview, card);
+      return;
+    }
     if (!('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
     if (!previewObserver) {
       previewObserver = new IntersectionObserver(function(entries) {
@@ -463,48 +943,71 @@
 
   function fetchPreviewFor(article) {
     if (!article.link) return;
-    fetch('/api/link-preview', {
+    var link = article.link;
+    if (Object.prototype.hasOwnProperty.call(previewCacheByLink, link)) {
+      applyPreviewToCard(article, previewCacheByLink[link]);
+      return;
+    }
+    if (previewRequestByLink[link]) {
+      previewRequestByLink[link].then(function(preview) {
+        applyPreviewToCard(article, preview);
+      });
+      return;
+    }
+    previewRequestByLink[link] = fetch('/api/link-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: article.link })
+      body: JSON.stringify({ url: link })
     })
       .then(function(res) { return res.ok ? res.json() : null; })
       .then(function(data) {
-        var preview = data && data.preview;
-        var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
-        if (preview) {
-          article.source_preview = preview;
-          article.source_image = preview.image || '';
-          var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
-          if (arenaBtn) arenaBtn.href = createArenaHref(article);
-        }
-        if (!li) return;
-        var thumb = li.querySelector('.tribunes-thumb');
-        if (!thumb) return;
-        if (!preview || !preview.image) {
-          thumb.style.display = 'none';
-          return;
-        }
-        var img = thumb.querySelector('.tribunes-thumb-img');
-        if (!img) {
-          thumb.style.display = 'none';
-          return;
-        }
-        thumb.style.display = '';
-        thumb.classList.add('tribunes-thumb-loading');
-        thumb.classList.remove('tribunes-thumb-loaded');
-        img.src = preview.image;
-        img.onload = function() {
-          thumb.classList.remove('tribunes-thumb-loading');
-          thumb.classList.add('tribunes-thumb-loaded');
-        };
-        img.onerror = function() { thumb.style.display = 'none'; };
+        var preview = data && data.preview ? data.preview : null;
+        previewCacheByLink[link] = preview;
+        return preview;
       })
       .catch(function() {
-        var li = list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
-        var thumb = li && li.querySelector('.tribunes-thumb');
-        if (thumb) thumb.style.display = 'none';
+        previewCacheByLink[link] = null;
+        return null;
+      })
+      .then(function(preview) {
+        delete previewRequestByLink[link];
+        applyPreviewToCard(article, preview);
+        return preview;
       });
+  }
+
+  function applyPreviewToCard(article, preview, card) {
+    if (!article || !article.link) return;
+    var li = card || list.querySelector('[data-link="' + cssEscape(article.link) + '"]');
+    if (preview) {
+      article.source_preview = preview;
+      article.source_image = preview.image || '';
+      var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
+      if (arenaBtn) arenaBtn.href = createArenaHref(article);
+    }
+    if (!li) return;
+    var thumb = li.querySelector('.tribunes-thumb');
+    if (!thumb) return;
+    if (!preview || !preview.image) {
+      thumb.style.display = 'none';
+      return;
+    }
+    var img = thumb.querySelector('.tribunes-thumb-img');
+    if (!img) {
+      thumb.style.display = 'none';
+      return;
+    }
+    thumb.style.display = '';
+    if (img.dataset.src === preview.image && thumb.classList.contains('tribunes-thumb-loaded')) return;
+    img.dataset.src = preview.image;
+    thumb.classList.add('tribunes-thumb-loading');
+    thumb.classList.remove('tribunes-thumb-loaded');
+    img.onload = function() {
+      thumb.classList.remove('tribunes-thumb-loading');
+      thumb.classList.add('tribunes-thumb-loaded');
+    };
+    img.onerror = function() { thumb.style.display = 'none'; };
+    img.src = preview.image;
   }
 
   function cssEscape(value) {

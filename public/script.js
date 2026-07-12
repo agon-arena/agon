@@ -4456,7 +4456,9 @@ function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
 function syncDebateIframeModalPageClass(pathname = "") {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
-  modal.classList.toggle("contact-frame-open", String(pathname || "") === "/contact");
+  const safePathname = String(pathname || "");
+  modal.classList.toggle("contact-frame-open", safePathname === "/contact");
+  modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
 }
 
 function syncDebateIframeAiParentAnimationViewport() {
@@ -4793,6 +4795,25 @@ function ensureDebateIframeModal() {
     }
     #debate-iframe-modal.open {
       display: flex;
+    }
+    #debate-iframe-modal.tribunes-frame-open {
+      inset: 0 !important;
+      padding: 0 !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+    }
+    #debate-iframe-modal.tribunes-frame-open.loading {
+      inset: 0 !important;
+    }
+    #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-inner {
+      height: 100vh !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    @supports (height: 100dvh) {
+      #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-inner {
+        height: 100dvh !important;
+      }
     }
     #debate-iframe-modal.loading {
       inset: var(--debate-iframe-modal-top, 0px) 0 0 0;
@@ -7342,11 +7363,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
   const isCommunityCard = !!d.is_community;
-  const communitySourceOnlyCard = isCommunityCard
-    && String(d.source_url || "").trim()
-    && !String(d.image_url || "").trim()
-    && !String(d.video_url || "").trim();
-  const mediaHtml = communitySourceOnlyCard ? "" : buildIndexSwipeableMediaHtml(d, options);
+  const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
   const mediaOutsideLink = !!mediaHtml;
   const prevEpUrl = String(d.previous_episode_url || "").trim();
   const nextEpUrl = String(d.next_episode_url || "").trim();
