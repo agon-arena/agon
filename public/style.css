@@ -23038,6 +23038,57 @@ body.page-home-mobile .debate-card.debate-card--community::after {
   background: none !important;
 }
 
+/* Bulles Agôn : les cartes issues d'une source ne doivent pas repeindre
+   un panneau gris derrière le visuel. */
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:hover,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:focus-within,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:hover,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:focus-within {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source.index-card-active,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source.index-card-context-open,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:has([data-index-context-toggle][aria-expanded="true"]),
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source.index-card-active,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source.index-card-context-open,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:has([data-index-context-toggle][aria-expanded="true"]) {
+  background: transparent !important;
+}
+
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source::before,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source::after,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:hover::before,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:hover::after,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source::before,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source::after,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:hover::before,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:hover::after {
+  background: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner) h2,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner):hover h2,
+body.page-home .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner):focus-within h2,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner) h2,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner):hover h2,
+body.page-home-mobile .theme-horizontal-inner > .debate-card.debate-card--community-source:not(.has-title-banner):focus-within h2 {
+  background: transparent !important;
+  color: #edf2f5 !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.34) !important;
+}
+
 /* Overrides finaux : textes des modales création / ajout idée / barème IA. */
 body.page-debate .argument-form h3,
 body.page-debate .argument-form-body > h3,
