@@ -7338,71 +7338,17 @@ function syncIndexBubbleTrendBadges(root = document) {
   });
 }
 
-function isIndexCommunitySourceOnlyCard(debate) {
-  const d = debate || {};
-  return !!d.is_community
-    && !!String(d.source_url || "").trim()
-    && !String(d.image_url || "").trim()
-    && !String(d.video_url || "").trim();
-}
-
-function buildIndexCommunitySourceImageMediaHtml(debate, options = {}) {
-  const d = debate || {};
-  const debateId = String(d.id || "").trim();
-  const sourceUrl = String(d.source_url || "").trim();
-  if (!sourceUrl) return "";
-
-  const sourcePreview = getResolvedIndexSourcePreview(sourceUrl, d);
-  const normalizedPreview = normalizeSourcePreviewData(sourcePreview, sourceUrl);
-  const image = String(normalizedPreview.image || "").trim();
-
-  if (!image) {
-    if (hasAnyIndexAssociatedMediaOrSource(d) && !d._indexSourcePreviewHydrationDone) {
-      scheduleIndexSourcePreviewHydration(debateId);
-    }
-    return buildIndexSourcePreviewLoadingCardHtml(debateId);
-  }
-
-  const safeDebateId = escapeAttribute(debateId);
-  const title = normalizedPreview.title || d.question || "Image de la source";
-  const clickAttr = safeDebateId
-    ? ` onclick="openIndexDebateFromMedia('${safeDebateId}', event)" style="cursor:pointer;"`
-    : "";
-
-  return `
-    <div class="debate-card-media debate-card-media-local-image debate-card-media-community-source-image"${clickAttr}>
-      <div
-        class="debate-card-local-image-shell debate-card-community-source-image-shell"
-      >
-        <img
-          class="debate-card-local-image debate-card-community-source-image"
-          src="${escapeAttribute(image)}"
-          alt="${escapeAttribute(title)}"
-          loading="eager"
-          decoding="async"
-          onerror="this.onerror=null; this.src='/fondchargement-256.png';"
-        >
-      </div>
-    </div>
-  `;
-}
-
-function buildIndexCardMediaHtmlForDebate(debate, options = {}) {
-  if (isIndexCommunitySourceOnlyCard(debate)) {
-    if (String(currentTypeFilter || "") === "community") return "";
-    if (typeof _agonCloudMode !== "undefined" && _agonCloudMode) return "";
-    return buildIndexCommunitySourceImageMediaHtml(debate, options);
-  }
-  return buildIndexSwipeableMediaHtml(debate, options);
-}
-
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
   const isCommunityCard = !!d.is_community;
-  const communitySourceOnlyCard = isIndexCommunitySourceOnlyCard(d);
-  const mediaHtml = buildIndexCardMediaHtmlForDebate(d, options);
-  const mediaOutsideLink = !!mediaHtml && !communitySourceOnlyCard;
+  const communitySourceOnlyCard = isCommunityCard
+    && String(d.source_url || "").trim()
+    && !String(d.image_url || "").trim()
+    && !String(d.video_url || "").trim();
+  const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
+  const communityInlineSourceMedia = communitySourceOnlyCard && !!mediaHtml;
+  const mediaOutsideLink = !!mediaHtml && !communityInlineSourceMedia;
   const prevEpUrl = String(d.previous_episode_url || "").trim();
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
@@ -7447,7 +7393,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
 
   return `
-    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
+    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}${communityInlineSourceMedia ? ' has-community-inline-source-media' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
       <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
@@ -9349,31 +9295,20 @@ function rerenderIndexCardMedia(debateId) {
   const mediaOptions = card.closest('.similar-debates-results')
     ? { showSwipeHotspots: false, showSourceBadgeWithoutImage: true }
     : {};
-  const mediaHtml = buildIndexCardMediaHtmlForDebate(debate, mediaOptions);
+  const mediaHtml = buildIndexSwipeableMediaHtml(debate, mediaOptions);
 
   const existingWrapper = card.querySelector(':scope > .index-card-media-with-title');
   if (existingWrapper) {
     existingWrapper.querySelectorAll('.index-media-swipe-shell, .debate-card-media, .debate-source-card, .debate-card-source').forEach((node) => node.remove());
   }
   card.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source').forEach((node) => node.remove());
-  const cardLink = card.querySelector(':scope > .debate-card-link');
-  if (cardLink) {
-    cardLink.querySelectorAll(':scope > .index-media-swipe-shell, :scope > .debate-card-media, :scope > .debate-source-card, :scope > .debate-card-source').forEach((node) => node.remove());
-  }
 
   if (!mediaHtml) {
     refreshIndexCardMediaEnhancements(card);
     return true;
   }
 
-  if (isIndexCommunitySourceOnlyCard(debate) && cardLink) {
-    const title = cardLink.querySelector(':scope > h2');
-    if (title) {
-      title.insertAdjacentHTML('beforebegin', mediaHtml);
-    } else {
-      cardLink.insertAdjacentHTML('beforeend', mediaHtml);
-    }
-  } else if (existingWrapper) {
+  if (existingWrapper) {
     existingWrapper.insertAdjacentHTML('afterbegin', mediaHtml);
   } else {
     const anchor = card.querySelector(':scope > .debate-card-context, :scope > .debate-index-context-preview, :scope > .debate-card-bottom-entry, :scope > .debate-card-actions, :scope > .debate-card-footer-actions');
@@ -33308,7 +33243,6 @@ try {
     setCurrentCategoryFilters,
     setDebateColumnFocus,
     setDebateViewMode,
-    setAgonCloudMode,
     setIndexMobileTypeFilter,
     setPoliticalCloudGroup,
     shareIndexDebateByEmail,

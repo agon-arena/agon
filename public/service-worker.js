@@ -1,4 +1,4 @@
-const SW_VERSION = "20260712-bulles-agon-community-restore";
+const SW_VERSION = "20260712-revert-community-card-source-preview";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
