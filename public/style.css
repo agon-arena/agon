@@ -19180,9 +19180,14 @@ body.page-home #debates-list .theme-row-section:first-child {
   width: max-content;
   margin: 0 auto 12px;
   align-self: center;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
+  /* Anneau sombre en plus de la bordure claire : selon la couleur de bulle qui se
+     trouve juste derrière (nuage de tags dynamique), une bordure blanche seule peut
+     se fondre dans le fond et sembler disparaître/recouverte. L'un des deux anneaux
+     (clair ou sombre) reste toujours visible quel que soit le fond. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   /* overflow:hidden met la taille mini flex à 0 : sans flex-shrink:0, la section
      desktop (hauteur figée + cloud rigide) écrase le switch à chaque bascule */
@@ -22105,6 +22110,12 @@ body.page-create-mobile .create-card .create-submit-helper {
   border: 1px solid #e5e7eb;
   border-radius: 999px;
   background: #f3f4f6;
+  /* overflow:hidden coupe le rendu de la bordure dès que border-radius + le fond du
+     dernier segment actif (#1a1f24, cf. .tribunes-filter-segment-active) touchent le
+     bord inférieur arrondi : la bordure du bas disparaît visuellement, recouverte par
+     le coin du segment actif. box-shadow la redessine par-dessus, indépendamment du
+     clipping interne. */
+  box-shadow: 0 0 0 1px #e5e7eb;
   overflow: hidden;
 }
 
@@ -22754,6 +22765,89 @@ body.page-debate .position-argument-button {
 
 body.page-debate .debate-top-add-button {
   animation: debateAddBtnShine 2.4s ease-in-out 4 forwards !important;
+}
+
+/* Cartes communauté : bouton "Voir plus" — même souci que le titre (couleur claire
+   #d1d5db + text-shadow noir épais, pensés pour fond sombre) : illisible/flou sur le
+   fond clair #e9ebec. */
+.debate-card.debate-card--community .debate-card-context-toggle,
+body.page-home .debate-card.debate-card--community .debate-card-context-toggle,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-context-toggle {
+  color: #000000 !important;
+  text-shadow: none !important;
+}
+
+/* Cartes communauté : retire le flou (backdrop-filter) du placeholder "Chargement de
+   l'image…" affiché pendant la récupération de l'aperçu (cf. index-social-loading-
+   placeholder-og, injecté en JS avec un fond bleu nuit + blur pensé pour l'ancien thème
+   sombre — devient incohérent sur le fond clair #e9ebec des cartes communauté). */
+.debate-card.debate-card--community .index-social-loading-placeholder {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Cartes communauté : titre dans la même couleur que les titres de rubriques
+   (.theme-row-title-text, #000000) — sur fond clair #e9ebec, le blanc par défaut
+   (prévu pour le bandeau bleu nuit #243038) ne serait plus lisible. */
+.debate-card.debate-card--community h2,
+body.page-home .debate-card.debate-card--community h2,
+body.page-home-mobile .debate-card.debate-card--community h2,
+.debate-card.debate-card--community .index-card-title-banner-text,
+body.page-home .debate-card.debate-card--community .index-card-title-banner-text,
+body.page-home-mobile .debate-card.debate-card--community .index-card-title-banner-text {
+  color: #000000 !important;
+  /* .index-card-title-banner-text a un text-shadow épais (0 2px 6px + 0 1px 2px, noir à
+     95%) pensé pour du blanc sur image sombre — sur du texte déjà noir, ça donne un halo
+     flou autour des lettres au lieu d'un contraste. */
+  text-shadow: none !important;
+}
+
+/* Cartes communauté : supprime le liseré (.debate-card-context a un border plein autour
+   du texte + du bouton "Voir plus") qui donne l'impression de deux barres parallèles,
+   une au-dessus du bloc et une juste sous le bouton "Voir plus". */
+.debate-card.debate-card--community .debate-card-context,
+body.page-home .debate-card.debate-card--community .debate-card-context,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-context {
+  border: none !important;
+}
+
+/* Cartes communauté : même blanc cassé que les bandeaux haut/bas (.topbar, .home-bottom-nav).
+   !important nécessaire pour passer devant body.page-home .debate-card (ligne ~18550) ET
+   body.page-home .debate-card .debate-source-card (ligne ~17847, fond quasi-noir !important) :
+   la carte visible est en réalité recouverte par .debate-source-card (l'aperçu de la source),
+   pas juste le fond de .debate-card lui-même — sans ce second override rien ne se voyait. */
+.debate-card.debate-card--community,
+body.page-home .debate-card.debate-card--community,
+body.page-home-mobile .debate-card.debate-card--community {
+  background: #e9ebec !important;
+}
+
+.debate-card.debate-card--community .debate-source-card,
+body.page-home .debate-card.debate-card--community .debate-source-card,
+body.page-home-mobile .debate-card.debate-card--community .debate-source-card,
+.debate-card.debate-card--community .debate-source-card-image-wrap,
+body.page-home .debate-card.debate-card--community .debate-source-card-image-wrap,
+body.page-home-mobile .debate-card.debate-card--community .debate-source-card-image-wrap,
+.debate-card.debate-card--community .debate-source-card-body,
+body.page-home .debate-card.debate-card--community .debate-source-card-body,
+body.page-home-mobile .debate-card.debate-card--community .debate-source-card-body {
+  background: #e9ebec !important;
+}
+
+/* Bandeau titre (has-title-banner, cas source-only) : même fond + dégradés qui
+   se fondent dans #e9ebec au lieu du bleu nuit #243038 par défaut. */
+.debate-card.debate-card--community .index-card-title-banner,
+body.page-home .debate-card.debate-card--community .index-card-title-banner,
+body.page-home-mobile .debate-card.debate-card--community .index-card-title-banner {
+  background: #e9ebec !important;
+}
+
+.debate-card.debate-card--community .index-card-media-with-title::before {
+  background: linear-gradient(to top, transparent, #e9ebec) !important;
+}
+
+.debate-card.debate-card--community .index-card-media-with-title::after {
+  background: linear-gradient(to bottom, transparent, #e9ebec) !important;
 }
 
 /* Overrides finaux : textes des modales création / ajout idée / barème IA. */

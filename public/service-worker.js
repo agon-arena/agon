@@ -1,4 +1,4 @@
-const SW_VERSION = "20260712-community-card-same-as-agon";
+const SW_VERSION = "20260712-cloud-switch-border-v9";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

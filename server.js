@@ -7923,41 +7923,89 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   res.json({ ok: true, inserted: rows.length });
 });
 
-// Un simple ORDER BY published_at + LIMIT 200 laisse les onglets Gauche/Droite du front
-// (cf. orientationClass dans autres-sources.html) vides dès que les sources généralistes
+// Un simple ORDER BY published_at + LIMIT 200 laisse l'onglet Droite du front
+// (cf. orientationClass dans autres-sources.html) vide dès que les sources généralistes
 // à fort débit (Le Parisien, BFMTV, La Dépêche...) dominent la fenêtre récente : elles
 // représentent la majorité du volume collecté, donc la totalité des 200 lignes les plus
-// récentes peut être généraliste. Trois requêtes bornées à parts égales (généraliste /
-// gauche / droite), fusionnées et dédupliquées, sans dépasser le budget de lecture de
-// l'ancien LIMIT 200 (cf. OPINION_ARTICLES_RETENTION_DAYS et l'incident de quota Supabase
-// du 20/06/2026).
-const OPINION_ARTICLES_BUCKET_LIMIT = 67;
+// récentes peut être généraliste. Classement gauche/droite à parts égales, généraliste
+// écarté (cf. OPINION_ARTICLES_RETENTION_DAYS et l'incident de quota Supabase du 20/06/2026).
+// Bucket par bord ET par type (articles vs vidéos YouTube) : sans ça, les vidéos (moins
+// nombreuses) se font noyer par les articles dans la limite globale.
+const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 50;
+// Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
+// server.js) : "gauche"/"droite" couvrent aussi les familles proches (écolo, souverainiste,
+// libéral...), pas seulement les libellés exacts "gauche"/"droite".
+function getOpinionOrientationGroup(orientation) {
+  const o = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (
+    o.includes("gauche") || o.includes("ecolog") || o.includes("ecolo") || o.includes("libertaire") ||
+    o.includes("altermondialiste") || o.includes("alter-mondialiste") || o.includes("anticapitaliste") ||
+    o.includes("anti-capitaliste") || o.includes("socialiste") || o.includes("social-democrate") ||
+    o.includes("social democrate") || o.includes("progressiste") || o.includes("insoumis") ||
+    o.includes("insoumission") || o.includes("communiste") || o.includes("marxiste") ||
+    o.includes("feministe") || o.includes("syndical") || o.includes("alternatif") || o.includes("alternative")
+  ) return "left";
+  if (
+    o.includes("droite") || o.includes("centre-droit") || o.includes("centre droit") ||
+    o.includes("droite-centre") || o.includes("droite centre") || o.includes("conservateur") ||
+    o.includes("souverainiste") || o.includes("liberal") || o.includes("republicain") || o.includes("identitaire")
+  ) return "right";
+  return "center";
+}
+
+// Cache court en mémoire : la page /autres-sources n'a pas besoin d'être seconde-près,
+// et sans lui chaque visiteur redéclenchait le fetch + la requête ciblée ci-dessous contre
+// Supabase (cf. incident de quota Disk IO du 20/06/2026 — server.js:7403, 7455).
+const OPINION_ARTICLES_CACHE_TTL_MS = 60 * 1000;
+let _opinionArticlesCache = null;
+let _opinionArticlesCacheComputedAt = 0;
 
 app.get("/api/opinion-articles", async (req, res) => {
   try {
-    // Un query builder Supabase est mutable : le réutiliser pour des requêtes lancées
-    // en parallèle (Promise.all) fait que les filtres se marchent dessus. D'où la factory,
-    // qui repart d'un builder neuf à chaque appel.
-    const table = () => supabase.from("opinion_articles").select("*").order("published_at", { ascending: false });
-    const [left, right, general] = await Promise.all([
-      table().or("orientation.ilike.%gauche%,orientation.ilike.%ecolog%,orientation.ilike.%écolog%").limit(OPINION_ARTICLES_BUCKET_LIMIT),
-      table().ilike("orientation", "%droite%").limit(OPINION_ARTICLES_BUCKET_LIMIT),
-      table()
-        .not("orientation", "ilike", "%gauche%")
-        .not("orientation", "ilike", "%droite%")
-        .not("orientation", "ilike", "%ecolog%")
-        .not("orientation", "ilike", "%écolog%")
-        .limit(OPINION_ARTICLES_BUCKET_LIMIT)
-    ]);
-    if (left.error) throw new Error(left.error.message);
-    if (right.error) throw new Error(right.error.message);
-    if (general.error) throw new Error(general.error.message);
-
-    const byId = new Map();
-    for (const row of [...(left.data || []), ...(right.data || []), ...(general.data || [])]) {
-      byId.set(row.id, row);
+    if (_opinionArticlesCache && Date.now() - _opinionArticlesCacheComputedAt < OPINION_ARTICLES_CACHE_TTL_MS) {
+      return res.json({ articles: _opinionArticlesCache });
     }
-    const articles = [...byId.values()].sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+
+    // La classification gauche/droite (avec ses synonymes) se fait en JS, pas en SQL :
+    // ilike n'est pas insensible aux accents, ce qui rendrait le filtre SQL aussi long
+    // et fragile que la liste de synonymes elle-même. Passe 1 : colonnes légères
+    // uniquement (pas de title/link/summary) sur un large volume pour classer sans
+    // faire peser le poids texte de tout ce qui sera finalement rejeté ; passe 2 :
+    // select("*") restreint aux seules lignes retenues.
+    const { data: lightRows, error: lightError } = await supabase
+      .from("opinion_articles")
+      .select("id, orientation, type, published_at")
+      .order("published_at", { ascending: false })
+      .limit(2000);
+    if (lightError) throw new Error(lightError.message);
+
+    const buckets = {
+      left: { article: [], youtube: [] },
+      right: { article: [], youtube: [] }
+    };
+    for (const row of lightRows || []) {
+      const group = getOpinionOrientationGroup(row.orientation);
+      if (group !== "left" && group !== "right") continue;
+      const type = row.type === "youtube" ? "youtube" : "article";
+      const bucket = buckets[group][type];
+      if (bucket.length < OPINION_ARTICLES_TYPE_BUCKET_LIMIT) bucket.push(row.id);
+    }
+    const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube];
+    if (!selectedIds.length) {
+      _opinionArticlesCache = [];
+      _opinionArticlesCacheComputedAt = Date.now();
+      return res.json({ articles: [] });
+    }
+
+    const { data: fullRows, error: fullError } = await supabase
+      .from("opinion_articles")
+      .select("*")
+      .in("id", selectedIds);
+    if (fullError) throw new Error(fullError.message);
+
+    const articles = (fullRows || []).sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+    _opinionArticlesCache = articles;
+    _opinionArticlesCacheComputedAt = Date.now();
     res.json({ articles });
   } catch (error) {
     res.status(500).json({ articles: [], error: error.message });
