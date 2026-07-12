@@ -7346,9 +7346,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     && String(d.source_url || "").trim()
     && !String(d.image_url || "").trim()
     && !String(d.video_url || "").trim();
-  const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
-  const communityInlineSourceMedia = communitySourceOnlyCard && !!mediaHtml;
-  const mediaOutsideLink = !!mediaHtml && !communityInlineSourceMedia;
+  const mediaHtml = communitySourceOnlyCard ? "" : buildIndexSwipeableMediaHtml(d, options);
+  const mediaOutsideLink = !!mediaHtml;
   const prevEpUrl = String(d.previous_episode_url || "").trim();
   const nextEpUrl = String(d.next_episode_url || "").trim();
   const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
@@ -7393,7 +7392,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const youthBadgeHtml = buildIndexYouthBadgeHtml(d.category);
 
   return `
-    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}${communityInlineSourceMedia ? ' has-community-inline-source-media' : ''}" data-debate-id="${d.id}">
+    <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
       ${agonBadgeHtml}
       ${topBadgesHtml}
       <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">

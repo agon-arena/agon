@@ -22945,25 +22945,6 @@ body.page-home-mobile .debate-card.debate-card--community .debate-source-card-im
   box-shadow: none !important;
 }
 
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card {
-  margin: 2px 0 0 !important;
-  border-radius: 10px !important;
-}
-
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-body {
-  display: none !important;
-}
-
-.debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap,
-body.page-home .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap,
-body.page-home-mobile .debate-card.debate-card--community.has-community-inline-source-media .debate-source-card-image-wrap {
-  border-radius: 10px !important;
-}
-
 .debate-card.debate-card--community .index-card-media-with-title::before {
   background: linear-gradient(to top, transparent, #e9ebec) !important;
 }
