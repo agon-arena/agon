@@ -24,6 +24,42 @@
       border-bottom: 1px solid rgba(36, 48, 56, 0.12);
       border-radius: 8px 8px 0 0;
     }
+    .tribunes-refresh-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid rgba(36, 48, 56, 0.22);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #243038;
+      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.1);
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .tribunes-refresh-btn:hover,
+    .tribunes-refresh-btn:focus-visible {
+      background: #ffffff;
+    }
+    .tribunes-refresh-btn:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+    .tribunes-refresh-btn i {
+      font-size: 15px;
+    }
+    .tribunes-refresh-btn.is-loading i {
+      animation: tribunes-refresh-spin 0.8s linear infinite;
+    }
+    @keyframes tribunes-refresh-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     .tribunes-page-header h1,
     .tribunes-page-header p {
       display: block !important;
@@ -416,6 +452,9 @@
 <main class="about-page-shell">
   <section class="about-panel">
     <div class="tribunes-page-header">
+      <button type="button" id="tribunes-refresh-btn" class="tribunes-refresh-btn" aria-label="Actualiser les articles" title="Actualiser les articles">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
       <h1>Autres sources</h1>
       <p>Articles qui n'ont pas (encore) donné lieu à une arène sur Agôn.</p>
 
@@ -548,6 +587,9 @@
     videoModal.classList.add('open');
     document.body.classList.add('index-background-suspended');
   }
+  // Exposée globalement : le titre de la carte vidéo l'appelle via un onclick inline
+  // (portée globale), alors que le reste de la carte l'appelle depuis cette fermeture.
+  window.openVideoModal = openVideoModal;
 
   function closeVideoModal() {
     if (!videoModal) return;
@@ -1096,10 +1138,34 @@
     });
   });
 
-  fetch('/api/opinion-articles', { cache: 'no-store' })
-    .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-    .then(function(data) { allArticles = Array.isArray(data.articles) ? data.articles : []; applyFilter(); restoreInitialHeaderPosition(); })
-    .catch(function() { list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>'; });
+  var refreshBtn = document.getElementById('tribunes-refresh-btn');
+
+  function loadArticles(isRefresh) {
+    if (refreshBtn) {
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add('is-loading');
+    }
+    return fetch('/api/opinion-articles', { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        allArticles = Array.isArray(data.articles) ? data.articles : [];
+        applyFilter();
+        if (!isRefresh) restoreInitialHeaderPosition();
+      })
+      .catch(function() {
+        if (!isRefresh) list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>';
+      })
+      .then(function() {
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.classList.remove('is-loading');
+        }
+      });
+  }
+
+  if (refreshBtn) refreshBtn.addEventListener('click', function() { loadArticles(true); });
+
+  loadArticles(false);
 })();
 </script>
 </body>
