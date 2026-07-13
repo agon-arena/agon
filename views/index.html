@@ -1428,6 +1428,16 @@
       <div style="color:#c0d8e0;font-size:15px;font-weight:700;">⏳ Comptes à rebours d'analyse</div>
       <button type="button" onclick="closeAnalysisQueueModal()" style="background:#0f1c24;border:1px solid #2d3f4a;color:#7a9aaa;border-radius:8px;padding:5px 12px;cursor:pointer;">Fermer</button>
     </div>
+    <div id="agon-analysis-queue-toolbar" style="display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:6px;color:#a8c4d0;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="aq-select-all" onchange="toggleAllAnalysisCountdowns(this.checked)">
+        Tout cocher
+      </label>
+      <button type="button" id="aq-bulk-cancel-btn" onclick="cancelSelectedAnalysisCountdowns()" disabled
+        style="background:#3a1c1c;border:1px solid #6a2d2d;color:#e09090;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;opacity:0.5;">
+        ✕ Annuler la sélection (0)
+      </button>
+    </div>
     <div id="agon-analysis-queue-content" style="font-size:13px;line-height:1.6;color:#a8c4d0;">Chargement…</div>
   </div>
 </div>
@@ -1475,17 +1485,24 @@
       .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function(items) {
         _aqItems = items || [];
+        var toolbar = document.getElementById("agon-analysis-queue-toolbar");
         if (!_aqItems.length) {
           content.innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+          toolbar.style.display = "none";
           return;
         }
         content.innerHTML = _aqItems.map(function(item) {
-          var cancelBtn = item.status === "scheduled"
+          var cancelable = item.status === "scheduled";
+          var checkbox = cancelable
+            ? '<input type="checkbox" class="aq-select-cb" data-id="' + aqEsc(item.id) + '" onclick="event.stopPropagation()" onchange="updateAnalysisSelectionCount()" style="flex:0 0 auto;width:16px;height:16px;cursor:pointer;">'
+            : '<span style="flex:0 0 auto;width:16px;"></span>';
+          var cancelBtn = cancelable
             ? '<button type="button" onclick="event.preventDefault(); event.stopPropagation(); cancelAnalysisCountdown(\'' + aqEsc(item.id) + '\', this)" '
               + 'style="flex:0 0 auto;background:#3a1c1c;border:1px solid #6a2d2d;color:#e09090;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ Annuler</button>'
             : '';
           return '<a id="aq-row-' + aqEsc(item.id) + '" href="/debate?id=' + encodeURIComponent(item.id) + '" onclick="event.preventDefault(); closeAnalysisQueueModal(); openDebateIframeModal(\'/debate?id=' + encodeURIComponent(item.id) + '\');" '
             + 'style="display:flex;align-items:center;gap:10px;background:#0f1c24;border:1px solid #2d3f4a;border-radius:10px;padding:10px 12px;margin-bottom:8px;text-decoration:none;">'
+            + checkbox
             + '<div style="flex:1 1 auto;min-width:0;">'
             + '<div style="color:#c0d8e0;font-weight:700;margin-bottom:3px;">' + aqEsc(item.question) + '</div>'
             + '<div style="color:#7a9aaa;font-size:12px;">Arène ' + aqEsc(item.id) + ' · <span id="aq-remaining-' + aqEsc(item.id) + '" style="color:#e8c76a;font-weight:700;"></span></div>'
@@ -1493,13 +1510,66 @@
             + cancelBtn
             + '</a>';
         }).join("");
+        var hasCancelable = _aqItems.some(function(item) { return item.status === "scheduled"; });
+        toolbar.style.display = hasCancelable ? "flex" : "none";
+        document.getElementById("aq-select-all").checked = false;
+        updateAnalysisSelectionCount();
         aqTick();
         if (_aqTimer) clearInterval(_aqTimer);
         _aqTimer = setInterval(aqTick, 1000);
       })
       .catch(function() {
         content.innerHTML = '<p style="color:#e07070;">Erreur de chargement (mode admin requis).</p>';
+        document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
       });
+  };
+
+  window.toggleAllAnalysisCountdowns = function(checked) {
+    document.querySelectorAll(".aq-select-cb").forEach(function(cb) { cb.checked = checked; });
+    updateAnalysisSelectionCount();
+  };
+
+  window.updateAnalysisSelectionCount = function() {
+    var boxes = document.querySelectorAll(".aq-select-cb");
+    var checked = document.querySelectorAll(".aq-select-cb:checked");
+    var selectAll = document.getElementById("aq-select-all");
+    if (selectAll) selectAll.checked = boxes.length > 0 && checked.length === boxes.length;
+    var btn = document.getElementById("aq-bulk-cancel-btn");
+    if (!btn) return;
+    btn.textContent = "✕ Annuler la sélection (" + checked.length + ")";
+    btn.disabled = checked.length === 0;
+    btn.style.opacity = checked.length === 0 ? "0.5" : "1";
+  };
+
+  window.cancelSelectedAnalysisCountdowns = function() {
+    var ids = Array.prototype.slice.call(document.querySelectorAll(".aq-select-cb:checked")).map(function(cb) { return cb.getAttribute("data-id"); });
+    if (!ids.length) return;
+    if (!window.confirm("Annuler les " + ids.length + " comptes à rebours sélectionnés ? Ces analyses ne seront pas générées.")) return;
+    var btn = document.getElementById("aq-bulk-cancel-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Annulation en cours…"; }
+    var errors = [];
+    Promise.all(ids.map(function(id) {
+      return fetch("/api/admin/analysis-queue/" + encodeURIComponent(id) + "/cancel", {
+        method: "POST",
+        headers: { "x-admin-token": localStorage.getItem("admin_token") || "" }
+      })
+        .then(function(r) { return r.json().then(function(json) { return { ok: r.ok, json: json, id: id }; }); })
+        .then(function(res) {
+          if (!res.ok) { errors.push(id); return; }
+          var row = document.getElementById("aq-row-" + id);
+          if (row) row.remove();
+          _aqItems = _aqItems.filter(function(item) { return String(item.id) !== String(id); });
+        })
+        .catch(function() { errors.push(id); });
+    })).then(function() {
+      if (!_aqItems.length) {
+        document.getElementById("agon-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+        document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
+      } else {
+        updateAnalysisSelectionCount();
+      }
+      if (errors.length) window.alert("Annulation impossible pour " + errors.length + " arène(s) (génération déjà démarrée ?) : " + errors.join(", "));
+    });
   };
 
   window.cancelAnalysisCountdown = function(debateId, btn) {
@@ -1517,6 +1587,9 @@
         _aqItems = _aqItems.filter(function(item) { return String(item.id) !== String(debateId); });
         if (!_aqItems.length) {
           document.getElementById("agon-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+          document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
+        } else {
+          updateAnalysisSelectionCount();
         }
       })
       .catch(function(err) {

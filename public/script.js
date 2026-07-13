@@ -5115,9 +5115,9 @@ function ensureDebateIframeModal() {
         border-radius: 0;
       }
       #debate-iframe-modal-close {
-        bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-        left: auto;
-        right: 322px;
+        bottom: 32px;
+        left: calc(25vw - 21px);
+        right: auto;
         width: 42px;
         height: 42px;
         padding: 0;
@@ -5227,12 +5227,14 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:open-page-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
+      const returnUrl = String(e.data.returnUrl || "").trim();
+      if (returnUrl) rememberNotificationsReturnContext(returnUrl);
       openDebateIframeModal(nextUrl);
       return;
     }
 
     if (e.data.type === "agon:open-notifications-in-parent-modal") {
-      openNotificationsInDebateIframeModal();
+      openNotificationsInDebateIframeModal(null, String(e.data.returnUrl || ""));
       return;
     }
 
@@ -5747,9 +5749,16 @@ function openDebateIframeModal(url, options = {}) {
       let iframeUrlPathname = url;
       try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
       if (iframeUrlPathname === "/notifications") {
-        window.parent.postMessage({ type: "agon:open-notifications-in-parent-modal" }, "*");
+        window.parent.postMessage({
+          type: "agon:open-notifications-in-parent-modal",
+          returnUrl: `${location.pathname}${location.search}${location.hash}`
+        }, "*");
       } else {
-        window.parent.postMessage({ type: "agon:open-page-in-parent-modal", url }, "*");
+        window.parent.postMessage({
+          type: "agon:open-page-in-parent-modal",
+          url,
+          returnUrl: `${location.pathname}${location.search}${location.hash}`
+        }, "*");
       }
     } catch (e) {}
     return;
@@ -6021,6 +6030,25 @@ function closeDebateIframeModal(options = {}) {
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!modal) return;
+  const notificationsReturnContext = getNotificationsReturnContext();
+  const currentIframePathname = String(window.__agonIframeCurrentPathname || "");
+  const shouldReturnToTribunesFromChildPage =
+    modal.classList.contains("open") &&
+    notificationsReturnContext?.pathname === "/autres-sources" &&
+    notificationsReturnContext.returnUrl &&
+    ["/notifications", "/create", "/contributions", "/about", "/contact"].includes(currentIframePathname);
+  if (shouldReturnToTribunesFromChildPage && frame) {
+    clearNotificationsReturnContext();
+    setDebateIframeModalLoadingState(true, "Retour aux autres actus en cours");
+    setDebateIframeModalCloseButtonVisible(false);
+    syncDebateIframeModalPageClass("/autres-sources");
+    window.__agonIframeCurrentPathname = "/autres-sources";
+    navigateDebateIframeModalFrame(frame, notificationsReturnContext.returnUrl);
+    armDebateIframeParentLoadingFallback("/autres-sources", () => {
+      syncDebateIframeModalCloseButtonWithFramePage(frame);
+    });
+    return;
+  }
   const skipReturnLoader = options && options.skipReturnLoader === true;
   const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
   const shouldReturnDirectlyToIndex = openedFromNotifications && location.pathname === "/notifications";
@@ -6164,7 +6192,7 @@ function isTopLevelDebatePage() {
 
 function isTopLevelIframeModalPage() {
   if (window.self !== window.top) return false;
-  if (location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create" || location.pathname === "/notifications") return true;
+  if (location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/create" || location.pathname === "/notifications" || location.pathname === "/autres-sources") return true;
   if (location.pathname === "/debates" || location.pathname.startsWith("/debates/")) return true;
   return false;
 }
@@ -6226,7 +6254,7 @@ function clearNotificationsReturnContext() {
 
 function getNotificationsBackTarget(fallbackHref = "/") {
   const context = getNotificationsReturnContext();
-  if (context?.pathname === "/debate" && context.returnUrl) {
+  if ((context?.pathname === "/debate" || context?.pathname === "/autres-sources") && context.returnUrl) {
     return context.returnUrl;
   }
 
@@ -6240,7 +6268,7 @@ function getNotificationsBackTarget(fallbackHref = "/") {
   return fallbackHref || "/";
 }
 
-function openNotificationsInDebateIframeModal(event = null) {
+function openNotificationsInDebateIframeModal(event = null, returnUrl = "") {
   if (event?.preventDefault) {
     event.preventDefault();
   }
@@ -6255,7 +6283,9 @@ function openNotificationsInDebateIframeModal(event = null) {
     closeHomeTopbarMenu();
   }
 
-  if (location.pathname === "/debate") {
+  if (returnUrl) {
+    rememberNotificationsReturnContext(returnUrl);
+  } else if (location.pathname === "/debate" || location.pathname === "/autres-sources") {
     rememberNotificationsReturnContext(`${location.pathname}${location.search}${location.hash}`);
   }
 
@@ -11739,6 +11769,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const badgeLabel = String(options?.badgeLabel || '').trim() || domain;
   const showSourceBadgeWithoutImage = options?.showSourceBadgeWithoutImage === true;
   const showImageArea = !!(image || showSourceBadgeWithoutImage || (!debateId && !debateHref));
+  const sourcePanelAttrs = `data-source-panel-url="${escapeAttribute(safeUrl)}" data-source-panel-domain="${escapeAttribute(domain)}" data-source-panel-title="${escapeAttribute(title)}" data-source-panel-description="${escapeAttribute(description)}" data-source-panel-image="${escapeAttribute(image)}"`;
 
   let cardTag, cardAttributes, openSourceHtml;
 
@@ -11753,11 +11784,12 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     openSourceHtml = "";
   } else {
     cardTag = "div";
-    cardAttributes = `class="debate-source-card" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit;"`;
+    cardAttributes = `class="debate-source-card" ${sourcePanelAttrs} role="button" tabindex="0" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`;
     openSourceHtml = `<div>
           <a
             class="debate-source-link"
             href="${escapeAttribute(safeUrl)}"
+            ${sourcePanelAttrs}
             target="_blank"
             rel="noopener noreferrer"
             style="display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:700; color:#111111; text-decoration:none;"
@@ -11802,6 +11834,146 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
     </${cardTag}>
   `;
 }
+
+function ensureAgonSourcePanel() {
+  let overlay = document.getElementById("agon-source-panel-overlay");
+  if (overlay) return overlay;
+
+  overlay = document.createElement("div");
+  overlay.id = "agon-source-panel-overlay";
+  overlay.className = "agon-source-panel-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML = `
+    <div class="agon-source-panel" role="dialog" aria-modal="true" aria-label="Source externe">
+      <div class="agon-source-panel-topbar">
+        <img src="/favicon-64.png" alt="agôn" class="agon-source-panel-logo">
+        <span id="agon-source-panel-domain" class="agon-source-panel-domain"></span>
+        <button type="button" class="agon-source-panel-close" data-agon-source-panel-close>Retour</button>
+      </div>
+      <div class="agon-source-panel-media">
+        <img id="agon-source-panel-image" src="/logovisuel.png" alt="">
+      </div>
+      <div class="agon-source-panel-body">
+        <div id="agon-source-panel-source" class="agon-source-panel-source"></div>
+        <h2 id="agon-source-panel-title" class="agon-source-panel-title"></h2>
+        <p id="agon-source-panel-summary" class="agon-source-panel-summary"></p>
+        <div class="agon-source-panel-actions">
+          <a id="agon-source-panel-open" class="agon-source-panel-open" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>
+          <button type="button" class="agon-source-panel-back" data-agon-source-panel-close>Retour vers agôn</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest("[data-agon-source-panel-close]")) {
+      event.preventDefault();
+      closeAgonSourcePanel();
+    }
+  });
+
+  return overlay;
+}
+
+function getAgonSourcePanelFallbackImage() {
+  try {
+    if (typeof getIndexDefaultFallbackImage === "function") {
+      return getIndexDefaultFallbackImage(typeof getDebateId === "function" ? getDebateId() : "");
+    }
+  } catch (_) {}
+  return "/logovisuel.png";
+}
+
+function getAgonSourcePanelPreviewFromElement(element, fallbackUrl = "") {
+  const root = element?.closest?.("[data-source-panel-url]") || element;
+  const dataset = root?.dataset || {};
+  const card = root?.closest?.(".debate-source-card") || root;
+  const imageNode = card?.querySelector?.("[data-index-og-image], .debate-source-card-image, img");
+  return {
+    url: dataset.sourcePanelUrl || fallbackUrl || root?.getAttribute?.("href") || "",
+    domain: dataset.sourcePanelDomain || card?.querySelector?.(".debate-source-card-domain")?.textContent?.trim() || "",
+    title: dataset.sourcePanelTitle || card?.querySelector?.(".debate-source-card-title")?.textContent?.trim() || "",
+    description: dataset.sourcePanelDescription || card?.querySelector?.(".debate-source-card-description")?.textContent?.trim() || "",
+    image: dataset.sourcePanelImage || imageNode?.currentSrc || imageNode?.src || imageNode?.dataset?.imageSrc || ""
+  };
+}
+
+function openAgonSourcePanel(sourceUrl, preview = {}) {
+  const safeUrl = String(sourceUrl || preview?.url || "").trim();
+  if (!safeUrl) return;
+
+  const overlay = ensureAgonSourcePanel();
+  const normalized = normalizeSourcePreviewData(preview, safeUrl);
+  const fallbackImage = getAgonSourcePanelFallbackImage();
+  const imageUrl = normalized.image || String(preview?.image || "").trim() || fallbackImage;
+  const domainLabel = normalized.domain || getDomainLabel(safeUrl) || "Source externe";
+  const title = normalized.title || domainLabel || "Source externe";
+  const description = normalized.description || "Le site original s’ouvre hors d’Agôn pour éviter les pages blanches et les blocages d’affichage.";
+
+  const domainEl = document.getElementById("agon-source-panel-domain");
+  const sourceEl = document.getElementById("agon-source-panel-source");
+  const titleEl = document.getElementById("agon-source-panel-title");
+  const summaryEl = document.getElementById("agon-source-panel-summary");
+  const imageEl = document.getElementById("agon-source-panel-image");
+  const openEl = document.getElementById("agon-source-panel-open");
+
+  if (domainEl) domainEl.textContent = (() => { try { return new URL(safeUrl).hostname; } catch (_) { return domainLabel; } })();
+  if (sourceEl) sourceEl.textContent = domainLabel;
+  if (titleEl) titleEl.textContent = title;
+  if (summaryEl) {
+    summaryEl.textContent = description;
+    summaryEl.style.display = description ? "" : "none";
+  }
+  if (imageEl) {
+    imageEl.onerror = () => {
+      imageEl.onerror = null;
+      imageEl.src = fallbackImage;
+    };
+    imageEl.src = imageUrl;
+  }
+  if (openEl) openEl.href = safeUrl;
+
+  overlay.style.display = "flex";
+  overlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("agon-source-panel-is-open");
+}
+
+function closeAgonSourcePanel() {
+  const overlay = document.getElementById("agon-source-panel-overlay");
+  if (!overlay) return;
+  overlay.style.display = "none";
+  overlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("agon-source-panel-is-open");
+}
+
+window.openAgonSourcePanel = openAgonSourcePanel;
+window.closeAgonSourcePanel = closeAgonSourcePanel;
+
+document.addEventListener("click", (event) => {
+  const sourceTrigger = event.target?.closest?.(".page-debate [data-source-panel-url]");
+  if (!sourceTrigger) return;
+  const url = sourceTrigger.dataset?.sourcePanelUrl || sourceTrigger.getAttribute?.("href") || "";
+  if (!url) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
+}, true);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeAgonSourcePanel();
+    return;
+  }
+
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const sourceTrigger = event.target?.closest?.(".page-debate [data-source-panel-url]");
+  if (!sourceTrigger || sourceTrigger.tagName === "A") return;
+  const url = sourceTrigger.dataset?.sourcePanelUrl || "";
+  if (!url) return;
+  event.preventDefault();
+  openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
+});
 
 function linkifyText(str) {
   const escaped = escapeHtml(str ?? "");
@@ -12836,6 +13008,14 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
       return false;
     }
   })();
+  const shouldReturnToParentModalPage = (() => {
+    try {
+      const parsedUrl = new URL(String(targetHref || ""), window.location.origin);
+      return parsedUrl.origin === window.location.origin && parsedUrl.pathname === "/autres-sources";
+    } catch (error) {
+      return false;
+    }
+  })();
 
   if (cameFromDebateIframe) {
     if (shouldReturnToDebate) {
@@ -12849,6 +13029,17 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
         window.location.href = targetHref;
       }, 40);
 
+      return false;
+    }
+
+    if (shouldReturnToParentModalPage) {
+      try {
+        clearNotificationsReturnContext();
+        window.parent.postMessage({
+          type: "agon:open-page-in-parent-modal",
+          url: targetHref
+        }, "*");
+      } catch (error) {}
       return false;
     }
 
@@ -24163,7 +24354,7 @@ function initDebateMediaHistory(debate) {
 
   const mediaOrientationByDomain = {
     // ── Presse nationale généraliste ──
-    'lemonde.fr': 'centre-gauche / généraliste',
+    'lemonde.fr': 'généraliste',
     'leparisien.fr': 'généraliste / populaire',
     'lefigaro.fr': 'droite',
     '20minutes.fr': 'généraliste populaire',
@@ -24172,7 +24363,7 @@ function initDebateMediaHistory(debate) {
     'la-croix.com': 'centre / chrétien-social',
     'marianne.net': 'souverainiste / républicain',
     // ── Magazines et hebdos ──
-    'nouvelobs.com': 'centre-gauche',
+    'nouvelobs.com': 'généraliste',
     'lepoint.fr': 'centre-droit',
     'lexpress.fr': 'centre / centre-droit',
     'lopinion.fr': 'droite / libéral',
@@ -24193,9 +24384,9 @@ function initDebateMediaHistory(debate) {
     'publicsenat.fr': 'institutionnel / politique',
     // ── Radio ──
     'rtl.fr': 'généraliste / radio',
-    'europe1.fr': 'centre-droit / radio',
+    'europe1.fr': 'droite',
     'rmc.fr': 'généraliste / radio',
-    'franceinter.fr': 'centre-gauche / radio',
+    'franceinter.fr': 'généraliste',
     'franceculture.fr': 'centre-gauche / radio',
     // ── Service public ──
     'franceinfo.fr': 'centre / service public',

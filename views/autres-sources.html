@@ -12,53 +12,60 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260712-cards-edge6">
+  <link rel="stylesheet" href="/style.min.css?v=20260712-cards-noclip2">
   <style>
     .tribunes-page-header {
       position: sticky;
-      top: 0;
+      top: calc(var(--tribunes-topbar-offset, 0px) - 56px);
       z-index: 40;
       margin: -16px -16px 0;
-      padding: 16px 16px 12px;
-      background: #dbe5e1;
+      padding: 2px 16px 10px;
+      background: rgba(219, 229, 225, 0.86);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(36, 48, 56, 0.12);
       border-radius: 8px 8px 0 0;
+      box-shadow: 0 8px 18px rgba(36, 48, 56, 0.08);
+      transform: translateY(-64px);
+      margin-bottom: -64px;
     }
-    .tribunes-refresh-btn {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      z-index: 2;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border: 1px solid rgba(36, 48, 56, 0.22);
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.9);
-      color: #243038;
-      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.1);
-      cursor: pointer;
-      transition: background 0.15s ease, transform 0.15s ease;
-    }
-    .tribunes-refresh-btn:hover,
-    .tribunes-refresh-btn:focus-visible {
-      background: #ffffff;
-    }
-    .tribunes-refresh-btn:disabled {
+    .tribunes-floating-refresh-btn:disabled {
       cursor: default;
-      opacity: 0.7;
+      opacity: 0.74;
     }
-    .tribunes-refresh-btn i {
-      font-size: 15px;
+    .tribunes-floating-refresh-btn {
+      bottom: 32px !important;
     }
-    .tribunes-refresh-btn.is-loading i {
+    .tribunes-floating-refresh-btn.is-loading i {
       animation: tribunes-refresh-spin 0.8s linear infinite;
     }
     @keyframes tribunes-refresh-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+    body.page-tribunes .about-page-shell {
+      padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.page-tribunes .home-bottom-nav {
+      background:
+        linear-gradient(
+          90deg,
+          #f3f4f6 0%,
+          #d1d5db 25%,
+          #9ca3af 50%,
+          #374151 75%,
+          #111827 100%
+        ) bottom / 100% 5px no-repeat,
+        #ffffff !important;
+    }
+    body.page-tribunes .home-bottom-nav-item {
+      color: #111827;
+    }
+    body.page-tribunes .home-bottom-nav-item:hover,
+    body.page-tribunes .home-bottom-nav-item:focus-visible,
+    body.page-tribunes .home-bottom-nav-item-active {
+      background: rgba(0, 0, 0, 0.06);
+      color: #000000;
     }
     .tribunes-page-header h1,
     .tribunes-page-header p {
@@ -74,12 +81,15 @@
       visibility: visible !important;
     }
     .tribunes-page-header + .tribunes-list {
-      margin-top: 14px;
+      margin-top: 54px;
     }
+    html.in-iframe body.page-tribunes,
     body.page-tribunes.in-iframe {
       overflow-x: hidden;
       background: #dbe5e1 !important;
     }
+    html.in-iframe body.page-tribunes .about-page-shell,
+    body.page-tribunes .about-page-shell,
     body.page-tribunes.in-iframe .about-page-shell {
       display: block !important;
       width: 100vw !important;
@@ -87,6 +97,7 @@
       min-height: auto !important;
       margin: 0 0 24px !important;
     }
+    html.in-iframe body.page-tribunes .about-panel,
     body.page-tribunes.in-iframe .about-panel {
       box-sizing: border-box;
       width: 100%;
@@ -96,11 +107,261 @@
       border-radius: 0;
       box-shadow: none;
     }
+    html.in-iframe body.page-tribunes .topbar,
+    body.page-tribunes.in-iframe .topbar {
+      display: block !important;
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 90 !important;
+      margin: 0 !important;
+      transform: none !important;
+      opacity: 1 !important;
+    }
+    html.in-iframe body.page-tribunes .topbar-inner,
+    body.page-tribunes.in-iframe .topbar-inner {
+      min-height: 28px;
+    }
+    body.page-tribunes .topbar {
+      padding-top: 1px;
+    }
+    body.page-tribunes .topbar-inner,
+    body.page-tribunes .topbar-actions,
+    body.page-tribunes .home-brand-block {
+      position: relative;
+      z-index: 1;
+    }
+    body.page-tribunes .topbar-inner.topbar-home {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      grid-template-areas: "actions brand spacer";
+      align-items: center;
+      row-gap: 2px;
+      column-gap: 12px;
+      min-height: 28px;
+      padding-top: 0;
+      padding-bottom: 1px;
+    }
+    body.page-tribunes .home-brand-block {
+      grid-area: brand;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 0;
+      margin-left: 0;
+    }
+    body.page-tribunes .home-brand-main {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 0;
+      width: 100%;
+    }
+    .source-link-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+      background: rgba(13, 24, 31, 0.68);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+    }
+    .source-link-panel {
+      width: min(520px, 100%);
+      max-height: 94vh;
+      overflow: auto;
+      border: 2px solid #000000;
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+    }
+    .source-link-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .source-link-domain {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      color: #243038;
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .source-link-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border: 1px solid rgba(36, 48, 56, 0.16);
+      border-radius: 999px;
+      padding: 0 12px;
+      background: #f3f6f7;
+      color: #243038;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .source-link-media {
+      position: relative;
+      aspect-ratio: 1.62 / 1;
+      overflow: hidden;
+      background: #dbe5e1;
+    }
+    .source-link-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .source-link-body {
+      display: grid;
+      gap: 12px;
+      padding: 18px 18px 20px;
+    }
+    .source-link-source {
+      color: #243038;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .source-link-title {
+      margin: 0;
+      color: #111827;
+      font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+      font-size: clamp(1.7rem, 7vw, 2.3rem);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+    .source-link-summary {
+      margin: 0;
+      color: #384250;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.42;
+    }
+    .source-link-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-top: 4px;
+    }
+    .source-link-open,
+    .source-link-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      border-radius: 999px;
+      padding: 0 16px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .source-link-open {
+      flex: 1 1 190px;
+      border: 0;
+      background: #243038;
+      color: #ffffff;
+      box-shadow: 0 12px 24px rgba(36, 48, 56, 0.2);
+    }
+    .source-link-back {
+      flex: 1 1 150px;
+      border: 1px solid rgba(36, 48, 56, 0.16);
+      background: #f3f6f7;
+      color: #243038;
+      cursor: pointer;
+    }
+    body.page-tribunes .topbar-actions {
+      grid-area: actions;
+      width: auto;
+      margin-left: 0;
+      margin-top: 0;
+      flex-shrink: 0;
+      justify-content: flex-start;
+      gap: 8px;
+      z-index: 10001;
+    }
+    body.page-tribunes .home-topbar-menu-toggle {
+      width: 30px;
+      height: 30px;
+      margin-left: 8px;
+      transform: none;
+    }
+    body.page-tribunes .tribunes-topbar-notifications {
+      grid-area: spacer;
+      justify-self: end;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      min-width: 36px;
+      height: 36px;
+      min-height: 36px;
+      margin-right: 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      color: #111827;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    body.page-tribunes .tribunes-topbar-notifications:hover,
+    body.page-tribunes .tribunes-topbar-notifications:focus-visible {
+      background: #e5e7eb;
+      border-color: #d1d5db;
+      color: #000000;
+    }
+    body.page-tribunes .tribunes-topbar-notifications i {
+      font-size: 15px;
+    }
+    body.page-tribunes #notifications-count-compact {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 18px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    body.page-tribunes .home-logo {
+      width: 98px;
+      margin: 0 auto;
+    }
+    html.in-iframe body.page-tribunes .tribunes-page-header,
     body.page-tribunes.in-iframe .tribunes-page-header {
-      padding-top: 6px;
+      padding-top: 0;
       border-bottom: 0;
       border-radius: 0;
     }
+    html.in-iframe body.page-tribunes .tribunes-list,
+    html.in-iframe body.page-tribunes .tribunes-theme-section,
+    html.in-iframe body.page-tribunes .tribunes-carousel-wrap,
+    html.in-iframe body.page-tribunes .tribunes-carousel,
     body.page-tribunes.in-iframe .tribunes-list,
     body.page-tribunes.in-iframe .tribunes-theme-section,
     body.page-tribunes.in-iframe .tribunes-carousel-wrap,
@@ -108,6 +369,7 @@
       max-width: 100%;
       min-width: 0;
     }
+    html.in-iframe body.page-tribunes .tribunes-list,
     body.page-tribunes.in-iframe .tribunes-list {
       border: 0;
       border-radius: 0;
@@ -116,7 +378,7 @@
       padding-top: 4px;
     }
     .tribunes-theme-section + .tribunes-theme-section {
-      padding-top: 14px;
+      padding-top: 4px;
     }
     .tribunes-theme-heading {
       position: relative;
@@ -256,7 +518,7 @@
       gap: 22px;
       width: 100%;
       min-height: 10px;
-      margin: 5px auto 12px;
+      margin: -20px auto 0;
     }
     .tribunes-carousel-dot {
       position: relative;
@@ -301,24 +563,39 @@
     }
     .tribunes-carousel {
       gap: 14px;
+      align-items: flex-start;
+      overflow-y: hidden;
+      padding-bottom: 26px;
+      transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .tribunes-carousel .tribunes-item {
-      width: clamp(320px, 24vw, 390px);
+      box-sizing: border-box;
+      align-self: flex-start;
+      height: auto;
+      width: clamp(306px, 23vw, 370px);
     }
     .tribunes-thumb {
       aspect-ratio: 1.65 / 1;
     }
     .tribunes-item-body {
-      min-height: 218px;
+      position: relative;
+      isolation: isolate;
+      min-height: 0;
       align-content: start;
-      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-rows: auto;
       gap: 7px;
       padding: 11px 14px 12px;
     }
     .tribunes-meta {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+    }
+    .tribunes-badge {
+      min-height: 18px;
+      padding: 1px 6px;
+      font-size: 0.64rem;
+      line-height: 1;
     }
     .tribunes-date {
       justify-self: end;
@@ -349,27 +626,50 @@
       right: auto;
       left: 8px;
     }
+    .tribunes-thumb.tribunes-thumb-source-logo {
+      background: #ffffff;
+    }
+    .tribunes-thumb.tribunes-thumb-source-logo .tribunes-thumb-img {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      object-fit: contain;
+      width: 58%;
+      height: 58%;
+      transform: translate(-50%, -50%);
+    }
     .tribunes-title {
+      position: relative;
+      z-index: 2;
       font-size: 1.28rem;
-      line-height: 1.02;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
+      line-height: 1.18;
+      display: block;
+      -webkit-line-clamp: unset;
       -webkit-box-orient: vertical;
-      overflow: hidden;
-      max-height: 3.1em;
+      overflow: visible;
+      max-height: none;
+      background: #ffffff;
     }
     .tribunes-summary {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      line-height: 1.32;
-      max-height: 3.96em;
+      position: relative;
+      z-index: 2;
+      display: block;
+      -webkit-line-clamp: unset;
+      -webkit-box-orient: initial;
+      overflow: visible;
+      line-height: 1.42;
+      max-height: none;
+      background: #ffffff;
     }
     .tribunes-arena-actions {
+      position: relative;
+      z-index: 1;
       align-self: end;
-      margin-top: 0;
-      padding-top: 8px;
+      margin-top: -12px;
+      padding-top: 4px;
+    }
+    .tribunes-arena-btn {
+      transform: translateY(4px);
     }
     @media (max-width: 520px) {
       .tribunes-theme-heading {
@@ -392,8 +692,8 @@
       }
       .tribunes-carousel-dots {
         gap: 18px;
-        margin-top: 4px;
-        margin-bottom: 10px;
+        margin-top: -20px;
+        margin-bottom: 0;
       }
       .tribunes-carousel-dot {
         width: 7px;
@@ -409,21 +709,63 @@
         padding-left: 12px;
         padding-right: 12px;
       }
+      html.in-iframe body.page-tribunes .about-panel,
+      body.page-tribunes.in-iframe .about-panel {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+      html.in-iframe body.page-tribunes .tribunes-list,
+      body.page-tribunes.in-iframe .tribunes-list {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+      html.in-iframe body.page-tribunes .tribunes-carousel-wrap,
+      body.page-tribunes.in-iframe .tribunes-carousel-wrap {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        width: 100vw;
+      }
       body.page-tribunes.in-iframe .tribunes-carousel-wrap {
         max-width: none;
       }
       .tribunes-carousel {
         padding-left: 0;
         padding-right: 0;
+        box-sizing: border-box;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        scroll-padding-left: 0;
+        touch-action: pan-y;
       }
       .tribunes-carousel .tribunes-item {
+        flex: 0 0 100%;
         width: 100%;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+      }
+      html.in-iframe body.page-tribunes .tribunes-carousel .tribunes-item,
+      body.page-tribunes.in-iframe .tribunes-carousel .tribunes-item {
+        flex-basis: calc(100vw - 8px);
+        width: calc(100vw - 8px);
+        margin-left: 0;
+        margin-right: 0;
+      }
+      html.in-iframe body.page-tribunes .tribunes-carousel,
+      body.page-tribunes.in-iframe .tribunes-carousel {
+        padding-left: 4px;
+        padding-right: 4px;
+        scroll-padding-left: 4px;
       }
       .tribunes-thumb {
         aspect-ratio: 1.45 / 1;
       }
       .tribunes-item-body {
-        min-height: 238px;
+        min-height: 0;
       }
       .tribunes-carousel-wrap::before,
       .tribunes-carousel-wrap::after {
@@ -445,8 +787,18 @@
     window.__agonPageArrivalReady = true;
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
     document.addEventListener('DOMContentLoaded', function(){
+      function syncTribunesTopbarOffset() {
+        var topbar = document.querySelector('.topbar');
+        var height = topbar && getComputedStyle(topbar).display !== 'none' ? Math.ceil(topbar.getBoundingClientRect().height) : 0;
+        document.body.style.setProperty('--tribunes-topbar-offset', height + 'px');
+      }
+      syncTribunesTopbarOffset();
+      window.addEventListener('resize', syncTribunesTopbarOffset, { passive: true });
+      window.addEventListener('orientationchange', syncTribunesTopbarOffset, { passive: true });
+      setTimeout(syncTribunesTopbarOffset, 120);
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
+        syncTribunesTopbarOffset();
         try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
       }
     });
@@ -460,14 +812,83 @@
         <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
       </div>
     </div>
+    <div class="topbar-actions">
+      <div class="home-topbar-menu-wrap">
+        <button
+          type="button"
+          id="home-topbar-menu-toggle"
+          class="home-topbar-menu-toggle"
+          aria-label="Ouvrir le menu"
+          aria-controls="home-topbar-menu"
+          aria-expanded="false"
+          onclick="toggleHomeTopbarMenu(event)"
+        >
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div
+          id="home-topbar-menu"
+          class="home-topbar-menu"
+          onclick="event.stopPropagation()"
+          aria-label="Menu du bandeau"
+        >
+          <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/create')">
+            <i class="fa-solid fa-plus"></i>
+            <span>Ouvrir une arène</span>
+          </a>
+          <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/notifications')">
+            <i class="fa-regular fa-bell"></i>
+            <span>Notifications</span>
+          </a>
+          <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
+            <i class="fa-regular fa-folder-open"></i>
+            <span>Mes scores et contributions</span>
+          </a>
+          <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
+            <i class="fa-solid fa-mobile-screen"></i>
+            <span>Télécharger l'application</span>
+          </button>
+          <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
+            <i id="push-menu-icon" class="fa-regular fa-bell"></i>
+            <span id="push-menu-label">Activer les alertes</span>
+          </button>
+          <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')">
+            <i class="fa-regular fa-circle-question"></i>
+            <span>À propos</span>
+          </a>
+          <a href="/contact" class="home-topbar-menu-item" id="home-topbar-contact-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contact')">
+            <i class="fa-regular fa-envelope"></i>
+            <span>Contact</span>
+          </a>
+          <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-login-button">
+            <i class="fa-regular fa-user"></i>
+            <span>Se connecter / s'inscrire</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <a
+      href="/notifications"
+      id="notifications-bell"
+      class="topbar-notification-link tribunes-topbar-notifications"
+      aria-label="Notifications"
+      onclick="event.preventDefault(); openDebateIframeModal('/notifications')"
+    >
+      <i class="fa-regular fa-bell"></i>
+      <span id="notifications-count-compact" style="display:none;"></span>
+    </a>
   </div>
 </header>
+<button
+  type="button"
+  id="home-topbar-menu-backdrop"
+  class="home-topbar-menu-backdrop"
+  aria-label="Fermer le menu"
+  onclick="closeHomeTopbarMenu()"
+></button>
 <main class="about-page-shell">
   <section class="about-panel">
     <div class="tribunes-page-header">
-      <button type="button" id="tribunes-refresh-btn" class="tribunes-refresh-btn" aria-label="Actualiser les articles" title="Actualiser les articles">
-        <i class="fa-solid fa-rotate"></i>
-      </button>
       <h1>Autres actus</h1>
       <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Agôn.</p>
 
@@ -494,6 +915,71 @@
     </div>
   </section>
 </main>
+<button
+  type="button"
+  id="tribunes-refresh-btn"
+  class="app-floating-refresh-btn index-floating-refresh-btn tribunes-floating-refresh-btn"
+  title="Actualiser"
+  aria-label="Actualiser les articles"
+>
+  <i class="fa-solid fa-rotate-right"></i>
+</button>
+<nav class="home-bottom-nav" aria-label="Navigation principale mobile">
+  <div class="home-bottom-nav-item-wrap">
+    <button
+      type="button"
+      id="index-explorer-toggle"
+      class="home-bottom-nav-item"
+      aria-label="Explorer"
+      aria-haspopup="true"
+      aria-expanded="false"
+      onclick="toggleIndexExplorerMenu(event)"
+    >
+      <i class="fa-regular fa-compass"></i>
+      <span>Explorer</span>
+    </button>
+    <div id="index-explorer-menu" class="home-bottom-share-menu" onclick="event.stopPropagation()">
+      <div class="index-explorer-menu-body">
+        <button type="button" onclick="closeIndexExplorerMenu(); scrollToTribunesTop()">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Toutes les actus</span>
+        </button>
+        <div class="index-explorer-menu-divider"></div>
+        <div class="index-explorer-menu-label">Thématiques</div>
+        <button type="button" onclick="scrollToTribunesTheme('Politique')"><i class="fa-solid fa-scale-balanced"></i><span>Politique</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('International')"><i class="fa-solid fa-globe"></i><span>International</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Économie - emploi')"><i class="fa-solid fa-briefcase"></i><span>Économie - emploi</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Société - éducation')"><i class="fa-solid fa-users"></i><span>Société - éducation</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Sciences - technologie')"><i class="fa-solid fa-flask"></i><span>Sciences - technologie</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Climat - environnement')"><i class="fa-solid fa-leaf"></i><span>Climat - environnement</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Justice - faits divers')"><i class="fa-solid fa-scale-balanced"></i><span>Justice - faits divers</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Culture - modes')"><i class="fa-solid fa-palette"></i><span>Culture - modes</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Philosophie - sciences sociales')"><i class="fa-solid fa-brain"></i><span>Philosophie<span class="theme-philo-sep"> - </span><span class="theme-philo-br"><br></span>sciences sociales</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Médias - divertissements')"><i class="fa-solid fa-tv"></i><span>Médias<span class="theme-philo-sep"> - </span><span class="theme-philo-br"><br></span>divertissements</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Sports - loisirs')"><i class="fa-solid fa-futbol"></i><span>Sports - loisirs</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Santé - bien-être')"><i class="fa-solid fa-heart-pulse"></i><span>Santé - bien-être</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Vie personnelle - modes de vie')"><i class="fa-solid fa-house"></i><span>Vie personnelle - modes de vie</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Espace jeunes')"><i class="fa-solid fa-star"></i><span>Espace jeunes</span></button>
+      </div>
+    </div>
+  </div>
+
+  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
+    <i class="fa-solid fa-plus"></i>
+    <span>Ouvrir</span>
+  </a>
+
+  <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
+    <i class="fa-regular fa-folder-open"></i>
+    <span>Contributions</span>
+  </a>
+
+  <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
+    <i class="fa-regular fa-bell"></i>
+    <span>Alertes</span>
+    <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
+  </a>
+</nav>
 <div class="tribunes-video-modal" id="tribunes-video-modal" role="dialog" aria-modal="true" aria-label="Lecture de la vidéo">
   <div class="tribunes-video-modal-inner">
     <button type="button" class="tribunes-video-modal-close" id="tribunes-video-modal-close" aria-label="Fermer">✕</button>
@@ -512,7 +998,43 @@
   var currentType = '';
   var initialHeaderScrollRestored = false;
 
-  // Thématique dérivée du champ orientation (ex. "gauche / investigation" -> investigation),
+  var CATEGORY_OPTIONS = [
+    "Politique",
+    "International",
+    "Économie - emploi",
+    "Société - éducation",
+    "Sciences - technologie",
+    "Climat - environnement",
+    "Justice - faits divers",
+    "Culture - modes",
+    "Philosophie - sciences sociales",
+    "Médias - divertissements",
+    "Sports - loisirs",
+    "Santé - bien-être",
+    "Vie personnelle - modes de vie",
+    "Espace jeunes"
+  ];
+
+  function normalizeCategory(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return '';
+    var normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (var i = 0; i < CATEGORY_OPTIONS.length; i++) {
+      var category = CATEGORY_OPTIONS[i];
+      if (category.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === normalized) return category;
+    }
+    return '';
+  }
+
+  function categoryKey(label) {
+    return String(label || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'sans-categorie';
+  }
+
+  // Secours historique : thématique dérivée du champ orientation (ex. "gauche / investigation" -> investigation),
   // dont le deuxième segment décrit souvent un genre éditorial plutôt qu'un positionnement
   // politique. Classement approximatif par mots-clés (premier qui matche gagne) : les
   // sources sans second segment (ex. simplement "droite") n'ont pas de thématique.
@@ -552,6 +1074,16 @@
     return String(text == null ? '' : text)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function summaryExcerpt(text) {
+    var value = String(text || '').replace(/\s+/g, ' ').trim();
+    var limit = 140;
+    if (!value || value.length <= limit) return value;
+    var cut = value.slice(0, limit);
+    var lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > 92) cut = cut.slice(0, lastSpace);
+    return cut.replace(/[.,;:!?…-]+$/g, '') + '…';
   }
 
   function orientationClass(orientation) {
@@ -661,7 +1193,8 @@
     var badge = article.orientation
       ? '<span class="tribunes-badge ' + orientationClass(article.orientation) + '">' + escapeHtml(article.orientation) + '</span>'
       : '';
-    var summary = article.summary ? '<p class="tribunes-summary">' + escapeHtml(article.summary) + '</p>' : '';
+    var summaryText = summaryExcerpt(article.summary);
+    var summary = summaryText ? '<p class="tribunes-summary">' + escapeHtml(summaryText) + '</p>' : '';
     var newBadge = isArticleNew(article)
       ? '<div class="debate-card-top-badges"><div class="debate-card-new-badge">Nouveau</div></div>'
       : '';
@@ -733,11 +1266,32 @@
     return Boolean(target && target.closest('a, button, input, select, textarea'));
   }
 
+  function getCardSourcePreview(card, url) {
+    if (!card) return { url: url || '' };
+    var img = card.querySelector('.tribunes-thumb-img');
+    var source = card.querySelector('.tribunes-meta-main strong');
+    var title = card.querySelector('.tribunes-title');
+    var summary = card.querySelector('.tribunes-summary');
+    var fallbackImage = (typeof AGON_FALLBACK_IMAGE === 'string' && AGON_FALLBACK_IMAGE) ? AGON_FALLBACK_IMAGE : '/logovisuel.png';
+    return {
+      url: url || card.dataset.link || '',
+      image: (img && (img.currentSrc || img.src)) || fallbackImage,
+      source: (source && source.textContent || '').trim(),
+      title: (title && title.textContent || '').trim(),
+      summary: (summary && summary.textContent || '').trim()
+    };
+  }
+  window.getCardSourcePreview = getCardSourcePreview;
+
   function openCardArticle(card) {
     if (!card || !card.dataset) return;
     if (card.dataset.videoId) { openVideoModal(card.dataset.videoId); return; }
     var link = card.dataset.link;
     if (!link) return;
+    if (typeof window.openExtPanel === 'function') {
+      window.openExtPanel(link, getCardSourcePreview(card, link));
+      return;
+    }
     window.open(link, '_blank', 'noopener,noreferrer');
   }
 
@@ -761,6 +1315,10 @@
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
+        if (isMobileTribunesCarousel()) {
+          scrollTribunesCarouselByCard(row, btn.classList.contains('tribunes-carousel-arrow-left') ? -1 : 1);
+          return;
+        }
         var amount = Math.max(240, Math.round(row.clientWidth * 0.9));
         row.scrollBy({ left: btn.classList.contains('tribunes-carousel-arrow-left') ? -amount : amount, behavior: 'smooth' });
         scheduleCarouselStateUpdate(row);
@@ -776,9 +1334,171 @@
     });
     list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
       row.__tribunesControls = collectCarouselControls(row);
+      bindTribunesMobileOneCardSwipe(row);
       row.addEventListener('scroll', function() { scheduleCarouselStateUpdate(row); }, { passive: true });
+      row.addEventListener('load', function(e) {
+        var target = e.target;
+        if (target && (target.tagName === 'IMG' || target.tagName === 'VIDEO')) {
+          syncTribunesCarouselHeight(row, { force: true });
+        }
+      }, { capture: true, passive: true });
+      observeTribunesCarouselHeight(row);
       updateCarouselArrowState(row);
+      syncTribunesCarouselHeight(row, { force: true });
       syncCarouselDots(row);
+    });
+  }
+
+  function getCenteredTribunesCard(row, cards) {
+    var center = row.scrollLeft + row.clientWidth / 2;
+    var best = null;
+    var bestDist = Infinity;
+    cards.forEach(function(card) {
+      var dist = Math.abs((card.offsetLeft + card.offsetWidth / 2) - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = card;
+      }
+    });
+    return best;
+  }
+
+  function isMobileTribunesCarousel() {
+    return window.matchMedia && window.matchMedia('(max-width: 520px)').matches;
+  }
+
+  function getTribunesCardSnapLeft(row, card) {
+    if (!row || !card) return 0;
+    return Math.max(0, Math.round(card.offsetLeft - Math.max(0, (row.clientWidth - card.offsetWidth) / 2)));
+  }
+
+  function getCurrentTribunesCardIndex(row, cards) {
+    var centered = getCenteredTribunesCard(row, cards);
+    var index = centered ? cards.indexOf(centered) : 0;
+    return index < 0 ? 0 : index;
+  }
+
+  function scrollTribunesCarouselToCard(row, index, options) {
+    var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+    if (!cards.length) return;
+    options = options || {};
+    var safeIndex = Math.max(0, Math.min(cards.length - 1, index));
+    row.__tribunesAutoSnapping = true;
+    window.clearTimeout(row.__tribunesAutoSnapClearTimer);
+    row.scrollTo({ left: getTribunesCardSnapLeft(row, cards[safeIndex]), behavior: options.instant ? 'auto' : 'smooth' });
+    row.__tribunesAutoSnapClearTimer = window.setTimeout(function() {
+      row.__tribunesAutoSnapping = false;
+    }, options.instant ? 80 : 380);
+    scheduleCarouselStateUpdate(row);
+    syncTribunesCarouselHeight(row, { force: true });
+  }
+
+  function scrollTribunesCarouselByCard(row, direction) {
+    var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+    if (!cards.length) return;
+    scrollTribunesCarouselToCard(row, getCurrentTribunesCardIndex(row, cards) + direction);
+  }
+
+  function bindTribunesMobileOneCardSwipe(row) {
+    if (!row || row.__tribunesOneCardSwipeBound) return;
+    row.__tribunesOneCardSwipeBound = true;
+
+    row.addEventListener('touchstart', function(event) {
+      if (!isMobileTribunesCarousel()) return;
+      var touch = event.touches && event.touches[0];
+      if (!touch) return;
+      var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+      row.__tribunesTouchState = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        locked: false,
+        startIndex: getCurrentTribunesCardIndex(row, cards)
+      };
+    }, { passive: true });
+
+    row.addEventListener('touchmove', function(event) {
+      if (!isMobileTribunesCarousel()) return;
+      var state = row.__tribunesTouchState;
+      var touch = event.touches && event.touches[0];
+      if (!state || !touch) return;
+      var dx = touch.clientX - state.startX;
+      var dy = touch.clientY - state.startY;
+      if (!state.locked && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+        state.locked = true;
+      }
+      if (state.locked && event.cancelable) {
+        event.preventDefault();
+      }
+    }, { passive: false });
+
+    row.addEventListener('touchend', function(event) {
+      if (!isMobileTribunesCarousel()) return;
+      var state = row.__tribunesTouchState;
+      row.__tribunesTouchState = null;
+      var touch = event.changedTouches && event.changedTouches[0];
+      if (!state || !touch) return;
+      var dx = touch.clientX - state.startX;
+      var dy = touch.clientY - state.startY;
+      var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+      if (!cards.length) return;
+      var targetIndex = state.startIndex;
+      if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) * 1.15) {
+        targetIndex += dx < 0 ? 1 : -1;
+      }
+      targetIndex = Math.max(0, Math.min(cards.length - 1, targetIndex));
+      scrollTribunesCarouselToCard(row, targetIndex);
+    }, { passive: true });
+
+    row.addEventListener('touchcancel', function() {
+      row.__tribunesTouchState = null;
+    }, { passive: true });
+  }
+
+  function syncTribunesCarouselHeight(row, options) {
+    if (!row) return;
+    var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+    if (!cards.length) return;
+    options = options || {};
+    var rowLeft = row.scrollLeft;
+    var rowRight = row.scrollLeft + row.clientWidth;
+    var visibleCards = cards.filter(function(card) {
+      var cardLeft = card.offsetLeft;
+      var cardRight = cardLeft + card.offsetWidth;
+      return cardRight > rowLeft + 2 && cardLeft < rowRight - 2;
+    });
+    var isMobile = window.matchMedia('(max-width: 768px)').matches;
+    var targetCards = visibleCards.length ? visibleCards : cards;
+    if (isMobile) {
+      var centeredCard = getCenteredTribunesCard(row, cards);
+      targetCards = centeredCard ? [centeredCard] : (visibleCards.length ? [visibleCards[0]] : cards.slice(0, 1));
+    }
+    var visibleKey = row.clientWidth + '|' + targetCards.map(function(card) {
+      return card.dataset.link || '';
+    }).join(',');
+    if (!options.force && row.dataset.heightVisibleKey === visibleKey && row.style.height) return;
+    row.dataset.heightVisibleKey = visibleKey;
+    var rowStyle = window.getComputedStyle ? getComputedStyle(row) : null;
+    var bottomPadding = rowStyle ? (parseFloat(rowStyle.paddingBottom) || 0) : 0;
+    var nextHeight = Math.ceil(Math.max.apply(null, targetCards.map(function(card) {
+      return card.offsetTop + card.offsetHeight;
+    })) + bottomPadding + 4);
+    if (nextHeight > 0) row.style.height = nextHeight + 'px';
+  }
+
+  function observeTribunesCarouselHeight(row) {
+    if (!row || row.__tribunesHeightObserved || !window.ResizeObserver) return;
+    row.__tribunesHeightObserved = true;
+    var resizeRaf = 0;
+    var observer = new ResizeObserver(function() {
+      if (resizeRaf) return;
+      resizeRaf = requestAnimationFrame(function() {
+        resizeRaf = 0;
+        row.dataset.heightVisibleKey = '';
+        syncTribunesCarouselHeight(row, { force: true });
+      });
+    });
+    row.querySelectorAll('.tribunes-item').forEach(function(card) {
+      observer.observe(card);
     });
   }
 
@@ -800,6 +1520,7 @@
     row.__tribunesScrollRaf = requestAnimationFrame(function() {
       row.__tribunesScrollRaf = 0;
       updateCarouselArrowState(row);
+      syncTribunesCarouselHeight(row);
     });
   }
 
@@ -878,6 +1599,12 @@
         dot.dataset.index = String(i);
         dot.addEventListener('click', function() {
           var index = Number(this.dataset.index || '0');
+          if (isMobileTribunesCarousel()) {
+            var mobileCards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+            var mobileIndex = dotCount <= 1 ? 0 : Math.round(index * Math.max(0, mobileCards.length - 1) / (dotCount - 1));
+            scrollTribunesCarouselToCard(row, mobileIndex);
+            return;
+          }
           var currentMaxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
           var targetLeft = dotCount <= 1 ? 0 : Math.round(index * currentMaxScrollLeft / (dotCount - 1));
           row.scrollTo({ left: targetLeft, behavior: 'smooth' });
@@ -901,30 +1628,26 @@
     });
   }
 
-  // Regroupe par thématique (dérivée de l'orientation, cf. themeClass) : les thématiques
-  // nommées d'abord (les plus fournies en premier), puis un carrousel "Actualité générale"
-  // pour tout le reste — la majorité des sources généralistes n'ont pas de second segment
-  // dans leur orientation (juste "généraliste", "régional"...), donc pas de thématique
-  // détectable ; ce carrousel fourre-tout reste volontairement le plus gros.
+  // Regroupe par les mêmes rubriques que l'index. Le serveur fournit article.category
+  // (classification nano à l'ingestion + fallback local), donc le front ne devine plus
+  // la rubrique à partir de l'orientation politique de la source.
   function groupByTheme(articles) {
     var buckets = {};
-    var order = [];
     articles.forEach(function(a) {
-      var key = themeClass(a.orientation) || '_general';
-      if (!buckets[key]) { buckets[key] = []; order.push(key); }
-      buckets[key].push(a);
+      var category = normalizeCategory(a.category) || 'Société - éducation';
+      var key = categoryKey(category);
+      if (!buckets[key]) buckets[key] = { key: key, label: category, items: [] };
+      buckets[key].items.push(a);
     });
-    var namedKeys = order.filter(function(k) { return k !== '_general'; });
-    namedKeys.sort(function(a, b) { return buckets[b].length - buckets[a].length; });
-    var groups = namedKeys.map(function(k) { return { key: k, label: THEME_LABEL_BY_KEY[k], items: buckets[k] }; });
-    if (buckets._general) groups.push({ key: '_general', label: 'Actualité générale', items: buckets._general });
-    return groups;
+    return CATEGORY_OPTIONS
+      .map(function(category) { return buckets[categoryKey(category)]; })
+      .filter(Boolean);
   }
 
   function renderThemeSection(group) {
     var rowId = 'tribunes-row-' + group.key;
     return '' +
-      '<section class="tribunes-theme-section">' +
+      '<section class="tribunes-theme-section" data-theme="' + escapeHtml(group.label) + '">' +
         '<div class="tribunes-theme-heading">' +
           '<button type="button" class="tribunes-row-jump-start is-hidden" data-row="' + rowId + '" aria-label="Revenir au premier article">«</button>' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left tribunes-heading-arrow tribunes-heading-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents">‹</button>' +
@@ -966,6 +1689,36 @@
     });
   }
 
+  function getTribunesStickyOffset() {
+    var topbar = document.querySelector('.topbar');
+    var header = document.querySelector('.tribunes-page-header');
+    var topbarH = topbar && getComputedStyle(topbar).display !== 'none' ? topbar.offsetHeight : 0;
+    var headerH = header && getComputedStyle(header).display !== 'none' ? Math.min(header.offsetHeight, 96) : 0;
+    return topbarH + headerH + 8;
+  }
+
+  function scrollToTribunesTop() {
+    var target = document.querySelector('.tribunes-page-header') || document.body;
+    var top = target.getBoundingClientRect().top + window.scrollY - getTribunesStickyOffset();
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  function scrollToTribunesTheme(theme) {
+    var safeTheme = String(theme || '').trim();
+    if (!safeTheme) return;
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.tribunes-theme-section'));
+    var section = sections.find(function(node) {
+      return String(node.getAttribute('data-theme') || '').trim() === safeTheme;
+    });
+    if (!section) return;
+    var top = section.getBoundingClientRect().top + window.scrollY - getTribunesStickyOffset();
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    if (typeof closeIndexExplorerMenu === 'function') closeIndexExplorerMenu();
+  }
+
+  window.scrollToTribunesTop = scrollToTribunesTop;
+  window.scrollToTribunesTheme = scrollToTribunesTheme;
+
   // Vignette Open Graph par article, via le système de preview de liens déjà utilisé
   // pour les sources de débats (/api/link-preview, cache disque côté serveur — aucun
   // impact Supabase). Chargement paresseux au scroll (IntersectionObserver) plutôt
@@ -975,9 +1728,105 @@
   var previewObserver = null;
   var previewCacheByLink = {};
   var previewRequestByLink = {};
+  var AGON_FALLBACK_IMAGE = '/logovisuel.png';
+  var LIBERATION_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lib%C3%A9ration.svg/langfr-250px-Lib%C3%A9ration.svg.png';
+
+  function uniqueImageCandidates(candidates) {
+    var seen = {};
+    return candidates
+      .map(function(value) { return String(value || '').trim(); })
+      .filter(Boolean)
+      .filter(function(value) {
+        var key = value.replace(/([?&])width=\d+/i, '$1width=').replace(/([?&])height=\d+/i, '$1height=');
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+  }
+
+  function getYouTubeThumbnailCandidates(videoId) {
+    if (!videoId) return [];
+    var base = 'https://i.ytimg.com/vi/' + encodeURIComponent(videoId) + '/';
+    return [
+      base + 'maxresdefault.jpg',
+      base + 'sddefault.jpg',
+      base + 'hqdefault.jpg',
+      base + 'mqdefault.jpg'
+    ];
+  }
+
+  function getSourceFallbackImage(article) {
+    var source = String(article && article.source || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    var link = String(article && article.link || '').toLowerCase();
+    if (source.indexOf('liberation') !== -1 || link.indexOf('liberation.fr') !== -1) {
+      return LIBERATION_FALLBACK_IMAGE;
+    }
+    return '';
+  }
+
+  function getPreviewImageCandidates(article, preview) {
+    var videoId = article && article.type === 'youtube' ? getYouTubeVideoId(article.link) : '';
+    var sourceFallback = getSourceFallbackImage(article);
+    return uniqueImageCandidates([
+      article && article.source_image,
+      preview && preview.image,
+      preview && preview.imageUrl,
+      preview && preview.thumbnail,
+      preview && preview.thumbnailUrl,
+      preview && preview.ogImage
+    ].concat(getYouTubeThumbnailCandidates(videoId), [sourceFallback, AGON_FALLBACK_IMAGE]));
+  }
+
+  function isExternalImageUrl(url) {
+    return /^https?:\/\//i.test(String(url || ''));
+  }
+
+  function toDisplayImageCandidates(rawCandidates) {
+    var display = [];
+    rawCandidates.forEach(function(url) {
+      if (isExternalImageUrl(url)) {
+        display.push(url);
+        display.push('/api/image-proxy?url=' + encodeURIComponent(url));
+      } else {
+        display.push(url);
+      }
+    });
+    return uniqueImageCandidates(display);
+  }
+
+  function setThumbImageFromCandidates(thumb, img, rawCandidates) {
+    var candidates = toDisplayImageCandidates(rawCandidates);
+    var index = 0;
+
+    function loadNext() {
+      var next = candidates[index++];
+      if (!next) {
+        thumb.style.display = 'none';
+        return;
+      }
+      thumb.style.display = '';
+      img.dataset.src = next;
+      thumb.classList.toggle('tribunes-thumb-source-logo', next.indexOf('Lib%C3%A9ration.svg') !== -1 || next.indexOf('Libération.svg') !== -1);
+      thumb.classList.add('tribunes-thumb-loading');
+      thumb.classList.remove('tribunes-thumb-loaded');
+      img.src = next;
+    }
+
+    img.onload = function() {
+      thumb.classList.remove('tribunes-thumb-loading');
+      thumb.classList.add('tribunes-thumb-loaded');
+    };
+    img.onerror = loadNext;
+    loadNext();
+  }
 
   function observeForPreview(card, article) {
     card.__article = article;
+    if (article.type === 'youtube') {
+      applyPreviewToCard(article, null, card);
+    }
     if (Object.prototype.hasOwnProperty.call(previewCacheByLink, article.link)) {
       applyPreviewToCard(article, previewCacheByLink[article.link], card);
       return;
@@ -1047,26 +1896,16 @@
     if (!li) return;
     var thumb = li.querySelector('.tribunes-thumb');
     if (!thumb) return;
-    if (!preview || !preview.image) {
-      thumb.style.display = 'none';
-      return;
-    }
     var img = thumb.querySelector('.tribunes-thumb-img');
     if (!img) {
       thumb.style.display = 'none';
       return;
     }
-    thumb.style.display = '';
-    if (img.dataset.src === preview.image && thumb.classList.contains('tribunes-thumb-loaded')) return;
-    img.dataset.src = preview.image;
-    thumb.classList.add('tribunes-thumb-loading');
-    thumb.classList.remove('tribunes-thumb-loaded');
-    img.onload = function() {
-      thumb.classList.remove('tribunes-thumb-loading');
-      thumb.classList.add('tribunes-thumb-loaded');
-    };
-    img.onerror = function() { thumb.style.display = 'none'; };
-    img.src = preview.image;
+    var rawCandidates = getPreviewImageCandidates(article, preview);
+    var cacheKey = rawCandidates.join('|');
+    if (img.dataset.candidateKey === cacheKey && thumb.classList.contains('tribunes-thumb-loaded')) return;
+    img.dataset.candidateKey = cacheKey;
+    setThumbImageFromCandidates(thumb, img, rawCandidates);
   }
 
   function cssEscape(value) {
@@ -1179,6 +2018,86 @@
   if (refreshBtn) refreshBtn.addEventListener('click', function() { loadArticles(true); });
 
   loadArticles(false);
+})();
+</script>
+<!-- Fiche source externe -->
+<div id="ext-link-overlay" class="source-link-overlay" aria-hidden="true">
+  <div class="source-link-panel" role="dialog" aria-modal="true" aria-label="Source externe">
+    <div class="source-link-topbar">
+      <img src="/favicon-64.png" alt="agôn" style="height:28px; width:auto; display:block; flex-shrink:0;">
+      <span id="ext-link-domain" class="source-link-domain"></span>
+      <button type="button" class="source-link-close" onclick="closeExtPanel()">Retour</button>
+    </div>
+    <div class="source-link-media">
+      <img id="ext-link-image" src="/logovisuel.png" alt="">
+    </div>
+    <div class="source-link-body">
+      <div id="ext-link-source" class="source-link-source"></div>
+      <h2 id="ext-link-title" class="source-link-title"></h2>
+      <p id="ext-link-summary" class="source-link-summary"></p>
+      <div class="source-link-actions">
+        <a id="ext-link-open" class="source-link-open" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>
+        <button type="button" class="source-link-back" onclick="closeExtPanel()">Retour vers agôn</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  function openExtPanel(url, preview) {
+    var overlay = document.getElementById('ext-link-overlay');
+    var domain = document.getElementById('ext-link-domain');
+    var openLink = document.getElementById('ext-link-open');
+    var image = document.getElementById('ext-link-image');
+    var source = document.getElementById('ext-link-source');
+    var title = document.getElementById('ext-link-title');
+    var summary = document.getElementById('ext-link-summary');
+    if (!overlay) return;
+    preview = preview || {};
+    var host = '';
+    try { host = new URL(url).hostname; } catch(e) { host = url; }
+    if (domain) domain.textContent = host;
+    if (openLink) openLink.href = url;
+    if (image) {
+      image.src = preview.image || '/logovisuel.png';
+      image.onerror = function() { image.onerror = null; image.src = '/logovisuel.png'; };
+    }
+    if (source) {
+      source.textContent = preview.source || host || 'Source externe';
+      source.style.display = source.textContent ? '' : 'none';
+    }
+    if (title) title.textContent = preview.title || 'Source externe';
+    if (summary) {
+      summary.textContent = preview.summary || 'Le site original s’ouvre hors d’Agôn pour éviter les pages blanches et les blocages d’affichage.';
+      summary.style.display = summary.textContent ? '' : 'none';
+    }
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeExtPanel() {
+    var overlay = document.getElementById('ext-link-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+  window.openExtPanel = openExtPanel;
+  window.closeExtPanel = closeExtPanel;
+  document.addEventListener('click', function(event) {
+    var link = event.target.closest('a[target="_blank"]');
+    if (!link || link.id === 'ext-link-open') return;
+    var href = link.getAttribute('href');
+    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    event.preventDefault();
+    var card = link.closest('.tribunes-item');
+    var preview = (typeof getCardSourcePreview === 'function') ? getCardSourcePreview(card, href) : { url: href };
+    openExtPanel(href, preview);
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') closeExtPanel();
+  });
 })();
 </script>
 </body>

@@ -6,6 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const dns = require("dns");
 const net = require("net");
+const { Readable } = require("stream");
 const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
@@ -209,6 +210,20 @@ const VEILLE_YOUTUBE_PATH = (process.env.VEILLE_YOUTUBE_PATH || path.join(__dirn
 
 let _veilleMediasCache = null;
 
+function normalizeVeilleMediaOrientation(nom, domain, orientation) {
+  const mediaName = String(nom || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .trim();
+  const mediaDomain = String(domain || "").replace(/^www\./, "").toLowerCase();
+  if ((mediaName === "le monde" || mediaName.startsWith("le monde :")) || mediaDomain === "lemonde.fr") return "généraliste";
+  if (mediaName === "l'obs" || mediaName.includes("nouvelobs") || mediaDomain === "nouvelobs.com") return "généraliste";
+  if (mediaName === "france inter" || mediaName.startsWith("france inter :") || mediaDomain === "franceinter.fr") return "généraliste";
+  if (mediaName === "europe 1" || mediaName.startsWith("europe 1 :") || mediaName === "europe1" || mediaDomain === "europe1.fr") return "droite";
+  return String(orientation || "").trim();
+}
+
 function _processMediasRows(items) {
   function extractYouTubeChannelId(item) {
     const candidates = [String(item?.rss || ""), String(item?.url || "")];
@@ -235,9 +250,10 @@ function _processMediasRows(items) {
           try { domain = new URL(String(item?.rss || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
         }
       }
+      const nom = String(item?.nom || item?.name || "").trim();
       return {
-        nom:         String(item?.nom || item?.name || "").trim(),
-        orientation: String(item?.orientation || "").trim(),
+        nom,
+        orientation: normalizeVeilleMediaOrientation(nom, domain, item?.orientation),
         domain,
         ...(isYt ? {
           url:       String(item?.url || "").trim(),
@@ -2409,8 +2425,10 @@ function _cacheSet(map, key, value, maxSize) {
 
 const externalPreviewCache = new Map();
 const externalPreviewInFlightRequests = new Map();
+const externalPreviewNoImageRetryAfter = new Map();
 const EXTERNAL_PREVIEW_CACHE_DIR = path.join(__dirname, "data", "external-preview-cache");
 const EXTERNAL_PREVIEW_CACHE_MAX = 300;
+const EXTERNAL_PREVIEW_NO_IMAGE_RETRY_MS = 30 * 60 * 1000;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEBATES_API_CACHE_MAX = 50;
@@ -2684,6 +2702,19 @@ function isMeaningfulPreviewData(preview, sourceUrl = "") {
   return false;
 }
 
+function hasPreviewImage(preview) {
+  return !!String(preview?.image || "").trim();
+}
+
+function markPreviewNoImageRetry(url) {
+  externalPreviewNoImageRetryAfter.set(String(url || ""), Date.now() + EXTERNAL_PREVIEW_NO_IMAGE_RETRY_MS);
+}
+
+function shouldRetryPreviewWithoutImage(url) {
+  const retryAfter = externalPreviewNoImageRetryAfter.get(String(url || "")) || 0;
+  return Date.now() >= retryAfter;
+}
+
 function getCachedPreview(url) {
   const entry = externalPreviewCache.get(url);
   if (!entry) return null;
@@ -2732,11 +2763,13 @@ async function getExternalLinkPreview(sourceUrl) {
   }
 
   const cached = getCachedPreview(safeUrl);
-  if (cached) return cached;
+  if (cached && hasPreviewImage(cached)) return cached;
+  if (cached && !hasPreviewImage(cached) && !shouldRetryPreviewWithoutImage(safeUrl)) return cached;
 
-  const persistedPreview = readPersistentPreview(safeUrl);
-  if (persistedPreview && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+  const persistedPreview = cached || readPersistentPreview(safeUrl);
+  if (persistedPreview && hasPreviewImage(persistedPreview) && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
     setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
+    externalPreviewNoImageRetryAfter.delete(safeUrl);
     return persistedPreview;
   }
 
@@ -2812,6 +2845,8 @@ async function getExternalLinkPreview(sourceUrl) {
       if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
         setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 60 * 24);
         writePersistentPreview(safeUrl, mergedPreview);
+        if (hasPreviewImage(mergedPreview)) externalPreviewNoImageRetryAfter.delete(safeUrl);
+        else markPreviewNoImageRetry(safeUrl);
         return mergedPreview;
       }
 
@@ -2821,6 +2856,7 @@ async function getExternalLinkPreview(sourceUrl) {
       }
 
       setCachedPreview(safeUrl, mergedPreview, 1000 * 60 * 5);
+      if (!hasPreviewImage(mergedPreview)) markPreviewNoImageRetry(safeUrl);
 
       if (isMeaningfulPreviewData(mergedPreview, safeUrl)) {
         writePersistentPreview(safeUrl, mergedPreview);
@@ -2830,6 +2866,7 @@ async function getExternalLinkPreview(sourceUrl) {
     } catch (error) {
       const fallback = persistedPreview || emptyPreview;
       setCachedPreview(safeUrl, fallback, 1000 * 60 * 5);
+      if (!hasPreviewImage(fallback)) markPreviewNoImageRetry(safeUrl);
       return fallback;
     } finally {
       if (externalPreviewInFlightRequests.get(safeUrl) === previewPromise) {
@@ -4660,6 +4697,49 @@ app.post("/api/link-preview", rateLimit("preview", 120), async (req, res) => {
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur récupération aperçu.");
+  }
+});
+
+app.get("/api/image-proxy", rateLimit("preview-image", 240), async (req, res) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const safeUrl = normalizeExternalUrl(req.query?.url);
+    if (!safeUrl) return res.status(400).send("URL manquante.");
+
+    await assertSafeExternalUrl(safeUrl);
+
+    const response = await fetch(safeUrl, {
+      headers: {
+        ...buildBrowserLikeHeaders(safeUrl, "browser"),
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+      },
+      redirect: "follow",
+      signal: controller.signal
+    });
+
+    if (!response.ok) return res.status(response.status).send("Image indisponible.");
+
+    const finalUrl = response.url || safeUrl;
+    await assertSafeExternalUrl(finalUrl);
+
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return res.status(415).send("Ressource non image.");
+
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (contentLength > 8 * 1024 * 1024) return res.status(413).send("Image trop volumineuse.");
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (!response.body) return res.status(502).send("Image indisponible.");
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (error) {
+    if (!res.headersSent) res.status(502).send("Image indisponible.");
+  } finally {
+    clearTimeout(timeout);
   }
 });
 
@@ -7901,23 +7981,26 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   console.log(`[veille/opinion-articles] payload: ${items.length} article(s)`);
   if (!items.length) return res.json({ ok: true, inserted: 0 });
 
-  const rows = items
-    .filter(item => item && item.title && item.link)
+  const validItems = items.filter(item => item && item.title && item.link);
+  const aiCategories = await classifyOpinionArticlesWithAI(validItems);
+
+  const rows = validItems
     .map(item => ({
       source: String(item.source || "").slice(0, 200),
-      orientation: item.orientation ? String(item.orientation).slice(0, 200) : null,
+      orientation: normalizeOpinionArticleOrientationForSource(item).slice(0, 200) || null,
       title: String(item.title).slice(0, 500),
       link: String(item.link).slice(0, 1000),
       summary: item.summary ? String(item.summary).slice(0, 2000) : null,
       type: item.type === "youtube" ? "youtube" : "article",
+      category: normalizeOpinionArticleCategory(item.category) ||
+        aiCategories.get(String(item.link || "")) ||
+        getOpinionArticleFallbackCategory(item),
       published_at: item.date ? new Date(item.date).toISOString() : new Date().toISOString()
     }));
 
   if (!rows.length) return res.json({ ok: true, inserted: 0 });
 
-  const { error } = await supabase
-    .from("opinion_articles")
-    .upsert(rows, { onConflict: "link", ignoreDuplicates: true });
+  const error = await upsertOpinionArticleRows(rows);
 
   if (error) { console.error("veille/opinion-articles:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
   res.json({ ok: true, inserted: rows.length });
@@ -7932,6 +8015,8 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
 // Bucket par bord ET par type (articles vs vidéos YouTube) : sans ça, les vidéos (moins
 // nombreuses) se font noyer par les articles dans la limite globale.
 const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 50;
+const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 2000;
+const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
 // server.js) : "gauche"/"droite" couvrent aussi les familles proches (écolo, souverainiste,
 // libéral...), pas seulement les libellés exacts "gauche"/"droite".
@@ -7953,6 +8038,305 @@ function getOpinionOrientationGroup(orientation) {
   return "center";
 }
 
+function normalizeOpinionArticleOrientationForSource(article) {
+  let domain = "";
+  try { domain = new URL(String(article?.link || "")).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) {}
+  return normalizeVeilleMediaOrientation(article?.source, domain, article?.orientation);
+}
+
+async function fetchOpinionArticleSelectionRows(limit = OPINION_ARTICLES_SELECTION_SCAN_LIMIT) {
+  const safeLimit = Math.max(1, Math.min(5000, Number(limit || OPINION_ARTICLES_SELECTION_SCAN_LIMIT)));
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; from < safeLimit; from += pageSize) {
+    const to = Math.min(safeLimit - 1, from + pageSize - 1);
+    const { data, error } = await supabase
+      .from("opinion_articles")
+      .select("id, source, link, orientation, type, published_at")
+      .order("published_at", { ascending: false })
+      .range(from, to);
+    if (error) throw new Error(error.message);
+    rows.push(...(data || []));
+    if (!data || data.length < to - from + 1) break;
+  }
+  return rows;
+}
+
+function getOpinionArticleSourceKey(row) {
+  const sourceKey = normalizeCloudSourceName(row?.source).replace(/\s*:?\s*youtube$/, "").trim();
+  if (sourceKey) return sourceKey;
+  const domainKey = normalizeCloudSourceUrl(row?.link);
+  return domainKey || "source-inconnue";
+}
+
+function selectDiverseOpinionArticleIds(rows, limit = OPINION_ARTICLES_TYPE_BUCKET_LIMIT, sourceSoftLimit = OPINION_ARTICLES_SOURCE_SOFT_LIMIT) {
+  const safeLimit = Math.max(0, Number(limit || 0));
+  if (!safeLimit || !Array.isArray(rows) || !rows.length) return [];
+
+  const bySource = new Map();
+  for (const row of rows) {
+    const sourceKey = getOpinionArticleSourceKey(row);
+    if (!bySource.has(sourceKey)) bySource.set(sourceKey, []);
+    bySource.get(sourceKey).push(row.id);
+  }
+
+  const selected = [];
+  const selectedSet = new Set();
+  const takeRoundRobin = (queues, maxPerSource) => {
+    const sourceCounts = new Map();
+    while (selected.length < safeLimit && queues.length) {
+      let progressed = false;
+      for (let index = 0; index < queues.length && selected.length < safeLimit;) {
+        const queue = queues[index];
+        const sourceKey = queue.sourceKey;
+        const currentCount = sourceCounts.get(sourceKey) || 0;
+        if (Number.isFinite(maxPerSource) && currentCount >= maxPerSource) {
+          queues.splice(index, 1);
+          continue;
+        }
+        const id = queue.ids.shift();
+        if (id != null && !selectedSet.has(id)) {
+          selected.push(id);
+          selectedSet.add(id);
+          sourceCounts.set(sourceKey, currentCount + 1);
+          progressed = true;
+        }
+        if (!queue.ids.length) queues.splice(index, 1);
+        else index += 1;
+      }
+      if (!progressed) break;
+    }
+  };
+
+  const cappedQueues = Array.from(bySource.entries())
+    .map(([sourceKey, ids]) => ({ sourceKey, ids: ids.slice() }))
+    .filter((queue) => queue.ids.length);
+  takeRoundRobin(cappedQueues, Math.max(1, Number(sourceSoftLimit || OPINION_ARTICLES_SOURCE_SOFT_LIMIT)));
+
+  const fallbackQueues = Array.from(bySource.entries())
+    .map(([sourceKey, ids]) => ({ sourceKey, ids: ids.filter((id) => !selectedSet.has(id)) }))
+    .filter((queue) => queue.ids.length);
+  takeRoundRobin(fallbackQueues, Infinity);
+  return selected;
+}
+
+function buildVisibleOpinionArticleSelection(lightRows, perTypeLimit = OPINION_ARTICLES_TYPE_BUCKET_LIMIT) {
+  const candidates = {
+    left: { article: [], youtube: [] },
+    right: { article: [], youtube: [] }
+  };
+
+  for (const row of lightRows || []) {
+    const group = getOpinionOrientationGroup(normalizeOpinionArticleOrientationForSource(row) || row.orientation);
+    if (group !== "left" && group !== "right") continue;
+    const type = row.type === "youtube" ? "youtube" : "article";
+    candidates[group][type].push(row);
+  }
+
+  return {
+    left: {
+      article: selectDiverseOpinionArticleIds(candidates.left.article, perTypeLimit),
+      youtube: selectDiverseOpinionArticleIds(candidates.left.youtube, perTypeLimit)
+    },
+    right: {
+      article: selectDiverseOpinionArticleIds(candidates.right.article, perTypeLimit),
+      youtube: selectDiverseOpinionArticleIds(candidates.right.youtube, perTypeLimit)
+    }
+  };
+}
+
+const OPINION_ARTICLE_CATEGORY_OPTIONS = [
+  "Politique",
+  "International",
+  "Économie - emploi",
+  "Société - éducation",
+  "Sciences - technologie",
+  "Climat - environnement",
+  "Justice - faits divers",
+  "Culture - modes",
+  "Philosophie - sciences sociales",
+  "Médias - divertissements",
+  "Sports - loisirs",
+  "Santé - bien-être",
+  "Vie personnelle - modes de vie",
+  "Espace jeunes"
+];
+const OPINION_ARTICLE_CATEGORY_MODEL = process.env.OPENAI_OPINION_CATEGORY_MODEL || "gpt-4.1-nano";
+const OPINION_ARTICLE_CATEGORY_BATCH_SIZE = Math.max(1, Math.min(60, Number(process.env.OPENAI_OPINION_CATEGORY_BATCH_SIZE || 40)));
+
+function normalizeOpinionArticleCategory(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const key = raw
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " et ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const canonical = OPINION_ARTICLE_CATEGORY_OPTIONS.find((category) => {
+    return category
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/&/g, " et ")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") === key;
+  });
+  if (canonical) return canonical;
+  const aliases = new Map([
+    ["economie", "Économie - emploi"],
+    ["emploi", "Économie - emploi"],
+    ["economie-et-emploi", "Économie - emploi"],
+    ["societe", "Société - éducation"],
+    ["education", "Société - éducation"],
+    ["societe-et-education", "Société - éducation"],
+    ["sciences", "Sciences - technologie"],
+    ["technologie", "Sciences - technologie"],
+    ["science-technologie", "Sciences - technologie"],
+    ["science-et-technologie", "Sciences - technologie"],
+    ["sciences-et-technologie", "Sciences - technologie"],
+    ["sciences-et-technologies", "Sciences - technologie"],
+    ["climat", "Climat - environnement"],
+    ["environnement", "Climat - environnement"],
+    ["climat-et-environnement", "Climat - environnement"],
+    ["justice", "Justice - faits divers"],
+    ["faits-divers", "Justice - faits divers"],
+    ["justice-et-faits-divers", "Justice - faits divers"],
+    ["culture", "Culture - modes"],
+    ["modes", "Culture - modes"],
+    ["culture-et-modes", "Culture - modes"],
+    ["philosophie", "Philosophie - sciences sociales"],
+    ["sciences-sociales", "Philosophie - sciences sociales"],
+    ["philosophie-et-sciences-sociales", "Philosophie - sciences sociales"],
+    ["medias", "Médias - divertissements"],
+    ["divertissements", "Médias - divertissements"],
+    ["media-divertissement", "Médias - divertissements"],
+    ["medias-et-divertissements", "Médias - divertissements"],
+    ["sports", "Sports - loisirs"],
+    ["loisirs", "Sports - loisirs"],
+    ["sports-et-loisirs", "Sports - loisirs"],
+    ["medecine", "Santé - bien-être"],
+    ["medecine-sante", "Santé - bien-être"],
+    ["sante-medecine", "Santé - bien-être"],
+    ["sante", "Santé - bien-être"],
+    ["bien-etre", "Santé - bien-être"],
+    ["sante-et-bien-etre", "Santé - bien-être"],
+    ["vie-personnelle", "Vie personnelle - modes de vie"],
+    ["modes-de-vie", "Vie personnelle - modes de vie"],
+    ["vie-personnelle-et-modes-de-vie", "Vie personnelle - modes de vie"],
+    ["jeunes", "Espace jeunes"],
+    ["espace-jeune", "Espace jeunes"]
+  ]);
+  return aliases.get(key) || "";
+}
+
+function getOpinionArticleFallbackCategory(article) {
+  const text = [
+    article?.title,
+    article?.summary,
+    article?.source,
+    article?.orientation
+  ].filter(Boolean).join(" ").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+  const rules = [
+    ["Politique", ["macron", "assemblee", "gouvernement", "ministere", "presidentielle", "election", "primaire", "depute", "senat", "parlement", "parti", "rn", "lfi", "ps", "lr", "politique"]],
+    ["Économie - emploi", ["economie", "emploi", "salaire", "entreprise", "budget", "impot", "taxe", "inflation", "banque", "bourse", "industrie", "retraite", "chomage", "pouvoir d'achat"]],
+    ["Climat - environnement", ["climat", "ecolog", "environnement", "biodiversite", "energie", "pollution", "agriculture", "eau", "carbone"]],
+    ["Sciences - technologie", ["science", "technolog", "ia", "intelligence artificielle", "numerique", "internet", "reseau social", "cyber", "spatial", "espace", "robot"]],
+    ["Justice - faits divers", ["justice", "tribunal", "proces", "police", "gendarmerie", "meurtre", "agression", "violence", "prison", "enquete", "faits divers"]],
+    ["Culture - modes", ["culture", "cinema", "livre", "musique", "mode", "art", "theatre", "serie", "festival"]],
+    ["Médias - divertissements", ["media", "journal", "television", "radio", "cnews", "bfmtv", "divertissement", "youtube", "influenceur"]],
+    ["Sports - loisirs", ["sport", "football", "rugby", "tennis", "jo ", "olympique", "loisir"]],
+    ["Santé - bien-être", ["sante", "hopital", "medecin", "maladie", "virus", "vaccin", "psy", "bien-etre"]],
+    ["Philosophie - sciences sociales", ["philosoph", "sociolog", "anthropolog", "histoire", "religion", "idee", "intellectuel"]],
+    ["Vie personnelle - modes de vie", ["famille", "couple", "parent", "logement", "consommation", "alimentation", "travail a distance", "vie personnelle"]],
+    ["Espace jeunes", ["jeune", "adolescent", "lycee", "college", "etudiant", "ecole"]],
+    ["International", ["ukraine", "russie", "chine", "etats-unis", "trump", "gaza", "israel", "palestine", "iran", "otan", "union europeenne", "geopolit", "international"]]
+  ];
+  for (const [category, keywords] of rules) {
+    if (keywords.some((keyword) => text.includes(keyword))) return category;
+  }
+  return "Société - éducation";
+}
+
+async function classifyOpinionArticlesWithAI(items) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !items.length) return new Map();
+
+  const results = new Map();
+  for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
+    const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
+    const compactItems = chunk.map((item, index) => ({
+      id: index,
+      source: String(item.source || "").slice(0, 120),
+      orientation: String(item.orientation || "").slice(0, 120),
+      type: item.type === "youtube" ? "youtube" : "article",
+      title: String(item.title || "").slice(0, 220),
+      summary: String(item.summary || "").slice(0, 450),
+      url: String(item.link || "").slice(0, 180)
+    }));
+    const itemIds = compactItems.map((item) => item.id).join(", ");
+    const prompt = [
+      "Réponds uniquement en json valide.",
+      "Classe chaque article dans UNE seule rubrique Agôn.",
+      "Rubriques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
+      `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
+      "Ne renvoie jamais seulement le premier item.",
+      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\"},{\"id\":1,\"category\":\"...\"}]} avec un objet par id.",
+      "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
+      "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
+      "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/livre/série = Culture - modes ; sport/compétition/Tour de France = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
+      "Ne crée jamais d'autre rubrique.",
+      "",
+      JSON.stringify(compactItems)
+    ].join("\n");
+
+    try {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: OPINION_ARTICLE_CATEGORY_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: Math.min(6000, 160 + chunk.length * 40),
+          temperature: 0
+        })
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      const content = data?.choices?.[0]?.message?.content;
+      const parsed = content ? JSON.parse(content) : null;
+      const classified = Array.isArray(parsed?.items) ? parsed.items : [];
+      classified.forEach((entry) => {
+        const localIndex = Number(entry?.id);
+        const category = normalizeOpinionArticleCategory(entry?.category);
+        if (Number.isInteger(localIndex) && chunk[localIndex] && category) {
+          results.set(String(chunk[localIndex].link || ""), category);
+        }
+      });
+    } catch (error) {
+      console.warn("[opinion-articles category] classification IA ignorée :", error.message);
+    }
+  }
+  return results;
+}
+
+async function upsertOpinionArticleRows(rows) {
+  const { error } = await supabase
+    .from("opinion_articles")
+    .upsert(rows, { onConflict: "link", ignoreDuplicates: true });
+  if (!error) return null;
+  const message = String(error.message || "");
+  if (!message.toLowerCase().includes("category")) return error;
+  const fallbackRows = rows.map(({ category, ...row }) => row);
+  const retry = await supabase
+    .from("opinion_articles")
+    .upsert(fallbackRows, { onConflict: "link", ignoreDuplicates: true });
+  if (retry.error) return retry.error;
+  console.warn("[opinion-articles] colonne category absente : migration data/migration-opinion-articles-category.sql à appliquer.");
+  return null;
+}
+
 // Cache court en mémoire : la page /autres-sources n'a pas besoin d'être seconde-près,
 // et sans lui chaque visiteur redéclenchait le fetch + la requête ciblée ci-dessous contre
 // Supabase (cf. incident de quota Disk IO du 20/06/2026 — server.js:7403, 7455).
@@ -7972,24 +8356,9 @@ app.get("/api/opinion-articles", async (req, res) => {
     // uniquement (pas de title/link/summary) sur un large volume pour classer sans
     // faire peser le poids texte de tout ce qui sera finalement rejeté ; passe 2 :
     // select("*") restreint aux seules lignes retenues.
-    const { data: lightRows, error: lightError } = await supabase
-      .from("opinion_articles")
-      .select("id, orientation, type, published_at")
-      .order("published_at", { ascending: false })
-      .limit(2000);
-    if (lightError) throw new Error(lightError.message);
+    const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
 
-    const buckets = {
-      left: { article: [], youtube: [] },
-      right: { article: [], youtube: [] }
-    };
-    for (const row of lightRows || []) {
-      const group = getOpinionOrientationGroup(row.orientation);
-      if (group !== "left" && group !== "right") continue;
-      const type = row.type === "youtube" ? "youtube" : "article";
-      const bucket = buckets[group][type];
-      if (bucket.length < OPINION_ARTICLES_TYPE_BUCKET_LIMIT) bucket.push(row.id);
-    }
+    const buckets = buildVisibleOpinionArticleSelection(lightRows);
     const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube];
     if (!selectedIds.length) {
       _opinionArticlesCache = [];
@@ -8003,12 +8372,82 @@ app.get("/api/opinion-articles", async (req, res) => {
       .in("id", selectedIds);
     if (fullError) throw new Error(fullError.message);
 
-    const articles = (fullRows || []).sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+    const articles = (fullRows || [])
+      .map((article) => ({
+        ...article,
+        orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
+        category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
+      }))
+      .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
     _opinionArticlesCache = articles;
     _opinionArticlesCacheComputedAt = Date.now();
     res.json({ articles });
   } catch (error) {
     res.status(500).json({ articles: [], error: error.message });
+  }
+});
+
+app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(2000, Number(req.body?.limit || req.query.limit || 200)));
+    const force = req.body?.force === true || req.query.force === "1" || req.query.force === "true";
+    const scope = String(req.body?.scope || req.query.scope || "latest").trim().toLowerCase();
+    let data = [];
+
+    if (scope === "visible") {
+      const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
+
+      const buckets = buildVisibleOpinionArticleSelection(lightRows);
+      const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube].slice(0, limit);
+      if (selectedIds.length) {
+        const { data: fullRows, error: fullError } = await supabase
+          .from("opinion_articles")
+          .select("id, source, orientation, title, link, summary, type, category, published_at")
+          .in("id", selectedIds);
+        if (fullError) throw new Error(fullError.message);
+        data = fullRows || [];
+      }
+    } else {
+      const { data: latestRows, error } = await supabase
+        .from("opinion_articles")
+        .select("id, source, orientation, title, link, summary, type, category, published_at")
+        .order("published_at", { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      data = latestRows || [];
+    }
+
+    const rows = force ? data : data.filter((article) => !normalizeOpinionArticleCategory(article.category));
+    if (!rows.length) return res.json({ ok: true, updated: 0, model: OPINION_ARTICLE_CATEGORY_MODEL });
+
+    const aiCategories = await classifyOpinionArticlesWithAI(rows);
+    let updated = 0;
+    let aiClassified = 0;
+    for (const article of rows) {
+      const linkKey = String(article.link || "");
+      const aiCategory = aiCategories.get(linkKey);
+      if (aiCategory) aiClassified += 1;
+      const category = aiCategory || getOpinionArticleFallbackCategory(article);
+      const { error: updateError } = await supabase
+        .from("opinion_articles")
+        .update({ category })
+        .eq("id", article.id);
+      if (updateError) throw new Error(updateError.message);
+      updated += 1;
+    }
+    _opinionArticlesCache = null;
+    _opinionArticlesCacheComputedAt = 0;
+    res.json({
+      ok: true,
+      updated,
+      aiClassified,
+      considered: data.length,
+      force,
+      scope,
+      model: process.env.OPENAI_API_KEY ? OPINION_ARTICLE_CATEGORY_MODEL : "fallback-local"
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

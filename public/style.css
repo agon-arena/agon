@@ -5995,6 +5995,161 @@ body.page-debate .topbar::after {
   background: #e5e7eb;
   transform: translateY(-1px);
 }
+
+.agon-source-panel-is-open {
+  overflow: hidden !important;
+}
+
+.agon-source-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+  background: rgba(13, 24, 31, 0.68);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.agon-source-panel {
+  width: min(520px, 100%);
+  max-height: 94vh;
+  overflow: auto;
+  border: 2px solid #000000;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+}
+
+.agon-source-panel-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(36, 48, 56, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.agon-source-panel-logo {
+  display: block;
+  flex-shrink: 0;
+  width: auto;
+  height: 28px;
+}
+
+.agon-source-panel-domain {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #243038;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agon-source-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(36, 48, 56, 0.16);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #f3f6f7;
+  color: #243038;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.agon-source-panel-media {
+  position: relative;
+  aspect-ratio: 1.62 / 1;
+  overflow: hidden;
+  background: #dbe5e1;
+}
+
+.agon-source-panel-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agon-source-panel-body {
+  display: grid;
+  gap: 12px;
+  padding: 18px 18px 20px;
+}
+
+.agon-source-panel-source {
+  color: #243038;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.agon-source-panel-title {
+  margin: 0;
+  color: #111827;
+  font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+  font-size: clamp(1.7rem, 7vw, 2.3rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.agon-source-panel-summary {
+  margin: 0;
+  color: #384250;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.42;
+}
+
+.agon-source-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.agon-source-panel-open,
+.agon-source-panel-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0 16px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.agon-source-panel-open {
+  flex: 1 1 190px;
+  border: 0;
+  background: #243038;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(36, 48, 56, 0.2);
+}
+
+.agon-source-panel-back {
+  flex: 1 1 150px;
+  border: 1px solid rgba(36, 48, 56, 0.16);
+  background: #f3f6f7;
+  color: #243038;
+  cursor: pointer;
+}
 .debate-source-fallback-x {
   display: flex;
   flex-direction: column;
@@ -13055,8 +13210,8 @@ body.admin-edit-open::after {
     top: auto !important;
     /* bottom : géré par le bloc "Dock flottant bas débat unifié" en fin de
        fichier (compense le débordement --agon-safe-bottom de la modale). */
-    left: auto !important;
-    right: 322px !important;
+    left: calc(25vw - 21px) !important;
+    right: auto !important;
     width: 42px !important;
     height: 42px !important;
     padding: 0 !important;
@@ -18122,7 +18277,7 @@ html.thematic-scroll .theme-row-section {
   position: relative;
   padding: 4px 0 3px 0;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   transition: height 0.36s cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -22470,7 +22625,7 @@ body.page-home-mobile .index-card-media-with-title video {
 body.page-home .theme-horizontal-row,
 body.page-home-mobile .theme-horizontal-row {
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
 }
 
 @media (max-width: 768px) {
@@ -23341,7 +23496,7 @@ body.page-create-mobile .create-card .create-submit-helper {
      que le bouton retombe sur la ligne du dock (refresh/compteur, compensés
      eux via --agon-embedded-bottom-ext dans l'iframe). */
   #debate-iframe-modal-close {
-    bottom: calc(3px + var(--agon-dock-lift, 0px) + var(--agon-safe-bottom, 0px)) !important;
+    bottom: 32px !important;
   }
 
   /* Boutons du document débat (direct ou embarqué dans l'iframe). */

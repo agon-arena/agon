@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260709-stance-mobile-fix" />
+<link rel="stylesheet" href="/style.min.css?v=20260713-source-panel" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -869,7 +869,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260709-stance-mobile-fix" defer></script>
+	<script src="/script.min.js?v=20260713-source-panel" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -2659,52 +2659,6 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 })();
 </script>
 
-<!-- Modale liens externes -->
-<div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
-  <div style="position:absolute; inset:0; background:#243038; display:flex; flex-direction:column;">
-    <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
-      <img src="/favicon-64.png" alt="agôn" style="height:32px; width:auto; display:block; flex-shrink:0;">
-      <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers agôn</button>
-    </div>
-    <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
-  </div>
-</div>
-<script>
-(function() {
-  function openExtPanel(url) {
-    var overlay = document.getElementById('ext-link-overlay');
-    var iframe = document.getElementById('ext-link-iframe');
-    var domain = document.getElementById('ext-link-domain');
-    if (!overlay || !iframe) return;
-    try { domain.textContent = new URL(url).hostname; } catch(e) { domain.textContent = url; }
-    iframe.src = url;
-    overlay.style.display = 'flex';
-    overlay.style.flexDirection = 'column';
-    document.body.style.overflow = 'hidden';
-  }
-  function closeExtPanel() {
-    var overlay = document.getElementById('ext-link-overlay');
-    var iframe = document.getElementById('ext-link-iframe');
-    if (!overlay || !iframe) return;
-    overlay.style.display = 'none';
-    iframe.src = '';
-    document.body.style.overflow = '';
-  }
-  window.closeExtPanel = closeExtPanel;
-  document.addEventListener('click', function(e) {
-    var link = e.target.closest('a[target="_blank"]');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-    e.preventDefault();
-    openExtPanel(href);
-  });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeExtPanel();
-  });
-})();
-</script>
 <div id="push-denied-modal" style="display:none; position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;" onclick="closePushDeniedModal()">
   <div style="background:#1e2d38; border:1px solid #3a4a55; border-radius:16px; padding:24px 20px; max-width:340px; width:90%; margin:auto;" onclick="event.stopPropagation()">
     <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
