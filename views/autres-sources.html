@@ -12,11 +12,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260713-tribunes-gap-fix">
+  <link rel="stylesheet" href="/style.min.css?v=20260714-scroll-arrows-refresh">
   <style>
     .tribunes-page-header {
       position: sticky;
-      top: calc(var(--tribunes-topbar-offset, 0px) - 56px);
+      top: var(--tribunes-header-stick-top, calc(var(--tribunes-topbar-offset, 0px) - 56px));
       z-index: 40;
       margin: -16px -16px 0;
       padding: 2px 16px 10px;
@@ -24,8 +24,13 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-radius: 8px 8px 0 0;
-      transform: translateY(-64px);
-      margin-bottom: -64px;
+    }
+    /* Une fois le header épinglé au scroll, seuls les boutons restent
+       visibles : le fond et le blur disparaissent (classe togglée en JS). */
+    .tribunes-page-header.tribunes-header-stuck {
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     .tribunes-refresh-nav-btn:disabled {
       cursor: default;
@@ -116,11 +121,109 @@
     body.page-tribunes.in-iframe .topbar-inner {
       min-height: 28px;
     }
-    body.page-tribunes .topbar {
-      padding-top: 1px;
+    /* === Bandeau du haut : réplique exacte de la page index. Les règles
+       descendantes .page-home* de style.css s'appliquent via le wrapper du
+       header ; celles préfixées body.page-home* sont recopiées ici avec le
+       scope body.page-tribunes (mêmes valeurs que style.css). === */
+    body.page-tribunes .topbar-inner.topbar-home {
+      row-gap: 0 !important;
     }
-    body.page-tribunes .topbar::after {
-      display: none;
+    body.page-tribunes .topbar-inner.topbar-home,
+    body.page-tribunes .topbar-inner {
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    /* L'index applique Oswald à toute la page (body.page-home :where(...)) ;
+       ici on ne le fait que dans la topbar répliquée. */
+    body.page-tribunes .topbar :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
+    body.page-tribunes .agon-user-score-widget,
+    body.page-tribunes .agon-user-score-widget :where(span) {
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+    }
+    body.page-tribunes .home-logo {
+      width: 128px !important;
+      max-height: 96px !important;
+      object-fit: contain !important;
+    }
+    body.page-tribunes .topbar-social {
+      display: none !important;
+    }
+    @media (min-width: 769px) {
+      body.page-tribunes .topbar {
+        height: 152px !important;
+        min-height: 152px !important;
+        max-height: 152px !important;
+      }
+      body.page-tribunes .home-brand-main {
+        transform: translateX(83px) !important;
+      }
+      body.page-tribunes .home-logo {
+        width: 402px !important;
+        max-height: 144px !important;
+        transform: translateY(2px) !important;
+      }
+      body.page-tribunes .home-brand-block {
+        height: 146px !important;
+        max-height: 146px !important;
+        overflow: visible !important;
+      }
+      body.page-tribunes .topbar-inner.topbar-home {
+        grid-template-columns: 44px minmax(0, 1fr) 210px !important;
+      }
+      body.page-tribunes .topbar-app-icon--desktop {
+        width: 144px !important;
+        height: 144px !important;
+        border-radius: 18px !important;
+        margin: 0 !important;
+        transform: none !important;
+        align-self: center !important;
+        justify-self: center !important;
+        position: absolute !important;
+        top: 4px !important;
+        right: -51px !important;
+        z-index: 2 !important;
+      }
+    }
+    @media (max-width: 768px) {
+      body.page-tribunes .topbar-app-icon--mobile {
+        width: 104px !important;
+        height: 104px !important;
+        border-radius: 16px !important;
+        margin: -25px 0 -35px -52px !important;
+      }
+      body.is-standalone.page-tribunes .topbar {
+        padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
+      }
+      body.is-standalone.page-tribunes .topbar-inner.topbar-home {
+        padding-top: 1px !important;
+        padding-bottom: 0px !important;
+      }
+      body.is-standalone.page-tribunes .home-topbar-login-icon {
+        grid-area: spacer;
+        justify-self: end;
+        align-self: center;
+        width: 38px;
+        height: 38px;
+        display: inline-flex !important;
+        position: absolute !important;
+        top: 50% !important;
+        right: 10px !important;
+        left: auto !important;
+        transform: translateY(-50%) !important;
+        margin: 0 !important;
+      }
+      body.is-standalone.page-tribunes .topbar-actions {
+        justify-content: flex-start !important;
+      }
+      body.is-standalone.page-tribunes .topbar-inner.topbar-home {
+        position: relative !important;
+      }
+    }
+    body.page-tribunes .about-page-shell {
+      /* Comble le padding-top hérité de main (16px mobile / 28px desktop) :
+         sans ce fond, le body sombre (#243038) transparaît derrière la page
+         aux extrémités hautes de l'écran, entre la topbar et le panneau. */
+      background: linear-gradient(#dbe5e1, #dbe5e1) top / 100% 40px no-repeat;
     }
     .tribunes-page-header::before {
       content: "";
@@ -142,43 +245,12 @@
       z-index: 2;
       border-radius: 8px 8px 0 0;
     }
-    body.is-standalone.page-tribunes .topbar {
-      padding-top: calc(10px + env(safe-area-inset-top, 0px));
-    }
-    body.page-tribunes .topbar-inner,
-    body.page-tribunes .topbar-actions,
-    body.page-tribunes .home-brand-block {
-      position: relative;
-      z-index: 1;
-    }
-    body.page-tribunes .topbar-inner.topbar-home {
-      display: grid;
-      grid-template-columns: 44px minmax(0, 1fr) 44px;
-      grid-template-areas: "actions brand spacer";
-      align-items: center;
-      row-gap: 2px;
-      column-gap: 12px;
-      min-height: 28px;
-      padding-top: 0;
-      padding-bottom: 1px;
-    }
-    body.page-tribunes .home-brand-block {
-      grid-area: brand;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      min-width: 0;
-      margin-left: 0;
-    }
-    body.page-tribunes .home-brand-main {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      min-width: 0;
-      width: 100%;
+    /* Pas de liseré dégradé en haut du panneau (il traçait une barre
+       horizontale juste au-dessus du titre Autres actus). */
+    @media (max-width: 768px) {
+      .tribunes-page-header::before {
+        display: none;
+      }
     }
     .source-link-overlay {
       position: fixed;
@@ -309,16 +381,6 @@
       color: #243038;
       cursor: pointer;
     }
-    body.page-tribunes .topbar-actions {
-      grid-area: actions;
-      width: auto;
-      margin-left: 0;
-      margin-top: 0;
-      flex-shrink: 0;
-      justify-content: flex-start;
-      gap: 8px;
-      z-index: 10001;
-    }
     body.page-tribunes .tribunes-mobile-back-button {
       position: fixed;
       left: calc(20% - 13px);
@@ -327,10 +389,13 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 42px;
-      min-width: 42px;
-      height: 42px;
-      min-height: 42px;
+      /* Même taille que les flèches haut/bas (.app-floating-refresh-btn) :
+         44px en mobile, 56px en desktop, bordure comprise. */
+      box-sizing: border-box;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      min-height: 44px;
       border-radius: 999px;
       border: 3px solid transparent;
       background:
@@ -356,62 +421,14 @@
     }
     @media (min-width: 769px) {
       body.page-tribunes .tribunes-mobile-back-button {
-        display: none;
+        left: 24px;
+        bottom: 24px;
+        width: 56px;
+        min-width: 56px;
+        height: 56px;
+        min-height: 56px;
+        font-size: 22px;
       }
-    }
-    body.page-tribunes .home-topbar-menu-toggle {
-      width: 30px;
-      height: 30px;
-      margin-left: 8px;
-      transform: none;
-    }
-    body.page-tribunes .tribunes-topbar-notifications {
-      grid-area: spacer;
-      justify-self: end;
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      min-width: 36px;
-      height: 36px;
-      min-height: 36px;
-      margin-right: 8px;
-      border-radius: 999px;
-      background: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      color: #111827;
-      text-decoration: none;
-      flex-shrink: 0;
-    }
-    body.page-tribunes .tribunes-topbar-notifications:hover,
-    body.page-tribunes .tribunes-topbar-notifications:focus-visible {
-      background: #e5e7eb;
-      border-color: #d1d5db;
-      color: #000000;
-    }
-    body.page-tribunes .tribunes-topbar-notifications i {
-      font-size: 15px;
-    }
-    body.page-tribunes #notifications-count-compact {
-      position: absolute;
-      top: -4px;
-      right: -4px;
-      min-width: 18px;
-      height: 18px;
-      padding: 0 5px;
-      border-radius: 999px;
-      background: #dc2626;
-      color: #ffffff;
-      font-size: 10px;
-      font-weight: 700;
-      line-height: 18px;
-      text-align: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-    body.page-tribunes .home-logo {
-      width: 98px;
-      margin: 0 auto;
     }
     html.in-iframe body.page-tribunes .tribunes-page-header,
     body.page-tribunes.in-iframe .tribunes-page-header {
@@ -466,6 +483,15 @@
         linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
         linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
         #e9ebec;
+    }
+    /* Mobile : pas de liseré dégradé au bas du bandeau (il traçait un trait
+       horizontal juste au-dessus de la première carte). */
+    @media (max-width: 768px) {
+      .tribunes-theme-heading::before {
+        background:
+          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
+          #e9ebec;
+      }
     }
     .tribunes-theme-heading h2 {
       margin: 0;
@@ -725,12 +751,58 @@
     .tribunes-arena-actions {
       position: relative;
       z-index: 1;
-      align-self: end;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       margin-top: -12px;
       padding-top: 4px;
     }
     .tribunes-arena-btn {
       transform: translateY(4px);
+      width: auto;
+      min-height: 26px;
+      padding: 3px 10px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+      /* Palette neutre de la page (titres #111827, pilule active #1a1f24)
+         plutôt que le bleu-vert #243038 du style global. */
+      border-color: #111827;
+      background: #111827;
+      box-shadow: 0 6px 14px rgba(17, 24, 39, 0.16);
+    }
+    .tribunes-arena-btn:hover,
+    .tribunes-arena-btn:focus-visible {
+      background: #000000;
+      border-color: #000000;
+    }
+    .tribunes-source-btn {
+      transform: translateY(4px);
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 3px 10px;
+      /* Même famille que le bouton notifications de la topbar et le fond des
+         filtres : #f3f4f6 / #e5e7eb / #111827. */
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #111827;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tribunes-source-btn:hover,
+    .tribunes-source-btn:focus-visible {
+      background: #e5e7eb;
+      border-color: #d1d5db;
+      color: #000000;
     }
     @media (max-width: 520px) {
       .tribunes-theme-heading {
@@ -848,12 +920,49 @@
     window.__agonPageArrivalReady = true;
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
     document.addEventListener('DOMContentLoaded', function(){
+      // Remontée visuelle du header sur la topbar : translateY(-64px) en
+      // desktop, aucune en mobile (cf. CSS). Mesurée ici pour que les calculs
+      // de sticky suivent la valeur effective du viewport courant.
+      function tribunesHeaderShift() {
+        var header = document.querySelector('.tribunes-page-header');
+        if (!header) return 0;
+        var tr = getComputedStyle(header).transform;
+        if (!tr || tr === 'none') return 0;
+        var m = tr.match(/matrix\(([^)]+)\)/);
+        return m ? -(parseFloat(m[1].split(',')[5]) || 0) : 0;
+      }
       function syncTribunesTopbarOffset() {
         var topbar = document.querySelector('.topbar');
         var height = topbar && getComputedStyle(topbar).display !== 'none' ? Math.ceil(topbar.getBoundingClientRect().height) : 0;
         document.body.style.setProperty('--tribunes-topbar-offset', height + 'px');
+        // Point d'accroche du header sticky : calé pour que le switch
+        // Tout/Gauche/Droite se pose juste sous le haut du viewport (le
+        // bandeau n'est pas sticky et défile) — ou juste sous le bandeau
+        // quand celui-ci reste sticky (mode iframe). Titre + description
+        // sont masqués au-dessus. tribunesHeaderShift() compense le
+        // translateY éventuel du header.
+        var header = document.querySelector('.tribunes-page-header');
+        var switchEl = document.getElementById('tribunes-filter-switch');
+        if (header && switchEl) {
+          var topbarSticky = topbar && getComputedStyle(topbar).position === 'sticky';
+          var switchOffset = switchEl.getBoundingClientRect().top - header.getBoundingClientRect().top;
+          document.body.style.setProperty('--tribunes-header-stick-top', Math.round((topbarSticky ? height : 0) + 6 + tribunesHeaderShift() - switchOffset) + 'px');
+        }
+      }
+      // Toggle du fond du header : transparent une fois épinglé (seuls les
+      // boutons restent visibles), fond normal au repos. rect.top intègre le
+      // translateY éventuel, d'où la comparaison à stick-top - shift.
+      function syncTribunesHeaderStuck() {
+        var header = document.querySelector('.tribunes-page-header');
+        if (!header) return;
+        var stickTop = parseFloat(document.body.style.getPropertyValue('--tribunes-header-stick-top'));
+        if (isNaN(stickTop)) return;
+        var stuck = header.getBoundingClientRect().top <= stickTop - tribunesHeaderShift() + 2;
+        header.classList.toggle('tribunes-header-stuck', stuck);
       }
       syncTribunesTopbarOffset();
+      syncTribunesHeaderStuck();
+      document.addEventListener('scroll', syncTribunesHeaderStuck, { capture: true, passive: true });
       window.addEventListener('resize', syncTribunesTopbarOffset, { passive: true });
       window.addEventListener('orientationchange', syncTribunesTopbarOffset, { passive: true });
       setTimeout(syncTribunesTopbarOffset, 120);
@@ -866,13 +975,28 @@
   </script>
 </head>
 <body class="page-tribunes">
+<!-- Bandeau du haut : réplique exacte de la page index. Le wrapper
+     display:contents porte les classes page-home/page-home-mobile (celles
+     du body de l'index) pour activer les règles descendantes de style.css
+     sans les appliquer au reste de la page ; les règles préfixées
+     body.page-home* sont recopiées dans le <style> avec le scope
+     body.page-tribunes. display:contents : le wrapper ne crée pas de boîte,
+     la topbar reste enfant direct du body pour le layout (sticky intact). -->
+<div class="page-home page-home-mobile" style="display: contents">
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
+
     <div class="home-brand-block">
-      <div class="home-brand-main">
-        <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
-      </div>
+      <button id="admin-login-btn" class="admin-icon" type="button" title="Mode admin">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+
+    <div class="home-brand-main">
+  <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+</div>
     </div>
+
+
     <div class="topbar-actions">
       <div class="home-topbar-menu-wrap">
         <button
@@ -921,15 +1045,102 @@
             <i class="fa-regular fa-envelope"></i>
             <span>Contact</span>
           </a>
+
           <button type="button" class="home-topbar-menu-item home-topbar-menu-item-primary" id="home-topbar-login-button">
             <i class="fa-regular fa-user"></i>
             <span>Se connecter / s'inscrire</span>
           </button>
+
+          <button type="button" class="home-topbar-menu-item" id="home-topbar-admin-login-button" onclick="closeHomeTopbarMenu(); adminLogin();">
+            <i class="fa-solid fa-gear"></i>
+            <span>Mode admin</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="back-notifications-stack">
+        <div id="global-share-bar"></div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      id="home-topbar-login-icon"
+      class="home-topbar-login-icon"
+      aria-label="Se connecter"
+      onclick="showAccountsComingSoonMessage()"
+    >
+      <i class="fa-solid fa-power-off"></i>
+    </button>
+
+    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
+
+    <div class="admin-controls-row" data-admin style="display:none;">
+      <div class="admin-topbar-menu" id="admin-topbar-menu">
+        <button
+          id="admin-topbar-menu-toggle"
+          class="button button-secondary admin-topbar-menu-toggle"
+          type="button"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
+          <i class="fa-solid fa-gear" aria-hidden="true"></i>
+          <span>Admin</span>
+          <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div class="admin-topbar-menu-panel" id="admin-topbar-menu-panel" hidden>
+          <button id="admin-logout-btn" class="admin-topbar-menu-item admin-topbar-menu-item-danger" type="button">
+            Quitter le mode admin
+          </button>
+
+          <a class="admin-topbar-menu-item admin-reports-button" href="/admin-reports" data-admin style="display:none;">
+            Signalements
+            <span id="reports-count" class="notifications-count" style="display:none;"></span>
+          </a>
+
+          <a class="admin-topbar-menu-item admin-tags-button" href="/admin-tags" data-admin style="display:none;">
+            <i class="fa-solid fa-tags" aria-hidden="true"></i>
+            <span>Tags</span>
+          </a>
+
+          <a class="admin-topbar-menu-item" href="/admin-stories" onclick="event.preventDefault(); openDebateIframeModal('/admin-stories')" data-admin style="display:none;">
+            <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+            <span>Histoires associées</span>
+          </a>
+
+          <a class="admin-topbar-menu-item" href="/admin/veille" target="_blank" rel="noopener" data-admin style="display:none;">
+            <span aria-hidden="true">📥</span>
+            <span>Sujets en attente</span>
+          </a>
+
+
+          <button type="button" id="admin-update-cloud-btn" class="admin-topbar-menu-item" data-admin style="display:none;">
+            <span aria-hidden="true">⟳</span>
+            <span>Mettre à jour les bulles</span>
+          </button>
+
+          <button type="button" id="admin-broadcast-daily-btn" class="admin-topbar-menu-item" data-admin style="display:none;">
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
+            <span>Arènes du jour</span>
+          </button>
+
+          <button type="button" id="admin-analysis-queue-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="openAnalysisQueueModal()">
+            <span aria-hidden="true">⏳</span>
+            <span>Comptes à rebours</span>
+          </button>
+
+          <button type="button" id="admin-diagnostic-btn" class="admin-topbar-menu-item" data-admin style="display:none;" onclick="openDiagnosticModal()">
+            <i class="fa-solid fa-bug" aria-hidden="true"></i>
+            <span>Diagnostic refresh</span>
+          </button>
         </div>
       </div>
     </div>
+
   </div>
 </header>
+</div>
 <a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){}">
   <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 </a>
@@ -969,6 +1180,27 @@
     </div>
   </section>
 </main>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
+  onclick="(function(){var now=Date.now();if(window._lastScrollUp&&now-window._lastScrollUp<400){window.scrollTo({top:0,behavior:'smooth'});window._lastScrollUp=0;}else{scrollToAdjacentTribunesSection('up');window._lastScrollUp=now;}})()"
+  title="Défiler vers le haut"
+  aria-label="Défiler vers le haut"
+>
+  <i class="fa-solid fa-chevron-up"></i>
+</button>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
+  onclick="scrollToAdjacentTribunesSection('down')"
+  title="Défiler vers le bas"
+  aria-label="Défiler vers le bas"
+>
+  <i class="fa-solid fa-chevron-down"></i>
+</button>
+
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <div class="home-bottom-nav-item-wrap">
     <button
@@ -1036,7 +1268,7 @@
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260713-tribunes-gap-fix" defer></script>
+<script src="/script.min.js?v=20260714-tribunes-index-topbar" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1278,6 +1510,7 @@
           summary +
           '<div class="tribunes-arena-actions">' +
             '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir une arène</a>' +
+            '<a class="tribunes-source-btn" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer" onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>' +
           '</div>' +
         '</div>' +
       '</li>';
@@ -1344,6 +1577,30 @@
     }
     window.open(link, '_blank', 'noopener,noreferrer');
   }
+  window.openCardArticle = openCardArticle;
+
+  // Équivalent de scrollToAdjacentSection (index) pour les sections thématiques
+  // de cette page. Offset réduit : ni la topbar ni le header ne restent sticky
+  // une fois la page scrollée.
+  function scrollToAdjacentTribunesSection(direction) {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.tribunes-theme-section'));
+    if (!sections.length) return;
+    var offset = 12;
+    var ys = sections.map(function(section) {
+      var heading = section.querySelector('.tribunes-theme-heading') || section;
+      return heading.getBoundingClientRect().top + window.scrollY;
+    });
+    var viewTop = window.scrollY + offset + 4;
+    var cur = -1;
+    for (var i = 0; i < ys.length; i++) {
+      if (ys[i] <= viewTop) cur = i;
+    }
+    var next = direction === 'up' ? cur - 1 : cur + 1;
+    if (next < 0) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (next >= sections.length) return;
+    window.scrollTo({ top: Math.max(0, ys[next] - offset), behavior: 'smooth' });
+  }
+  window.scrollToAdjacentTribunesSection = scrollToAdjacentTribunesSection;
 
   function attachCardLinkHandlers() {
     list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {

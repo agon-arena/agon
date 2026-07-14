@@ -1043,11 +1043,15 @@ function renderUserScoreWidget(data) {
         box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
       }
       body.page-home .agon-user-score-widget-logo-overlay,
-      body.page-home-mobile .agon-user-score-widget-logo-overlay {
+      body.page-home-mobile .agon-user-score-widget-logo-overlay,
+      body.page-tribunes .agon-user-score-widget-logo-overlay,
+      body.page-debate .agon-user-score-widget-logo-overlay {
         max-width: min(210px, calc(100vw - 120px));
       }
       @media (max-width: 768px) {
-        body.page-home-mobile .agon-user-score-widget-logo-overlay {
+        body.page-home-mobile .agon-user-score-widget-logo-overlay,
+        body.page-tribunes .agon-user-score-widget-logo-overlay,
+        body.page-debate .agon-user-score-widget-logo-overlay {
           bottom: 12px;
         }
       }
@@ -1056,7 +1060,9 @@ function renderUserScoreWidget(data) {
           font-size: 9.5px;
           padding: 3px 9px;
         }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay {
+        body.page-home-mobile .agon-user-score-widget-logo-overlay,
+        body.page-tribunes .agon-user-score-widget-logo-overlay,
+        body.page-debate .agon-user-score-widget-logo-overlay {
           bottom: 11px;
           transform: translateX(-50%);
           max-width: min(168px, calc(100vw - 116px));
@@ -1064,7 +1070,9 @@ function renderUserScoreWidget(data) {
           padding: 2px 7px;
           gap: 4px;
         }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay i {
+        body.page-home-mobile .agon-user-score-widget-logo-overlay i,
+        body.page-tribunes .agon-user-score-widget-logo-overlay i,
+        body.page-debate .agon-user-score-widget-logo-overlay i {
           font-size: 8px;
         }
       }
@@ -1094,7 +1102,13 @@ function renderUserScoreWidget(data) {
   }
 
   const isDesktop = window.matchMedia("(min-width: 769px)").matches;
-  const isIndexPage = document.body.classList.contains("page-home") || document.body.classList.contains("page-home-mobile");
+  // page-tribunes / page-debate : le bandeau de ces pages est une réplique
+  // de celui de l'index (topbar dans un wrapper page-home/page-home-mobile),
+  // le badge s'y place donc pareil, en overlay sur le logo.
+  const isIndexPage = document.body.classList.contains("page-home")
+    || document.body.classList.contains("page-home-mobile")
+    || document.body.classList.contains("page-tribunes")
+    || document.body.classList.contains("page-debate");
   if (isIndexPage && brandMain) {
     brandMain.classList.add("agon-user-score-anchor");
     widget.classList.add("agon-user-score-widget-logo-overlay");
@@ -33718,9 +33732,39 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   const alertsRect = alerts.getBoundingClientRect();
 
   const isMobileIndexNav = window.matchMedia?.("(max-width: 768px)")?.matches === true;
-  const leftButtonNudge = isMobileIndexNav ? 4 : 0;
-  const leftMidpoint = ((explorerRect.right + openRect.left) / 2) + leftButtonNudge;
-  const rightMidpoint = (contributionsRect.right + alertsRect.left) / 2;
+
+  // Flèches resserrées de part et d'autre du bouton Actualiser (trous
+  // Ouvrir|Actualiser et Actualiser|Contributions). Repli sur les trous
+  // extérieurs (Explorer|Ouvrir et Contributions|Alertes) si la nav de la
+  // page n'a pas d'item Actualiser.
+  const refresh = findByText("actualiser");
+  let leftMidpoint;
+  let rightMidpoint;
+  if (refresh) {
+    const refreshRect = refresh.getBoundingClientRect();
+    leftMidpoint = (openRect.right + refreshRect.left) / 2;
+    rightMidpoint = (refreshRect.right + contributionsRect.left) / 2;
+  } else {
+    const leftButtonNudge = isMobileIndexNav ? 4 : 0;
+    leftMidpoint = ((explorerRect.right + openRect.left) / 2) + leftButtonNudge;
+    rightMidpoint = (contributionsRect.right + alertsRect.left) / 2;
+  }
+
+  // Page Autres actus : en mobile, le bouton retour vers l'accueil se cale
+  // dans le trou Explorer|Ouvrir ; en desktop il garde sa position CSS
+  // (coin bas gauche), d'où le nettoyage du left inline au resize.
+  const back = document.querySelector(".tribunes-mobile-back-button");
+  if (back) {
+    if (isMobileIndexNav) {
+      const backMidpoint = (explorerRect.right + openRect.left) / 2;
+      const backWidth = back.getBoundingClientRect().width || 42;
+      if (Number.isFinite(backMidpoint)) {
+        back.style.left = `${Math.round(backMidpoint - backWidth / 2)}px`;
+      }
+    } else {
+      back.style.left = "";
+    }
+  }
   if (Number.isFinite(leftMidpoint)) up.style.left = `${Math.round(leftMidpoint)}px`;
   if (Number.isFinite(rightMidpoint)) down.style.left = `${Math.round(rightMidpoint)}px`;
 }

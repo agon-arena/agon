@@ -11296,12 +11296,15 @@ body.page-debate .debate-floating-refresh-btn {
   font-size: 12px;
 }
 
+/* Position de repli avant que syncIndexFloatingScrollButtonsWithBottomNav
+   cale les flèches sur les trous Ouvrir|Actualiser et Actualiser|Contributions
+   de la bottom-nav. */
 .index-floating-scroll-up {
-  left: calc(50% - 54px);
+  left: calc(50% - 40px);
 }
 
 .index-floating-scroll-down {
-  left: calc(50% + 54px);
+  left: calc(50% + 40px);
 }
 
 @media (min-width: 769px) {
@@ -11316,21 +11319,11 @@ body.page-debate .debate-floating-refresh-btn {
   }
 
   .index-floating-scroll-up {
-    left: calc(50% - 125px);
+    left: calc(50% - 55px);
   }
 
   .index-floating-scroll-down {
-    left: calc(50% + 150px);
-  }
-}
-
-@media (max-width: 768px) {
-  .index-floating-scroll-up {
-    left: calc(20% + 4px);
-  }
-
-  .index-floating-scroll-down {
-    left: 80%;
+    left: calc(50% + 55px);
   }
 }
 

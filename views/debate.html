@@ -107,6 +107,109 @@
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
 <link rel="stylesheet" href="/style.min.css?v=20260713-tribunes-gap-fix" />
+<style>
+  /* === Bandeau du haut : réplique exacte de la page index. Les règles
+     descendantes .page-home* de style.css s'appliquent via le wrapper du
+     header ; celles préfixées body.page-home* sont recopiées ici avec le
+     scope body.page-debate (mêmes valeurs que style.css). Les largeurs de
+     logo .page-debate historiques (140/212px) sont écrasées au passage. === */
+  body.page-debate .topbar-inner.topbar-home {
+    row-gap: 0 !important;
+  }
+  body.page-debate .topbar-inner.topbar-home,
+  body.page-debate .topbar-inner {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  body.page-debate .home-logo {
+    width: 128px !important;
+    max-height: 96px !important;
+    object-fit: contain !important;
+  }
+  body.page-debate .topbar-social {
+    display: none !important;
+  }
+  /* Liseré bas du bandeau : valeur index (-2px), pas la variante débat. */
+  body.page-debate .topbar::after {
+    bottom: -2px !important;
+  }
+  /* L'index applique Oswald à toute la page (body.page-home :where(...)) ;
+     ici on ne le fait que dans la topbar répliquée. */
+  body.page-debate .topbar :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
+  body.page-debate .agon-user-score-widget,
+  body.page-debate .agon-user-score-widget :where(span) {
+    font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  }
+  @media (min-width: 769px) {
+    body.page-debate .topbar {
+      height: 152px !important;
+      min-height: 152px !important;
+      max-height: 152px !important;
+    }
+    body.page-debate .home-brand-main {
+      transform: translateX(83px) !important;
+    }
+    body.page-debate .home-logo {
+      width: 402px !important;
+      max-height: 144px !important;
+      transform: translateY(2px) !important;
+    }
+    body.page-debate .home-brand-block {
+      height: 146px !important;
+      max-height: 146px !important;
+      overflow: visible !important;
+    }
+    body.page-debate .topbar-inner.topbar-home {
+      grid-template-columns: 44px minmax(0, 1fr) 210px !important;
+    }
+    body.page-debate .topbar-app-icon--desktop {
+      width: 144px !important;
+      height: 144px !important;
+      border-radius: 18px !important;
+      margin: 0 !important;
+      transform: none !important;
+      align-self: center !important;
+      justify-self: center !important;
+      position: absolute !important;
+      top: 4px !important;
+      right: -51px !important;
+      z-index: 2 !important;
+    }
+  }
+  @media (max-width: 768px) {
+    body.page-debate .topbar-app-icon--mobile {
+      width: 104px !important;
+      height: 104px !important;
+      border-radius: 16px !important;
+      margin: -25px 0 -35px -52px !important;
+    }
+    body.is-standalone.page-debate .topbar {
+      padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
+    }
+    body.is-standalone.page-debate .topbar-inner.topbar-home {
+      padding-top: 1px !important;
+      padding-bottom: 0px !important;
+      position: relative !important;
+    }
+    body.is-standalone.page-debate .home-topbar-login-icon {
+      grid-area: spacer;
+      justify-self: end;
+      align-self: center;
+      width: 38px;
+      height: 38px;
+      display: inline-flex !important;
+      position: absolute !important;
+      top: 50% !important;
+      right: 10px !important;
+      left: auto !important;
+      transform: translateY(-50%) !important;
+      margin: 0 !important;
+    }
+    body.is-standalone.page-debate .topbar-actions {
+      justify-content: flex-start !important;
+    }
+  }
+</style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -127,6 +230,12 @@ try {
   <i class="fa-solid fa-arrow-left"></i>
 </button>
 
+<!-- Bandeau du haut : réplique exacte de la page index (même mécanique que
+     sur autres-sources.html) : wrapper display:contents portant les classes
+     page-home/page-home-mobile pour activer les règles descendantes de
+     style.css ; les règles préfixées body.page-home* sont recopiées dans le
+     <style> ci-dessus avec le scope body.page-debate. -->
+<div class="page-home page-home-mobile" style="display: contents">
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
 
@@ -137,7 +246,7 @@ try {
 
 
 <div class="home-brand-main">
-  <img src="/logogloire.jpeg" alt="Logo agôn" class="home-logo">
+  <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
 </div>
     </div>
 
@@ -202,6 +311,20 @@ try {
 </div>
     </div>
 
+
+    <button
+      type="button"
+      id="home-topbar-login-icon"
+      class="home-topbar-login-icon"
+      aria-label="Se connecter"
+      onclick="showAccountsComingSoonMessage()"
+    >
+      <i class="fa-solid fa-power-off"></i>
+    </button>
+
+    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
+
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
         <button
@@ -255,6 +378,7 @@ try {
 
   </div>
 </header>
+</div>
 
 <button
   type="button"
@@ -859,7 +983,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260713-tribunes-gap-fix" defer></script>
+	<script src="/script.min.js?v=20260714-debate-index-topbar" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
