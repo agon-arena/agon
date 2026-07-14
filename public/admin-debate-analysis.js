@@ -10,7 +10,7 @@
 
   function observeAnimated(root) {
     (root || document).querySelectorAll(
-      '.ada-trigger-btn, .ada-countdown-badge, .ada-countdown-ready'
+      '.ada-trigger-btn, .ada-countdown-badge, .ada-countdown-ready, .ada-countdown-progress'
     ).forEach(function (el) { _visObs.observe(el); });
   }
 
@@ -330,10 +330,11 @@
         }
       }
       .ada-countdown-progress {
-        display: inline-flex; align-items: center;
+        display: inline-flex; align-items: center; justify-content: center;
+        margin: 0 auto;
         padding: 0 6px;
         font-size: 11px; font-weight: 500; color: #111827;
-        white-space: nowrap; font-style: italic; line-height: 1.3;
+        white-space: normal; font-style: italic; line-height: 1.25; text-align: center;
       }
       @media (min-width: 769px) {
         .ada-countdown-progress { font-size: 12px; }
@@ -356,7 +357,7 @@
         }
         body.page-debate .ada-countdown-progress {
           position: relative;
-          top: -2px;
+          top: -1px;
         }
       }
 
@@ -2338,14 +2339,15 @@
         tick();
       }
 
-      if (!hasPending && Number.isFinite(json.contributionsRemaining) && json.contributionsRemaining > 0) {
-        const n = json.contributionsRemaining;
+      if (!hasPending && Number.isFinite(json.contributionsRemaining) && json.contributionsRemaining >= 0) {
+        const rawRemaining = Math.max(0, json.contributionsRemaining);
+        const n = rawRemaining === 0 ? 5 : rawRemaining;
         const grid = json.scoringGrid || null;
         const progress = document.createElement('span');
         progress.className = 'ada-countdown-progress';
         progress.style.cursor = 'pointer';
         progress.title = "Comment l'IA évalue les contributions";
-        progress.textContent = `Encore ${n} contribution${n > 1 ? 's' : ''} avant ${hasReady ? 'la prochaine analyse IA' : "le lancement de l'analyse IA"}`;
+        progress.textContent = `Encore ${n} contribution${n === 1 ? '' : 's'} ${hasReady ? "pour renouveler l'analyse IA" : "avant le lancement de l'analyse IA"}`;
         // Avant la 1re analyse, aucun barème stabilisé n'existe : on utilise la
         // config réelle de l'arène (libre vs à position) renvoyée par le serveur,
         // plutôt que lastScoringGrid qui ne reflète qu'un rapport déjà généré.

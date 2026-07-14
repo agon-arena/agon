@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260713-source-panel" />
+<link rel="stylesheet" href="/style.min.css?v=20260713-tribunes-gap-fix" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -200,10 +200,6 @@ try {
     </button>
   </div>
 </div>
-      <a href="/notifications" id="notifications-bell" class="topbar-notification-link" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
-        <i class="fa-regular fa-bell"></i>
-        <span id="notifications-count-compact" style="display:none;"></span>
-      </a>
     </div>
 
     <div class="admin-controls-row" data-admin style="display:none;">
@@ -789,15 +785,6 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 </section>
 
 </main>
-<button
-  type="button"
-  class="app-floating-refresh-btn debate-floating-refresh-btn"
-  onclick="window.location.reload()"
-  title="Actualiser"
-  aria-label="Actualiser la page"
->
-  <i class="fa-solid fa-rotate-right"></i>
-</button>
 <div id="ranking-toast" class="ranking-toast">
   <div class="ranking-toast-content">
     <div class="ranking-toast-icon">🚀</div>
@@ -812,12 +799,15 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     <span>Explorer</span>
   </a>
 
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
+  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
     <i class="fa-solid fa-plus"></i>
     <span>Ouvrir</span>
   </a>
 
-  
+  <button type="button" class="home-bottom-nav-item debate-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
+    <i class="fa-solid fa-rotate-right"></i>
+    <span>Actualiser</span>
+  </button>
 
   <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
     <i class="fa-regular fa-folder-open"></i>
@@ -869,7 +859,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260713-source-panel" defer></script>
+	<script src="/script.min.js?v=20260713-tribunes-gap-fix" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -922,7 +912,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom"></script>
-<script src="/admin-debate-analysis.js?v=20260701-report-code-contact-hide-close-arrow"></script>
+<script src="/admin-debate-analysis.js?v=20260713-debate-no-top-bell-v29"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

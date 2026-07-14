@@ -9144,6 +9144,37 @@ body.page-debate .topbar::after {
   object-fit: cover;
 }
 
+/* Logo de secours (ex. Libération) : affiché en petit badge centré, jamais
+   étiré/rogné en plein cadre, quel que soit le contexte (carte simple ou
+   carte à bandeau de titre qui force width/height/object-fit ailleurs). */
+.debate-source-card-image-logo {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 56% !important;
+  height: 56% !important;
+  object-fit: contain !important;
+}
+
+body.page-home .index-card-media-with-title img.debate-source-card-image-logo,
+body.page-home-mobile .index-card-media-with-title img.debate-source-card-image-logo {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 56% !important;
+  height: 56% !important;
+  object-fit: contain !important;
+}
+
+/* Cartes index : le fond du cadre média est forcé en noir ailleurs, sauf
+   pour ce logo de secours qui a besoin d'un fond blanc pour rester lisible. */
+body.page-home .debate-card .debate-source-card-image-wrap:has(.debate-source-card-image-logo),
+body.page-home-mobile .debate-card .debate-source-card-image-wrap:has(.debate-source-card-image-logo) {
+  background: #ffffff !important;
+}
+
 .debate-source-card-body {
   display: grid;
   gap: 4px;
@@ -11285,21 +11316,21 @@ body.page-debate .debate-floating-refresh-btn {
   }
 
   .index-floating-scroll-up {
-    left: calc(50% - 165px);
+    left: calc(50% - 125px);
   }
 
   .index-floating-scroll-down {
-    left: calc(50% + 165px);
+    left: calc(50% + 150px);
   }
 }
 
 @media (max-width: 768px) {
   .index-floating-scroll-up {
-    left: 25%;
+    left: calc(20% + 4px);
   }
 
   .index-floating-scroll-down {
-    left: 75%;
+    left: 80%;
   }
 }
 
@@ -13210,7 +13241,7 @@ body.admin-edit-open::after {
     top: auto !important;
     /* bottom : géré par le bloc "Dock flottant bas débat unifié" en fin de
        fichier (compense le débordement --agon-safe-bottom de la modale). */
-    left: calc(25vw - 21px) !important;
+    left: calc(20% - 13px) !important;
     right: auto !important;
     width: 42px !important;
     height: 42px !important;
@@ -17272,11 +17303,11 @@ body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
 /* Mobile : descendre légèrement le bloc titre fixe */
 @media (max-width: 768px) {
   body.page-debate .debate-hero-outer {
-    top: 16px !important;
+    top: 10px !important;
   }
 
   body.page-debate.debate-topbar-hidden .debate-hero-outer {
-    top: 16px !important;
+    top: 10px !important;
     margin-top: 0 !important;
   }
 
@@ -17314,8 +17345,22 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
 }
 
 @media (max-width: 768px) {
+  body.page-debate main.debate-page {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
   body.page-debate .home-bottom-nav {
-    display: none !important;
+    display: grid !important;
+    background:
+      linear-gradient(
+        90deg,
+        #f3f4f6 0%,
+        #d1d5db 25%,
+        #9ca3af 50%,
+        #374151 75%,
+        #111827 100%
+      ) bottom / 100% 5px no-repeat,
+      #ffffff !important;
   }
 
   #voices-float-badge {
@@ -20312,6 +20357,32 @@ body.index-background-suspended .topbar * {
   }
 }
 
+/* Quand une arène est ouverte dans l'iframe mobile, le scroll visible se passe
+   dans l'iframe. On garde donc le document parent scrollable en arrière-plan :
+   sinon Safari/Chrome mobile n'ont aucun scroll racine pour replier leur barre. */
+@media (max-width: 768px) {
+  html.debate-native-parent-scroll-open,
+  body.debate-native-parent-scroll-open {
+    overflow-y: auto !important;
+    overflow-x: clip !important;
+    overscroll-behavior-y: auto !important;
+  }
+
+  #debate-iframe-browser-chrome-scroll-spacer {
+    display: block;
+    width: 1px;
+    height: calc(100vh + 420px);
+    min-height: calc(100dvh + 420px);
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  body:not(.debate-native-parent-scroll-open) #debate-iframe-browser-chrome-scroll-spacer {
+    display: none !important;
+  }
+}
+
 /* Loading X/Instagram dans le carousel desktop : version compacte avec sablier */
 @media (min-width: 769px) {
   .theme-horizontal-inner .index-social-loading-placeholder {
@@ -21123,7 +21194,7 @@ body.page-debate .debate-side-focus-btn-right {
   #debate-iframe-modal.contact-frame-open #debate-iframe-modal-close {
     left: 16px !important;
     right: auto !important;
-    bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: 34px !important;
   }
 }
 
@@ -21216,6 +21287,7 @@ body.page-contact.in-iframe .contact-page-shell {
 .page-tribunes .about-panel {
   background: #dbe5e1;
   padding: 16px;
+  box-shadow: none;
 }
 
 /* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
@@ -21461,6 +21533,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -21472,6 +21545,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -21487,6 +21561,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -21565,6 +21640,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -21576,6 +21652,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -21591,6 +21668,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -21667,6 +21745,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -21678,6 +21757,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -21835,8 +21915,8 @@ body.page-create-mobile .create-card .create-submit-helper {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  border: 1px solid rgba(36, 48, 56, 0.08);
-  border-radius: 10px;
+  border: none;
+  border-radius: 0 0 10px 10px;
   background: #dbe5e1;
 }
 
@@ -21930,7 +22010,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     margin-left: -12px;
     margin-right: -12px;
     padding: 10px;
-    border-radius: 12px;
+    border-radius: 0 0 12px 12px;
   }
 }
 
@@ -22313,6 +22393,13 @@ body.page-create-mobile .create-card .create-submit-helper {
   cursor: default;
 }
 
+#tribunes-media-filter {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tribunes-filter-segment {
   border: none;
   background: transparent;
@@ -22641,6 +22728,7 @@ body.page-home-mobile .theme-horizontal-row {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -22654,6 +22742,7 @@ body.page-home-mobile .theme-horizontal-row {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -22664,6 +22753,7 @@ body.page-home-mobile .theme-horizontal-row {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -22709,7 +22799,7 @@ body.page-home-mobile .theme-horizontal-row {
    bottom=32px centre le bouton (44px de haut) exactement sur la jonction. */
 @media (max-width: 768px), (display-mode: standalone) {
   .app-floating-refresh-btn {
-    bottom: 32px !important;
+    bottom: 34px !important;
   }
 }
 
@@ -23256,6 +23346,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-home-mobile,
   body.page-create-mobile,
   body.page-notifications-mobile,
+  body.page-tribunes,
   body.page-debate,
   body.page-contact,
   body.page-about {
@@ -23267,6 +23358,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -23282,6 +23374,7 @@ body.page-create-mobile .create-card .create-submit-helper {
     body.page-home-mobile,
     body.page-create-mobile,
     body.page-notifications-mobile,
+    body.page-tribunes,
     body.page-debate,
     body.page-contact,
     body.page-about {
@@ -23289,9 +23382,15 @@ body.page-create-mobile .create-card .create-submit-helper {
     }
   }
 
+  body.page-tribunes {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
   body.page-home-mobile:not(.admin-edit-open)::after,
   body.page-create-mobile:not(.admin-edit-open)::after,
   body.page-notifications-mobile:not(.admin-edit-open)::after,
+  body.page-tribunes:not(.admin-edit-open)::after,
   body.page-debate:not(.admin-edit-open):not(.argument-form-open)::after,
   body.page-contact:not(.admin-edit-open)::after,
   body.page-about:not(.admin-edit-open)::after,
@@ -23496,11 +23595,12 @@ body.page-create-mobile .create-card .create-submit-helper {
      que le bouton retombe sur la ligne du dock (refresh/compteur, compensés
      eux via --agon-embedded-bottom-ext dans l'iframe). */
   #debate-iframe-modal-close {
-    bottom: 32px !important;
+    bottom: 34px !important;
   }
 
   /* Boutons du document débat (direct ou embarqué dans l'iframe). */
   .page-debate .mobile-back-button {
+    left: calc(20% - 13px) !important;
     bottom: calc(3px + var(--agon-dock-lift, 0px) + var(--agon-embedded-bottom-ext, 0px)) !important;
   }
 
@@ -23583,7 +23683,8 @@ body.page-create-mobile .create-card .create-submit-helper {
 
   body.is-standalone.page-home-mobile::before,
   body.is-standalone.page-create-mobile::before,
-  body.is-standalone.page-notifications-mobile::before {
+  body.is-standalone.page-notifications-mobile::before,
+  body.is-standalone.page-tribunes::before {
     content: "";
     position: fixed;
     left: 0;
@@ -23708,5 +23809,55 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-debate #debate-source-preview-wrap:has(#debate-source-yt-container) .debate-card-media-youtube,
   body.page-debate .debate-source-preview-wrap:has(#debate-source-yt-container) .debate-card-media-youtube {
     margin-bottom: 0 !important;
+  }
+}
+
+/* Verrou final : bouton gauche page débat, en direct comme dans l'iframe parent. */
+@media (max-width: 768px) {
+  body.page-debate .mobile-back-button,
+  #debate-iframe-modal.open #debate-iframe-modal-close,
+  body:has(#debate-iframe-modal.open) #debate-iframe-modal-close {
+    left: calc(20% - 13px) !important;
+  }
+
+  body.page-debate .mobile-back-button {
+    bottom: 34px !important;
+    transform: none !important;
+  }
+
+  #debate-iframe-modal.open #debate-iframe-modal-close,
+  body:has(#debate-iframe-modal.open) #debate-iframe-modal-close {
+    bottom: 34px !important;
+    transform: none !important;
+  }
+
+  body.page-debate #voices-float-badge,
+  body.debate-embedded-frame #voices-float-badge {
+    left: 80% !important;
+    right: auto !important;
+    bottom: 36px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%) !important;
+    box-sizing: border-box;
+  }
+}
+
+/* Verrou final mobile : état initial plus bas, remontée seulement quand le
+   bloc est sticky après scroll. */
+@media (max-width: 768px) {
+  body.page-debate:not(.debate-embedded-frame):not(.debate-title-hidden):not(.debate-topbar-hidden) .debate-hero-outer {
+    top: 10px !important;
+    margin-top: 20px !important;
+    transform: translateY(0) !important;
+  }
+
+  body.page-debate.debate-topbar-hidden:not(.debate-embedded-frame):not(.debate-title-hidden) .debate-hero-outer {
+    top: 10px !important;
+    margin-top: 0 !important;
+    transform: translateY(-12px) !important;
   }
 }

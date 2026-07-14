@@ -449,7 +449,14 @@ registerServiceWorker();
 
   try { history.scrollRestoration = 'manual'; } catch (_) {}
 
-  window.scrollTo(0, 0);
+  // Retour depuis une arène : une position de scroll est en cours de
+  // restauration ailleurs (cf. script inline dans <head>) — ne pas la défaire
+  // en forçant le haut de page ici, sous peine de voir un flash au retrait du loader.
+  const isRestoringDebateReturnScroll = window.__agonPendingDebateReturnScrollY > 0;
+
+  if (!isRestoringDebateReturnScroll) {
+    window.scrollTo(0, 0);
+  }
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   const waitForPaint = function() {
@@ -501,15 +508,54 @@ registerServiceWorker();
   function tryHide() {
     if (hidden || !introSequenceDone || !contentReady) return;
     hidden = true;
-    try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
+    if (!isRestoringDebateReturnScroll) {
+      try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
+    }
     loader.classList.add('is-hiding');
     setTimeout(function() {
       if (loader.parentNode) loader.parentNode.removeChild(loader);
     }, 500);
   }
 
-  // Condition contenu : le feed index doit avoir rendu ses cartes.
-  window.addEventListener('agon:feed-ready', function() { contentReady = true; tryHide(); }, { once: true });
+  if (isRestoringDebateReturnScroll) {
+    // Retour d'arène : le premier rendu (depuis le cache) peut être suivi d'un
+    // rafraîchissement silencieux qui reconstruit toute la liste et décale le
+    // scroll. On attend d'abord ce cycle (agon:feed-settled), PUIS on vérifie
+    // en plus que window.scrollY est réellement stable sur la cible pendant
+    // plusieurs frames consécutives avant de révéler — ça encaisse aussi bien
+    // le réarrangement tardif que d'éventuelles différences de timing d'un
+    // moteur de rendu à l'autre (Safari inclus), sans jamais montrer le haut
+    // de page derrière.
+    const targetScrollY = window.__agonPendingDebateReturnScrollY;
+    const STABLE_FRAMES_NEEDED = 6;
+    const deadline = Date.now() + 7000;
+    let feedSettled = false;
+    let stableFrames = 0;
+
+    window.addEventListener('agon:feed-settled', function() { feedSettled = true; }, { once: true });
+
+    (function checkScrollSettled() {
+      if (hidden) return;
+
+      const currentY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      const atTarget = Math.abs(currentY - targetScrollY) < 3;
+      stableFrames = (feedSettled && atTarget) ? (stableFrames + 1) : 0;
+
+      if (stableFrames >= STABLE_FRAMES_NEEDED || Date.now() > deadline) {
+        contentReady = true;
+        tryHide();
+        return;
+      }
+
+      requestAnimationFrame(checkScrollSettled);
+    })();
+  } else {
+    // Condition contenu : le feed index doit avoir rendu ses cartes.
+    window.addEventListener('agon:feed-ready', function() {
+      contentReady = true;
+      tryHide();
+    }, { once: true });
+  }
 
   // Filet de sécurité absolu
   setTimeout(function() {
@@ -519,6 +565,14 @@ registerServiceWorker();
   }, 10000);
 
   async function runIntroSequence() {
+    if (isRestoringDebateReturnScroll) {
+      // Retour depuis une arène : pas d'animation de marque à rejouer, on
+      // attend juste que le scroll soit vérifié stable (cf. checkScrollSettled ci-dessus).
+      introSequenceDone = true;
+      tryHide();
+      return;
+    }
+
     // Pause sur le logo avant les messages
     if (window.__agonStartupInlineStarted !== true) {
       await wait(400);
@@ -2175,7 +2229,7 @@ function getStableBottomBarOffset() {
 
 function isIframeDebateLoadingOverlayContext() {
   const path = location.pathname;
-  return (path === "/debate" || path === "/create" || path === "/notifications") && window.self !== window.top;
+  return (path === "/debate" || path === "/create" || path === "/notifications" || path === "/autres-sources") && window.self !== window.top;
 }
 
 function isCreateToDebateLoadingTransition() {
@@ -3967,6 +4021,87 @@ function shouldUseMobileDebateModalScrollLock() {
   return window.innerWidth <= 768;
 }
 
+function shouldUseNativeParentScrollForDebateIframe(pathname = "") {
+  return shouldUseMobileDebateModalScrollLock() && String(pathname || "") === "/debate";
+}
+
+function ensureDebateIframeBrowserChromeScrollSpacer() {
+  let spacer = document.getElementById("debate-iframe-browser-chrome-scroll-spacer");
+  if (!spacer) {
+    spacer = document.createElement("div");
+    spacer.id = "debate-iframe-browser-chrome-scroll-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(spacer);
+  }
+  return spacer;
+}
+
+function removeDebateIframeBrowserChromeScrollSpacer() {
+  document.getElementById("debate-iframe-browser-chrome-scroll-spacer")?.remove();
+}
+
+function setDebateIframeNativeParentScrollMode(isEnabled) {
+  const enabled = !!isEnabled;
+  const modal = document.getElementById("debate-iframe-modal");
+
+  document.documentElement.classList.toggle("debate-native-parent-scroll-open", enabled);
+  document.body.classList.toggle("debate-native-parent-scroll-open", enabled);
+  if (modal) modal.classList.toggle("debate-native-parent-scroll-open", enabled);
+
+  if (enabled) {
+    ensureDebateIframeBrowserChromeScrollSpacer();
+    unlockPageScrollForDebateModal();
+  } else {
+    removeDebateIframeBrowserChromeScrollSpacer();
+  }
+}
+
+function syncDebateIframeParentScrollModeForPath(pathname = "", options = {}) {
+  const nativeParentScroll = shouldUseNativeParentScrollForDebateIframe(pathname);
+  setDebateIframeNativeParentScrollMode(nativeParentScroll);
+
+  if (
+    !nativeParentScroll &&
+    options.lockWhenOpen === true &&
+    window.__agonDebateModalOpen === true &&
+    _debateModalScrollLockMode === ""
+  ) {
+    lockPageScrollForDebateModal(window.scrollY || document.documentElement.scrollTop || 0);
+  }
+}
+
+function handleDebateIframeBrowserChromeScrollProxy(data = {}) {
+  const modal = document.getElementById("debate-iframe-modal");
+  if (!modal?.classList?.contains("open")) return;
+  if (!modal.classList.contains("debate-native-parent-scroll-open")) return;
+  if (!shouldUseMobileDebateModalScrollLock()) return;
+  if (String(data.pathname || "") !== "/debate") return;
+
+  ensureDebateIframeBrowserChromeScrollSpacer();
+
+  const root = document.documentElement;
+  const maxScroll = Math.max(0, root.scrollHeight - window.innerHeight);
+  if (maxScroll <= 0) return;
+
+  const currentParentY = Math.max(0, window.scrollY || root.scrollTop || 0);
+  const savedParentY = _debateModalSavedScrollY !== null
+    ? Math.max(0, Math.round(Number(_debateModalSavedScrollY) || 0))
+    : currentParentY;
+  const childY = Math.max(0, Math.round(Number(data.scrollY) || 0));
+  const direction = String(data.direction || "");
+
+  let targetY = currentParentY;
+  if (direction === "down" || childY > 24) {
+    targetY = Math.min(maxScroll, Math.max(currentParentY, savedParentY + Math.min(220, Math.max(36, childY))));
+  } else if (direction === "up" && childY <= 2) {
+    targetY = Math.min(maxScroll, savedParentY);
+  }
+
+  if (Math.abs(targetY - currentParentY) > 1) {
+    window.scrollTo(0, targetY);
+  }
+}
+
 function lockPageScrollForDebateModal(savedScrollY = 0) {
   const safeScrollY = Math.max(0, Math.round(Number(savedScrollY) || 0));
 
@@ -4301,6 +4436,7 @@ function cleanupStaleDebateIframeModalBlockers() {
 
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
+  setDebateIframeNativeParentScrollMode(false);
   document.body.classList.remove("index-background-suspended");
   document.body.classList.remove("debate-iframe-parent-loading-open");
   if (modal) {
@@ -4459,6 +4595,8 @@ function syncDebateIframeModalPageClass(pathname = "") {
   const safePathname = String(pathname || "");
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
+  modal.classList.toggle("debate-frame-open", safePathname === "/debate");
+  syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
 function syncDebateIframeAiParentAnimationViewport() {
@@ -4699,6 +4837,70 @@ function initIframePageContextBridge() {
   }, true);
 }
 
+function initIframeScrollProxyForBrowserChrome() {
+  if (window.self === window.top) return;
+  if (location.pathname !== "/debate") return;
+  if (document.documentElement.dataset.iframeScrollProxyForBrowserChromeInitialized === "true") return;
+  document.documentElement.dataset.iframeScrollProxyForBrowserChromeInitialized = "true";
+
+  let lastScrollY = Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || 0));
+  let lastTouchY = null;
+  let queuedReason = "";
+  let queuedDirection = "";
+  let raf = null;
+
+  const postScrollProxy = (reason = "scroll", forcedDirection = "") => {
+    raf = null;
+    const scrollY = Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || 0));
+    const direction = forcedDirection || (scrollY > lastScrollY ? "down" : scrollY < lastScrollY ? "up" : "");
+    lastScrollY = scrollY;
+
+    try {
+      window.parent.postMessage({
+        type: "agon:iframe-scroll-proxy",
+        pathname: location.pathname,
+        scrollY,
+        direction,
+        reason
+      }, "*");
+    } catch (error) {}
+  };
+
+  const queueScrollProxy = (reason = "scroll", forcedDirection = "") => {
+    queuedReason = reason;
+    if (forcedDirection) queuedDirection = forcedDirection;
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      const reasonToSend = queuedReason || "scroll";
+      const directionToSend = queuedDirection || "";
+      queuedReason = "";
+      queuedDirection = "";
+      postScrollProxy(reasonToSend, directionToSend);
+    });
+  };
+
+  window.addEventListener("scroll", () => queueScrollProxy("scroll"), { passive: true });
+  window.addEventListener("wheel", () => queueScrollProxy("wheel"), { passive: true });
+  window.addEventListener("touchstart", (event) => {
+    lastTouchY = event.touches && event.touches.length ? event.touches[0].clientY : null;
+  }, { passive: true });
+  window.addEventListener("touchmove", (event) => {
+    const touchY = event.touches && event.touches.length ? event.touches[0].clientY : null;
+    let direction = "";
+    if (typeof touchY === "number" && typeof lastTouchY === "number") {
+      direction = touchY < lastTouchY ? "down" : touchY > lastTouchY ? "up" : "";
+    }
+    lastTouchY = touchY;
+    queueScrollProxy("touchmove", direction);
+  }, { passive: true });
+  window.addEventListener("touchend", () => {
+    lastTouchY = null;
+    queueScrollProxy("touchend");
+  }, { passive: true });
+
+  postScrollProxy("init");
+}
+
 let debateIframeModalNavigationToken = 0;
 
 function normalizeDebateIframeModalUrl(url = "") {
@@ -4917,7 +5119,9 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh,
-    #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh {
+    #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh,
+    #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
@@ -5115,8 +5319,8 @@ function ensureDebateIframeModal() {
         border-radius: 0;
       }
       #debate-iframe-modal-close {
-        bottom: 32px;
-        left: calc(25vw - 21px);
+        bottom: 34px;
+        left: calc(20% - 13px);
         right: auto;
         width: 42px;
         height: 42px;
@@ -5135,7 +5339,7 @@ function ensureDebateIframeModal() {
         border-radius: 20px 20px 0 0;
       }
       #debate-iframe-modal-close {
-        bottom: 78px;
+        bottom: 80px;
         left: 26px;
       }
     }
@@ -5219,6 +5423,11 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:open-debate-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
+      const returnUrl = String(e.data.returnUrl || "").trim();
+      if (shouldOpenDebateAsTopLevelMobilePage(nextUrl, { returnUrl })) {
+        openDebateAsTopLevelMobilePage(nextUrl, { returnUrl });
+        return;
+      }
       syncIndexUrlWithOpenIframeModal(nextUrl);
       openDebateIframeModal(nextUrl);
       return;
@@ -5229,7 +5438,17 @@ function ensureDebateIframeModal() {
       if (!nextUrl) return;
       const returnUrl = String(e.data.returnUrl || "").trim();
       if (returnUrl) rememberNotificationsReturnContext(returnUrl);
-      openDebateIframeModal(nextUrl);
+      try {
+        const parsedNextUrl = new URL(nextUrl, window.location.origin);
+        if (parsedNextUrl.origin === window.location.origin && parsedNextUrl.pathname === "/autres-sources") {
+          closeDebateIframeModal({ skipReturnLoader: true });
+          if (window.location.pathname !== "/autres-sources") {
+            window.location.href = `${parsedNextUrl.pathname}${parsedNextUrl.search}${parsedNextUrl.hash}`;
+          }
+          return;
+        }
+      } catch (error) {}
+      openDebateIframeModal(nextUrl, { returnUrl });
       return;
     }
 
@@ -5301,6 +5520,11 @@ function ensureDebateIframeModal() {
       armDebateIframeParentLoadingFallback(window.__agonIframeCurrentPathname, () => {
         syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
       });
+      return;
+    }
+
+    if (e.data.type === "agon:iframe-scroll-proxy") {
+      handleDebateIframeBrowserChromeScrollProxy(e.data);
       return;
     }
 
@@ -5744,6 +5968,14 @@ function _showEpisodeNavNotFound() {
 }
 
 function openDebateIframeModal(url, options = {}) {
+  try {
+    const parsedModalUrl = new URL(String(url || ""), window.location.origin);
+    if (parsedModalUrl.origin === window.location.origin && parsedModalUrl.pathname === "/autres-sources") {
+      window.location.href = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
+      return;
+    }
+  } catch (error) {}
+
   if (window.self !== window.top) {
     try {
       let iframeUrlPathname = url;
@@ -5763,6 +5995,12 @@ function openDebateIframeModal(url, options = {}) {
     } catch (e) {}
     return;
   }
+
+  if (shouldOpenDebateAsTopLevelMobilePage(url, options)) {
+    openDebateAsTopLevelMobilePage(url, options);
+    return;
+  }
+
   closeHomeTopbarMenu();
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
@@ -5795,6 +6033,7 @@ function openDebateIframeModal(url, options = {}) {
   let iframeUrlPathname = url;
   try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
   const isDebateUrl = iframeUrlPathname === "/debate";
+  const useNativeParentScroll = shouldUseNativeParentScrollForDebateIframe(iframeUrlPathname);
   syncIndexUrlWithOpenIframeModal(url);
   requestAnimationFrame(() => syncIndexUrlWithOpenIframeModal(url));
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 250);
@@ -5805,7 +6044,12 @@ function openDebateIframeModal(url, options = {}) {
   setDebateIframeModalCloseButtonVisible(true);
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
   modal.classList.add("open");
-  lockPageScrollForDebateModal(_debateModalSavedScrollY);
+  if (useNativeParentScroll) {
+    setDebateIframeNativeParentScrollMode(true);
+  } else {
+    setDebateIframeNativeParentScrollMode(false);
+    lockPageScrollForDebateModal(_debateModalSavedScrollY);
+  }
   setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
   navigateDebateIframeModalFrame(frame, url);
 
@@ -6059,6 +6303,7 @@ function closeDebateIframeModal(options = {}) {
     window.__agonDebateModalOpen = false;
     window.__agonDebateModalOpenedFromNotifications = false;
     setDebateIframeAiLoadingAnimationState(false);
+    setDebateIframeNativeParentScrollMode(false);
     document.body.classList.remove("index-background-suspended");
     unlockPageScrollForDebateModal();
     _debateModalSavedScrollY = null;
@@ -6093,6 +6338,7 @@ function closeDebateIframeModal(options = {}) {
   syncIndexUrlWithOpenIframeModal("");
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
+  setDebateIframeNativeParentScrollMode(false);
   document.body.classList.remove("index-background-suspended");
   // Reprise des embeds différée : déclenchée par scheduleDebateIframeFrameTeardown
   // ci-dessous, une fois l'iframe débat vidée.
@@ -6198,7 +6444,148 @@ function isTopLevelIframeModalPage() {
 }
 
 const NOTIFICATIONS_RETURN_CONTEXT_KEY = "agon_notifications_return_context";
+const DEBATE_RETURN_CONTEXT_KEY = "agon_debate_return_context";
+const DEBATE_RETURN_SCROLL_KEY = "agon_debate_return_scroll";
 const INDEX_SKIP_STARTUP_ONCE_KEY = "agon_skip_startup_once";
+
+function normalizeSameOriginPathUrl(url = "", fallback = "") {
+  const safeFallback = String(fallback || "").trim();
+  try {
+    const parsedUrl = new URL(String(url || ""), window.location.origin);
+    if (parsedUrl.origin !== window.location.origin) return safeFallback;
+    return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+  } catch (error) {
+    return safeFallback;
+  }
+}
+
+function isDebateUrlPath(url = "") {
+  try {
+    return new URL(String(url || ""), window.location.origin).pathname === "/debate";
+  } catch (error) {
+    return false;
+  }
+}
+
+function isMobileBrowserViewport() {
+  return window.innerWidth <= 768;
+}
+
+function getCurrentReturnPath() {
+  return `${location.pathname}${location.search}${location.hash}`;
+}
+
+function isValidDebateReturnUrl(returnUrl = "") {
+  const normalizedReturnUrl = normalizeSameOriginPathUrl(returnUrl, "");
+  if (!normalizedReturnUrl) return false;
+
+  try {
+    const parsedUrl = new URL(normalizedReturnUrl, window.location.origin);
+    if (parsedUrl.pathname === "/debate") return false;
+    return (
+      parsedUrl.pathname === "/" ||
+      parsedUrl.pathname === "/debates" ||
+      parsedUrl.pathname.startsWith("/debates/") ||
+      parsedUrl.pathname === "/autres-sources" ||
+      parsedUrl.pathname === "/notifications" ||
+      parsedUrl.pathname === "/contributions"
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+function rememberDebateReturnContext(returnUrl = "") {
+  const normalizedReturnUrl = normalizeSameOriginPathUrl(returnUrl, "");
+  if (!normalizedReturnUrl || !isValidDebateReturnUrl(normalizedReturnUrl)) return;
+
+  try {
+    sessionStorage.setItem(DEBATE_RETURN_CONTEXT_KEY, JSON.stringify({
+      returnUrl: normalizedReturnUrl,
+      ts: Date.now()
+    }));
+  } catch (error) {}
+}
+
+function rememberDebateReturnScrollPosition(returnUrl = "", scrollY = 0) {
+  const normalizedReturnUrl = normalizeSameOriginPathUrl(returnUrl, "");
+  if (!normalizedReturnUrl || !isValidDebateReturnUrl(normalizedReturnUrl)) return;
+
+  try {
+    sessionStorage.setItem(DEBATE_RETURN_SCROLL_KEY, JSON.stringify({
+      returnUrl: normalizedReturnUrl,
+      scrollY: Math.max(0, Math.round(Number(scrollY) || 0)),
+      ts: Date.now()
+    }));
+  } catch (error) {}
+}
+
+function getDebateReturnContext(maxAgeMs = 30 * 60 * 1000) {
+  try {
+    const raw = sessionStorage.getItem(DEBATE_RETURN_CONTEXT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    const returnUrl = normalizeSameOriginPathUrl(parsed?.returnUrl, "");
+    const ts = Number(parsed?.ts || 0);
+
+    if (!returnUrl || !ts || Date.now() - ts > maxAgeMs || !isValidDebateReturnUrl(returnUrl)) {
+      sessionStorage.removeItem(DEBATE_RETURN_CONTEXT_KEY);
+      return null;
+    }
+
+    return { returnUrl, ts };
+  } catch (error) {
+    return null;
+  }
+}
+
+function clearDebateReturnContext() {
+  try {
+    sessionStorage.removeItem(DEBATE_RETURN_CONTEXT_KEY);
+  } catch (error) {}
+}
+
+function getDebateReturnTarget(fallbackUrl = "/") {
+  const context = getDebateReturnContext();
+  if (context?.returnUrl) return context.returnUrl;
+
+  try {
+    const referrerUrl = new URL(document.referrer || "", window.location.origin);
+    const referrerPath = `${referrerUrl.pathname}${referrerUrl.search}${referrerUrl.hash}`;
+    if (referrerUrl.origin === window.location.origin && isValidDebateReturnUrl(referrerPath)) {
+      return referrerPath;
+    }
+  } catch (error) {}
+
+  return fallbackUrl;
+}
+
+function shouldOpenDebateAsTopLevelMobilePage(url = "", options = {}) {
+  return (
+    window.self === window.top &&
+    isMobileBrowserViewport() &&
+    options?.forceIframe !== true &&
+    isDebateUrlPath(url)
+  );
+}
+
+function openDebateAsTopLevelMobilePage(url = "", options = {}) {
+  const targetUrl = normalizeSameOriginPathUrl(url, "");
+  if (!targetUrl || !isDebateUrlPath(targetUrl)) return false;
+
+  const rawReturnUrl = String(options?.returnUrl || "").trim() || getCurrentReturnPath();
+  const returnUrl = isValidDebateReturnUrl(rawReturnUrl) ? normalizeSameOriginPathUrl(rawReturnUrl, "/") : "/";
+  rememberDebateReturnContext(returnUrl);
+  rememberDebateReturnScrollPosition(returnUrl, window.scrollY || document.documentElement.scrollTop || 0);
+
+  try {
+    sessionStorage.setItem(INDEX_SKIP_STARTUP_ONCE_KEY, "1");
+  } catch (error) {}
+
+  window.location.href = targetUrl;
+  return true;
+}
 
 function rememberNotificationsReturnContext(returnUrl = "") {
   const normalizedReturnUrl = String(returnUrl || "").trim();
@@ -6397,7 +6784,8 @@ function openIndexDebateFromMedia(debateId, event) {
     try {
       window.parent.postMessage({
         type: "agon:open-debate-in-parent-modal",
-        url: nextUrl
+        url: nextUrl,
+        returnUrl: `${location.pathname}${location.search}${location.hash}`
       }, "*");
       return;
     } catch (error) {
@@ -6475,10 +6863,48 @@ function initIndexReturnNavigation() {
       return;
     }
 
-    // Page débat ouverte en page complète (ex. lien partagé) : history.back()
-    // n'a aucune garantie de ramener vers l'index Agôn, donc on y va directement.
+    // Page débat ouverte en page complète : revenir vers la page Agôn qui l'a
+    // ouverte quand elle est connue, sinon revenir à l'index.
     setPendingBackButtonsState();
-    window.location.href = "/";
+    const returnTarget = getDebateReturnTarget("/");
+
+    // Préférer un vrai retour d'historique (history.back()) plutôt qu'une
+    // navigation avant (location.href) : quand la page précédente est éligible
+    // au bfcache du navigateur (Safari en particulier le fait très bien), elle
+    // est restaurée instantanément depuis son état gelé — DOM, JS et position
+    // de scroll exacts — sans reconstruire la page ni pouvoir laisser voir un
+    // flash du haut de page pendant que le feed se recharge.
+    // On ne le fait que si le referrer confirme que la page juste avant dans
+    // l'historique de cet onglet est bien la cible attendue (sinon, ex. un
+    // enchaînement débat → débat similaire, history.back() ramènerait à cet
+    // autre débat au lieu de l'index).
+    let referrerPathname = "";
+    try { referrerPathname = new URL(document.referrer || "", window.location.origin).pathname; } catch (_) {}
+    let returnPathname = "";
+    try { returnPathname = new URL(returnTarget, window.location.origin).pathname; } catch (_) {}
+    const referrerMatchesReturnTarget = document.referrer
+      && new URL(document.referrer, window.location.origin).origin === window.location.origin
+      && referrerPathname === returnPathname;
+
+    if (window.history.length > 1 && referrerMatchesReturnTarget) {
+      let navigatedAway = false;
+      const onPageHide = () => { navigatedAway = true; };
+      window.addEventListener("pagehide", onPageHide, { once: true });
+      window.history.back();
+      setTimeout(() => {
+        window.removeEventListener("pagehide", onPageHide);
+        if (!navigatedAway) {
+          // Rien dans l'historique de cet onglet à ce sujet (arrivée directe
+          // via un lien partagé, par ex.) : history.back() n'a rien fait.
+          clearDebateReturnContext();
+          window.location.href = returnTarget;
+        }
+      }, 500);
+      return;
+    }
+
+    clearDebateReturnContext();
+    window.location.href = returnTarget;
   };
 
   backSelectors.forEach((selector) => {
@@ -8034,6 +8460,14 @@ function setDebateSourcePreviewLoadingElement(sourceLoading, isVisible, label = 
 const INDEX_OG_IMAGE_LOADED_CACHE_MAX = 120;
 const indexOpenGraphLoadedImageUrls = new Set();
 
+// Logo Libération : utilisé uniquement en secours quand l'image d'un article
+// liberation.fr échoue au chargement (jamais en premier choix).
+const LIBERATION_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lib%C3%A9ration.svg/langfr-250px-Lib%C3%A9ration.svg.png';
+
+function isLiberationSourceUrl(url) {
+  return /liberation\.fr/i.test(String(url || ''));
+}
+
 function normalizeIndexOpenGraphImageCacheUrl(url) {
   return String(url || '').trim();
 }
@@ -8094,11 +8528,27 @@ function renderIndexOpenGraphImageShell(shell) {
     clearTimer();
     shell.dataset.rendered = 'fallback';
     shell.dataset.rendering = 'false';
-    img.onerror = null;
-    img.onload = finish;
     img.style.display = 'block';
     img.style.opacity = '0';
     if (loading) loading.style.display = '';
+
+    // Secours spécifique Libération : uniquement quand l'image d'origine échoue,
+    // jamais affiché en premier choix.
+    const canTryLiberationFallback = isLiberationSourceUrl(shell.dataset.sourceUrl)
+      && shell.dataset.triedLiberationFallback !== 'true'
+      && img.getAttribute('src') !== LIBERATION_FALLBACK_IMAGE;
+    if (canTryLiberationFallback) {
+      shell.dataset.triedLiberationFallback = 'true';
+      img.onload = finish;
+      img.onerror = fail;
+      shell.style.background = '#ffffff';
+      img.classList.add('debate-source-card-image-logo');
+      img.src = LIBERATION_FALLBACK_IMAGE;
+      return;
+    }
+
+    img.onerror = null;
+    img.onload = finish;
     if (img.getAttribute('src') !== '/fondchargement-256.png') {
       img.src = '/fondchargement-256.png';
     } else {
@@ -8212,6 +8662,7 @@ function unloadIndexOpenGraphImageShell(shell) {
     delete shell.dataset.ogImageFallbackTimer;
   }
 
+  delete shell.dataset.triedLiberationFallback;
   if (loading) loading.style.display = '';
   shell.dataset.rendered = 'false';
   shell.dataset.rendering = 'false';
@@ -11761,8 +12212,12 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const title = normalizedPreview.title || domain;
   const description = normalizedPreview.description || "";
   // Aperçu sans image (site qui bloque la récupération, ex. 403 anti-bot) :
-  // le visuel Agôn par défaut prend le relais pour ne jamais laisser une carte sans image.
-  const image = normalizedPreview.image || String(options?.fallbackImage || "").trim();
+  // le logo Libération prend le relais pour ce domaine, sinon le visuel Agôn
+  // par défaut, pour ne jamais laisser une carte sans image.
+  const image = normalizedPreview.image
+    || (isLiberationSourceUrl(safeUrl) ? LIBERATION_FALLBACK_IMAGE : "")
+    || String(options?.fallbackImage || "").trim();
+  const isLogoFallbackImage = image === LIBERATION_FALLBACK_IMAGE;
   const imageAlreadyLoaded = hasLoadedIndexOpenGraphImage(image);
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
@@ -11804,8 +12259,8 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
       ${showImageArea ? `
       <div
         class="debate-source-card-image-wrap"
-        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}"${imageAlreadyLoaded ? ' data-rendered="true"' : ''}` : ''}
-        style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)); overflow:hidden;"
+        ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}" data-source-url="${escapeAttribute(safeUrl)}"${imageAlreadyLoaded ? ' data-rendered="true"' : ''}` : ''}
+        style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:${isLogoFallbackImage ? '#ffffff' : 'linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82))'}; overflow:hidden;"
       >
         ${image ? `
         <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:${imageAlreadyLoaded ? 'none' : 'flex'}; width:100%; height:100%;">
@@ -11814,12 +12269,14 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
         ` : ''}
         ${image ? `
         <img
-          class="debate-source-card-image"
+          class="debate-source-card-image${isLogoFallbackImage ? ' debate-source-card-image-logo' : ''}"
           data-index-og-image
           ${imageAlreadyLoaded ? `src="${escapeAttribute(image)}"` : ''}
           alt="${escapeAttribute(title)}"
           decoding="async"
-          style="display:${imageAlreadyLoaded ? 'block' : 'none'}; width:100%; height:100%; object-fit:cover; opacity:${imageAlreadyLoaded ? '1' : '0'}; transition:opacity 0.18s ease;"
+          style="${isLogoFallbackImage
+            ? `display:${imageAlreadyLoaded ? 'block' : 'none'}; opacity:${imageAlreadyLoaded ? '1' : '0'}; transition:opacity 0.18s ease;`
+            : `display:${imageAlreadyLoaded ? 'block' : 'none'}; width:100%; height:100%; object-fit:cover; opacity:${imageAlreadyLoaded ? '1' : '0'}; transition:opacity 0.18s ease;`}"
         >
         ` : ''}
         <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
@@ -20519,6 +20976,13 @@ async function initIndex() {
     const openModalUrl = resolveInitialOpenModalUrl(params.get("openModal") || "");
     const openDebateId = String(params.get("openDebate") || "").trim();
     if (openModalUrl) {
+      try {
+        const parsedOpenModalUrl = new URL(openModalUrl, window.location.origin);
+        if (parsedOpenModalUrl.origin === window.location.origin && parsedOpenModalUrl.pathname === "/autres-sources") {
+          window.location.replace(`${parsedOpenModalUrl.pathname}${parsedOpenModalUrl.search}${parsedOpenModalUrl.hash}`);
+          return;
+        }
+      } catch (error) {}
       openDebateIframeModal(openModalUrl);
     } else if (openDebateId) {
       openDebateIframeModal(`/debate?id=${encodeURIComponent(openDebateId)}`);
@@ -20580,6 +21044,7 @@ async function initIndex() {
         });
         refreshCategoryFilterOptions(debatesCache);
         if (window.__agonDebateModalOpen) {
+          window.dispatchEvent(new Event("agon:feed-settled"));
           return;
         }
 
@@ -20589,8 +21054,15 @@ async function initIndex() {
 
         requestAnimationFrame(() => {
           restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
+          // Signal dédié : le feed vient d'être reconstruit avec les données
+          // fraîches et le scroll réappliqué. Le loader de retour d'arène
+          // attend cet événement avant de vérifier la stabilité du scroll,
+          // pour ne jamais révéler la page avant ce réarrangement tardif.
+          window.dispatchEvent(new Event("agon:feed-settled"));
         });
-      }).catch(() => {}).finally(() => {
+      }).catch(() => {
+        window.dispatchEvent(new Event("agon:feed-settled"));
+      }).finally(() => {
         // Plus de chargement progressif au scroll : on récupère directement
         // toutes les arènes restantes une fois le rafraîchissement initial terminé.
         loadAllRemainingIndexDebatesPages();
@@ -20621,6 +21093,7 @@ async function initIndex() {
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("agon:feed-ready"));
+      window.dispatchEvent(new Event("agon:feed-settled"));
 
       // Plus de chargement progressif au scroll : on récupère directement
       // toutes les arènes restantes dès l'arrivée sur la page.
@@ -20643,6 +21116,7 @@ async function initIndex() {
     pageArrivalLoadingOverlayReady = true;
     hidePageArrivalLoadingOverlay();
     window.dispatchEvent(new Event("agon:feed-ready"));
+    window.dispatchEvent(new Event("agon:feed-settled"));
     console.error('[Agôn] initIndex error:', error);
   }
 }
@@ -26853,6 +27327,51 @@ function renderArgumentAiScoreBadges() {
   openPendingAiScorePopupIfReady();
 }
 
+function renderDebateAiProgressInlineFromAnalysis(debateId) {
+  const slot = document.getElementById("debate-ai-progress-slot");
+  const safeDebateId = String(debateId || "").trim();
+  if (!slot || !safeDebateId) return;
+
+  const fetchAnalysis = typeof window.__agonFetchAnalysis === "function"
+    ? window.__agonFetchAnalysis(safeDebateId).then((res) => (res && res.r && res.r.ok ? res.json : null))
+    : fetch(`${API}/debates/${encodeURIComponent(safeDebateId)}/analysis?key=${encodeURIComponent(getKey())}`, {
+        headers: debateOwnerHeaders()
+      }).then((response) => response.ok ? response.json() : null);
+
+  fetchAnalysis
+    .then((json) => {
+      if (!json) return;
+      const hasPending = (json.status === "scheduled" || json.status === "generating") && !!json.scheduledAt;
+      const hasReady = !hasPending && !!(json.raw || json.status === "ready");
+      const remaining = Number(json.contributionsRemaining);
+
+      if (hasPending || !Number.isFinite(remaining) || remaining < 0) {
+        slot.innerHTML = "";
+        return;
+      }
+
+      const rawRemaining = Math.max(0, Math.round(remaining));
+      const safeRemaining = rawRemaining === 0 ? 5 : rawRemaining;
+      const label = `Encore ${safeRemaining} contribution${safeRemaining === 1 ? "" : "s"} ${hasReady ? "pour renouveler l'analyse IA" : "avant le lancement de l'analyse IA"}`;
+      slot.innerHTML = `<span class="debate-ai-progress-inline ada-countdown-progress">${escapeHtml(label)}</span>`;
+    })
+    .catch(() => {});
+}
+
+function scheduleDebateAiProgressInlineRender(debateId) {
+  const safeDebateId = String(debateId || "").trim();
+  if (!safeDebateId) return;
+
+  renderDebateAiProgressInlineFromAnalysis(safeDebateId);
+  [250, 900, 1800, 3200].forEach((delay) => {
+    window.setTimeout(() => {
+      if (String(getDebateId() || "").trim() === safeDebateId) {
+        renderDebateAiProgressInlineFromAnalysis(safeDebateId);
+      }
+    }, delay);
+  });
+}
+
 async function loadDebateFullData(id) {
   try {
     const data = await fetchJSON(API + "/debates/" + id + "?key=" + encodeURIComponent(getKey()), { headers: debateOwnerHeaders() });
@@ -27086,6 +27605,7 @@ currentDebateShareData = {
   percentB
 };
 applyArgumentBodyCharacterLimit(data.debate);
+scheduleDebateAiProgressInlineRender(id);
 
 // La page est utilisable dès que le débat, les idées et les compteurs sont rendus.
 // Les traitements secondaires (arènes similaires, analyse IA, admin) peuvent suivre
@@ -31229,6 +31749,7 @@ initPageArrivalLoadingOverlay();
 document.addEventListener("DOMContentLoaded", () => {
   confirmPushNotificationReadFromUrl();
   initIframePageContextBridge();
+  initIframeScrollProxyForBrowserChrome();
   initDebateLinkPrewarm();
   if ((document.body.classList.contains('page-home') || document.body.classList.contains('page-home-mobile')) && !getDebateId()) {
     initMobileIndexCardHighlight();
@@ -32633,6 +33154,8 @@ function bindAgonMobileViewportBottomFillSync() {
   scheduleHomeBottomNavViewportOffsetUpdate();
 }
 
+window.__agonSyncMobileBottomNavViewport = scheduleHomeBottomNavViewportOffsetUpdate;
+
 let agonStandaloneBottomSurfaceRaf = null;
 let agonStandaloneBottomSurfaceTimeout = null;
 let agonStandaloneBottomSurfaceObserver = null;
@@ -33172,6 +33695,52 @@ if (document.readyState === "loading") {
   initDebateTopExplorerLink();
 }
 
+function syncIndexFloatingScrollButtonsWithBottomNav() {
+  const up = document.querySelector(".index-floating-scroll-up");
+  const down = document.querySelector(".index-floating-scroll-down");
+  const nav = document.querySelector(".home-bottom-nav");
+  if (!up || !down || !nav) return;
+
+  const itemNodes = Array.from(nav.querySelectorAll(".home-bottom-nav-item"));
+  const findByText = (text) => itemNodes.find((item) => {
+    const label = item.querySelector("span");
+    return String(label?.textContent || "").trim().toLowerCase() === text;
+  });
+  const explorer = nav.querySelector("#index-explorer-toggle") || findByText("explorer");
+  const open = findByText("ouvrir");
+  const contributions = findByText("contributions");
+  const alerts = findByText("alertes");
+  if (!explorer || !open || !contributions || !alerts) return;
+
+  const explorerRect = explorer.getBoundingClientRect();
+  const openRect = open.getBoundingClientRect();
+  const contributionsRect = contributions.getBoundingClientRect();
+  const alertsRect = alerts.getBoundingClientRect();
+
+  const isMobileIndexNav = window.matchMedia?.("(max-width: 768px)")?.matches === true;
+  const leftButtonNudge = isMobileIndexNav ? 4 : 0;
+  const leftMidpoint = ((explorerRect.right + openRect.left) / 2) + leftButtonNudge;
+  const rightMidpoint = (contributionsRect.right + alertsRect.left) / 2;
+  if (Number.isFinite(leftMidpoint)) up.style.left = `${Math.round(leftMidpoint)}px`;
+  if (Number.isFinite(rightMidpoint)) down.style.left = `${Math.round(rightMidpoint)}px`;
+}
+
+function initIndexFloatingScrollButtonAlignment() {
+  const up = document.querySelector(".index-floating-scroll-up");
+  const down = document.querySelector(".index-floating-scroll-down");
+  if (!up || !down) return;
+
+  const sync = () => requestAnimationFrame(syncIndexFloatingScrollButtonsWithBottomNav);
+  sync();
+  window.addEventListener("resize", sync, { passive: true });
+  window.addEventListener("orientationchange", sync, { passive: true });
+  window.setTimeout(sync, 250);
+  window.setTimeout(sync, 900);
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(sync).catch(() => {});
+  }
+}
+
 // ===== BOTTOM NAV — GRISAGE AU CLIC =====
 function initBottomNavLoadingState() {
   const nav = document.querySelector(".home-bottom-nav");
@@ -33201,8 +33770,10 @@ function initBottomNavLoadingState() {
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initBottomNavLoadingState);
+  document.addEventListener("DOMContentLoaded", initIndexFloatingScrollButtonAlignment);
 } else {
   initBottomNavLoadingState();
+  initIndexFloatingScrollButtonAlignment();
 }
 
 

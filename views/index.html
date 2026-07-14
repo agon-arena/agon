@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260712-cloud-switch-border-v9">
+  <link rel="stylesheet" href="/style.min.css?v=20260713-tribunes-gap-fix">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -213,7 +213,30 @@
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
-<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}t();window.addEventListener('pageshow',t,true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);})()</script>
+<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');var y=null;try{var raw=sessionStorage.getItem('agon_debate_return_scroll');if(raw){var parsed=JSON.parse(raw);var ts=Number(parsed&&parsed.ts||0);var u=new URL(String(parsed&&parsed.returnUrl||''),window.location.origin);if(u.origin===window.location.origin&&u.pathname===window.location.pathname&&Date.now()-ts<30*60*1000){y=Math.max(0,Math.round(Number(parsed&&parsed.scrollY)||0));window.__agonPendingDebateReturnScrollY=y;}else{sessionStorage.removeItem('agon_debate_return_scroll');}}}catch(_){}function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}function r(){if(y===null)return;try{window.scrollTo(0,y);document.documentElement.scrollTop=y;document.body.scrollTop=y;}catch(_){}}
+  // Restauration depuis le bfcache (retour navigateur après une arène ouverte
+  // en page complète) : la page est ressuscitée telle quelle, scroll inclus —
+  // il ne faut surtout pas rejouer r()/t() ici, sous peine d'écraser une
+  // position déjà correcte (t() en particulier la remettrait à zéro).
+  function guardedPageshow(fn){return function(e){if(e&&e.persisted)return;fn();};}
+  if(y!==null){r();window.addEventListener('pageshow',guardedPageshow(r),true);window.addEventListener('load',function(){r();setTimeout(r,0);setTimeout(r,80);setTimeout(r,250);},true);window.addEventListener('agon:feed-ready',function(){r();setTimeout(r,80);setTimeout(r,350);},true);
+  // Filet supplémentaire : la liste des débats peut se réorganiser après coup
+  // (pagination progressive, rafraîchissement silencieux après un rendu depuis
+  // le cache) bien après que les retries ci-dessus soient passés. Tant que ça
+  // bouge, on replaque la position à chaque mutation du DOM, sur une fenêtre
+  // bornée, sinon un réarrangement tardif décale le scroll et laisse voir
+  // furtivement le haut de la page (bulles) avant de se corriger.
+  var stopAt = Date.now() + 8000;
+  var obs = new MutationObserver(function(){
+    if (Date.now() > stopAt) { obs.disconnect(); return; }
+    r();
+  });
+  if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+  setTimeout(function(){
+    obs.disconnect();
+    try { sessionStorage.removeItem('agon_debate_return_scroll'); } catch(_){}
+  }, 8000);
+}else{t();window.addEventListener('pageshow',guardedPageshow(t),true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);}})()</script>
 <script>
 (function(){
   var shouldSkipStartup = false;
@@ -276,6 +299,12 @@
 (function(){
   var loader = document.getElementById('agon-startup-loader');
   if (!loader) return;
+  // Retour depuis une arène avec une position de scroll à restaurer : on garde
+  // le loader (sans son animation) pour masquer le temps que le feed se
+  // recharge, sinon on voit furtivement le haut de la page avant le scroll.
+  if (window.__agonPendingDebateReturnScrollY > 0) {
+    return;
+  }
   if (window.__agonSkipStartupOnce === true) {
     if (loader.parentNode) loader.parentNode.removeChild(loader);
     return;
@@ -559,7 +588,7 @@
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
   <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite</button>
 </div>
-<a href="/autres-sources" class="agon-tribunes-btn" onclick="event.preventDefault(); openDebateIframeModal('/autres-sources')">
+<a href="/autres-sources" class="agon-tribunes-btn">
   <i class="fa-solid fa-newspaper"></i>
   <span>Autres actus</span>
 </a>
@@ -582,16 +611,6 @@
   aria-label="Défiler vers le haut"
 >
   <i class="fa-solid fa-chevron-up"></i>
-</button>
-
-<button
-  type="button"
-  class="app-floating-refresh-btn index-floating-refresh-btn"
-  onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
-  title="Actualiser"
-  aria-label="Actualiser la page"
->
-  <i class="fa-solid fa-rotate-right"></i>
 </button>
 
 <button
@@ -651,7 +670,15 @@
     <span>Ouvrir</span>
   </a>
 
-  
+  <button
+    type="button"
+    class="home-bottom-nav-item index-bottom-refresh-btn"
+    onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){window.location.reload();},60);})()"
+    aria-label="Actualiser la page"
+  >
+    <i class="fa-solid fa-rotate-right"></i>
+    <span>Actualiser</span>
+  </button>
 
   <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
     <i class="fa-regular fa-folder-open"></i>
@@ -860,7 +887,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260712-cloud-switch-border-v9" defer></script>
+<script src="/script.min.js?v=20260713-tribunes-gap-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260712-cards-noclip2">
+  <link rel="stylesheet" href="/style.min.css?v=20260713-tribunes-gap-fix">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -23,20 +23,15 @@
       background: rgba(219, 229, 225, 0.86);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
       border-radius: 8px 8px 0 0;
-      box-shadow: 0 8px 18px rgba(36, 48, 56, 0.08);
       transform: translateY(-64px);
       margin-bottom: -64px;
     }
-    .tribunes-floating-refresh-btn:disabled {
+    .tribunes-refresh-nav-btn:disabled {
       cursor: default;
       opacity: 0.74;
     }
-    .tribunes-floating-refresh-btn {
-      bottom: 32px !important;
-    }
-    .tribunes-floating-refresh-btn.is-loading i {
+    .tribunes-refresh-nav-btn.is-loading i {
       animation: tribunes-refresh-spin 0.8s linear infinite;
     }
     @keyframes tribunes-refresh-spin {
@@ -44,7 +39,7 @@
       to { transform: rotate(360deg); }
     }
     body.page-tribunes .about-page-shell {
-      padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+      padding-bottom: calc(92px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
     }
     body.page-tribunes .home-bottom-nav {
       background:
@@ -81,7 +76,7 @@
       visibility: visible !important;
     }
     .tribunes-page-header + .tribunes-list {
-      margin-top: 54px;
+      margin-top: 0;
     }
     html.in-iframe body.page-tribunes,
     body.page-tribunes.in-iframe {
@@ -123,6 +118,32 @@
     }
     body.page-tribunes .topbar {
       padding-top: 1px;
+    }
+    body.page-tribunes .topbar::after {
+      display: none;
+    }
+    .tribunes-page-header::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 5px;
+      background: linear-gradient(
+        90deg,
+        #111827 0%,
+        #374151 25%,
+        #9ca3af 50%,
+        #d1d5db 75%,
+        #f3f4f6 100%
+      );
+      opacity: 1;
+      pointer-events: none;
+      z-index: 2;
+      border-radius: 8px 8px 0 0;
+    }
+    body.is-standalone.page-tribunes .topbar {
+      padding-top: calc(10px + env(safe-area-inset-top, 0px));
     }
     body.page-tribunes .topbar-inner,
     body.page-tribunes .topbar-actions,
@@ -297,6 +318,46 @@
       justify-content: flex-start;
       gap: 8px;
       z-index: 10001;
+    }
+    body.page-tribunes .tribunes-mobile-back-button {
+      position: fixed;
+      left: calc(20% - 13px);
+      bottom: 34px;
+      z-index: 10000;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      min-width: 42px;
+      height: 42px;
+      min-height: 42px;
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background:
+        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #e5edf3;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      cursor: pointer;
+      padding: 0;
+      font-size: 18px;
+      line-height: 1;
+    }
+    body.page-tribunes .tribunes-mobile-back-button:hover,
+    body.page-tribunes .tribunes-mobile-back-button:focus-visible {
+      background:
+        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #ffffff;
+      outline: none;
+    }
+    @media (min-width: 769px) {
+      body.page-tribunes .tribunes-mobile-back-button {
+        display: none;
+      }
     }
     body.page-tribunes .home-topbar-menu-toggle {
       width: 30px;
@@ -867,18 +928,11 @@
         </div>
       </div>
     </div>
-    <a
-      href="/notifications"
-      id="notifications-bell"
-      class="topbar-notification-link tribunes-topbar-notifications"
-      aria-label="Notifications"
-      onclick="event.preventDefault(); openDebateIframeModal('/notifications')"
-    >
-      <i class="fa-regular fa-bell"></i>
-      <span id="notifications-count-compact" style="display:none;"></span>
-    </a>
   </div>
 </header>
+<a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){}">
+  <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+</a>
 <button
   type="button"
   id="home-topbar-menu-backdrop"
@@ -915,15 +969,6 @@
     </div>
   </section>
 </main>
-<button
-  type="button"
-  id="tribunes-refresh-btn"
-  class="app-floating-refresh-btn index-floating-refresh-btn tribunes-floating-refresh-btn"
-  title="Actualiser"
-  aria-label="Actualiser les articles"
->
-  <i class="fa-solid fa-rotate-right"></i>
-</button>
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <div class="home-bottom-nav-item-wrap">
     <button
@@ -969,6 +1014,11 @@
     <span>Ouvrir</span>
   </a>
 
+  <button type="button" id="tribunes-refresh-btn" class="home-bottom-nav-item tribunes-refresh-nav-btn" aria-label="Actualiser les articles">
+    <i class="fa-solid fa-rotate-right"></i>
+    <span>Actualiser</span>
+  </button>
+
   <a href="/contributions" class="home-bottom-nav-item" aria-label="Mes contributions" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
     <i class="fa-regular fa-folder-open"></i>
     <span>Contributions</span>
@@ -986,7 +1036,7 @@
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260710-source-preview-image" defer></script>
+<script src="/script.min.js?v=20260713-tribunes-gap-fix" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1665,6 +1715,13 @@
       '</section>';
   }
 
+  function syncTribunesMobileBottomViewport() {
+    if (typeof window.__agonSyncMobileBottomNavViewport !== 'function') return;
+    window.__agonSyncMobileBottomNavViewport();
+    requestAnimationFrame(window.__agonSyncMobileBottomNavViewport);
+    setTimeout(window.__agonSyncMobileBottomNavViewport, 220);
+  }
+
   function render(articles) {
     if (previewObserver) {
       previewObserver.disconnect();
@@ -1672,6 +1729,7 @@
     }
     if (!articles.length) {
       list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>';
+      syncTribunesMobileBottomViewport();
       return;
     }
     var articleByLink = {};
@@ -1682,6 +1740,7 @@
     attachCarouselArrows();
     requestAnimationFrame(updateAllCarouselArrowStates);
     setTimeout(updateAllCarouselArrowStates, 120);
+    syncTribunesMobileBottomViewport();
 
     list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
       var article = articleByLink[card.dataset.link];
