@@ -7766,10 +7766,9 @@ body.page-debate .topbar::after {
 }
 
 /* ===== Dock flottant retour/actualiser/votes (page débat mobile) :
-   masqué tout en haut de page pour ne pas recouvrir le texte de la
-   consigne qui commence juste sous la carte source/média ; réapparaît
-   dès que l'utilisateur scrolle (voir initDebateFloatingDockAutoReveal
-   dans script.js, qui pose .debate-floating-dock-visible sur body). ===== */
+   visible dès l'arrivée sur la page, masqué seulement près du bas de
+   page (voir initDebateFloatingDockAutoReveal dans script.js, qui pose
+   .debate-floating-dock-visible sur body). ===== */
 @media (max-width: 768px) {
   body.page-debate .mobile-back-button,
   body.page-debate .debate-floating-refresh-btn,

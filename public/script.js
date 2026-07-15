@@ -514,6 +514,7 @@ registerServiceWorker();
     loader.classList.add('is-hiding');
     setTimeout(function() {
       if (loader.parentNode) loader.parentNode.removeChild(loader);
+      document.documentElement.classList.remove('agon-return-veil');
     }, 500);
   }
 
@@ -562,6 +563,7 @@ registerServiceWorker();
     if (hidden) return;
     hidden = true;
     if (loader.parentNode) loader.parentNode.removeChild(loader);
+    document.documentElement.classList.remove('agon-return-veil');
   }, 10000);
 
   async function runIntroSequence() {
@@ -18340,6 +18342,11 @@ function _restoreMainTagCloud() {
 // ── Bulles Agôn : bascule entre le nuage actualité et le top 10 des arènes actives ──
 
 let _agonCloudMode = false;
+// Débats du top 10 des Bulles Agôn, dans l'ordre du nuage : placés en tête du
+// bandeau "Arènes sous tension" en mode Agôn pour que chaque bulle ait toujours
+// sa carte dans le carrousel, même une vieille arène redevenue active qui n'est
+// pas dans les débats récents chargés par l'index (cf. loadAgonBubbleTensionDebates).
+let _agonBubbleTensionDebates = [];
 let _agonCloudOriginalCaptionHtml = null;
 let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
@@ -18483,6 +18490,37 @@ async function fetchAgonBubbleTrends() {
   }
 }
 
+// Résout les débats du top 10 des Bulles Agôn dans l'ordre du nuage : ceux déjà
+// dans debatesCache sont réutilisés tels quels, les autres (arènes anciennes hors
+// des débats récents de l'index) sont récupérés via GET /api/debates?ids=…, avec
+// le même garde-fou de 5s que fetchAgonBubbleTrends.
+async function loadAgonBubbleTensionDebates(trends) {
+  const subjectIds = (Array.isArray(trends) ? trends : [])
+    .map((item) => String(item?.subjectId || "").trim())
+    .filter(Boolean);
+  if (!subjectIds.length) return [];
+
+  const debateById = new Map((Array.isArray(debatesCache) ? debatesCache : [])
+    .map((debate) => [String(debate?.id || ""), debate]));
+  const missingIds = subjectIds.filter((id) => !debateById.has(id));
+
+  if (missingIds.length) {
+    try {
+      const fetched = await Promise.race([
+        fetchJSON(API + "/debates?ids=" + missingIds.join(",")),
+        new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+      ]);
+      (Array.isArray(fetched) ? fetched : []).forEach((debate) => {
+        if (debate && debate.id != null) debateById.set(String(debate.id), debate);
+      });
+    } catch (error) {
+      console.warn('Chargement des arènes du top 10 Agôn interrompu :', error);
+    }
+  }
+
+  return subjectIds.map((id) => debateById.get(id)).filter(Boolean);
+}
+
 // Met le segment actif du sélecteur en phase avec le mode courant
 function syncAgonCloudModeSwitch() {
   document.getElementById('agon-cloud-mode-actu')?.classList.toggle('agon-cloud-mode-segment-active', !_agonCloudMode);
@@ -18587,6 +18625,7 @@ function toggleAgonCloud() {
     const token = beginAgonCloudSwitchLoading(container);
     afterAgonCloudSpinnerPaint(() => {
       _agonCloudMode = false;
+      _agonBubbleTensionDebates = [];
       container.classList.remove('agon-cloud-mode-agon');
       syncAgonCloudModeSwitch();
       // Retour en Bulles Actu : le filtre gauche/droite redevient disponible, repart
@@ -18635,6 +18674,13 @@ function toggleAgonCloud() {
       finishAgonCloudSwitchLoading(token, container);
       return;
     }
+
+    // Les cartes des 10 arènes du nuage doivent être prêtes avant le re-render
+    // du feed : le bandeau "Arènes sous tension" les place en tête (cf.
+    // buildIndexThematicSectionsHtml) pour que le clic sur une bulle trouve
+    // toujours sa carte.
+    _agonBubbleTensionDebates = await loadAgonBubbleTensionDebates(trends);
+    if (token !== _agonCloudSwitchToken) return;
 
     // Le mode est posé avant le re-render du feed pour que les bandeaux utilisent
     // les compteurs de cartes du mode Agôn (10 en tension, 1 ailleurs sur mobile).
@@ -20109,7 +20155,7 @@ function buildIndexThematicSectionsHtml(debates) {
     }
 
     // ── Arènes sous tension : activité récente en priorité, puis dernières arènes actives ──
-    const tensionDebates = getTensionSourceForCurrentFilters(allDebates)
+    let tensionDebates = getTensionSourceForCurrentFilters(allDebates)
       .filter((d) => (d.argument_count || 0) > 0 || (d.comment_count || 0) > 0)
       .sort((a, b) => {
         const scoreDiff = (b.tension_score || 0) - (a.tension_score || 0);
@@ -20117,6 +20163,16 @@ function buildIndexThematicSectionsHtml(debates) {
         return new Date(b.last_activity_at || b.last_argument_at || b.created_at || 0)
           - new Date(a.last_activity_at || a.last_argument_at || a.created_at || 0);
       });
+    // Mode Bulles Agôn : les 10 arènes du nuage passent en tête, dans l'ordre du
+    // nuage, pour que chaque bulle retrouve toujours sa carte dans ce bandeau —
+    // y compris une vieille arène absente des débats chargés par l'index.
+    if (_agonCloudMode && _agonBubbleTensionDebates.length) {
+      const headIds = new Set(_agonBubbleTensionDebates.map((d) => String(d.id)));
+      tensionDebates = [
+        ..._agonBubbleTensionDebates,
+        ...tensionDebates.filter((d) => !headIds.has(String(d.id)))
+      ];
+    }
     if (tensionDebates.length) {
       const inner = _buildCarouselInner(tensionDebates, "Arènes sous tension", tensionInitial);
       if (inner) {
@@ -31220,14 +31276,13 @@ function initDebateTitleAutoHide() {
 function initDebateFloatingDockAutoReveal() {
   if (window.location.pathname !== "/debate") return;
 
-  const SHOW_AFTER = 120;
   const HIDE_NEAR_BOTTOM = 40;
   let ticking = false;
 
   function update() {
     const scrollEl = document.scrollingElement || document.documentElement;
     const nearBottom = window.scrollY + window.innerHeight >= scrollEl.scrollHeight - HIDE_NEAR_BOTTOM;
-    const shouldShow = window.scrollY > SHOW_AFTER && !nearBottom;
+    const shouldShow = !nearBottom;
     document.body.classList.toggle("debate-floating-dock-visible", shouldShow);
     ticking = false;
   }
@@ -31238,6 +31293,15 @@ function initDebateFloatingDockAutoReveal() {
       ticking = true;
     }
   }, { passive: true });
+
+  // Le dock doit être visible dès l'arrivée, mais au chargement la page n'a
+  // pas encore sa hauteur finale (arguments non rendus) : nearBottom peut être
+  // vrai et le masquer jusqu'au premier scroll. On recalcule quand la hauteur
+  // du document change.
+  if (window.ResizeObserver) {
+    const heightObserver = new ResizeObserver(() => update());
+    heightObserver.observe(document.documentElement);
+  }
 
   update();
 }

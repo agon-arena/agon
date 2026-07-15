@@ -100,6 +100,11 @@
     html.agon-skip-startup-once .agon-startup-loader {
       display: none !important;
     }
+    /* Voile de retour (scroll à restaurer) : les flèches haut/bas restent
+       visibles au-dessus du loader (z-index 9999) pendant le rechargement. */
+    html.agon-return-veil .index-floating-scroll-btn {
+      z-index: 10000;
+    }
     .agon-startup-loader-inner {
       text-align: center;
       padding: 32px 24px;
@@ -302,7 +307,10 @@
   // Retour depuis une arène avec une position de scroll à restaurer : on garde
   // le loader (sans son animation) pour masquer le temps que le feed se
   // recharge, sinon on voit furtivement le haut de la page avant le scroll.
+  // La classe agon-return-veil fait passer les flèches haut/bas au-dessus de
+  // ce voile (retirée par script.js quand le loader est enlevé).
   if (window.__agonPendingDebateReturnScrollY > 0) {
+    document.documentElement.classList.add('agon-return-veil');
     return;
   }
   if (window.__agonSkipStartupOnce === true) {
@@ -911,7 +919,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260715-scroll-arrows-cached-pos" defer></script>
+<script src="/script.min.js?v=20260715-return-veil-arrows" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

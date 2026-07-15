@@ -241,135 +241,6 @@
          aux extrémités hautes de l'écran, entre la topbar et le panneau. */
       background: linear-gradient(#dbe5e1, #dbe5e1) top / 100% 40px no-repeat;
     }
-    .source-link-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 20000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
-      background: rgba(13, 24, 31, 0.68);
-      backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
-    }
-    .source-link-panel {
-      width: min(520px, 100%);
-      max-height: 94vh;
-      overflow: auto;
-      border: 2px solid #000000;
-      border-radius: 18px;
-      background: #ffffff;
-      box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
-    }
-    .source-link-topbar {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    }
-    .source-link-domain {
-      min-width: 0;
-      flex: 1;
-      overflow: hidden;
-      color: #243038;
-      font-size: 13px;
-      font-weight: 800;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .source-link-close {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 34px;
-      border: 1px solid rgba(36, 48, 56, 0.16);
-      border-radius: 999px;
-      padding: 0 12px;
-      background: #f3f6f7;
-      color: #243038;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 900;
-    }
-    .source-link-media {
-      position: relative;
-      aspect-ratio: 1.62 / 1;
-      overflow: hidden;
-      background: #dbe5e1;
-    }
-    .source-link-media img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .source-link-body {
-      display: grid;
-      gap: 12px;
-      padding: 18px 18px 20px;
-    }
-    .source-link-source {
-      color: #243038;
-      font-size: 15px;
-      font-weight: 900;
-    }
-    .source-link-title {
-      margin: 0;
-      color: #111827;
-      font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
-      font-size: clamp(1.7rem, 7vw, 2.3rem);
-      font-weight: 900;
-      line-height: 1.05;
-      letter-spacing: 0;
-    }
-    .source-link-summary {
-      margin: 0;
-      color: #384250;
-      font-size: 15px;
-      font-weight: 600;
-      line-height: 1.42;
-    }
-    .source-link-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding-top: 4px;
-    }
-    .source-link-open,
-    .source-link-back {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 42px;
-      border-radius: 999px;
-      padding: 0 16px;
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 900;
-    }
-    .source-link-open {
-      flex: 1 1 190px;
-      border: 0;
-      background: #243038;
-      color: #ffffff;
-      box-shadow: 0 12px 24px rgba(36, 48, 56, 0.2);
-    }
-    .source-link-back {
-      flex: 1 1 150px;
-      border: 1px solid rgba(36, 48, 56, 0.16);
-      background: #f3f6f7;
-      color: #243038;
-      cursor: pointer;
-    }
     /* z-index : sous la modale iframe (#debate-iframe-modal, 9999) — le
        bouton occupait le même coin que la flèche de fermeture de la modale
        (10000) et interceptait le tap, renvoyant vers l'accueil. */
@@ -1553,33 +1424,21 @@
     return Boolean(target && target.closest('a, button, input, select, textarea'));
   }
 
-  function getCardSourcePreview(card, url) {
-    if (!card) return { url: url || '' };
-    var img = card.querySelector('.tribunes-thumb-img');
-    var source = card.querySelector('.tribunes-meta-main strong');
-    var title = card.querySelector('.tribunes-title');
-    var summary = card.querySelector('.tribunes-summary');
-    var fallbackImage = (typeof AGON_FALLBACK_IMAGE === 'string' && AGON_FALLBACK_IMAGE) ? AGON_FALLBACK_IMAGE : '/logovisuel.png';
-    return {
-      url: url || card.dataset.link || '',
-      image: (img && (img.currentSrc || img.src)) || fallbackImage,
-      source: (source && source.textContent || '').trim(),
-      title: (title && title.textContent || '').trim(),
-      summary: (summary && summary.textContent || '').trim()
-    };
-  }
-  window.getCardSourcePreview = getCardSourcePreview;
-
   function openCardArticle(card) {
     if (!card || !card.dataset) return;
     if (card.dataset.videoId) { openVideoModal(card.dataset.videoId); return; }
     var link = card.dataset.link;
     if (!link) return;
-    if (typeof window.openExtPanel === 'function') {
-      window.openExtPanel(link, getCardSourcePreview(card, link));
-      return;
-    }
-    window.open(link, '_blank', 'noopener,noreferrer');
+    // Clic d'ancre plutôt que window.open : en PWA iOS, window.open bascule
+    // vers Safari sans bouton de retour, alors qu'un lien target="_blank"
+    // ouvre la vue intégrée avec la croix / flèche de retour vers Agôn.
+    var anchor = document.createElement('a');
+    anchor.href = link;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
   window.openCardArticle = openCardArticle;
 
@@ -2357,86 +2216,6 @@
   if (refreshBtn) refreshBtn.addEventListener('click', function() { loadArticles(true); });
 
   loadArticles(false);
-})();
-</script>
-<!-- Fiche source externe -->
-<div id="ext-link-overlay" class="source-link-overlay" aria-hidden="true">
-  <div class="source-link-panel" role="dialog" aria-modal="true" aria-label="Source externe">
-    <div class="source-link-topbar">
-      <img src="/favicon-64.png" alt="agôn" style="height:28px; width:auto; display:block; flex-shrink:0;">
-      <span id="ext-link-domain" class="source-link-domain"></span>
-      <button type="button" class="source-link-close" onclick="closeExtPanel()">Retour</button>
-    </div>
-    <div class="source-link-media">
-      <img id="ext-link-image" src="/logovisuel.png" alt="">
-    </div>
-    <div class="source-link-body">
-      <div id="ext-link-source" class="source-link-source"></div>
-      <h2 id="ext-link-title" class="source-link-title"></h2>
-      <p id="ext-link-summary" class="source-link-summary"></p>
-      <div class="source-link-actions">
-        <a id="ext-link-open" class="source-link-open" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>
-        <button type="button" class="source-link-back" onclick="closeExtPanel()">Retour vers agôn</button>
-      </div>
-    </div>
-  </div>
-</div>
-<script>
-(function() {
-  function openExtPanel(url, preview) {
-    var overlay = document.getElementById('ext-link-overlay');
-    var domain = document.getElementById('ext-link-domain');
-    var openLink = document.getElementById('ext-link-open');
-    var image = document.getElementById('ext-link-image');
-    var source = document.getElementById('ext-link-source');
-    var title = document.getElementById('ext-link-title');
-    var summary = document.getElementById('ext-link-summary');
-    if (!overlay) return;
-    preview = preview || {};
-    var host = '';
-    try { host = new URL(url).hostname; } catch(e) { host = url; }
-    if (domain) domain.textContent = host;
-    if (openLink) openLink.href = url;
-    if (image) {
-      image.src = preview.image || '/logovisuel.png';
-      image.onerror = function() { image.onerror = null; image.src = '/logovisuel.png'; };
-    }
-    if (source) {
-      source.textContent = preview.source || host || 'Source externe';
-      source.style.display = source.textContent ? '' : 'none';
-    }
-    if (title) title.textContent = preview.title || 'Source externe';
-    if (summary) {
-      summary.textContent = preview.summary || 'Le site original s’ouvre hors d’Agôn pour éviter les pages blanches et les blocages d’affichage.';
-      summary.style.display = summary.textContent ? '' : 'none';
-    }
-    overlay.style.display = 'flex';
-    overlay.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeExtPanel() {
-    var overlay = document.getElementById('ext-link-overlay');
-    if (!overlay) return;
-    overlay.style.display = 'none';
-    overlay.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-  window.openExtPanel = openExtPanel;
-  window.closeExtPanel = closeExtPanel;
-  document.addEventListener('click', function(event) {
-    var link = event.target.closest('a[target="_blank"]');
-    if (!link || link.id === 'ext-link-open') return;
-    var href = link.getAttribute('href');
-    if (!href || href.startsWith('/') || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-    event.preventDefault();
-    var card = link.closest('.tribunes-item');
-    var preview = (typeof getCardSourcePreview === 'function') ? getCardSourcePreview(card, href) : { url: href };
-    openExtPanel(href, preview);
-  });
-  document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') closeExtPanel();
-  });
 })();
 </script>
 </body>

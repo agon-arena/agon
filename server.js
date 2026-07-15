@@ -6022,6 +6022,13 @@ app.get("/api/debates", async (req, res) => {
     const categoryQuery = String(req.query.category || "").trim();
     const rawPoliticalGroupQuery = String(req.query.politicalGroup || "").trim();
     const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right" || rawPoliticalGroupQuery === "mixed") ? rawPoliticalGroupQuery : "";
+    // Lecture ciblée par ids (ex: cartes du top 10 Bulles Agôn absentes des débats
+    // récents de l'index) : mêmes enrichissements que la liste, plafonné à 20 ids.
+    const idsQuery = String(req.query.ids || "")
+      .split(",")
+      .map((raw) => Number.parseInt(raw.trim(), 10))
+      .filter((id) => Number.isFinite(id) && id > 0)
+      .slice(0, 20);
     const cacheKey = getDebatesApiCacheKey({
       limit: safeLimit,
       offset: safeOffset,
@@ -6031,7 +6038,7 @@ app.get("/api/debates", async (req, res) => {
     // req.query._ est un simple cache-buster côté navigateur (Date.now()) :
     // il ne doit pas invalider le cache serveur. Seuls fresh=1 ou un header
     // Cache-Control: no-store explicite forcent un bypass réel.
-    const bypassCache = categoryQuery || politicalGroupQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    const bypassCache = idsQuery.length > 0 || categoryQuery || politicalGroupQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
@@ -6041,6 +6048,9 @@ app.get("/api/debates", async (req, res) => {
     const canPageInDatabase = !searchQuery && (categoryQuery || effectiveSortMode === "recent" || effectiveSortMode === "old");
     const buildDebatesQuery = () => {
       let q = supabase.from("debates").select(DEBATES_LIST_SELECT_COLUMNS);
+      if (idsQuery.length) {
+        q = q.in("id", idsQuery);
+      }
       if (categoryQuery) {
         q = q.eq("category", categoryQuery);
       }
@@ -8365,13 +8375,21 @@ async function upsertOpinionArticleRows(rows) {
 }
 
 // ===== Filtre "inédits" : Autres actus n'affiche que des sujets non couverts
-// par une arène agôn récente. Un article est écarté si son titre partage au
-// moins 2 mots significatifs avec la question, les mots-clés ou le libellé de
-// bulle d'une arène des 14 derniers jours. Les arènes servant de référence
-// sont mises en cache mémoire (TTL 15 min) pour limiter l'egress Supabase. =====
+// par une arène de la session de publication en cours (la dernière rafale du
+// bot de veille — le retrait des sessions précédentes est déjà fait à la
+// source par le bot, cf. subjectKey + retrait rétroactif). Un article est
+// écarté si son titre partage au moins 2 mots significatifs avec la question,
+// les mots-clés ou le libellé de bulle d'une arène de cette rafale. Les arènes
+// servant de référence sont mises en cache mémoire (TTL 15 min) pour limiter
+// l'egress Supabase. =====
 const OPINION_UNSEEN_DEBATES_TTL_MS = 15 * 60 * 1000;
-const OPINION_UNSEEN_DEBATES_SCAN_LIMIT = 400;
-const OPINION_UNSEEN_DEBATE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const OPINION_UNSEEN_DEBATES_SCAN_LIMIT = 100;
+// Fenêtre de recherche de la dernière rafale : au-delà de 24h sans publication,
+// plus aucune arène ne sert de référence (filet vide = rien d'écarté).
+const OPINION_UNSEEN_SESSION_SCAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Une rafale de publication s'étale sur quelques minutes : toute arène créée à
+// moins de cet écart de la plus récente appartient à la même session.
+const OPINION_UNSEEN_SESSION_GAP_MS = 90 * 60 * 1000;
 const OPINION_UNSEEN_MIN_SHARED_TOKENS = 2;
 let _opinionDebateTopicsCache = null;
 let _opinionDebateTopicsComputedAt = 0;
@@ -8410,15 +8428,22 @@ async function getRecentDebateTopicTokenSets() {
     return _opinionDebateTopicsCache;
   }
   try {
-    const since = new Date(Date.now() - OPINION_UNSEEN_DEBATE_MAX_AGE_MS).toISOString();
+    const since = new Date(Date.now() - OPINION_UNSEEN_SESSION_SCAN_MAX_AGE_MS).toISOString();
     const { data, error } = await supabase
       .from("debates")
-      .select("question, keywords, cloud_label")
+      .select("question, keywords, cloud_label, created_at")
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(OPINION_UNSEEN_DEBATES_SCAN_LIMIT);
     if (error) throw new Error(error.message);
-    const sets = (data || [])
+    // Session en cours = la rafale la plus récente : la première ligne (tri desc)
+    // donne l'arène la plus fraîche, on ne garde que celles créées dans la foulée.
+    const newestCreatedAt = data?.length ? new Date(data[0].created_at).getTime() : 0;
+    const sessionRows = (data || []).filter((debate) => {
+      const createdAt = new Date(debate.created_at).getTime();
+      return Number.isFinite(createdAt) && newestCreatedAt - createdAt <= OPINION_UNSEEN_SESSION_GAP_MS;
+    });
+    const sets = sessionRows
       .map((debate) => {
         const keywords = Array.isArray(debate.keywords) ? debate.keywords.join(" ") : "";
         const tokens = extractOpinionTopicTokens(`${debate.question || ""} ${keywords} ${debate.cloud_label || ""}`);
@@ -8547,8 +8572,8 @@ app.get("/api/opinion-articles", async (req, res) => {
       .in("id", selectedIds);
     if (fullError) throw new Error(fullError.message);
 
-    // Filtre "inédits" : ne garde que les sujets non couverts par une arène
-    // agôn récente (cf. getRecentDebateTopicTokenSets ci-dessus).
+    // Filtre "inédits" : ne garde que les sujets non couverts par une arène de
+    // la session de publication en cours (cf. getRecentDebateTopicTokenSets).
     const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
     const articles = attachOpinionArticlePreviews(
       (fullRows || [])
