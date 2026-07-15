@@ -1184,6 +1184,27 @@
   <i class="fa-solid fa-chevron-down"></i>
 </button>
 
+<script>
+/* Restaure la position des flèches calculée à la visite précédente
+   (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
+   avant le premier rendu, pour éviter le saut depuis la position CSS de repli
+   le temps que script.min.js soit parsé. */
+(function () {
+  try {
+    var raw = sessionStorage.getItem("agonFloatingScrollBtnPos:" + location.pathname);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || s.w !== window.innerWidth) return;
+    var up = document.querySelector(".index-floating-scroll-up");
+    var down = document.querySelector(".index-floating-scroll-down");
+    if (up && s.up) up.style.left = s.up;
+    if (down && s.down) down.style.left = s.down;
+    var back = document.querySelector(".tribunes-mobile-back-button");
+    if (back && s.back) back.style.left = s.back;
+  } catch (e) {}
+})();
+</script>
+
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <div class="home-bottom-nav-item-wrap">
     <button
@@ -1251,7 +1272,7 @@
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260714-tribunes-index-topbar" defer></script>
+<script src="/script.min.js?v=20260715-scroll-arrows-cached-pos" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

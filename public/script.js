@@ -33767,6 +33767,19 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   }
   if (Number.isFinite(leftMidpoint)) up.style.left = `${Math.round(leftMidpoint)}px`;
   if (Number.isFinite(rightMidpoint)) down.style.left = `${Math.round(rightMidpoint)}px`;
+
+  // Mémorise les positions calculées pour que le script inline des pages
+  // (index / Autres actus) les restaure avant le premier rendu au prochain
+  // chargement — sinon les flèches restent sur la position CSS de repli
+  // (collées au centre) le temps que script.min.js soit parsé, puis sautent.
+  try {
+    sessionStorage.setItem("agonFloatingScrollBtnPos:" + location.pathname, JSON.stringify({
+      w: window.innerWidth,
+      up: up.style.left,
+      down: down.style.left,
+      back: (back && isMobileIndexNav) ? back.style.left : ""
+    }));
+  } catch {}
 }
 
 function initIndexFloatingScrollButtonAlignment() {
