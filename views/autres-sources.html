@@ -25,6 +25,15 @@
       -webkit-backdrop-filter: blur(12px);
       border-radius: 8px 8px 0 0;
     }
+    /* Desktop : le header passe sous la topbar (z-index 20) pour coulisser
+       derrière le bandeau blanc pendant la transition de scroll, et le
+       panneau est légèrement relevé vers le bandeau. */
+    @media (min-width: 769px) {
+      body.page-tribunes .tribunes-page-header {
+        z-index: 12;
+        margin-top: -32px;
+      }
+    }
     /* Une fois le header épinglé au scroll, seuls les boutons restent
        visibles : le fond et le blur disparaissent (classe togglée en JS). */
     .tribunes-page-header.tribunes-header-stuck {
@@ -125,6 +134,13 @@
        descendantes .page-home* de style.css s'appliquent via le wrapper du
        header ; celles préfixées body.page-home* sont recopiées ici avec le
        scope body.page-tribunes (mêmes valeurs que style.css). === */
+    /* Pas sticky ici (contrairement à l'index) : le bandeau défile avec la
+       page, seuls les menus du panneau s'épinglent (syncTribunesTopbarOffset
+       détecte la position et cale le point d'accroche en conséquence).
+       relative et pas static : conteneur du liseré ::after. */
+    body.page-tribunes .topbar {
+      position: relative;
+    }
     body.page-tribunes .topbar-inner.topbar-home {
       row-gap: 0 !important;
     }
@@ -224,33 +240,6 @@
          sans ce fond, le body sombre (#243038) transparaît derrière la page
          aux extrémités hautes de l'écran, entre la topbar et le panneau. */
       background: linear-gradient(#dbe5e1, #dbe5e1) top / 100% 40px no-repeat;
-    }
-    .tribunes-page-header::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      height: 5px;
-      background: linear-gradient(
-        90deg,
-        #111827 0%,
-        #374151 25%,
-        #9ca3af 50%,
-        #d1d5db 75%,
-        #f3f4f6 100%
-      );
-      opacity: 1;
-      pointer-events: none;
-      z-index: 2;
-      border-radius: 8px 8px 0 0;
-    }
-    /* Pas de liseré dégradé en haut du panneau (il traçait une barre
-       horizontale juste au-dessus du titre Autres actus). */
-    @media (max-width: 768px) {
-      .tribunes-page-header::before {
-        display: none;
-      }
     }
     .source-link-overlay {
       position: fixed;
@@ -381,11 +370,14 @@
       color: #243038;
       cursor: pointer;
     }
+    /* z-index : sous la modale iframe (#debate-iframe-modal, 9999) — le
+       bouton occupait le même coin que la flèche de fermeture de la modale
+       (10000) et interceptait le tap, renvoyant vers l'accueil. */
     body.page-tribunes .tribunes-mobile-back-button {
       position: fixed;
       left: calc(20% - 13px);
       bottom: 34px;
-      z-index: 10000;
+      z-index: 9000;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -483,15 +475,6 @@
         linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
         linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
         #e9ebec;
-    }
-    /* Mobile : pas de liseré dégradé au bas du bandeau (il traçait un trait
-       horizontal juste au-dessus de la première carte). */
-    @media (max-width: 768px) {
-      .tribunes-theme-heading::before {
-        background:
-          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
-          #e9ebec;
-      }
     }
     .tribunes-theme-heading h2 {
       margin: 0;
@@ -1938,6 +1921,23 @@
   // Regroupe par les mêmes rubriques que l'index. Le serveur fournit article.category
   // (classification nano à l'ingestion + fallback local), donc le front ne devine plus
   // la rubrique à partir de l'orientation politique de la source.
+  // Bandeau "À la une" en tête de page : les articles les plus récents,
+  // toutes thématiques confondues. Doublon volontaire avec leur section
+  // d'origine (même logique que les doublons inter-groupes du bot de veille).
+  var A_LA_UNE_COUNT = 10;
+
+  function buildALaUneGroup(articles) {
+    var items = articles
+      .filter(function(a) { return a.published_at; })
+      .slice()
+      .sort(function(a, b) {
+        return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+      })
+      .slice(0, A_LA_UNE_COUNT);
+    if (!items.length) return null;
+    return { key: 'a-la-une', label: 'À la une', items: items };
+  }
+
   function groupByTheme(articles) {
     var buckets = {};
     articles.forEach(function(a) {
@@ -1946,9 +1946,11 @@
       if (!buckets[key]) buckets[key] = { key: key, label: category, items: [] };
       buckets[key].items.push(a);
     });
-    return CATEGORY_OPTIONS
+    var groups = CATEGORY_OPTIONS
       .map(function(category) { return buckets[categoryKey(category)]; })
       .filter(Boolean);
+    var aLaUne = buildALaUneGroup(articles);
+    return aLaUne ? [aLaUne].concat(groups) : groups;
   }
 
   function renderThemeSection(group) {

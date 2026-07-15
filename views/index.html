@@ -588,7 +588,10 @@
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
   <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite</button>
 </div>
-<a href="/autres-sources" class="agon-tribunes-btn">
+<!-- Mémorise la position de scroll pour que le retour depuis Autres actus
+     (flèche ou geste navigateur) restaure exactement cet endroit — même
+     mécanique que le retour d'une arène ouverte en pleine page. -->
+<a href="/autres-sources" class="agon-tribunes-btn" onclick="try{rememberDebateReturnScrollPosition('/', window.scrollY||document.documentElement.scrollTop||0)}catch(e){}">
   <i class="fa-solid fa-newspaper"></i>
   <span>Autres actus</span>
 </a>

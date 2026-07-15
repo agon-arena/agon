@@ -8006,6 +8006,33 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   res.json({ ok: true, inserted: rows.length });
 });
 
+// Retrait à la source : appelé par le bot quand un sujet devient une arène —
+// les articles de ce sujet (liens du groupe) quittent Autres actus, y compris
+// ceux envoyés lors de runs précédents, avant la publication du sujet.
+app.post("/api/veille/opinion-articles/remove", rateLimit("veille-opinion-articles-remove", 30), async (req, res) => {
+  const links = [...new Set(
+    (Array.isArray(req.body?.links) ? req.body.links : [])
+      .map((link) => String(link || "").trim())
+      .filter(Boolean)
+  )].slice(0, 400);
+  if (!links.length) return res.json({ ok: true, removed: 0 });
+
+  let removed = 0;
+  for (let i = 0; i < links.length; i += 100) {
+    const chunk = links.slice(i, i + 100);
+    const { error, count } = await supabase
+      .from("opinion_articles")
+      .delete({ count: "exact" })
+      .in("link", chunk);
+    if (error) { console.error("veille/opinion-articles/remove:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
+    removed += count || 0;
+  }
+
+  // Le prochain GET /api/opinion-articles reconstruit sans ces articles.
+  if (removed > 0) _opinionArticlesCache = null;
+  res.json({ ok: true, removed });
+});
+
 // Un simple ORDER BY published_at + LIMIT 200 laisse l'onglet Droite du front
 // (cf. orientationClass dans autres-sources.html) vide dès que les sources généralistes
 // à fort débit (Le Parisien, BFMTV, La Dépêche...) dominent la fenêtre récente : elles
@@ -8337,6 +8364,154 @@ async function upsertOpinionArticleRows(rows) {
   return null;
 }
 
+// ===== Filtre "inédits" : Autres actus n'affiche que des sujets non couverts
+// par une arène agôn récente. Un article est écarté si son titre partage au
+// moins 2 mots significatifs avec la question, les mots-clés ou le libellé de
+// bulle d'une arène des 14 derniers jours. Les arènes servant de référence
+// sont mises en cache mémoire (TTL 15 min) pour limiter l'egress Supabase. =====
+const OPINION_UNSEEN_DEBATES_TTL_MS = 15 * 60 * 1000;
+const OPINION_UNSEEN_DEBATES_SCAN_LIMIT = 400;
+const OPINION_UNSEEN_DEBATE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const OPINION_UNSEEN_MIN_SHARED_TOKENS = 2;
+let _opinionDebateTopicsCache = null;
+let _opinionDebateTopicsComputedAt = 0;
+
+// Mots grammaticaux/génériques (≥ 4 lettres, sans accents) qui ne doivent pas
+// compter comme recoupement de sujet entre un titre d'article et une arène.
+const OPINION_TOPIC_STOPWORDS = new Set([
+  "pour", "avec", "sans", "dans", "plus", "moins", "tres", "apres", "avant",
+  "contre", "entre", "vers", "chez", "mais", "comme", "etre", "avoir", "fait",
+  "faire", "faut", "peut", "peuvent", "doit", "doivent", "cette", "cettes",
+  "elle", "elles", "leur", "leurs", "tout", "tous", "toute", "toutes", "autre",
+  "autres", "quel", "quelle", "quels", "quelles", "pourquoi", "comment",
+  "quand", "aussi", "deja", "encore", "sont", "etait", "etaient", "nous",
+  "vous", "votre", "notre", "alors", "ainsi", "selon", "face", "leurs",
+  "celui", "celle", "ceux", "meme", "memes", "bien", "être", "vraiment",
+  "direct", "live", "question", "jour", "info", "infos", "actu", "video"
+]);
+
+function extractOpinionTopicTokens(text) {
+  return String(text || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 4 && !OPINION_TOPIC_STOPWORDS.has(token));
+}
+
+// Tolérance singulier/pluriel & flexions courtes : deux tokens se recoupent
+// s'ils sont égaux ou si l'un préfixe l'autre (ex: incendie / incendies).
+function opinionTopicTokensOverlap(a, b) {
+  if (a === b) return true;
+  return a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a));
+}
+
+async function getRecentDebateTopicTokenSets() {
+  if (_opinionDebateTopicsCache && Date.now() - _opinionDebateTopicsComputedAt < OPINION_UNSEEN_DEBATES_TTL_MS) {
+    return _opinionDebateTopicsCache;
+  }
+  try {
+    const since = new Date(Date.now() - OPINION_UNSEEN_DEBATE_MAX_AGE_MS).toISOString();
+    const { data, error } = await supabase
+      .from("debates")
+      .select("question, keywords, cloud_label")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(OPINION_UNSEEN_DEBATES_SCAN_LIMIT);
+    if (error) throw new Error(error.message);
+    const sets = (data || [])
+      .map((debate) => {
+        const keywords = Array.isArray(debate.keywords) ? debate.keywords.join(" ") : "";
+        const tokens = extractOpinionTopicTokens(`${debate.question || ""} ${keywords} ${debate.cloud_label || ""}`);
+        return tokens.length ? [...new Set(tokens)] : null;
+      })
+      .filter(Boolean);
+    _opinionDebateTopicsCache = sets;
+    _opinionDebateTopicsComputedAt = Date.now();
+    return sets;
+  } catch (error) {
+    console.warn("[opinion-articles inédits] arènes de référence indisponibles :", error.message);
+    // Cache périmé plutôt que rien ; sinon aucun filtrage sur cette passe.
+    return _opinionDebateTopicsCache || [];
+  }
+}
+
+function isOpinionArticleCoveredByDebates(article, debateTokenSets) {
+  if (!debateTokenSets.length) return false;
+  const titleTokens = [...new Set(extractOpinionTopicTokens(article?.title))];
+  if (titleTokens.length < OPINION_UNSEEN_MIN_SHARED_TOKENS) return false;
+  for (const debateTokens of debateTokenSets) {
+    let shared = 0;
+    for (const token of titleTokens) {
+      if (debateTokens.some((debateToken) => opinionTopicTokensOverlap(token, debateToken))) {
+        shared += 1;
+        if (shared >= OPINION_UNSEEN_MIN_SHARED_TOKENS) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Previews d'articles résolus côté serveur : on joint au payload les aperçus
+// déjà présents dans le cache disque de /api/link-preview, et on complète les
+// manquants en tâche de fond (concurrence 2). Le client ne fait alors plus un
+// POST /api/link-preview par carte (rafales réseau sur mobile) et rien de
+// supplémentaire ne transite par Supabase — les previews vivent sur le disque
+// du serveur.
+const OPINION_PREVIEW_WARM_CONCURRENCY = 2;
+const OPINION_PREVIEW_WARM_MAX_PER_PASS = 40;
+const _opinionPreviewWarmQueue = [];
+const _opinionPreviewWarmQueued = new Set();
+let _opinionPreviewWarmActive = 0;
+
+function pumpOpinionPreviewWarmQueue() {
+  while (_opinionPreviewWarmActive < OPINION_PREVIEW_WARM_CONCURRENCY && _opinionPreviewWarmQueue.length) {
+    const url = _opinionPreviewWarmQueue.shift();
+    _opinionPreviewWarmActive += 1;
+    getExternalLinkPreview(url)
+      .catch(() => null)
+      .finally(() => {
+        _opinionPreviewWarmActive -= 1;
+        _opinionPreviewWarmQueued.delete(url);
+        pumpOpinionPreviewWarmQueue();
+      });
+  }
+}
+
+function queueOpinionPreviewWarmup(urls) {
+  for (const url of urls.slice(0, OPINION_PREVIEW_WARM_MAX_PER_PASS)) {
+    if (_opinionPreviewWarmQueued.has(url)) continue;
+    _opinionPreviewWarmQueued.add(url);
+    _opinionPreviewWarmQueue.push(url);
+  }
+  pumpOpinionPreviewWarmQueue();
+}
+
+function attachOpinionArticlePreviews(articles) {
+  const missing = [];
+  const enriched = articles.map((article) => {
+    const link = normalizeExternalUrl(article.link);
+    if (!link) return article;
+    const preview = getCachedPreview(link) || readPersistentPreview(link);
+    if (preview && hasPreviewImage(preview)) {
+      return {
+        ...article,
+        source_image: article.source_image || preview.image || "",
+        source_preview: {
+          image: preview.image || "",
+          title: preview.title || "",
+          description: preview.description || ""
+        }
+      };
+    }
+    // Les miniatures YouTube sont déjà servies par i.ytimg.com côté client :
+    // inutile de préchauffer un aperçu pour elles.
+    if (article.type !== "youtube") missing.push(link);
+    return article;
+  });
+  queueOpinionPreviewWarmup(missing);
+  return enriched;
+}
+
 // Cache court en mémoire : la page /autres-sources n'a pas besoin d'être seconde-près,
 // et sans lui chaque visiteur redéclenchait le fetch + la requête ciblée ci-dessous contre
 // Supabase (cf. incident de quota Disk IO du 20/06/2026 — server.js:7403, 7455).
@@ -8372,13 +8547,19 @@ app.get("/api/opinion-articles", async (req, res) => {
       .in("id", selectedIds);
     if (fullError) throw new Error(fullError.message);
 
-    const articles = (fullRows || [])
-      .map((article) => ({
-        ...article,
-        orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
-        category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
-      }))
-      .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+    // Filtre "inédits" : ne garde que les sujets non couverts par une arène
+    // agôn récente (cf. getRecentDebateTopicTokenSets ci-dessus).
+    const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
+    const articles = attachOpinionArticlePreviews(
+      (fullRows || [])
+        .map((article) => ({
+          ...article,
+          orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
+          category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
+        }))
+        .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
+        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
+    );
     _opinionArticlesCache = articles;
     _opinionArticlesCacheComputedAt = Date.now();
     res.json({ articles });
