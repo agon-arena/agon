@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260714-scroll-arrows-refresh">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-home-bottom-nav-embedded-fix">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -509,6 +509,21 @@
       padding-bottom: 26px;
       transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
+    /* Sentinelle du chargement paresseux : invisible, ne doit peser ni dans le
+       gap flex ni dans les mesures de cartes (.tribunes-item uniquement). */
+    .tribunes-load-sentinel {
+      list-style: none;
+      flex: 0 0 1px;
+      width: 1px;
+      min-width: 1px;
+      padding: 0;
+      margin: 0 -14px 0 0;
+      visibility: hidden;
+    }
+    /* Sentinelle globale de pagination : même habillage que sur l'index. */
+    #tribunes-infinite-scroll-sentinel {
+      padding: 18px 0 10px;
+    }
     .tribunes-carousel .tribunes-item {
       box-sizing: border-box;
       align-self: flex-start;
@@ -995,9 +1010,47 @@
   </div>
 </header>
 </div>
-<a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){}">
+<a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){} try{showTribunesNavOverlay()}catch(e){}">
   <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 </a>
+<style>
+.tribunes-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tribunes-nav-overlay img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  animation: tribunesNavHourglassSpin 1s linear infinite;
+}
+@keyframes tribunesNavHourglassSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+</style>
+<script>
+// Voile immédiat au clic sur la flèche retour vers l'accueil : même mécanique
+// que le sablier au clic sur "Autres actus" côté index — sans lui, rien ne
+// change à l'écran avant le premier rendu de la page d'accueil.
+function showTribunesNavOverlay() {
+  if (document.getElementById("tribunes-nav-overlay")) return;
+  var o = document.createElement("div");
+  o.id = "tribunes-nav-overlay";
+  o.className = "tribunes-nav-overlay";
+  o.innerHTML = '<img src="/sablier-96.png" alt="">';
+  document.body.appendChild(o);
+}
+window.addEventListener("pageshow", function() {
+  var o = document.getElementById("tribunes-nav-overlay");
+  if (o) o.remove();
+});
+</script>
 <button
   type="button"
   id="home-topbar-menu-backdrop"
@@ -1143,7 +1196,7 @@
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260715-scroll-arrows-cached-pos" defer></script>
+<script src="/script.min.js?v=20260716-tribunes-notif-return-toplevel" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1154,6 +1207,24 @@
   var currentMedia = '';
   var currentType = '';
   var initialHeaderScrollRestored = false;
+
+  // ── Pagination façon index : chargement initial de 120 articles puis pages de 60
+  // via la sentinelle globale en bas de page, et matérialisation par lots de 5
+  // cartes dans chaque carrousel (mêmes constantes que INDEX_INITIAL_DEBATES_FETCH_LIMIT,
+  // INDEX_DEBATES_PAGE_SIZE et _CAROUSEL_BATCH côté script.js de l'index). ──
+  var TRIBUNES_INITIAL_FETCH_LIMIT = 120;
+  var TRIBUNES_PAGE_SIZE = 60;
+  var TRIBUNES_CAROUSEL_BATCH = 5;
+  var tribunesNextOffset = 0;
+  var tribunesHasMore = false;
+  var tribunesPageLoading = false;
+  // rowId → articles du groupe pas encore matérialisés en cartes dans le carrousel
+  var tribunesPendingBatches = {};
+  var tribunesGlobalObserver = null;
+
+  function tribunesCarouselInitialCount() {
+    return window.matchMedia('(max-width: 768px)').matches ? 2 : 5;
+  }
 
   var CATEGORY_OPTIONS = [
     "Politique",
@@ -1384,8 +1455,8 @@
           '<a class="tribunes-title" href="' + escapeHtml(article.link) + '"' + videoAttr + (videoId ? '' : ' target="_blank" rel="noopener noreferrer"') + titleClick + '>' + escapeHtml(article.title) + '</a>' +
           summary +
           '<div class="tribunes-arena-actions">' +
-            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir une arène</a>' +
             '<a class="tribunes-source-btn" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer" onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>' +
+            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir une arène</a>' +
           '</div>' +
         '</div>' +
       '</li>';
@@ -1465,19 +1536,23 @@
   }
   window.scrollToAdjacentTribunesSection = scrollToAdjacentTribunesSection;
 
-  function attachCardLinkHandlers() {
-    list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
-      card.addEventListener('click', function(event) {
-        if (shouldIgnoreCardOpen(event.target)) return;
-        openCardArticle(card);
-      });
-      card.addEventListener('keydown', function(event) {
-        if (shouldIgnoreCardOpen(event.target)) return;
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        openCardArticle(card);
-      });
+  function bindTribunesCardHandlers(card) {
+    if (card.__tribunesCardBound) return;
+    card.__tribunesCardBound = true;
+    card.addEventListener('click', function(event) {
+      if (shouldIgnoreCardOpen(event.target)) return;
+      openCardArticle(card);
     });
+    card.addEventListener('keydown', function(event) {
+      if (shouldIgnoreCardOpen(event.target)) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openCardArticle(card);
+    });
+  }
+
+  function attachCardLinkHandlers() {
+    list.querySelectorAll('.tribunes-item[data-link]').forEach(bindTribunesCardHandlers);
   }
 
   function attachCarouselArrows() {
@@ -1667,6 +1742,9 @@
         syncTribunesCarouselHeight(row, { force: true });
       });
     });
+    // Référence gardée sur la rangée : les cartes matérialisées plus tard par le
+    // chargement paresseux doivent rejoindre le même observateur.
+    row.__tribunesHeightObserver = observer;
     row.querySelectorAll('.tribunes-item').forEach(function(card) {
       observer.observe(card);
     });
@@ -1835,6 +1913,11 @@
 
   function renderThemeSection(group) {
     var rowId = 'tribunes-row-' + group.key;
+    // Même principe que _buildCarouselInner côté index : seules les premières
+    // cartes sont matérialisées, le reste attend dans tribunesPendingBatches et
+    // se charge par lots de 5 quand on approche de la fin du carrousel.
+    var initialItems = group.items.slice(0, tribunesCarouselInitialCount());
+    tribunesPendingBatches[rowId] = group.items.slice(initialItems.length);
     return '' +
       '<section class="tribunes-theme-section" data-theme="' + escapeHtml(group.label) + '">' +
         '<div class="tribunes-theme-heading">' +
@@ -1845,8 +1928,9 @@
         '</div>' +
         '<div class="tribunes-carousel-wrap">' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents"><i class="fa-solid fa-chevron-left"></i></button>' +
-          '<ul class="tribunes-carousel" id="' + rowId + '">' +
-            group.items.map(renderItem).join('') +
+          '<ul class="tribunes-carousel" id="' + rowId + '" data-carousel-total="' + group.items.length + '">' +
+            initialItems.map(renderItem).join('') +
+            '<li class="tribunes-load-sentinel" aria-hidden="true"></li>' +
           '</ul>' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants"><i class="fa-solid fa-chevron-right"></i></button>' +
         '</div>' +
@@ -1866,17 +1950,22 @@
       previewObserver.disconnect();
       previewObserver = null;
     }
+    tribunesPendingBatches = {};
     if (!articles.length) {
-      list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>';
+      list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>'
+        + buildTribunesGlobalSentinelHtml();
+      initTribunesGlobalLoadMore();
       syncTribunesMobileBottomViewport();
       return;
     }
     var articleByLink = {};
     articles.forEach(function(a) { if (a.link) articleByLink[a.link] = a; });
 
-    list.innerHTML = groupByTheme(articles).map(renderThemeSection).join('');
+    list.innerHTML = groupByTheme(articles).map(renderThemeSection).join('') + buildTribunesGlobalSentinelHtml();
     attachCardLinkHandlers();
     attachCarouselArrows();
+    initTribunesCarouselLazyLoad();
+    initTribunesGlobalLoadMore();
     requestAnimationFrame(updateAllCarouselArrowStates);
     setTimeout(updateAllCarouselArrowStates, 120);
     syncTribunesMobileBottomViewport();
@@ -1884,6 +1973,68 @@
     list.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
       var article = articleByLink[card.dataset.link];
       if (article) observeForPreview(card, article);
+    });
+  }
+
+  // ── Chargement paresseux des carrousels, décalqué de initCarouselLazyLoad (index) :
+  // à l'approche de la fin de rangée, on matérialise le prochain lot de 5 cartes
+  // depuis le pool en mémoire du groupe. ──
+  function appendTribunesCarouselBatch(row, batch) {
+    if (!row || !batch.length) return;
+    var sentinel = row.querySelector('.tribunes-load-sentinel');
+    var html = batch.map(renderItem).join('');
+    if (sentinel) sentinel.insertAdjacentHTML('beforebegin', html);
+    else row.insertAdjacentHTML('beforeend', html);
+    var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item')).slice(-batch.length);
+    cards.forEach(function(card, index) {
+      bindTribunesCardHandlers(card);
+      if (row.__tribunesHeightObserver) row.__tribunesHeightObserver.observe(card);
+      if (batch[index]) observeForPreview(card, batch[index]);
+    });
+    scheduleCarouselStateUpdate(row);
+    syncCarouselDots(row);
+  }
+
+  function initTribunesCarouselLazyLoad() {
+    list.querySelectorAll('.tribunes-load-sentinel').forEach(function(sentinel) {
+      var row = sentinel.closest('.tribunes-carousel');
+      if (!row || row.__tribunesLazyBound) return;
+      row.__tribunesLazyBound = true;
+
+      var rafPending = false;
+
+      function loadBatchIfNeeded() {
+        rafPending = false;
+        var pending = tribunesPendingBatches[row.id];
+        if (!pending || !pending.length) {
+          // Pool épuisé et plus aucune page serveur à venir : la sentinelle ne
+          // servira plus. Tant que tribunesHasMore est vrai, on la garde — les
+          // pages suivantes réalimentent le pool via appendArticlesToCarousels.
+          if (!tribunesHasMore) {
+            var done = row.querySelector('.tribunes-load-sentinel');
+            if (done) done.remove();
+          }
+          return;
+        }
+        // Déclenche le chargement quand on est à moins d'une largeur de la fin
+        if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
+        appendTribunesCarouselBatch(row, pending.splice(0, TRIBUNES_CAROUSEL_BATCH));
+        if (pending.length && !rafPending) {
+          rafPending = true;
+          requestAnimationFrame(loadBatchIfNeeded);
+        }
+      }
+
+      function onScroll() {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(loadBatchIfNeeded);
+      }
+
+      row.__tribunesLazyKick = onScroll;
+      row.addEventListener('scroll', onScroll, { passive: true });
+      // Vérification immédiate si le carrousel est déjà court (peu de cartes visibles)
+      requestAnimationFrame(loadBatchIfNeeded);
     });
   }
 
@@ -2143,11 +2294,19 @@
     currentMedia = populateSelectFromValues(mediaFilterEl, mediaNames, currentMedia, 'Tous les médias');
   }
 
-  function computeFiltered() {
-    var filtered = articlesInScope();
+  // Applique les filtres actifs (orientation, média, type) à une liste donnée —
+  // utilisé pour la liste complète comme pour les articles d'une nouvelle page.
+  function filterArticlesList(articles) {
+    var filtered = currentFilter === 'mixed'
+      ? articles
+      : articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
     if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
     if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
     return filtered;
+  }
+
+  function computeFiltered() {
+    return filterArticlesList(allArticles);
   }
 
   function applyFilter() {
@@ -2190,20 +2349,152 @@
 
   var refreshBtn = document.getElementById('tribunes-refresh-btn');
 
-  function loadArticles(isRefresh) {
+  // ── Sentinelle globale en bas de page, décalquée de l'index
+  // (#index-infinite-scroll-sentinel + loadMoreOtherDebates) : chaque déclenchement
+  // charge la page suivante de 60 articles et réalimente les pools des carrousels. ──
+  function buildTribunesGlobalSentinelHtml() {
+    if (!tribunesHasMore) return '';
+    return '<div id="tribunes-infinite-scroll-sentinel" class="load-more-container" aria-busy="false">' +
+      '<button class="button button-small" type="button">Fais défiler pour charger la suite</button>' +
+      '</div>';
+  }
+
+  function setTribunesGlobalSentinelLoading(loading) {
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (!sentinel) return;
+    sentinel.classList.toggle('load-more-container-loading', !!loading);
+    sentinel.setAttribute('aria-busy', loading ? 'true' : 'false');
+    sentinel.innerHTML = loading
+      ? '<div class="load-more-status"><span class="load-more-spinner" aria-hidden="true"></span><span class="load-more-text">Chargement des articles</span></div>'
+      : '<button class="button button-small" type="button">Fais défiler pour charger la suite</button>';
+    if (!loading) bindTribunesGlobalSentinelButton(sentinel);
+  }
+
+  function bindTribunesGlobalSentinelButton(sentinel) {
+    var btn = sentinel && sentinel.querySelector('button');
+    if (btn) btn.addEventListener('click', loadMoreTribunesArticles);
+  }
+
+  function removeTribunesGlobalSentinel() {
+    if (tribunesGlobalObserver) {
+      tribunesGlobalObserver.disconnect();
+      tribunesGlobalObserver = null;
+    }
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (sentinel) sentinel.remove();
+  }
+
+  function initTribunesGlobalLoadMore() {
+    if (tribunesGlobalObserver) {
+      tribunesGlobalObserver.disconnect();
+      tribunesGlobalObserver = null;
+    }
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (!sentinel) return;
+    bindTribunesGlobalSentinelButton(sentinel);
+    if (!('IntersectionObserver' in window)) return;
+    tribunesGlobalObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) loadMoreTribunesArticles();
+      });
+    }, { rootMargin: '600px 0px' });
+    tribunesGlobalObserver.observe(sentinel);
+  }
+
+  // Répartit les articles d'une nouvelle page dans les pools des carrousels
+  // existants (l'ordre par date est préservé : les pages suivantes sont plus
+  // anciennes, elles s'ajoutent en fin de rangée). Nouvelle rubrique = re-render
+  // complet, cas rare une fois les 120 premiers articles chargés.
+  function appendArticlesToCarousels(pageArticles) {
+    var visible = filterArticlesList(pageArticles);
+    if (!visible.length) return;
+    if (!list.querySelector('.tribunes-theme-section')) {
+      applyFilter();
+      return;
+    }
+    var needsFullRender = false;
+    visible.forEach(function(article) {
+      var category = normalizeCategory(article.category) || 'Société - éducation';
+      var rowId = 'tribunes-row-' + categoryKey(category);
+      var row = document.getElementById(rowId);
+      if (!row) {
+        needsFullRender = true;
+        return;
+      }
+      (tribunesPendingBatches[rowId] = tribunesPendingBatches[rowId] || []).push(article);
+      row.dataset.carouselTotal = String((Number(row.dataset.carouselTotal) || 0) + 1);
+    });
+    if (needsFullRender) {
+      applyFilter();
+      return;
+    }
+    list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
+      syncCarouselDots(row);
+      // Si l'utilisateur est déjà en fin de rangée, matérialise le nouveau lot
+      if (row.__tribunesLazyKick) row.__tribunesLazyKick();
+    });
+  }
+
+  // Si la sentinelle reste à l'écran après une page (ex: page sans article du
+  // filtre actif), enchaîne la suivante — équivalent de la boucle de
+  // loadMoreOtherDebates côté index.
+  function maybeChainNextTribunesPage() {
+    if (!tribunesHasMore || tribunesPageLoading) return;
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (!sentinel) return;
+    var rect = sentinel.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 600 && rect.bottom > -600) {
+      setTimeout(loadMoreTribunesArticles, 60);
+    }
+  }
+
+  function loadMoreTribunesArticles() {
+    if (tribunesPageLoading || !tribunesHasMore) return;
+    tribunesPageLoading = true;
+    setTribunesGlobalSentinelLoading(true);
+    fetch('/api/opinion-articles?limit=' + TRIBUNES_PAGE_SIZE + '&offset=' + tribunesNextOffset, { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        var page = Array.isArray(data.articles) ? data.articles : [];
+        tribunesNextOffset += page.length;
+        tribunesHasMore = data.hasMore === true && page.length > 0;
+        // Le cache serveur peut s'être reconstruit entre deux pages : dédoublonne
+        // par lien pour absorber les chevauchements d'offsets.
+        var knownLinks = {};
+        allArticles.forEach(function(article) { knownLinks[article.link || article.id] = true; });
+        var fresh = page.filter(function(article) { return !knownLinks[article.link || article.id]; });
+        allArticles = allArticles.concat(fresh);
+        populateMediaFilter();
+        appendArticlesToCarousels(fresh);
+        if (!tribunesHasMore) removeTribunesGlobalSentinel();
+      })
+      .catch(function() {
+        tribunesHasMore = false;
+        removeTribunesGlobalSentinel();
+      })
+      .then(function() {
+        tribunesPageLoading = false;
+        setTribunesGlobalSentinelLoading(false);
+        maybeChainNextTribunesPage();
+      });
+  }
+
+  function loadArticles() {
     if (refreshBtn) {
       refreshBtn.disabled = true;
       refreshBtn.classList.add('is-loading');
     }
-    return fetch('/api/opinion-articles', { cache: 'no-store' })
+    return fetch('/api/opinion-articles?limit=' + TRIBUNES_INITIAL_FETCH_LIMIT + '&offset=0', { cache: 'no-store' })
       .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
       .then(function(data) {
         allArticles = Array.isArray(data.articles) ? data.articles : [];
+        tribunesNextOffset = allArticles.length;
+        tribunesHasMore = data.hasMore === true && allArticles.length > 0;
         applyFilter();
-        if (!isRefresh) restoreInitialHeaderPosition();
+        restoreInitialHeaderPosition();
       })
       .catch(function() {
-        if (!isRefresh) list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>';
+        list.innerHTML = '<li class="tribunes-empty">Erreur de chargement.</li>';
       })
       .then(function() {
         if (refreshBtn) {
@@ -2213,9 +2504,16 @@
       });
   }
 
-  if (refreshBtn) refreshBtn.addEventListener('click', function() { loadArticles(true); });
+  // Actualiser = rechargement complet de la page (même comportement que le
+  // bouton Actualiser de l'index), pas un simple re-fetch des articles.
+  if (refreshBtn) refreshBtn.addEventListener('click', function() {
+    var o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
+    document.body.appendChild(o);
+    setTimeout(function() { window.location.reload(); }, 60);
+  });
 
-  loadArticles(false);
+  loadArticles();
 })();
 </script>
 </body>

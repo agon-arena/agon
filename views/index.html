@@ -49,7 +49,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260714-scroll-arrows-refresh">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-home-bottom-nav-embedded-fix">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <noscript>
@@ -99,11 +99,6 @@
     }
     html.agon-skip-startup-once .agon-startup-loader {
       display: none !important;
-    }
-    /* Voile de retour (scroll à restaurer) : les flèches haut/bas restent
-       visibles au-dessus du loader (z-index 9999) pendant le rechargement. */
-    html.agon-return-veil .index-floating-scroll-btn {
-      z-index: 10000;
     }
     .agon-startup-loader-inner {
       text-align: center;
@@ -218,30 +213,12 @@
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
-<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');var y=null;try{var raw=sessionStorage.getItem('agon_debate_return_scroll');if(raw){var parsed=JSON.parse(raw);var ts=Number(parsed&&parsed.ts||0);var u=new URL(String(parsed&&parsed.returnUrl||''),window.location.origin);if(u.origin===window.location.origin&&u.pathname===window.location.pathname&&Date.now()-ts<30*60*1000){y=Math.max(0,Math.round(Number(parsed&&parsed.scrollY)||0));window.__agonPendingDebateReturnScrollY=y;}else{sessionStorage.removeItem('agon_debate_return_scroll');}}}catch(_){}function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}function r(){if(y===null)return;try{window.scrollTo(0,y);document.documentElement.scrollTop=y;document.body.scrollTop=y;}catch(_){}}
-  // Restauration depuis le bfcache (retour navigateur après une arène ouverte
-  // en page complète) : la page est ressuscitée telle quelle, scroll inclus —
-  // il ne faut surtout pas rejouer r()/t() ici, sous peine d'écraser une
-  // position déjà correcte (t() en particulier la remettrait à zéro).
+<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}
+  // Restauration depuis le bfcache (retour navigateur) : la page est ressuscitée
+  // telle quelle, scroll inclus — ne pas rejouer t() ici, sous peine de remettre
+  // à zéro une position déjà correcte.
   function guardedPageshow(fn){return function(e){if(e&&e.persisted)return;fn();};}
-  if(y!==null){r();window.addEventListener('pageshow',guardedPageshow(r),true);window.addEventListener('load',function(){r();setTimeout(r,0);setTimeout(r,80);setTimeout(r,250);},true);window.addEventListener('agon:feed-ready',function(){r();setTimeout(r,80);setTimeout(r,350);},true);
-  // Filet supplémentaire : la liste des débats peut se réorganiser après coup
-  // (pagination progressive, rafraîchissement silencieux après un rendu depuis
-  // le cache) bien après que les retries ci-dessus soient passés. Tant que ça
-  // bouge, on replaque la position à chaque mutation du DOM, sur une fenêtre
-  // bornée, sinon un réarrangement tardif décale le scroll et laisse voir
-  // furtivement le haut de la page (bulles) avant de se corriger.
-  var stopAt = Date.now() + 8000;
-  var obs = new MutationObserver(function(){
-    if (Date.now() > stopAt) { obs.disconnect(); return; }
-    r();
-  });
-  if (document.body) obs.observe(document.body, { childList: true, subtree: true });
-  setTimeout(function(){
-    obs.disconnect();
-    try { sessionStorage.removeItem('agon_debate_return_scroll'); } catch(_){}
-  }, 8000);
-}else{t();window.addEventListener('pageshow',guardedPageshow(t),true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);}})()</script>
+  t();window.addEventListener('pageshow',guardedPageshow(t),true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);})()</script>
 <script>
 (function(){
   var shouldSkipStartup = false;
@@ -304,15 +281,6 @@
 (function(){
   var loader = document.getElementById('agon-startup-loader');
   if (!loader) return;
-  // Retour depuis une arène avec une position de scroll à restaurer : on garde
-  // le loader (sans son animation) pour masquer le temps que le feed se
-  // recharge, sinon on voit furtivement le haut de la page avant le scroll.
-  // La classe agon-return-veil fait passer les flèches haut/bas au-dessus de
-  // ce voile (retirée par script.js quand le loader est enlevé).
-  if (window.__agonPendingDebateReturnScrollY > 0) {
-    document.documentElement.classList.add('agon-return-veil');
-    return;
-  }
   if (window.__agonSkipStartupOnce === true) {
     if (loader.parentNode) loader.parentNode.removeChild(loader);
     return;
@@ -596,13 +564,50 @@
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
   <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite</button>
 </div>
-<!-- Mémorise la position de scroll pour que le retour depuis Autres actus
-     (flèche ou geste navigateur) restaure exactement cet endroit — même
-     mécanique que le retour d'une arène ouverte en pleine page. -->
-<a href="/autres-sources" class="agon-tribunes-btn" onclick="try{rememberDebateReturnScrollPosition('/', window.scrollY||document.documentElement.scrollTop||0)}catch(e){}">
+<a href="/autres-sources" class="agon-tribunes-btn" onclick="try{showTribunesNavOverlay()}catch(e){}">
   <i class="fa-solid fa-newspaper"></i>
   <span>Autres actus</span>
 </a>
+<style>
+.tribunes-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tribunes-nav-overlay img {
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  animation: tribunesNavHourglassSpin 1s linear infinite;
+}
+@keyframes tribunesNavHourglassSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+</style>
+<script>
+// Voile immédiat au clic sur "Autres actus" : en navigation pleine page, rien
+// ne change à l'écran avant le premier rendu de la nouvelle page — sans ce
+// voile figeant l'écran (sablier, même style que la publication d'arène), le
+// bouton semble ne pas réagir. Retiré via pageshow au retour bfcache (flèche
+// / geste).
+function showTribunesNavOverlay() {
+  if (document.getElementById("tribunes-nav-overlay")) return;
+  var o = document.createElement("div");
+  o.id = "tribunes-nav-overlay";
+  o.className = "tribunes-nav-overlay";
+  o.innerHTML = '<img src="/sablier-96.png" alt="">';
+  document.body.appendChild(o);
+}
+window.addEventListener("pageshow", function() {
+  var o = document.getElementById("tribunes-nav-overlay");
+  if (o) o.remove();
+});
+</script>
 <p class="agon-tag-trends-caption" style="text-align: center;">
   Les tendances de l'actualité française ces dernières heures.<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>
 </p>
@@ -919,7 +924,7 @@
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260715-return-veil-arrows" defer></script>
+<script src="/script.min.js?v=20260716-tribunes-notif-return-toplevel" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

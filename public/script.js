@@ -449,14 +449,7 @@ registerServiceWorker();
 
   try { history.scrollRestoration = 'manual'; } catch (_) {}
 
-  // Retour depuis une arène : une position de scroll est en cours de
-  // restauration ailleurs (cf. script inline dans <head>) — ne pas la défaire
-  // en forçant le haut de page ici, sous peine de voir un flash au retrait du loader.
-  const isRestoringDebateReturnScroll = window.__agonPendingDebateReturnScrollY > 0;
-
-  if (!isRestoringDebateReturnScroll) {
-    window.scrollTo(0, 0);
-  }
+  window.scrollTo(0, 0);
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
   const waitForPaint = function() {
@@ -508,73 +501,27 @@ registerServiceWorker();
   function tryHide() {
     if (hidden || !introSequenceDone || !contentReady) return;
     hidden = true;
-    if (!isRestoringDebateReturnScroll) {
-      try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
-    }
+    try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
     loader.classList.add('is-hiding');
     setTimeout(function() {
       if (loader.parentNode) loader.parentNode.removeChild(loader);
-      document.documentElement.classList.remove('agon-return-veil');
     }, 500);
   }
 
-  if (isRestoringDebateReturnScroll) {
-    // Retour d'arène : le premier rendu (depuis le cache) peut être suivi d'un
-    // rafraîchissement silencieux qui reconstruit toute la liste et décale le
-    // scroll. On attend d'abord ce cycle (agon:feed-settled), PUIS on vérifie
-    // en plus que window.scrollY est réellement stable sur la cible pendant
-    // plusieurs frames consécutives avant de révéler — ça encaisse aussi bien
-    // le réarrangement tardif que d'éventuelles différences de timing d'un
-    // moteur de rendu à l'autre (Safari inclus), sans jamais montrer le haut
-    // de page derrière.
-    const targetScrollY = window.__agonPendingDebateReturnScrollY;
-    const STABLE_FRAMES_NEEDED = 6;
-    const deadline = Date.now() + 7000;
-    let feedSettled = false;
-    let stableFrames = 0;
-
-    window.addEventListener('agon:feed-settled', function() { feedSettled = true; }, { once: true });
-
-    (function checkScrollSettled() {
-      if (hidden) return;
-
-      const currentY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      const atTarget = Math.abs(currentY - targetScrollY) < 3;
-      stableFrames = (feedSettled && atTarget) ? (stableFrames + 1) : 0;
-
-      if (stableFrames >= STABLE_FRAMES_NEEDED || Date.now() > deadline) {
-        contentReady = true;
-        tryHide();
-        return;
-      }
-
-      requestAnimationFrame(checkScrollSettled);
-    })();
-  } else {
-    // Condition contenu : le feed index doit avoir rendu ses cartes.
-    window.addEventListener('agon:feed-ready', function() {
-      contentReady = true;
-      tryHide();
-    }, { once: true });
-  }
+  // Condition contenu : le feed index doit avoir rendu ses cartes.
+  window.addEventListener('agon:feed-ready', function() {
+    contentReady = true;
+    tryHide();
+  }, { once: true });
 
   // Filet de sécurité absolu
   setTimeout(function() {
     if (hidden) return;
     hidden = true;
     if (loader.parentNode) loader.parentNode.removeChild(loader);
-    document.documentElement.classList.remove('agon-return-veil');
   }, 10000);
 
   async function runIntroSequence() {
-    if (isRestoringDebateReturnScroll) {
-      // Retour depuis une arène : pas d'animation de marque à rejouer, on
-      // attend juste que le scroll soit vérifié stable (cf. checkScrollSettled ci-dessus).
-      introSequenceDone = true;
-      tryHide();
-      return;
-    }
-
     // Pause sur le logo avant les messages
     if (window.__agonStartupInlineStarted !== true) {
       await wait(400);
@@ -5439,11 +5386,6 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:open-debate-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
-      const returnUrl = String(e.data.returnUrl || "").trim();
-      if (shouldOpenDebateAsTopLevelMobilePage(nextUrl, { returnUrl })) {
-        openDebateAsTopLevelMobilePage(nextUrl, { returnUrl });
-        return;
-      }
       syncIndexUrlWithOpenIframeModal(nextUrl);
       openDebateIframeModal(nextUrl);
       return;
@@ -6012,11 +5954,6 @@ function openDebateIframeModal(url, options = {}) {
     return;
   }
 
-  if (shouldOpenDebateAsTopLevelMobilePage(url, options)) {
-    openDebateAsTopLevelMobilePage(url, options);
-    return;
-  }
-
   closeHomeTopbarMenu();
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
@@ -6298,15 +6235,12 @@ function closeDebateIframeModal(options = {}) {
     notificationsReturnContext.returnUrl &&
     ["/notifications", "/create", "/contributions", "/about", "/contact"].includes(currentIframePathname);
   if (shouldReturnToTribunesFromChildPage && frame) {
+    // Vraie navigation top-level (comme le lien "retour" à l'intérieur de
+    // /notifications) plutôt qu'un rechargement dans l'iframe : sinon Autres
+    // actus continue de tourner en iframe, et iOS n'ouvre plus les liens
+    // sources dans la vue avec croix de retour mais dans un vrai nouvel onglet.
     clearNotificationsReturnContext();
-    setDebateIframeModalLoadingState(true, "Retour aux autres actus en cours");
-    setDebateIframeModalCloseButtonVisible(false);
-    syncDebateIframeModalPageClass("/autres-sources");
-    window.__agonIframeCurrentPathname = "/autres-sources";
-    navigateDebateIframeModalFrame(frame, notificationsReturnContext.returnUrl);
-    armDebateIframeParentLoadingFallback("/autres-sources", () => {
-      syncDebateIframeModalCloseButtonWithFramePage(frame);
-    });
+    window.location.href = notificationsReturnContext.returnUrl;
     return;
   }
   const skipReturnLoader = options && options.skipReturnLoader === true;
@@ -6460,8 +6394,6 @@ function isTopLevelIframeModalPage() {
 }
 
 const NOTIFICATIONS_RETURN_CONTEXT_KEY = "agon_notifications_return_context";
-const DEBATE_RETURN_CONTEXT_KEY = "agon_debate_return_context";
-const DEBATE_RETURN_SCROLL_KEY = "agon_debate_return_scroll";
 const INDEX_SKIP_STARTUP_ONCE_KEY = "agon_skip_startup_once";
 
 function normalizeSameOriginPathUrl(url = "", fallback = "") {
@@ -6473,22 +6405,6 @@ function normalizeSameOriginPathUrl(url = "", fallback = "") {
   } catch (error) {
     return safeFallback;
   }
-}
-
-function isDebateUrlPath(url = "") {
-  try {
-    return new URL(String(url || ""), window.location.origin).pathname === "/debate";
-  } catch (error) {
-    return false;
-  }
-}
-
-function isMobileBrowserViewport() {
-  return window.innerWidth <= 768;
-}
-
-function getCurrentReturnPath() {
-  return `${location.pathname}${location.search}${location.hash}`;
 }
 
 function isValidDebateReturnUrl(returnUrl = "") {
@@ -6511,61 +6427,7 @@ function isValidDebateReturnUrl(returnUrl = "") {
   }
 }
 
-function rememberDebateReturnContext(returnUrl = "") {
-  const normalizedReturnUrl = normalizeSameOriginPathUrl(returnUrl, "");
-  if (!normalizedReturnUrl || !isValidDebateReturnUrl(normalizedReturnUrl)) return;
-
-  try {
-    sessionStorage.setItem(DEBATE_RETURN_CONTEXT_KEY, JSON.stringify({
-      returnUrl: normalizedReturnUrl,
-      ts: Date.now()
-    }));
-  } catch (error) {}
-}
-
-function rememberDebateReturnScrollPosition(returnUrl = "", scrollY = 0) {
-  const normalizedReturnUrl = normalizeSameOriginPathUrl(returnUrl, "");
-  if (!normalizedReturnUrl || !isValidDebateReturnUrl(normalizedReturnUrl)) return;
-
-  try {
-    sessionStorage.setItem(DEBATE_RETURN_SCROLL_KEY, JSON.stringify({
-      returnUrl: normalizedReturnUrl,
-      scrollY: Math.max(0, Math.round(Number(scrollY) || 0)),
-      ts: Date.now()
-    }));
-  } catch (error) {}
-}
-
-function getDebateReturnContext(maxAgeMs = 30 * 60 * 1000) {
-  try {
-    const raw = sessionStorage.getItem(DEBATE_RETURN_CONTEXT_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    const returnUrl = normalizeSameOriginPathUrl(parsed?.returnUrl, "");
-    const ts = Number(parsed?.ts || 0);
-
-    if (!returnUrl || !ts || Date.now() - ts > maxAgeMs || !isValidDebateReturnUrl(returnUrl)) {
-      sessionStorage.removeItem(DEBATE_RETURN_CONTEXT_KEY);
-      return null;
-    }
-
-    return { returnUrl, ts };
-  } catch (error) {
-    return null;
-  }
-}
-
-function clearDebateReturnContext() {
-  try {
-    sessionStorage.removeItem(DEBATE_RETURN_CONTEXT_KEY);
-  } catch (error) {}
-}
-
 function getDebateReturnTarget(fallbackUrl = "/") {
-  const context = getDebateReturnContext();
-  if (context?.returnUrl) return context.returnUrl;
-
   try {
     const referrerUrl = new URL(document.referrer || "", window.location.origin);
     const referrerPath = `${referrerUrl.pathname}${referrerUrl.search}${referrerUrl.hash}`;
@@ -6575,32 +6437,6 @@ function getDebateReturnTarget(fallbackUrl = "/") {
   } catch (error) {}
 
   return fallbackUrl;
-}
-
-function shouldOpenDebateAsTopLevelMobilePage(url = "", options = {}) {
-  return (
-    window.self === window.top &&
-    isMobileBrowserViewport() &&
-    options?.forceIframe !== true &&
-    isDebateUrlPath(url)
-  );
-}
-
-function openDebateAsTopLevelMobilePage(url = "", options = {}) {
-  const targetUrl = normalizeSameOriginPathUrl(url, "");
-  if (!targetUrl || !isDebateUrlPath(targetUrl)) return false;
-
-  const rawReturnUrl = String(options?.returnUrl || "").trim() || getCurrentReturnPath();
-  const returnUrl = isValidDebateReturnUrl(rawReturnUrl) ? normalizeSameOriginPathUrl(rawReturnUrl, "/") : "/";
-  rememberDebateReturnContext(returnUrl);
-  rememberDebateReturnScrollPosition(returnUrl, window.scrollY || document.documentElement.scrollTop || 0);
-
-  try {
-    sessionStorage.setItem(INDEX_SKIP_STARTUP_ONCE_KEY, "1");
-  } catch (error) {}
-
-  window.location.href = targetUrl;
-  return true;
 }
 
 function rememberNotificationsReturnContext(returnUrl = "") {
@@ -6912,14 +6748,12 @@ function initIndexReturnNavigation() {
         if (!navigatedAway) {
           // Rien dans l'historique de cet onglet à ce sujet (arrivée directe
           // via un lien partagé, par ex.) : history.back() n'a rien fait.
-          clearDebateReturnContext();
           window.location.href = returnTarget;
         }
       }, 500);
       return;
     }
 
-    clearDebateReturnContext();
     window.location.href = returnTarget;
   };
 
@@ -21114,7 +20948,6 @@ async function initIndex() {
         });
         refreshCategoryFilterOptions(debatesCache);
         if (window.__agonDebateModalOpen) {
-          window.dispatchEvent(new Event("agon:feed-settled"));
           return;
         }
 
@@ -21124,14 +20957,8 @@ async function initIndex() {
 
         requestAnimationFrame(() => {
           restoreIndexScrollFromAnchor(restoreAnchor, fallbackScrollY);
-          // Signal dédié : le feed vient d'être reconstruit avec les données
-          // fraîches et le scroll réappliqué. Le loader de retour d'arène
-          // attend cet événement avant de vérifier la stabilité du scroll,
-          // pour ne jamais révéler la page avant ce réarrangement tardif.
-          window.dispatchEvent(new Event("agon:feed-settled"));
         });
       }).catch(() => {
-        window.dispatchEvent(new Event("agon:feed-settled"));
       }).finally(() => {
         // Plus de chargement progressif au scroll : on récupère directement
         // toutes les arènes restantes une fois le rafraîchissement initial terminé.
@@ -21163,7 +20990,6 @@ async function initIndex() {
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("agon:feed-ready"));
-      window.dispatchEvent(new Event("agon:feed-settled"));
 
       // Plus de chargement progressif au scroll : on récupère directement
       // toutes les arènes restantes dès l'arrivée sur la page.
@@ -21186,7 +21012,6 @@ async function initIndex() {
     pageArrivalLoadingOverlayReady = true;
     hidePageArrivalLoadingOverlay();
     window.dispatchEvent(new Event("agon:feed-ready"));
-    window.dispatchEvent(new Event("agon:feed-settled"));
     console.error('[Agôn] initIndex error:', error);
   }
 }

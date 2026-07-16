@@ -8013,6 +8013,8 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   const error = await upsertOpinionArticleRows(rows);
 
   if (error) { console.error("veille/opinion-articles:", error.message); return res.status(500).json({ ok: false, error: error.message }); }
+  // Le prochain GET /api/opinion-articles reconstruit avec ces nouveaux articles.
+  if (rows.length > 0) _opinionArticlesCache = null;
   res.json({ ok: true, inserted: rows.length });
 });
 
@@ -8051,7 +8053,7 @@ app.post("/api/veille/opinion-articles/remove", rateLimit("veille-opinion-articl
 // écarté (cf. OPINION_ARTICLES_RETENTION_DAYS et l'incident de quota Supabase du 20/06/2026).
 // Bucket par bord ET par type (articles vs vidéos YouTube) : sans ça, les vidéos (moins
 // nombreuses) se font noyer par les articles dans la limite globale.
-const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 50;
+const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 100;
 const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 2000;
 const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
@@ -8198,7 +8200,7 @@ const OPINION_ARTICLE_CATEGORY_OPTIONS = [
   "Vie personnelle - modes de vie",
   "Espace jeunes"
 ];
-const OPINION_ARTICLE_CATEGORY_MODEL = process.env.OPENAI_OPINION_CATEGORY_MODEL || "gpt-4.1-nano";
+const OPINION_ARTICLE_CATEGORY_MODEL = process.env.OPENAI_OPINION_CATEGORY_MODEL || "gpt-5-nano";
 const OPINION_ARTICLE_CATEGORY_BATCH_SIZE = Math.max(1, Math.min(60, Number(process.env.OPENAI_OPINION_CATEGORY_BATCH_SIZE || 40)));
 
 function normalizeOpinionArticleCategory(value) {
@@ -8266,31 +8268,45 @@ function normalizeOpinionArticleCategory(value) {
   return aliases.get(key) || "";
 }
 
-function getOpinionArticleFallbackCategory(article) {
-  const text = [
-    article?.title,
-    article?.summary,
-    article?.source,
-    article?.orientation
-  ].filter(Boolean).join(" ").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// Mots-clés du fallback : match sur frontière de mot (plus de "sélection" →
+// élection, "transport" → sport, "nouveau" → eau). Un `*` final autorise les
+// suffixes ("ecolog*" matche écologie/écologiste) ; sinon mot entier, pluriel
+// s/x toléré. Seuls titre + résumé sont analysés : le nom de la source ou
+// l'orientation polluaient le classement ("France Culture" → Culture).
+// Premier match gagne : rubriques au vocabulaire spécifique (Sports,
+// International) avant les fourre-tout (Politique, Économie).
+const OPINION_FALLBACK_RULES = [
+  ["Sports - loisirs", ["sport*", "football*", "rugby", "tennis", "cyclisme", "tour de france", "jo", "jeux olympiques", "olympique*", "coupe du monde", "quinte", "match*", "loisir*"]],
+  ["International", ["ukraine", "russie", "chine", "etats-unis", "trump", "gaza", "israel*", "palestin*", "iran*", "yemen*", "houthi*", "arabie saoudite", "syrie", "liban", "otan", "union europeenne", "geopolit*", "international*", "moyen-orient", "diplomat*", "guerre*"]],
+  ["Politique", ["macron", "assemblee nationale", "gouvernement*", "ministre*", "ministere*", "presidentiel*", "election*", "legislative*", "primaire*", "depute*", "senat*", "parlement*", "parti", "rn", "lfi", "ps", "lr", "politique*"]],
+  ["Économie - emploi", ["economie*", "economique*", "emploi*", "salaire*", "entreprise*", "budget*", "impot*", "taxe*", "inflation", "banque*", "bourse", "industrie*", "retraite*", "chomage", "pouvoir d'achat"]],
+  ["Climat - environnement", ["climat*", "ecolog*", "environnement*", "biodiversite", "energie*", "pollution*", "agricult*", "eau", "canicule*", "secheresse*", "meteo", "carbone", "orage*"]],
+  ["Sciences - technologie", ["science*", "technolog*", "ia", "intelligence artificielle", "numerique*", "internet", "cyber*", "spatial*", "fusee*", "robot*", "algorithme*"]],
+  ["Justice - faits divers", ["justice", "tribunal*", "proces", "police*", "gendarm*", "meurtre*", "agression*", "violence*", "prison*", "attentat*", "faits divers"]],
+  ["Santé - bien-être", ["sante", "hopital*", "hopitaux", "medecin*", "maladie*", "virus", "vaccin*", "psychiatr*", "psycholog*", "bien-etre", "cancer*", "epidemie*"]],
+  ["Culture - modes", ["culture*", "cinema*", "film*", "livre*", "musique*", "mode", "art", "arts", "theatre*", "serie*", "festival*", "exposition*", "concert*"]],
+  ["Médias - divertissements", ["media*", "journal*", "television*", "radio", "cnews", "bfmtv", "divertissement*", "youtube*", "influenceur*", "reseaux sociaux"]],
+  ["Philosophie - sciences sociales", ["philosoph*", "sociolog*", "anthropolog*", "histoire", "religion*", "intellectuel*"]],
+  ["Vie personnelle - modes de vie", ["famille*", "couple*", "parent*", "logement*", "consommation", "alimentation", "vie personnelle", "voyage*"]],
+  ["Espace jeunes", ["jeunes", "adolescent*", "lycee*", "college*", "etudiant*", "ecole*", "jeunesse"]]
+].map(([category, keywords]) => [
+  category,
+  keywords.map((keyword) => {
+    const prefix = keyword.endsWith("*");
+    const escaped = (prefix ? keyword.slice(0, -1) : keyword).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("\\b" + escaped + (prefix ? "\\w*" : "(s|x)?\\b"));
+  })
+]);
 
-  const rules = [
-    ["Politique", ["macron", "assemblee", "gouvernement", "ministere", "presidentielle", "election", "primaire", "depute", "senat", "parlement", "parti", "rn", "lfi", "ps", "lr", "politique"]],
-    ["Économie - emploi", ["economie", "emploi", "salaire", "entreprise", "budget", "impot", "taxe", "inflation", "banque", "bourse", "industrie", "retraite", "chomage", "pouvoir d'achat"]],
-    ["Climat - environnement", ["climat", "ecolog", "environnement", "biodiversite", "energie", "pollution", "agriculture", "eau", "carbone"]],
-    ["Sciences - technologie", ["science", "technolog", "ia", "intelligence artificielle", "numerique", "internet", "reseau social", "cyber", "spatial", "espace", "robot"]],
-    ["Justice - faits divers", ["justice", "tribunal", "proces", "police", "gendarmerie", "meurtre", "agression", "violence", "prison", "enquete", "faits divers"]],
-    ["Culture - modes", ["culture", "cinema", "livre", "musique", "mode", "art", "theatre", "serie", "festival"]],
-    ["Médias - divertissements", ["media", "journal", "television", "radio", "cnews", "bfmtv", "divertissement", "youtube", "influenceur"]],
-    ["Sports - loisirs", ["sport", "football", "rugby", "tennis", "jo ", "olympique", "loisir"]],
-    ["Santé - bien-être", ["sante", "hopital", "medecin", "maladie", "virus", "vaccin", "psy", "bien-etre"]],
-    ["Philosophie - sciences sociales", ["philosoph", "sociolog", "anthropolog", "histoire", "religion", "idee", "intellectuel"]],
-    ["Vie personnelle - modes de vie", ["famille", "couple", "parent", "logement", "consommation", "alimentation", "travail a distance", "vie personnelle"]],
-    ["Espace jeunes", ["jeune", "adolescent", "lycee", "college", "etudiant", "ecole"]],
-    ["International", ["ukraine", "russie", "chine", "etats-unis", "trump", "gaza", "israel", "palestine", "iran", "otan", "union europeenne", "geopolit", "international"]]
-  ];
-  for (const [category, keywords] of rules) {
-    if (keywords.some((keyword) => text.includes(keyword))) return category;
+function getOpinionArticleFallbackCategory(article) {
+  const text = [article?.title, article?.summary]
+    .filter(Boolean).join(" ")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[’‘]/g, "'")
+    .toLowerCase();
+
+  for (const [category, patterns] of OPINION_FALLBACK_RULES) {
+    if (patterns.some((pattern) => pattern.test(text))) return category;
   }
   return "Société - éducation";
 }
@@ -8318,26 +8334,37 @@ async function classifyOpinionArticlesWithAI(items) {
       "Rubriques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
       `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
       "Ne renvoie jamais seulement le premier item.",
+      "Recopie le libellé de rubrique EXACTEMENT comme dans la liste, sans le modifier.",
       "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\"},{\"id\":1,\"category\":\"...\"}]} avec un objet par id.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
       "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
-      "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/livre/série = Culture - modes ; sport/compétition/Tour de France = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
+      "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/livre/série = Culture - modes ; sport/compétition/Tour de France/courses hippiques = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
       "Ne crée jamais d'autre rubrique.",
       "",
       JSON.stringify(compactItems)
     ].join("\n");
 
     try {
+      // Les modèles gpt-5-* refusent max_tokens et toute temperature ≠ 1 :
+      // max_completion_tokens (qui inclut leurs tokens de raisonnement, d'où le
+      // budget large + reasoning_effort minimal) et température par défaut.
+      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+      const body = {
+        model: OPINION_ARTICLE_CATEGORY_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" }
+      };
+      if (isGpt5) {
+        body.max_completion_tokens = Math.min(12000, 1000 + chunk.length * 80);
+        body.reasoning_effort = "low";
+      } else {
+        body.max_tokens = Math.min(6000, 160 + chunk.length * 40);
+        body.temperature = 0;
+      }
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({
-          model: OPINION_ARTICLE_CATEGORY_MODEL,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          max_tokens: Math.min(6000, 160 + chunk.length * 40),
-          temperature: 0
-        })
+        body: JSON.stringify(body)
       });
       if (!r.ok) throw new Error(`openai http ${r.status}`);
       const data = await r.json();
@@ -8540,56 +8567,76 @@ function attachOpinionArticlePreviews(articles) {
 // Cache court en mémoire : la page /autres-sources n'a pas besoin d'être seconde-près,
 // et sans lui chaque visiteur redéclenchait le fetch + la requête ciblée ci-dessous contre
 // Supabase (cf. incident de quota Disk IO du 20/06/2026 — server.js:7403, 7455).
-const OPINION_ARTICLES_CACHE_TTL_MS = 60 * 1000;
+// TTL 5 min : le recalcul complet prend plus d'une seconde et se voyait à chaque
+// visite avec l'ancien TTL de 60 s ; la fraîcheur reste assurée par l'invalidation
+// explicite aux endpoints veille (ingestion et retrait).
+const OPINION_ARTICLES_CACHE_TTL_MS = 5 * 60 * 1000;
 let _opinionArticlesCache = null;
 let _opinionArticlesCacheComputedAt = 0;
 
+async function getOpinionArticlesSelection() {
+  if (_opinionArticlesCache && Date.now() - _opinionArticlesCacheComputedAt < OPINION_ARTICLES_CACHE_TTL_MS) {
+    return _opinionArticlesCache;
+  }
+
+  // La classification gauche/droite (avec ses synonymes) se fait en JS, pas en SQL :
+  // ilike n'est pas insensible aux accents, ce qui rendrait le filtre SQL aussi long
+  // et fragile que la liste de synonymes elle-même. Passe 1 : colonnes légères
+  // uniquement (pas de title/link/summary) sur un large volume pour classer sans
+  // faire peser le poids texte de tout ce qui sera finalement rejeté ; passe 2 :
+  // select("*") restreint aux seules lignes retenues.
+  const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
+
+  const buckets = buildVisibleOpinionArticleSelection(lightRows);
+  const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube];
+  if (!selectedIds.length) {
+    _opinionArticlesCache = [];
+    _opinionArticlesCacheComputedAt = Date.now();
+    return _opinionArticlesCache;
+  }
+
+  const { data: fullRows, error: fullError } = await supabase
+    .from("opinion_articles")
+    .select("*")
+    .in("id", selectedIds);
+  if (fullError) throw new Error(fullError.message);
+
+  // Filtre "inédits" : ne garde que les sujets non couverts par une arène de
+  // la session de publication en cours (cf. getRecentDebateTopicTokenSets).
+  const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
+  const articles = attachOpinionArticlePreviews(
+    (fullRows || [])
+      .map((article) => ({
+        ...article,
+        orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
+        category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
+      }))
+      .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
+      .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
+  );
+  _opinionArticlesCache = articles;
+  _opinionArticlesCacheComputedAt = Date.now();
+  return articles;
+}
+
+// Pagination façon index (/api/debates) : la sélection complète vit dans le cache
+// mémoire, chaque requête n'en découpe qu'une tranche. Sans limit, réponse
+// complète (compat ascendante) ; total/hasMore permettent au front d'alimenter
+// sa sentinelle de scroll infini.
 app.get("/api/opinion-articles", async (req, res) => {
   try {
-    if (_opinionArticlesCache && Date.now() - _opinionArticlesCacheComputedAt < OPINION_ARTICLES_CACHE_TTL_MS) {
-      return res.json({ articles: _opinionArticlesCache });
+    const articles = await getOpinionArticlesSelection();
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+    if (!limit) {
+      return res.json({ articles, total: articles.length, hasMore: false });
     }
-
-    // La classification gauche/droite (avec ses synonymes) se fait en JS, pas en SQL :
-    // ilike n'est pas insensible aux accents, ce qui rendrait le filtre SQL aussi long
-    // et fragile que la liste de synonymes elle-même. Passe 1 : colonnes légères
-    // uniquement (pas de title/link/summary) sur un large volume pour classer sans
-    // faire peser le poids texte de tout ce qui sera finalement rejeté ; passe 2 :
-    // select("*") restreint aux seules lignes retenues.
-    const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
-
-    const buckets = buildVisibleOpinionArticleSelection(lightRows);
-    const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube];
-    if (!selectedIds.length) {
-      _opinionArticlesCache = [];
-      _opinionArticlesCacheComputedAt = Date.now();
-      return res.json({ articles: [] });
-    }
-
-    const { data: fullRows, error: fullError } = await supabase
-      .from("opinion_articles")
-      .select("*")
-      .in("id", selectedIds);
-    if (fullError) throw new Error(fullError.message);
-
-    // Filtre "inédits" : ne garde que les sujets non couverts par une arène de
-    // la session de publication en cours (cf. getRecentDebateTopicTokenSets).
-    const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
-    const articles = attachOpinionArticlePreviews(
-      (fullRows || [])
-        .map((article) => ({
-          ...article,
-          orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
-          category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
-        }))
-        .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
-        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
-    );
-    _opinionArticlesCache = articles;
-    _opinionArticlesCacheComputedAt = Date.now();
-    res.json({ articles });
+    const rawOffset = Number.parseInt(String(req.query.offset ?? ""), 10);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+    const page = articles.slice(offset, offset + limit);
+    res.json({ articles: page, total: articles.length, hasMore: offset + page.length < articles.length });
   } catch (error) {
-    res.status(500).json({ articles: [], error: error.message });
+    res.status(500).json({ articles: [], total: 0, hasMore: false, error: error.message });
   }
 });
 

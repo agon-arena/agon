@@ -23392,9 +23392,17 @@ body.page-create-mobile .create-card .create-submit-helper {
     display: none !important;
   }
 
+  /* --agon-safe-bottom vient d'une sonde env(safe-area-inset-bottom) mesurée
+     dans CE document : elle vaut toujours 0 quand ce document tourne dans
+     l'iframe du modal débat (WebKit ne propage jamais les safe-area-inset-*
+     aux iframes). --agon-embedded-bottom-ext (posé par initAgonDockAlignment,
+     cf. plus haut) capture le même écart géométriquement (iframe.innerHeight
+     - parent.innerHeight) et reste fiable dans ce cas — d'où le max() : sans
+     lui, le bandeau se pose au ras du bas de l'iframe, qui déborde sous
+     l'écran visible de --agon-safe-bottom, donc trop bas et rogné. */
   .home-bottom-nav {
-    bottom: calc(0px - var(--agon-safe-bottom)) !important;
-    padding-bottom: calc(3px + var(--agon-safe-bottom)) !important;
+    bottom: calc(0px - max(var(--agon-safe-bottom, 0px), var(--agon-embedded-bottom-ext, 0px))) !important;
+    padding-bottom: calc(3px + max(var(--agon-safe-bottom, 0px), var(--agon-embedded-bottom-ext, 0px))) !important;
   }
 
   body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-body,
