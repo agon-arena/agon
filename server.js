@@ -8053,8 +8053,14 @@ app.post("/api/veille/opinion-articles/remove", rateLimit("veille-opinion-articl
 // écarté (cf. OPINION_ARTICLES_RETENTION_DAYS et l'incident de quota Supabase du 20/06/2026).
 // Bucket par bord ET par type (articles vs vidéos YouTube) : sans ça, les vidéos (moins
 // nombreuses) se font noyer par les articles dans la limite globale.
-const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 100;
-const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 2000;
+// Relevé 100→250 et 2000→4000 le 16/07/2026 (demande explicite : plus de liens visibles
+// sur Autres actus) : ça n'augmente pas le volume écrit en base par le bot veille (déjà
+// illimité côté écriture), juste la requête de lecture (cache 5 min, cf.
+// OPINION_ARTICLES_CACHE_TTL_MS) et la taille de la réponse — pas de risque identifié
+// sur le quota Supabase/Render à ce niveau, contrairement à l'incident du 20/06/2026 qui
+// venait de tables sans purge (page_visits/notification_events), pas de ce plafond.
+const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 250;
+const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 4000;
 const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
 // server.js) : "gauche"/"droite" couvrent aussi les familles proches (écolo, souverainiste,
