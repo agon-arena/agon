@@ -86,7 +86,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260716-revert-topbar-shift">
+<link rel="stylesheet" href="/style.min.css?v=20260716-standalone-cloud-transition">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -810,7 +810,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var params = new URLSearchParams(location.search);
     var prefillQuestion = params.get('question');
     var prefillSource = params.get('source_url');
-    if (!prefillQuestion && !prefillSource) return;
+    var prefillCategory = params.get('category');
+    if (!prefillQuestion && !prefillSource && !prefillCategory) return;
 
     function fireEvents(el, types) {
       types.forEach(function(type) {
@@ -834,6 +835,21 @@ document.addEventListener('DOMContentLoaded', function() {
         fireEvents(sourceRadio, ['change']);
         sourceInput.value = prefillSource.slice(0, 500);
         fireEvents(sourceInput, ['input', 'change']);
+      }
+    }
+
+    if (prefillCategory) {
+      // Le picker (initCreateCategoryPicker, script.js) a déjà construit ses cases à cocher
+      // à ce stade — cf. commentaire ci-dessus sur l'attente de DOMContentLoaded — donc on ne
+      // peut pas se contenter de renseigner #category : il faut cocher la case correspondante
+      // et déclencher son listener "change" pour que l'UI (libellé, chip) se mette à jour.
+      var categoryOptions = document.querySelectorAll('#create-category-options input[type="checkbox"]');
+      for (var i = 0; i < categoryOptions.length; i++) {
+        if (categoryOptions[i].value === prefillCategory) {
+          categoryOptions[i].checked = true;
+          fireEvents(categoryOptions[i], ['change']);
+          break;
+        }
       }
     }
 

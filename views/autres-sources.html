@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260716-revert-topbar-shift">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-standalone-cloud-transition">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1766,6 +1766,7 @@ window.addEventListener("pageshow", function() {
     var params = new URLSearchParams();
     if (article.title) params.set('question', truncateWithEllipsis(article.title, 110));
     if (article.link) params.set('source_url', article.link);
+    if (article.category) params.set('category', article.category);
     params.set('community', '1');
     var preview = article.source_preview || {};
     var sourceImage = article.source_image || preview.image || preview.imageUrl || preview.thumbnail || '';

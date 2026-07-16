@@ -11160,6 +11160,12 @@ body.is-standalone .agon-tag-trends-section {
   align-items: center;
   justify-content: center;
   padding-bottom: 70px;
+  /* 100dvh (et parfois env(safe-area-inset-bottom)) peut mettre un instant à se
+     stabiliser après une navigation standalone mobile — sans transition, le
+     cadre du nuage (centré via justify-content) saute brutalement de sa
+     hauteur initiale à sa hauteur définitive. La transition lisse ce
+     changement en un mouvement fluide plutôt qu'un saut visible. */
+  transition: min-height 0.25s ease;
 }
 
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
