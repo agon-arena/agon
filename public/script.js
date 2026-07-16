@@ -2491,7 +2491,12 @@ function initPageArrivalLoadingOverlay() {
   pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/";
 
   const isNotificationsInIframe = window.self !== window.top && location.pathname === "/notifications";
-  const shouldShowOverlayImmediately = (!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition();
+  // Retour depuis Autres actus (ou reload interne à l'index) : window.__agonSkipStartupOnce
+  // est déjà posé pour sauter l'intro logo (cf. index.html) — même logique ici, sans quoi
+  // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
+  // Bulles Actu/Agôn en dessous le temps que les débats se rechargent.
+  const skipForIndexReturn = location.pathname === "/" && window.__agonSkipStartupOnce === true;
+  const shouldShowOverlayImmediately = !skipForIndexReturn && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
@@ -5856,10 +5861,20 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
       const isNotificationsUrl = (() => {
         try { return new URL(normalizedModalUrl, window.location.origin).pathname === "/notifications"; } catch (e) { return false; }
       })();
-      if (!pathname.startsWith("/debates/") && !isNotificationsUrl) {
+      if (!isNotificationsUrl) {
         const nextUrl = new URL(window.location.href);
+        const previousOpenModalParam = nextUrl.searchParams.get("openModal") || "";
         nextUrl.searchParams.set("openModal", normalizedModalUrl);
-        window.history.replaceState({}, "", nextUrl);
+        if (window.location.href === nextUrl.toString()) {
+          // Déjà à jour, rien à faire.
+        } else if (pathname.startsWith("/debates/") && previousOpenModalParam !== normalizedModalUrl) {
+          // Entrée d'historique distincte de la fiche débat en dessous (ex: "Mes
+          // contributions" cliqué depuis une arène) : sans elle, "retour" saute
+          // par-dessus le débat jusqu'à l'index au lieu d'y revenir d'abord.
+          window.history.pushState({}, "", nextUrl);
+        } else {
+          window.history.replaceState({}, "", nextUrl);
+        }
       }
     } else {
       const nextPath = "/";
@@ -5872,6 +5887,65 @@ function syncIndexUrlWithOpenIframeModal(modalUrl = "") {
   } catch (error) {}
 }
 
+// Réagit au bouton retour/suivant du navigateur : sans ce gestionnaire, rien
+// ne réconciliait la modale débat avec l'URL après un popstate (ex: ouvrir un
+// débat puis faire "retour" ne refermait pas la modale ; ouvrir "Mes
+// contributions" depuis un débat puis "retour" sautait jusqu'à l'index au
+// lieu d'y revenir).
+function handleIndexHistoryPopState() {
+  if (window.self !== window.top) return;
+
+  const modal = document.getElementById("debate-iframe-modal");
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  const pathname = location.pathname;
+  const params = new URLSearchParams(location.search);
+  const openModalParam = params.get("openModal") || "";
+
+  const debatesMatch = pathname.match(/^\/debates\/(.+)$/);
+  const debateIdFromPath = debatesMatch ? decodeURIComponent(debatesMatch[1]) : "";
+
+  const desiredUrl = debateIdFromPath
+    ? (openModalParam || `/debate?id=${encodeURIComponent(debateIdFromPath)}`)
+    : "";
+
+  const modalIsOpen = modal?.classList?.contains("open") === true;
+
+  if (!desiredUrl) {
+    if (modalIsOpen) closeDebateIframeModal();
+    return;
+  }
+
+  if (!modalIsOpen) {
+    openDebateIframeModal(desiredUrl);
+    return;
+  }
+
+  if (!(frame instanceof HTMLIFrameElement)) return;
+
+  let currentPathAndSearch = "";
+  try {
+    const currentHref = frame.contentWindow?.location?.href || "";
+    if (currentHref) {
+      const parsedCurrent = new URL(currentHref, window.location.origin);
+      currentPathAndSearch = `${parsedCurrent.pathname}${parsedCurrent.search}`;
+    }
+  } catch (error) {}
+
+  let desiredPathname = "";
+  let desiredPathAndSearch = "";
+  try {
+    const parsedDesired = new URL(desiredUrl, window.location.origin);
+    desiredPathname = parsedDesired.pathname;
+    desiredPathAndSearch = `${parsedDesired.pathname}${parsedDesired.search}`;
+  } catch (error) {}
+
+  if (currentPathAndSearch && currentPathAndSearch === desiredPathAndSearch) return;
+
+  window.__agonIframeCurrentPathname = desiredPathname || window.__agonIframeCurrentPathname;
+  setDebateIframeModalLoadingState(true, "Chargement en cours");
+  navigateDebateIframeModalFrame(frame, desiredUrl);
+  armDebateIframeParentLoadingFallback(desiredPathname);
+}
 
 async function scrollToIndexDebateCard(url) {
   const match = String(url || "").match(/[?&]id=([^&]+)/);
@@ -8356,6 +8430,15 @@ function isLiberationSourceUrl(url) {
   return /liberation\.fr/i.test(String(url || ''));
 }
 
+// Logo Le Point : lepoint.fr est protégé par un anti-bot (DataDome) qui bloque
+// systématiquement la récupération d'og:image (403 sur tous les profils UA,
+// y compris Googlebot/Facebook/Twitter) — jamais d'image d'origine possible.
+const LEPOINT_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/en/thumb/1/15/Le_Point_Logo.svg/250px-Le_Point_Logo.svg.png';
+
+function isLePointSourceUrl(url) {
+  return /lepoint\.fr/i.test(String(url || ''));
+}
+
 function normalizeIndexOpenGraphImageCacheUrl(url) {
   return String(url || '').trim();
 }
@@ -8432,6 +8515,20 @@ function renderIndexOpenGraphImageShell(shell) {
       shell.style.background = '#ffffff';
       img.classList.add('debate-source-card-image-logo');
       img.src = LIBERATION_FALLBACK_IMAGE;
+      return;
+    }
+
+    // Secours spécifique Le Point : même mécanique que Libération.
+    const canTryLePointFallback = isLePointSourceUrl(shell.dataset.sourceUrl)
+      && shell.dataset.triedLePointFallback !== 'true'
+      && img.getAttribute('src') !== LEPOINT_FALLBACK_IMAGE;
+    if (canTryLePointFallback) {
+      shell.dataset.triedLePointFallback = 'true';
+      img.onload = finish;
+      img.onerror = fail;
+      shell.style.background = '#ffffff';
+      img.classList.add('debate-source-card-image-logo');
+      img.src = LEPOINT_FALLBACK_IMAGE;
       return;
     }
 
@@ -8551,6 +8648,7 @@ function unloadIndexOpenGraphImageShell(shell) {
   }
 
   delete shell.dataset.triedLiberationFallback;
+  delete shell.dataset.triedLePointFallback;
   if (loading) loading.style.display = '';
   shell.dataset.rendered = 'false';
   shell.dataset.rendering = 'false';
@@ -12100,12 +12198,13 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const title = normalizedPreview.title || domain;
   const description = normalizedPreview.description || "";
   // Aperçu sans image (site qui bloque la récupération, ex. 403 anti-bot) :
-  // le logo Libération prend le relais pour ce domaine, sinon le visuel Agôn
-  // par défaut, pour ne jamais laisser une carte sans image.
+  // le logo du média prend le relais pour ces domaines connus, sinon le visuel
+  // Agôn par défaut, pour ne jamais laisser une carte sans image.
   const image = normalizedPreview.image
     || (isLiberationSourceUrl(safeUrl) ? LIBERATION_FALLBACK_IMAGE : "")
+    || (isLePointSourceUrl(safeUrl) ? LEPOINT_FALLBACK_IMAGE : "")
     || String(options?.fallbackImage || "").trim();
-  const isLogoFallbackImage = image === LIBERATION_FALLBACK_IMAGE;
+  const isLogoFallbackImage = image === LIBERATION_FALLBACK_IMAGE || image === LEPOINT_FALLBACK_IMAGE;
   const imageAlreadyLoaded = hasLoadedIndexOpenGraphImage(image);
   const debateHref = String(options?.debateHref || "").trim();
   const debateId = escapeAttribute(String(options?.debateId || "").trim());
@@ -20210,6 +20309,7 @@ function showBubbleCloudLoadingSpinner(options = {}) {
   const section = document.querySelector("#agon-tag-trends-section");
   const cloud = document.querySelector("#agon-tag-trends-cloud");
   if (!section || !cloud) return;
+  ensurePageArrivalLoadingOverlayStyles();
   section.hidden = false;
   const existing = document.getElementById("agon-cloud-loading-spinner");
   if (existing) {
@@ -28507,7 +28607,6 @@ ${renderManualWritingBadge(a)}
   <span class="comments-count-defavorable">✕ ${defavorableCommentsCount} contest${defavorableCommentsCount > 1 ? "ent" : "e"} l'idée</span>
   <span class="comments-count-amelioration">↻ ${ameliorationCommentsCount} proposition${ameliorationCommentsCount > 1 ? "s" : ""} d'amélioration</span>
 </div>
-</div>
           </div>
 
           ${commentsOpen ? `
@@ -30880,7 +30979,8 @@ function ensureCommentStanceMobileStyles() {
   style.id = "comment-stance-mobile-style";
   style.textContent = `
     @media (max-width: 768px) {
-      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option,
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option {
         padding: 5px 9px !important;
         border-radius: 999px !important;
         border: 1px solid transparent !important;
@@ -30890,7 +30990,8 @@ function ensureCommentStanceMobileStyles() {
         gap: 4px !important;
       }
 
-      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked),
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) {
         background: transparent !important;
         border-color: transparent !important;
         outline: none !important;
@@ -30898,7 +30999,8 @@ function ensureCommentStanceMobileStyles() {
         font-weight: 900 !important;
       }
 
-      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"] {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"],
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"] {
         appearance: none !important;
         -webkit-appearance: none !important;
         width: 10px !important;
@@ -30917,12 +31019,14 @@ function ensureCommentStanceMobileStyles() {
         transform: none !important;
       }
 
-      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked,
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
         background: currentColor !important;
         box-shadow: inset 0 0 0 3px #ffffff !important;
       }
 
-      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"],
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"]:checked) input[type="radio"] {
         border-color: currentColor !important;
         background: currentColor !important;
         box-shadow: inset 0 0 0 3px #ffffff !important;
@@ -31714,6 +31818,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname === "/" || location.pathname === "/debates" || location.pathname.startsWith("/debates/")) {
     showBubbleCloudLoadingSpinner();
     initIndex();
+    window.addEventListener("popstate", handleIndexHistoryPopState);
   }
   if (location.pathname === "/create") {
     initCreate();

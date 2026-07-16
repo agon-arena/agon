@@ -217,7 +217,10 @@ function normalizeVeilleMediaOrientation(nom, domain, orientation) {
     .replace(/[’]/g, "'")
     .trim();
   const mediaDomain = String(domain || "").replace(/^www\./, "").toLowerCase();
-  if ((mediaName === "le monde" || mediaName.startsWith("le monde :")) || mediaDomain === "lemonde.fr") return "généraliste";
+  // Rubrique nommée du Monde (ex. "Le Monde – Le Fil Good") : garde son orientation
+  // propre plutôt que d'hériter du "généraliste" forcé pour le flux principal.
+  const isNamedLeMondeSection = /^le monde\s*[:\-–]/.test(mediaName);
+  if (!isNamedLeMondeSection && (mediaName === "le monde" || mediaDomain === "lemonde.fr")) return "généraliste";
   if (mediaName === "l'obs" || mediaName.includes("nouvelobs") || mediaDomain === "nouvelobs.com") return "généraliste";
   if (mediaName === "france inter" || mediaName.startsWith("france inter :") || mediaDomain === "franceinter.fr") return "généraliste";
   if (mediaName === "europe 1" || mediaName.startsWith("europe 1 :") || mediaName === "europe1" || mediaDomain === "europe1.fr") return "droite";

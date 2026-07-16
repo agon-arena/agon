@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260716-native-back-button">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-lepoint-logo-fallback">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -69,6 +69,18 @@
     }
     body.page-tribunes .home-bottom-nav-item {
       color: #111827;
+    }
+    /* Menu hamburger : même police que sur l'index (Oswald), au lieu de l'Arial
+       hérité par défaut sur cette page. */
+    body.page-tribunes .home-topbar-menu-item {
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+    }
+    /* Bandeau bas plein cadre sur cette page (pas la pilule flottante des
+       autres pages) : coins droits en desktop. */
+    @media (min-width: 769px) {
+      body.page-tribunes .home-bottom-nav {
+        border-radius: 0;
+      }
     }
     body.page-tribunes .home-bottom-nav-item:hover,
     body.page-tribunes .home-bottom-nav-item:focus-visible,
@@ -778,8 +790,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
+       ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
+       laissant les icônes (ex: chevrons haut/bas flottants au retour vers l'index) invisibles
+       pendant ce temps. -->
+  <link rel="preload" as="font" type="font/woff2" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2" crossorigin>
   <script>
     // Les autres pages du site posent ce marqueur pour signaler qu'elles sont bien
     // arrivées ; autres-sources.html ne le faisait pas, ce qui peut faire croire au
@@ -1070,16 +1087,52 @@ window.addEventListener("pageshow", function() {
         <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
       </div>
 
-      <div class="tribunes-filters-row">
-        <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
-          <option value="">Tous les médias</option>
-        </select>
-        <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
-          <option value="">Articles et vidéos</option>
-          <option value="article">Articles seulement</option>
-          <option value="youtube">Vidéos seulement</option>
-        </select>
+      <div class="index-explorer-topbar">
+        <button
+          type="button"
+          id="tribunes-sort-toggle"
+          class="index-sort-toggle"
+          aria-label="Afficher les filtres de tri et de recherche"
+          aria-controls="tribunes-explorer-controls"
+          aria-expanded="false"
+          onclick="toggleTribunesSortControls(event)"
+        >
+          <i class="fa-solid fa-sliders"></i>
+          <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Rechercher</span>
+        </button>
       </div>
+
+      <div id="tribunes-explorer-controls" class="index-explorer-controls" style="display:none;">
+        <div class="search-box">
+          <input
+            id="tribunes-search"
+            type="text"
+            placeholder="Rechercher un article..."
+            autocomplete="off"
+          >
+          <button type="button" class="button index-search-submit" onclick="applyTribunesSearch()">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <span>Rechercher</span>
+          </button>
+        </div>
+
+        <div class="tribunes-filters-row">
+          <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
+            <option value="">Tous les médias</option>
+          </select>
+          <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
+            <option value="">Articles et vidéos</option>
+            <option value="article">Articles seulement</option>
+            <option value="youtube">Vidéos seulement</option>
+          </select>
+        </div>
+
+        <button type="button" class="index-explorer-close-btn" onclick="toggleTribunesSortControls(event)" aria-label="Fermer les options">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
     </div>
 
     <div class="tribunes-list" id="tribunes-list">
@@ -1196,7 +1249,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260716-remove-debug-overlay" defer></script>
+<script src="/script.min.js?v=20260716-back-button-debate-modal" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1206,6 +1259,7 @@ window.addEventListener("pageshow", function() {
   var currentFilter = 'mixed';
   var currentMedia = '';
   var currentType = '';
+  var currentSearchQuery = '';
   var initialHeaderScrollRestored = false;
 
   // ── Pagination façon index : chargement initial de 120 articles puis pages de 60
@@ -1222,8 +1276,14 @@ window.addEventListener("pageshow", function() {
   var tribunesPendingBatches = {};
   var tribunesGlobalObserver = null;
 
-  function tribunesCarouselInitialCount() {
-    return window.matchMedia('(max-width: 768px)').matches ? 2 : 5;
+  // "À la une" n'a pas de plafond sur le nombre d'articles du pool (cf.
+  // buildALaUneGroup), mais n'affiche que très peu de cartes au chargement
+  // initial — 1 en mobile, 4 en desktop — le reste se charge en scrollant
+  // comme les autres rubriques (tribunesPendingBatches).
+  function tribunesInitialCountForGroup(groupKey) {
+    var isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (groupKey === 'a-la-une') return isMobile ? 1 : 4;
+    return isMobile ? 2 : 5;
   }
 
   var CATEGORY_OPTIONS = [
@@ -1302,6 +1362,12 @@ window.addEventListener("pageshow", function() {
     return String(text == null ? '' : text)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function normalizeSearchText(value) {
+    return String(value == null ? '' : value)
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
   }
 
   function summaryExcerpt(text) {
@@ -1560,12 +1626,24 @@ window.addEventListener("pageshow", function() {
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
+        var isRight = !btn.classList.contains('tribunes-carousel-arrow-left');
+        // "À la une" : la flèche "suivant" peut être cliquée alors que les cartes
+        // déjà chargées ne débordent pas encore (cf. updateCarouselArrowState) —
+        // on matérialise alors une carte de plus depuis le pool illimité avant de
+        // faire défiler, sinon le clic ne ferait rien de visible.
+        if (row.id === 'tribunes-row-a-la-une' && isRight) {
+          var maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+          if (maxScrollLeft - row.scrollLeft <= 12) {
+            var pending = tribunesPendingBatches[row.id];
+            if (pending && pending.length) appendTribunesCarouselBatch(row, pending.splice(0, 1));
+          }
+        }
         if (isMobileTribunesCarousel()) {
-          scrollTribunesCarouselByCard(row, btn.classList.contains('tribunes-carousel-arrow-left') ? -1 : 1);
+          scrollTribunesCarouselByCard(row, isRight ? 1 : -1);
           return;
         }
         var amount = Math.max(240, Math.round(row.clientWidth * 0.9));
-        row.scrollBy({ left: btn.classList.contains('tribunes-carousel-arrow-left') ? -amount : amount, behavior: 'smooth' });
+        row.scrollBy({ left: isRight ? amount : -amount, behavior: 'smooth' });
         scheduleCarouselStateUpdate(row);
       });
     });
@@ -1580,7 +1658,10 @@ window.addEventListener("pageshow", function() {
     list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
       row.__tribunesControls = collectCarouselControls(row);
       bindTribunesMobileOneCardSwipe(row);
-      row.addEventListener('scroll', function() { scheduleCarouselStateUpdate(row); }, { passive: true });
+      row.addEventListener('scroll', function() {
+        scheduleCarouselStateUpdate(row);
+        maybeLoadNextALaUneCard(row);
+      }, { passive: true });
       row.addEventListener('load', function(e) {
         var target = e.target;
         if (target && (target.tagName === 'IMG' || target.tagName === 'VIDEO')) {
@@ -1690,6 +1771,16 @@ window.addEventListener("pageshow", function() {
       if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy) * 1.15) {
         targetIndex += dx < 0 ? 1 : -1;
       }
+      // "À la une" n'a pas de sentinelle de pagination (pool illimité, matérialisation
+      // gardée réduite) : un swipe qui tente de dépasser la dernière carte chargée en
+      // matérialise une seule de plus depuis le pool, plutôt que par lots de 5.
+      if (row.id === 'tribunes-row-a-la-une' && targetIndex >= cards.length) {
+        var pending = tribunesPendingBatches[row.id];
+        if (pending && pending.length) {
+          appendTribunesCarouselBatch(row, pending.splice(0, 1));
+          cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+        }
+      }
       targetIndex = Math.max(0, Math.min(cards.length - 1, targetIndex));
       scrollTribunesCarouselToCard(row, targetIndex);
     }, { passive: true });
@@ -1783,12 +1874,19 @@ window.addEventListener("pageshow", function() {
     var canScroll = maxScrollLeft > edgeTolerance;
     var isAtStart = scrollLeft <= edgeTolerance;
     var isAtEnd = maxScrollLeft - scrollLeft <= edgeTolerance;
-    section.classList.toggle('tribunes-row-can-scroll', canScroll);
+    // "À la une" : sur un écran large, les 4 (ou 1) cartes initiales peuvent tenir
+    // entièrement dans le conteneur (aucun débordement) alors que le pool illimité
+    // contient encore des articles — la flèche "suivant" doit rester visible pour
+    // que le clic puisse en matérialiser d'autres (cf. gestionnaire de clic plus bas),
+    // sinon rien n'indique que la rangée peut aller plus loin.
+    var hasMoreALaUnePending = row.id === 'tribunes-row-a-la-une' && (tribunesPendingBatches[row.id] || []).length > 0;
+    section.classList.toggle('tribunes-row-can-scroll', canScroll || hasMoreALaUnePending);
     section.classList.toggle('tribunes-row-at-start', !canScroll || isAtStart);
-    section.classList.toggle('tribunes-row-at-end', !canScroll || isAtEnd);
+    section.classList.toggle('tribunes-row-at-end', !hasMoreALaUnePending && (!canScroll || isAtEnd));
     (controls && controls.arrows ? controls.arrows : []).forEach(function(btn) {
+      var isRightArrow = btn.classList.contains('tribunes-carousel-arrow-right');
       var hideLeft = btn.classList.contains('tribunes-carousel-arrow-left') && (!canScroll || isAtStart);
-      var hideRight = btn.classList.contains('tribunes-carousel-arrow-right') && (!canScroll || isAtEnd);
+      var hideRight = isRightArrow && (!canScroll || isAtEnd) && !hasMoreALaUnePending;
       btn.classList.toggle('is-hidden', hideLeft || hideRight);
       btn.setAttribute('aria-hidden', hideLeft || hideRight ? 'true' : 'false');
       btn.tabIndex = hideLeft || hideRight ? -1 : 0;
@@ -1880,18 +1978,18 @@ window.addEventListener("pageshow", function() {
   // (classification nano à l'ingestion + fallback local), donc le front ne devine plus
   // la rubrique à partir de l'orientation politique de la source.
   // Bandeau "À la une" en tête de page : les articles les plus récents,
-  // toutes thématiques confondues. Doublon volontaire avec leur section
-  // d'origine (même logique que les doublons inter-groupes du bot de veille).
-  var A_LA_UNE_COUNT = 10;
-
+  // toutes thématiques confondues, sans limite de nombre — seule la
+  // matérialisation initiale des cartes est restreinte (cf.
+  // tribunesInitialCountForGroup), le reste se charge en scrollant comme les
+  // autres rubriques. Doublon volontaire avec leur section d'origine (même
+  // logique que les doublons inter-groupes du bot de veille).
   function buildALaUneGroup(articles) {
     var items = articles
       .filter(function(a) { return a.published_at; })
       .slice()
       .sort(function(a, b) {
         return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
-      })
-      .slice(0, A_LA_UNE_COUNT);
+      });
     if (!items.length) return null;
     return { key: 'a-la-une', label: 'À la une', items: items };
   }
@@ -1913,11 +2011,17 @@ window.addEventListener("pageshow", function() {
 
   function renderThemeSection(group) {
     var rowId = 'tribunes-row-' + group.key;
+    var isALaUne = group.key === 'a-la-une';
     // Même principe que _buildCarouselInner côté index : seules les premières
-    // cartes sont matérialisées, le reste attend dans tribunesPendingBatches et
-    // se charge par lots de 5 quand on approche de la fin du carrousel.
-    var initialItems = group.items.slice(0, tribunesCarouselInitialCount());
+    // cartes sont matérialisées, le reste attend dans tribunesPendingBatches.
+    // Les rubriques normales le consomment par lots de 5 via la sentinelle de
+    // pagination générique ; "À la une" (pool illimité) n'a pas de sentinelle —
+    // elle se contente d'en charger une seule à la fois, sur swipe mobile
+    // (cf. bindTribunesMobileOneCardSwipe), pour ne jamais tout matérialiser
+    // d'un coup.
+    var initialItems = group.items.slice(0, tribunesInitialCountForGroup(group.key));
     tribunesPendingBatches[rowId] = group.items.slice(initialItems.length);
+    var carouselTotal = group.items.length;
     return '' +
       '<section class="tribunes-theme-section" data-theme="' + escapeHtml(group.label) + '">' +
         '<div class="tribunes-theme-heading">' +
@@ -1928,9 +2032,9 @@ window.addEventListener("pageshow", function() {
         '</div>' +
         '<div class="tribunes-carousel-wrap">' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents"><i class="fa-solid fa-chevron-left"></i></button>' +
-          '<ul class="tribunes-carousel" id="' + rowId + '" data-carousel-total="' + group.items.length + '">' +
+          '<ul class="tribunes-carousel" id="' + rowId + '" data-carousel-total="' + carouselTotal + '">' +
             initialItems.map(renderItem).join('') +
-            '<li class="tribunes-load-sentinel" aria-hidden="true"></li>' +
+            (isALaUne ? '' : '<li class="tribunes-load-sentinel" aria-hidden="true"></li>') +
           '</ul>' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants"><i class="fa-solid fa-chevron-right"></i></button>' +
         '</div>' +
@@ -1952,7 +2056,10 @@ window.addEventListener("pageshow", function() {
     }
     tribunesPendingBatches = {};
     if (!articles.length) {
-      list.innerHTML = '<p class="tribunes-empty">' + (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.') + '</p>'
+      var emptyMessage = currentSearchQuery
+        ? 'Aucun article ne correspond à votre recherche.'
+        : (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.');
+      list.innerHTML = '<p class="tribunes-empty">' + emptyMessage + '</p>'
         + buildTribunesGlobalSentinelHtml();
       initTribunesGlobalLoadMore();
       syncTribunesMobileBottomViewport();
@@ -1993,6 +2100,24 @@ window.addEventListener("pageshow", function() {
     });
     scheduleCarouselStateUpdate(row);
     syncCarouselDots(row);
+  }
+
+  // "À la une" n'a pas de sentinelle de pagination générique (pool illimité,
+  // matérialisation gardée réduite, cf. renderThemeSection) mais doit tout de
+  // même rester scrollable en desktop : on matérialise une carte de plus dès
+  // qu'on atteint réellement la fin du scroll (tolérance serrée, contrairement
+  // au calcul "à moins d'une largeur de la fin" des autres rangées, qui
+  // déclenchait un chargement au moindre micro-ajustement de scroll du
+  // navigateur — cf. scroll anchoring — sur une rangée qui déborde à peine).
+  // Le mobile a son propre mécanisme au swipe (cf. bindTribunesMobileOneCardSwipe).
+  function maybeLoadNextALaUneCard(row) {
+    if (!row || row.id !== 'tribunes-row-a-la-une' || isMobileTribunesCarousel()) return;
+    var pending = tribunesPendingBatches[row.id];
+    if (!pending || !pending.length) return;
+    var maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+    var edgeTolerance = 12;
+    if (maxScrollLeft - row.scrollLeft > edgeTolerance) return;
+    appendTribunesCarouselBatch(row, pending.splice(0, 1));
   }
 
   function initTribunesCarouselLazyLoad() {
@@ -2047,9 +2172,7 @@ window.addEventListener("pageshow", function() {
   }
 
   function scrollToTribunesTop() {
-    var target = document.querySelector('.tribunes-page-header') || document.body;
-    var top = target.getBoundingClientRect().top + window.scrollY - getTribunesStickyOffset();
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function scrollToTribunesTheme(theme) {
@@ -2079,6 +2202,10 @@ window.addEventListener("pageshow", function() {
   var previewRequestByLink = {};
   var AGON_FALLBACK_IMAGE = '/logovisuel.png';
   var LIBERATION_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lib%C3%A9ration.svg/langfr-250px-Lib%C3%A9ration.svg.png';
+  // lepoint.fr est protégé par un anti-bot (DataDome) qui bloque systématiquement
+  // la récupération d'og:image (403 sur tous les profils UA testés côté serveur,
+  // y compris Googlebot/Facebook/Twitter) — jamais d'image d'origine possible.
+  var LEPOINT_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/en/thumb/1/15/Le_Point_Logo.svg/250px-Le_Point_Logo.svg.png';
 
   function uniqueImageCandidates(candidates) {
     var seen = {};
@@ -2111,6 +2238,9 @@ window.addEventListener("pageshow", function() {
     var link = String(article && article.link || '').toLowerCase();
     if (source.indexOf('liberation') !== -1 || link.indexOf('liberation.fr') !== -1) {
       return LIBERATION_FALLBACK_IMAGE;
+    }
+    if (source.indexOf('le point') !== -1 || link.indexOf('lepoint.fr') !== -1) {
+      return LEPOINT_FALLBACK_IMAGE;
     }
     return '';
   }
@@ -2157,7 +2287,7 @@ window.addEventListener("pageshow", function() {
       }
       thumb.style.display = '';
       img.dataset.src = next;
-      thumb.classList.toggle('tribunes-thumb-source-logo', next.indexOf('Lib%C3%A9ration.svg') !== -1 || next.indexOf('Libération.svg') !== -1);
+      thumb.classList.toggle('tribunes-thumb-source-logo', next.indexOf('Lib%C3%A9ration.svg') !== -1 || next.indexOf('Libération.svg') !== -1 || next.indexOf('Le_Point_Logo.svg') !== -1);
       thumb.classList.add('tribunes-thumb-loading');
       thumb.classList.remove('tribunes-thumb-loaded');
       img.src = next;
@@ -2294,14 +2424,22 @@ window.addEventListener("pageshow", function() {
     currentMedia = populateSelectFromValues(mediaFilterEl, mediaNames, currentMedia, 'Tous les médias');
   }
 
-  // Applique les filtres actifs (orientation, média, type) à une liste donnée —
-  // utilisé pour la liste complète comme pour les articles d'une nouvelle page.
+  // Applique les filtres actifs (orientation, média, type, recherche) à une liste
+  // donnée — utilisé pour la liste complète comme pour les articles d'une nouvelle page.
   function filterArticlesList(articles) {
     var filtered = currentFilter === 'mixed'
       ? articles
       : articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
     if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
     if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
+    if (currentSearchQuery) {
+      var needle = normalizeSearchText(currentSearchQuery);
+      filtered = filtered.filter(function(article) {
+        return normalizeSearchText(article.title).indexOf(needle) !== -1 ||
+          normalizeSearchText(article.summary).indexOf(needle) !== -1 ||
+          normalizeSearchText(article.source).indexOf(needle) !== -1;
+      });
+    }
     return filtered;
   }
 
@@ -2309,9 +2447,31 @@ window.addEventListener("pageshow", function() {
     return filterArticlesList(allArticles);
   }
 
+  function renderTribunesActiveFilterTags() {
+    var container = document.getElementById('tribunes-active-filters');
+    if (!container) return;
+    var hasSearch = !!currentSearchQuery;
+    container.innerHTML = hasSearch
+      ? '<button type="button" class="index-active-filter-tag" onclick="removeTribunesSearchTag()" aria-label="Retirer la recherche ' + escapeHtml(currentSearchQuery) + '">' +
+        '<span>' + escapeHtml(currentSearchQuery) + '</span>' +
+        '<span class="index-active-filter-tag-close" aria-hidden="true">×</span>' +
+        '</button>'
+      : '';
+    container.classList.toggle('index-active-filters-empty', !hasSearch);
+  }
+
+  function removeTribunesSearchTag() {
+    currentSearchQuery = '';
+    var input = document.getElementById('tribunes-search');
+    if (input) input.value = '';
+    applyFilter();
+  }
+  window.removeTribunesSearchTag = removeTribunesSearchTag;
+
   function applyFilter() {
     populateMediaFilter();
     render(computeFiltered());
+    renderTribunesActiveFilterTags();
   }
 
   function restoreInitialHeaderPosition() {
@@ -2346,6 +2506,67 @@ window.addEventListener("pageshow", function() {
       render(computeFiltered());
     });
   });
+
+  // Panneau "Trier / Rechercher" — même mécanique que #index-explorer-controls
+  // côté index (toggleIndexSortControls dans script.js) : bouton pilule qui
+  // déplie/replie un panneau flottant, fermeture au clic en dehors.
+  function syncTribunesExplorerToggleButton(isOpen) {
+    var toggle = document.getElementById('tribunes-sort-toggle');
+    if (!toggle) return;
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    toggle.classList.toggle('index-sort-toggle-active', isOpen);
+  }
+
+  function setTribunesExplorerControlsOpen(forceOpen) {
+    var controls = document.getElementById('tribunes-explorer-controls');
+    if (!controls) return;
+    var shouldOpen = !!forceOpen;
+    controls.style.display = shouldOpen ? 'flex' : 'none';
+    syncTribunesExplorerToggleButton(shouldOpen);
+  }
+
+  function toggleTribunesSortControls(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    var controls = document.getElementById('tribunes-explorer-controls');
+    if (!controls) return;
+    var isOpen = controls.style.display !== 'none';
+    setTribunesExplorerControlsOpen(!isOpen);
+  }
+  window.toggleTribunesSortControls = toggleTribunesSortControls;
+
+  document.addEventListener('click', function(event) {
+    var controls = document.getElementById('tribunes-explorer-controls');
+    var toggle = document.getElementById('tribunes-sort-toggle');
+    if (!controls || !toggle) return;
+    if (controls.style.display === 'none') return;
+    if (toggle.contains(event.target) || controls.contains(event.target)) return;
+    setTribunesExplorerControlsOpen(false);
+  });
+
+  // En desktop, le panneau Trier/Rechercher se referme dès qu'on scrolle
+  // (évite qu'il reste flottant au-dessus du contenu pendant la lecture).
+  window.addEventListener('scroll', function() {
+    if (window.innerWidth < 769) return;
+    var controls = document.getElementById('tribunes-explorer-controls');
+    if (!controls || controls.style.display === 'none') return;
+    setTribunesExplorerControlsOpen(false);
+  }, { passive: true });
+
+  function applyTribunesSearch() {
+    var input = document.getElementById('tribunes-search');
+    currentSearchQuery = String((input && input.value) || '').trim();
+    applyFilter();
+  }
+  window.applyTribunesSearch = applyTribunesSearch;
+
+  var tribunesSearchInput = document.getElementById('tribunes-search');
+  if (tribunesSearchInput) {
+    tribunesSearchInput.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      applyTribunesSearch();
+    });
+  }
 
   var refreshBtn = document.getElementById('tribunes-refresh-btn');
 
@@ -2431,6 +2652,7 @@ window.addEventListener("pageshow", function() {
     list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
       syncCarouselDots(row);
       // Si l'utilisateur est déjà en fin de rangée, matérialise le nouveau lot
+      // ("À la une" n'a pas de __tribunesLazyKick : sa matérialisation reste figée).
       if (row.__tribunesLazyKick) row.__tribunesLazyKick();
     });
   }

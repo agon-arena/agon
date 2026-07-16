@@ -6997,9 +6997,22 @@ body.page-debate .topbar::after {
   justify-content: center;
   align-items: center;
   width: min(920px, 100%);
-  margin: -8px auto 0;
+  margin: -4px auto 0;
   position: relative;
   z-index: 140;
+}
+
+/* Page "Autres actus" : le bouton Trier/Rechercher est juste sous le switch
+   Gauche/Tout/Droite (.tribunes-filter-switch) et le margin-top négatif
+   générique le fait chevaucher ce switch. On le repousse en dessous. */
+.page-tribunes .index-explorer-topbar {
+  margin-top: 6px;
+}
+
+@media (min-width: 769px) {
+  .page-tribunes .index-active-filters {
+    margin-top: -2px;
+  }
 }
 
 .index-sort-toggle {
@@ -7261,7 +7274,7 @@ body.page-debate .topbar::after {
 
   .page-home-mobile .index-explorer-topbar {
     width: 100%;
-    margin-top: -8px;
+    margin-top: -4px;
     transform: none;
   }
 
@@ -13401,16 +13414,22 @@ body.page-debate .debate-top-sticky-actions {
   justify-content: center;
 }
 
-/* ===== DÉBAT MOBILE : vrais petits ronds des choix de commentaire ===== */
+/* ===== DÉBAT MOBILE : vrais petits ronds des choix de commentaire =====
+   Scopé à la fois sur .debate-columns (arènes à positions) et
+   .arguments-list-unified (arènes libres, sans camp) : ces deux vues
+   partagent .argument-card-unit mais vivent dans des conteneurs différents,
+   et cette règle n'était scopée que sur le premier. */
 @media (max-width: 768px) {
-  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option {
+  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option,
+  body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option {
     padding: 5px 9px !important;
     font-size: 12px !important;
     font-weight: 700 !important;
     gap: 4px !important;
   }
 
-  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"] {
+  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"],
+  body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"] {
     appearance: none !important;
     -webkit-appearance: none !important;
     width: 10px !important;
@@ -13429,7 +13448,8 @@ body.page-debate .debate-top-sticky-actions {
     transform: none !important;
   }
 
-  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
+  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked,
+  body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
     background: currentColor !important;
     box-shadow: inset 0 0 0 3px #ffffff !important;
   }
@@ -22021,7 +22041,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   flex-direction: column;
   background: #fff;
   border: 3px solid #000000;
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
   overflow: hidden;
   font-size: 0.9rem;
   color: #374151;
