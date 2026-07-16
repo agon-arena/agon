@@ -1,4 +1,4 @@
-const SW_VERSION = "20260716-instant-standalone-launch-v30";
+const SW_VERSION = "20260716-mutable-asset-fetch-timeout-v31";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -95,24 +95,40 @@ self.addEventListener("fetch", (event) => {
   // suivant. Seul le tout premier lancement (rien en cache encore) attend le
   // réseau, avec la page de récupération en filet si le serveur ne répond pas.
   if (request.mode === "navigate") {
+    // Bouton "Actualiser" (cf. forceFullPageRefresh dans script.js) : marqueur
+    // posé sur l'URL pour forcer explicitement le réseau, en ignorant le
+    // cache-first ci-dessous — sinon, si la page affichée est bloquée/figée,
+    // "Actualiser" ne ferait que réafficher la même page en cache à
+    // l'identique, sans aucun moyen d'en sortir. On retire le marqueur avant
+    // de l'utiliser comme clé de cache, sinon la revalidation alimente une
+    // entrée "?_swrefresh=…" que les lancements normaux (URL propre) ne
+    // consulteront jamais.
+    const requestUrl = new URL(request.url);
+    const forcedFresh = requestUrl.searchParams.has("_swrefresh");
+    let cacheKeyRequest = request;
+    if (forcedFresh) {
+      requestUrl.searchParams.delete("_swrefresh");
+      cacheKeyRequest = new Request(requestUrl.toString(), { headers: request.headers });
+    }
+
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cachedResponse = await cache.match(request);
+        const cachedResponse = forcedFresh ? null : await cache.match(cacheKeyRequest);
 
         if (cachedResponse) {
           // Revalidation arrière-plan sans limite de temps : rien n'attend
           // dessus, elle met juste à jour le cache pour le prochain lancement.
           event.waitUntil(
             fetch(request, { cache: "no-store" }).then((response) => {
-              if (response && response.ok) cache.put(request, response.clone());
+              if (response && response.ok) cache.put(cacheKeyRequest, response.clone());
             }).catch(() => {})
           );
           return cachedResponse;
         }
 
-        // Rien en cache (tout premier lancement, ou cache vidé) : on attend
-        // le réseau, avec le même filet de récupération qu'avant si le
-        // serveur ne répond pas dans le délai imparti.
+        // Rien en cache (tout premier lancement, cache vidé, ou "Actualiser"
+        // forcé) : on attend le réseau, avec le même filet de récupération
+        // qu'avant si le serveur ne répond pas dans le délai imparti.
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), NAVIGATION_FETCH_TIMEOUT_MS);
         return fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
@@ -121,7 +137,7 @@ self.addEventListener("fetch", (event) => {
             return buildRecoveryResponse(request.url);
           }
           if (response && response.ok) {
-            cache.put(request, response.clone());
+            cache.put(cacheKeyRequest, response.clone());
           }
           return response;
         }).catch(() => {
@@ -139,15 +155,26 @@ self.addEventListener("fetch", (event) => {
   // l'ouverture froide de l'app rapide.
   if (request.method === "GET" && isCacheableStaticAsset(request.url)) {
     if (isMutableStaticAsset(request.url)) {
+      // Même filet que les navigations (timeout + repli cache) : sans lui, un
+      // réseau qui reste ouvert sans jamais répondre (réveil du téléphone en
+      // 4G/5G typiquement) laisse ce fetch en attente indéfinie — l'app reste
+      // figée en attendant un script.min.js/style.min.css qui n'arrive jamais,
+      // alors que la version en cache suffirait très bien à afficher la page.
       event.respondWith(
-        caches.open(STATIC_CACHE).then((cache) =>
-          fetch(request, { cache: "no-store" }).then((response) => {
+        caches.open(STATIC_CACHE).then((cache) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), NAVIGATION_FETCH_TIMEOUT_MS);
+          return fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
+            clearTimeout(timeoutId);
             if (response && response.ok) {
               cache.put(request, response.clone());
             }
             return response;
-          }).catch(() => cache.match(request))
-        )
+          }).catch(() => {
+            clearTimeout(timeoutId);
+            return cache.match(request);
+          });
+        })
       );
       return;
     }

@@ -849,11 +849,109 @@
         );
       }
     }
+
+    /* Overlay "source externe" en iframe pour le mobile hors-standalone —
+       équivalent du navigateur intégré qu'iOS ouvre nativement en PWA
+       installée (cf. openCardArticle). */
+    .tribunes-source-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: none;
+      flex-direction: column;
+      background: #ffffff;
+    }
+    .tribunes-source-modal.open {
+      display: flex;
+    }
+    .tribunes-source-modal-topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      padding: max(9px, env(safe-area-inset-top)) 10px 9px;
+      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
+      background: rgba(255, 255, 255, 0.97);
+    }
+    .tribunes-source-modal-domain {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      color: #243038;
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tribunes-source-modal-open-tab,
+    .tribunes-source-modal-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      flex-shrink: 0;
+      border: 1px solid rgba(36, 48, 56, 0.16);
+      border-radius: 999px;
+      padding: 0 12px;
+      background: #f3f6f7;
+      color: #243038;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+    }
+    .tribunes-source-modal-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+    .tribunes-source-modal-body iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    .tribunes-source-modal-fallback {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+      background: #ffffff;
+    }
+    .tribunes-source-modal-fallback.show {
+      display: flex;
+    }
+    .tribunes-source-modal-fallback p {
+      margin: 0;
+      max-width: 320px;
+      color: #384250;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.42;
+    }
+    .tribunes-source-modal-fallback a {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      border-radius: 999px;
+      padding: 0 18px;
+      background: #243038;
+      color: #ffffff;
+      font-weight: 900;
+      text-decoration: none;
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
@@ -1345,7 +1443,21 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260716-arrow-real-gap-align" defer></script>
+<div class="tribunes-source-modal" id="tribunes-source-modal" role="dialog" aria-modal="true" aria-label="Source externe">
+  <div class="tribunes-source-modal-topbar">
+    <span class="tribunes-source-modal-domain" id="tribunes-source-modal-domain"></span>
+    <a class="tribunes-source-modal-open-tab" id="tribunes-source-modal-open-tab" href="#" target="_blank" rel="noopener noreferrer">Nouvel onglet</a>
+    <button type="button" class="tribunes-source-modal-close" id="tribunes-source-modal-close">Fermer</button>
+  </div>
+  <div class="tribunes-source-modal-body">
+    <iframe id="tribunes-source-modal-frame" title="Source externe" referrerpolicy="no-referrer"></iframe>
+    <div class="tribunes-source-modal-fallback" id="tribunes-source-modal-fallback">
+      <p>Ce site ne peut pas s’afficher ici.</p>
+      <a id="tribunes-source-modal-fallback-open" href="#" target="_blank" rel="noopener noreferrer">Ouvrir dans un nouvel onglet</a>
+    </div>
+  </div>
+</div>
+<script src="/script.min.js?v=20260716-source-panel-standalone-direct" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1609,7 +1721,7 @@ window.addEventListener("pageshow", function() {
     var playBadge = videoId ? '<div class="tribunes-play-badge" aria-hidden="true"></div>' : '';
     var titleClick = videoId
       ? ' onclick="event.preventDefault(); openVideoModal(this.dataset.videoId)"'
-      : '';
+      : ' onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"';
     return '' +
       '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '"' + videoAttr + ' role="link" tabindex="0">' +
         '<div class="tribunes-thumb tribunes-thumb-loading">' +
@@ -1671,11 +1783,81 @@ window.addEventListener("pageshow", function() {
     return Boolean(target && target.closest('a, button, input, select, textarea'));
   }
 
+  // En PWA standalone, iOS intercepte lui-même les liens target="_blank" et les
+  // ouvre dans sa propre vue navigateur intégrée (croix/flèche de retour) — un
+  // comportement du système, pas du code. En navigateur mobile classique, cette
+  // interception n'existe pas : un lien target="_blank" ouvre un vrai nouvel
+  // onglet. Pour retrouver un rendu "fermable, retour à Agôn" équivalent dans ce
+  // cas, on construit nous-mêmes une overlay plein écran avec une iframe. Repli
+  // automatique vers un nouvel onglet si la source ne charge pas (certains sites
+  // de presse bloquent l'affichage encadré via X-Frame-Options/CSP).
+  var sourceModal = document.getElementById('tribunes-source-modal');
+  var sourceModalDomain = document.getElementById('tribunes-source-modal-domain');
+  var sourceModalOpenTab = document.getElementById('tribunes-source-modal-open-tab');
+  var sourceModalClose = document.getElementById('tribunes-source-modal-close');
+  var sourceModalFrame = document.getElementById('tribunes-source-modal-frame');
+  var sourceModalFallback = document.getElementById('tribunes-source-modal-fallback');
+  var sourceModalFallbackOpen = document.getElementById('tribunes-source-modal-fallback-open');
+  var sourceModalFallbackTimer = null;
+
+  function openSourceModal(url) {
+    if (!sourceModal || !sourceModalFrame) return;
+    var domain = '';
+    try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { domain = url; }
+    if (sourceModalDomain) sourceModalDomain.textContent = domain;
+    if (sourceModalOpenTab) sourceModalOpenTab.href = url;
+    if (sourceModalFallbackOpen) sourceModalFallbackOpen.href = url;
+    if (sourceModalFallback) sourceModalFallback.classList.remove('show');
+
+    if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
+    sourceModalFrame.onload = function() {
+      if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
+    };
+    sourceModalFrame.src = url;
+    // Repli si la page ne se charge pas du tout (site injoignable, réseau) —
+    // ne détecte pas les blocages silencieux type X-Frame-Options (impossible à
+    // lire depuis une iframe cross-origin), d'où le bouton "Nouvel onglet"
+    // toujours visible dans la barre du haut en complément.
+    sourceModalFallbackTimer = setTimeout(function() {
+      if (sourceModalFallback) sourceModalFallback.classList.add('show');
+    }, 4000);
+
+    sourceModal.classList.add('open');
+    document.body.classList.add('index-background-suspended');
+  }
+
+  function closeSourceModal() {
+    if (!sourceModal) return;
+    sourceModal.classList.remove('open');
+    document.body.classList.remove('index-background-suspended');
+    if (sourceModalFrame) sourceModalFrame.src = 'about:blank';
+    if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
+  }
+
+  if (sourceModalClose) sourceModalClose.addEventListener('click', closeSourceModal);
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && sourceModal && sourceModal.classList.contains('open')) closeSourceModal();
+  });
+
+  function isMobileWebNonStandalone() {
+    var isStandalone = document.body.classList.contains('is-standalone')
+      || !!window.navigator.standalone
+      || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    return isMobile && !isStandalone;
+  }
+
   function openCardArticle(card) {
     if (!card || !card.dataset) return;
     if (card.dataset.videoId) { openVideoModal(card.dataset.videoId); return; }
     var link = card.dataset.link;
     if (!link) return;
+
+    if (isMobileWebNonStandalone()) {
+      openSourceModal(link);
+      return;
+    }
+
     // Clic d'ancre plutôt que window.open : en PWA iOS, window.open bascule
     // vers Safari sans bouton de retour, alors qu'un lien target="_blank"
     // ouvre la vue intégrée avec la croix / flèche de retour vers Agôn.
@@ -2880,7 +3062,7 @@ window.addEventListener("pageshow", function() {
     var o = document.createElement('div');
     o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
     document.body.appendChild(o);
-    setTimeout(function() { window.location.reload(); }, 60);
+    setTimeout(function() { typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload(); }, 60);
   });
 
   loadArticles();

@@ -374,6 +374,33 @@ function registerServiceWorker() {
 
 registerServiceWorker();
 
+// Bouton "Actualiser" : depuis que le service worker sert le cache en
+// priorité au lancement (cf. service-worker.js), un reload() classique ne
+// ferait que réafficher la même page déjà en cache si elle est bloquée/figée
+// — sans jamais toucher le réseau. Le marqueur _swrefresh force le service
+// worker à ignorer le cache pour CETTE navigation précise et à attendre une
+// réponse fraîche du serveur (avec son propre filet de récupération si le
+// serveur ne répond pas). Nettoyé de l'URL visible juste après, plus bas.
+function forceFullPageRefresh() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("_swrefresh", "1");
+    window.location.replace(url.toString());
+  } catch (error) {
+    window.location.reload();
+  }
+}
+window.forceFullPageRefresh = forceFullPageRefresh;
+
+(function stripSwRefreshMarkerFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("_swrefresh")) return;
+    url.searchParams.delete("_swrefresh");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  } catch (error) {}
+})();
+
 (function initOffscreenAnimationPause() {
   const PAUSE_CLASS = 'agon-anim-paused';
   const SELECTORS = [
@@ -12394,6 +12421,23 @@ function closeAgonSourcePanel() {
 window.openAgonSourcePanel = openAgonSourcePanel;
 window.closeAgonSourcePanel = closeAgonSourcePanel;
 
+// En standalone (PWA), iOS ouvre déjà sa propre vue navigateur intégrée
+// (croix/flèche de retour) pour les liens target="_blank" — même mécanisme
+// que sur la page "Autres actus" (cf. openCardArticle dans autres-sources.html).
+// Le panneau d'aperçu (openAgonSourcePanel) n'a donc pas de raison d'être dans
+// ce contexte : il ajoutait un écran intermédiaire avant d'atteindre la même
+// vue native. On garde le panneau uniquement hors standalone (desktop/mobile
+// web), où il évite les pages blanches/blocages d'affichage.
+function openExternalSourceDirect(url) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.target = "_blank";
+  anchor.rel = "noopener noreferrer";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 document.addEventListener("click", (event) => {
   const sourceTrigger = event.target?.closest?.(".page-debate [data-source-panel-url]");
   if (!sourceTrigger) return;
@@ -12401,6 +12445,10 @@ document.addEventListener("click", (event) => {
   if (!url) return;
   event.preventDefault();
   event.stopPropagation();
+  if (isStandaloneMode()) {
+    openExternalSourceDirect(url);
+    return;
+  }
   openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
 }, true);
 
@@ -12416,6 +12464,10 @@ document.addEventListener("keydown", (event) => {
   const url = sourceTrigger.dataset?.sourcePanelUrl || "";
   if (!url) return;
   event.preventDefault();
+  if (isStandaloneMode()) {
+    openExternalSourceDirect(url);
+    return;
+  }
   openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
 });
 

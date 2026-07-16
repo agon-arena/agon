@@ -8071,7 +8071,13 @@ const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 function getOpinionOrientationGroup(orientation) {
   const o = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   if (o.includes("nouvelles positives")) return "positive";
-  if (o.includes("actualites regionales")) return "regional";
+  // Aucun média de medias.json n'a le libellé exact "actualités régionales" —
+  // les sources régionales sont taguées "régional" seul, "généraliste /
+  // régional" ou "régional / généraliste" (cf. audit du 16/07/2026, qui
+  // expliquait un filtre "Actualités régionales" resté vide). \b évite de
+  // capturer "régionaliste" (orientation politique identitaire, pas une
+  // simple source locale) qui contient aussi la sous-chaîne "regional".
+  if (/\bregional\b/.test(o)) return "regional";
   if (
     o.includes("gauche") || o.includes("ecolog") || o.includes("ecolo") || o.includes("libertaire") ||
     o.includes("altermondialiste") || o.includes("alter-mondialiste") || o.includes("anticapitaliste") ||

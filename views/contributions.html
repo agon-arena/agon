@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
@@ -437,7 +437,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn"
-  onclick="window.location.reload()"
+  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
@@ -926,6 +926,6 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260716-arrow-real-gap-align" defer></script>
+<script src="/script.min.js?v=20260716-source-panel-standalone-direct" defer></script>
 </body>
 </html>
