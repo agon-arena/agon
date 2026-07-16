@@ -8070,6 +8070,8 @@ const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // libéral...), pas seulement les libellés exacts "gauche"/"droite".
 function getOpinionOrientationGroup(orientation) {
   const o = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (o.includes("nouvelles positives")) return "positive";
+  if (o.includes("actualites regionales")) return "regional";
   if (
     o.includes("gauche") || o.includes("ecolog") || o.includes("ecolo") || o.includes("libertaire") ||
     o.includes("altermondialiste") || o.includes("alter-mondialiste") || o.includes("anticapitaliste") ||
@@ -8168,29 +8170,44 @@ function selectDiverseOpinionArticleIds(rows, limit = OPINION_ARTICLES_TYPE_BUCK
   return selected;
 }
 
+// Groupes thématiques (par opposition à gauche/droite) : jamais soumis au
+// plafond par bucket ni au round-robin de diversité par source — tout passe
+// toujours, cf. demande du 16/07/2026 pour "positive", volume naturellement
+// faible dans les deux cas (peu de sources, rétention 2 jours cf.
+// OPINION_ARTICLES_RETENTION_DAYS).
+const OPINION_UNCAPPED_GROUPS = ["positive", "regional"];
+
 function buildVisibleOpinionArticleSelection(lightRows, perTypeLimit = OPINION_ARTICLES_TYPE_BUCKET_LIMIT) {
   const candidates = {
     left: { article: [], youtube: [] },
-    right: { article: [], youtube: [] }
+    right: { article: [], youtube: [] },
+    positive: { article: [], youtube: [] },
+    regional: { article: [], youtube: [] }
   };
+  const knownGroups = Object.keys(candidates);
 
   for (const row of lightRows || []) {
     const group = getOpinionOrientationGroup(normalizeOpinionArticleOrientationForSource(row) || row.orientation);
-    if (group !== "left" && group !== "right") continue;
+    if (!knownGroups.includes(group)) continue;
     const type = row.type === "youtube" ? "youtube" : "article";
     candidates[group][type].push(row);
   }
 
-  return {
-    left: {
-      article: selectDiverseOpinionArticleIds(candidates.left.article, perTypeLimit),
-      youtube: selectDiverseOpinionArticleIds(candidates.left.youtube, perTypeLimit)
-    },
-    right: {
-      article: selectDiverseOpinionArticleIds(candidates.right.article, perTypeLimit),
-      youtube: selectDiverseOpinionArticleIds(candidates.right.youtube, perTypeLimit)
+  const result = {};
+  for (const group of knownGroups) {
+    if (OPINION_UNCAPPED_GROUPS.includes(group)) {
+      result[group] = {
+        article: candidates[group].article.map((row) => row.id),
+        youtube: candidates[group].youtube.map((row) => row.id)
+      };
+    } else {
+      result[group] = {
+        article: selectDiverseOpinionArticleIds(candidates[group].article, perTypeLimit),
+        youtube: selectDiverseOpinionArticleIds(candidates[group].youtube, perTypeLimit)
+      };
     }
-  };
+  }
+  return result;
 }
 
 const OPINION_ARTICLE_CATEGORY_OPTIONS = [
@@ -8597,7 +8614,7 @@ async function getOpinionArticlesSelection() {
   const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
 
   const buckets = buildVisibleOpinionArticleSelection(lightRows);
-  const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube];
+  const selectedIds = Object.values(buckets).flatMap((bucket) => [...bucket.article, ...bucket.youtube]);
   if (!selectedIds.length) {
     _opinionArticlesCache = [];
     _opinionArticlesCacheComputedAt = Date.now();
@@ -8660,7 +8677,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
       const lightRows = await fetchOpinionArticleSelectionRows(OPINION_ARTICLES_SELECTION_SCAN_LIMIT);
 
       const buckets = buildVisibleOpinionArticleSelection(lightRows);
-      const selectedIds = [...buckets.left.article, ...buckets.left.youtube, ...buckets.right.article, ...buckets.right.youtube].slice(0, limit);
+      const selectedIds = Object.values(buckets).flatMap((bucket) => [...bucket.article, ...bucket.youtube]).slice(0, limit);
       if (selectedIds.length) {
         const { data: fullRows, error: fullError } = await supabase
           .from("opinion_articles")

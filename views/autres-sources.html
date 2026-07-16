@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260716-lepoint-logo-fallback">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-filter-switch-tints">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -32,6 +32,16 @@
       body.page-tribunes .tribunes-page-header {
         z-index: 12;
         margin-top: -32px;
+      }
+    }
+    /* Desktop : le bloc Trier/Rechercher (bouton + panneau) est sorti du
+       header sticky en JS (cf. plus bas) pour défiler normalement, sans
+       affecter les autres boutons du header (Nouvelles positives, filtre
+       Gauche/Tout/Droite, Actualités régionales) qui restent épinglés. */
+    @media (min-width: 769px) {
+      body.page-tribunes .tribunes-sort-search-block {
+        margin: 8px auto 0;
+        width: min(920px, 100%);
       }
     }
     /* Une fois le header épinglé au scroll, seuls les boutons restent
@@ -96,6 +106,8 @@
       text-align: center !important;
     }
     .tribunes-page-header #tribunes-filter-switch,
+    .tribunes-page-header #tribunes-positive-filter-btn,
+    .tribunes-page-header #tribunes-regional-filter-btn,
     .tribunes-page-header .tribunes-filters-row {
       display: flex !important;
       opacity: 1 !important;
@@ -297,7 +309,9 @@
     @media (min-width: 769px) {
       body.page-tribunes .tribunes-mobile-back-button {
         left: 24px;
-        bottom: 24px;
+        /* Même hauteur que les flèches haut/bas (.index-floating-refresh-btn),
+           plutôt que collé au coin bas de l'écran. */
+        bottom: calc(48px + env(safe-area-inset-bottom, 0px));
         width: 56px;
         min-width: 56px;
         height: 56px;
@@ -345,6 +359,22 @@
       padding: 10px 58px 12px;
       overflow: visible;
       box-sizing: border-box;
+    }
+    /* Regroupe « + ‹ (gauche) et › (droite) chacun dans un bloc de même largeur
+       des deux côtés (fixée en mobile, cf. media query) : sans ça, le titre se
+       recentre en fonction de ce qui est visible/masqué à gauche vs à droite et
+       n'est plus vraiment au centre du bandeau une fois sur 2 lignes. */
+    .tribunes-theme-heading-side {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .tribunes-theme-heading-side-left {
+      justify-content: flex-end;
+    }
+    .tribunes-theme-heading-side-right {
+      justify-content: flex-start;
     }
     .tribunes-theme-heading::before {
       content: "";
@@ -689,10 +719,22 @@
       .tribunes-theme-heading {
         margin-left: -10px;
         margin-right: -10px;
-        padding: 9px 44px 10px;
+        padding: 9px 8px 10px;
+      }
+      /* Largeur fixe identique des deux côtés (masqué ou non) : le titre reste
+         donc toujours centré sur le bandeau, y compris sur 2 lignes — plutôt
+         que de dépendre de ce qui est visible à gauche vs à droite. */
+      .tribunes-theme-heading-side {
+        width: 56px;
       }
       .tribunes-theme-heading h2 {
         font-size: clamp(22px, 7vw, 30px);
+      }
+      /* Sous-thème ("Thème - sous-thème") : toujours une ligne dédiée sous le
+         tiret, jamais un 3e retour à la ligne laissé au hasard du navigateur. */
+      .tribunes-theme-heading-line2 {
+        display: block;
+        white-space: nowrap;
       }
       .tribunes-theme-heading .tribunes-carousel-arrow {
         width: 28px;
@@ -821,14 +863,14 @@
         var topbar = document.querySelector('.topbar');
         var height = topbar && getComputedStyle(topbar).display !== 'none' ? Math.ceil(topbar.getBoundingClientRect().height) : 0;
         document.body.style.setProperty('--tribunes-topbar-offset', height + 'px');
-        // Point d'accroche du header sticky : calé pour que le switch
-        // Tout/Gauche/Droite se pose juste sous le haut du viewport (le
-        // bandeau n'est pas sticky et défile) — ou juste sous le bandeau
-        // quand celui-ci reste sticky (mode iframe). Titre + description
-        // sont masqués au-dessus. tribunesHeaderShift() compense le
-        // translateY éventuel du header.
+        // Point d'accroche du header sticky : calé pour que le bouton
+        // "Nouvelles positives" (ou, à défaut, le switch Tout/Gauche/Droite)
+        // se pose juste sous le haut du viewport (le bandeau n'est pas
+        // sticky et défile) — ou juste sous le bandeau quand celui-ci reste
+        // sticky (mode iframe). Titre + description sont masqués au-dessus.
+        // tribunesHeaderShift() compense le translateY éventuel du header.
         var header = document.querySelector('.tribunes-page-header');
-        var switchEl = document.getElementById('tribunes-filter-switch');
+        var switchEl = document.getElementById('tribunes-positive-filter-btn') || document.getElementById('tribunes-filter-switch');
         if (header && switchEl) {
           var topbarSticky = topbar && getComputedStyle(topbar).position === 'sticky';
           var switchOffset = switchEl.getBoundingClientRect().top - header.getBoundingClientRect().top;
@@ -846,10 +888,33 @@
         var stuck = header.getBoundingClientRect().top <= stickTop - tribunesHeaderShift() + 2;
         header.classList.toggle('tribunes-header-stuck', stuck);
       }
+      // Desktop uniquement : sort le bloc Trier/Rechercher (bouton + panneau)
+      // du header sticky pour qu'il défile normalement, sans affecter les
+      // autres boutons du header (Nouvelles positives, Gauche/Tout/Droite,
+      // Actualités régionales) qui doivent rester épinglés. Sur mobile, le
+      // bloc reste à sa place d'origine dans le header (comportement inchangé).
+      function applyTribunesSortSearchLayout() {
+        var wrap = document.getElementById('tribunes-sort-search-wrap');
+        var header = document.querySelector('.tribunes-page-header');
+        if (!wrap || !header) return;
+        var isDesktop = window.matchMedia('(min-width: 769px)').matches;
+        if (isDesktop) {
+          if (wrap.parentElement === header) {
+            header.parentElement.insertBefore(wrap, header.nextSibling);
+          }
+        } else if (wrap.parentElement !== header) {
+          var activeFilters = document.getElementById('tribunes-active-filters');
+          header.insertBefore(wrap, activeFilters || null);
+        }
+      }
+      applyTribunesSortSearchLayout();
       syncTribunesTopbarOffset();
       syncTribunesHeaderStuck();
       document.addEventListener('scroll', syncTribunesHeaderStuck, { capture: true, passive: true });
-      window.addEventListener('resize', syncTribunesTopbarOffset, { passive: true });
+      window.addEventListener('resize', function () {
+        applyTribunesSortSearchLayout();
+        syncTribunesTopbarOffset();
+      }, { passive: true });
       window.addEventListener('orientationchange', syncTribunesTopbarOffset, { passive: true });
       setTimeout(syncTribunesTopbarOffset, 120);
       if (window.self !== window.top) {
@@ -1081,55 +1146,65 @@ window.addEventListener("pageshow", function() {
       <h1>Autres actus</h1>
       <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Agôn.</p>
 
+      <button type="button" id="tribunes-positive-filter-btn" class="tribunes-positive-filter-btn" aria-pressed="false" data-extra-filter="positive" data-active-class="tribunes-positive-filter-btn-active">
+        <i class="fa-solid fa-seedling" aria-hidden="true"></i> Nouvelles positives
+      </button>
+
       <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
         <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
         <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Tout</button>
         <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
       </div>
 
-      <div class="index-explorer-topbar">
-        <button
-          type="button"
-          id="tribunes-sort-toggle"
-          class="index-sort-toggle"
-          aria-label="Afficher les filtres de tri et de recherche"
-          aria-controls="tribunes-explorer-controls"
-          aria-expanded="false"
-          onclick="toggleTribunesSortControls(event)"
-        >
-          <i class="fa-solid fa-sliders"></i>
-          <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Rechercher</span>
-        </button>
-      </div>
+      <button type="button" id="tribunes-regional-filter-btn" class="tribunes-regional-filter-btn" aria-pressed="false" data-extra-filter="regional" data-active-class="tribunes-regional-filter-btn-active">
+        <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Actualités régionales
+      </button>
 
-      <div id="tribunes-explorer-controls" class="index-explorer-controls" style="display:none;">
-        <div class="search-box">
-          <input
-            id="tribunes-search"
-            type="text"
-            placeholder="Rechercher un article..."
-            autocomplete="off"
+      <div id="tribunes-sort-search-wrap" class="tribunes-sort-search-block">
+        <div class="index-explorer-topbar">
+          <button
+            type="button"
+            id="tribunes-sort-toggle"
+            class="index-sort-toggle"
+            aria-label="Afficher les filtres de tri et de recherche"
+            aria-controls="tribunes-explorer-controls"
+            aria-expanded="false"
+            onclick="toggleTribunesSortControls(event)"
           >
-          <button type="button" class="button index-search-submit" onclick="applyTribunesSearch()">
-            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-            <span>Rechercher</span>
+            <i class="fa-solid fa-sliders"></i>
+            <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Rechercher</span>
           </button>
         </div>
 
-        <div class="tribunes-filters-row">
-          <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
-            <option value="">Tous les médias</option>
-          </select>
-          <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
-            <option value="">Articles et vidéos</option>
-            <option value="article">Articles seulement</option>
-            <option value="youtube">Vidéos seulement</option>
-          </select>
-        </div>
+        <div id="tribunes-explorer-controls" class="index-explorer-controls" style="display:none;">
+          <div class="search-box">
+            <input
+              id="tribunes-search"
+              type="text"
+              placeholder="Rechercher un article..."
+              autocomplete="off"
+            >
+            <button type="button" class="button index-search-submit" onclick="applyTribunesSearch()">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <span>Rechercher</span>
+            </button>
+          </div>
 
-        <button type="button" class="index-explorer-close-btn" onclick="toggleTribunesSortControls(event)" aria-label="Fermer les options">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+          <div class="tribunes-filters-row">
+            <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
+              <option value="">Tous les médias</option>
+            </select>
+            <select id="tribunes-type-filter" class="tribunes-media-filter" aria-label="Filtrer par type de contenu">
+              <option value="">Articles et vidéos</option>
+              <option value="article">Articles seulement</option>
+              <option value="youtube">Vidéos seulement</option>
+            </select>
+          </div>
+
+          <button type="button" class="index-explorer-close-btn" onclick="toggleTribunesSortControls(event)" aria-label="Fermer les options">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
       </div>
 
       <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
@@ -1364,6 +1439,18 @@ window.addEventListener("pageshow", function() {
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
+  // Titre de rubrique "Thème - sous-thème" : coupe toujours juste après le tiret
+  // (jamais où le navigateur le déciderait tout seul) et cantonne le sous-thème à
+  // une seconde ligne unique — cf. .tribunes-theme-heading-line2 en mobile, qui
+  // force ce second segment sur sa propre ligne sans jamais wrapper une 2e fois.
+  function tribunesThemeTitleHtml(label) {
+    var idx = String(label || '').indexOf(' - ');
+    if (idx === -1) return escapeHtml(label);
+    var part1 = label.slice(0, idx);
+    var part2 = label.slice(idx + 3);
+    return escapeHtml(part1) + ' -<span class="tribunes-theme-heading-line2"> ' + escapeHtml(part2) + '</span>';
+  }
+
   function normalizeSearchText(value) {
     return String(value == null ? '' : value)
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1382,6 +1469,8 @@ window.addEventListener("pageshow", function() {
 
   function orientationClass(orientation) {
     var o = String(orientation || '').toLowerCase();
+    if (o.indexOf('nouvelles positives') !== -1) return 'positive';
+    if (o.indexOf('actualites regionales') !== -1 || o.indexOf('actualités régionales') !== -1) return 'regional';
     if (o.indexOf('gauche') !== -1 || o.indexOf('ecolog') !== -1 || o.indexOf('écolog') !== -1) return 'left';
     if (o.indexOf('droite') !== -1) return 'right';
     return 'center';
@@ -2025,10 +2114,14 @@ window.addEventListener("pageshow", function() {
     return '' +
       '<section class="tribunes-theme-section" data-theme="' + escapeHtml(group.label) + '">' +
         '<div class="tribunes-theme-heading">' +
-          '<button type="button" class="tribunes-row-jump-start is-hidden" data-row="' + rowId + '" aria-label="Revenir au premier article">«</button>' +
-          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left tribunes-heading-arrow tribunes-heading-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents">‹</button>' +
-          '<h2>' + escapeHtml(group.label) + '</h2>' +
-          '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right tribunes-heading-arrow tribunes-heading-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants">›</button>' +
+          '<div class="tribunes-theme-heading-side tribunes-theme-heading-side-left">' +
+            '<button type="button" class="tribunes-row-jump-start is-hidden" data-row="' + rowId + '" aria-label="Revenir au premier article">«</button>' +
+            '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left tribunes-heading-arrow tribunes-heading-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents">‹</button>' +
+          '</div>' +
+          '<h2>' + tribunesThemeTitleHtml(group.label) + '</h2>' +
+          '<div class="tribunes-theme-heading-side tribunes-theme-heading-side-right">' +
+            '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-right tribunes-heading-arrow tribunes-heading-arrow-right" data-row="' + rowId + '" aria-label="Articles suivants">›</button>' +
+          '</div>' +
         '</div>' +
         '<div class="tribunes-carousel-wrap">' +
           '<button type="button" class="tribunes-carousel-arrow tribunes-carousel-arrow-left" data-row="' + rowId + '" aria-label="Articles précédents"><i class="fa-solid fa-chevron-left"></i></button>' +
@@ -2058,7 +2151,11 @@ window.addEventListener("pageshow", function() {
     if (!articles.length) {
       var emptyMessage = currentSearchQuery
         ? 'Aucun article ne correspond à votre recherche.'
-        : (currentFilter === 'mixed' ? 'Aucun article pour le moment.' : 'Aucun article de ce côté pour le moment.');
+        : (currentFilter === 'mixed'
+          ? 'Aucun article pour le moment.'
+          : (currentFilter === 'positive'
+            ? 'Aucune nouvelle positive pour le moment.'
+            : (currentFilter === 'regional' ? 'Aucune actualité régionale pour le moment.' : 'Aucun article de ce côté pour le moment.')));
       list.innerHTML = '<p class="tribunes-empty">' + emptyMessage + '</p>'
         + buildTribunesGlobalSentinelHtml();
       initTribunesGlobalLoadMore();
@@ -2485,6 +2582,20 @@ window.addEventListener("pageshow", function() {
   }
 
   var switchEl = document.getElementById('tribunes-filter-switch');
+  // Boutons "extra" en dehors du switch Gauche/Tout/Droite (Nouvelles positives,
+  // Actualités régionales, ...) : un seul actif à la fois, mutuellement exclusif
+  // avec le switch. data-extra-filter porte la valeur de currentFilter à activer,
+  // data-active-class la classe CSS d'état actif propre à chaque bouton.
+  var extraFilterBtns = Array.prototype.slice.call(document.querySelectorAll('[data-extra-filter]'));
+
+  function syncExtraFilterButtons(activeValue) {
+    extraFilterBtns.forEach(function(btn) {
+      var isActive = btn.dataset.extraFilter === activeValue;
+      btn.classList.toggle(btn.dataset.activeClass, isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
   if (switchEl) {
     switchEl.addEventListener('click', function(event) {
       var btn = event.target.closest('[data-filter]');
@@ -2494,9 +2605,25 @@ window.addEventListener("pageshow", function() {
       switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
         seg.classList.toggle('tribunes-filter-segment-active', seg === btn);
       });
+      syncExtraFilterButtons('');
       applyFilter();
     });
   }
+
+  extraFilterBtns.forEach(function(extraBtn) {
+    extraBtn.addEventListener('click', function() {
+      var isActive = extraBtn.classList.contains(extraBtn.dataset.activeClass);
+      currentFilter = isActive ? 'mixed' : extraBtn.dataset.extraFilter;
+      currentMedia = '';
+      syncExtraFilterButtons(isActive ? '' : extraBtn.dataset.extraFilter);
+      if (switchEl) {
+        switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
+          seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'mixed' : false);
+        });
+      }
+      applyFilter();
+    });
+  });
 
   [mediaFilterEl, typeFilterEl].forEach(function(el) {
     if (!el) return;

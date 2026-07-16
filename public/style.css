@@ -22336,6 +22336,16 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #003399;
 }
 
+.tribunes-badge.positive {
+  background: #eafbf0;
+  color: #1a7a3d;
+}
+
+.tribunes-badge.regional {
+  background: #f3edfe;
+  color: #6b21a8;
+}
+
 @media (min-width: 560px) {
   .tribunes-item-body {
     padding: 14px 16px 16px;
@@ -22369,6 +22379,76 @@ body.page-create-mobile .create-card .create-submit-helper {
      clipping interne. */
   box-shadow: 0 0 0 1px #e5e7eb;
   overflow: hidden;
+}
+
+.tribunes-positive-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: max-content;
+  margin: 12px auto 0;
+  padding: 6px 16px;
+  border: 1px solid #bbe6c4;
+  border-radius: 999px;
+  background: #eafbf0;
+  color: #1a7a3d;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tribunes-positive-filter-btn:hover {
+  background: #d8f5e2;
+}
+
+.tribunes-positive-filter-btn.tribunes-positive-filter-btn-active {
+  background: #1a1f24;
+  border-color: #1a1f24;
+  color: #ffffff;
+}
+
+.tribunes-positive-filter-btn + .tribunes-filter-switch {
+  margin-top: 6px;
+}
+
+.tribunes-regional-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: max-content;
+  margin: 12px auto 0;
+  padding: 6px 16px;
+  border: 1px solid #d9cde6;
+  border-radius: 999px;
+  background: #f4eff8;
+  color: #7a5c94;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tribunes-regional-filter-btn:hover {
+  background: #ece3f2;
+}
+
+.tribunes-regional-filter-btn.tribunes-regional-filter-btn-active {
+  background: #1a1f24;
+  border-color: #1a1f24;
+  color: #ffffff;
+}
+
+.tribunes-filter-switch + .tribunes-regional-filter-btn {
+  margin-top: 6px;
 }
 
 .page-tribunes .about-panel h1,
@@ -22443,6 +22523,22 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-filter-segment-active:hover {
   color: #ffffff;
+}
+
+/* Teinte discrète par orientation (au repos) : rosé désaturé à gauche, bleuté
+   désaturé à droite ; "Tout" reste neutre. L'état actif garde le fond sombre
+   partagé (:not() empêche cette couleur de concurrencer le blanc actif). */
+#tribunes-filter-left:not(.tribunes-filter-segment-active) {
+  color: #b3617e;
+}
+#tribunes-filter-left:not(.tribunes-filter-segment-active):hover {
+  color: #9c4c68;
+}
+#tribunes-filter-right:not(.tribunes-filter-segment-active) {
+  color: #5b7ca8;
+}
+#tribunes-filter-right:not(.tribunes-filter-segment-active):hover {
+  color: #47638c;
 }
 
 @keyframes agon-card-highlight {
