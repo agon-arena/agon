@@ -1,4 +1,4 @@
-const SW_VERSION = "20260713-debate-no-top-bell-v29";
+const SW_VERSION = "20260716-instant-standalone-launch-v30";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -86,26 +86,48 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  // Force les pages HTML à être toujours rechargées depuis le réseau (contourne le cache iOS PWA).
-  // Si le serveur répond 5xx pendant un redémarrage, on ne laisse pas iOS standalone
-  // mémoriser une page d'erreur brute : on sert une page de récupération non cachable.
-  // Un serveur muet (Mac en veille, Supabase dégradé qui suspend les routes) ne doit
-  // pas laisser iOS afficher le snapshot figé de l'app pendant des minutes : au-delà
-  // de ce délai, on abandonne la navigation et on sert la page de récupération, qui
-  // se recharge d'elle-même dès que le serveur répond.
+  // Lancement standalone : sert la dernière page HTML connue en cache
+  // IMMÉDIATEMENT (démarrage instantané), et revalide en arrière-plan pour
+  // que le prochain lancement soit à jour — au lieu d'attendre le réseau à
+  // chaque ouverture (coûteux sur mobile). Un serveur en 5xx pendant un
+  // redémarrage ne casse rien : la page déjà affichée reste fonctionnelle, la
+  // mise à jour arrière-plan échoue silencieusement et retentera au lancement
+  // suivant. Seul le tout premier lancement (rien en cache encore) attend le
+  // réseau, avec la page de récupération en filet si le serveur ne répond pas.
   if (request.mode === "navigate") {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), NAVIGATION_FETCH_TIMEOUT_MS);
     event.respondWith(
-      fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
-        clearTimeout(timeoutId);
-        if (response && response.status >= 500) {
-          return buildRecoveryResponse(request.url);
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cachedResponse = await cache.match(request);
+
+        if (cachedResponse) {
+          // Revalidation arrière-plan sans limite de temps : rien n'attend
+          // dessus, elle met juste à jour le cache pour le prochain lancement.
+          event.waitUntil(
+            fetch(request, { cache: "no-store" }).then((response) => {
+              if (response && response.ok) cache.put(request, response.clone());
+            }).catch(() => {})
+          );
+          return cachedResponse;
         }
-        return response;
-      }).catch(() => {
-        clearTimeout(timeoutId);
-        return buildRecoveryResponse(request.url);
+
+        // Rien en cache (tout premier lancement, ou cache vidé) : on attend
+        // le réseau, avec le même filet de récupération qu'avant si le
+        // serveur ne répond pas dans le délai imparti.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), NAVIGATION_FETCH_TIMEOUT_MS);
+        return fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
+          clearTimeout(timeoutId);
+          if (response && response.status >= 500) {
+            return buildRecoveryResponse(request.url);
+          }
+          if (response && response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        }).catch(() => {
+          clearTimeout(timeoutId);
+          return buildRecoveryResponse(request.url);
+        });
       })
     );
     return;

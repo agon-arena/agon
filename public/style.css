@@ -10633,6 +10633,7 @@ body.page-home.page-home-mobile {
 }
 
 .home-bottom-nav-item {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   min-height: 46px;
@@ -19666,6 +19667,11 @@ body.agon-cloud-switch-loading::before {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
+    /* Recale le cadre nuages + boutons (Bulles Actu/Agôn, Gauche/Tout/Droite,
+       Autres actus) sur le bandeau bas / les flèches en dessous, qui ne
+       partagent pas exactement le même axe de centrage (cf. retours du
+       16/07/2026). */
+    transform: translateX(-10px);
   }
   .agon-tag-trends-cloud {
     max-width: 780px;

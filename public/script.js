@@ -33774,6 +33774,10 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   let rightMidpoint;
   if (refresh) {
     const refreshRect = refresh.getBoundingClientRect();
+    // Calé sur les voisins réels d'Actualiser (le cadre nuages/boutons du
+    // dessus est recalé séparément via #agon-tag-trends-section, cf.
+    // style.css) plutôt que sur le centre théorique de la nav : sinon la
+    // flèche ne tombe plus pile entre Ouvrir et Actualiser.
     leftMidpoint = (openRect.right + refreshRect.left) / 2;
     rightMidpoint = (refreshRect.right + contributionsRect.left) / 2;
   } else {
@@ -33825,6 +33829,7 @@ function initIndexFloatingScrollButtonAlignment() {
   window.addEventListener("orientationchange", sync, { passive: true });
   window.setTimeout(sync, 250);
   window.setTimeout(sync, 900);
+  window.setTimeout(sync, 1800);
   if (document.fonts?.ready) {
     document.fonts.ready.then(sync).catch(() => {});
   }

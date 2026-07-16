@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260716-filter-switch-tints">
+  <link rel="stylesheet" href="/style.min.css?v=20260716-revert-topbar-shift">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -823,9 +823,30 @@
       .tribunes-item-body {
         min-height: 0;
       }
+      /* Même dégradé qu'en desktop mais plus discret et plus serré : la carte
+         mobile occupe déjà tout l'écran (scroll-snap plein écran), un fondu
+         trop large ou trop opaque mangerait une bonne partie du visuel. */
       .tribunes-carousel-wrap::before,
       .tribunes-carousel-wrap::after {
-        display: none;
+        width: clamp(20px, 5vw, 32px);
+      }
+      .tribunes-carousel-wrap::before {
+        background: linear-gradient(
+          to right,
+          rgba(219, 229, 225, 0.55) 0%,
+          rgba(219, 229, 225, 0.38) 34%,
+          rgba(219, 229, 225, 0.14) 70%,
+          rgba(219, 229, 225, 0) 100%
+        );
+      }
+      .tribunes-carousel-wrap::after {
+        background: linear-gradient(
+          to left,
+          rgba(219, 229, 225, 0.55) 0%,
+          rgba(219, 229, 225, 0.38) 34%,
+          rgba(219, 229, 225, 0.14) 70%,
+          rgba(219, 229, 225, 0) 100%
+        );
       }
     }
   </style>
@@ -1324,7 +1345,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260716-back-button-debate-modal" defer></script>
+<script src="/script.min.js?v=20260716-arrow-real-gap-align" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
