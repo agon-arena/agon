@@ -7715,8 +7715,13 @@ body.page-debate .topbar::after {
 }
 
 @media (max-width: 768px) {
-  body.debate-embedded-frame .mobile-back-button {
-    display: none !important;
+  /* Débat embarqué dans l'iframe du modal : on montre CE bouton (natif de la
+     page débat, déjà câblé sur goBackToIndex qui gère le postMessage vers le
+     parent) plutôt que celui de la modale, pour n'avoir plus qu'un seul
+     document à positionner par rapport au bandeau bas — cf. positionnement
+     dans initAgonDebateDockLineSync, plus de synchro entre 2 documents. */
+  body.page-debate.debate-embedded-frame .mobile-back-button {
+    display: inline-flex !important;
   }
 
   .page-notifications-mobile .mobile-back-button,
@@ -23392,17 +23397,26 @@ body.page-create-mobile .create-card .create-submit-helper {
     display: none !important;
   }
 
-  /* --agon-safe-bottom vient d'une sonde env(safe-area-inset-bottom) mesurée
-     dans CE document : elle vaut toujours 0 quand ce document tourne dans
-     l'iframe du modal débat (WebKit ne propage jamais les safe-area-inset-*
-     aux iframes). --agon-embedded-bottom-ext (posé par initAgonDockAlignment,
-     cf. plus haut) capture le même écart géométriquement (iframe.innerHeight
-     - parent.innerHeight) et reste fiable dans ce cas — d'où le max() : sans
-     lui, le bandeau se pose au ras du bas de l'iframe, qui déborde sous
-     l'écran visible de --agon-safe-bottom, donc trop bas et rogné. */
   .home-bottom-nav {
-    bottom: calc(0px - max(var(--agon-safe-bottom, 0px), var(--agon-embedded-bottom-ext, 0px))) !important;
-    padding-bottom: calc(3px + max(var(--agon-safe-bottom, 0px), var(--agon-embedded-bottom-ext, 0px))) !important;
+    bottom: calc(0px - var(--agon-safe-bottom, 0px)) !important;
+    padding-bottom: calc(3px + var(--agon-safe-bottom, 0px)) !important;
+  }
+
+  /* Embarqué dans l'iframe du modal débat (mobile) : le conteneur du modal
+     (#debate-iframe-modal.open, cf. plus haut) déborde déjà lui-même de
+     env(safe-area-inset-bottom) sous le viewport parent, et l'iframe étire sa
+     propre boîte d'autant via le height:100% en cascade — donc la boîte de
+     l'iframe est déjà exactement à la bonne hauteur (mesuré : son propre
+     window.innerHeight inclut déjà les +Npx de safe-area). Rebleeder une
+     seconde fois ICI avec bottom:-N revient à pousser le bandeau N px sous le
+     bord bas de l'iframe — un débordement qu'une frame ne peut pas peindre
+     (contrairement au document de premier niveau, qui a le droit de peindre
+     dans la safe-area en position:fixed) : ce surplus est simplement rogné,
+     d'où le bandeau coupé. bottom:0 suffit ici, la boîte de l'iframe étant
+     déjà à niveau ; padding-bottom reste inchangé (fait juste remonter les
+     icônes hors de la zone du home indicator, indépendant du calcul ci-dessus). */
+  body.debate-embedded-frame .home-bottom-nav {
+    bottom: 0 !important;
   }
 
   body.is-standalone.agon-mobile-cloud-viewport.page-debate #debate-source-fallback .debate-source-card .debate-source-card-body,
@@ -23820,22 +23834,48 @@ body.page-create-mobile .create-card .create-submit-helper {
     left: calc(20% - 13px) !important;
   }
 
-  body.page-debate .mobile-back-button {
+  body.page-debate:not(.debate-embedded-frame) .mobile-back-button {
     bottom: 34px !important;
     transform: none !important;
   }
 
+  /* Débat embarqué : .mobile-back-button et #voices-float-badge vivent tous
+     les deux dans ce même document — --agon-dock-button-bottom (posée par
+     initAgonDebateDockLineSync, cf. plus haut) vient d'une mesure DIRECTE de
+     la position réelle du bandeau .home-bottom-nav, donc les deux restent
+     alignés sur la même ligne quel que soit l'état de la barre Safari. */
+  body.page-debate.debate-embedded-frame .mobile-back-button {
+    bottom: var(--agon-dock-button-bottom, 34px) !important;
+    transform: none !important;
+  }
+
+  /* Bouton fermeture de la modale : ne sert plus que pour les autres pages
+     ouvertes dans la modale (create, notifications...), qui n'ont pas leur
+     propre bouton retour à cheval sur un bandeau bas — /debate le masque
+     entièrement (cf. #debate-iframe-modal.debate-frame-open plus haut). */
   #debate-iframe-modal.open #debate-iframe-modal-close,
   body:has(#debate-iframe-modal.open) #debate-iframe-modal-close {
     bottom: 34px !important;
     transform: none !important;
   }
 
-  body.page-debate #voices-float-badge,
-  body.debate-embedded-frame #voices-float-badge {
+  body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
     left: 80% !important;
     right: auto !important;
     bottom: 36px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%) !important;
+    box-sizing: border-box;
+  }
+
+  body.debate-embedded-frame #voices-float-badge {
+    left: 80% !important;
+    right: auto !important;
+    bottom: var(--agon-dock-button-bottom, 68px) !important;
     height: 42px !important;
     min-height: 42px !important;
     display: inline-flex;

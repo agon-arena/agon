@@ -734,6 +734,35 @@ if (isStandaloneMode()) {
   setInterval(update, 4000);
 })();
 
+// Aligne le bouton retour (.mobile-back-button) et le badge de voix
+// (#voices-float-badge) sur la même ligne, à cheval sur le bandeau bas de la
+// page débat. Les deux vivent dans CE MÊME document (y compris embarqués
+// dans l'iframe du modal, cf. .mobile-back-button réactivé côté CSS à la
+// place du bouton de fermeture du parent) : une seule mesure directe de la
+// position du bandeau suffit, plus besoin de synchroniser 2 documents avec
+// des window.innerHeight différents et un état de barre Safari changeant.
+(function initAgonDebateDockLineSync() {
+  const DOCK_BUTTON_HEIGHT = 42;
+
+  function sync() {
+    if (!document.body || !document.body.classList.contains("page-debate") || window.innerWidth > 768) return;
+    const nav = document.querySelector(".home-bottom-nav");
+    if (!nav) return;
+
+    const navTop = nav.getBoundingClientRect().top;
+    const bottomOffset = Math.round(window.innerHeight - navTop - DOCK_BUTTON_HEIGHT / 2);
+    document.documentElement.style.setProperty("--agon-dock-button-bottom", `${bottomOffset}px`);
+  }
+
+  sync();
+  window.addEventListener("resize", sync);
+  window.addEventListener("orientationchange", sync);
+  window.visualViewport?.addEventListener("resize", sync);
+  setTimeout(sync, 1000);
+  setTimeout(sync, 3000);
+  setInterval(sync, 1000);
+})();
+
 // Flag purement local (posé dès la détection standalone, sans dépendre du
 // réseau) : c'est lui qui doit déclencher le bandeau "ouvre l'app installée"
 // ci-dessous. Le posait auparavant sur "appInstallPinged", qui n'est fixé que
@@ -5086,6 +5115,15 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh {
       display: none !important;
+    }
+    /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
+       même document que #voices-float-badge) plutôt que ce bouton du parent —
+       un seul document à positionner par rapport au bandeau bas au lieu de
+       synchroniser 2 documents (cf. initAgonDebateDockLineSync). */
+    @media (max-width: 768px) {
+      #debate-iframe-modal.debate-frame-open #debate-iframe-modal-close {
+        display: none !important;
+      }
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
       inset: 0 !important;
