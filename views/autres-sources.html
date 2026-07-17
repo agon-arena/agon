@@ -850,6 +850,20 @@
       }
     }
 
+    .tribunes-initial-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 0;
+    }
+    .tribunes-initial-loading-img {
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
+      opacity: 0.86;
+      animation: createSubmitSpin 0.9s linear infinite;
+    }
+
     /* Overlay "source externe" en iframe pour le mobile hors-standalone —
        équivalent du navigateur intégré qu'iOS ouvre nativement en PWA
        installée (cf. openCardArticle). */
@@ -1330,7 +1344,9 @@ window.addEventListener("pageshow", function() {
     </div>
 
     <div class="tribunes-list" id="tribunes-list">
-      <p class="tribunes-empty">Chargement…</p>
+      <div class="tribunes-initial-loading" aria-label="Chargement">
+        <img src="/sablier-96.png" alt="" class="tribunes-initial-loading-img">
+      </div>
     </div>
   </section>
 </main>

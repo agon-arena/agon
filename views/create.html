@@ -839,18 +839,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (prefillCategory) {
-      // Le picker (initCreateCategoryPicker, script.js) a déjà construit ses cases à cocher
-      // à ce stade — cf. commentaire ci-dessus sur l'attente de DOMContentLoaded — donc on ne
-      // peut pas se contenter de renseigner #category : il faut cocher la case correspondante
-      // et déclencher son listener "change" pour que l'UI (libellé, chip) se mette à jour.
-      var categoryOptions = document.querySelectorAll('#create-category-options input[type="checkbox"]');
-      for (var i = 0; i < categoryOptions.length; i++) {
-        if (categoryOptions[i].value === prefillCategory) {
-          categoryOptions[i].checked = true;
-          fireEvents(categoryOptions[i], ['change']);
-          break;
+      // Le picker (initCreateCategoryPicker, script.js) construit ses cases à cocher au
+      // chargement : on ne peut pas se contenter de renseigner #category, il faut cocher la
+      // case correspondante et déclencher son listener "change" pour que l'UI (libellé, chip)
+      // se mette à jour. Pas de garantie que ce script s'exécute après l'init du picker (ordre
+      // entre scripts deferred et inline non garanti d'un navigateur à l'autre) : on retente
+      // pendant 2s au cas où les cases n'existent pas encore.
+      var categoryAttempts = 0;
+      var applyCategoryPrefill = function() {
+        var categoryOptions = document.querySelectorAll('#create-category-options input[type="checkbox"]');
+        if (!categoryOptions.length && categoryAttempts < 20) {
+          categoryAttempts++;
+          setTimeout(applyCategoryPrefill, 100);
+          return;
         }
-      }
+        for (var i = 0; i < categoryOptions.length; i++) {
+          if (categoryOptions[i].value === prefillCategory) {
+            categoryOptions[i].checked = true;
+            fireEvents(categoryOptions[i], ['change']);
+            break;
+          }
+        }
+      };
+      applyCategoryPrefill();
     }
 
     // autoResizeTextarea(this) (déclenché par le "input" ci-dessus) mesure scrollHeight
