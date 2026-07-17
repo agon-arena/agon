@@ -854,6 +854,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      /* .tribunes-list a un fond clair (#dbe5e1) mais ne prend que la hauteur
+         de son contenu — tant qu'il ne contient que ce loader, une bande du
+         fond sombre du body (#243038, "bleu") reste visible en dessous
+         jusqu'en bas de l'écran. On étire le loader pour couvrir tout le
+         viewport restant et masquer cette bande pendant l'attente. */
+      min-height: 70vh;
       padding: 48px 0;
     }
     .tribunes-initial-loading-img {

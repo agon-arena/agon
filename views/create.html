@@ -839,29 +839,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (prefillCategory) {
-      // Le picker (initCreateCategoryPicker, script.js) construit ses cases à cocher au
-      // chargement : on ne peut pas se contenter de renseigner #category, il faut cocher la
-      // case correspondante et déclencher son listener "change" pour que l'UI (libellé, chip)
-      // se mette à jour. Pas de garantie que ce script s'exécute après l'init du picker (ordre
-      // entre scripts deferred et inline non garanti d'un navigateur à l'autre) : on retente
-      // pendant 2s au cas où les cases n'existent pas encore.
-      var categoryAttempts = 0;
+      // Le picker (initCreateCategoryPicker, script.js) construit ses cases à cocher : on ne
+      // peut pas se contenter de renseigner #category, il faut cocher la case correspondante
+      // et déclencher son listener "change" pour que l'UI (libellé, chip) se mette à jour.
+      // initCreate() ne construit ce picker qu'APRÈS un await fetchJSON (chargement des débats
+      // pour la détection de doublons, cf. script.js ~L23117) : ce fetch peut prendre plusieurs
+      // secondes selon la charge, donc un simple délai fixe n'est pas fiable. On observe plutôt
+      // l'apparition des cases via MutationObserver, avec un filet de 30s en cas d'échec du picker.
+      var categoryPrefillApplied = false;
       var applyCategoryPrefill = function() {
+        if (categoryPrefillApplied) return true;
         var categoryOptions = document.querySelectorAll('#create-category-options input[type="checkbox"]');
-        if (!categoryOptions.length && categoryAttempts < 20) {
-          categoryAttempts++;
-          setTimeout(applyCategoryPrefill, 100);
-          return;
-        }
         for (var i = 0; i < categoryOptions.length; i++) {
           if (categoryOptions[i].value === prefillCategory) {
             categoryOptions[i].checked = true;
             fireEvents(categoryOptions[i], ['change']);
-            break;
+            categoryPrefillApplied = true;
+            return true;
           }
         }
+        return false;
       };
-      applyCategoryPrefill();
+      if (!applyCategoryPrefill()) {
+        var categoryOptionsContainer = document.getElementById('create-category-options');
+        if (categoryOptionsContainer) {
+          var categoryObserver = new MutationObserver(function() {
+            if (applyCategoryPrefill()) categoryObserver.disconnect();
+          });
+          categoryObserver.observe(categoryOptionsContainer, { childList: true });
+          setTimeout(function() { categoryObserver.disconnect(); }, 30000);
+        }
+      }
     }
 
     // autoResizeTextarea(this) (déclenché par le "input" ci-dessus) mesure scrollHeight
