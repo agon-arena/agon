@@ -153,6 +153,27 @@
     html.agon-startup-active .app-floating-refresh-btn {
       visibility: hidden !important;
     }
+    /* Porte de sortie si l'intro s'éternise (classe posée par le garde-fou
+       inline à ~6,5s) : bouton Recharger sur l'écran de démarrage lui-même —
+       à l'intérieur du loader, donc au-dessus de tout, et son onclick inline
+       (location.reload) ne dépend d'aucun fichier externe. Invisible sur un
+       lancement normal (l'intro se termine bien avant). Symbole en texte brut :
+       Font Awesome peut ne pas être chargé dans ce scénario de panne réseau. */
+    .agon-startup-retry-btn {
+      display: none;
+      margin: 26px auto 0;
+      padding: 10px 24px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    html.agon-startup-stuck .agon-startup-retry-btn {
+      display: inline-block;
+    }
   </style>
   <style>
     body { background-color: #243038; }
@@ -310,6 +331,7 @@
     <div class="agon-startup-lines">
       <p class="agon-startup-line agon-startup-line-1">mentem eleva</p>
     </div>
+    <button type="button" class="agon-startup-retry-btn" onclick="try{window.location.reload()}catch(e){}" aria-label="Recharger l'application">&#8635;&nbsp;&nbsp;Recharger</button>
   </div>
 </div>
 <script>
@@ -323,6 +345,30 @@
   var line = loader.querySelector('.agon-startup-line-1');
   if (!line) return;
   window.__agonStartupInlineStarted = true;
+  // Garde-fou autonome, sans aucune dépendance à script.min.js : la fin de
+  // l'intro (retrait du loader + de la classe agon-startup-active qui masque
+  // la barre basse) repose entièrement sur ce fichier externe. S'il ne
+  // s'exécute jamais — hoquet réseau au lancement, cf. blocage PWA du
+  // 18/07/2026 vers 18h29, app coincée sur l'animation — plus rien n'est
+  // cliquable, pour toujours. Au bout de 12s on libère l'écran d'ici même ;
+  // en fonctionnement normal, le failsafe de 10s de script.min.js est déjà
+  // passé et tout ceci est un no-op.
+  // Étape 1 (~6,5s) : intro anormalement longue → révèle le bouton Recharger
+  // du loader (porte de sortie manuelle, cf. .agon-startup-retry-btn).
+  setTimeout(function () {
+    if (loader.parentNode && !loader.classList.contains('is-hiding')) {
+      document.documentElement.classList.add('agon-startup-stuck');
+    }
+  }, 6500);
+  // Étape 2 (12s) : libération automatique complète.
+  setTimeout(function () {
+    if (loader.parentNode && !loader.classList.contains('is-hiding')) {
+      loader.classList.add('is-hiding');
+      setTimeout(function () { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 600);
+    }
+    document.documentElement.classList.remove('agon-startup-active');
+    document.documentElement.classList.remove('agon-startup-stuck');
+  }, 12000);
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
@@ -693,6 +739,22 @@ window.addEventListener("pageshow", function() {
     if (back && s.back) back.style.left = s.back;
   } catch (e) {}
 })();
+
+/* Même principe pour le cadre du nuage en standalone : la marge d'alignement
+   sous le tag de filtre (calculée par alignStandaloneBubbleFrameToActiveFilter)
+   est reposée avant le premier rendu pour que le cadre apparaisse directement
+   à sa position définitive, sans saut le temps que script.min.js soit parsé. */
+(function () {
+  try {
+    if (!(navigator.standalone || window.matchMedia("(display-mode: standalone)").matches)) return;
+    var raw = sessionStorage.getItem("agonCloudMarginTop:" + location.pathname);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || s.w !== window.innerWidth || typeof s.m !== "number") return;
+    var cloud = document.getElementById("agon-tag-trends-cloud");
+    if (cloud) cloud.style.marginTop = s.m + "px";
+  } catch (e) {}
+})();
 </script>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
@@ -959,7 +1021,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260718-startup-bottom-band" defer></script>
+<script src="/script.min.js?v=20260718-cloud-frame-norestore-jump" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

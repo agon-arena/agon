@@ -6013,8 +6013,25 @@ body.page-debate .topbar::after {
   -webkit-backdrop-filter: blur(5px);
 }
 
-.agon-source-panel {
+/* Ancêtre position:relative aux bords exactement alignés sur le panneau, pour
+   porter le calque .scroll-fade-hint ("suite ↓") hors de la zone de scroll
+   (cf. attachScrollFadeHint) : posé dans le panneau, il défilerait avec le
+   contenu au lieu de rester collé au bord bas visible. */
+.agon-source-panel-wrap {
+  position: relative;
+  display: flex;
   width: min(520px, 100%);
+  max-height: 94vh;
+}
+
+.agon-source-panel-wrap > .scroll-fade-hint {
+  /* Suit le rayon du panneau (18px moins la bordure de 2px) pour que le
+     dégradé ne déborde pas sur les coins arrondis. */
+  border-radius: 0 0 16px 16px;
+}
+
+.agon-source-panel {
+  width: 100%;
   max-height: 94vh;
   overflow: auto;
   border: 2px solid #000000;

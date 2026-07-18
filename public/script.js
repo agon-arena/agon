@@ -12317,6 +12317,7 @@ function ensureAgonSourcePanel() {
   overlay.className = "agon-source-panel-overlay";
   overlay.setAttribute("aria-hidden", "true");
   overlay.innerHTML = `
+    <div class="agon-source-panel-wrap">
     <div class="agon-source-panel" role="dialog" aria-modal="true" aria-label="Source externe">
       <div class="agon-source-panel-topbar">
         <img src="/favicon-64.png" alt="agôn" class="agon-source-panel-logo">
@@ -12335,6 +12336,7 @@ function ensureAgonSourcePanel() {
           <button type="button" class="agon-source-panel-back" data-agon-source-panel-close>Retour vers agôn</button>
         </div>
       </div>
+    </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -12410,6 +12412,17 @@ function openAgonSourcePanel(sourceUrl, preview = {}) {
   overlay.style.display = "flex";
   overlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("agon-source-panel-is-open");
+
+  // Indicateur "suite ↓" en bas du panneau tant que la carte dépasse (titre ou
+  // résumé longs, petit écran) : la carte semble sinon complète alors que les
+  // boutons sont hors champ. Rattaché après affichage : les mesures de
+  // scroll/clientHeight seraient nulles tant que l'overlay est en display:none.
+  const panelEl = overlay.querySelector(".agon-source-panel");
+  const panelWrapEl = overlay.querySelector(".agon-source-panel-wrap");
+  if (panelEl && panelWrapEl && typeof attachScrollFadeHint === "function") {
+    panelEl.scrollTop = 0;
+    attachScrollFadeHint(panelEl, panelWrapEl, "#ffffff");
+  }
 }
 
 function closeAgonSourcePanel() {
@@ -18239,8 +18252,15 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     const targetCloudTop = tagRect.bottom + 7 - frameTop;
     const delta = targetCloudTop - cloudRect.top;
     const currentMarginTop = parseFloat(cloud.style.marginTop || '0') || 0;
+    const nextMarginTop = currentMarginTop + delta;
 
-    cloud.style.marginTop = (currentMarginTop + delta) + 'px';
+    cloud.style.marginTop = nextMarginTop + 'px';
+    // Mémorise la marge finale pour que le script inline d'index.html la repose
+    // avant le premier rendu à la visite suivante (retour Autres actus, reprise) :
+    // le cadre apparaît directement à sa position définitive, sans saut.
+    try {
+      sessionStorage.setItem('agonCloudMarginTop:' + location.pathname, JSON.stringify({ w: window.innerWidth, m: Math.round(nextMarginTop * 10) / 10 }));
+    } catch (e) {}
   });
 }
 
@@ -20351,6 +20371,37 @@ function syncBubbleFrameTop() {
   }
 
   window.addEventListener('resize', debouncedSync, { passive: true });
+
+  // Reprise standalone mobile : au retour depuis Autres actus ou après une mise
+  // en veille, le viewport (100dvh, safe-area) se stabilise après nos mesures et
+  // l'alignement du cadre sous le tag de filtre reste figé trop bas. On resynchronise
+  // sur les signaux de reprise ; l'alignement étant incrémental (delta vers la cible),
+  // un rappel après stabilisation converge vers la position définitive.
+  function resyncAfterResume() {
+    debouncedSync();
+    setTimeout(syncBubbleFrameTop, 400);
+  }
+  window.addEventListener('pageshow', resyncAfterResume);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) resyncAfterResume();
+  });
+  window.visualViewport?.addEventListener('resize', debouncedSync, { passive: true });
+
+  // La section nuage anime min-height 0.25s (100dvh instable en standalone) : un
+  // alignement mesuré pendant la transition fige une position intermédiaire.
+  const trendsSection = document.getElementById('agon-tag-trends-section');
+  if (trendsSection) {
+    trendsSection.addEventListener('transitionend', function(e) {
+      if (e.propertyName === 'min-height') debouncedSync();
+    });
+  }
+
+  // Le bandeau haut peut grandir après coup (bandeau score) et décaler la rangée
+  // de tags qui sert de référence à l'alignement du cadre.
+  const activeFilters = document.getElementById('index-active-filters');
+  if (activeFilters) {
+    new ResizeObserver(debouncedSync).observe(activeFilters);
+  }
 
   requestAnimationFrame(syncBubbleFrameTop);
 })();
