@@ -292,6 +292,17 @@
       body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned > * {
         pointer-events: auto;
       }
+      /* Une fois épinglé, l'écart de 14px hérité de la position de repos
+         (.index-explorer-topbar ci-dessus) n'a plus de raison d'être : le
+         bouton vient au ras du haut de l'écran. Repos inchangé. */
+      body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned .index-explorer-topbar {
+        margin-top: 0;
+      }
+      /* Tags de filtres actifs embarqués dans le bloc épinglé (cf. JS) :
+         petit écart sous le bouton pilule. */
+      body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned > #tribunes-active-filters {
+        margin-top: 6px;
+      }
     }
     body.page-tribunes #tribunes-positive-filter-btn {
       margin-top: 24px;
@@ -1140,6 +1151,8 @@
       var header = document.querySelector('.tribunes-page-header');
       var positiveBtn = document.getElementById('tribunes-positive-filter-btn');
       var spacer = document.getElementById('tribunes-sort-search-spacer');
+      var tags = document.getElementById('tribunes-active-filters');
+      var tagsSpacer = document.getElementById('tribunes-active-filters-spacer');
       if (!wrap || !header) return;
       var isPinned = wrap.classList.contains('tribunes-sort-search-pinned');
       if (pinned === isPinned) return;
@@ -1152,6 +1165,19 @@
           wrap.insertAdjacentElement('afterend', spacer);
         }
         spacer.style.height = height + 'px';
+        // Les tags de filtres actifs embarquent dans le bloc épinglé (visibles
+        // sous le bouton pendant le scroll) : leur spacer réserve leur place
+        // d'origine en bas du header et sert de repère pour les y remettre.
+        if (tags) {
+          if (!tagsSpacer) {
+            tagsSpacer = document.createElement('div');
+            tagsSpacer.id = 'tribunes-active-filters-spacer';
+            tagsSpacer.setAttribute('aria-hidden', 'true');
+            tags.insertAdjacentElement('afterend', tagsSpacer);
+          }
+          tagsSpacer.style.height = Math.ceil(tags.getBoundingClientRect().height) + 'px';
+          wrap.appendChild(tags);
+        }
         // Sort du header : sinon son backdrop-filter capturerait le
         // containing block de ce position:fixed (l'élément resterait fixe
         // par rapport au header, qui lui défile normalement, pas au viewport).
@@ -1159,6 +1185,10 @@
         wrap.classList.add('tribunes-sort-search-pinned');
       } else {
         wrap.classList.remove('tribunes-sort-search-pinned');
+        if (tags && tagsSpacer) {
+          tagsSpacer.insertAdjacentElement('beforebegin', tags);
+          tagsSpacer.remove();
+        }
         header.insertBefore(wrap, positiveBtn || header.firstChild);
         if (spacer) spacer.remove();
       }
@@ -1168,7 +1198,14 @@
       var wrap = document.getElementById('tribunes-sort-search-wrap');
       var spacer = document.getElementById('tribunes-sort-search-spacer');
       if (!wrap || !spacer || !wrap.classList.contains('tribunes-sort-search-pinned')) return;
-      spacer.style.height = Math.ceil(wrap.getBoundingClientRect().height) + 'px';
+      // Chaque spacer compense la hauteur de son élément à sa place d'origine :
+      // celui du wrap ne doit donc pas compter les tags embarqués (qui ont le leur).
+      var tags = document.getElementById('tribunes-active-filters');
+      var tagsSpacer = document.getElementById('tribunes-active-filters-spacer');
+      var tagsInWrap = !!(tags && wrap.contains(tags));
+      var tagsHeight = tagsInWrap ? Math.ceil(tags.getBoundingClientRect().height) : 0;
+      spacer.style.height = Math.max(0, Math.ceil(wrap.getBoundingClientRect().height) - tagsHeight) + 'px';
+      if (tagsInWrap && tagsSpacer) tagsSpacer.style.height = tagsHeight + 'px';
     }
     window.tribunesSortSearchRefreshSpacer = tribunesSortSearchRefreshSpacer;
 
@@ -3137,6 +3174,11 @@ window.addEventListener("pageshow", function() {
     if (currentType) tags.push(tribunesFilterTagHtml('type', currentType === 'article' ? 'Articles seulement' : 'Vidéos seulement'));
     container.innerHTML = tags.join('');
     container.classList.toggle('index-active-filters-empty', !tags.length);
+    // Si le bloc Trier/Rechercher est épinglé (les tags embarqués avec lui),
+    // leur hauteur vient peut-être de changer : les spacers doivent suivre.
+    if (typeof window.tribunesSortSearchRefreshSpacer === 'function') {
+      window.tribunesSortSearchRefreshSpacer();
+    }
   }
 
   function removeTribunesFilterTag(kind) {
