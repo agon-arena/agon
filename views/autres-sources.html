@@ -301,6 +301,9 @@
       font-size: 13.5px;
       border: 2px solid #000000;
     }
+    body.page-tribunes .index-explorer-controls {
+      border: 2px solid #000000;
+    }
     /* #tribunes-active-filters reste dans le DOM même vide (juste après
        Actualités régionales) avec sa réserve d'espace habituelle
        (min-height + margin-top, pensée pour afficher des tags de filtre
@@ -945,53 +948,8 @@
       gap: 8px;
       flex-shrink: 0;
       padding: max(9px, env(safe-area-inset-top)) 10px 9px;
-      background: rgba(255, 255, 255, 0.97);
-    }
-    .tribunes-source-modal-preview {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-      padding: 9px 12px;
-      border-top: 1px solid rgba(36, 48, 56, 0.08);
       border-bottom: 1px solid rgba(36, 48, 56, 0.12);
-      background: #f6f8f7;
-    }
-    .tribunes-source-modal-preview-img {
-      width: 44px;
-      height: 44px;
-      flex-shrink: 0;
-      border-radius: 9px;
-      object-fit: cover;
-      background: #dfe6e3;
-    }
-    .tribunes-source-modal-preview-img[src=""],
-    .tribunes-source-modal-preview-img:not([src]) {
-      display: none;
-    }
-    .tribunes-source-modal-preview-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-    .tribunes-source-modal-preview-title {
-      overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      color: #1b242b;
-      font-size: 13.5px;
-      font-weight: 700;
-      line-height: 1.28;
-    }
-    .tribunes-source-modal-preview-source {
-      overflow: hidden;
-      color: #6b7684;
-      font-size: 12px;
-      font-weight: 600;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.97);
     }
     .tribunes-source-modal-domain {
       min-width: 0;
@@ -1031,72 +989,94 @@
       height: 100%;
       border: 0;
     }
-    .tribunes-source-modal-loading {
+    /* Écran d'état (chargement puis, le cas échéant, repli) : grande image +
+       titre de l'article en haut de la page, dans le corps — pas dans la
+       petite barre du haut — puis en dessous soit le sablier de chargement,
+       soit (si l'iframe ne charge vraiment pas, timeout réseau) le message
+       de repli avec bouton "Nouvel onglet". Recouvre l'iframe tant que
+       l'article ne s'est pas chargé ; masqué au onload. */
+    .tribunes-source-modal-status {
       position: absolute;
       inset: 0;
       z-index: 1;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
+      overflow-y: auto;
       background: #ffffff;
-      pointer-events: none;
       transition: opacity 0.2s ease;
     }
-    .tribunes-source-modal-loading.hide {
+    .tribunes-source-modal-status.hide {
       opacity: 0;
+      pointer-events: none;
     }
-    .tribunes-source-modal-loading-img {
+    .tribunes-source-modal-status-img {
+      display: block;
+      width: 100%;
+      height: 46vw;
+      max-height: 220px;
+      flex-shrink: 0;
+      object-fit: cover;
+      background: #dfe6e3;
+    }
+    .tribunes-source-modal-status-img[src=""],
+    .tribunes-source-modal-status-img:not([src]) {
+      display: none;
+    }
+    .tribunes-source-modal-status-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 26px 24px;
+      text-align: center;
+    }
+    .tribunes-source-modal-status-title {
+      margin: 0;
+      max-width: 340px;
+      color: #1b242b;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.32;
+    }
+    .tribunes-source-modal-status-source {
+      margin-top: -8px;
+      color: #6b7684;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .tribunes-source-modal-status-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .tribunes-source-modal-status.show-fallback .tribunes-source-modal-status-loading {
+      display: none;
+    }
+    .tribunes-source-modal-status-loading-img {
       width: 40px;
       height: 40px;
       object-fit: contain;
       opacity: 0.82;
       animation: createSubmitSpin 0.9s linear infinite;
     }
-    .tribunes-source-modal-loading span {
+    .tribunes-source-modal-status-loading span {
       color: #8a95a1;
       font-size: 13px;
       font-weight: 600;
     }
-    .tribunes-source-modal-fallback {
-      position: absolute;
-      inset: 0;
-      z-index: 2;
+    .tribunes-source-modal-status-fallback {
       display: none;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 24px;
-      text-align: center;
-      background: #ffffff;
+      gap: 14px;
+      margin-top: 4px;
     }
-    .tribunes-source-modal-fallback.show {
+    .tribunes-source-modal-status.show-fallback .tribunes-source-modal-status-fallback {
       display: flex;
     }
-    .tribunes-source-modal-fallback-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 60px;
-      height: 60px;
-      margin-bottom: 4px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #2d3d47, #1a2329);
-      color: #ffffff;
-      font-size: 20px;
-      box-shadow: 0 10px 22px rgba(36, 48, 56, 0.22);
-    }
-    .tribunes-source-modal-fallback-title {
-      margin: 0;
-      max-width: 320px;
-      color: #1b242b;
-      font-size: 17px;
-      font-weight: 800;
-      line-height: 1.32;
-    }
-    .tribunes-source-modal-fallback-text {
+    .tribunes-source-modal-status-fallback-text {
       margin: 0;
       max-width: 290px;
       color: #6b7684;
@@ -1104,12 +1084,11 @@
       font-weight: 500;
       line-height: 1.5;
     }
-    .tribunes-source-modal-fallback-btn {
+    .tribunes-source-modal-status-fallback-btn {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       min-height: 46px;
-      margin-top: 4px;
       border-radius: 999px;
       padding: 0 22px;
       background: #243038;
@@ -1120,7 +1099,7 @@
       box-shadow: 0 8px 18px rgba(36, 48, 56, 0.26);
       transition: transform 0.15s ease;
     }
-    .tribunes-source-modal-fallback-btn:active {
+    .tribunes-source-modal-status-fallback-btn:active {
       transform: scale(0.96);
     }
   </style>
@@ -1717,26 +1696,24 @@ window.addEventListener("pageshow", function() {
     <a class="tribunes-source-modal-open-tab" id="tribunes-source-modal-open-tab" href="#" target="_blank" rel="noopener noreferrer">Nouvel onglet</a>
     <button type="button" class="tribunes-source-modal-close" id="tribunes-source-modal-close">Fermer</button>
   </div>
-  <div class="tribunes-source-modal-preview" id="tribunes-source-modal-preview">
-    <img id="tribunes-source-modal-preview-img" alt="" class="tribunes-source-modal-preview-img">
-    <div class="tribunes-source-modal-preview-text">
-      <strong id="tribunes-source-modal-preview-title" class="tribunes-source-modal-preview-title"></strong>
-      <span id="tribunes-source-modal-preview-source" class="tribunes-source-modal-preview-source"></span>
-    </div>
-  </div>
   <div class="tribunes-source-modal-body">
     <iframe id="tribunes-source-modal-frame" title="Source externe" referrerpolicy="no-referrer"></iframe>
-    <div class="tribunes-source-modal-loading" id="tribunes-source-modal-loading">
-      <img src="/sablier-96.png" alt="" class="tribunes-source-modal-loading-img">
-      <span>Chargement de l’article…</span>
-    </div>
-    <div class="tribunes-source-modal-fallback" id="tribunes-source-modal-fallback">
-      <div class="tribunes-source-modal-fallback-icon"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i></div>
-      <h2 class="tribunes-source-modal-fallback-title">Cet article ne peut pas s’afficher ici</h2>
-      <p class="tribunes-source-modal-fallback-text">Ce site refuse l’affichage encadré. Ouvre-le dans un nouvel onglet pour le lire.</p>
-      <a id="tribunes-source-modal-fallback-open" class="tribunes-source-modal-fallback-btn" href="#" target="_blank" rel="noopener noreferrer">
-        <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Ouvrir dans un nouvel onglet
-      </a>
+    <div class="tribunes-source-modal-status" id="tribunes-source-modal-status">
+      <img id="tribunes-source-modal-status-img" class="tribunes-source-modal-status-img" alt="">
+      <div class="tribunes-source-modal-status-body">
+        <h2 class="tribunes-source-modal-status-title" id="tribunes-source-modal-status-title"></h2>
+        <span class="tribunes-source-modal-status-source" id="tribunes-source-modal-status-source"></span>
+        <div class="tribunes-source-modal-status-loading" id="tribunes-source-modal-status-loading">
+          <img src="/sablier-96.png" alt="" class="tribunes-source-modal-status-loading-img">
+          <span>Chargement de l’article…</span>
+        </div>
+        <div class="tribunes-source-modal-status-fallback" id="tribunes-source-modal-status-fallback">
+          <p class="tribunes-source-modal-status-fallback-text">Ce site refuse l’affichage encadré. Ouvre-le dans un nouvel onglet pour le lire.</p>
+          <a id="tribunes-source-modal-fallback-open" class="tribunes-source-modal-status-fallback-btn" href="#" target="_blank" rel="noopener noreferrer">
+            <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Ouvrir dans un nouvel onglet
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -2080,35 +2057,30 @@ window.addEventListener("pageshow", function() {
   var sourceModalOpenTab = document.getElementById('tribunes-source-modal-open-tab');
   var sourceModalClose = document.getElementById('tribunes-source-modal-close');
   var sourceModalFrame = document.getElementById('tribunes-source-modal-frame');
-  var sourceModalPreview = document.getElementById('tribunes-source-modal-preview');
-  var sourceModalPreviewImg = document.getElementById('tribunes-source-modal-preview-img');
-  var sourceModalPreviewTitle = document.getElementById('tribunes-source-modal-preview-title');
-  var sourceModalPreviewSource = document.getElementById('tribunes-source-modal-preview-source');
-  var sourceModalLoading = document.getElementById('tribunes-source-modal-loading');
-  var sourceModalFallback = document.getElementById('tribunes-source-modal-fallback');
+  var sourceModalStatus = document.getElementById('tribunes-source-modal-status');
+  var sourceModalStatusImg = document.getElementById('tribunes-source-modal-status-img');
+  var sourceModalStatusTitle = document.getElementById('tribunes-source-modal-status-title');
+  var sourceModalStatusSource = document.getElementById('tribunes-source-modal-status-source');
   var sourceModalFallbackOpen = document.getElementById('tribunes-source-modal-fallback-open');
   var sourceModalFallbackTimer = null;
 
-  // Carte d'aperçu (image + titre + source) affichée sous la barre du haut, tout le temps
-  // que le modal est ouvert — qu'un article donné se retrouve embarquable en iframe ou
-  // bloqué par le site (cf. openSourceModal) n'a aucune incidence dessus, contrairement aux
-  // écrans loading/fallback : ça garde toujours un aperçu visuel de l'article visé, même
-  // quand la source elle-même se contente d'afficher une page d'erreur générique.
-  function fillSourceModalPreview(article) {
-    if (!sourceModalPreview) return;
-    if (!article) { sourceModalPreview.style.display = 'none'; return; }
-    sourceModalPreview.style.display = '';
-    if (sourceModalPreviewTitle) sourceModalPreviewTitle.textContent = article.title || '';
-    if (sourceModalPreviewSource) sourceModalPreviewSource.textContent = article.source || '';
-    if (sourceModalPreviewImg) {
+  // Image + titre de l'article, en haut du corps de la page (pas dans la petite barre du
+  // haut) : ils restent visibles pendant le chargement ET pendant le repli le cas échéant,
+  // seule la partie sous le titre change (sablier vs message + bouton "Nouvel onglet"),
+  // pilotée par la classe show-fallback sur sourceModalStatus.
+  function fillSourceModalStatus(article) {
+    if (sourceModalStatusTitle) sourceModalStatusTitle.textContent = article && article.title || '';
+    if (sourceModalStatusSource) sourceModalStatusSource.textContent = article && article.source || '';
+    if (sourceModalStatusImg) {
+      if (!article) { sourceModalStatusImg.removeAttribute('src'); return; }
       var candidates = toDisplayImageCandidates(getPreviewImageCandidates(article, article.source_preview));
       var index = 0;
-      sourceModalPreviewImg.onerror = function() {
+      sourceModalStatusImg.onerror = function() {
         var next = candidates[index++];
-        if (next) { sourceModalPreviewImg.src = next; } else { sourceModalPreviewImg.removeAttribute('src'); }
+        if (next) { sourceModalStatusImg.src = next; } else { sourceModalStatusImg.removeAttribute('src'); }
       };
       var first = candidates[index++];
-      if (first) { sourceModalPreviewImg.src = first; } else { sourceModalPreviewImg.removeAttribute('src'); }
+      if (first) { sourceModalStatusImg.src = first; } else { sourceModalStatusImg.removeAttribute('src'); }
     }
   }
 
@@ -2119,14 +2091,13 @@ window.addEventListener("pageshow", function() {
     if (sourceModalDomain) sourceModalDomain.textContent = domain;
     if (sourceModalOpenTab) sourceModalOpenTab.href = url;
     if (sourceModalFallbackOpen) sourceModalFallbackOpen.href = url;
-    if (sourceModalFallback) sourceModalFallback.classList.remove('show');
-    if (sourceModalLoading) sourceModalLoading.classList.remove('hide');
-    fillSourceModalPreview(article);
+    if (sourceModalStatus) { sourceModalStatus.classList.remove('hide', 'show-fallback'); }
+    fillSourceModalStatus(article);
 
     if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
     sourceModalFrame.onload = function() {
       if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
-      if (sourceModalLoading) sourceModalLoading.classList.add('hide');
+      if (sourceModalStatus) sourceModalStatus.classList.add('hide');
     };
     sourceModalFrame.src = url;
     // Repli si la page ne se charge pas du tout (site injoignable, réseau) —
@@ -2134,8 +2105,7 @@ window.addEventListener("pageshow", function() {
     // lire depuis une iframe cross-origin), d'où le bouton "Nouvel onglet"
     // toujours visible dans la barre du haut en complément.
     sourceModalFallbackTimer = setTimeout(function() {
-      if (sourceModalLoading) sourceModalLoading.classList.add('hide');
-      if (sourceModalFallback) sourceModalFallback.classList.add('show');
+      if (sourceModalStatus) sourceModalStatus.classList.add('show-fallback');
     }, 4000);
 
     sourceModal.classList.add('open');
