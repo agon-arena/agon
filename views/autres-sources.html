@@ -34,13 +34,12 @@
         margin-top: -32px;
       }
     }
-    /* Desktop : le bloc Trier/Rechercher (bouton + panneau) est sorti du
-       header sticky en JS (cf. plus bas) pour défiler normalement, sans
-       affecter les autres boutons du header (Nouvelles positives, filtre
-       Gauche/Tout/Droite, Actualités régionales) qui restent épinglés. */
+    /* Desktop : le bloc Trier/Rechercher reste dans le header sticky, juste
+       au-dessus de Nouvelles positives — même position et même largeur qu'en
+       mobile (il est donc épinglé au scroll avec les autres boutons). */
     @media (min-width: 769px) {
       body.page-tribunes .tribunes-sort-search-block {
-        margin: 8px auto 0;
+        margin: 24px auto 0;
         width: min(920px, 100%);
       }
     }
@@ -258,6 +257,28 @@
       body.is-standalone.page-tribunes .topbar-inner.topbar-home {
         position: relative !important;
       }
+      body.page-tribunes .index-explorer-topbar {
+        margin-top: 14px;
+      }
+    }
+    body.page-tribunes #tribunes-positive-filter-btn {
+      margin-top: 24px;
+    }
+    /* Bouton Trier/Rechercher agrandi — mobile et desktop. */
+    body.page-tribunes .index-sort-toggle {
+      padding: 8px 16px;
+      gap: 7px;
+      font-size: 13.5px;
+    }
+    /* #tribunes-active-filters reste dans le DOM même vide (juste après
+       Actualités régionales) avec sa réserve d'espace habituelle
+       (min-height + margin-top, pensée pour afficher des tags de filtre
+       actifs) : ça éloigne inutilement le bandeau "À la une" du bouton
+       régional quand aucun filtre n'est actif. On la retire dans ce cas
+       (mobile et desktop). */
+    body.page-tribunes #tribunes-active-filters.index-active-filters-empty {
+      min-height: 0;
+      margin-top: 0;
     }
     body.page-tribunes .about-page-shell {
       /* Comble le padding-top hérité de main (16px mobile / 28px desktop) :
@@ -850,16 +871,19 @@
       }
     }
 
+    /* #tribunes-list a un fond clair (#dbe5e1) mais ne prend que la hauteur de
+       son contenu — tant qu'il ne contient que le loader, une bande du fond
+       sombre du body (#243038) reste visible en dessous jusqu'en bas de
+       l'écran. On étire ce conteneur (pas le loader lui-même, pour garder le
+       sablier bien visible juste sous l'en-tête, sans scroll) pour masquer
+       cette bande pendant l'attente. */
+    #tribunes-list:has(.tribunes-initial-loading) {
+      min-height: 70vh;
+    }
     .tribunes-initial-loading {
       display: flex;
       align-items: center;
       justify-content: center;
-      /* .tribunes-list a un fond clair (#dbe5e1) mais ne prend que la hauteur
-         de son contenu — tant qu'il ne contient que ce loader, une bande du
-         fond sombre du body (#243038, "bleu") reste visible en dessous
-         jusqu'en bas de l'écran. On étire le loader pour couvrir tout le
-         viewport restant et masquer cette bande pendant l'attente. */
-      min-height: 70vh;
       padding: 48px 0;
     }
     .tribunes-initial-loading-img {
@@ -931,6 +955,34 @@
       height: 100%;
       border: 0;
     }
+    .tribunes-source-modal-loading {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: #ffffff;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .tribunes-source-modal-loading.hide {
+      opacity: 0;
+    }
+    .tribunes-source-modal-loading-img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      opacity: 0.82;
+      animation: createSubmitSpin 0.9s linear infinite;
+    }
+    .tribunes-source-modal-loading span {
+      color: #8a95a1;
+      font-size: 13px;
+      font-weight: 600;
+    }
     .tribunes-source-modal-fallback {
       position: absolute;
       inset: 0;
@@ -939,7 +991,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 14px;
+      gap: 12px;
       padding: 24px;
       text-align: center;
       background: #ffffff;
@@ -947,37 +999,65 @@
     .tribunes-source-modal-fallback.show {
       display: flex;
     }
-    .tribunes-source-modal-fallback p {
+    .tribunes-source-modal-fallback-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 60px;
+      height: 60px;
+      margin-bottom: 4px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2d3d47, #1a2329);
+      color: #ffffff;
+      font-size: 20px;
+      box-shadow: 0 10px 22px rgba(36, 48, 56, 0.22);
+    }
+    .tribunes-source-modal-fallback-title {
       margin: 0;
       max-width: 320px;
-      color: #384250;
-      font-size: 15px;
-      font-weight: 600;
-      line-height: 1.42;
+      color: #1b242b;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.32;
     }
-    .tribunes-source-modal-fallback a {
+    .tribunes-source-modal-fallback-text {
+      margin: 0;
+      max-width: 290px;
+      color: #6b7684;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    .tribunes-source-modal-fallback-btn {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      min-height: 42px;
+      min-height: 46px;
+      margin-top: 4px;
       border-radius: 999px;
-      padding: 0 18px;
+      padding: 0 22px;
       background: #243038;
       color: #ffffff;
-      font-weight: 900;
+      font-weight: 800;
+      font-size: 14px;
       text-decoration: none;
+      box-shadow: 0 8px 18px rgba(36, 48, 56, 0.26);
+      transition: transform 0.15s ease;
+    }
+    .tribunes-source-modal-fallback-btn:active {
+      transform: scale(0.96);
     }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
        laissant les icônes (ex: chevrons haut/bas flottants au retour vers l'index) invisibles
-       pendant ce temps. -->
-  <link rel="preload" as="font" type="font/woff2" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2" crossorigin>
+       pendant ce temps. Servie depuis /vendor (et non cdnjs) pour ne plus dépendre d'un CDN
+       tiers : une coupure/latence dessus laissait ces mêmes icônes vides. -->
+  <link rel="preload" as="font" type="font/woff2" href="/vendor/fontawesome/webfonts/fa-solid-900.woff2" crossorigin>
   <script>
     // Les autres pages du site posent ce marqueur pour signaler qu'elles sont bien
     // arrivées ; autres-sources.html ne le faisait pas, ce qui peut faire croire au
@@ -1027,23 +1107,17 @@
         var stuck = header.getBoundingClientRect().top <= stickTop - tribunesHeaderShift() + 2;
         header.classList.toggle('tribunes-header-stuck', stuck);
       }
-      // Desktop uniquement : sort le bloc Trier/Rechercher (bouton + panneau)
-      // du header sticky pour qu'il défile normalement, sans affecter les
-      // autres boutons du header (Nouvelles positives, Gauche/Tout/Droite,
-      // Actualités régionales) qui doivent rester épinglés. Sur mobile, le
-      // bloc reste à sa place d'origine dans le header (comportement inchangé).
+      // Le bloc Trier/Rechercher reste au-dessus de "Nouvelles positives" dans
+      // le header, en mobile comme en desktop (donc épinglé avec les autres
+      // boutons au scroll) : ne fait que garantir sa position si un resize
+      // (ou une exécution précédente de ce script) l'avait déplacé ailleurs.
       function applyTribunesSortSearchLayout() {
         var wrap = document.getElementById('tribunes-sort-search-wrap');
         var header = document.querySelector('.tribunes-page-header');
+        var positiveBtn = document.getElementById('tribunes-positive-filter-btn');
         if (!wrap || !header) return;
-        var isDesktop = window.matchMedia('(min-width: 769px)').matches;
-        if (isDesktop) {
-          if (wrap.parentElement === header) {
-            header.parentElement.insertBefore(wrap, header.nextSibling);
-          }
-        } else if (wrap.parentElement !== header) {
-          var activeFilters = document.getElementById('tribunes-active-filters');
-          header.insertBefore(wrap, activeFilters || null);
+        if (wrap.parentElement !== header || (positiveBtn && wrap.nextElementSibling !== positiveBtn)) {
+          header.insertBefore(wrap, positiveBtn || header.firstChild);
         }
       }
       applyTribunesSortSearchLayout();
@@ -1285,20 +1359,6 @@ window.addEventListener("pageshow", function() {
       <h1>Autres actus</h1>
       <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Agôn.</p>
 
-      <button type="button" id="tribunes-positive-filter-btn" class="tribunes-positive-filter-btn" aria-pressed="false" data-extra-filter="positive" data-active-class="tribunes-positive-filter-btn-active">
-        <i class="fa-solid fa-seedling" aria-hidden="true"></i> Nouvelles positives
-      </button>
-
-      <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
-        <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
-        <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Tout</button>
-        <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
-      </div>
-
-      <button type="button" id="tribunes-regional-filter-btn" class="tribunes-regional-filter-btn" aria-pressed="false" data-extra-filter="regional" data-active-class="tribunes-regional-filter-btn-active">
-        <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Actualités régionales
-      </button>
-
       <div id="tribunes-sort-search-wrap" class="tribunes-sort-search-block">
         <div class="index-explorer-topbar">
           <button
@@ -1345,6 +1405,20 @@ window.addEventListener("pageshow", function() {
           </button>
         </div>
       </div>
+
+      <button type="button" id="tribunes-positive-filter-btn" class="tribunes-positive-filter-btn" aria-pressed="false" data-extra-filter="positive" data-active-class="tribunes-positive-filter-btn-active">
+        <i class="fa-solid fa-seedling" aria-hidden="true"></i> Nouvelles positives
+      </button>
+
+      <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
+        <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
+        <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Tout</button>
+        <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
+      </div>
+
+      <button type="button" id="tribunes-regional-filter-btn" class="tribunes-regional-filter-btn" aria-pressed="false" data-extra-filter="regional" data-active-class="tribunes-regional-filter-btn-active">
+        <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Actualités régionales
+      </button>
 
       <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
     </div>
@@ -1473,9 +1547,17 @@ window.addEventListener("pageshow", function() {
   </div>
   <div class="tribunes-source-modal-body">
     <iframe id="tribunes-source-modal-frame" title="Source externe" referrerpolicy="no-referrer"></iframe>
+    <div class="tribunes-source-modal-loading" id="tribunes-source-modal-loading">
+      <img src="/sablier-96.png" alt="" class="tribunes-source-modal-loading-img">
+      <span>Chargement de l’article…</span>
+    </div>
     <div class="tribunes-source-modal-fallback" id="tribunes-source-modal-fallback">
-      <p>Ce site ne peut pas s’afficher ici.</p>
-      <a id="tribunes-source-modal-fallback-open" href="#" target="_blank" rel="noopener noreferrer">Ouvrir dans un nouvel onglet</a>
+      <div class="tribunes-source-modal-fallback-icon"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i></div>
+      <h2 class="tribunes-source-modal-fallback-title">Cet article ne peut pas s’afficher ici</h2>
+      <p class="tribunes-source-modal-fallback-text">Ce site refuse l’affichage encadré. Ouvre-le dans un nouvel onglet pour le lire.</p>
+      <a id="tribunes-source-modal-fallback-open" class="tribunes-source-modal-fallback-btn" href="#" target="_blank" rel="noopener noreferrer">
+        <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Ouvrir dans un nouvel onglet
+      </a>
     </div>
   </div>
 </div>
@@ -1819,6 +1901,7 @@ window.addEventListener("pageshow", function() {
   var sourceModalOpenTab = document.getElementById('tribunes-source-modal-open-tab');
   var sourceModalClose = document.getElementById('tribunes-source-modal-close');
   var sourceModalFrame = document.getElementById('tribunes-source-modal-frame');
+  var sourceModalLoading = document.getElementById('tribunes-source-modal-loading');
   var sourceModalFallback = document.getElementById('tribunes-source-modal-fallback');
   var sourceModalFallbackOpen = document.getElementById('tribunes-source-modal-fallback-open');
   var sourceModalFallbackTimer = null;
@@ -1831,10 +1914,12 @@ window.addEventListener("pageshow", function() {
     if (sourceModalOpenTab) sourceModalOpenTab.href = url;
     if (sourceModalFallbackOpen) sourceModalFallbackOpen.href = url;
     if (sourceModalFallback) sourceModalFallback.classList.remove('show');
+    if (sourceModalLoading) sourceModalLoading.classList.remove('hide');
 
     if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
     sourceModalFrame.onload = function() {
       if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
+      if (sourceModalLoading) sourceModalLoading.classList.add('hide');
     };
     sourceModalFrame.src = url;
     // Repli si la page ne se charge pas du tout (site injoignable, réseau) —
@@ -1842,6 +1927,7 @@ window.addEventListener("pageshow", function() {
     // lire depuis une iframe cross-origin), d'où le bouton "Nouvel onglet"
     // toujours visible dans la barre du haut en complément.
     sourceModalFallbackTimer = setTimeout(function() {
+      if (sourceModalLoading) sourceModalLoading.classList.add('hide');
       if (sourceModalFallback) sourceModalFallback.classList.add('show');
     }, 4000);
 
