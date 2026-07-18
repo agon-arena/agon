@@ -143,6 +143,16 @@
       from { opacity: 0; }
       to { opacity: 1; }
     }
+    /* Bande basse pendant l'intro : sur iPhone en PWA, WebKit peint en retard le
+       loader fixed dans les derniers ~60px de l'écran — le dock et la pastille
+       "Autres actus" y apparaissent sous l'animation. On les masque tant que
+       l'intro joue : la bande montre alors le fond sombre du body, toujours
+       peint correctement. Classe retirée par tryHide() dans script.js. */
+    html.agon-startup-active .home-bottom-nav,
+    html.agon-startup-active .agon-tribunes-btn,
+    html.agon-startup-active .app-floating-refresh-btn {
+      visibility: hidden !important;
+    }
   </style>
   <style>
     body { background-color: #243038; }
@@ -286,6 +296,8 @@
   if (shouldSkipStartup) {
     window.__agonSkipStartupOnce = true;
     document.documentElement.classList.add('agon-skip-startup-once');
+  } else {
+    document.documentElement.classList.add('agon-startup-active');
   }
 })();
 </script>
@@ -947,7 +959,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260716-source-panel-standalone-direct" defer></script>
+<script src="/script.min.js?v=20260718-startup-bottom-band" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -278,8 +278,10 @@
            tient pas non plus sur cette page (même souci d'overflow) : elle
            disparaît entièrement au scroll, donc le bouton se pose tout en
            haut du viewport plutôt qu'à la hauteur de la topbar (qui n'est
-           plus là pour justifier cet espace). */
-        top: max(3px, env(safe-area-inset-top, 0px));
+           plus là pour justifier cet espace). Au ras du bord (0 au lieu de
+           3px) : ne concerne que cet état épinglé, la position de repos dans
+           la page ne bouge pas. */
+        top: max(0px, calc(env(safe-area-inset-top, 0px) - 3px));
         left: 0;
         right: 0;
         z-index: 150;
@@ -1541,6 +1543,15 @@ window.addEventListener("pageshow", function() {
           </div>
 
           <div class="tribunes-filters-row">
+            <select id="tribunes-orientation-filter" class="tribunes-media-filter" aria-label="Filtrer par orientation ou rubrique">
+              <option value="">Toutes les actus</option>
+              <optgroup label="Orientation politique">
+                <option value="left">Gauche</option>
+                <option value="right">Droite</option>
+              </optgroup>
+              <option value="regional">Actualités régionales</option>
+              <option value="positive">Nouvelles positives</option>
+            </select>
             <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
               <option value="">Tous les médias</option>
             </select>
@@ -2561,6 +2572,66 @@ window.addEventListener("pageshow", function() {
   // tribunesInitialCountForGroup), le reste se charge en scrollant comme les
   // autres rubriques. Doublon volontaire avec leur section d'origine (même
   // logique que les doublons inter-groupes du bot de veille).
+  // Vue "Tout" uniquement : alterne les cartes des médias de droite et de gauche
+  // (droite, gauche, droite…) dans chaque rangée. Seules les positions occupées
+  // par des cartes gauche/droite sont réordonnées — les autres cartes (centre,
+  // nouvelles positives, actualités régionales…) gardent exactement leur place,
+  // et l'ordre interne de chaque bord (récence) est préservé.
+  function alternateOrientations(items) {
+    var rightQueue = [];
+    var leftQueue = [];
+    items.forEach(function(article) {
+      var side = orientationClass(article.orientation);
+      if (side === 'right') rightQueue.push(article);
+      else if (side === 'left') leftQueue.push(article);
+    });
+    if (!rightQueue.length || !leftQueue.length) return items;
+    var nextSide = 'right';
+    return items.map(function(article) {
+      var side = orientationClass(article.orientation);
+      if (side !== 'right' && side !== 'left') return article;
+      var pick = nextSide === 'right'
+        ? (rightQueue.length ? rightQueue.shift() : leftQueue.shift())
+        : (leftQueue.length ? leftQueue.shift() : rightQueue.shift());
+      nextSide = nextSide === 'right' ? 'left' : 'right';
+      return pick;
+    });
+  }
+
+  // Vues Gauche/Droite : espace les cartes d'un même média pour ne jamais avoir
+  // deux cartes consécutives du même site (ex. trois Libération d'affilée). À
+  // chaque position on prend la première carte restante d'un média différent du
+  // précédent, donc l'ordre d'origine est préservé au maximum ; si toutes les
+  // cartes restantes viennent du même média, elles se suivent (inévitable).
+  function spreadSameSource(items) {
+    var remaining = items.slice();
+    var result = [];
+    var prevSource = null;
+    while (remaining.length) {
+      var idx = 0;
+      if (prevSource !== null) {
+        idx = -1;
+        for (var i = 0; i < remaining.length; i++) {
+          if (String(remaining[i].source || '') !== prevSource) { idx = i; break; }
+        }
+        if (idx === -1) idx = 0;
+      }
+      var pick = remaining.splice(idx, 1)[0];
+      prevSource = String(pick.source || '');
+      result.push(pick);
+    }
+    return result;
+  }
+
+  // Ordre des cartes dans une rangée selon la vue active : alternance
+  // droite/gauche en "Tout", espacement des médias identiques en Gauche/Droite,
+  // ordre inchangé ailleurs (Nouvelles positives, actualités régionales…).
+  function orderCarouselItems(items) {
+    if (currentFilter === 'mixed') return alternateOrientations(items);
+    if (currentFilter === 'left' || currentFilter === 'right') return spreadSameSource(items);
+    return items;
+  }
+
   function buildALaUneGroup(articles) {
     var items = articles
       .filter(function(a) { return a.published_at; })
@@ -2569,7 +2640,7 @@ window.addEventListener("pageshow", function() {
         return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
       });
     if (!items.length) return null;
-    return { key: 'a-la-une', label: 'À la une', items: items };
+    return { key: 'a-la-une', label: 'À la une', items: orderCarouselItems(items) };
   }
 
   function groupByTheme(articles) {
@@ -2582,7 +2653,11 @@ window.addEventListener("pageshow", function() {
     });
     var groups = CATEGORY_OPTIONS
       .map(function(category) { return buckets[categoryKey(category)]; })
-      .filter(Boolean);
+      .filter(Boolean)
+      .map(function(group) {
+        group.items = orderCarouselItems(group.items);
+        return group;
+      });
     var aLaUne = buildALaUneGroup(articles);
     return aLaUne ? [aLaUne].concat(groups) : groups;
   }
@@ -3033,26 +3108,60 @@ window.addEventListener("pageshow", function() {
     return filterArticlesList(allArticles);
   }
 
+  // Tags de filtres actifs, fermables — même mécanique que la page index
+  // (renderIndexActiveFilterTags dans script.js) : un tag par filtre actif
+  // (recherche, orientation/rubrique, média, type), la croix le retire.
+  var TRIBUNES_FILTER_TAG_LABELS = {
+    left: 'Gauche',
+    right: 'Droite',
+    regional: 'Actualités régionales',
+    positive: 'Nouvelles positives'
+  };
+
+  function tribunesFilterTagHtml(kind, label) {
+    return '<button type="button" class="index-active-filter-tag" onclick="removeTribunesFilterTag(\'' + kind + '\')" aria-label="Retirer le filtre ' + escapeHtml(label) + '">' +
+      '<span>' + escapeHtml(label) + '</span>' +
+      '<span class="index-active-filter-tag-close" aria-hidden="true">×</span>' +
+      '</button>';
+  }
+
   function renderTribunesActiveFilterTags() {
     var container = document.getElementById('tribunes-active-filters');
     if (!container) return;
-    var hasSearch = !!currentSearchQuery;
-    container.innerHTML = hasSearch
-      ? '<button type="button" class="index-active-filter-tag" onclick="removeTribunesSearchTag()" aria-label="Retirer la recherche ' + escapeHtml(currentSearchQuery) + '">' +
-        '<span>' + escapeHtml(currentSearchQuery) + '</span>' +
-        '<span class="index-active-filter-tag-close" aria-hidden="true">×</span>' +
-        '</button>'
-      : '';
-    container.classList.toggle('index-active-filters-empty', !hasSearch);
+    var tags = [];
+    if (currentSearchQuery) tags.push(tribunesFilterTagHtml('search', currentSearchQuery));
+    if (currentFilter !== 'mixed' && TRIBUNES_FILTER_TAG_LABELS[currentFilter]) {
+      tags.push(tribunesFilterTagHtml('orientation', TRIBUNES_FILTER_TAG_LABELS[currentFilter]));
+    }
+    if (currentMedia) tags.push(tribunesFilterTagHtml('media', currentMedia));
+    if (currentType) tags.push(tribunesFilterTagHtml('type', currentType === 'article' ? 'Articles seulement' : 'Vidéos seulement'));
+    container.innerHTML = tags.join('');
+    container.classList.toggle('index-active-filters-empty', !tags.length);
   }
 
-  function removeTribunesSearchTag() {
-    currentSearchQuery = '';
-    var input = document.getElementById('tribunes-search');
-    if (input) input.value = '';
+  function removeTribunesFilterTag(kind) {
+    if (kind === 'orientation') {
+      // Même chemin que la sélection "Toutes les actus" dans le menu :
+      // resynchronise aussi le switch, les pilules et le select.
+      setTribunesOrientationFilter('');
+      return;
+    }
+    if (kind === 'search') {
+      currentSearchQuery = '';
+      var input = document.getElementById('tribunes-search');
+      if (input) input.value = '';
+    } else if (kind === 'media') {
+      currentMedia = '';
+      if (mediaFilterEl) mediaFilterEl.value = '';
+    } else if (kind === 'type') {
+      currentType = '';
+      if (typeFilterEl) typeFilterEl.value = '';
+    }
     applyFilter();
   }
-  window.removeTribunesSearchTag = removeTribunesSearchTag;
+  window.removeTribunesFilterTag = removeTribunesFilterTag;
+  // Compat : ancien nom encore présent dans d'éventuels rendus en cours.
+  window.removeTribunesSearchTag = function() { removeTribunesFilterTag('search'); };
 
   function applyFilter() {
     populateMediaFilter();
@@ -3085,6 +3194,17 @@ window.addEventListener("pageshow", function() {
     });
   }
 
+  // Menu du panneau Trier/Rechercher reprenant les mêmes filtres que les
+  // boutons de l'en-tête (Gauche/Droite, Actualités régionales, Nouvelles
+  // positives) : il pilote currentFilter comme eux et reste synchronisé
+  // dans les deux sens.
+  var orientationFilterEl = document.getElementById('tribunes-orientation-filter');
+
+  function syncOrientationFilterSelect() {
+    if (!orientationFilterEl) return;
+    orientationFilterEl.value = currentFilter === 'mixed' ? '' : currentFilter;
+  }
+
   if (switchEl) {
     switchEl.addEventListener('click', function(event) {
       var btn = event.target.closest('[data-filter]');
@@ -3095,6 +3215,7 @@ window.addEventListener("pageshow", function() {
         seg.classList.toggle('tribunes-filter-segment-active', seg === btn);
       });
       syncExtraFilterButtons('');
+      syncOrientationFilterSelect();
       applyFilter();
     });
   }
@@ -3110,9 +3231,32 @@ window.addEventListener("pageshow", function() {
           seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'mixed' : false);
         });
       }
+      syncOrientationFilterSelect();
       applyFilter();
     });
   });
+
+  function setTribunesOrientationFilter(value) {
+    var isExtra = value === 'positive' || value === 'regional';
+    currentFilter = value || 'mixed';
+    currentMedia = '';
+    syncExtraFilterButtons(isExtra ? value : '');
+    if (switchEl) {
+      switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
+        // Filtre extra actif → aucun segment allumé, comme au clic direct
+        // sur les boutons Nouvelles positives / Actualités régionales.
+        seg.classList.toggle('tribunes-filter-segment-active', !isExtra && seg.dataset.filter === (value || 'mixed'));
+      });
+    }
+    syncOrientationFilterSelect();
+    applyFilter();
+  }
+
+  if (orientationFilterEl) {
+    orientationFilterEl.addEventListener('change', function() {
+      setTribunesOrientationFilter(orientationFilterEl.value);
+    });
+  }
 
   [mediaFilterEl, typeFilterEl].forEach(function(el) {
     if (!el) return;
@@ -3120,6 +3264,7 @@ window.addEventListener("pageshow", function() {
       currentMedia = mediaFilterEl.value;
       currentType = typeFilterEl.value;
       render(computeFiltered());
+      renderTribunesActiveFilterTags();
     });
   });
 

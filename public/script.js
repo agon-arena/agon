@@ -529,6 +529,7 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     if (hidden || !introSequenceDone || !contentReady) return;
     hidden = true;
     try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
+    document.documentElement.classList.remove('agon-startup-active');
     loader.classList.add('is-hiding');
     setTimeout(function() {
       if (loader.parentNode) loader.parentNode.removeChild(loader);
@@ -545,6 +546,7 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   setTimeout(function() {
     if (hidden) return;
     hidden = true;
+    document.documentElement.classList.remove('agon-startup-active');
     if (loader.parentNode) loader.parentNode.removeChild(loader);
   }, 10000);
 
