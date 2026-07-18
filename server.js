@@ -1271,32 +1271,43 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
 
   if (error) throw new Error(error.message);
 
-  // Masque les ancêtres explicitement cités par matchedSubjectId, sur toute la
+  // Masque les ancêtres explicitement cités par la tendance, sur toute la
   // profondeur de la chaîne (ex: 941→940→921 doit masquer 940 ET 921, même si 940
-  // est lui-même ignoré avant d'avoir pu propager son propre lien). On ne fusionne
-  // jamais deux débats qui n'ont pas de lien direct/transitif entre eux : des
-  // « cousins » reliés seulement par un ancêtre commun lointain (ex: deux sujets
-  // sortis dans la même rafale de veille, jamais comparés entre eux par l'IA)
-  // restent des bulles séparées — la fenêtre anti-rafale (MIN_TREND_MATCH_GAP_MS)
-  // doit rester respectée, on ne la contourne pas via un ancêtre partagé.
-  const trendParent = new Map();
+  // est lui-même ignoré avant d'avoir pu propager son propre lien). Chaque débat
+  // peut citer PLUSIEURS ancêtres (matchedSubjectIds) : ne masquer que le plus
+  // récent laissait l'autre prédécesseur affiché quand il appartenait à un autre
+  // nuage (cf. doublon gauche 1972/2007 du 18/07/2026, 2007 ayant matché 1981 mixed
+  // ET 1972 left). On ne fusionne jamais deux débats qui n'ont pas de lien
+  // direct/transitif entre eux : des « cousins » reliés seulement par un ancêtre
+  // commun lointain (ex: deux sujets sortis dans la même rafale de veille, jamais
+  // comparés entre eux par l'IA) restent des bulles séparées — la fenêtre
+  // anti-rafale (MIN_TREND_MATCH_GAP_MS) doit rester respectée, on ne la
+  // contourne pas via un ancêtre partagé.
+  const trendParents = new Map();
   for (const debate of (allDebates || [])) {
-    const matchedId = getDebateTrend(debate.id)?.matchedSubjectId;
-    if (matchedId) trendParent.set(String(debate.id), String(matchedId));
+    const trend = getDebateTrend(debate.id);
+    const parentIds = (Array.isArray(trend?.matchedSubjectIds) && trend.matchedSubjectIds.length
+      ? trend.matchedSubjectIds
+      : (trend?.matchedSubjectId ? [trend.matchedSubjectId] : []))
+      .map((id) => String(id));
+    if (parentIds.length) trendParents.set(String(debate.id), parentIds);
   }
 
   const hiddenAncestors = new Set();
-  for (const startId of trendParent.keys()) {
+  for (const startId of trendParents.keys()) {
     const visited = new Set([startId]);
-    let current = trendParent.get(startId);
-    while (current && !visited.has(current)) {
+    const queue = [...trendParents.get(startId)];
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) continue;
       hiddenAncestors.add(current);
       visited.add(current);
-      current = trendParent.get(current);
+      queue.push(...(trendParents.get(current) || []));
     }
   }
 
   const seenTags = new Set();
+  const seenSharedSpaces = new Set();
   const candidates = [];
   for (const debate of (allDebates || [])) {
     const id = String(debate.id);
@@ -1307,6 +1318,13 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
     if (debate.creator_key !== AGON_ADMIN_CREATOR_KEY) continue;
     if ((debate.political_group || "mixed") !== politicalGroup) continue;
 
+    // Arènes fusionnées (espace partagé) : une seule bulle par espace, la plus
+    // récente (le tri est décroissant). Filet déterministe indépendant du match de
+    // tendance — deux cartes du même espace posent la même question par définition
+    // de la fusion, elles ne doivent jamais coexister dans un nuage.
+    const sharedCanonicalId = resolveSharedDebateId(id) || id;
+    if (seenSharedSpaces.has(sharedCanonicalId)) continue;
+
     const label = getCloudLabelFromDebate(debate);
     if (!label) continue;
     const sourceCount = countCloudSourcesForGroup(debate, politicalGroup, orientationMaps);
@@ -1315,6 +1333,7 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
     if (seenTags.has(normTag)) continue;
 
     seenTags.add(normTag);
+    seenSharedSpaces.add(sharedCanonicalId);
     const debateDate = debate.source_published_at || debate.created_at || now;
     const trendEntry = getDebateTrend(debate.id);
     candidates.push({
@@ -3306,6 +3325,11 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
       question: matched.question,
       created_at: matched.created_at,
       sourceCount: matched.sourceCount,
+      // Tous les prédécesseurs de la séquence, pas seulement le plus récent : le
+      // masquage des bulles doit pouvoir cacher chacun d'eux (cf. doublon nuage
+      // gauche 1972/2007 du 18/07/2026 — 2007 avait matché 1981 ET 1972, mais seul
+      // 1981, d'un autre groupe, était retenu ; 1972 restait affiché à côté).
+      matchedIds: candidates.map((c) => String(c.id)),
       confidence,
       reason: String(parsed?.reason || "").trim()
     };
@@ -6648,6 +6672,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
               trend: computedTrend,
               sourceCount: currentSourceCount,
               matchedSubjectId: matched.id,
+              matchedSubjectIds: Array.isArray(matched.matchedIds) && matched.matchedIds.length ? matched.matchedIds : [String(matched.id)],
               matchedSubjectTitle: matched.question,
               previousSourceCount: matched.sourceCount || 0,
               reason: matched.reason || ""
@@ -9645,6 +9670,7 @@ const previousSourceCount = previousSourceKeys.size;
       trend: computedTrend,
       sourceCount: currentSourceCount,
       matchedSubjectId: matched.id,
+      matchedSubjectIds: Array.isArray(matched.matchedIds) && matched.matchedIds.length ? matched.matchedIds : [String(matched.id)],
       matchedSubjectTitle: matched.question,
       previousSourceCount,
       reason: matched.reason || ""
