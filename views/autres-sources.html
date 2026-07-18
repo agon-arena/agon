@@ -260,6 +260,36 @@
       body.page-tribunes .index-explorer-topbar {
         margin-top: 14px;
       }
+      /* Épinglage manuel (JS) du bouton Trier/Rechercher au scroll, mobile
+         uniquement — polyfill de sticky : .tribunes-page-header a beau être
+         en position:sticky, ça ne tient pas sur cette page (overflow-x:clip
+         sur body sans overflow-y:clip en vis-à-vis → calculé en
+         overflow-x:hidden + overflow-y:auto, qui devient le conteneur de
+         référence du sticky mais ne scrolle jamais lui-même, le scroll réel
+         ayant lieu sur html). Activé seulement une fois le point d'ancrage
+         dépassé (cf. JS) : la position de repos (non épinglée) reste
+         strictement celle déjà validée, rien ne bouge tant qu'on n'a pas
+         scrollé jusque-là. Pas de fond/bordure sur le conteneur épinglé :
+         seul le bouton (déjà en pilule avec son propre fond) doit rester
+         visible, pas une barre pleine largeur. */
+      body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned {
+        position: fixed;
+        /* La topbar (logo agôn) est censée être sticky elle aussi mais ne
+           tient pas non plus sur cette page (même souci d'overflow) : elle
+           disparaît entièrement au scroll, donc le bouton se pose tout en
+           haut du viewport plutôt qu'à la hauteur de la topbar (qui n'est
+           plus là pour justifier cet espace). */
+        top: max(3px, env(safe-area-inset-top, 0px));
+        left: 0;
+        right: 0;
+        z-index: 150;
+        width: auto;
+        margin: 0;
+        pointer-events: none;
+      }
+      body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned > * {
+        pointer-events: auto;
+      }
     }
     body.page-tribunes #tribunes-positive-filter-btn {
       margin-top: 24px;
@@ -269,6 +299,7 @@
       padding: 8px 16px;
       gap: 7px;
       font-size: 13.5px;
+      border: 2px solid #000000;
     }
     /* #tribunes-active-filters reste dans le DOM même vide (juste après
        Actualités régionales) avec sa réserve d'espace habituelle
@@ -914,8 +945,53 @@
       gap: 8px;
       flex-shrink: 0;
       padding: max(9px, env(safe-area-inset-top)) 10px 9px;
-      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
       background: rgba(255, 255, 255, 0.97);
+    }
+    .tribunes-source-modal-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      padding: 9px 12px;
+      border-top: 1px solid rgba(36, 48, 56, 0.08);
+      border-bottom: 1px solid rgba(36, 48, 56, 0.12);
+      background: #f6f8f7;
+    }
+    .tribunes-source-modal-preview-img {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 9px;
+      object-fit: cover;
+      background: #dfe6e3;
+    }
+    .tribunes-source-modal-preview-img[src=""],
+    .tribunes-source-modal-preview-img:not([src]) {
+      display: none;
+    }
+    .tribunes-source-modal-preview-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .tribunes-source-modal-preview-title {
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      color: #1b242b;
+      font-size: 13.5px;
+      font-weight: 700;
+      line-height: 1.28;
+    }
+    .tribunes-source-modal-preview-source {
+      overflow: hidden;
+      color: #6b7684;
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .tribunes-source-modal-domain {
       min-width: 0;
@@ -1066,6 +1142,94 @@
     // que prévu" (cf. resolveStuckDebateIframeParentLoading côté script.js).
     window.__agonPageArrivalReady = true;
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+
+    // ── Épinglage manuel du bouton Trier/Rechercher (mobile) ──────────────
+    // .tribunes-page-header est en position:sticky mais ça ne tient pas sur
+    // cette page (cf. commentaire CSS) : on reproduit l'effet à la main,
+    // uniquement une fois le point d'ancrage dépassé, pour ne jamais toucher
+    // à la position de repos (validée) tant qu'on n'a pas scrollé jusque-là.
+    // Fonctions globales (pas nichées dans le DOMContentLoaded ci-dessous) :
+    // tribunesSortSearchRefreshSpacer est aussi appelée depuis
+    // toggleTribunesSortControls (autre <script>) quand le panneau
+    // Trier/Rechercher s'ouvre/se ferme et change la hauteur du bloc épinglé.
+    var tribunesSortSearchTriggerY = null;
+
+    function tribunesSortSearchSetPinned(pinned) {
+      var wrap = document.getElementById('tribunes-sort-search-wrap');
+      var header = document.querySelector('.tribunes-page-header');
+      var positiveBtn = document.getElementById('tribunes-positive-filter-btn');
+      var spacer = document.getElementById('tribunes-sort-search-spacer');
+      if (!wrap || !header) return;
+      var isPinned = wrap.classList.contains('tribunes-sort-search-pinned');
+      if (pinned === isPinned) return;
+      if (pinned) {
+        var height = Math.ceil(wrap.getBoundingClientRect().height);
+        if (!spacer) {
+          spacer = document.createElement('div');
+          spacer.id = 'tribunes-sort-search-spacer';
+          spacer.setAttribute('aria-hidden', 'true');
+          wrap.insertAdjacentElement('afterend', spacer);
+        }
+        spacer.style.height = height + 'px';
+        // Sort du header : sinon son backdrop-filter capturerait le
+        // containing block de ce position:fixed (l'élément resterait fixe
+        // par rapport au header, qui lui défile normalement, pas au viewport).
+        header.parentElement.insertBefore(wrap, header);
+        wrap.classList.add('tribunes-sort-search-pinned');
+      } else {
+        wrap.classList.remove('tribunes-sort-search-pinned');
+        header.insertBefore(wrap, positiveBtn || header.firstChild);
+        if (spacer) spacer.remove();
+      }
+    }
+
+    function tribunesSortSearchRefreshSpacer() {
+      var wrap = document.getElementById('tribunes-sort-search-wrap');
+      var spacer = document.getElementById('tribunes-sort-search-spacer');
+      if (!wrap || !spacer || !wrap.classList.contains('tribunes-sort-search-pinned')) return;
+      spacer.style.height = Math.ceil(wrap.getBoundingClientRect().height) + 'px';
+    }
+    window.tribunesSortSearchRefreshSpacer = tribunesSortSearchRefreshSpacer;
+
+    function tribunesSortSearchUpdate() {
+      var isMobile = window.matchMedia('(max-width: 768px)').matches;
+      if (!isMobile || tribunesSortSearchTriggerY === null) {
+        tribunesSortSearchSetPinned(false);
+        return;
+      }
+      tribunesSortSearchSetPinned(window.scrollY >= tribunesSortSearchTriggerY);
+    }
+
+    // Recalcule le point de déclenchement (position naturelle, non épinglée,
+    // du bouton par rapport à la page) — à refaire à chaque fois que la mise
+    // en page peut changer (resize, orientation, chargement initial).
+    function tribunesSortSearchRecalcTrigger() {
+      var wrap = document.getElementById('tribunes-sort-search-wrap');
+      if (!wrap) return;
+      // Mesure la position naturelle (non épinglée)...
+      tribunesSortSearchSetPinned(false);
+      var naturalTop = window.scrollY + wrap.getBoundingClientRect().top;
+      // ...puis la valeur de "top" réellement appliquée une fois épinglé (lue
+      // depuis le rendu plutôt que dupliquée en JS : reste juste même si la
+      // valeur CSS — env(safe-area-inset-top), etc. — change plus tard).
+      tribunesSortSearchSetPinned(true);
+      var pinnedTop = wrap.getBoundingClientRect().top;
+      tribunesSortSearchSetPinned(false);
+      tribunesSortSearchTriggerY = Math.max(0, naturalTop - pinnedTop);
+      tribunesSortSearchUpdate();
+    }
+
+    (function () {
+      var raf = null;
+      window.addEventListener('scroll', function () {
+        if (raf) return;
+        raf = requestAnimationFrame(function () {
+          raf = null;
+          tribunesSortSearchUpdate();
+        });
+      }, { passive: true });
+    })();
+
     document.addEventListener('DOMContentLoaded', function(){
       // Remontée visuelle du header sur la topbar : translateY(-64px) en
       // desktop, aucune en mobile (cf. CSS). Mesurée ici pour que les calculs
@@ -1123,13 +1287,21 @@
       applyTribunesSortSearchLayout();
       syncTribunesTopbarOffset();
       syncTribunesHeaderStuck();
+      tribunesSortSearchRecalcTrigger();
       document.addEventListener('scroll', syncTribunesHeaderStuck, { capture: true, passive: true });
       window.addEventListener('resize', function () {
         applyTribunesSortSearchLayout();
         syncTribunesTopbarOffset();
+        tribunesSortSearchRecalcTrigger();
       }, { passive: true });
-      window.addEventListener('orientationchange', syncTribunesTopbarOffset, { passive: true });
-      setTimeout(syncTribunesTopbarOffset, 120);
+      window.addEventListener('orientationchange', function () {
+        syncTribunesTopbarOffset();
+        tribunesSortSearchRecalcTrigger();
+      }, { passive: true });
+      setTimeout(function () {
+        syncTribunesTopbarOffset();
+        tribunesSortSearchRecalcTrigger();
+      }, 120);
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
         syncTribunesTopbarOffset();
@@ -1545,6 +1717,13 @@ window.addEventListener("pageshow", function() {
     <a class="tribunes-source-modal-open-tab" id="tribunes-source-modal-open-tab" href="#" target="_blank" rel="noopener noreferrer">Nouvel onglet</a>
     <button type="button" class="tribunes-source-modal-close" id="tribunes-source-modal-close">Fermer</button>
   </div>
+  <div class="tribunes-source-modal-preview" id="tribunes-source-modal-preview">
+    <img id="tribunes-source-modal-preview-img" alt="" class="tribunes-source-modal-preview-img">
+    <div class="tribunes-source-modal-preview-text">
+      <strong id="tribunes-source-modal-preview-title" class="tribunes-source-modal-preview-title"></strong>
+      <span id="tribunes-source-modal-preview-source" class="tribunes-source-modal-preview-source"></span>
+    </div>
+  </div>
   <div class="tribunes-source-modal-body">
     <iframe id="tribunes-source-modal-frame" title="Source externe" referrerpolicy="no-referrer"></iframe>
     <div class="tribunes-source-modal-loading" id="tribunes-source-modal-loading">
@@ -1901,12 +2080,39 @@ window.addEventListener("pageshow", function() {
   var sourceModalOpenTab = document.getElementById('tribunes-source-modal-open-tab');
   var sourceModalClose = document.getElementById('tribunes-source-modal-close');
   var sourceModalFrame = document.getElementById('tribunes-source-modal-frame');
+  var sourceModalPreview = document.getElementById('tribunes-source-modal-preview');
+  var sourceModalPreviewImg = document.getElementById('tribunes-source-modal-preview-img');
+  var sourceModalPreviewTitle = document.getElementById('tribunes-source-modal-preview-title');
+  var sourceModalPreviewSource = document.getElementById('tribunes-source-modal-preview-source');
   var sourceModalLoading = document.getElementById('tribunes-source-modal-loading');
   var sourceModalFallback = document.getElementById('tribunes-source-modal-fallback');
   var sourceModalFallbackOpen = document.getElementById('tribunes-source-modal-fallback-open');
   var sourceModalFallbackTimer = null;
 
-  function openSourceModal(url) {
+  // Carte d'aperçu (image + titre + source) affichée sous la barre du haut, tout le temps
+  // que le modal est ouvert — qu'un article donné se retrouve embarquable en iframe ou
+  // bloqué par le site (cf. openSourceModal) n'a aucune incidence dessus, contrairement aux
+  // écrans loading/fallback : ça garde toujours un aperçu visuel de l'article visé, même
+  // quand la source elle-même se contente d'afficher une page d'erreur générique.
+  function fillSourceModalPreview(article) {
+    if (!sourceModalPreview) return;
+    if (!article) { sourceModalPreview.style.display = 'none'; return; }
+    sourceModalPreview.style.display = '';
+    if (sourceModalPreviewTitle) sourceModalPreviewTitle.textContent = article.title || '';
+    if (sourceModalPreviewSource) sourceModalPreviewSource.textContent = article.source || '';
+    if (sourceModalPreviewImg) {
+      var candidates = toDisplayImageCandidates(getPreviewImageCandidates(article, article.source_preview));
+      var index = 0;
+      sourceModalPreviewImg.onerror = function() {
+        var next = candidates[index++];
+        if (next) { sourceModalPreviewImg.src = next; } else { sourceModalPreviewImg.removeAttribute('src'); }
+      };
+      var first = candidates[index++];
+      if (first) { sourceModalPreviewImg.src = first; } else { sourceModalPreviewImg.removeAttribute('src'); }
+    }
+  }
+
+  function openSourceModal(url, article) {
     if (!sourceModal || !sourceModalFrame) return;
     var domain = '';
     try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { domain = url; }
@@ -1915,6 +2121,7 @@ window.addEventListener("pageshow", function() {
     if (sourceModalFallbackOpen) sourceModalFallbackOpen.href = url;
     if (sourceModalFallback) sourceModalFallback.classList.remove('show');
     if (sourceModalLoading) sourceModalLoading.classList.remove('hide');
+    fillSourceModalPreview(article);
 
     if (sourceModalFallbackTimer) { clearTimeout(sourceModalFallbackTimer); sourceModalFallbackTimer = null; }
     sourceModalFrame.onload = function() {
@@ -1963,7 +2170,7 @@ window.addEventListener("pageshow", function() {
     if (!link) return;
 
     if (isMobileWebNonStandalone()) {
-      openSourceModal(link);
+      openSourceModal(link, card.__article);
       return;
     }
 
@@ -2962,6 +3169,12 @@ window.addEventListener("pageshow", function() {
     var shouldOpen = !!forceOpen;
     controls.style.display = shouldOpen ? 'flex' : 'none';
     syncTribunesExplorerToggleButton(shouldOpen);
+    // Le panneau change la hauteur de #tribunes-sort-search-wrap : si le
+    // bouton est actuellement épinglé (mobile, scrollé), le spacer qui
+    // compense sa sortie du flux doit suivre (cf. autre <script>).
+    if (typeof window.tribunesSortSearchRefreshSpacer === 'function') {
+      window.tribunesSortSearchRefreshSpacer();
+    }
   }
 
   function toggleTribunesSortControls(event) {
