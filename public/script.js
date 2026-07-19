@@ -848,15 +848,46 @@ function maybeShowOpenAppBanner() {
   // ?debugBanner=1 (insensible à la casse) : force l'affichage pour vérifier
   // isolément le rendu visuel, sans dépendre des flags standalone/cooldown.
   const forceDebug = /(?:^|[?&])debugbanner=1(?:&|$)/i.test(location.search);
-  if (!forceDebug) {
-    if (isStandaloneMode() || window !== window.top) return;
-    if (lsGet("agonStandaloneSeen") !== "1") return;
-
-    const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
-    if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
-    lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+  if (forceDebug) {
+    renderOpenAppBanner();
+    return;
   }
 
+  if (isStandaloneMode() || window !== window.top) return;
+
+  const lastShown = Number(lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) || 0);
+  if (lastShown && Date.now() - lastShown < OPEN_APP_BANNER_COOLDOWN_MS) return;
+
+  // Cas direct : ce navigateur a déjà tourné en standalone (Android/Chrome,
+  // où PWA et navigateur partagent le même stockage).
+  if (lsGet("agonStandaloneSeen") === "1") {
+    lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+    renderOpenAppBanner();
+    return;
+  }
+
+  // Cas iOS : Safari et la PWA ont des stockages séparés, le flag local
+  // n'existe que côté PWA. Mais la PWA hérite de la clé anonyme copiée depuis
+  // Safari à l'installation : on demande donc au serveur si cette clé est
+  // marquée app_installed_at (cf. /api/users/app-installed). Vérification au
+  // plus une fois par 24h pour ne pas interroger le serveur à chaque page.
+  if (!window.matchMedia?.("(max-width: 768px)")?.matches) return;
+  const checkedAt = Number(lsGet("appInstalledCheckedAt") || 0);
+  if (checkedAt && Date.now() - checkedAt < OPEN_APP_BANNER_COOLDOWN_MS) return;
+  lsSet("appInstalledCheckedAt", String(Date.now()));
+  fetch(API + "/users/app-installed?legacyKey=" + encodeURIComponent(getKey()))
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (!data || !data.installed) return;
+      // Mémorisé : les prochains passages prennent le cas direct sans requête.
+      lsSet("agonStandaloneSeen", "1");
+      lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
+      renderOpenAppBanner();
+    })
+    .catch(() => {});
+}
+
+function renderOpenAppBanner() {
   if (!document.getElementById("agon-open-app-banner-styles")) {
     const style = document.createElement("style");
     style.id = "agon-open-app-banner-styles";
@@ -915,7 +946,7 @@ function maybeShowOpenAppBanner() {
   banner.innerHTML = `
     <button type="button" class="agon-open-app-banner-close" aria-label="Fermer">&times;</button>
     <img src="/icon-192-optimized.png" alt="">
-    <span>Tu as l'app Agôn installée&nbsp;: ouvre-la depuis ton écran d'accueil.</span>
+    <span>Utilise l'app Agôn déjà installée sur ton mobile pour retrouver tes contributions.</span>
     <button type="button" class="agon-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
   `;
   document.body.appendChild(banner);
@@ -989,6 +1020,11 @@ function formatPct(n) {
   return Number(n).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
+// Icône du score Logos : volute grecque (spirale) en SVG inline — pas
+// d'équivalent dans Font Awesome. Le wrapper <i> conserve les styles
+// existants qui ciblent les balises i (couleur, font-size → taille 1em).
+const AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
+
 function renderUserScoreWidget(data) {
   const topbar = document.querySelector(".topbar");
   const topbarInner = document.querySelector(".topbar-inner");
@@ -1030,8 +1066,9 @@ function renderUserScoreWidget(data) {
         gap: 6px;
         padding: 4px 12px;
         border-radius: 999px;
-        background: #111827;
-        color: #fff;
+        background: #fff;
+        color: #111827;
+        border: 1px solid #111827;
         font-size: 11px;
         font-weight: 700;
         white-space: nowrap;
@@ -1109,7 +1146,7 @@ function renderUserScoreWidget(data) {
   if (hasScore) {
     const parts = [];
     if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Orator)');
-    if (notesScore !== null) parts.push('<i class="fa-solid fa-graduation-cap"></i>' + (votesScore !== null ? '' : 'Top ') + formatPct(notesScore) + '% (Logos)');
+    if (notesScore !== null) parts.push(AGON_LOGOS_ICON + (votesScore !== null ? '' : 'Top ') + formatPct(notesScore) + '% (Logos)');
     widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
   } else {
     // Aucune idée postée pour l'instant : incite à contribuer plutôt que de masquer
@@ -1202,7 +1239,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
       : '';
     sections.push(
       '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
+        '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         valueLine +
         '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>' +
         countHint +
@@ -1220,7 +1257,7 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         '<p class="install-modal-text">Mesure les voix récoltées sur tes idées.</p>' +
       '</div><div class="install-modal-divider"></div>' +
       '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-graduation-cap"></i> Score Logos</h4>' +
+        '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos</h4>' +
         '<p class="install-modal-text">Mesure la qualité de tes idées, notée par l\'IA.</p>' +
       '</div><div class="install-modal-divider"></div>' +
       '<div class="install-modal-section">' +
@@ -18610,6 +18647,9 @@ function applyPoliticalCloudCaption(group) {
   if (!caption) return;
   const text = POLITICAL_CLOUD_CAPTION_TEXT[group] || POLITICAL_CLOUD_CAPTION_TEXT.mixed;
   caption.innerHTML = text + POLITICAL_CLOUD_CAPTION_LINK_HTML;
+  // La hauteur de la légende change (2 ou 3 lignes) : recale son ancrage et
+  // l'espace symétrique avec le bandeau thématique (standalone mobile).
+  window.__agonSyncMobileBottomNavViewport?.();
 }
 
 async function fetchPoliticalBubbleTrends(group) {
@@ -18690,6 +18730,7 @@ function toggleAgonCloud() {
       container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
       document.getElementById('agon-political-cloud-switch')?.removeAttribute('hidden');
       if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
+      window.__agonSyncMobileBottomNavViewport?.();
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
       syncCloudSectionHeight();
@@ -18765,6 +18806,7 @@ function toggleAgonCloud() {
     if (caption) {
       if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
       caption.textContent = "Les arènes créées par la communauté les plus tendues.";
+      window.__agonSyncMobileBottomNavViewport?.();
     }
     // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
@@ -20284,8 +20326,10 @@ function initCarouselLazyLoad() {
       const pending = _carouselPendingBatches.get(key);
 
       if (pending && pending.length) {
-        // Déclenche le chargement quand on est à moins d'une largeur de la fin
-        if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
+        // Déclenche le chargement à moins de 2 largeurs de la fin : avec une seule,
+        // un swipe avec élan atteignait le bord dur avant l'ajout du lot, donnant
+        // l'impression que la rangée n'avait plus de cartes.
+        if (row.scrollLeft + row.clientWidth < row.scrollWidth - 2 * row.clientWidth) return;
         const batch = pending.splice(0, _CAROUSEL_BATCH);
         appendCarouselBatchBeforeSentinel(row, sentinel, batch);
         if (!pending.length && _carouselApiHasMore.get(key) === false) {
@@ -20303,13 +20347,19 @@ function initCarouselLazyLoad() {
         return;
       }
 
+      // Fetch déjà en cours : on attend simplement — surtout ne pas fermer la
+      // rangée. Les scrolls arrivent en rafale pendant un swipe : l'un d'eux
+      // tombait pendant le fetch et retirait définitivement la sentinelle,
+      // figeant les carrousels à ~5 cartes (mobile comme desktop).
+      if (apiFetching) return;
       // Pool mémoire épuisé → fallback API pour les catégories réelles
-      if (!DEBATE_CATEGORY_OPTIONS.includes(key) || _carouselApiHasMore.get(key) === false || apiFetching) {
+      if (!DEBATE_CATEGORY_OPTIONS.includes(key) || _carouselApiHasMore.get(key) === false) {
         row.removeEventListener('scroll', onScroll);
         sentinel.remove();
         return;
       }
-      if (row.scrollLeft + row.clientWidth < row.scrollWidth - row.clientWidth) return;
+      // Même anticipation à 2 largeurs que le chemin pool ci-dessus.
+      if (row.scrollLeft + row.clientWidth < row.scrollWidth - 2 * row.clientWidth) return;
 
       apiFetching = true;
       const offset = _carouselApiOffsets.get(key) || 0;
@@ -20426,6 +20476,8 @@ function showBubbleCloudLoadingSpinner(options = {}) {
   if (!section || !cloud) return;
   ensurePageArrivalLoadingOverlayStyles();
   section.hidden = false;
+  // La section vient d'apparaître : recale l'ancrage de la légende tendances.
+  window.__agonSyncMobileBottomNavViewport?.();
   const existing = document.getElementById("agon-cloud-loading-spinner");
   if (existing) {
     existing.classList.toggle("agon-cloud-loading-switch", options.switchMode === true);
@@ -20444,6 +20496,10 @@ function showBubbleCloudLoadingSpinner(options = {}) {
 
 function hideBubbleCloudLoadingSpinner() {
   document.getElementById("agon-cloud-loading-spinner")?.remove();
+  // Le nuage vient de finir de se rendre : la position du bouton Autres actus
+  // (référence de l'espace symétrique autour de la légende tendances) est
+  // désormais définitive — recale l'ancrage (standalone mobile).
+  window.__agonSyncMobileBottomNavViewport?.();
 }
 
 function updateIndexTagTrends(items) {
@@ -20564,6 +20620,10 @@ function renderDebatesList(debates) {
   if (header) header.style.display = "none";
 
   div.innerHTML = buildIndexThematicSectionsHtml(safeDebates);
+
+  // Le premier bandeau thématique vient d'être (re)créé : recale son espace
+  // sous la légende tendances (standalone mobile).
+  window.__agonSyncMobileBottomNavViewport?.();
 
   // Active/désactive le mode thématique : classes sur <html> et <body>
   const hasRows = !!div.querySelector(".theme-horizontal-row");
@@ -33236,7 +33296,82 @@ function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOf
   document.documentElement.style.setProperty('--agon-legacy-standalone-bottom-fill', `${legacyValue}px`);
 }
 
+// Légende "Les tendances…" (standalone mobile) : cachée juste sous le bord
+// haut du bandeau bas. L'ancrage CSS de secours (100% de la section, basé sur
+// 100dvh) tombe trop bas sur les vieux iPhones PWA au viewport tronqué
+// (innerHeight < 100dvh) : la légende y atterrissait dans la bande morte du
+// bas, visible SOUS le bandeau. On mesure donc la position réelle du bandeau
+// (fixed → indépendante du scroll) et on pose le décalage en variable CSS.
+function syncAgonHomeTrendsCaptionAnchor() {
+  const root = document.documentElement;
+  const clear = () => {
+    root.style.removeProperty('--agon-home-trends-caption-top');
+    root.style.removeProperty('--agon-home-first-row-mt');
+  };
+  const body = document.body;
+  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
+    clear();
+    return;
+  }
+  const section = document.getElementById('agon-tag-trends-section');
+  const nav = document.querySelector('.home-bottom-nav');
+  if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) {
+    clear();
+    return;
+  }
+  const scrollY = window.scrollY || 0;
+  const navTop = nav.getBoundingClientRect().top;
+  const sectionDocTop = section.getBoundingClientRect().top + scrollY;
+  // Position document voulue = position viewport du bandeau au repos (+6px
+  // pour glisser le haut de la légende juste sous son bord haut).
+  let offset = Math.round(navTop + 6 - sectionDocTop);
+  // Petits écrans où le nuage déborde du viewport : le bandeau passe au-dessus
+  // de la fin du contenu de la section — sans plancher, la légende remonterait
+  // sur le bouton Autres actus / les switches. Restée sous le contenu, elle est
+  // alors simplement sous le bas d'écran (ou derrière le bandeau) : cachée
+  // aussi.
+  const lastContent = section.querySelector('.agon-tribunes-btn');
+  let contentBottomDoc = null;
+  if (lastContent) {
+    const lastRect = lastContent.getBoundingClientRect();
+    if (lastRect.height > 0) {
+      contentBottomDoc = lastRect.bottom + scrollY;
+      offset = Math.max(offset, Math.round(contentBottomDoc + 10 - sectionDocTop));
+    }
+  }
+  if (!Number.isFinite(offset) || offset < 200) {
+    clear();
+    return;
+  }
+  root.style.setProperty('--agon-home-trends-caption-top', `${offset}px`);
+
+  // Espace symétrique : autant de vide entre la légende et le bandeau
+  // thématique ("À la une") en dessous qu'entre le bouton Autres actus et la
+  // légende au-dessus. La marge est posée en variable (consommée par le
+  // margin-top du premier .theme-row-section) et recalculée par delta sur la
+  // position mesurée du bandeau : idempotent d'une passe à l'autre.
+  const caption = section.querySelector('.agon-tag-trends-caption');
+  const firstRow = document.querySelector('#debates-list .theme-row-section');
+  if (!caption || !firstRow || contentBottomDoc === null) {
+    root.style.removeProperty('--agon-home-first-row-mt');
+    return;
+  }
+  const captionDocTop = sectionDocTop + offset;
+  const gapAbove = captionDocTop - contentBottomDoc;
+  const captionHeight = caption.getBoundingClientRect().height;
+  const bandEl = firstRow.querySelector('.theme-row-title') || firstRow;
+  const bandDocTop = bandEl.getBoundingClientRect().top + scrollY;
+  const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
+  const nextMarginTop = Math.round(currentMarginTop + (captionDocTop + captionHeight + gapAbove - bandDocTop));
+  if (!Number.isFinite(nextMarginTop)) {
+    root.style.removeProperty('--agon-home-first-row-mt');
+    return;
+  }
+  root.style.setProperty('--agon-home-first-row-mt', `${nextMarginTop}px`);
+}
+
 function updateHomeBottomNavViewportOffset() {
+  syncAgonHomeTrendsCaptionAnchor();
   const viewportBottomFill = getAgonMobileViewportBottomFill();
   const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
   const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
@@ -33313,6 +33448,14 @@ function bindAgonMobileViewportBottomFillSync() {
     document.addEventListener("DOMContentLoaded", scheduleHomeBottomNavViewportOffsetUpdate, { once: true });
   }
   scheduleHomeBottomNavViewportOffsetUpdate();
+
+  // Au lancement standalone, iOS peut rapporter une hauteur provisoire sans
+  // émettre de resize (cf. initAgonDockAlignment) : relances différées pour
+  // recaler l'ancrage de la légende et l'offset du bandeau une fois la
+  // hauteur stabilisée.
+  setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 1000);
+  setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 3000);
+  setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 7000);
 }
 
 window.__agonSyncMobileBottomNavViewport = scheduleHomeBottomNavViewportOffsetUpdate;

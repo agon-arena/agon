@@ -4846,6 +4846,35 @@ app.post("/api/users/mark-app-installed", rateLimit("users", 30), async (req, re
   }
 });
 
+// Consultation par le navigateur classique : sur iOS, Safari et la PWA ont des
+// stockages séparés (le flag local "standalone vu" n'existe que côté PWA),
+// mais la PWA hérite de la clé anonyme copiée depuis Safari à l'installation.
+// La présence d'app_installed_at sur cette clé permet donc à Safari de savoir
+// que l'app est installée. Lecture seule : pas d'upsert, clé inconnue →
+// installed:false.
+app.get("/api/users/app-installed", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+
+    if (validation.error) {
+      return res.json({ installed: false });
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("app_installed_at")
+      .eq("legacy_key", validation.legacyKey)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return res.json({ installed: !!(data && data.app_installed_at) });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur consultation app installee.");
+  }
+});
+
 /* =========================
    PUSH SUBSCRIPTIONS
 ========================= */
@@ -8544,6 +8573,36 @@ async function getRecentDebateTopicTokenSets() {
   }
 }
 
+// Clé de dédoublonnage par titre exact (même normalisation que cleanText côté
+// bot veille) : les dépêches reprises telles quelles par plusieurs médias
+// (syndication EBRA, fils AFP) arrivent avec des liens différents — le upsert
+// onConflict "link" ne les attrape pas, on les replie donc à l'affichage.
+function getOpinionArticleTitleKey(title) {
+  return String(title || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Ne garde qu'un article par titre exact — le premier rencontré, donc le plus
+// récent puisque la sélection est triée par published_at décroissant.
+function dedupeOpinionArticlesByTitle(articles) {
+  const seen = new Set();
+  const kept = [];
+  for (const article of articles) {
+    const key = getOpinionArticleTitleKey(article?.title);
+    if (key) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    kept.push(article);
+  }
+  return kept;
+}
+
 function isOpinionArticleCoveredByDebates(article, debateTokenSets) {
   if (!debateTokenSets.length) return false;
   const titleTokens = [...new Set(extractOpinionTopicTokens(article?.title))];
@@ -8631,6 +8690,28 @@ const OPINION_ARTICLES_CACHE_TTL_MS = 5 * 60 * 1000;
 let _opinionArticlesCache = null;
 let _opinionArticlesCacheComputedAt = 0;
 
+// Seuls les bulletins de prévision type "météo du jour" sont écartés d'Autres
+// actus (demande du 19/07/2026, resserrée le même jour : tempêtes, vigilances
+// et épisodes météo marquants sont de vraies actualités et restent affichés).
+// Comparaison sur le titre uniquement, après normalisation sans accents ;
+// "Météo-France" est neutralisé d'abord — le nom de l'agence apparaît dans les
+// titres d'alerte ("Météo-France place 12 départements en vigilance") qui ne
+// doivent pas être filtrés.
+const OPINION_WEATHER_FORECAST_PATTERNS = [
+  /\bmeteo\b/,
+  /\bquel temps\b/,
+  /\ble temps (du jour|ce matin|cet apres-midi|ce soir|de ce\b|qu['’\s]?il fera)/
+];
+
+function isOpinionArticleWeatherRelated(article) {
+  const title = String(article?.title || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/meteo[ -]?france/g, " ");
+  if (!title.trim()) return false;
+  return OPINION_WEATHER_FORECAST_PATTERNS.some((pattern) => pattern.test(title));
+}
+
 async function getOpinionArticlesSelection() {
   if (_opinionArticlesCache && Date.now() - _opinionArticlesCacheComputedAt < OPINION_ARTICLES_CACHE_TTL_MS) {
     return _opinionArticlesCache;
@@ -8662,14 +8743,17 @@ async function getOpinionArticlesSelection() {
   // la session de publication en cours (cf. getRecentDebateTopicTokenSets).
   const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
   const articles = attachOpinionArticlePreviews(
-    (fullRows || [])
-      .map((article) => ({
-        ...article,
-        orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
-        category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
-      }))
-      .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
-      .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
+    dedupeOpinionArticlesByTitle(
+      (fullRows || [])
+        .map((article) => ({
+          ...article,
+          orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
+          category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
+        }))
+        .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
+        .filter((article) => !isOpinionArticleWeatherRelated(article))
+        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
+    )
   );
   _opinionArticlesCache = articles;
   _opinionArticlesCacheComputedAt = Date.now();
@@ -9933,8 +10017,11 @@ function _extractTextFromHtml(html) {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
-  // Limiter à ~2500 caractères pour ne pas surcharger le contexte GPT
-  return text.length > 2500 ? text.slice(0, 2500) + '…' : text;
+  // ~8000 caractères : la vérification factuelle (PROMPT3) doit pouvoir
+  // retrouver un chiffre ou un passage précis dans des documents longs
+  // (exposés des motifs, rapports) — à 2500 le fait cherché était souvent
+  // au-delà de la coupe (cf. source Sénat de l'arène 1990, 19/07/2026).
+  return text.length > 8000 ? text.slice(0, 8000) + '…' : text;
 }
 
 function _isJsChallengePage(text) {
@@ -9952,45 +10039,74 @@ async function _fetchViaJina(url) {
   try {
     const jinaUrl = `https://r.jina.ai/${url}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
-      const resp = await fetch(jinaUrl, {
-        headers: { 'Accept': 'text/plain', 'User-Agent': 'Mozilla/5.0' },
-        signal: controller.signal
-      });
-      if (!resp.ok) return null;
+      const headers = { 'Accept': 'text/plain', 'User-Agent': 'Mozilla/5.0' };
+      // Sans clé, r.jina.ai est fortement rate-limité par IP — depuis Render
+      // (IP partagée) les échecs silencieux étaient probables. La clé est
+      // optionnelle : poser JINA_API_KEY dans l'environnement pour fiabiliser.
+      if (process.env.JINA_API_KEY) headers['Authorization'] = `Bearer ${process.env.JINA_API_KEY}`;
+      const resp = await fetch(jinaUrl, { headers, signal: controller.signal });
+      if (!resp.ok) {
+        console.warn(`[source-fetch] Jina HTTP ${resp.status} pour ${url.slice(0, 90)}`);
+        return null;
+      }
       const text = (await resp.text()).trim();
       // Jina retourne du Markdown — on filtre les lignes d'en-tête/navigation parasites
       const lines = text.split('\n').filter(l => l.trim().length > 0);
       const meaningful = lines.slice(3).join(' ').replace(/\s+/g, ' ').trim();
-      return meaningful.length > 50 ? meaningful.slice(0, 2500) : null;
+      return meaningful.length > 50 ? meaningful.slice(0, 8000) : null;
     } finally {
       clearTimeout(timeout);
     }
-  } catch {
+  } catch (e) {
+    console.warn(`[source-fetch] Jina erreur pour ${url.slice(0, 90)} :`, e.message);
     return null;
   }
 }
 
 async function _fetchSourceContent(url) {
+  // Chaque étape logge son échec : les échecs silencieux rendaient le taux de
+  // réussite indiagnosticable en prod (cf. source Sénat de l'arène 1990 restée
+  // "url_seule" le 19/07/2026 alors que la page répond 200 hors Render).
   try {
     // 1er essai : profil navigateur standard
-    const r1 = await fetchPreviewHtml(url, 5000, 'browser');
+    const r1 = await fetchPreviewHtml(url, 10000, 'browser').catch((e) => ({ ok: false, status: `exception ${e.message}` }));
     if (r1.ok && r1.html) {
       const t1 = _extractTextFromHtml(r1.html);
-      if (!_isJsChallengePage(t1)) return t1.length > 20 ? t1 : '(non disponible)';
+      if (!_isJsChallengePage(t1) && t1.length > 20) return t1;
+      console.warn(`[source-fetch] navigateur: contenu inutilisable (${t1.length} car., challenge=${_isJsChallengePage(t1)}) pour ${url.slice(0, 90)}`);
+    } else {
+      console.warn(`[source-fetch] navigateur: HTTP ${r1.status} pour ${url.slice(0, 90)}`);
     }
     // 2e essai : Jina Reader (gère les sites JS-rendered)
     const jina = await _fetchViaJina(url);
     if (jina && !_isJsChallengePage(jina)) return jina;
     // 3e essai : Googlebot
-    const r3 = await fetchPreviewHtml(url, 6000, 'googlebot');
+    const r3 = await fetchPreviewHtml(url, 10000, 'googlebot').catch((e) => ({ ok: false, status: `exception ${e.message}` }));
     if (r3.ok && r3.html) {
       const t3 = _extractTextFromHtml(r3.html);
-      if (!_isJsChallengePage(t3)) return t3.length > 20 ? t3 : '(non disponible)';
+      if (!_isJsChallengePage(t3) && t3.length > 20) return t3;
+    } else {
+      console.warn(`[source-fetch] googlebot: HTTP ${r3.status} pour ${url.slice(0, 90)}`);
     }
+    // 4e essai : Wayback Machine — les pages institutionnelles y sont presque
+    // toujours archivées, et archive.org ne bloque pas les IP datacenter
+    // (dernier recours typique quand le site refuse l'IP de Render).
+    const wb = await fetchPreviewHtml(`https://web.archive.org/web/2/${url}`, 12000, 'browser').catch((e) => ({ ok: false, status: `exception ${e.message}` }));
+    if (wb.ok && wb.html) {
+      const tw = _extractTextFromHtml(wb.html);
+      if (!_isJsChallengePage(tw) && tw.length > 20) {
+        console.log(`[source-fetch] contenu récupéré via Wayback pour ${url.slice(0, 90)}`);
+        return tw;
+      }
+    } else {
+      console.warn(`[source-fetch] wayback: HTTP ${wb.status} pour ${url.slice(0, 90)}`);
+    }
+    console.warn(`[source-fetch] ÉCHEC total (4 étapes) pour ${url.slice(0, 90)}`);
     return '(non disponible)';
-  } catch {
+  } catch (e) {
+    console.warn(`[source-fetch] exception inattendue pour ${url.slice(0, 90)} :`, e.message);
     return '(non disponible)';
   }
 }

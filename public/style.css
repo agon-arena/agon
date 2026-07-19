@@ -11187,17 +11187,19 @@ body.is-standalone .agon-tag-trends-section {
 }
 
 /* Standalone : la légende "Les tendances de l'actualité…" est sortie du flux
-   et ancrée juste sous le bord bas de la section (= le fold), derrière la nav
-   basse opaque — invisible à l'ouverture quel que soit le téléphone, elle
-   apparaît dès le premier défilement. Le -44px (corrigé du safe-area, déjà
-   soustrait de la hauteur de section) place son haut ~42px au-dessus du bas
-   d'écran, toujours sous le haut de la nav (~49-59px). */
+   et glissée juste sous le bord haut du bandeau bas opaque — invisible à
+   l'ouverture quel que soit le téléphone, elle apparaît dès le premier
+   défilement. La position est mesurée en JS sur le bandeau réel
+   (--agon-home-trends-caption-top, cf. syncAgonHomeTrendsCaptionAnchor) car
+   sur les vieux iPhones PWA 100dvh dépasse le viewport tronqué et un ancrage
+   CSS pur tombait dans la bande morte du bas, visible sous le bandeau. Le
+   calc() ne sert que de secours avant/sans JS. */
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + env(safe-area-inset-bottom, 0px) - 44px);
+  top: var(--agon-home-trends-caption-top, calc(100% + env(safe-area-inset-bottom, 0px) - 44px));
   margin-top: 0;
   margin-bottom: 0;
 }
@@ -11533,6 +11535,14 @@ body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-re
 
 .install-modal-section {
   margin-bottom: 4px;
+}
+
+/* Spirale grecque du score Logos : le SVG se dimensionne et se colore comme
+   un glyphe Font Awesome (1em / currentColor hérités du <i> wrapper). */
+.agon-logos-icon svg {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
 }
 
 .install-modal-platform {
@@ -19385,12 +19395,13 @@ body.page-home-mobile .debate-card-agon-badge {
     margin-top: 0 !important;
   }
 
-  /* -4px (et non -80px) : la légende "Les tendances…", ancrée sous le fold au
-     ras du bas de la section, doit rester lisible au scroll — à -80px le
-     bandeau "À la une" (z-index 2, au-dessus de la section) la recouvrait,
-     y compris la variante Gauche/Droite sur 3 lignes (48px). */
+  /* La marge est posée en JS (syncAgonHomeTrendsCaptionAnchor) pour laisser
+     sous la légende "Les tendances…" (cachée sous le fold) le même espace
+     vide qu'au-dessus, avant le bandeau "À la une". -4px en secours
+     avant/sans JS : à -80px le bandeau (z-index 2, au-dessus de la section)
+     recouvrait la légende au scroll. */
   body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
-    margin-top: -4px;
+    margin-top: var(--agon-home-first-row-mt, -4px);
     position: relative;
     z-index: 2;
   }
