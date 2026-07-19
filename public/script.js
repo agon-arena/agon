@@ -765,7 +765,12 @@ if (isStandaloneMode()) {
   setTimeout(update, 1000);
   setTimeout(update, 3000);
   setTimeout(update, 7000);
-  setInterval(update, 4000);
+  // Anti-chauffe : dans un onglet navigateur classique (ni standalone, ni
+  // iframe du modal), lift/ext restent à 0 — le filet 4s ne servait à rien
+  // et empêchait l'idle profond. On le réserve aux contextes concernés.
+  if (isEmbedded || isStandaloneMode()) {
+    setInterval(update, 4000);
+  }
 })();
 
 // Aligne le bouton retour (.mobile-back-button) et le badge de voix
@@ -27973,8 +27978,12 @@ if (element) {
   };
   requestAnimationFrame(pollScroll);
 
-  scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false });
-  highlightNotificationTargetElement(element, highlight, 5000);
+  // Flash déclenché APRÈS l'atterrissage du scroll (comme le chemin
+  // notifications) : lancé en même temps, l'animation (2s) se terminait
+  // pendant le défilement et le visiteur arrivait sur une carte immobile.
+  Promise.resolve(scrollNotificationTargetIntoPlace(element, highlight, { finalizeTransition: false }))
+    .then(() => { highlightNotificationTargetElement(element, highlight, 5000); })
+    .catch(() => { highlightNotificationTargetElement(element, highlight, 5000); });
   if (shouldOpenAiScore && highlight.startsWith("argument-")) {
     openPendingAiScorePopupIfReady();
   }
@@ -33177,6 +33186,17 @@ function scrollToAdjacentSection(direction) {
 
 window.scrollToAdjacentSection = scrollToAdjacentSection;
 
+// Flèches haut/bas de la page débat : pas de bandeaux thématiques ici, on
+// défile d'un écran (moins la topbar) ; le double-appui haut → retour en haut
+// est géré inline dans debate.html, comme sur l'index.
+function scrollDebatePageStep(direction) {
+  const topbarH = document.querySelector('.topbar')?.offsetHeight || 0;
+  const step = Math.max(200, window.innerHeight - topbarH - 90);
+  window.scrollBy({ top: direction === 'up' ? -step : step, behavior: 'smooth' });
+}
+
+window.scrollDebatePageStep = scrollDebatePageStep;
+
 function fastWindowScrollTo(targetTop, duration = 420, onComplete = null) {
   const startTop = window.scrollY || document.documentElement.scrollTop || 0;
   const endTop = Math.max(0, Number(targetTop) || 0);
@@ -34004,6 +34024,10 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   const down = document.querySelector(".index-floating-scroll-down");
   const nav = document.querySelector(".home-bottom-nav");
   if (!up || !down || !nav) return;
+  // Nav masquée (certains contextes standalone/embarqués) : ses items mesurent
+  // 0×0, caler les flèches dessus les enverrait à left:0 — on garde la
+  // position CSS de repli.
+  if (nav.getBoundingClientRect().height < 1) return;
 
   const itemNodes = Array.from(nav.querySelectorAll(".home-bottom-nav-item"));
   const findByText = (text) => itemNodes.find((item) => {
@@ -34239,6 +34263,21 @@ window.addEventListener('pageshow', (event) => {
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden && !bannerShown) poll();
   });
+})();
+
+// ===== ANTI-CHAUFFE — PAUSE DES ANIMATIONS DU CLOUD HORS ÉCRAN =====
+// Chaque bulle cumule 2 animations infinies (breathe + flash) : dès que la
+// section cloud sort du viewport (feed scrollé), tout est suspendu via
+// animation-play-state (classe agon-cloud-anims-paused, cf. style.css).
+(function initAgonCloudAnimationPause() {
+  if (typeof IntersectionObserver !== "function") return;
+  const section = document.getElementById("agon-tag-trends-section");
+  if (!section) return;
+  const observer = new IntersectionObserver((entries) => {
+    const entry = entries[entries.length - 1];
+    section.classList.toggle("agon-cloud-anims-paused", !entry.isIntersecting);
+  }, { rootMargin: "80px 0px" });
+  observer.observe(section);
 })();
 
 // ===== CLOUD SECTION — PLEIN ÉCRAN DESKTOP =====

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260719-logos-spiral2">
+  <link rel="stylesheet" href="/style.min.css?v=20260719-heat-fix1">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -375,6 +375,12 @@
       padding: 0;
       font-size: 18px;
       line-height: 1;
+    }
+    /* Lecture vidéo (modal .tribunes-video-modal, z-index 1000) : la flèche
+       retour (z-index 9000) flottait au-dessus de la vidéo — masquée tant que
+       le modal est ouvert (classe posée par openVideoModal/closeVideoModal). */
+    body.page-tribunes.index-background-suspended .tribunes-mobile-back-button {
+      display: none !important;
     }
     body.page-tribunes .tribunes-mobile-back-button:hover,
     body.page-tribunes .tribunes-mobile-back-button:focus-visible {
@@ -1600,7 +1606,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260719-logos-spiral2" defer></script>
+<script src="/script.min.js?v=20260719-heat-fix1" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1979,12 +1985,21 @@ window.addEventListener("pageshow", function() {
   window.openCardArticle = openCardArticle;
 
   // Équivalent de scrollToAdjacentSection (index) pour les sections thématiques
-  // de cette page. Offset réduit : ni la topbar ni le header ne restent sticky
-  // une fois la page scrollée.
+  // de cette page. L'offset compense la partie visible du header épinglé
+  // (boutons de filtres sticky) : avec un offset fixe de 12px, le nom de la
+  // rubrique atterrissait caché sous ces boutons.
+  function getTribunesStuckHeaderBottom() {
+    var header = document.querySelector('.tribunes-page-header');
+    if (!header) return 0;
+    var stickTop = parseFloat(document.body.style.getPropertyValue('--tribunes-header-stick-top'));
+    if (isNaN(stickTop)) return 0;
+    return Math.max(0, stickTop + header.offsetHeight);
+  }
+
   function scrollToAdjacentTribunesSection(direction) {
     var sections = Array.prototype.slice.call(document.querySelectorAll('.tribunes-theme-section'));
     if (!sections.length) return;
-    var offset = 12;
+    var offset = Math.max(12, getTribunesStuckHeaderBottom() + 10);
     var ys = sections.map(function(section) {
       var heading = section.querySelector('.tribunes-theme-heading') || section;
       return heading.getBoundingClientRect().top + window.scrollY;

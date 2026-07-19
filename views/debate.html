@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260719-logos-spiral2" />
+<link rel="stylesheet" href="/style.min.css?v=20260719-heat-fix1" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -917,6 +917,45 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 </div>
 
 
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
+  onclick="(function(){var now=Date.now();if(window._lastScrollUp&&now-window._lastScrollUp<400){window.scrollTo({top:0,behavior:'smooth'});window._lastScrollUp=0;}else{scrollDebatePageStep('up');window._lastScrollUp=now;}})()"
+  title="Défiler vers le haut"
+  aria-label="Défiler vers le haut"
+>
+  <i class="fa-solid fa-chevron-up"></i>
+</button>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
+  onclick="scrollDebatePageStep('down')"
+  title="Défiler vers le bas"
+  aria-label="Défiler vers le bas"
+>
+  <i class="fa-solid fa-chevron-down"></i>
+</button>
+
+<script>
+/* Restaure la position des flèches calculée à la visite précédente
+   (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
+   avant le premier rendu, pour éviter le saut depuis la position CSS de repli
+   le temps que script.min.js soit parsé. */
+(function () {
+  try {
+    var raw = sessionStorage.getItem("agonFloatingScrollBtnPos:" + location.pathname);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || s.w !== window.innerWidth) return;
+    var up = document.querySelector(".index-floating-scroll-up");
+    var down = document.querySelector(".index-floating-scroll-down");
+    if (up && s.up) up.style.left = s.up;
+    if (down && s.down) down.style.left = s.down;
+  } catch (e) {}
+})();
+</script>
+
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <a href="/" id="debate-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Explorer">
     <i class="fa-regular fa-compass"></i>
@@ -983,7 +1022,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260719-logos-spiral2" defer></script>
+	<script src="/script.min.js?v=20260719-share-flash-after-scroll" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

@@ -19877,6 +19877,15 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   animation: agonBubbleBreathe 3.5s ease-in-out infinite;
 }
 
+/* Anti-chauffe : la section cloud hors écran suspend les animations infinies
+   des bulles (breathe + flash) et des badges tendance du cloud — classe posée
+   par initAgonCloudAnimationPause (script.js). */
+.agon-cloud-anims-paused .agon-tag-bubble,
+.agon-cloud-anims-paused .agon-tag-bubble-flash,
+.agon-cloud-anims-paused .agon-tag-trend {
+  animation-play-state: paused;
+}
+
 .agon-tag-pos-0  { animation-delay: 0.0s; }
 .agon-tag-pos-1  { animation-delay: 0.7s; }
 .agon-tag-pos-2  { animation-delay: 1.4s; }

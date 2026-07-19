@@ -7608,7 +7608,12 @@ const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
 // non encore publiés en débat, pas seulement la presse d'opinion) et sans intérêt passé
 // quelques jours — GET /api/opinion-articles ne montre de toute façon que les 200 plus
 // récentes.
-const OPINION_ARTICLES_RETENTION_DAYS = 2;
+// Passé de 2 à 7 jours le 19/07/2026 (demande : plus de cartes consultables sur
+// Autres actus). Coût maîtrisé : ~300-600 lignes légères/jour, soit ~2000-4000
+// lignes en base au lieu de ~1200 — la sélection lue toutes les 5 min (cache)
+// reste bornée par OPINION_ARTICLES_SELECTION_SCAN_LIMIT (4000) et les buckets
+// à 250, sans rapport avec l'incident de quota du 20/06/2026 (tables sans purge).
+const OPINION_ARTICLES_RETENTION_DAYS = 7;
 const RETENTION_DELETE_BATCH_SIZE = 500;
 const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
 
