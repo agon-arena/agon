@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260718-source-panel-scroll-hint">
+  <link rel="stylesheet" href="/style.min.css?v=20260719-caption-fold">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -24,6 +24,16 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-radius: 8px 8px 0 0;
+    }
+    /* Chauffe téléphone : pas de backdrop-filter en mobile — iOS recompose le
+       blur d'arrière-plan à chaque frame de scroll (GPU). Fond plus opaque à
+       la place ; le blur reste en desktop. */
+    @media (max-width: 768px) {
+      .tribunes-page-header {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(219, 229, 225, 0.97);
+      }
     }
     /* Desktop : le header passe sous la topbar (z-index 20) pour coulisser
        derrière le bandeau blanc pendant la transition de scroll, et le
@@ -941,6 +951,18 @@
       animation: createSubmitSpin 0.9s linear infinite;
     }
 
+    /* Chauffe téléphone : le sablier des vignettes (animation infinie de
+       style.css) ne tourne que pour les cartes réellement à l'écran — la
+       classe est posée/retirée par un IntersectionObserver. Hors écran,
+       des dizaines de sabliers tournaient en continu (cartes paresseuses
+       jamais scrollées) et maintenaient le GPU éveillé pour rien. */
+    .tribunes-thumb-loader-img {
+      animation-play-state: paused;
+    }
+    .tribunes-item-onscreen .tribunes-thumb-loader-img {
+      animation-play-state: running;
+    }
+
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1132,7 +1154,21 @@
       syncTribunesTopbarOffset();
       syncTribunesHeaderStuck();
       tribunesSortSearchRecalcTrigger();
-      document.addEventListener('scroll', syncTribunesHeaderStuck, { capture: true, passive: true });
+      // Throttle rAF + filtre : seul le scroll du document compte pour l'état
+      // épinglé du header — en capture, les scrolls horizontaux des carrousels
+      // déclenchaient aussi ce handler (getBoundingClientRect = layout forcé)
+      // à chaque tick de swipe.
+      (function () {
+        var stuckRaf = null;
+        document.addEventListener('scroll', function (event) {
+          if (event.target !== document && event.target !== document.documentElement && event.target !== document.body) return;
+          if (stuckRaf) return;
+          stuckRaf = requestAnimationFrame(function () {
+            stuckRaf = null;
+            syncTribunesHeaderStuck();
+          });
+        }, { capture: true, passive: true });
+      })();
       window.addEventListener('resize', function () {
         applyTribunesSortSearchLayout();
         syncTribunesTopbarOffset();
@@ -1564,7 +1600,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260718-source-panel-scroll-hint" defer></script>
+<script src="/script.min.js?v=20260719-heat-fixes" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -2741,8 +2777,20 @@ window.addEventListener("pageshow", function() {
     loadNext();
   }
 
+  // Observer persistant (pas de unobserve) : pose/retire .tribunes-item-onscreen
+  // pour que le sablier de vignette ne tourne que sur les cartes visibles
+  // (cf. règle animation-play-state dans le <style> de la page).
+  var thumbSpinObserver = ('IntersectionObserver' in window)
+    ? new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          entry.target.classList.toggle('tribunes-item-onscreen', entry.isIntersecting);
+        });
+      }, { rootMargin: '60px' })
+    : null;
+
   function observeForPreview(card, article) {
     card.__article = article;
+    if (thumbSpinObserver) thumbSpinObserver.observe(card);
     if (article.type === 'youtube') {
       applyPreviewToCard(article, null, card);
     }

@@ -48,7 +48,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260716-standalone-cloud-transition">
+  <link rel="stylesheet" href="/style.min.css?v=20260719-caption-fold">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -804,10 +804,18 @@ window.addEventListener("pageshow", function() {
     <span>Ouvrir</span>
   </a>
 
+  <!-- Voile sombre immédiat avant le reload, MAIS le voile est fixed et WebKit
+       (PWA iPhone) peint en retard les couches fixed dans les ~60px du bas :
+       la frame figée au moment de la navigation peut y garder la barre blanche
+       et la pastille "Autres actus", qui restent alors visibles sous l'intro de
+       la page suivante. D'où : (1) la classe agon-startup-active posée dès le
+       clic pour masquer ces éléments par le CSS critique (du contenu normal,
+       peint sans retard), (2) 250ms avant de naviguer — le temps que la bande
+       basse rattrape — au lieu de 60ms. -->
   <button
     type="button"
     class="home-bottom-nav-item index-bottom-refresh-btn"
-    onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);setTimeout(function(){typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload();},60);})()"
+    onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);document.documentElement.classList.add('agon-startup-active');setTimeout(function(){typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload();},250);})()"
     aria-label="Actualiser la page"
   >
     <i class="fa-solid fa-rotate-right"></i>
@@ -1021,7 +1029,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260718-cloud-frame-norestore-jump" defer></script>
+<script src="/script.min.js?v=20260719-heat-fixes" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

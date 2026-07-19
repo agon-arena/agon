@@ -529,9 +529,14 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     if (hidden || !introSequenceDone || !contentReady) return;
     hidden = true;
     try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
-    document.documentElement.classList.remove('agon-startup-active');
     loader.classList.add('is-hiding');
+    // agon-startup-active (qui masque barre basse + pastille "Autres actus" +
+    // flèches flottantes, cf. CSS critique d'index.html) n'est retirée qu'une
+    // fois le loader réellement parti : pendant le fondu, WebKit (PWA iPhone)
+    // ne peint pas la couche fixed du loader dans les ~60px du bas — des
+    // éléments réaffichés à cet instant y apparaîtraient sous l'animation.
     setTimeout(function() {
+      document.documentElement.classList.remove('agon-startup-active');
       if (loader.parentNode) loader.parentNode.removeChild(loader);
     }, 500);
   }
@@ -789,7 +794,12 @@ if (isStandaloneMode()) {
   window.visualViewport?.addEventListener("resize", sync);
   setTimeout(sync, 1000);
   setTimeout(sync, 3000);
-  setInterval(sync, 1000);
+  // Filet périodique réservé à la page débat (seule page où sync agit) : sur
+  // les autres pages, ce réveil CPU chaque seconde empêchait l'idle profond
+  // d'iOS et contribuait à la chauffe.
+  if (document.body && document.body.classList.contains("page-debate")) {
+    setInterval(sync, 1000);
+  }
 })();
 
 // Flag purement local (posé dès la détection standalone, sans dépendre du

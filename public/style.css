@@ -926,14 +926,15 @@ main.create-page {
   animation: debate-card-new-badge-shine 2.8s ease-in-out 3;
 }
 
+/* Transform uniquement (pas de box-shadow animé) : l'ombre animée forçait un
+   repaint CPU à chaque frame sur des dizaines de badges simultanés — l'ombre
+   statique du badge reste posée sur l'élément lui-même. */
 @keyframes debate-card-new-badge-pulse {
   0%, 100% {
     transform: translateY(0);
-    box-shadow: 0 6px 14px rgba(220, 38, 38, 0.22);
   }
   50% {
     transform: translateY(-1px);
-    box-shadow: 0 8px 18px rgba(220, 38, 38, 0.3);
   }
 }
 
@@ -11185,9 +11186,26 @@ body.is-standalone .agon-tag-trends-section {
   transition: min-height 0.25s ease;
 }
 
+/* Standalone : la légende "Les tendances de l'actualité…" est sortie du flux
+   et ancrée juste sous le bord bas de la section (= le fold), derrière la nav
+   basse opaque — invisible à l'ouverture quel que soit le téléphone, elle
+   apparaît dès le premier défilement. Le -44px (corrigé du safe-area, déjà
+   soustrait de la hauteur de section) place son haut ~42px au-dessus du bas
+   d'écran, toujours sous le haut de la nav (~49-59px). */
 body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   transform: none;
-  margin-top: 4px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + env(safe-area-inset-bottom, 0px) - 44px);
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Compense la sortie du flux de la légende (4 + ~32 + 26 = 62px) pour que le
+   contenu centré (nuage, switches) ne bouge pas : 70px + 62px. */
+body.is-standalone.page-home-mobile .agon-tag-trends-section {
+  padding-bottom: 132px;
 }
 
 body.is-standalone #agon-political-cloud-switch {
@@ -19367,8 +19385,12 @@ body.page-home-mobile .debate-card-agon-badge {
     margin-top: 0 !important;
   }
 
+  /* -4px (et non -80px) : la légende "Les tendances…", ancrée sous le fold au
+     ras du bas de la section, doit rester lisible au scroll — à -80px le
+     bandeau "À la une" (z-index 2, au-dessus de la section) la recouvrait,
+     y compris la variante Gauche/Droite sur 3 lignes (48px). */
   body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
-    margin-top: -80px;
+    margin-top: -4px;
     position: relative;
     z-index: 2;
   }
