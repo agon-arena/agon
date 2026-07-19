@@ -17401,6 +17401,13 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
   body.debate-embedded-frame .app-floating-refresh-btn {
     display: none !important;
   }
+
+  /* Sauf les flèches haut/bas : comme sur l'index, à cheval sur le liseré du
+     bandeau bas (visible aussi dans la modale desktop). */
+  body.debate-embedded-frame .index-floating-scroll-up,
+  body.debate-embedded-frame .index-floating-scroll-down {
+    display: inline-flex !important;
+  }
 }
 
 
@@ -24034,6 +24041,15 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-debate.debate-embedded-frame .mobile-back-button {
     bottom: var(--agon-dock-button-bottom, 34px) !important;
     transform: none !important;
+  }
+
+  /* Flèches haut/bas de la page débat : même ligne que le reste du dock
+     (retour, compteur de voix), à cheval sur le liseré dégradé du bandeau —
+     leur bottom statique de 34px (hérité des flèches de l'index) ne suit pas
+     le bandeau quand le viewport standalone le décale (vieux iPhones PWA). */
+  body.page-debate .index-floating-scroll-up,
+  body.page-debate .index-floating-scroll-down {
+    bottom: var(--agon-dock-button-bottom, 34px) !important;
   }
 
   /* Bouton fermeture de la modale : ne sert plus que pour les autres pages

@@ -6958,6 +6958,23 @@ function initIndexReturnNavigation() {
 }
 
 async function fetchJSON(url, opt = {}) {
+  // Blip Supabase (rafales ECONNRESET/latence, cf. 19/07/2026) : une lecture
+  // qui échoue en erreur réseau ou en 5xx est retentée une fois, 400ms plus
+  // tard. Jamais de relance pour les écritures (risque de double vote/post),
+  // ni sur timeout (AbortError) pour ne pas doubler l'attente.
+  const method = String(opt.method || "GET").toUpperCase();
+  const canRetry = (method === "GET" || method === "HEAD") && !opt.signal;
+  try {
+    return await fetchJSONOnce(url, opt);
+  } catch (error) {
+    const retryable = canRetry && error?.name !== "AbortError" && (error.status === undefined || error.status >= 500);
+    if (!retryable) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return fetchJSONOnce(url, opt);
+  }
+}
+
+async function fetchJSONOnce(url, opt = {}) {
   let _timeoutId;
   if (!opt.signal && typeof AbortController !== "undefined") {
     const ctrl = new AbortController();
@@ -21247,6 +21264,7 @@ async function initIndex() {
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("agon:feed-ready"));
+      try { sessionStorage.removeItem("agonIndexLoadRetries"); } catch {}
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" }).then((fresh) => {
@@ -21286,6 +21304,7 @@ async function initIndex() {
     } else {
       // Première visite — comportement normal
       const debates = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
+      try { sessionStorage.removeItem("agonIndexLoadRetries"); } catch {}
       debatesCache = Array.isArray(debates) ? debates : [];
       resetIndexDebatesPaginationState(
         debatesCache.length,
@@ -21331,6 +21350,30 @@ async function initIndex() {
     hidePageArrivalLoadingOverlay();
     window.dispatchEvent(new Event("agon:feed-ready"));
     console.error('[Agôn] initIndex error:', error);
+    showIndexLoadErrorState();
+  }
+}
+
+// Échec du chargement initial du feed (blip Supabase, cf. 19/07/2026) : au
+// lieu d'une page vide sans issue, affiche un sablier + relance automatique.
+// Deux rechargements auto max (compteur sessionStorage, remis à zéro dès
+// qu'un chargement réussit) ; au-delà, il reste le bouton Réessayer.
+function showIndexLoadErrorState() {
+  const list = document.getElementById("debates-list");
+  if (!list) return;
+  let autoRetries = 0;
+  try { autoRetries = Number(sessionStorage.getItem("agonIndexLoadRetries") || 0); } catch {}
+  const willAutoRetry = autoRetries < 2;
+  list.innerHTML =
+    '<div class="empty-state index-load-error">' +
+      '<img src="/sablier2-64.png" alt="" style="width:36px;height:36px;object-fit:contain;display:block;margin:0 auto 10px;">' +
+      '<p style="margin:0 0 12px;">Connexion instable — le contenu n\'a pas pu être chargé.' +
+      (willAutoRetry ? '<br>Nouvelle tentative automatique dans quelques secondes…' : '') + '</p>' +
+      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'agonIndexLoadRetries\')}catch(e){};location.reload()">Réessayer</button>' +
+    '</div>';
+  if (willAutoRetry) {
+    try { sessionStorage.setItem("agonIndexLoadRetries", String(autoRetries + 1)); } catch {}
+    setTimeout(() => location.reload(), 6000);
   }
 }
 

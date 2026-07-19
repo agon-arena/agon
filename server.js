@@ -46,15 +46,37 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 // une limite large : un upload de vidéo peut légitimement dépasser 10 s.
 const SUPABASE_DB_TIMEOUT_MS = 10000;
 const SUPABASE_STORAGE_TIMEOUT_MS = 120000;
-function supabaseFetchWithTimeout(input, init = {}) {
+const SUPABASE_RETRY_DELAY_MS = 250;
+// Blips réseau transitoires (rafale de resets TLS Supabase observée le
+// 19/07/2026 ~20h26) — un timeout (TimeoutError) n'en fait pas partie.
+function isTransientSupabaseNetworkError(error) {
+  const cause = error?.cause || error;
+  const text = `${cause?.code || ""} ${cause?.message || ""} ${error?.message || ""}`;
+  return /ECONNRESET|ECONNREFUSED|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed/i.test(text);
+}
+async function supabaseFetchWithTimeout(input, init = {}) {
   const url = typeof input === "string" ? input : String(input?.url || "");
   const timeoutMs = url.includes("/storage/v1/") ? SUPABASE_STORAGE_TIMEOUT_MS : SUPABASE_DB_TIMEOUT_MS;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  // AbortSignal.any : Node ≥ 20.3. À défaut, on préserve le signal appelant.
-  const signal = init.signal
-    ? (typeof AbortSignal.any === "function" ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal)
-    : timeoutSignal;
-  return fetch(input, { ...init, signal });
+  const method = String(init.method || input?.method || "GET").toUpperCase();
+  const doFetch = () => {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    // AbortSignal.any : Node ≥ 20.3. À défaut, on préserve le signal appelant.
+    const signal = init.signal
+      ? (typeof AbortSignal.any === "function" ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal)
+      : timeoutSignal;
+    return fetch(input, { ...init, signal });
+  };
+  try {
+    return await doFetch();
+  } catch (error) {
+    // Une seule relance rapide, lectures uniquement — un POST relancé après
+    // une coupure en plein vol pourrait écrire deux fois.
+    if ((method === "GET" || method === "HEAD") && !init.signal?.aborted && isTransientSupabaseNetworkError(error)) {
+      await new Promise((resolve) => setTimeout(resolve, SUPABASE_RETRY_DELAY_MS));
+      return doFetch();
+    }
+    throw error;
+  }
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
