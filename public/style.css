@@ -22113,6 +22113,63 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #6b7280;
 }
 
+/* Bannière des médias sélectionnés sous l'onglet Personnalisé, au-dessus du
+   bandeau "Dernières actualités" (cf. demande du 20/07/2026). */
+.tribunes-custom-media-page-banner {
+  width: min(920px, 100%);
+  margin: 10px auto 16px;
+  box-sizing: border-box;
+  border: 1px solid #e2e2e2;
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 12px 14px;
+}
+
+.tribunes-custom-media-page-banner-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: #2c5c94;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.tribunes-custom-media-page-banner-empty:hover {
+  text-decoration: underline;
+}
+
+.tribunes-custom-media-page-banner-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tribunes-custom-media-page-banner-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  border: 1px solid #ddd;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #444;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-page-banner-edit:hover {
+  background: #f0f0f0;
+}
+
 .tribunes-item {
   position: relative;
   display: flex;

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media9">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media10">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1496,6 +1496,8 @@ window.addEventListener("pageshow", function() {
       <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
     </div>
 
+    <div id="tribunes-custom-media-page-banner" class="tribunes-custom-media-page-banner" style="display:none;"></div>
+
     <div class="tribunes-list" id="tribunes-list">
       <div class="tribunes-initial-loading" aria-label="Chargement">
         <img src="/sablier-96.png" alt="" class="tribunes-initial-loading-img">
@@ -1625,7 +1627,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media9" defer></script>
+<script src="/script.min.js?v=20260720-custom-media10" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1906,6 +1908,7 @@ window.addEventListener("pageshow", function() {
     try { localStorage.setItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY, JSON.stringify(Array.from(customMediaSelection))); } catch (e) {}
     rebuildCustomMediaSelectionKeys();
     renderCustomMediaSelectedTags();
+    renderCustomMediaPageBanner();
   }
 
   // customMediaGroups : [{key, label, media: [{nom, youtube}]}] tel que
@@ -1988,15 +1991,15 @@ window.addEventListener("pageshow", function() {
     }).join('');
   }
 
-  // Tags fermables des médias cochés, en haut de la modale, groupés par
-  // orientation (Droite/Gauche/Généralistes/...) — demande du 20/07/2026.
-  // Ne rend rien tant que le catalogue (customMediaGroups) n'est pas encore
-  // chargé (ex. appelé une première fois via saveCustomMediaSelection avant
-  // toute ouverture du picker) : les tags apparaîtront au premier rendu utile.
-  var customMediaSelectedTagsEl = document.getElementById('tribunes-custom-media-selected-tags');
-  function renderCustomMediaSelectedTags() {
-    if (!customMediaSelectedTagsEl || !customMediaGroups) return;
-    var sectionsHtml = customMediaGroups.map(function(group) {
+  // Tags fermables des médias cochés, groupés par orientation
+  // (Droite/Gauche/Généralistes/...) — demande du 20/07/2026. Partagée entre
+  // la modale (tags en haut du picker) et la bannière de la page (tags
+  // au-dessus du bandeau "Dernières actualités" quand l'onglet Personnalisé
+  // est actif). Chaîne vide tant que le catalogue (customMediaGroups) n'est
+  // pas encore chargé.
+  function buildSelectedMediaTagsSectionsHtml() {
+    if (!customMediaGroups) return '';
+    return customMediaGroups.map(function(group) {
       var chips = [];
       (group.subgroups || []).forEach(function(subgroup) {
         subgroup.media.forEach(function(media) {
@@ -2017,23 +2020,70 @@ window.addEventListener("pageshow", function() {
         '<div class="tribunes-custom-media-tag-row">' + chips.join('') + '</div>' +
         '</div>';
     }).filter(Boolean).join('');
+  }
+
+  // Un seul handler de suppression (délégation), branché sur les deux
+  // conteneurs (modale + bannière page) : même logique de retrait des deux
+  // côtés (retire la sélection, décoche la case si visible, rafraîchit).
+  function handleSelectedMediaTagRemoveClick(event) {
+    var btn = event.target.closest('[data-remove-media]');
+    if (!btn) return;
+    var key = btn.dataset.removeMedia;
+    customMediaSelection.delete(key);
+    saveCustomMediaSelection();
+    if (customMediaModalList) {
+      var input = customMediaModalList.querySelector('input[type="checkbox"][data-media="' + cssEscape(key) + '"]');
+      if (input) input.checked = false;
+    }
+    refreshCustomFilterIfActive();
+  }
+
+  var customMediaSelectedTagsEl = document.getElementById('tribunes-custom-media-selected-tags');
+  function renderCustomMediaSelectedTags() {
+    if (!customMediaSelectedTagsEl) return;
+    var sectionsHtml = buildSelectedMediaTagsSectionsHtml();
     customMediaSelectedTagsEl.innerHTML = sectionsHtml;
     customMediaSelectedTagsEl.classList.toggle('tribunes-custom-media-selected-tags-empty', !sectionsHtml);
   }
-
   if (customMediaSelectedTagsEl) {
-    customMediaSelectedTagsEl.addEventListener('click', function(event) {
-      var btn = event.target.closest('[data-remove-media]');
-      if (!btn) return;
-      var key = btn.dataset.removeMedia;
-      customMediaSelection.delete(key);
-      saveCustomMediaSelection();
-      if (customMediaModalList) {
-        var input = customMediaModalList.querySelector('input[type="checkbox"][data-media="' + cssEscape(key) + '"]');
-        if (input) input.checked = false;
-      }
-      refreshCustomFilterIfActive();
-    });
+    customMediaSelectedTagsEl.addEventListener('click', handleSelectedMediaTagRemoveClick);
+  }
+
+  // Bannière sur la page (pas dans la modale) : visible seulement sous
+  // l'onglet Personnalisé, au-dessus du bandeau "Dernières actualités".
+  // Affiche les mêmes tags que la modale, ou une invite à choisir des
+  // médias si la sélection est vide.
+  var customMediaPageBannerEl = document.getElementById('tribunes-custom-media-page-banner');
+  function renderCustomMediaPageBanner() {
+    if (!customMediaPageBannerEl) return;
+    if (currentFilter !== 'custom') {
+      customMediaPageBannerEl.style.display = 'none';
+      return;
+    }
+    customMediaPageBannerEl.style.display = '';
+    if (!customMediaSelection.size) {
+      customMediaPageBannerEl.innerHTML =
+        '<button type="button" class="tribunes-custom-media-page-banner-empty" onclick="openTribunesCustomMediaPicker()">' +
+          '<i class="fa-solid fa-sliders" aria-hidden="true"></i> Aucun média sélectionné — clique ici pour choisir tes médias' +
+        '</button>';
+      return;
+    }
+    var sectionsHtml = buildSelectedMediaTagsSectionsHtml();
+    if (!sectionsHtml) {
+      // Sélection non vide mais catalogue pas encore chargé (retour sur la
+      // page avec une sélection sauvegardée, picker jamais ouvert cette
+      // session) : on le charge pour pouvoir afficher les tags.
+      loadCustomMediaOptions().then(renderCustomMediaPageBanner);
+      return;
+    }
+    customMediaPageBannerEl.innerHTML =
+      '<div class="tribunes-custom-media-page-banner-tags">' + sectionsHtml + '</div>' +
+      '<button type="button" class="tribunes-custom-media-page-banner-edit" onclick="openTribunesCustomMediaPicker()">' +
+        '<i class="fa-solid fa-gear" aria-hidden="true"></i> Modifier' +
+      '</button>';
+  }
+  if (customMediaPageBannerEl) {
+    customMediaPageBannerEl.addEventListener('click', handleSelectedMediaTagRemoveClick);
   }
 
   // Rafraîchit la liste affichée si l'onglet Personnalisé est actif — appelé
@@ -3353,6 +3403,7 @@ window.addEventListener("pageshow", function() {
     populateMediaFilter();
     render(computeFiltered());
     renderTribunesActiveFilterTags();
+    renderCustomMediaPageBanner();
   }
 
   function restoreInitialHeaderPosition() {
