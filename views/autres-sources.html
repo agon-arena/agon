@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media11">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media12">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1619,15 +1619,17 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-close" id="tribunes-custom-media-modal-close" aria-label="Fermer">✕</button>
     <h2>Mes médias</h2>
     <p class="tribunes-custom-media-modal-hint">Coche les médias dont tu veux voir les articles.</p>
-    <div class="tribunes-custom-media-selected-tags tribunes-custom-media-selected-tags-empty" id="tribunes-custom-media-selected-tags"></div>
-    <div class="tribunes-custom-media-modal-actions">
-      <button type="button" id="tribunes-custom-media-select-all">Tout cocher</button>
-      <button type="button" id="tribunes-custom-media-select-none">Tout décocher</button>
+    <div class="tribunes-custom-media-modal-scroll">
+      <div class="tribunes-custom-media-selected-tags tribunes-custom-media-selected-tags-empty" id="tribunes-custom-media-selected-tags"></div>
+      <div class="tribunes-custom-media-modal-actions">
+        <button type="button" id="tribunes-custom-media-select-all">Tout cocher</button>
+        <button type="button" id="tribunes-custom-media-select-none">Tout décocher</button>
+      </div>
+      <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
     </div>
-    <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media11" defer></script>
+<script src="/script.min.js?v=20260720-custom-media12" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
