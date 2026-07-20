@@ -22133,7 +22133,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   width: 100%;
   border: none;
   background: none;
-  color: #2c5c94;
+  color: #7a5c94;
   font: inherit;
   font-size: 0.9rem;
   font-weight: 600;
@@ -22596,10 +22596,10 @@ body.page-create-mobile .create-card .create-submit-helper {
   width: max-content;
   margin: 12px auto 0;
   padding: 6px 16px;
-  border: 1px solid #c7d9f2;
+  border: 1px solid #d9cde6;
   border-radius: 999px;
-  background: #eef4fc;
-  color: #2c5c94;
+  background: #f4eff8;
+  color: #7a5c94;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -22610,7 +22610,7 @@ body.page-create-mobile .create-card .create-submit-helper {
 }
 
 .tribunes-custom-filter-btn:hover {
-  background: #dfeafa;
+  background: #ece3f2;
 }
 
 .tribunes-custom-filter-btn.tribunes-custom-filter-btn-active {
@@ -22791,6 +22791,23 @@ body.page-create-mobile .create-card .create-submit-helper {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.tribunes-custom-media-modal-save {
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #1a1f24;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-modal-save:hover {
+  background: #2a3138;
 }
 
 .tribunes-custom-media-modal-group + .tribunes-custom-media-modal-group {

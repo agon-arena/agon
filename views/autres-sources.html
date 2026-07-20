@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-votebadge3pxleft">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-customsavebtn">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1633,6 +1633,7 @@ window.addEventListener("pageshow", function() {
       </div>
       <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
     </div>
+    <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
 <script src="/script.min.js?v=20260720-custom-media15" defer></script>
@@ -2216,6 +2217,12 @@ window.addEventListener("pageshow", function() {
 
   var customMediaModalCloseBtn = document.getElementById('tribunes-custom-media-modal-close');
   if (customMediaModalCloseBtn) customMediaModalCloseBtn.addEventListener('click', closeTribunesCustomMediaPicker);
+  // La sélection est déjà sauvegardée en localStorage à chaque coche
+  // (saveCustomMediaSelection appelé sur chaque changement) : fermer sans
+  // passer par ce bouton (croix, Échap, clic hors modale) enregistre donc
+  // aussi. Ce bouton ne fait que refermer avec une confirmation visuelle.
+  var customMediaModalSaveBtn = document.getElementById('tribunes-custom-media-modal-save');
+  if (customMediaModalSaveBtn) customMediaModalSaveBtn.addEventListener('click', closeTribunesCustomMediaPicker);
   if (customMediaModal) {
     customMediaModal.addEventListener('click', function(event) {
       if (event.target === customMediaModal) closeTribunesCustomMediaPicker();
