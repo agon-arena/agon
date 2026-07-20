@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media4">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media5">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1624,7 +1624,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media4" defer></script>
+<script src="/script.min.js?v=20260720-custom-media5" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1848,27 +1848,75 @@ window.addEventListener("pageshow", function() {
     if (event.key === 'Escape' && videoModal && videoModal.classList.contains('open')) closeVideoModal();
   });
 
-  // Onglet "Personnalisé" : médias généralistes (jamais montrés ailleurs, cf.
-  // orientationClass -> 'center') que l'utilisateur choisit un par un. Pas de
-  // compte sur ce site : la sélection vit en localStorage, par navigateur.
+  // Onglet "Personnalisé" : n'importe quel média (toute orientation) que
+  // l'utilisateur choisit un par un. Pas de compte sur ce site : la sélection
+  // vit en localStorage, par navigateur.
   var TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY = 'agon_tribunes_custom_media';
   var customMediaSelection = new Set();
+
+  // Le bot veille suffixe parfois le nom du média avec " : <sous-rubrique> :
+  // youtube" ou juste " : youtube" pour les contenus vidéo (ex. "i-télé :
+  // youtube", "France Info : faits-divers : youtube"), alors que la liste de
+  // médias configurés (veille_medias, servie par custom-media-options) ne
+  // connaît que le nom de la chaîne. Sans normalisation, cocher "i-télé"
+  // ne matcherait jamais ces articles. Même normalisation que
+  // normalizeCloudSourceName + getOpinionArticleSourceKey côté server.js,
+  // en gardant la sous-rubrique éventuelle hors du calcul (juste le suffixe
+  // "youtube" final est retiré) pour rester alignée avec le nom de chaîne.
+  function normalizeMediaMatchKey(value) {
+    return String(value || '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[’']/g, ' ')
+      .replace(/[^a-z0-9\s.-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\s*:?\s*youtube$/, '')
+      .trim();
+  }
+
+  // Presse et chaîne YouTube du même média sont deux entrées distinctes (ex.
+  // "Midi Libre" vs "Midi Libre YOUTUBE") — la sélection stocke donc des clés
+  // composites "<nom>::yt" pour les chaînes vidéo, "<nom>" pour la presse.
+  // Ces clés sont normalisées (accents/casse/suffixe "youtube" retirés côté
+  // nom) puis comparées au couple (source, type) réel de chaque article.
+  var CUSTOM_MEDIA_YT_SUFFIX = '::yt';
+  function normalizeSelectionKey(key) {
+    var isYt = key.slice(-CUSTOM_MEDIA_YT_SUFFIX.length) === CUSTOM_MEDIA_YT_SUFFIX;
+    var base = isYt ? key.slice(0, -CUSTOM_MEDIA_YT_SUFFIX.length) : key;
+    return normalizeMediaMatchKey(base) + (isYt ? CUSTOM_MEDIA_YT_SUFFIX : '');
+  }
+  function computeArticleMediaKey(article) {
+    return normalizeMediaMatchKey(article.source) + (article.type === 'youtube' ? CUSTOM_MEDIA_YT_SUFFIX : '');
+  }
+
+  var customMediaSelectionKeys = new Set();
+  function rebuildCustomMediaSelectionKeys() {
+    customMediaSelectionKeys = new Set(Array.from(customMediaSelection).map(normalizeSelectionKey));
+  }
+
   try {
     var storedCustomMedia = JSON.parse(localStorage.getItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY) || '[]');
     if (Array.isArray(storedCustomMedia)) storedCustomMedia.forEach(function(name) { customMediaSelection.add(name); });
   } catch (e) {}
+  rebuildCustomMediaSelectionKeys();
 
   function saveCustomMediaSelection() {
     try { localStorage.setItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY, JSON.stringify(Array.from(customMediaSelection))); } catch (e) {}
+    rebuildCustomMediaSelectionKeys();
   }
 
-  // customMediaGroups : [{key, label, media: [...]}] tel que renvoyé par le
-  // serveur (regroupé par orientation, cf. OPINION_CUSTOM_MEDIA_GROUP_ORDER
-  // côté server.js) — customMediaOptions reste une liste à plat de tous les
-  // noms, pour "Tout cocher/décocher" sans avoir à re-parcourir les groupes.
+  // customMediaGroups : [{key, label, media: [{nom, youtube}]}] tel que
+  // renvoyé par le serveur (regroupé par orientation, cf.
+  // OPINION_CUSTOM_MEDIA_GROUP_ORDER côté server.js) — customMediaOptions
+  // reste une liste à plat de toutes les clés de sélection, pour "Tout
+  // cocher/décocher" sans avoir à re-parcourir les groupes.
   var customMediaGroups = null;
   var customMediaOptions = null;
   var customMediaOptionsPromise = null;
+  function mediaSelectionKey(media) {
+    return media.nom + (media.youtube ? CUSTOM_MEDIA_YT_SUFFIX : '');
+  }
   function loadCustomMediaOptions() {
     if (customMediaGroups) return Promise.resolve(customMediaGroups);
     if (customMediaOptionsPromise) return customMediaOptionsPromise;
@@ -1877,7 +1925,7 @@ window.addEventListener("pageshow", function() {
       .then(function(data) {
         customMediaGroups = Array.isArray(data.groups) ? data.groups : [];
         customMediaOptions = customMediaGroups.reduce(function(acc, group) {
-          return acc.concat(Array.isArray(group.media) ? group.media : []);
+          return acc.concat((Array.isArray(group.media) ? group.media : []).map(mediaSelectionKey));
         }, []);
         return customMediaGroups;
       })
@@ -1895,11 +1943,13 @@ window.addEventListener("pageshow", function() {
       return;
     }
     customMediaModalList.innerHTML = customMediaGroups.map(function(group) {
-      var items = group.media.map(function(name) {
-        var checked = customMediaSelection.has(name) ? ' checked' : '';
+      var items = group.media.map(function(media) {
+        var key = mediaSelectionKey(media);
+        var label = media.nom + (media.youtube ? ' YOUTUBE' : '');
+        var checked = customMediaSelection.has(key) ? ' checked' : '';
         return '<label class="tribunes-custom-media-modal-item">' +
-          '<input type="checkbox" data-media="' + escapeHtml(name) + '"' + checked + '>' +
-          '<span>' + escapeHtml(name) + '</span>' +
+          '<input type="checkbox" data-media="' + escapeHtml(key) + '"' + checked + '>' +
+          '<span>' + escapeHtml(label) + '</span>' +
           '</label>';
       }).join('');
       return '<div class="tribunes-custom-media-modal-group">' +
@@ -3062,7 +3112,7 @@ window.addEventListener("pageshow", function() {
     }
     if (currentFilter === 'custom') {
       return allArticles.filter(function(article) {
-        return customMediaSelection.has(article.source);
+        return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
     }
     return allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
@@ -3103,7 +3153,7 @@ window.addEventListener("pageshow", function() {
       filtered = articles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
     } else if (currentFilter === 'custom') {
       filtered = articles.filter(function(article) {
-        return customMediaSelection.has(article.source);
+        return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
     } else {
       filtered = articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });

@@ -8844,15 +8844,23 @@ app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
     for (const media of readVeilleMedias()) {
       const nom = String(media.nom || "").trim();
       if (!nom) continue;
+      // Presse et chaîne YouTube du même média (même "nom") restent deux
+      // entrées distinctes — demande du 20/07/2026, ex. "Midi Libre" (presse)
+      // vs "Midi Libre YOUTUBE" (vidéo) — sinon cocher l'une cochait l'autre
+      // sans que ce soit visible pour l'utilisateur.
+      const isYoutube = media.domain === "youtube.com";
       const group = getOpinionOrientationGroup(media.orientation);
-      if (!byGroup.has(group)) byGroup.set(group, new Set());
-      byGroup.get(group).add(nom);
+      const dedupeKey = nom + (isYoutube ? "::yt" : "");
+      if (!byGroup.has(group)) byGroup.set(group, new Map());
+      const groupMap = byGroup.get(group);
+      if (!groupMap.has(dedupeKey)) groupMap.set(dedupeKey, { nom, youtube: isYoutube });
     }
     const groups = OPINION_CUSTOM_MEDIA_GROUP_ORDER
       .map(({ key, label }) => ({
         key,
         label,
-        media: Array.from(byGroup.get(key) || []).sort((a, b) => a.localeCompare(b, "fr"))
+        media: Array.from((byGroup.get(key) || new Map()).values())
+          .sort((a, b) => a.nom.localeCompare(b.nom, "fr") || (a.youtube === b.youtube ? 0 : a.youtube ? 1 : -1))
       }))
       .filter((group) => group.media.length);
     res.json({ groups });
