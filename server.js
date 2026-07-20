@@ -8142,9 +8142,12 @@ app.post("/api/veille/opinion-articles/remove", rateLimit("veille-opinion-articl
 // illimité côté écriture), juste la requête de lecture (cache 5 min, cf.
 // OPINION_ARTICLES_CACHE_TTL_MS) et la taille de la réponse — pas de risque identifié
 // sur le quota Supabase/Render à ce niveau, contrairement à l'incident du 20/06/2026 qui
-// venait de tables sans purge (page_visits/notification_events), pas de ce plafond.
-const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 250;
-const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 4000;
+// venait de tables sans purge (page_visits/notification_events), pas de ce plafond. Relevé
+// 250→400 et 4000→6000 le 20/07/2026 (même demande) : egress mesuré ~300 Mo/jour tout
+// confondu (storage média inclus), la part de cette API (JSON texte, cache 5 min) y reste
+// marginale même au plafond relevé — cf. aussi le cap interne de fetchOpinionArticleSelectionRows.
+const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 400;
+const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 6000;
 const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
 // server.js) : "gauche"/"droite" couvrent aussi les familles proches (écolo, souverainiste,
@@ -8186,7 +8189,7 @@ function normalizeOpinionArticleOrientationForSource(article) {
 }
 
 async function fetchOpinionArticleSelectionRows(limit = OPINION_ARTICLES_SELECTION_SCAN_LIMIT) {
-  const safeLimit = Math.max(1, Math.min(5000, Number(limit || OPINION_ARTICLES_SELECTION_SCAN_LIMIT)));
+  const safeLimit = Math.max(1, Math.min(6000, Number(limit || OPINION_ARTICLES_SELECTION_SCAN_LIMIT)));
   const rows = [];
   const pageSize = 1000;
   for (let from = 0; from < safeLimit; from += pageSize) {
