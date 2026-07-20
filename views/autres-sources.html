@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-customsavebtn">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-loadinghourglass">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1636,7 +1636,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media15" defer></script>
+<script src="/script.min.js?v=20260720-loadinghourglass" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -2931,6 +2931,22 @@ window.addEventListener("pageshow", function() {
     }
     tribunesPendingBatches = {};
     if (!articles.length) {
+      // Filtre étroit (Personnalisé, Nouvelles positives...) dont les
+      // correspondances peuvent être loin dans les pages pas encore
+      // chargées : tant qu'il reste des pages à parcourir (tribunesHasMore),
+      // on affiche un sablier plutôt que "Aucun article" — le message
+      // définitif n'apparaît qu'une fois toutes les pages épuisées sans
+      // résultat (cf. loadMoreTribunesArticles, qui force un dernier
+      // applyFilter() dans ce cas précis). Demande du 20/07/2026.
+      if (tribunesHasMore) {
+        list.innerHTML = '<div class="tribunes-empty-loading">' +
+            '<span class="load-more-spinner" aria-hidden="true"></span>' +
+            '<span>Chargement des liens…</span>' +
+          '</div>' + buildTribunesGlobalSentinelHtml();
+        initTribunesGlobalLoadMore();
+        syncTribunesMobileBottomViewport();
+        return;
+      }
       var emptyMessage = currentSearchQuery
         ? 'Aucun article ne correspond à votre recherche.'
         : (currentFilter === 'center'
@@ -3717,11 +3733,19 @@ window.addEventListener("pageshow", function() {
         allArticles = allArticles.concat(fresh);
         populateMediaFilter();
         appendArticlesToCarousels(fresh);
-        if (!tribunesHasMore) removeTribunesGlobalSentinel();
+        if (!tribunesHasMore) {
+          removeTribunesGlobalSentinel();
+          // Toutes les pages sont épuisées et aucune n'a jamais eu de
+          // correspondance (appendArticlesToCarousels ne re-render que s'il
+          // trouve quelque chose) : le sablier resterait affiché sans ça —
+          // un dernier applyFilter() bascule vers le message "Aucun article".
+          if (!list.querySelector('.tribunes-theme-section')) applyFilter();
+        }
       })
       .catch(function() {
         tribunesHasMore = false;
         removeTribunesGlobalSentinel();
+        if (!list.querySelector('.tribunes-theme-section')) applyFilter();
       })
       .then(function() {
         tribunesPageLoading = false;

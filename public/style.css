@@ -22113,6 +22113,15 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #6b7280;
 }
 
+.tribunes-empty-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0;
+  color: #6b7280;
+}
+
 /* Bannière des médias sélectionnés sous l'onglet Personnalisé, au-dessus du
    bandeau "Dernières actualités" (cf. demande du 20/07/2026). */
 .tribunes-custom-media-page-banner {
