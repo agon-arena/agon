@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260719-retry-arrows3">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media1">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1456,6 +1456,7 @@ window.addEventListener("pageshow", function() {
               </optgroup>
               <option value="regional">Actualités régionales</option>
               <option value="positive">Nouvelles positives</option>
+              <option value="custom">Personnalisé</option>
             </select>
             <select id="tribunes-media-filter" class="tribunes-media-filter" aria-label="Filtrer par média">
               <option value="">Tous les médias</option>
@@ -1485,6 +1486,11 @@ window.addEventListener("pageshow", function() {
 
       <button type="button" id="tribunes-regional-filter-btn" class="tribunes-regional-filter-btn" aria-pressed="false" data-extra-filter="regional" data-active-class="tribunes-regional-filter-btn-active">
         <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Actualités régionales
+      </button>
+
+      <button type="button" id="tribunes-custom-filter-btn" class="tribunes-custom-filter-btn" aria-pressed="false" data-extra-filter="custom" data-active-class="tribunes-custom-filter-btn-active">
+        <i class="fa-solid fa-list-check" aria-hidden="true"></i> Personnalisé
+        <i class="fa-solid fa-gear tribunes-custom-filter-gear" aria-hidden="true" title="Choisir mes médias"></i>
       </button>
 
       <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
@@ -1606,7 +1612,19 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260719-retry-arrows3" defer></script>
+<div class="tribunes-custom-media-modal" id="tribunes-custom-media-modal" role="dialog" aria-modal="true" aria-label="Choisir mes médias">
+  <div class="tribunes-custom-media-modal-inner">
+    <button type="button" class="tribunes-custom-media-modal-close" id="tribunes-custom-media-modal-close" aria-label="Fermer">✕</button>
+    <h2>Mes médias</h2>
+    <p class="tribunes-custom-media-modal-hint">Coche les médias généralistes dont tu veux voir les articles.</p>
+    <div class="tribunes-custom-media-modal-actions">
+      <button type="button" id="tribunes-custom-media-select-all">Tout cocher</button>
+      <button type="button" id="tribunes-custom-media-select-none">Tout décocher</button>
+    </div>
+    <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
+  </div>
+</div>
+<script src="/script.min.js?v=20260720-custom-media1" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1788,6 +1806,7 @@ window.addEventListener("pageshow", function() {
   var videoModal = document.getElementById('tribunes-video-modal');
   var videoModalFrameWrap = document.getElementById('tribunes-video-modal-frame-wrap');
   var videoModalClose = document.getElementById('tribunes-video-modal-close');
+  var tribunesBackBtn = document.querySelector('.tribunes-mobile-back-button');
 
   function openVideoModal(videoId) {
     if (!videoId || !videoModal || !videoModalFrameWrap) return;
@@ -1800,6 +1819,11 @@ window.addEventListener("pageshow", function() {
     videoModalFrameWrap.appendChild(iframe);
     videoModal.classList.add('open');
     document.body.classList.add('index-background-suspended');
+    // Forcé en inline en plus de la règle CSS (body.index-background-suspended
+    // .tribunes-mobile-back-button) : sur mobile la flèche restait visible
+    // au-dessus de la vidéo malgré la règle — display:none direct sur
+    // l'élément lève toute ambiguïté de cascade/rendu.
+    if (tribunesBackBtn) tribunesBackBtn.style.setProperty('display', 'none', 'important');
   }
   // Exposée globalement : le titre de la carte vidéo l'appelle via un onclick inline
   // (portée globale), alors que le reste de la carte l'appelle depuis cette fermeture.
@@ -1811,6 +1835,7 @@ window.addEventListener("pageshow", function() {
     // Vide l'iframe pour arrêter réellement la lecture (masquer seul laisserait le son tourner).
     if (videoModalFrameWrap) videoModalFrameWrap.innerHTML = '';
     document.body.classList.remove('index-background-suspended');
+    if (tribunesBackBtn) tribunesBackBtn.style.removeProperty('display');
   }
 
   if (videoModalClose) videoModalClose.addEventListener('click', closeVideoModal);
@@ -1822,6 +1847,123 @@ window.addEventListener("pageshow", function() {
   document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape' && videoModal && videoModal.classList.contains('open')) closeVideoModal();
   });
+
+  // Onglet "Personnalisé" : médias généralistes (jamais montrés ailleurs, cf.
+  // orientationClass -> 'center') que l'utilisateur choisit un par un. Pas de
+  // compte sur ce site : la sélection vit en localStorage, par navigateur.
+  var TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY = 'agon_tribunes_custom_media';
+  var customMediaSelection = new Set();
+  try {
+    var storedCustomMedia = JSON.parse(localStorage.getItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY) || '[]');
+    if (Array.isArray(storedCustomMedia)) storedCustomMedia.forEach(function(name) { customMediaSelection.add(name); });
+  } catch (e) {}
+
+  function saveCustomMediaSelection() {
+    try { localStorage.setItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY, JSON.stringify(Array.from(customMediaSelection))); } catch (e) {}
+  }
+
+  var customMediaOptions = null;
+  var customMediaOptionsPromise = null;
+  function loadCustomMediaOptions() {
+    if (customMediaOptions) return Promise.resolve(customMediaOptions);
+    if (customMediaOptionsPromise) return customMediaOptionsPromise;
+    customMediaOptionsPromise = fetch('/api/opinion-articles/custom-media-options', { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        customMediaOptions = Array.isArray(data.media) ? data.media : [];
+        return customMediaOptions;
+      })
+      .catch(function() { customMediaOptions = []; return customMediaOptions; });
+    return customMediaOptionsPromise;
+  }
+
+  var customMediaModal = document.getElementById('tribunes-custom-media-modal');
+  var customMediaModalList = document.getElementById('tribunes-custom-media-modal-list');
+
+  function renderCustomMediaModalList() {
+    if (!customMediaModalList || !customMediaOptions) return;
+    if (!customMediaOptions.length) {
+      customMediaModalList.innerHTML = '<p class="tribunes-custom-media-modal-hint">Aucun média généraliste configuré.</p>';
+      return;
+    }
+    customMediaModalList.innerHTML = customMediaOptions.map(function(name) {
+      var checked = customMediaSelection.has(name) ? ' checked' : '';
+      return '<label class="tribunes-custom-media-modal-item">' +
+        '<input type="checkbox" data-media="' + escapeHtml(name) + '"' + checked + '>' +
+        '<span>' + escapeHtml(name) + '</span>' +
+        '</label>';
+    }).join('');
+  }
+
+  // Rafraîchit la liste affichée si l'onglet Personnalisé est actif — appelé
+  // après chaque changement de sélection (case cochée, tout cocher/décocher).
+  function refreshCustomFilterIfActive() {
+    if (currentFilter !== 'custom') return;
+    render(computeFiltered());
+    renderTribunesActiveFilterTags();
+  }
+
+  function openTribunesCustomMediaPicker() {
+    if (!customMediaModal) return;
+    loadCustomMediaOptions().then(function() {
+      renderCustomMediaModalList();
+      customMediaModal.classList.add('open');
+    });
+  }
+  window.openTribunesCustomMediaPicker = openTribunesCustomMediaPicker;
+
+  function closeTribunesCustomMediaPicker() {
+    if (customMediaModal) customMediaModal.classList.remove('open');
+  }
+
+  if (customMediaModalList) {
+    customMediaModalList.addEventListener('change', function(event) {
+      var input = event.target.closest('input[type="checkbox"][data-media]');
+      if (!input) return;
+      var name = input.dataset.media;
+      if (input.checked) customMediaSelection.add(name); else customMediaSelection.delete(name);
+      saveCustomMediaSelection();
+      refreshCustomFilterIfActive();
+    });
+  }
+
+  var customMediaSelectAllBtn = document.getElementById('tribunes-custom-media-select-all');
+  var customMediaSelectNoneBtn = document.getElementById('tribunes-custom-media-select-none');
+  if (customMediaSelectAllBtn) {
+    customMediaSelectAllBtn.addEventListener('click', function() {
+      (customMediaOptions || []).forEach(function(name) { customMediaSelection.add(name); });
+      saveCustomMediaSelection();
+      renderCustomMediaModalList();
+      refreshCustomFilterIfActive();
+    });
+  }
+  if (customMediaSelectNoneBtn) {
+    customMediaSelectNoneBtn.addEventListener('click', function() {
+      customMediaSelection.clear();
+      saveCustomMediaSelection();
+      renderCustomMediaModalList();
+      refreshCustomFilterIfActive();
+    });
+  }
+
+  var customMediaModalCloseBtn = document.getElementById('tribunes-custom-media-modal-close');
+  if (customMediaModalCloseBtn) customMediaModalCloseBtn.addEventListener('click', closeTribunesCustomMediaPicker);
+  if (customMediaModal) {
+    customMediaModal.addEventListener('click', function(event) {
+      if (event.target === customMediaModal) closeTribunesCustomMediaPicker();
+    });
+  }
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && customMediaModal && customMediaModal.classList.contains('open')) closeTribunesCustomMediaPicker();
+  });
+
+  var customFilterGear = document.querySelector('#tribunes-custom-filter-btn .tribunes-custom-filter-gear');
+  if (customFilterGear) {
+    customFilterGear.addEventListener('click', function(event) {
+      event.stopPropagation();
+      openTribunesCustomMediaPicker();
+    });
+  }
 
   function formatDate(iso) {
     try {
@@ -2547,7 +2689,11 @@ window.addEventListener("pageshow", function() {
           ? 'Aucun article pour le moment.'
           : (currentFilter === 'positive'
             ? 'Aucune nouvelle positive pour le moment.'
-            : (currentFilter === 'regional' ? 'Aucune actualité régionale pour le moment.' : 'Aucun article de ce côté pour le moment.')));
+            : (currentFilter === 'regional'
+              ? 'Aucune actualité régionale pour le moment.'
+              : (currentFilter === 'custom'
+                ? (customMediaSelection.size ? 'Aucun article pour les médias sélectionnés.' : 'Choisis tes médias pour voir leurs articles.')
+                : 'Aucun article de ce côté pour le moment.'))));
       list.innerHTML = '<p class="tribunes-empty">' + emptyMessage + '</p>'
         + buildTribunesGlobalSentinelHtml();
       initTribunesGlobalLoadMore();
@@ -2894,10 +3040,18 @@ window.addEventListener("pageshow", function() {
     return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
   }
 
+  // 'center' (médias généralistes) : jamais dans "Tout", uniquement visible
+  // dans l'onglet "Personnalisé" et seulement pour les médias cochés.
   function articlesInScope() {
-    return currentFilter === 'mixed'
-      ? allArticles
-      : allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+    if (currentFilter === 'mixed') {
+      return allArticles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
+    }
+    if (currentFilter === 'custom') {
+      return allArticles.filter(function(article) {
+        return orientationClass(article.orientation) === 'center' && customMediaSelection.has(article.source);
+      });
+    }
+    return allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
   }
 
   // Listes déroulantes (média / thématique) construites à partir des articles de
@@ -2930,9 +3084,16 @@ window.addEventListener("pageshow", function() {
   // Applique les filtres actifs (orientation, média, type, recherche) à une liste
   // donnée — utilisé pour la liste complète comme pour les articles d'une nouvelle page.
   function filterArticlesList(articles) {
-    var filtered = currentFilter === 'mixed'
-      ? articles
-      : articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+    var filtered;
+    if (currentFilter === 'mixed') {
+      filtered = articles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
+    } else if (currentFilter === 'custom') {
+      filtered = articles.filter(function(article) {
+        return orientationClass(article.orientation) === 'center' && customMediaSelection.has(article.source);
+      });
+    } else {
+      filtered = articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+    }
     if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
     if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
     if (currentSearchQuery) {
@@ -2957,7 +3118,8 @@ window.addEventListener("pageshow", function() {
     left: 'Gauche',
     right: 'Droite',
     regional: 'Actualités régionales',
-    positive: 'Nouvelles positives'
+    positive: 'Nouvelles positives',
+    custom: 'Personnalisé'
   };
 
   function tribunesFilterTagHtml(kind, label) {
@@ -3070,7 +3232,8 @@ window.addEventListener("pageshow", function() {
   extraFilterBtns.forEach(function(extraBtn) {
     extraBtn.addEventListener('click', function() {
       var isActive = extraBtn.classList.contains(extraBtn.dataset.activeClass);
-      currentFilter = isActive ? 'mixed' : extraBtn.dataset.extraFilter;
+      var nextFilter = isActive ? 'mixed' : extraBtn.dataset.extraFilter;
+      currentFilter = nextFilter;
       currentMedia = '';
       syncExtraFilterButtons(isActive ? '' : extraBtn.dataset.extraFilter);
       if (switchEl) {
@@ -3080,11 +3243,14 @@ window.addEventListener("pageshow", function() {
       }
       syncOrientationFilterSelect();
       applyFilter();
+      // Premier passage sur "Personnalisé" sans média coché : ouvre direct le
+      // picker, sinon l'onglet n'affiche qu'un message vide sans indice.
+      if (nextFilter === 'custom' && !customMediaSelection.size) openTribunesCustomMediaPicker();
     });
   });
 
   function setTribunesOrientationFilter(value) {
-    var isExtra = value === 'positive' || value === 'regional';
+    var isExtra = value === 'positive' || value === 'regional' || value === 'custom';
     currentFilter = value || 'mixed';
     currentMedia = '';
     syncExtraFilterButtons(isExtra ? value : '');
@@ -3097,6 +3263,7 @@ window.addEventListener("pageshow", function() {
     }
     syncOrientationFilterSelect();
     applyFilter();
+    if (value === 'custom' && !customMediaSelection.size) openTribunesCustomMediaPicker();
   }
 
   if (orientationFilterEl) {

@@ -8269,7 +8269,16 @@ function buildVisibleOpinionArticleSelection(lightRows, perTypeLimit = OPINION_A
     left: { article: [], youtube: [] },
     right: { article: [], youtube: [] },
     positive: { article: [], youtube: [] },
-    regional: { article: [], youtube: [] }
+    regional: { article: [], youtube: [] },
+    // Médias généralistes ("center", ex. Le Parisien) : jamais montrés dans
+    // Gauche/Tout/Droite/Nouvelles positives/Actualités régionales (demande du
+    // 19-20/07/2026 : pas de noyer le flux d'opinion avec du tout-venant), mais
+    // sélectionnables un par un dans l'onglet "Personnalisé" (cf.
+    // /api/opinion-articles/custom-media-options et currentFilter === 'custom'
+    // côté client, autres-sources.html). Round-robin diversité comme
+    // gauche/droite (pas uncapped) : le volume "center" est nettement plus
+    // gros, un plafond garde le scan/egress sous contrôle.
+    center: { article: [], youtube: [] }
   };
   const knownGroups = Object.keys(candidates);
 
@@ -8760,10 +8769,15 @@ async function getOpinionArticlesSelection() {
     return _opinionArticlesCache;
   }
 
-  const { data: fullRows, error: fullError } = await supabase
-    .from("opinion_articles")
-    .select("*")
-    .in("id", selectedIds);
+  // selectedIds peut dépasser 1000 (round-robin sur tous les groupes/types) :
+  // .in() seul se fait plafonner silencieusement à 1000 lignes par PostgREST,
+  // ce qui coupait les articles les plus récents (ids les plus hauts) sans
+  // erreur — cf. incident du 20/07/2026 (aucun article des dernières ~16h
+  // visible). fetchAllSupabaseRowsIn découpe et pagine.
+  const { data: fullRows, error: fullError } = await fetchAllSupabaseRowsIn(
+    selectedIds,
+    (chunk) => supabase.from("opinion_articles").select("*").in("id", chunk)
+  );
   if (fullError) throw new Error(fullError.message);
 
   // Filtre "inédits" : ne garde que les sujets non couverts par une arène de
@@ -8805,6 +8819,25 @@ app.get("/api/opinion-articles", async (req, res) => {
     res.json({ articles: page, total: articles.length, hasMore: offset + page.length < articles.length });
   } catch (error) {
     res.status(500).json({ articles: [], total: 0, hasMore: false, error: error.message });
+  }
+});
+
+// Liste des médias "généraliste" sélectionnables dans l'onglet Personnalisé —
+// dérivée de la config veille_medias (source de vérité déjà utilisée pour
+// classer left/right/positive/regional), pas d'un scan d'opinion_articles :
+// une liste stable, indépendante du volume publié à l'instant T.
+app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
+  try {
+    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+    const names = Array.from(new Set(
+      readVeilleMedias()
+        .filter((media) => getOpinionOrientationGroup(media.orientation) === "center")
+        .map((media) => String(media.nom || "").trim())
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, "fr"));
+    res.json({ media: names });
+  } catch (error) {
+    res.status(500).json({ media: [], error: error.message });
   }
 });
 

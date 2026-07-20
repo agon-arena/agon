@@ -22424,6 +22424,11 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #6b21a8;
 }
 
+.tribunes-badge.center {
+  background: #eef4fc;
+  color: #2c5c94;
+}
+
 @media (min-width: 560px) {
   .tribunes-item-body {
     padding: 14px 16px 16px;
@@ -22527,6 +22532,147 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-filter-switch + .tribunes-regional-filter-btn {
   margin-top: 6px;
+}
+
+.tribunes-custom-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: max-content;
+  margin: 12px auto 0;
+  padding: 6px 16px;
+  border: 1px solid #c7d9f2;
+  border-radius: 999px;
+  background: #eef4fc;
+  color: #2c5c94;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tribunes-custom-filter-btn:hover {
+  background: #dfeafa;
+}
+
+.tribunes-custom-filter-btn.tribunes-custom-filter-btn-active {
+  background: #1a1f24;
+  border-color: #1a1f24;
+  color: #ffffff;
+}
+
+.tribunes-regional-filter-btn + .tribunes-custom-filter-btn {
+  margin-top: 6px;
+}
+
+.tribunes-custom-filter-gear {
+  margin-left: 2px;
+  font-size: 11px;
+  opacity: 0.75;
+  padding: 2px 4px;
+}
+
+.tribunes-custom-filter-gear:hover {
+  opacity: 1;
+}
+
+.tribunes-custom-media-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 12, 14, 0.6);
+}
+
+.tribunes-custom-media-modal.open {
+  display: flex;
+}
+
+.tribunes-custom-media-modal-inner {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.tribunes-custom-media-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #f1f1f1;
+  color: #333;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-modal-close:hover {
+  background: #e4e4e4;
+}
+
+.tribunes-custom-media-modal-inner h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+
+.tribunes-custom-media-modal-hint {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.tribunes-custom-media-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tribunes-custom-media-modal-actions button {
+  border: 1px solid #ddd;
+  background: #f7f7f7;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-modal-actions button:hover {
+  background: #eee;
+}
+
+.tribunes-custom-media-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tribunes-custom-media-modal-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.tribunes-custom-media-modal-item:hover {
+  background: #f5f5f5;
 }
 
 .page-tribunes .about-panel h1,
