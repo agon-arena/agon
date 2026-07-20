@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-votebadge2pxleft">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-votebadge3pxleft">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1635,7 +1635,7 @@ window.addEventListener("pageshow", function() {
     </div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media14" defer></script>
+<script src="/script.min.js?v=20260720-custom-media15" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -2059,17 +2059,23 @@ window.addEventListener("pageshow", function() {
 
   // Bannière sur la page (pas dans la modale) : visible seulement sous
   // l'onglet Personnalisé, au-dessus du bandeau "Dernières actualités".
-  // Affiche les mêmes tags que la modale, ou une invite à choisir des
-  // médias si la sélection est vide.
+  // Repliée par défaut derrière un bouton "Mes médias (N)" — un simple
+  // bouton "Modifier" qui ouvre un menu, plutôt que la liste complète des
+  // tags affichée en permanence sur la page (demande du 20/07/2026 : la
+  // liste pouvait devenir très longue et encombrer la page). Le menu
+  // déplié reprend les mêmes tags fermables que dans la modale.
   var customMediaPageBannerEl = document.getElementById('tribunes-custom-media-page-banner');
+  var customMediaPageBannerOpen = false;
   function renderCustomMediaPageBanner() {
     if (!customMediaPageBannerEl) return;
     if (currentFilter !== 'custom') {
       customMediaPageBannerEl.style.display = 'none';
+      customMediaPageBannerOpen = false;
       return;
     }
     customMediaPageBannerEl.style.display = '';
     if (!customMediaSelection.size) {
+      customMediaPageBannerOpen = false;
       customMediaPageBannerEl.innerHTML =
         '<button type="button" class="tribunes-custom-media-page-banner-empty" onclick="openTribunesCustomMediaPicker()">' +
           '<i class="fa-solid fa-sliders" aria-hidden="true"></i> Aucun média sélectionné — clique ici pour choisir tes médias' +
@@ -2084,14 +2090,41 @@ window.addEventListener("pageshow", function() {
       loadCustomMediaOptions().then(renderCustomMediaPageBanner);
       return;
     }
+    var isOpen = customMediaPageBannerOpen;
     customMediaPageBannerEl.innerHTML =
-      '<div class="tribunes-custom-media-page-banner-tags">' + sectionsHtml + '</div>' +
-      '<button type="button" class="tribunes-custom-media-page-banner-edit" onclick="openTribunesCustomMediaPicker()">' +
-        '<i class="fa-solid fa-gear" aria-hidden="true"></i> Modifier' +
-      '</button>';
+      '<button type="button" class="tribunes-custom-media-page-banner-toggle" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
+        '<i class="fa-solid fa-sliders" aria-hidden="true"></i> Mes médias (' + customMediaSelection.size + ')' +
+        '<i class="fa-solid fa-chevron-down tribunes-custom-media-page-banner-chevron" aria-hidden="true"></i>' +
+      '</button>' +
+      '<div class="tribunes-custom-media-page-banner-dropdown"' + (isOpen ? '' : ' hidden') + '>' +
+        '<div class="tribunes-custom-media-page-banner-tags">' + sectionsHtml + '</div>' +
+        '<button type="button" class="tribunes-custom-media-page-banner-edit" onclick="openTribunesCustomMediaPicker()">' +
+          '<i class="fa-solid fa-gear" aria-hidden="true"></i> Modifier' +
+        '</button>' +
+      '</div>';
   }
   if (customMediaPageBannerEl) {
-    customMediaPageBannerEl.addEventListener('click', handleSelectedMediaTagRemoveClick);
+    customMediaPageBannerEl.addEventListener('click', function(event) {
+      var toggleBtn = event.target.closest('.tribunes-custom-media-page-banner-toggle');
+      if (toggleBtn) {
+        customMediaPageBannerOpen = !customMediaPageBannerOpen;
+        var dropdown = customMediaPageBannerEl.querySelector('.tribunes-custom-media-page-banner-dropdown');
+        if (dropdown) dropdown.hidden = !customMediaPageBannerOpen;
+        toggleBtn.setAttribute('aria-expanded', customMediaPageBannerOpen ? 'true' : 'false');
+        return;
+      }
+      handleSelectedMediaTagRemoveClick(event);
+    });
+    // Clic en dehors : referme le menu déplié.
+    document.addEventListener('click', function(event) {
+      if (!customMediaPageBannerOpen) return;
+      if (customMediaPageBannerEl.contains(event.target)) return;
+      customMediaPageBannerOpen = false;
+      var dropdown = customMediaPageBannerEl.querySelector('.tribunes-custom-media-page-banner-dropdown');
+      var toggle = customMediaPageBannerEl.querySelector('.tribunes-custom-media-page-banner-toggle');
+      if (dropdown) dropdown.hidden = true;
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
   }
 
   // Rafraîchit la liste affichée si l'onglet Personnalisé est actif — appelé

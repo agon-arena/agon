@@ -22145,6 +22145,38 @@ body.page-create-mobile .create-card .create-submit-helper {
   text-decoration: underline;
 }
 
+.tribunes-custom-media-page-banner-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: #333;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.tribunes-custom-media-page-banner-chevron {
+  font-size: 0.7rem;
+  color: #888;
+  transition: transform 0.15s ease;
+}
+
+.tribunes-custom-media-page-banner-toggle[aria-expanded="true"] .tribunes-custom-media-page-banner-chevron {
+  transform: rotate(180deg);
+}
+
+.tribunes-custom-media-page-banner-dropdown {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e2e2;
+}
+
 .tribunes-custom-media-page-banner-tags {
   display: flex;
   flex-direction: column;
@@ -24398,7 +24430,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
-    left: calc(80% - 2px) !important;
+    left: calc(80% - 3px) !important;
     right: auto !important;
     bottom: 38px !important;
     height: 42px !important;
@@ -24411,7 +24443,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.debate-embedded-frame #voices-float-badge {
-    left: calc(80% - 2px) !important;
+    left: calc(80% - 3px) !important;
     right: auto !important;
     bottom: calc(var(--agon-dock-button-bottom, 68px) + 2px) !important;
     height: 42px !important;
