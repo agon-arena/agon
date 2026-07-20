@@ -124,6 +124,17 @@
     .tribunes-page-header + .tribunes-list {
       margin-top: 0;
     }
+    /* Tag "filtre actif" (Gauche/Généraliste/Droite/Nouvelles positives/
+       Personnalisé...) : inutile en desktop, où le switch/les boutons
+       montrent déjà l'état actif visuellement (segment/bouton surligné) —
+       le tag ne fait qu'ajouter du bruit, en plus épinglé avec le bloc
+       Trier/Rechercher au scroll. Gardé en mobile (demande du 20/07/2026),
+       où ces boutons défilent hors champ une fois le header épinglé. */
+    @media (min-width: 769px) {
+      #tribunes-active-filters .index-active-filter-tag[data-tag-kind="orientation"] {
+        display: none !important;
+      }
+    }
     html.in-iframe body.page-tribunes,
     body.page-tribunes.in-iframe {
       overflow-x: hidden;
@@ -3316,7 +3327,7 @@ window.addEventListener("pageshow", function() {
   };
 
   function tribunesFilterTagHtml(kind, label) {
-    return '<button type="button" class="index-active-filter-tag" onclick="removeTribunesFilterTag(\'' + kind + '\')" aria-label="Retirer le filtre ' + escapeHtml(label) + '">' +
+    return '<button type="button" class="index-active-filter-tag" data-tag-kind="' + kind + '" onclick="removeTribunesFilterTag(\'' + kind + '\')" aria-label="Retirer le filtre ' + escapeHtml(label) + '">' +
       '<span>' + escapeHtml(label) + '</span>' +
       '<span class="index-active-filter-tag-close" aria-hidden="true">×</span>' +
       '</button>';
