@@ -22676,6 +22676,22 @@ body.page-create-mobile .create-card .create-submit-helper {
   border-radius: 6px;
 }
 
+/* Contre la règle globale "input, textarea, select { width:100%; padding:12px
+   14px; border:1px solid ... }" (champs de formulaire, style.css ~ligne 2356)
+   qui s'applique aussi aux checkbox natifs faute d'exclusion par type : sans
+   ce reset, chaque checkbox prenait toute la largeur de la ligne (invisible
+   mais bien là dans la boîte de layout), écrasant le texte du média à
+   l'extrême droite. */
+.tribunes-custom-media-modal-item input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  flex: none;
+}
+
 .tribunes-custom-media-modal-item:hover {
   background: #f5f5f5;
 }
