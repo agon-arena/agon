@@ -22662,11 +22662,18 @@ body.page-create-mobile .create-card .create-submit-helper {
   width: calc(100% - 48px);
   max-width: 480px;
   max-height: 80vh;
-  overflow: auto;
+  /* overflow:hidden (pas auto) : seule la liste des médias défile en interne
+     (cf. .tribunes-custom-media-modal-list), le reste — titre, tags cochés,
+     bouton fermer — reste fixe dans la carte. display:flex column pour que
+     la liste prenne l'espace restant (flex:1) sans forcer toute la carte à
+     défiler. */
+  overflow: hidden;
   background: #ffffff;
   border-radius: 12px;
   padding: 24px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .tribunes-custom-media-modal-close {
@@ -22775,6 +22782,14 @@ body.page-create-mobile .create-card .create-submit-helper {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* flex:1 + min-height:0 : prend l'espace restant sous le titre/tags/actions
+     (fixes, hors de ce flex) et défile seul — min-height:0 est nécessaire
+     dans un flex column pour qu'un enfant puisse rétrécir sous sa taille de
+     contenu et laisser overflow-y agir (demande du 20/07/2026 : le bouton
+     fermer doit rester visible même en scrollant la liste). */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .tribunes-custom-media-modal-group + .tribunes-custom-media-modal-group {
