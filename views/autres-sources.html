@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media6">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media7">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1624,7 +1624,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media6" defer></script>
+<script src="/script.min.js?v=20260720-custom-media7" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1962,10 +1962,13 @@ window.addEventListener("pageshow", function() {
           items +
           '</div>';
       }).join('');
-      return '<div class="tribunes-custom-media-modal-group">' +
-        '<div class="tribunes-custom-media-modal-group-label">' + escapeHtml(group.label) + '</div>' +
+      // <details>/<summary> natif : chaque groupe (Droite, Gauche...) se
+      // replie par défaut — liste sinon trop longue à parcourir (109+ médias
+      // au total, cf. demande du 20/07/2026).
+      return '<details class="tribunes-custom-media-modal-group">' +
+        '<summary class="tribunes-custom-media-modal-group-label">' + escapeHtml(group.label) + '</summary>' +
         subgroupsHtml +
-        '</div>';
+        '</details>';
     }).join('');
   }
 

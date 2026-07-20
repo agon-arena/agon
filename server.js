@@ -8152,13 +8152,17 @@ const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 function getOpinionOrientationGroup(orientation) {
   const o = String(orientation || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   if (o.includes("nouvelles positives")) return "positive";
-  // Aucun média de medias.json n'a le libellé exact "actualités régionales" —
-  // les sources régionales sont taguées "régional" seul, "généraliste /
-  // régional" ou "régional / généraliste" (cf. audit du 16/07/2026, qui
-  // expliquait un filtre "Actualités régionales" resté vide). \b évite de
+  // Les sources régionales sont taguées "régional" seul, "généraliste /
+  // régional", "régional / généraliste" (cf. audit du 16/07/2026, qui
+  // expliquait un filtre "Actualités régionales" resté vide), ou au pluriel
+  // "actualités régionales" (ex. les 14 entrées France 3 Régions, ajoutées
+  // après cet audit — \bregional\b seul ne matchait pas "régionales" au
+  // pluriel, ce qui les faisait retomber dans "généraliste" ; corrigé le
+  // 20/07/2026). e?s? optionnel couvre régional/régionale/régionales sans
   // capturer "régionaliste" (orientation politique identitaire, pas une
-  // simple source locale) qui contient aussi la sous-chaîne "regional".
-  if (/\bregional\b/.test(o)) return "regional";
+  // simple source locale) : le \b après le "s?" ne matche jamais à
+  // l'intérieur de "régionaliste".
+  if (/\bregionale?s?\b/.test(o)) return "regional";
   if (
     o.includes("gauche") || o.includes("ecolog") || o.includes("ecolo") || o.includes("libertaire") ||
     o.includes("altermondialiste") || o.includes("alter-mondialiste") || o.includes("anticapitaliste") ||
