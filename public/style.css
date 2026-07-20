@@ -22666,6 +22666,21 @@ body.page-create-mobile .create-card .create-submit-helper {
   gap: 4px;
 }
 
+.tribunes-custom-media-modal-group + .tribunes-custom-media-modal-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.tribunes-custom-media-modal-group-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #888;
+  padding: 4px 4px 6px;
+}
+
 .tribunes-custom-media-modal-item {
   display: flex;
   align-items: center;

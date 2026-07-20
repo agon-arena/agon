@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media3">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media4">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1624,7 +1624,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media3" defer></script>
+<script src="/script.min.js?v=20260720-custom-media4" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1862,18 +1862,26 @@ window.addEventListener("pageshow", function() {
     try { localStorage.setItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY, JSON.stringify(Array.from(customMediaSelection))); } catch (e) {}
   }
 
+  // customMediaGroups : [{key, label, media: [...]}] tel que renvoyé par le
+  // serveur (regroupé par orientation, cf. OPINION_CUSTOM_MEDIA_GROUP_ORDER
+  // côté server.js) — customMediaOptions reste une liste à plat de tous les
+  // noms, pour "Tout cocher/décocher" sans avoir à re-parcourir les groupes.
+  var customMediaGroups = null;
   var customMediaOptions = null;
   var customMediaOptionsPromise = null;
   function loadCustomMediaOptions() {
-    if (customMediaOptions) return Promise.resolve(customMediaOptions);
+    if (customMediaGroups) return Promise.resolve(customMediaGroups);
     if (customMediaOptionsPromise) return customMediaOptionsPromise;
     customMediaOptionsPromise = fetch('/api/opinion-articles/custom-media-options', { cache: 'no-store' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        customMediaOptions = Array.isArray(data.media) ? data.media : [];
-        return customMediaOptions;
+        customMediaGroups = Array.isArray(data.groups) ? data.groups : [];
+        customMediaOptions = customMediaGroups.reduce(function(acc, group) {
+          return acc.concat(Array.isArray(group.media) ? group.media : []);
+        }, []);
+        return customMediaGroups;
       })
-      .catch(function() { customMediaOptions = []; return customMediaOptions; });
+      .catch(function() { customMediaGroups = []; customMediaOptions = []; return customMediaGroups; });
     return customMediaOptionsPromise;
   }
 
@@ -1881,17 +1889,23 @@ window.addEventListener("pageshow", function() {
   var customMediaModalList = document.getElementById('tribunes-custom-media-modal-list');
 
   function renderCustomMediaModalList() {
-    if (!customMediaModalList || !customMediaOptions) return;
-    if (!customMediaOptions.length) {
-      customMediaModalList.innerHTML = '<p class="tribunes-custom-media-modal-hint">Aucun média généraliste configuré.</p>';
+    if (!customMediaModalList || !customMediaGroups) return;
+    if (!customMediaGroups.length) {
+      customMediaModalList.innerHTML = '<p class="tribunes-custom-media-modal-hint">Aucun média configuré.</p>';
       return;
     }
-    customMediaModalList.innerHTML = customMediaOptions.map(function(name) {
-      var checked = customMediaSelection.has(name) ? ' checked' : '';
-      return '<label class="tribunes-custom-media-modal-item">' +
-        '<input type="checkbox" data-media="' + escapeHtml(name) + '"' + checked + '>' +
-        '<span>' + escapeHtml(name) + '</span>' +
-        '</label>';
+    customMediaModalList.innerHTML = customMediaGroups.map(function(group) {
+      var items = group.media.map(function(name) {
+        var checked = customMediaSelection.has(name) ? ' checked' : '';
+        return '<label class="tribunes-custom-media-modal-item">' +
+          '<input type="checkbox" data-media="' + escapeHtml(name) + '"' + checked + '>' +
+          '<span>' + escapeHtml(name) + '</span>' +
+          '</label>';
+      }).join('');
+      return '<div class="tribunes-custom-media-modal-group">' +
+        '<div class="tribunes-custom-media-modal-group-label">' + escapeHtml(group.label) + '</div>' +
+        items +
+        '</div>';
     }).join('');
   }
 

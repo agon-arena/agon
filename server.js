@@ -8823,22 +8823,41 @@ app.get("/api/opinion-articles", async (req, res) => {
 });
 
 // Liste de tous les médias sélectionnables dans l'onglet Personnalisé (toute
-// orientation confondue, pas seulement généraliste — demande du 20/07/2026) —
+// orientation confondue, pas seulement généraliste — demande du 20/07/2026),
+// regroupés par orientation pour faciliter la recherche dans le picker —
 // dérivée de la config veille_medias (source de vérité déjà utilisée pour
 // classer left/right/positive/regional/center), pas d'un scan
 // d'opinion_articles : une liste stable, indépendante du volume publié à
 // l'instant T.
+const OPINION_CUSTOM_MEDIA_GROUP_ORDER = [
+  { key: "right", label: "Droite" },
+  { key: "left", label: "Gauche" },
+  { key: "center", label: "Généralistes" },
+  { key: "positive", label: "Nouvelles positives" },
+  { key: "regional", label: "Actualités régionales" }
+];
+
 app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
   try {
     if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
-    const names = Array.from(new Set(
-      readVeilleMedias()
-        .map((media) => String(media.nom || "").trim())
-        .filter(Boolean)
-    )).sort((a, b) => a.localeCompare(b, "fr"));
-    res.json({ media: names });
+    const byGroup = new Map();
+    for (const media of readVeilleMedias()) {
+      const nom = String(media.nom || "").trim();
+      if (!nom) continue;
+      const group = getOpinionOrientationGroup(media.orientation);
+      if (!byGroup.has(group)) byGroup.set(group, new Set());
+      byGroup.get(group).add(nom);
+    }
+    const groups = OPINION_CUSTOM_MEDIA_GROUP_ORDER
+      .map(({ key, label }) => ({
+        key,
+        label,
+        media: Array.from(byGroup.get(key) || []).sort((a, b) => a.localeCompare(b, "fr"))
+      }))
+      .filter((group) => group.media.length);
+    res.json({ groups });
   } catch (error) {
-    res.status(500).json({ media: [], error: error.message });
+    res.status(500).json({ groups: [], error: error.message });
   }
 });
 
