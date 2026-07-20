@@ -8822,16 +8822,17 @@ app.get("/api/opinion-articles", async (req, res) => {
   }
 });
 
-// Liste des médias "généraliste" sélectionnables dans l'onglet Personnalisé —
+// Liste de tous les médias sélectionnables dans l'onglet Personnalisé (toute
+// orientation confondue, pas seulement généraliste — demande du 20/07/2026) —
 // dérivée de la config veille_medias (source de vérité déjà utilisée pour
-// classer left/right/positive/regional), pas d'un scan d'opinion_articles :
-// une liste stable, indépendante du volume publié à l'instant T.
+// classer left/right/positive/regional/center), pas d'un scan
+// d'opinion_articles : une liste stable, indépendante du volume publié à
+// l'instant T.
 app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
   try {
     if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
     const names = Array.from(new Set(
       readVeilleMedias()
-        .filter((media) => getOpinionOrientationGroup(media.orientation) === "center")
         .map((media) => String(media.nom || "").trim())
         .filter(Boolean)
     )).sort((a, b) => a.localeCompare(b, "fr"));

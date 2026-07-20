@@ -1616,7 +1616,7 @@ window.addEventListener("pageshow", function() {
   <div class="tribunes-custom-media-modal-inner">
     <button type="button" class="tribunes-custom-media-modal-close" id="tribunes-custom-media-modal-close" aria-label="Fermer">✕</button>
     <h2>Mes médias</h2>
-    <p class="tribunes-custom-media-modal-hint">Coche les médias généralistes dont tu veux voir les articles.</p>
+    <p class="tribunes-custom-media-modal-hint">Coche les médias dont tu veux voir les articles.</p>
     <div class="tribunes-custom-media-modal-actions">
       <button type="button" id="tribunes-custom-media-select-all">Tout cocher</button>
       <button type="button" id="tribunes-custom-media-select-none">Tout décocher</button>
@@ -3048,7 +3048,7 @@ window.addEventListener("pageshow", function() {
     }
     if (currentFilter === 'custom') {
       return allArticles.filter(function(article) {
-        return orientationClass(article.orientation) === 'center' && customMediaSelection.has(article.source);
+        return customMediaSelection.has(article.source);
       });
     }
     return allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
@@ -3089,7 +3089,7 @@ window.addEventListener("pageshow", function() {
       filtered = articles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
     } else if (currentFilter === 'custom') {
       filtered = articles.filter(function(article) {
-        return orientationClass(article.orientation) === 'center' && customMediaSelection.has(article.source);
+        return customMediaSelection.has(article.source);
       });
     } else {
       filtered = articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
