@@ -22582,22 +22582,27 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-custom-media-modal {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1000;
   display: none;
-  align-items: center;
-  justify-content: center;
   padding: 24px;
   background: rgba(10, 12, 14, 0.6);
+  box-sizing: border-box;
 }
 
 .tribunes-custom-media-modal.open {
-  display: flex;
+  display: block;
 }
 
 .tribunes-custom-media-modal-inner {
-  position: relative;
-  width: 100%;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100% - 48px);
   max-width: 480px;
   max-height: 80vh;
   overflow: auto;
