@@ -2050,12 +2050,18 @@ window.addEventListener("pageshow", function() {
       renderCustomMediaModalList();
       renderCustomMediaSelectedTags();
       customMediaModal.classList.add('open');
+      // Même traitement que la modale vidéo (openVideoModal) : la flèche
+      // retour flotte au-dessus de cette modale aussi.
+      if (tribunesBackBtn) tribunesBackBtn.style.setProperty('display', 'none', 'important');
     });
   }
   window.openTribunesCustomMediaPicker = openTribunesCustomMediaPicker;
 
   function closeTribunesCustomMediaPicker() {
     if (customMediaModal) customMediaModal.classList.remove('open');
+    if (tribunesBackBtn && !(videoModal && videoModal.classList.contains('open'))) {
+      tribunesBackBtn.style.removeProperty('display');
+    }
   }
 
   if (customMediaModalList) {
