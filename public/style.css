@@ -22681,6 +22681,21 @@ body.page-create-mobile .create-card .create-submit-helper {
   padding: 4px 4px 6px;
 }
 
+.tribunes-custom-media-modal-subgroup + .tribunes-custom-media-modal-subgroup {
+  margin-top: 6px;
+}
+
+.tribunes-custom-media-modal-subgroup-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #aaa;
+  padding: 2px 4px 2px 14px;
+}
+
+.tribunes-custom-media-modal-subgroup .tribunes-custom-media-modal-item {
+  padding-left: 14px;
+}
+
 .tribunes-custom-media-modal-item {
   display: flex;
   align-items: center;

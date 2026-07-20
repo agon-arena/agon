@@ -8855,14 +8855,20 @@ app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
       const groupMap = byGroup.get(group);
       if (!groupMap.has(dedupeKey)) groupMap.set(dedupeKey, { nom, youtube: isYoutube });
     }
+    // Chaque groupe d'orientation se divise en deux sous-sections — Vidéos
+    // puis Presse écrite (demande du 20/07/2026) — plutôt qu'une liste
+    // mélangée triée seulement par nom.
     const groups = OPINION_CUSTOM_MEDIA_GROUP_ORDER
-      .map(({ key, label }) => ({
-        key,
-        label,
-        media: Array.from((byGroup.get(key) || new Map()).values())
-          .sort((a, b) => a.nom.localeCompare(b.nom, "fr") || (a.youtube === b.youtube ? 0 : a.youtube ? 1 : -1))
-      }))
-      .filter((group) => group.media.length);
+      .map(({ key, label }) => {
+        const all = Array.from((byGroup.get(key) || new Map()).values());
+        const byName = (a, b) => a.nom.localeCompare(b.nom, "fr");
+        const subgroups = [
+          { key: "video", label: "Vidéos", media: all.filter((m) => m.youtube).sort(byName) },
+          { key: "press", label: "Presse écrite", media: all.filter((m) => !m.youtube).sort(byName) }
+        ].filter((subgroup) => subgroup.media.length);
+        return { key, label, subgroups };
+      })
+      .filter((group) => group.subgroups.length);
     res.json({ groups });
   } catch (error) {
     res.status(500).json({ groups: [], error: error.message });

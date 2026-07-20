@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media5">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media6">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1624,7 +1624,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media5" defer></script>
+<script src="/script.min.js?v=20260720-custom-media6" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1925,7 +1925,12 @@ window.addEventListener("pageshow", function() {
       .then(function(data) {
         customMediaGroups = Array.isArray(data.groups) ? data.groups : [];
         customMediaOptions = customMediaGroups.reduce(function(acc, group) {
-          return acc.concat((Array.isArray(group.media) ? group.media : []).map(mediaSelectionKey));
+          (Array.isArray(group.subgroups) ? group.subgroups : []).forEach(function(subgroup) {
+            (Array.isArray(subgroup.media) ? subgroup.media : []).forEach(function(media) {
+              acc.push(mediaSelectionKey(media));
+            });
+          });
+          return acc;
         }, []);
         return customMediaGroups;
       })
@@ -1943,18 +1948,23 @@ window.addEventListener("pageshow", function() {
       return;
     }
     customMediaModalList.innerHTML = customMediaGroups.map(function(group) {
-      var items = group.media.map(function(media) {
-        var key = mediaSelectionKey(media);
-        var label = media.nom + (media.youtube ? ' YOUTUBE' : '');
-        var checked = customMediaSelection.has(key) ? ' checked' : '';
-        return '<label class="tribunes-custom-media-modal-item">' +
-          '<input type="checkbox" data-media="' + escapeHtml(key) + '"' + checked + '>' +
-          '<span>' + escapeHtml(label) + '</span>' +
-          '</label>';
+      var subgroupsHtml = (group.subgroups || []).map(function(subgroup) {
+        var items = subgroup.media.map(function(media) {
+          var key = mediaSelectionKey(media);
+          var checked = customMediaSelection.has(key) ? ' checked' : '';
+          return '<label class="tribunes-custom-media-modal-item">' +
+            '<input type="checkbox" data-media="' + escapeHtml(key) + '"' + checked + '>' +
+            '<span>' + escapeHtml(media.nom) + '</span>' +
+            '</label>';
+        }).join('');
+        return '<div class="tribunes-custom-media-modal-subgroup">' +
+          '<div class="tribunes-custom-media-modal-subgroup-label">' + escapeHtml(subgroup.label) + '</div>' +
+          items +
+          '</div>';
       }).join('');
       return '<div class="tribunes-custom-media-modal-group">' +
         '<div class="tribunes-custom-media-modal-group-label">' + escapeHtml(group.label) + '</div>' +
-        items +
+        subgroupsHtml +
         '</div>';
     }).join('');
   }
