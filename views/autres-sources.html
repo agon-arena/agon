@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media7">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media8">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1624,7 +1624,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media7" defer></script>
+<script src="/script.min.js?v=20260720-custom-media8" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1941,6 +1941,13 @@ window.addEventListener("pageshow", function() {
   var customMediaModal = document.getElementById('tribunes-custom-media-modal');
   var customMediaModalList = document.getElementById('tribunes-custom-media-modal-list');
 
+  // Clé combinée groupe+sous-groupe ("right:video", "right:press"...) : les
+  // clés de sous-groupe (video/press) se répètent d'un groupe à l'autre, il
+  // faut les deux pour retrouver le bon sous-groupe dans customMediaGroups.
+  function subgroupActionKey(groupKey, subgroupKey) {
+    return groupKey + ':' + subgroupKey;
+  }
+
   function renderCustomMediaModalList() {
     if (!customMediaModalList || !customMediaGroups) return;
     if (!customMediaGroups.length) {
@@ -1949,6 +1956,7 @@ window.addEventListener("pageshow", function() {
     }
     customMediaModalList.innerHTML = customMediaGroups.map(function(group) {
       var subgroupsHtml = (group.subgroups || []).map(function(subgroup) {
+        var actionKey = subgroupActionKey(group.key, subgroup.key);
         var items = subgroup.media.map(function(media) {
           var key = mediaSelectionKey(media);
           var checked = customMediaSelection.has(key) ? ' checked' : '';
@@ -1959,12 +1967,18 @@ window.addEventListener("pageshow", function() {
         }).join('');
         return '<div class="tribunes-custom-media-modal-subgroup">' +
           '<div class="tribunes-custom-media-modal-subgroup-label">' + escapeHtml(subgroup.label) + '</div>' +
+          '<div class="tribunes-custom-media-modal-subgroup-actions">' +
+            '<button type="button" data-subgroup-select-all="' + escapeHtml(actionKey) + '">Tout cocher</button>' +
+            '<button type="button" data-subgroup-select-none="' + escapeHtml(actionKey) + '">Tout décocher</button>' +
+          '</div>' +
           items +
           '</div>';
       }).join('');
       // <details>/<summary> natif : chaque groupe (Droite, Gauche...) se
       // replie par défaut — liste sinon trop longue à parcourir (109+ médias
-      // au total, cf. demande du 20/07/2026).
+      // au total, cf. demande du 20/07/2026). Tout cocher/décocher est
+      // indépendant par sous-groupe Vidéos/Presse écrite (cf. mêmes boutons
+      // dans chaque .tribunes-custom-media-modal-subgroup ci-dessus).
       return '<details class="tribunes-custom-media-modal-group">' +
         '<summary class="tribunes-custom-media-modal-group-label">' + escapeHtml(group.label) + '</summary>' +
         subgroupsHtml +
@@ -2000,6 +2014,35 @@ window.addEventListener("pageshow", function() {
       var name = input.dataset.media;
       if (input.checked) customMediaSelection.add(name); else customMediaSelection.delete(name);
       saveCustomMediaSelection();
+      refreshCustomFilterIfActive();
+    });
+
+    // Tout cocher/décocher indépendant par sous-groupe (Vidéos / Presse
+    // écrite de chaque orientation) — demande du 20/07/2026. Met à jour les
+    // checkbox directement dans le DOM plutôt que de tout re-render, pour ne
+    // pas refermer les groupes ouverts.
+    customMediaModalList.addEventListener('click', function(event) {
+      var selectAllBtn = event.target.closest('[data-subgroup-select-all]');
+      var selectNoneBtn = event.target.closest('[data-subgroup-select-none]');
+      var btn = selectAllBtn || selectNoneBtn;
+      if (!btn) return;
+      var actionKey = selectAllBtn ? selectAllBtn.dataset.subgroupSelectAll : selectNoneBtn.dataset.subgroupSelectNone;
+      var separatorIndex = actionKey.indexOf(':');
+      var groupKey = actionKey.slice(0, separatorIndex);
+      var subgroupKey = actionKey.slice(separatorIndex + 1);
+      var group = (customMediaGroups || []).find(function(g) { return g.key === groupKey; });
+      var subgroup = group && (group.subgroups || []).find(function(s) { return s.key === subgroupKey; });
+      if (!subgroup) return;
+      var keys = subgroup.media.map(mediaSelectionKey);
+      if (selectAllBtn) keys.forEach(function(key) { customMediaSelection.add(key); });
+      else keys.forEach(function(key) { customMediaSelection.delete(key); });
+      saveCustomMediaSelection();
+      var subgroupEl = btn.closest('.tribunes-custom-media-modal-subgroup');
+      if (subgroupEl) {
+        Array.prototype.forEach.call(subgroupEl.querySelectorAll('input[type="checkbox"][data-media]'), function(input) {
+          input.checked = customMediaSelection.has(input.dataset.media);
+        });
+      }
       refreshCustomFilterIfActive();
     });
   }

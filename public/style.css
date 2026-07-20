@@ -22709,6 +22709,25 @@ body.page-create-mobile .create-card .create-submit-helper {
   margin-top: 6px;
 }
 
+.tribunes-custom-media-modal-subgroup-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px 4px 14px;
+}
+
+.tribunes-custom-media-modal-subgroup-actions button {
+  border: 1px solid #ddd;
+  background: #f7f7f7;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-modal-subgroup-actions button:hover {
+  background: #eee;
+}
+
 .tribunes-custom-media-modal-subgroup-label {
   font-size: 0.68rem;
   font-weight: 700;
