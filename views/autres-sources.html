@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media8">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media9">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1617,6 +1617,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-close" id="tribunes-custom-media-modal-close" aria-label="Fermer">✕</button>
     <h2>Mes médias</h2>
     <p class="tribunes-custom-media-modal-hint">Coche les médias dont tu veux voir les articles.</p>
+    <div class="tribunes-custom-media-selected-tags tribunes-custom-media-selected-tags-empty" id="tribunes-custom-media-selected-tags"></div>
     <div class="tribunes-custom-media-modal-actions">
       <button type="button" id="tribunes-custom-media-select-all">Tout cocher</button>
       <button type="button" id="tribunes-custom-media-select-none">Tout décocher</button>
@@ -1624,7 +1625,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-custom-media-modal-list" id="tribunes-custom-media-modal-list"></div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media8" defer></script>
+<script src="/script.min.js?v=20260720-custom-media9" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1904,6 +1905,7 @@ window.addEventListener("pageshow", function() {
   function saveCustomMediaSelection() {
     try { localStorage.setItem(TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY, JSON.stringify(Array.from(customMediaSelection))); } catch (e) {}
     rebuildCustomMediaSelectionKeys();
+    renderCustomMediaSelectedTags();
   }
 
   // customMediaGroups : [{key, label, media: [{nom, youtube}]}] tel que
@@ -1986,6 +1988,54 @@ window.addEventListener("pageshow", function() {
     }).join('');
   }
 
+  // Tags fermables des médias cochés, en haut de la modale, groupés par
+  // orientation (Droite/Gauche/Généralistes/...) — demande du 20/07/2026.
+  // Ne rend rien tant que le catalogue (customMediaGroups) n'est pas encore
+  // chargé (ex. appelé une première fois via saveCustomMediaSelection avant
+  // toute ouverture du picker) : les tags apparaîtront au premier rendu utile.
+  var customMediaSelectedTagsEl = document.getElementById('tribunes-custom-media-selected-tags');
+  function renderCustomMediaSelectedTags() {
+    if (!customMediaSelectedTagsEl || !customMediaGroups) return;
+    var sectionsHtml = customMediaGroups.map(function(group) {
+      var chips = [];
+      (group.subgroups || []).forEach(function(subgroup) {
+        subgroup.media.forEach(function(media) {
+          var key = mediaSelectionKey(media);
+          if (!customMediaSelection.has(key)) return;
+          var label = media.nom + (media.youtube ? ' YOUTUBE' : '');
+          chips.push(
+            '<button type="button" class="tribunes-custom-media-tag" data-remove-media="' + escapeHtml(key) + '" aria-label="Retirer ' + escapeHtml(label) + '">' +
+              '<span>' + escapeHtml(label) + '</span>' +
+              '<span class="tribunes-custom-media-tag-close" aria-hidden="true">×</span>' +
+            '</button>'
+          );
+        });
+      });
+      if (!chips.length) return '';
+      return '<div class="tribunes-custom-media-tag-group">' +
+        '<div class="tribunes-custom-media-tag-group-label">' + escapeHtml(group.label) + '</div>' +
+        '<div class="tribunes-custom-media-tag-row">' + chips.join('') + '</div>' +
+        '</div>';
+    }).filter(Boolean).join('');
+    customMediaSelectedTagsEl.innerHTML = sectionsHtml;
+    customMediaSelectedTagsEl.classList.toggle('tribunes-custom-media-selected-tags-empty', !sectionsHtml);
+  }
+
+  if (customMediaSelectedTagsEl) {
+    customMediaSelectedTagsEl.addEventListener('click', function(event) {
+      var btn = event.target.closest('[data-remove-media]');
+      if (!btn) return;
+      var key = btn.dataset.removeMedia;
+      customMediaSelection.delete(key);
+      saveCustomMediaSelection();
+      if (customMediaModalList) {
+        var input = customMediaModalList.querySelector('input[type="checkbox"][data-media="' + cssEscape(key) + '"]');
+        if (input) input.checked = false;
+      }
+      refreshCustomFilterIfActive();
+    });
+  }
+
   // Rafraîchit la liste affichée si l'onglet Personnalisé est actif — appelé
   // après chaque changement de sélection (case cochée, tout cocher/décocher).
   function refreshCustomFilterIfActive() {
@@ -1998,6 +2048,7 @@ window.addEventListener("pageshow", function() {
     if (!customMediaModal) return;
     loadCustomMediaOptions().then(function() {
       renderCustomMediaModalList();
+      renderCustomMediaSelectedTags();
       customMediaModal.classList.add('open');
     });
   }

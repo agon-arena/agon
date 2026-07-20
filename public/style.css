@@ -22641,6 +22641,60 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #666;
 }
 
+.tribunes-custom-media-selected-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.tribunes-custom-media-selected-tags-empty {
+  display: none;
+}
+
+.tribunes-custom-media-tag-group-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #aaa;
+  margin-bottom: 3px;
+}
+
+.tribunes-custom-media-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tribunes-custom-media-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 23px;
+  padding: 3px 7px;
+  border: 1px solid #1a1f24;
+  border-radius: 999px;
+  background: #1a1f24;
+  color: #ffffff;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tribunes-custom-media-tag-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  font-size: 12px;
+  line-height: 1;
+}
+
 .tribunes-custom-media-modal-actions {
   display: flex;
   gap: 8px;
