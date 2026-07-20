@@ -9,6 +9,7 @@ const net = require("net");
 const { Readable } = require("stream");
 const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
+const sharp = require("sharp");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { createNotificationEventSafe } = require("./lib/notification-events");
@@ -1780,6 +1781,43 @@ async function persistDebateMediaUrls(debateId, media = {}) {
   if (error) throw error;
 }
 
+// Photos envoyées telles quelles depuis le navigateur (souvent 3-15 Mo pour
+// une photo de téléphone) : sans retraitement, chaque page qui affiche cette
+// image la sert en pleine résolution à chaque visiteur — gros contributeur à
+// l'egress Supabase Storage (~300 Mo/jour mesurés le 20/07/2026, cf. discussion
+// Autres actus). Redimensionne à 1600px de large max (largeur d'affichage la
+// plus grande côté front, cf. hero/lightbox débat) et recompresse. Le GIF est
+// laissé tel quel : sharp ne préserverait pas forcément l'animation sans un
+// traitement dédié, et le gain de recompression sur GIF est de toute façon
+// marginal (codec déjà peu efficace).
+const DEBATE_IMAGE_MAX_WIDTH = 1600;
+async function compressDebateImageBuffer(buffer, mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized === "image/gif") return buffer;
+  try {
+    const resized = sharp(buffer, { failOn: "none" }).rotate().resize({
+      width: DEBATE_IMAGE_MAX_WIDTH,
+      withoutEnlargement: true
+    });
+    if (normalized === "image/png") {
+      return await resized.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
+    }
+    if (normalized === "image/webp") {
+      return await resized.webp({ quality: 78 }).toBuffer();
+    }
+    return await resized.jpeg({ quality: 78, mozjpeg: true }).toBuffer();
+  } catch (error) {
+    console.error("Erreur compression image:", error);
+    return buffer;
+  }
+}
+
+// Chemin de stockage horodaté (buildDebateMediaStoragePath) donc jamais réutilisé
+// pour un contenu différent (upsert:false) : un cache long côté navigateur/CDN est
+// sûr, une nouvelle image obtient toujours une nouvelle URL plutôt que d'écraser
+// l'ancienne (cf. discussion egress du 20/07/2026).
+const DEBATE_MEDIA_CACHE_CONTROL = "31536000";
+
 async function saveUploadedDebateImage(debateId, imageUpload, options = {}) {
   const dataUrl = String(imageUpload?.dataUrl || "").trim();
   const mimeType = String(imageUpload?.type || "").trim().toLowerCase();
@@ -1798,10 +1836,11 @@ async function saveUploadedDebateImage(debateId, imageUpload, options = {}) {
     throw new Error("Type d'image incohérent.");
   }
 
-  const buffer = Buffer.from(match[2], "base64");
-  if (!buffer.length) {
+  const rawBuffer = Buffer.from(match[2], "base64");
+  if (!rawBuffer.length) {
     throw new Error("Image vide.");
   }
+  const buffer = await compressDebateImageBuffer(rawBuffer, mimeType);
 
   const previousImageUrl = String(options.previousImageUrl || "").trim();
   const objectPath = buildDebateMediaStoragePath(debateId, "image", extension);
@@ -1810,6 +1849,7 @@ async function saveUploadedDebateImage(debateId, imageUpload, options = {}) {
     .from(SUPABASE_DEBATE_MEDIA_BUCKET)
     .upload(objectPath, buffer, {
       contentType: mimeType,
+      cacheControl: DEBATE_MEDIA_CACHE_CONTROL,
       upsert: false
     });
 
@@ -1856,6 +1896,7 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
     .from(SUPABASE_DEBATE_MEDIA_BUCKET)
     .upload(objectPath, safeBuffer, {
       contentType: getVideoMimeTypeFromExtension(extension),
+      cacheControl: DEBATE_MEDIA_CACHE_CONTROL,
       upsert: false
     });
 
