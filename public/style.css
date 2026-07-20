@@ -22556,41 +22556,6 @@ body.page-create-mobile .create-card .create-submit-helper {
   margin-top: 6px;
 }
 
-.tribunes-regional-filter-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: max-content;
-  margin: 12px auto 0;
-  padding: 6px 16px;
-  border: 1px solid #d9cde6;
-  border-radius: 999px;
-  background: #f4eff8;
-  color: #7a5c94;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.tribunes-regional-filter-btn:hover {
-  background: #ece3f2;
-}
-
-.tribunes-regional-filter-btn.tribunes-regional-filter-btn-active {
-  background: #1a1f24;
-  border-color: #1a1f24;
-  color: #ffffff;
-}
-
-.tribunes-filter-switch + .tribunes-regional-filter-btn {
-  margin-top: 6px;
-}
-
 .tribunes-custom-filter-btn {
   display: flex;
   align-items: center;
@@ -22622,7 +22587,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #ffffff;
 }
 
-.tribunes-regional-filter-btn + .tribunes-custom-filter-btn {
+.tribunes-filter-switch + .tribunes-custom-filter-btn {
   margin-top: 6px;
 }
 

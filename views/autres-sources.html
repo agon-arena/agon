@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media12">
+  <link rel="stylesheet" href="/style.min.css?v=20260720-custom-media14">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -116,7 +116,6 @@
     }
     .tribunes-page-header #tribunes-filter-switch,
     .tribunes-page-header #tribunes-positive-filter-btn,
-    .tribunes-page-header #tribunes-regional-filter-btn,
     .tribunes-page-header .tribunes-filters-row {
       display: flex !important;
       opacity: 1 !important;
@@ -1449,7 +1448,7 @@ window.addEventListener("pageshow", function() {
 
           <div class="tribunes-filters-row">
             <select id="tribunes-orientation-filter" class="tribunes-media-filter" aria-label="Filtrer par orientation ou rubrique">
-              <option value="">Toutes les actus</option>
+              <option value="center">Généralistes</option>
               <optgroup label="Orientation politique">
                 <option value="left">Gauche</option>
                 <option value="right">Droite</option>
@@ -1480,13 +1479,9 @@ window.addEventListener("pageshow", function() {
 
       <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
         <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
-        <button type="button" id="tribunes-filter-mixed" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="mixed">Tout</button>
+        <button type="button" id="tribunes-filter-center" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="center">Généraliste</button>
         <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
       </div>
-
-      <button type="button" id="tribunes-regional-filter-btn" class="tribunes-regional-filter-btn" aria-pressed="false" data-extra-filter="regional" data-active-class="tribunes-regional-filter-btn-active">
-        <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Actualités régionales
-      </button>
 
       <button type="button" id="tribunes-custom-filter-btn" class="tribunes-custom-filter-btn" aria-pressed="false" data-extra-filter="custom" data-active-class="tribunes-custom-filter-btn-active">
         <i class="fa-solid fa-list-check" aria-hidden="true"></i> Personnalisé
@@ -1629,14 +1624,14 @@ window.addEventListener("pageshow", function() {
     </div>
   </div>
 </div>
-<script src="/script.min.js?v=20260720-custom-media12" defer></script>
+<script src="/script.min.js?v=20260720-custom-media14" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
   if (!list) return;
 
   var allArticles = [];
-  var currentFilter = 'mixed';
+  var currentFilter = 'center';
   var currentMedia = '';
   var currentType = '';
   var currentSearchQuery = '';
@@ -2771,32 +2766,6 @@ window.addEventListener("pageshow", function() {
   // tribunesInitialCountForGroup), le reste se charge en scrollant comme les
   // autres rubriques. Doublon volontaire avec leur section d'origine (même
   // logique que les doublons inter-groupes du bot de veille).
-  // Vue "Tout" uniquement : alterne les cartes des médias de droite et de gauche
-  // (droite, gauche, droite…) dans chaque rangée. Seules les positions occupées
-  // par des cartes gauche/droite sont réordonnées — les autres cartes (centre,
-  // nouvelles positives, actualités régionales…) gardent exactement leur place,
-  // et l'ordre interne de chaque bord (récence) est préservé.
-  function alternateOrientations(items) {
-    var rightQueue = [];
-    var leftQueue = [];
-    items.forEach(function(article) {
-      var side = orientationClass(article.orientation);
-      if (side === 'right') rightQueue.push(article);
-      else if (side === 'left') leftQueue.push(article);
-    });
-    if (!rightQueue.length || !leftQueue.length) return items;
-    var nextSide = 'right';
-    return items.map(function(article) {
-      var side = orientationClass(article.orientation);
-      if (side !== 'right' && side !== 'left') return article;
-      var pick = nextSide === 'right'
-        ? (rightQueue.length ? rightQueue.shift() : leftQueue.shift())
-        : (leftQueue.length ? leftQueue.shift() : rightQueue.shift());
-      nextSide = nextSide === 'right' ? 'left' : 'right';
-      return pick;
-    });
-  }
-
   // Vues Gauche/Droite : espace les cartes d'un même média pour ne jamais avoir
   // deux cartes consécutives du même site (ex. trois Libération d'affilée). À
   // chaque position on prend la première carte restante d'un média différent du
@@ -2822,11 +2791,10 @@ window.addEventListener("pageshow", function() {
     return result;
   }
 
-  // Ordre des cartes dans une rangée selon la vue active : alternance
-  // droite/gauche en "Tout", espacement des médias identiques en Gauche/Droite,
-  // ordre inchangé ailleurs (Nouvelles positives, actualités régionales…).
+  // Ordre des cartes dans une rangée selon la vue active : espacement des
+  // médias identiques en Gauche/Droite, ordre inchangé ailleurs (Généraliste,
+  // Nouvelles positives, actualités régionales, Personnalisé).
   function orderCarouselItems(items) {
-    if (currentFilter === 'mixed') return alternateOrientations(items);
     if (currentFilter === 'left' || currentFilter === 'right') return spreadSameSource(items);
     return items;
   }
@@ -2914,8 +2882,8 @@ window.addEventListener("pageshow", function() {
     if (!articles.length) {
       var emptyMessage = currentSearchQuery
         ? 'Aucun article ne correspond à votre recherche.'
-        : (currentFilter === 'mixed'
-          ? 'Aucun article pour le moment.'
+        : (currentFilter === 'center'
+          ? 'Aucun article généraliste pour le moment.'
           : (currentFilter === 'positive'
             ? 'Aucune nouvelle positive pour le moment.'
             : (currentFilter === 'regional'
@@ -3269,12 +3237,11 @@ window.addEventListener("pageshow", function() {
     return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
   }
 
-  // 'center' (médias généralistes) : jamais dans "Tout", uniquement visible
-  // dans l'onglet "Personnalisé" et seulement pour les médias cochés.
+  // 'center' (médias généralistes) a son propre onglet (Généraliste, ex-Tout,
+  // demande du 20/07/2026) : filtré comme gauche/droite/positif/régional via
+  // orientationClass. 'custom' reste à part (sélection par média, toute
+  // orientation confondue).
   function articlesInScope() {
-    if (currentFilter === 'mixed') {
-      return allArticles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
-    }
     if (currentFilter === 'custom') {
       return allArticles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
@@ -3285,9 +3252,8 @@ window.addEventListener("pageshow", function() {
 
   // Listes déroulantes (média / thématique) construites à partir des articles de
   // l'orientation actuellement sélectionnée — repeuplées à chaque changement de filtre
-  // gauche/général/droite pour ne jamais proposer une option hors du groupe affiché
-  // (général = tout, sans distinction). Le filtre type (article/vidéo) est fixe, pas besoin
-  // de le repeupler.
+  // (Gauche/Généraliste/Droite/Personnalisé/...) pour ne jamais proposer une option hors
+  // du groupe affiché. Le filtre type (article/vidéo) est fixe, pas besoin de le repeupler.
   var mediaFilterEl = document.getElementById('tribunes-media-filter');
   var typeFilterEl = document.getElementById('tribunes-type-filter');
 
@@ -3314,9 +3280,7 @@ window.addEventListener("pageshow", function() {
   // donnée — utilisé pour la liste complète comme pour les articles d'une nouvelle page.
   function filterArticlesList(articles) {
     var filtered;
-    if (currentFilter === 'mixed') {
-      filtered = articles.filter(function(article) { return orientationClass(article.orientation) !== 'center'; });
-    } else if (currentFilter === 'custom') {
+    if (currentFilter === 'custom') {
       filtered = articles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
@@ -3363,7 +3327,10 @@ window.addEventListener("pageshow", function() {
     if (!container) return;
     var tags = [];
     if (currentSearchQuery) tags.push(tribunesFilterTagHtml('search', currentSearchQuery));
-    if (currentFilter !== 'mixed' && TRIBUNES_FILTER_TAG_LABELS[currentFilter]) {
+    // 'center' (Généraliste) est le filtre neutre/par défaut (ex-"Tout") :
+    // pas de tag pour lui-même, sinon la croix "retirer" ne ferait que
+    // revenir au même état (cf. removeTribunesFilterTag -> setTribunesOrientationFilter('')).
+    if (currentFilter !== 'center' && TRIBUNES_FILTER_TAG_LABELS[currentFilter]) {
       tags.push(tribunesFilterTagHtml('orientation', TRIBUNES_FILTER_TAG_LABELS[currentFilter]));
     }
     if (currentMedia) tags.push(tribunesFilterTagHtml('media', currentMedia));
@@ -3441,7 +3408,7 @@ window.addEventListener("pageshow", function() {
 
   function syncOrientationFilterSelect() {
     if (!orientationFilterEl) return;
-    orientationFilterEl.value = currentFilter === 'mixed' ? '' : currentFilter;
+    orientationFilterEl.value = currentFilter;
   }
 
   if (switchEl) {
@@ -3462,13 +3429,13 @@ window.addEventListener("pageshow", function() {
   extraFilterBtns.forEach(function(extraBtn) {
     extraBtn.addEventListener('click', function() {
       var isActive = extraBtn.classList.contains(extraBtn.dataset.activeClass);
-      var nextFilter = isActive ? 'mixed' : extraBtn.dataset.extraFilter;
+      var nextFilter = isActive ? 'center' : extraBtn.dataset.extraFilter;
       currentFilter = nextFilter;
       currentMedia = '';
       syncExtraFilterButtons(isActive ? '' : extraBtn.dataset.extraFilter);
       if (switchEl) {
         switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
-          seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'mixed' : false);
+          seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'center' : false);
         });
       }
       syncOrientationFilterSelect();
@@ -3481,14 +3448,14 @@ window.addEventListener("pageshow", function() {
 
   function setTribunesOrientationFilter(value) {
     var isExtra = value === 'positive' || value === 'regional' || value === 'custom';
-    currentFilter = value || 'mixed';
+    currentFilter = value || 'center';
     currentMedia = '';
     syncExtraFilterButtons(isExtra ? value : '');
     if (switchEl) {
       switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
         // Filtre extra actif → aucun segment allumé, comme au clic direct
         // sur les boutons Nouvelles positives / Actualités régionales.
-        seg.classList.toggle('tribunes-filter-segment-active', !isExtra && seg.dataset.filter === (value || 'mixed'));
+        seg.classList.toggle('tribunes-filter-segment-active', !isExtra && seg.dataset.filter === (value || 'center'));
       });
     }
     syncOrientationFilterSelect();
