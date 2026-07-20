@@ -24398,9 +24398,9 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
-    left: 80% !important;
+    left: calc(80% - 2px) !important;
     right: auto !important;
-    bottom: 36px !important;
+    bottom: 38px !important;
     height: 42px !important;
     min-height: 42px !important;
     display: inline-flex;
@@ -24411,9 +24411,9 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.debate-embedded-frame #voices-float-badge {
-    left: 80% !important;
+    left: calc(80% - 2px) !important;
     right: auto !important;
-    bottom: var(--agon-dock-button-bottom, 68px) !important;
+    bottom: calc(var(--agon-dock-button-bottom, 68px) + 2px) !important;
     height: 42px !important;
     min-height: 42px !important;
     display: inline-flex;
