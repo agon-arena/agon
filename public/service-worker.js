@@ -1,4 +1,4 @@
-const SW_VERSION = "20260716-mutable-asset-fetch-timeout-v31";
+const SW_VERSION = "20260721-stale-page-self-heal-v32";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -83,6 +83,14 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function notifyClientsOfStalePage(url) {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    for (const client of clients) {
+      if (client.url === url) client.postMessage({ type: "agon:page-stale" });
+    }
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
@@ -118,9 +126,24 @@ self.addEventListener("fetch", (event) => {
         if (cachedResponse) {
           // Revalidation arrière-plan sans limite de temps : rien n'attend
           // dessus, elle met juste à jour le cache pour le prochain lancement.
+          // Si le HTML fraîchement récupéré diffère de celui déjà affiché (typiquement
+          // juste après un déploiement touchant les vues), la page en cours peut être
+          // désynchronisée du CSS/JS déjà à jour (network-first) — ex. une classe liée
+          // à une police renommée entre les deux versions. On prévient la page pour
+          // qu'elle se recharge une fois, plutôt que d'attendre le lancement suivant.
           event.waitUntil(
-            fetch(request, { cache: "no-store" }).then((response) => {
-              if (response && response.ok) cache.put(cacheKeyRequest, response.clone());
+            Promise.all([
+              cachedResponse.clone().text().catch(() => null),
+              fetch(request, { cache: "no-store" })
+            ]).then(([oldHtml, response]) => {
+              if (!response || !response.ok) return;
+              const responseForCache = response.clone();
+              return response.text().then((newHtml) => {
+                cache.put(cacheKeyRequest, responseForCache);
+                if (oldHtml !== null && newHtml !== oldHtml) {
+                  return notifyClientsOfStalePage(cacheKeyRequest.url);
+                }
+              });
             }).catch(() => {})
           );
           return cachedResponse;

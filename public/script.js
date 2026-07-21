@@ -370,6 +370,16 @@ function registerServiceWorker() {
       .then((registration) => registration.update?.())
       .catch(() => {});
   });
+
+  // Le service worker sert le HTML en cache instantanément au lancement standalone,
+  // puis revalide en arrière-plan. Si cette revalidation détecte que le HTML affiché
+  // est obsolète (ex. juste après un déploiement, décalage avec le CSS/JS déjà à
+  // jour), il prévient la page ici pour qu'elle se recharge une seule fois.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type !== "agon:page-stale" || window.__agonStalePageRefreshed) return;
+    window.__agonStalePageRefreshed = true;
+    forceFullPageRefresh();
+  });
 }
 
 registerServiceWorker();
@@ -5251,6 +5261,39 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
+    }
+    /* QCM du jour : pas de flèche retour en bas, mais une croix en haut de
+       l'écran pour fermer la modale (même bouton #debate-iframe-modal-close,
+       juste repositionné + réhabillé pour cet état). */
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close {
+      top: calc(env(safe-area-inset-top, 0px) + 14px) !important;
+      bottom: auto !important;
+      left: auto !important;
+      right: 16px !important;
+      width: 42px !important;
+      height: 42px !important;
+      padding: 0 !important;
+      border-radius: 999px !important;
+    }
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close svg {
+      display: none;
+    }
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close::before,
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 2.5px;
+      border-radius: 2px;
+      background: #e5edf3;
+    }
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
        même document que #voices-float-badge) plutôt que ce bouton du parent —
