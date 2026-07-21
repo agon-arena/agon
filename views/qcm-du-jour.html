@@ -49,6 +49,14 @@
     .page-qcm-du-jour .home-logo {
       width: 110px;
     }
+    @media (max-width: 768px) {
+      .page-qcm-du-jour .home-logo {
+        width: 70px;
+      }
+      .page-qcm-du-jour .topbar-inner {
+        padding: 0;
+      }
+    }
     .qcm-page-shell {
       width: min(100% - 32px, 900px);
       margin: 112px auto 48px;
@@ -60,6 +68,10 @@
       .qcm-page-shell {
         width: min(100% - 64px, 1200px);
       }
+    }
+    .qcm-panel,
+    .qcm-panel * {
+      box-sizing: border-box;
     }
     .qcm-panel {
       width: 100%;
