@@ -1233,82 +1233,99 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 
   // Orator et Logos partagent le même palier (volume d'idées postées) mais
   // pas la même population (tout le monde n'a pas de note IA) : une ligne de
-  // comptage par axe, chacune visible seulement si son score existe.
-  const votesTierCountHint = (votesScore !== null && Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
+  // comptage par axe, chacune affichée dans l'onglet de son propre axe.
+  const votesTierCountHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
     ? '<p class="install-modal-text install-modal-hint">Palier Orator : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
     : '';
-  const notesTierCountHint = (notesScore !== null && Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
+  const notesTierCountHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
     ? '<p class="install-modal-text install-modal-hint">Palier Logos : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
     : '';
-  const tierSection = tierLabel
-    ? '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier' + tierRank + ' — ' + tierLabel + '</h4>' +
-        '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien.</p>' +
-        votesTierCountHint +
-        notesTierCountHint +
-      '</div><div class="install-modal-divider"></div>'
+  const tierIntro = tierLabel
+    ? '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier' + tierRank + ' — ' + tierLabel + '</h4>' +
+      '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien.</p>'
     : '';
 
   // Palier propre à Gnosis (basé sur le nombre de questions répondues au QCM,
   // pas le nombre d'idées postées) : population différente de celle des 2
-  // autres scores, affichée juste au-dessus de sa section plutôt qu'en haut.
+  // autres scores.
   const gnosisTierRank = (Number.isFinite(gnosisTier) && Number.isFinite(gnosisTierCount)) ? (' (' + gnosisTier + '/' + gnosisTierCount + ')') : '';
   const gnosisTierCountHint = (Number.isFinite(s.gnosisTierUsers) && Number.isFinite(s.gnosisTotalUsers))
     ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.gnosisTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.gnosisTotalUsers) + '</p>'
     : '';
-  const gnosisTierSection = gnosisTierLabel
-    ? '<div class="install-modal-section">' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Gnosis' + gnosisTierRank + ' — ' + gnosisTierLabel + '</h4>' +
-        '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>' +
-        gnosisTierCountHint +
-      '</div><div class="install-modal-divider"></div>'
+  const gnosisTierIntro = gnosisTierLabel
+    ? '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Gnosis' + gnosisTierRank + ' — ' + gnosisTierLabel + '</h4>' +
+      '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
     : '';
 
-  const sections = [];
+  // Chaque score a désormais son propre onglet (clic sur Orator / Logos / Gnosis
+  // dans le menu) plutôt que d'être tous empilés à la suite dans la modale.
+  const tabs = [];
   if (votesScore !== null) {
     const valueLine = Number.isFinite(s.votesValue)
       ? '<p class="install-modal-text"><strong>' + s.votesValue.toLocaleString("fr-FR") + (s.votesValue > 1 ? ' voix reçues' : ' voix reçue') + '</strong> au total sur toutes tes idées.</p>'
       : '';
-    sections.push(
-      '<div class="install-modal-section">' +
+    tabs.push({
+      key: "orator",
+      icon: '<i class="fa-solid fa-bolt"></i>',
+      label: "Orator",
+      content:
+        tierIntro +
+        votesTierCountHint +
+        '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + formatPct(votesScore) + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.</p>' +
-      '</div>'
-    );
+        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.</p>'
+    });
   }
   if (notesScore !== null) {
     const valueLine = Number.isFinite(s.notesValue)
       ? '<p class="install-modal-text"><strong>Moyenne de ' + s.notesValue.toLocaleString("fr-FR") + '/100</strong> sur tes idées notées par l\'IA.</p>'
       : '';
-    sections.push(
-      '<div class="install-modal-section">' +
+    tabs.push({
+      key: "logos",
+      icon: AGON_LOGOS_ICON,
+      label: "Logos",
+      content:
+        tierIntro +
+        notesTierCountHint +
+        '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>' +
-      '</div>'
-    );
+        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>'
+    });
   }
-
   if (gnosisScore !== null) {
     const valueLine = (Number.isFinite(s.gnosisCorrect) && Number.isFinite(s.gnosisAnswered))
       ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM du jour.</p>'
       : '';
-    sections.push(
-      gnosisTierSection +
-      '<div class="install-modal-section">' +
+    tabs.push({
+      key: "gnosis",
+      icon: '<i class="fa-solid fa-brain"></i>',
+      label: "Gnosis",
+      content:
+        gnosisTierIntro +
+        gnosisTierCountHint +
+        '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis — Top ' + formatPct(gnosisScore) + '%</h4>' +
         valueLine +
-        '<p class="install-modal-text">Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.</p>' +
-      '</div>'
-    );
+        '<p class="install-modal-text">Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.</p>'
+    });
   }
 
-  // Ni idée postée, ni vote reçu, ni note IA, ni réponse au QCM : les trois scores
-  // n'existent pas encore — explique le principe et incite à contribuer plutôt
-  // que de laisser la modale vide.
-  if (votesScore === null && notesScore === null && gnosisScore === null) {
-    sections.push(
+  let bodyHtml;
+  if (tabs.length) {
+    const tabButtons = tabs.map((t, i) =>
+      '<button type="button" class="agon-score-tab' + (i === 0 ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
+    ).join('');
+    const tabPanels = tabs.map((t, i) =>
+      '<div class="agon-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (i === 0 ? '' : ' hidden') + '>' + t.content + '</div>'
+    ).join('');
+    bodyHtml = '<div class="agon-score-tabs" role="tablist">' + tabButtons + '</div>' + tabPanels;
+  } else {
+    // Ni idée postée, ni vote reçu, ni note IA, ni réponse au QCM : les trois
+    // scores n'existent pas encore — explique le principe et incite à
+    // contribuer plutôt que de laisser la modale vide, pas de menu à afficher.
+    bodyHtml =
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator</h4>' +
         '<p class="install-modal-text">Mesure les voix récoltées sur tes idées.</p>' +
@@ -1323,17 +1340,25 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
       '</div><div class="install-modal-divider"></div>' +
       '<div class="install-modal-section">' +
         '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée ni répondu au QCM</strong> : ces scores se débloquent dès ta première contribution.</p>' +
-      '</div>'
-    );
+      '</div>';
   }
 
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
       '<h3 class="install-modal-title">Tes scores</h3>' +
-      tierSection +
-      sections.join('<div class="install-modal-divider"></div>') +
+      bodyHtml +
       '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
+
+  overlay.querySelectorAll(".agon-score-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.scoreTab;
+      overlay.querySelectorAll(".agon-score-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      overlay.querySelectorAll(".agon-score-tab-panel").forEach((panel) => {
+        panel.hidden = panel.dataset.scoreTab !== key;
+      });
+    });
+  });
 
   const close = () => {
     overlay.style.display = "none";

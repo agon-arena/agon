@@ -4290,6 +4290,10 @@ function getGnosisTierLabel(tier) {
   return GNOSIS_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
 }
 
+// Effectif plancher affiché pour chaque palier Gnosis (point de départ),
+// tant que le nombre réel d'utilisateurs du palier ne l'a pas dépassé.
+const GNOSIS_TIER_MIN_USERS = 1000;
+
 // Applique buildPercentileScoreMap indépendamment à l'intérieur de chaque
 // palier plutôt que sur toute la population d'un coup.
 function buildTieredPercentileScoreMap(valueByAuthorKey, tierByAuthorKey, tiers = USER_SCORE_TIERS) {
@@ -4416,11 +4420,19 @@ async function computeUserScores() {
     accuracyByAuthorKey.set(authorKey, ((quizCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
   }
 
-  const gnosisTierSizeByTier = new Map();
+  const gnosisTierRawSizeByTier = new Map();
   for (const authorKey of accuracyByAuthorKey.keys()) {
     const tier = gnosisTierByAuthorKey.get(authorKey) || 1;
-    gnosisTierSizeByTier.set(tier, (gnosisTierSizeByTier.get(tier) || 0) + 1);
+    gnosisTierRawSizeByTier.set(tier, (gnosisTierRawSizeByTier.get(tier) || 0) + 1);
   }
+  // Point de départ affiché pour chaque palier Gnosis tant que les effectifs
+  // réels ne l'ont pas dépassé (cf. gnosisTierCountHint côté client) — évite
+  // d'afficher un palier à 2 ou 3 utilisateurs en tout début de vie du QCM.
+  const gnosisTierSizeByTier = new Map();
+  for (const t of GNOSIS_SCORE_TIERS) {
+    gnosisTierSizeByTier.set(t.tier, Math.max(GNOSIS_TIER_MIN_USERS, gnosisTierRawSizeByTier.get(t.tier) || 0));
+  }
+  const gnosisTotalUsers = [...gnosisTierSizeByTier.values()].reduce((sum, size) => sum + size, 0);
 
   return {
     votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
@@ -4430,7 +4442,7 @@ async function computeUserScores() {
     gnosisTierByAuthorKey,
     votesTotalUsers: votesTotalByAuthorKey.size,
     notesTotalUsers: noteAvgByAuthorKey.size,
-    gnosisTotalUsers: accuracyByAuthorKey.size,
+    gnosisTotalUsers,
     votesTierSizeByTier,
     notesTierSizeByTier,
     gnosisTierSizeByTier,
