@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script src="/no-zoom.js?v=20260603" defer></script>
+  <title>QCM du jour | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192-optimized.png">
+  <meta name="theme-color" content="#243038">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agôn">
+  <link rel="stylesheet" href="/style.min.css?v=20260721-contribfont">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script>
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.self !== window.top) {
+        document.body.classList.add('in-iframe');
+        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+      }
+    });
+  </script>
+  <style>
+    /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038).
+       Posé à la fois sur html et body : html a déjà ce fond par défaut (cf.
+       style.css ligne ~14068), mais sans hauteur de body qui couvre tout le
+       viewport, une bande plus claire pouvait apparaître sous une carte courte. */
+    html:has(body.page-qcm-du-jour) {
+      background-color: #243038;
+    }
+    body.page-qcm-du-jour {
+      min-height: 100vh;
+      background-color: #243038;
+    }
+    .page-qcm-du-jour .topbar-inner {
+      justify-content: center;
+      padding: 2px 0;
+    }
+    .page-qcm-du-jour .home-brand-block {
+      flex: 0 0 auto;
+      margin-left: 0;
+    }
+    .page-qcm-du-jour .home-logo {
+      width: 110px;
+    }
+    .qcm-page-shell {
+      width: min(100% - 32px, 900px);
+      margin: 112px auto 48px;
+    }
+    .page-qcm-du-jour.in-iframe .qcm-page-shell {
+      margin: 20px auto;
+    }
+    @media (min-width: 769px) {
+      .qcm-page-shell {
+        width: min(100% - 64px, 1200px);
+      }
+    }
+    .qcm-panel {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .qcm-panel h1 {
+      margin: 0 0 4px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 34px;
+      line-height: 1;
+      color: #111827;
+      text-align: center;
+    }
+    .qcm-panel .qcm-subtitle {
+      margin: 0 0 20px;
+      color: #6b7280;
+      font-size: 14px;
+      text-align: center;
+    }
+    .qcm-progress {
+      margin: 0 0 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #516776;
+    }
+    .qcm-question {
+      margin: 0 0 18px;
+      font-size: 19px;
+      font-weight: 600;
+      color: #111827;
+      line-height: 1.3;
+    }
+    .qcm-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .qcm-option-btn {
+      position: relative;
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f9fafb;
+      color: #1f2937;
+      font-size: 15px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .qcm-option-btn:hover:not(:disabled) {
+      border-color: #516776;
+      background: #eef3f6;
+    }
+    .qcm-option-btn:disabled {
+      cursor: default;
+    }
+    .qcm-option-fill {
+      position: absolute;
+      inset: 0;
+      width: 0%;
+      background: rgba(81, 103, 118, 0.14);
+      transition: width 0.4s ease;
+      z-index: 0;
+    }
+    .qcm-option-label,
+    .qcm-option-pct {
+      position: relative;
+      z-index: 1;
+    }
+    .qcm-option-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .qcm-option-pct {
+      display: none;
+      font-size: 13px;
+      font-weight: 700;
+      color: #516776;
+      white-space: nowrap;
+    }
+    .qcm-option-btn.answered .qcm-option-pct {
+      display: inline;
+    }
+    .qcm-option-btn.is-correct {
+      border-color: #1f9d55;
+      background: #f0fdf4;
+    }
+    .qcm-option-btn.is-correct .qcm-option-fill {
+      background: rgba(31, 157, 85, 0.16);
+    }
+    .qcm-option-btn.is-wrong-picked {
+      border-color: #d64545;
+      background: #fef2f2;
+    }
+    .qcm-option-btn.is-wrong-picked .qcm-option-fill {
+      background: rgba(214, 69, 69, 0.16);
+    }
+    .qcm-feedback {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 14px;
+      line-height: 1.4;
+      text-align: center;
+    }
+    .qcm-feedback.visible {
+      display: block;
+    }
+    .qcm-feedback .qcm-feedback-verdict {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+    .qcm-feedback.is-correct .qcm-feedback-verdict { color: #1f9d55; }
+    .qcm-feedback.is-wrong .qcm-feedback-verdict { color: #d64545; }
+    .qcm-next-btn {
+      display: none;
+      margin: 16px auto 0;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 999px;
+      background: #243038;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .qcm-next-btn.visible {
+      display: block;
+    }
+    .qcm-state-message {
+      color: #6b7280;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .qcm-final-score {
+      text-align: center;
+      padding: 8px 0;
+    }
+    .qcm-final-score i {
+      font-size: 32px;
+      color: #f5b642;
+      margin-bottom: 10px;
+    }
+    .qcm-final-score .qcm-final-score-value {
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 40px;
+      color: #111827;
+      line-height: 1;
+      margin: 4px 0 6px;
+    }
+    .qcm-final-score .qcm-final-score-label {
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body class="page-qcm-du-jour">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+    <div class="home-brand-block">
+      <div class="home-brand-main">
+        <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+      </div>
+    </div>
+  </div>
+</header>
+<main class="qcm-page-shell">
+  <section class="qcm-panel" id="qcm-panel" aria-live="polite">
+    <h1><i class="fa-solid fa-circle-question"></i> QCM du jour</h1>
+    <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 6 questions.</p>
+    <div id="qcm-body">
+      <p class="qcm-state-message">Chargement du QCM du jour…</p>
+    </div>
+  </section>
+</main>
+<script src="/script.min.js?v=20260721-aboutnorefresh" defer></script>
+<script>
+(function () {
+  var body = document.getElementById('qcm-body');
+  var voterKey = null;
+  var questions = [];
+  var answeredByQuestionId = {};
+  var currentIndex = 0;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderMessage(text) {
+    body.innerHTML = '<p class="qcm-state-message">' + escapeHtml(text) + '</p>';
+  }
+
+  function pct(count, total) {
+    if (!total) return 0;
+    return Math.round((count / total) * 100);
+  }
+
+  function renderQuestion() {
+    var question = questions[currentIndex];
+    var answer = answeredByQuestionId[question.id];
+
+    var html = '';
+    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += '<div class="qcm-options" id="qcm-options"></div>';
+    html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
+    html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
+    body.innerHTML = html;
+
+    var optionsEl = document.getElementById('qcm-options');
+    question.options.forEach(function (optionText, index) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'qcm-option-btn';
+      btn.innerHTML =
+        '<span class="qcm-option-fill"></span>' +
+        '<span class="qcm-option-row">' +
+        '<span class="qcm-option-label">' + escapeHtml(optionText) + '</span>' +
+        '<span class="qcm-option-pct"></span>' +
+        '</span>';
+      btn.addEventListener('click', function () { submitAnswer(question, index); });
+      optionsEl.appendChild(btn);
+    });
+
+    if (answer) applyAnswerState(question, answer);
+  }
+
+  function applyAnswerState(question, answer) {
+    var optionsEl = document.getElementById('qcm-options');
+    var buttons = optionsEl.querySelectorAll('.qcm-option-btn');
+    var total = answer.totalAnswers || 0;
+    buttons.forEach(function (btn, index) {
+      btn.disabled = true;
+      btn.classList.add('answered');
+      var count = (answer.stats && answer.stats[index]) || 0;
+      btn.querySelector('.qcm-option-fill').style.width = pct(count, total) + '%';
+      btn.querySelector('.qcm-option-pct').textContent = pct(count, total) + '%';
+      if (index === answer.correctIndex) btn.classList.add('is-correct');
+      else if (index === answer.optionIndex) btn.classList.add('is-wrong-picked');
+    });
+
+    var feedback = document.getElementById('qcm-feedback');
+    feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
+    feedback.innerHTML =
+      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
+      escapeHtml(answer.explanation || '');
+
+    var nextBtn = document.getElementById('qcm-next-btn');
+    var isLast = currentIndex === questions.length - 1;
+    nextBtn.textContent = isLast ? 'Voir mon score' : 'Question suivante';
+    nextBtn.className = 'qcm-next-btn visible';
+    nextBtn.onclick = function () {
+      if (isLast) renderFinalScore();
+      else { currentIndex += 1; renderQuestion(); }
+    };
+  }
+
+  function submitAnswer(question, optionIndex) {
+    var optionsEl = document.getElementById('qcm-options');
+    optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = true; });
+
+    fetch('/api/daily-quiz/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        answeredByQuestionId[question.id] = data;
+        applyAnswerState(question, data);
+      })
+      .catch(function () {
+        optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = false; });
+      });
+  }
+
+  function renderFinalScore() {
+    var total = questions.length;
+    var correct = 0;
+    questions.forEach(function (q) {
+      var a = answeredByQuestionId[q.id];
+      if (a && a.correct) correct += 1;
+    });
+    body.innerHTML =
+      '<div class="qcm-final-score">' +
+      '<i class="fa-solid fa-trophy"></i>' +
+      '<div class="qcm-final-score-value">' + correct + ' / ' + total + '</div>' +
+      '<div class="qcm-final-score-label">bonnes réponses aujourd’hui</div>' +
+      '</div>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-restart-btn">Recommencer</button>';
+
+    // Les réponses du jour sont verrouillées côté serveur (une seule par
+    // question et par voterKey) : "Recommencer" repart de la question 1 pour
+    // les revoir, sans pouvoir les changer, plutôt qu'un vrai reset.
+    document.getElementById('qcm-restart-btn').onclick = function () {
+      currentIndex = 0;
+      renderQuestion();
+    };
+  }
+
+  function init() {
+    voterKey = typeof getKey === 'function' ? getKey() : null;
+
+    fetch('/api/daily-quiz/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        questions = Array.isArray(data.questions) ? data.questions : [];
+        if (!questions.length) {
+          renderMessage('Le QCM du jour n’est pas encore prêt, reviens un peu plus tard.');
+          return;
+        }
+        if (!voterKey) {
+          currentIndex = 0;
+          renderQuestion();
+          return;
+        }
+        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
+            var firstUnanswered = questions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
+            if (firstUnanswered === -1) {
+              renderFinalScore();
+            } else {
+              currentIndex = firstUnanswered;
+              renderQuestion();
+            }
+          })
+          .catch(function () { currentIndex = 0; renderQuestion(); });
+      })
+      .catch(function () {
+        renderMessage('Impossible de charger le QCM du jour pour le moment.');
+      });
+  }
+
+  // getKey() est défini dans script.min.js : ce script inline n'est pas
+  // concerné par l'attribut defer (ignoré sans src), il s'exécute donc avant
+  // que script.min.js n'ait fini de charger — on attend DOMContentLoaded,
+  // qui n'arrive qu'une fois tous les scripts deferred exécutés.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

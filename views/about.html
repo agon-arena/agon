@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260720-customsavebtn">
+  <link rel="stylesheet" href="/style.min.css?v=20260721-contribfont">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
@@ -47,6 +47,22 @@
         <p>Agôn est un réseau de contributions évaluées par intelligence artificielle. Les utilisateurs y publient des contenus qui sont évalués et comparés selon des critères définis.</p>
         <p>L’objectif est de faire émerger les propositions les plus robustes, les plus pertinentes ou les plus conformes aux critères choisis, sans imposer une vérité unique.</p>
         <p>Agôn met les idées à l’épreuve pour rendre l’intelligence collective plus lisible, plus stimulante et plus exigeante.</p>
+        <button type="button" class="about-accordion-collapse" onclick="this.closest('details').removeAttribute('open')">Masquer</button>
+      </div>
+    </details>
+
+    <details class="about-accordion">
+      <summary>Comment tes informations sont gardées en mémoire (sans compte)</summary>
+      <div class="about-accordion-content">
+        <p>Agôn ne demande ni compte, ni email, ni mot de passe. Dès ta première visite, ton navigateur génère une clé aléatoire, stockée uniquement en local sur cet appareil, dans ce navigateur précis. C'est cette clé — et non une identité civile — qui associe tes votes, tes idées postées, tes commentaires et tes notifications à « toi ».</p>
+        <p>Rien n'est relié à une adresse email, un numéro de téléphone ou un nom : Agôn ne sait pas qui tu es réellement, seulement que la même clé revient.</p>
+        <p><strong>Les limites de ce fonctionnement</strong></p>
+        <ul>
+          <li>Si tu effaces les données de navigation (cache, cookies, stockage local) de ton navigateur, cette clé est perdue avec tout ce qu'elle porte : historique de votes, de contributions et de notifications. Elle ne peut pas être récupérée, il n'y a ni mot de passe ni email à réinitialiser.</li>
+          <li>Cette clé est propre à un couple appareil + navigateur, elle n'est pas synchronisée. Un autre téléphone, un autre ordinateur, ou même un autre navigateur sur le même appareil, c'est vu comme une personne différente, sans lien avec ton activité précédente.</li>
+          <li>En navigation privée, la clé est généralement supprimée à la fermeture de la fenêtre : ton passage reste sans suite.</li>
+          <li>Ce n'est pas une preuve d'identité : rien n'empêche techniquement qu'une clé soit extraite ou partagée, et rien n'empêche une même personne d'en générer plusieurs (en changeant de navigateur ou en effaçant ses données).</li>
+        </ul>
         <button type="button" class="about-accordion-collapse" onclick="this.closest('details').removeAttribute('open')">Masquer</button>
       </div>
     </details>
@@ -114,7 +130,7 @@
 
   </section>
 </main>
-<script src="/script.min.js?v=20260719-retry-arrows3" defer></script>
+<script src="/script.min.js?v=20260721-aboutnorefresh" defer></script>
 <script>
 (function() {
   var list = document.getElementById('about-media-list');

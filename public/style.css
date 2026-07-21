@@ -20562,6 +20562,14 @@ body.page-notifications-mobile :where(button, input, textarea, select, p, span, 
   font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
 }
 
+/* Page Mes scores et contributions : police condensée peu lisible pour du texte
+   dense (listes de contributions, scores) → police déjà utilisée ailleurs sur
+   le site pour le corps de texte, plus lisible. */
+body.page-contributions,
+body.page-contributions :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
 /* Idées page débat : titre en gras, corps en normal avec première lettre en gras */
 body.page-debate .argument-title {
   font-weight: 700;

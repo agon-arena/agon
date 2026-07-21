@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260720-customsavebtn" />
+<link rel="stylesheet" href="/style.min.css?v=20260721-contribfont" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -286,7 +286,11 @@ try {
     </a>
     <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
       <i class="fa-regular fa-folder-open"></i>
-      <span>Mes scores et contributions</span>
+      <span>Scores, classements et contributions</span>
+    </a>
+    <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
+      <i class="fa-solid fa-list-check"></i>
+      <span>QCM du jour</span>
     </a>
     <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
       <i id="push-menu-icon" class="fa-regular fa-bell"></i>
@@ -1022,7 +1026,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260719-share-flash-after-scroll" defer></script>
+	<script src="/script.min.js?v=20260721-aboutnorefresh" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

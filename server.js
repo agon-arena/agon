@@ -4267,10 +4267,33 @@ function getUserContributionTierLabel(tier) {
   return USER_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
 }
 
+// Paliers de volume pour le score Gnosis (QCM du jour) : mêmes proportions que
+// USER_SCORE_TIERS (1 / 3 / 9 / +) mais mises à l'échelle du rythme du QCM
+// (6 questions/jour) plutôt que du rythme de publication d'idées — sinon un
+// visiteur qui répond tous les jours se retrouverait comparé à quelqu'un qui
+// n'a répondu qu'une fois.
+const GNOSIS_SCORE_TIERS = [
+  { tier: 1, max: 6, label: "6 questions répondues ou moins" },
+  { tier: 2, max: 18, label: "7 à 18 questions répondues" },
+  { tier: 3, max: 54, label: "19 à 54 questions répondues" },
+  { tier: 4, max: Infinity, label: "55 questions répondues ou plus" }
+];
+
+function getGnosisTier(count) {
+  for (const t of GNOSIS_SCORE_TIERS) {
+    if (count <= t.max) return t.tier;
+  }
+  return GNOSIS_SCORE_TIERS[GNOSIS_SCORE_TIERS.length - 1].tier;
+}
+
+function getGnosisTierLabel(tier) {
+  return GNOSIS_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
+}
+
 // Applique buildPercentileScoreMap indépendamment à l'intérieur de chaque
 // palier plutôt que sur toute la population d'un coup.
-function buildTieredPercentileScoreMap(valueByAuthorKey, tierByAuthorKey) {
-  const byTier = new Map(USER_SCORE_TIERS.map((t) => [t.tier, new Map()]));
+function buildTieredPercentileScoreMap(valueByAuthorKey, tierByAuthorKey, tiers = USER_SCORE_TIERS) {
+  const byTier = new Map(tiers.map((t) => [t.tier, new Map()]));
   for (const [authorKey, value] of valueByAuthorKey) {
     const tier = tierByAuthorKey.get(authorKey) || 1;
     byTier.get(tier).set(authorKey, value);
@@ -4350,18 +4373,73 @@ async function computeUserScores() {
     notesTierSizeByTier.set(tier, (notesTierSizeByTier.get(tier) || 0) + 1);
   }
 
+  // Score Gnosis : justesse au QCM du jour (part de bonnes réponses), sur le
+  // même principe que Logos (une moyenne/ratio, pas un total qui grossit
+  // avec le volume) — palier propre basé sur le nombre de questions
+  // répondues plutôt que sur le nombre d'idées postées.
+  const { data: allQuizAnswers, error: quizAnswersError } = await fetchAllSupabaseRows(() =>
+    supabase.from("daily_quiz_answers").select("voter_key, quiz_date, question_id, option_index"));
+  if (quizAnswersError) throw quizAnswersError;
+
+  const quizDates = [...new Set((allQuizAnswers || []).map((a) => a.quiz_date).filter(Boolean))];
+  const correctIndexByDateAndQuestion = new Map();
+  if (quizDates.length) {
+    const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
+      supabase.from("daily_quiz").select("quiz_date, questions").in("quiz_date", chunk));
+    if (quizRowsError) throw quizRowsError;
+    for (const row of quizRows || []) {
+      for (const q of (row.questions || [])) {
+        correctIndexByDateAndQuestion.set(`${row.quiz_date}:${q.id}`, q.correctIndex);
+      }
+    }
+  }
+
+  const quizAnsweredByAuthorKey = new Map();
+  const quizCorrectByAuthorKey = new Map();
+  for (const a of allQuizAnswers || []) {
+    const voterKey = String(a.voter_key || "").trim();
+    if (!voterKey) continue;
+    quizAnsweredByAuthorKey.set(voterKey, (quizAnsweredByAuthorKey.get(voterKey) || 0) + 1);
+    const correctIndex = correctIndexByDateAndQuestion.get(`${a.quiz_date}:${a.question_id}`);
+    if (correctIndex !== undefined && Number(a.option_index) === Number(correctIndex)) {
+      quizCorrectByAuthorKey.set(voterKey, (quizCorrectByAuthorKey.get(voterKey) || 0) + 1);
+    }
+  }
+
+  const gnosisTierByAuthorKey = new Map();
+  for (const [authorKey, count] of quizAnsweredByAuthorKey) {
+    gnosisTierByAuthorKey.set(authorKey, getGnosisTier(count));
+  }
+
+  const accuracyByAuthorKey = new Map();
+  for (const [authorKey, answered] of quizAnsweredByAuthorKey) {
+    accuracyByAuthorKey.set(authorKey, ((quizCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
+  }
+
+  const gnosisTierSizeByTier = new Map();
+  for (const authorKey of accuracyByAuthorKey.keys()) {
+    const tier = gnosisTierByAuthorKey.get(authorKey) || 1;
+    gnosisTierSizeByTier.set(tier, (gnosisTierSizeByTier.get(tier) || 0) + 1);
+  }
+
   return {
     votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
     notesScoreByAuthorKey: buildTieredPercentileScoreMap(noteAvgByAuthorKey, tierByAuthorKey),
+    gnosisScoreByAuthorKey: buildTieredPercentileScoreMap(accuracyByAuthorKey, gnosisTierByAuthorKey, GNOSIS_SCORE_TIERS),
     tierByAuthorKey,
+    gnosisTierByAuthorKey,
     votesTotalUsers: votesTotalByAuthorKey.size,
     notesTotalUsers: noteAvgByAuthorKey.size,
+    gnosisTotalUsers: accuracyByAuthorKey.size,
     votesTierSizeByTier,
     notesTierSizeByTier,
+    gnosisTierSizeByTier,
     // Valeurs brutes (pas seulement le percentile) — affichées telles quelles
     // dans la modale à côté du "Top X%".
     votesTotalByAuthorKey,
-    noteAvgByAuthorKey
+    noteAvgByAuthorKey,
+    quizAnsweredByAuthorKey,
+    quizCorrectByAuthorKey
   };
 }
 
@@ -4399,23 +4477,35 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
 
   try {
     const {
-      votesScoreByAuthorKey, notesScoreByAuthorKey, tierByAuthorKey,
-      votesTotalUsers, notesTotalUsers, votesTierSizeByTier, notesTierSizeByTier,
-      votesTotalByAuthorKey, noteAvgByAuthorKey
+      votesScoreByAuthorKey, notesScoreByAuthorKey, gnosisScoreByAuthorKey,
+      tierByAuthorKey, gnosisTierByAuthorKey,
+      votesTotalUsers, notesTotalUsers, gnosisTotalUsers,
+      votesTierSizeByTier, notesTierSizeByTier, gnosisTierSizeByTier,
+      votesTotalByAuthorKey, noteAvgByAuthorKey,
+      quizAnsweredByAuthorKey, quizCorrectByAuthorKey
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
+    const gnosisTier = gnosisTierByAuthorKey.get(key) || null;
     res.json({
       votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
       notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null,
+      gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : null,
       tierLabel: tier ? getUserContributionTierLabel(tier) : null,
       tier: tier || null,
       tierCount: USER_SCORE_TIERS.length,
+      gnosisTierLabel: gnosisTier ? getGnosisTierLabel(gnosisTier) : null,
+      gnosisTier: gnosisTier || null,
+      gnosisTierCount: GNOSIS_SCORE_TIERS.length,
       votesTotalUsers,
       notesTotalUsers,
+      gnosisTotalUsers,
       votesTierUsers: tier ? (votesTierSizeByTier.get(tier) || 0) : null,
       notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null,
+      gnosisTierUsers: gnosisTier ? (gnosisTierSizeByTier.get(gnosisTier) || 0) : null,
       votesValue: votesTotalByAuthorKey.has(key) ? votesTotalByAuthorKey.get(key) : null,
-      notesValue: noteAvgByAuthorKey.has(key) ? Math.round(noteAvgByAuthorKey.get(key) * 10) / 10 : null
+      notesValue: noteAvgByAuthorKey.has(key) ? Math.round(noteAvgByAuthorKey.get(key) * 10) / 10 : null,
+      gnosisAnswered: quizAnsweredByAuthorKey.has(key) ? quizAnsweredByAuthorKey.get(key) : null,
+      gnosisCorrect: quizCorrectByAuthorKey.has(key) ? quizCorrectByAuthorKey.get(key) : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);
@@ -4561,6 +4651,242 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
   } catch (e) {
     console.error("Erreur /api/my-contributions:", e);
     res.status(500).json({ error: "Erreur lors du chargement des contributions." });
+  }
+});
+
+// Classement global "Les meilleures idées" (page contributions) : les 3
+// fenêtres (jour/semaine/mois) sont calculées d'un coup sur les idées des 30
+// derniers jours et mises en cache — recalculer à chaque requête scannerait
+// toutes les idées récentes à chaque affichage de la page.
+const BEST_IDEAS_CACHE_TTL_MS = 3 * 60 * 1000;
+const BEST_IDEAS_WINDOW_MS = {
+  day: 24 * 60 * 60 * 1000,
+  week: 7 * 24 * 60 * 60 * 1000,
+  month: 30 * 24 * 60 * 60 * 1000
+};
+const BEST_IDEAS_PER_CATEGORY = 10;
+
+let _bestIdeasCache = null;
+let _bestIdeasCacheComputedAt = 0;
+let _bestIdeasRefreshPromise = null;
+
+async function computeBestIdeas() {
+  const sinceIso = new Date(Date.now() - BEST_IDEAS_WINDOW_MS.month).toISOString();
+
+  const { data: recentArguments, error: argsError } = await fetchAllSupabaseRows(() =>
+    supabase
+      .from("arguments")
+      .select("id, debate_id, side, title, body, votes, created_at")
+      .gte("created_at", sinceIso));
+  if (argsError) throw argsError;
+
+  const debateIds = [...new Set((recentArguments || []).map((a) => String(a.debate_id)).filter(Boolean))];
+  let debatesById = new Map();
+  // Notes IA : même source que /api/my-contributions et computeUserScores —
+  // le scoring par idée vit dans debates.ai_analysis, pas sur l'idée elle-même.
+  const scoreByArgumentId = new Map();
+  if (debateIds.length) {
+    const [{ data: relatedDebates, error: debatesError }, { data: analyzedDebates, error: analysisError }] = await Promise.all([
+      fetchAllSupabaseRowsIn(debateIds, (chunk) =>
+        supabase.from("debates").select("id, question, type, option_a, option_b").in("id", chunk)),
+      fetchAllSupabaseRowsIn(debateIds, (chunk) =>
+        supabase.from("debates").select("id, ai_analysis").in("id", chunk).not("ai_analysis", "is", null))
+    ]);
+    if (debatesError) throw debatesError;
+    if (analysisError) throw analysisError;
+    debatesById = new Map((relatedDebates || []).map((d) => [String(d.id), d]));
+
+    for (const row of analyzedDebates || []) {
+      const rawScoring = extractAnalysisScoringRaw(row.ai_analysis);
+      if (!rawScoring) continue;
+      try {
+        const parsedScoring = JSON.parse(rawScoring);
+        for (const [argId, entry] of _getAnalysisScoreByArgumentId(parsedScoring)) {
+          scoreByArgumentId.set(argId, entry);
+        }
+      } catch (e) {}
+    }
+  }
+
+  function buildForWindow(windowMs) {
+    const cutoff = Date.now() - windowMs;
+    const open = [];
+    const positioned = [];
+    for (const arg of recentArguments || []) {
+      const createdAtMs = new Date(String(arg.created_at || "").replace(" ", "T")).getTime();
+      if (!createdAtMs || createdAtMs < cutoff) continue;
+      const debate = debatesById.get(String(arg.debate_id));
+      if (!debate) continue;
+      const scoreEntry = scoreByArgumentId.get(String(arg.id));
+      const item = {
+        id: arg.id,
+        title: arg.title || "",
+        body: arg.body || "",
+        votes: Number(arg.votes) || 0,
+        ai_score: scoreEntry ? scoreEntry.score : null,
+        ai_category: scoreEntry ? scoreEntry.category : "",
+        created_at: arg.created_at,
+        debate_id: arg.debate_id,
+        debate_question: debate.question || ""
+      };
+      if (String(debate.type || "debate") === "open") {
+        open.push(item);
+      } else {
+        const sideLabel = arg.side === "A" ? (debate.option_a || "") : arg.side === "B" ? (debate.option_b || "") : "";
+        positioned.push({ ...item, side: arg.side || null, side_label: sideLabel });
+      }
+    }
+
+    const byVotes = (a, b) => b.votes - a.votes;
+    const byAiScore = (a, b) => b.ai_score - a.ai_score;
+    const withAiScore = (list) => list.filter((item) => item.ai_score !== null);
+
+    return {
+      votes: {
+        open: open.slice().sort(byVotes).slice(0, BEST_IDEAS_PER_CATEGORY),
+        positioned: positioned.slice().sort(byVotes).slice(0, BEST_IDEAS_PER_CATEGORY)
+      },
+      aiScore: {
+        open: withAiScore(open).sort(byAiScore).slice(0, BEST_IDEAS_PER_CATEGORY),
+        positioned: withAiScore(positioned).sort(byAiScore).slice(0, BEST_IDEAS_PER_CATEGORY)
+      }
+    };
+  }
+
+  return {
+    day: buildForWindow(BEST_IDEAS_WINDOW_MS.day),
+    week: buildForWindow(BEST_IDEAS_WINDOW_MS.week),
+    month: buildForWindow(BEST_IDEAS_WINDOW_MS.month)
+  };
+}
+
+async function refreshBestIdeasCache() {
+  if (_bestIdeasRefreshPromise) return _bestIdeasRefreshPromise;
+  _bestIdeasRefreshPromise = computeBestIdeas()
+    .then((result) => {
+      _bestIdeasCache = result;
+      _bestIdeasCacheComputedAt = Date.now();
+      return result;
+    })
+    .catch((e) => {
+      console.error("[best-ideas] refresh error:", e.message);
+      throw e;
+    })
+    .finally(() => {
+      _bestIdeasRefreshPromise = null;
+    });
+  return _bestIdeasRefreshPromise;
+}
+
+async function getBestIdeasData() {
+  if (_bestIdeasCache) {
+    if (Date.now() - _bestIdeasCacheComputedAt >= BEST_IDEAS_CACHE_TTL_MS) {
+      refreshBestIdeasCache().catch(() => {});
+    }
+    return _bestIdeasCache;
+  }
+  return refreshBestIdeasCache();
+}
+
+// Notifications "top 5 des classements" : prévient l'auteur d'une idée dès qu'elle
+// entre dans le top 5 d'un des classements de la page Contributions (votes ou note
+// IA, sur les 3 fenêtres jour/semaine/mois, arènes libres et à positions). Détection
+// par diff avec le relevé précédent, gardé en mémoire seulement.
+// Au tout premier passage après un démarrage/redémarrage serveur, on se contente
+// d'enregistrer l'état courant sans notifier : sinon chaque redémarrage ferait
+// paraître "nouveau" tout le top 5 déjà en place et spammerait ses auteurs.
+const TOP5_NOTIFY_CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const TOP5_NOTIFY_RANK_LIMIT = 5;
+const TOP5_NOTIFY_PERIODS = ["day", "week", "month"];
+const TOP5_NOTIFY_METRICS = ["votes", "aiScore"];
+const TOP5_NOTIFY_ARENA_TYPES = ["open", "positioned"];
+const TOP5_NOTIFY_PERIOD_LABELS = { day: "du jour", week: "de la semaine", month: "du mois" };
+const TOP5_NOTIFY_METRIC_LABELS = {
+  votes: "des idées les plus soutenues",
+  aiScore: "des idées les mieux notées par l'IA"
+};
+
+let _top5NotifyPreviousEntrants = new Map();
+let _top5NotifyWarmedUp = false;
+
+async function checkTop5IdeaEntries() {
+  let bestIdeas;
+  try {
+    bestIdeas = await refreshBestIdeasCache();
+  } catch (e) {
+    console.error("[top5-notify] Erreur calcul des classements:", e.message);
+    return;
+  }
+
+  // argumentId -> { item, entries: [{ period, metric }] }
+  const newEntriesByArgumentId = new Map();
+
+  for (const period of TOP5_NOTIFY_PERIODS) {
+    for (const metric of TOP5_NOTIFY_METRICS) {
+      for (const arenaType of TOP5_NOTIFY_ARENA_TYPES) {
+        const top5 = (bestIdeas?.[period]?.[metric]?.[arenaType] || []).slice(0, TOP5_NOTIFY_RANK_LIMIT);
+        const currentIds = new Set(top5.map((item) => String(item.id)));
+        const key = `${period}:${metric}:${arenaType}`;
+        const previousIds = _top5NotifyPreviousEntrants.get(key) || new Set();
+
+        if (_top5NotifyWarmedUp) {
+          for (const item of top5) {
+            const id = String(item.id);
+            if (previousIds.has(id)) continue;
+            if (!newEntriesByArgumentId.has(id)) newEntriesByArgumentId.set(id, { item, entries: [] });
+            newEntriesByArgumentId.get(id).entries.push({ period, metric });
+          }
+        }
+
+        _top5NotifyPreviousEntrants.set(key, currentIds);
+      }
+    }
+  }
+  _top5NotifyWarmedUp = true;
+
+  if (!newEntriesByArgumentId.size) return;
+
+  const argumentIds = [...newEntriesByArgumentId.keys()];
+  const { data: authorRows, error: authorsError } = await supabase
+    .from("arguments")
+    .select("id, author_key")
+    .in("id", argumentIds);
+  if (authorsError) {
+    console.error("[top5-notify] Erreur lecture auteurs:", authorsError.message);
+    return;
+  }
+  const authorKeyById = new Map((authorRows || []).map((row) => [String(row.id), row.author_key]));
+
+  for (const [argumentId, { item, entries }] of newEntriesByArgumentId) {
+    const authorKey = authorKeyById.get(argumentId);
+    if (!authorKey || authorKey === AGON_ADMIN_CREATOR_KEY) continue;
+
+    for (const { period, metric } of entries) {
+      const message = `Bravo ! Votre idée ${quoteNotificationContent(item.title)} est entrée dans le top 5 ${TOP5_NOTIFY_METRIC_LABELS[metric]} ${TOP5_NOTIFY_PERIOD_LABELS[period]}.`;
+      createNotification({
+        user_key: authorKey,
+        type: metric === "votes" ? "top5_idea_votes" : "top5_idea_ai_score",
+        debate_id: item.debate_id,
+        argument_id: Number(argumentId),
+        message
+      }).catch((e) => console.error("[top5-notify] Erreur création notification:", e.message));
+    }
+  }
+}
+
+setInterval(() => {
+  checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
+}, TOP5_NOTIFY_CHECK_INTERVAL_MS).unref();
+checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
+
+app.get("/api/best-ideas", rateLimit("bestIdeas", 60), async (req, res) => {
+  const period = ["day", "week", "month"].includes(String(req.query.period)) ? String(req.query.period) : "day";
+  try {
+    const data = await getBestIdeasData();
+    res.json({ period, ...data[period] });
+  } catch (e) {
+    console.error("Erreur /api/best-ideas:", e);
+    res.status(500).json({ error: "Erreur lors du chargement des meilleures idées." });
   }
 });
 
@@ -7677,6 +8003,9 @@ const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
 // reste bornée par OPINION_ARTICLES_SELECTION_SCAN_LIMIT (4000) et les buckets
 // à 250, sans rapport avec l'incident de quota du 20/06/2026 (tables sans purge).
 const OPINION_ARTICLES_RETENTION_DAYS = 7;
+// Un QCM par jour : 30 jours suffisent largement pour les stats/debug, sans
+// accumuler indéfiniment (même logique que les autres tables purgées ici).
+const DAILY_QUIZ_RETENTION_DAYS = 30;
 const RETENTION_DELETE_BATCH_SIZE = 500;
 const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
 
@@ -7718,6 +8047,8 @@ async function runDataRetentionCleanup() {
   await pruneOldRows("page_visits", PAGE_VISITS_RETENTION_DAYS);
   await pruneOldRows("notification_events", NOTIFICATION_EVENTS_RETENTION_DAYS);
   await pruneOldRows("opinion_articles", OPINION_ARTICLES_RETENTION_DAYS);
+  await pruneOldRows("daily_quiz", DAILY_QUIZ_RETENTION_DAYS);
+  await pruneOldRows("daily_quiz_answers", DAILY_QUIZ_RETENTION_DAYS);
 }
 
 runDataRetentionCleanup().catch((err) => console.error("[retention] purge initiale :", err.message));
@@ -10656,7 +10987,12 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
       r = await fetch("https://api.openai.com/v1/chat/completions", {
         method:  "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body:    JSON.stringify({ model: opts.model || "gpt-4o-mini", messages, temperature: opts.temperature ?? 0.3 }),
+        body:    JSON.stringify({
+          model: opts.model || "gpt-4o-mini",
+          messages,
+          temperature: opts.temperature ?? 0.3,
+          ...(opts.responseFormat ? { response_format: opts.responseFormat } : {})
+        }),
         signal:  AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (fetchErr) {
@@ -10698,6 +11034,349 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
     console.error("[analyze-debate]", err.message);
     return res.status(502).json({ error: err.message || "Erreur lors de la génération." });
   }
+});
+
+/* ================================================================= */
+/*   QCM du jour — généré chaque matin à partir des arènes AI d'Agôn */
+/* ================================================================= */
+
+const DAILY_QUIZ_QUESTION_COUNT = 6;
+const DAILY_QUIZ_MIN_CANDIDATES = 8;
+const DAILY_QUIZ_MIN_VALID_QUESTIONS = 3;
+const DAILY_QUIZ_GENERATION_MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4o-mini";
+
+function parisDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function parisHour(date = new Date()) {
+  const value = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" }).format(date);
+  return parseInt(value, 10);
+}
+
+// Minuit (heure de Paris) du jour de `date`, en ISO UTC — borne basse des
+// candidats du QCM. Calculé en retranchant le temps écoulé depuis minuit
+// local plutôt qu'en reconstruisant une date locale (fiable été/hiver, sans
+// dépendre d'un parsing de fuseau).
+function parisStartOfDayIso(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+  }).formatToParts(date);
+  const get = (type) => parseInt(parts.find((p) => p.type === type)?.value || "0", 10);
+  const msSinceParisMidnight = ((get("hour") * 60 + get("minute")) * 60 + get("second")) * 1000 + date.getMilliseconds();
+  return new Date(date.getTime() - msSinceParisMidnight).toISOString();
+}
+
+// Une même actu est souvent republiée 2-3 fois à quelques minutes d'intervalle
+// (variantes gauche/droite d'un même sujet) — une seule question par sujet identique.
+function dedupeDailyQuizCandidatesByQuestion(rows) {
+  const seen = new Set();
+  const deduped = [];
+  for (const row of rows) {
+    const key = String(row.question || "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
+}
+
+// Uniquement les arènes publiées depuis minuit (Paris) aujourd'hui — pas une
+// fenêtre glissante, qui remonterait sur l'actualité de la veille et casserait
+// la promesse "actualité du jour". Les publications se font par vagues
+// (~8h et ~16h heure de Paris) : le scheduler n'appelle cette fonction qu'à
+// partir de 17h (cf. tryGenerateDailyQuiz) pour laisser le temps aux deux
+// vagues du jour d'arriver. Pas de repli sur une autre journée si le volume
+// est insuffisant : la génération est simplement reportée au cycle suivant.
+async function fetchDailyQuizCandidateDebates() {
+  const cutoff = parisStartOfDayIso();
+  const { data, error } = await supabase
+    .from("debates")
+    .select("id, question, content, category, cloud_label")
+    .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(80);
+  if (error) throw new Error(error.message);
+  return dedupeDailyQuizCandidatesByQuestion(data || []);
+}
+
+function buildDailyQuizPrompt(candidates) {
+  const list = candidates
+    .map((c) => `- id:${c.id} | ${String(c.question || "").trim()}\n  ${String(c.content || "").trim().slice(0, 500).replace(/\s+/g, " ")}`)
+    .join("\n");
+  return [
+    `Tu écris un QCM d'actualité en français, ${DAILY_QUIZ_QUESTION_COUNT} questions, à partir des arènes ci-dessous (déjà rédigées par Agôn depuis l'actualité du jour).`,
+    "Règles strictes :",
+    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
+    "- Une question par sujet distinct (utilise des \"id\" différents pour sourceDebateId), en couvrant des thèmes variés.",
+    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- Pas de question fermée oui/non, pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
+    "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
+    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceDebateId":"id fourni"}]}.',
+    "",
+    "Arènes disponibles :",
+    list
+  ].join("\n");
+}
+
+function validateDailyQuizQuestions(rawQuestions, candidateIds) {
+  if (!Array.isArray(rawQuestions)) return [];
+  const validCandidateIds = new Set(candidateIds.map(String));
+  const usedSourceIds = new Set();
+  const valid = [];
+  for (const item of rawQuestions) {
+    const question = String(item?.question || "").trim();
+    const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
+    const correctIndex = Number(item?.correctIndex);
+    const explanation = String(item?.explanation || "").trim();
+    const sourceDebateId = String(item?.sourceDebateId ?? "").trim();
+    if (!question || options.length !== 4) continue;
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+    if (!sourceDebateId || !validCandidateIds.has(sourceDebateId) || usedSourceIds.has(sourceDebateId)) continue;
+    usedSourceIds.add(sourceDebateId);
+    valid.push({ question, options, correctIndex, explanation, sourceDebateId });
+    if (valid.length >= DAILY_QUIZ_QUESTION_COUNT) break;
+  }
+  return valid;
+}
+
+async function generateDailyQuizIfNeeded() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+
+  const todayKey = parisDateKey();
+  const { data: existing, error: existingError } = await supabase
+    .from("daily_quiz")
+    .select("id")
+    .eq("quiz_date", todayKey)
+    .maybeSingle();
+  if (existingError) { console.error("[daily-quiz] vérification existant :", existingError.message); return; }
+  if (existing) return;
+
+  const candidates = await fetchDailyQuizCandidateDebates();
+  if (candidates.length < DAILY_QUIZ_MIN_CANDIDATES) {
+    console.warn(`[daily-quiz] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
+    return;
+  }
+
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildDailyQuizPrompt(candidates) }], {
+      model: DAILY_QUIZ_GENERATION_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error("[daily-quiz] génération IA :", error.message);
+    return;
+  }
+
+  const validated = validateDailyQuizQuestions(parsed?.questions, candidates.map((c) => c.id));
+  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS) {
+    console.warn(`[daily-quiz] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
+    return;
+  }
+
+  const questions = validated.map((q, index) => ({ id: `q${index + 1}`, ...q }));
+  const { error: insertError } = await supabase.from("daily_quiz").insert({
+    quiz_date: todayKey,
+    questions,
+    source_debate_ids: questions.map((q) => q.sourceDebateId)
+  });
+  if (insertError) { console.error("[daily-quiz] insertion :", insertError.message); return; }
+  console.log(`[daily-quiz] QCM du ${todayKey} généré (${questions.length} questions).`);
+}
+
+// Même garde-fou que ANALYSIS_SCHEDULER_ENABLED : seule l'instance Render génère
+// le QCM (le Mac local reste passif). AGON_DAILY_QUIZ_SCHEDULER=on|off force le
+// comportement (ex. =on en local pour tester sans Render).
+const DAILY_QUIZ_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_DAILY_QUIZ_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+
+if (DAILY_QUIZ_SCHEDULER_ENABLED) {
+  const tryGenerateDailyQuiz = () => {
+    // Les arènes du jour arrivent par 2 vagues (~8h et ~16h heure de Paris,
+    // cf. cadence observée) : générer plus tôt ne verrait que la vague du
+    // matin, voire rien du tout. On attend 17h (marge d'1h après la 2e
+    // vague) pour que fetchDailyQuizCandidateDebates (bornée à minuit-Paris,
+    // sans repli sur la veille) ait un vrai volume de la journée en cours.
+    if (parisHour() < 17) return;
+    generateDailyQuizIfNeeded().catch((err) => console.error("[daily-quiz scheduler]", err.message));
+  };
+  tryGenerateDailyQuiz();
+  setInterval(tryGenerateDailyQuiz, 20 * 60 * 1000).unref();
+}
+
+const _dailyQuizStatsCache = new Map();
+const DAILY_QUIZ_STATS_CACHE_TTL_MS = 30 * 1000;
+
+async function getDailyQuizStats(quizDate, questionId) {
+  const cacheKey = `${quizDate}:${questionId}`;
+  const cached = _dailyQuizStatsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < DAILY_QUIZ_STATS_CACHE_TTL_MS) return cached.result;
+
+  const { data, error } = await supabase
+    .from("daily_quiz_answers")
+    .select("option_index")
+    .eq("quiz_date", quizDate)
+    .eq("question_id", questionId);
+  if (error) throw new Error(error.message);
+
+  const stats = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  for (const row of data || []) {
+    if (row.option_index >= 0 && row.option_index <= 3) stats[row.option_index] += 1;
+  }
+  const total = stats[0] + stats[1] + stats[2] + stats[3];
+  const result = { stats, total };
+  _dailyQuizStatsCache.set(cacheKey, { at: Date.now(), result });
+  return result;
+}
+
+app.get("/api/daily-quiz/today", async (req, res) => {
+  try {
+    const todayKey = parisDateKey();
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, questions")
+      .eq("quiz_date", todayKey)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.json({ date: todayKey, questions: [] });
+    const questions = (data.questions || []).map((q) => ({ id: q.id, question: q.question, options: q.options }));
+    res.json({ date: data.quiz_date, questions });
+  } catch (error) {
+    res.status(500).json({ date: null, questions: [], error: error.message });
+  }
+});
+
+app.get("/api/daily-quiz/results", async (req, res) => {
+  try {
+    const voterKey = String(req.query.voterKey || "").trim();
+    const todayKey = parisDateKey();
+    if (!voterKey) return res.json({ date: todayKey, answers: [] });
+
+    const { data: quizRow, error: quizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", todayKey)
+      .maybeSingle();
+    if (quizError) throw new Error(quizError.message);
+    const questionsById = new Map((quizRow?.questions || []).map((q) => [q.id, q]));
+
+    const { data: answerRows, error: answersError } = await supabase
+      .from("daily_quiz_answers")
+      .select("question_id, option_index")
+      .eq("quiz_date", todayKey)
+      .eq("voter_key", voterKey);
+    if (answersError) throw new Error(answersError.message);
+
+    const answers = [];
+    for (const row of answerRows || []) {
+      const question = questionsById.get(row.question_id);
+      if (!question) continue;
+      const { stats, total } = await getDailyQuizStats(todayKey, row.question_id);
+      answers.push({
+        questionId: row.question_id,
+        optionIndex: row.option_index,
+        correct: row.option_index === question.correctIndex,
+        correctIndex: question.correctIndex,
+        explanation: question.explanation,
+        stats,
+        totalAnswers: total
+      });
+    }
+    res.json({ date: todayKey, answers });
+  } catch (error) {
+    res.status(500).json({ date: null, answers: [], error: error.message });
+  }
+});
+
+app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
+  try {
+    const voterKey = String(req.body?.voterKey || "").trim();
+    const questionId = String(req.body?.questionId || "").trim();
+    const optionIndex = Number(req.body?.optionIndex);
+    if (!voterKey || !questionId || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3) {
+      return res.status(400).json({ error: "Requête invalide." });
+    }
+
+    const todayKey = parisDateKey();
+    const { data: quizRow, error: quizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", todayKey)
+      .maybeSingle();
+    if (quizError) throw new Error(quizError.message);
+    const question = (quizRow?.questions || []).find((q) => q.id === questionId);
+    if (!question) return res.status(404).json({ error: "QCM introuvable." });
+
+    const { data: existingAnswer, error: existingError } = await supabase
+      .from("daily_quiz_answers")
+      .select("option_index")
+      .eq("quiz_date", todayKey)
+      .eq("voter_key", voterKey)
+      .eq("question_id", questionId)
+      .maybeSingle();
+    if (existingError) throw new Error(existingError.message);
+
+    let finalOptionIndex = optionIndex;
+    if (existingAnswer) {
+      finalOptionIndex = existingAnswer.option_index;
+    } else {
+      const { error: insertError } = await supabase.from("daily_quiz_answers").insert({
+        quiz_date: todayKey,
+        voter_key: voterKey,
+        question_id: questionId,
+        option_index: optionIndex
+      });
+      if (insertError) {
+        if (insertError.code === "23505") {
+          const { data: raceRow } = await supabase
+            .from("daily_quiz_answers")
+            .select("option_index")
+            .eq("quiz_date", todayKey)
+            .eq("voter_key", voterKey)
+            .eq("question_id", questionId)
+            .maybeSingle();
+          finalOptionIndex = raceRow?.option_index ?? optionIndex;
+        } else {
+          throw new Error(insertError.message);
+        }
+      } else {
+        _dailyQuizStatsCache.delete(`${todayKey}:${questionId}`);
+      }
+    }
+
+    const { stats, total } = await getDailyQuizStats(todayKey, questionId);
+    res.json({
+      correct: finalOptionIndex === question.correctIndex,
+      correctIndex: question.correctIndex,
+      explanation: question.explanation,
+      optionIndex: finalOptionIndex,
+      stats,
+      totalAnswers: total
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/qcm-du-jour", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
 });
 
 /* ================================================================= */

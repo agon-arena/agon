@@ -48,7 +48,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260720-customsavebtn">
+  <link rel="stylesheet" href="/style.min.css?v=20260721-contribfont">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -422,7 +422,11 @@
           </a>
           <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
             <i class="fa-regular fa-folder-open"></i>
-            <span>Mes scores et contributions</span>
+            <span>Scores, classements et contributions</span>
+          </a>
+          <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
+            <i class="fa-solid fa-list-check"></i>
+            <span>QCM du jour</span>
           </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
@@ -693,6 +697,139 @@ window.addEventListener("pageshow", function() {
   Les tendances de l'actualité française ces dernières heures.<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>
 </p>
 </section>
+
+<div style="text-align:center;">
+  <a href="/qcm-du-jour" id="home-qcm-du-jour-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
+    <i class="fa-solid fa-circle-question"></i>
+    <span>QCM du jour</span>
+  </a>
+</div>
+<style>
+  /* Le paragraphe .agon-tag-trends-caption juste au-dessus a un margin-bottom
+     de 26px (mobile) / 40px (desktop, cf. @media min-width:769px dans
+     style.css) qui collapse avec le margin-top de ce bouton : sans cette
+     compensation négative, l'espace au-dessus du bouton est bien plus grand
+     que l'espace en dessous (bottom margin 12px + debates-list margin-top
+     8px = 12px collapsé). Valeurs calibrées pour égaliser les deux côtés. */
+  #home-qcm-du-jour-btn {
+    margin: -14px auto 12px;
+  }
+  @media (min-width: 769px) {
+    #home-qcm-du-jour-btn {
+      margin-top: -28px;
+    }
+  }
+
+  /* Bouton QCM du jour : mis en valeur (couleur propre, plus imposant que
+     .agon-tribunes-btn) plutôt que le style discret partagé avec "Autres
+     actus" — il doit sauter aux yeux la première fois qu'on le voit. Fond
+     sombre assorti à la palette du site + liseré et texte or, plutôt qu'une
+     couleur criarde. */
+  .home-qcm-btn {
+    position: relative;
+    overflow: hidden;
+    z-index: 135;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: max-content;
+    padding: 8px 18px;
+    border: 1px solid rgba(245, 182, 66, 0.55);
+    border-radius: 999px;
+    background: linear-gradient(135deg, #1c2a33, #2e3d47);
+    color: #f5c877;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .home-qcm-btn i,
+  .home-qcm-btn span {
+    position: relative;
+    z-index: 2;
+    font-size: 14px;
+  }
+  .home-qcm-btn:hover {
+    border-color: rgba(245, 182, 66, 0.9);
+    transform: translateY(-1px);
+  }
+  /* Reflet posé par le script ci-dessous : ne balaie le bouton que pendant
+     les premières secondes ET seulement quand il est réellement visible à
+     l'écran (IntersectionObserver) — coupé définitivement ensuite. */
+  .home-qcm-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -75%;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+    transform: skewX(-22deg);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+  .home-qcm-btn.home-qcm-btn-animate::before {
+    animation: homeQcmBtnShine 2.4s ease-in-out infinite;
+  }
+  @keyframes homeQcmBtnShine {
+    0% { left: -75%; opacity: 0; }
+    12% { opacity: 1; }
+    40% { opacity: 1; }
+    60% { left: 130%; opacity: 0; }
+    100% { left: 130%; opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-qcm-btn.home-qcm-btn-animate::before {
+      animation: none;
+    }
+  }
+</style>
+<script>
+(function () {
+  var btn = document.getElementById("home-qcm-du-jour-btn");
+  if (!btn) return;
+
+  var ATTENTION_DURATION_MS = 6000;
+  var stopTimer = null;
+  var observer = null;
+
+  function stop() {
+    btn.classList.remove("home-qcm-btn-animate");
+    if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+    if (observer) { observer.disconnect(); observer = null; }
+  }
+
+  if (!("IntersectionObserver" in window)) {
+    // Repli sans coupure "hors écran" si l'API manque : seule la coupure au
+    // bout de quelques secondes s'applique.
+    btn.classList.add("home-qcm-btn-animate");
+    stopTimer = setTimeout(stop, ATTENTION_DURATION_MS);
+    return;
+  }
+
+  var startedAt = null;
+  observer = new IntersectionObserver(function (entries) {
+    var visible = entries[0] && entries[0].isIntersecting;
+    if (visible) {
+      btn.classList.add("home-qcm-btn-animate");
+      if (!startedAt) {
+        startedAt = Date.now();
+        stopTimer = setTimeout(stop, ATTENTION_DURATION_MS);
+      }
+    } else {
+      btn.classList.remove("home-qcm-btn-animate");
+    }
+  }, { threshold: 0.4 });
+
+  observer.observe(btn);
+})();
+</script>
 
 <section id="debates-list" class="debates-list"></section>
 
@@ -1029,7 +1166,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260719-carousel-noclose" defer></script>
+<script src="/script.min.js?v=20260721-aboutnorefresh" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -1039,22 +1039,31 @@ function renderUserScoreWidget(data) {
 
   const votesScoreRaw = numOrNull(data?.votesScore);
   const notesScoreRaw = numOrNull(data?.notesScore);
+  const gnosisScoreRaw = numOrNull(data?.gnosisScore);
   // 1 décimale (pas Math.round entier) : préserve les bornes 0,1 / 99,9 posées
   // côté serveur pour les extrêmes, sinon Math.round(0.1) = 0 les efface.
   const votesScore = votesScoreRaw === null ? null : Math.round(votesScoreRaw * 10) / 10;
   const notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
+  const gnosisScore = gnosisScoreRaw === null ? null : Math.round(gnosisScoreRaw * 10) / 10;
   const tierLabel = String(data?.tierLabel || "").trim();
   const tier = numOrNull(data?.tier);
   const tierCount = numOrNull(data?.tierCount);
+  const gnosisTierLabel = String(data?.gnosisTierLabel || "").trim();
+  const gnosisTier = numOrNull(data?.gnosisTier);
+  const gnosisTierCount = numOrNull(data?.gnosisTierCount);
   const stats = {
     votesTotalUsers: numOrNull(data?.votesTotalUsers),
     notesTotalUsers: numOrNull(data?.notesTotalUsers),
+    gnosisTotalUsers: numOrNull(data?.gnosisTotalUsers),
     votesTierUsers: numOrNull(data?.votesTierUsers),
     notesTierUsers: numOrNull(data?.notesTierUsers),
+    gnosisTierUsers: numOrNull(data?.gnosisTierUsers),
     votesValue: numOrNull(data?.votesValue),
-    notesValue: numOrNull(data?.notesValue)
+    notesValue: numOrNull(data?.notesValue),
+    gnosisAnswered: numOrNull(data?.gnosisAnswered),
+    gnosisCorrect: numOrNull(data?.gnosisCorrect)
   };
-  const hasScore = votesScore !== null || notesScore !== null;
+  const hasScore = votesScore !== null || notesScore !== null || gnosisScore !== null;
 
   if (!document.getElementById("agon-user-score-styles")) {
     const style = document.createElement("style");
@@ -1145,18 +1154,19 @@ function renderUserScoreWidget(data) {
   widget.setAttribute("aria-label", hasScore ? "Mes scores" : "Débloquer mes scores Orator et Logos");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
-    showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tierCount);
+    showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount);
   });
 
   if (hasScore) {
     const parts = [];
     if (votesScore !== null) parts.push('<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Orator)');
     if (notesScore !== null) parts.push(AGON_LOGOS_ICON + (votesScore !== null ? '' : 'Top ') + formatPct(notesScore) + '% (Logos)');
+    if (gnosisScore !== null) parts.push('<i class="fa-solid fa-brain"></i>' + (votesScore !== null || notesScore !== null ? '' : 'Top ') + formatPct(gnosisScore) + '% (Gnosis)');
     widget.innerHTML = parts.join(' <span style="opacity:.5">-</span> ');
   } else {
     // Aucune idée postée pour l'instant : incite à contribuer plutôt que de masquer
-    // le widget (l'ancien comportement) — les scores Orator/Logos n'existent qu'une
-    // fois qu'on a posté au moins une idée.
+    // le widget (l'ancien comportement) — les scores Orator/Logos/Gnosis n'existent
+    // qu'une fois qu'on a posté une idée ou répondu au QCM du jour.
     widget.innerHTML = '<i class="fa-solid fa-bolt"></i>Poste une idée pour débloquer ton score';
   }
 
@@ -1200,7 +1210,7 @@ function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
 }
 
-function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tierCount) {
+function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount) {
   const existing = document.getElementById("agon-user-score-overlay");
   if (existing) existing.remove();
 
@@ -1211,18 +1221,41 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
   const s = stats || {};
   const tierRank = (Number.isFinite(tier) && Number.isFinite(tierCount)) ? (' (' + tier + '/' + tierCount + ')') : '';
 
+  // Orator et Logos partagent le même palier (volume d'idées postées) mais
+  // pas la même population (tout le monde n'a pas de note IA) : une ligne de
+  // comptage par axe, chacune visible seulement si son score existe.
+  const votesTierCountHint = (votesScore !== null && Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
+    ? '<p class="install-modal-text install-modal-hint">Palier Orator : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
+    : '';
+  const notesTierCountHint = (notesScore !== null && Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
+    ? '<p class="install-modal-text install-modal-hint">Palier Logos : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
+    : '';
   const tierSection = tierLabel
     ? '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier' + tierRank + ' — ' + tierLabel + '</h4>' +
         '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien.</p>' +
+        votesTierCountHint +
+        notesTierCountHint +
+      '</div><div class="install-modal-divider"></div>'
+    : '';
+
+  // Palier propre à Gnosis (basé sur le nombre de questions répondues au QCM,
+  // pas le nombre d'idées postées) : population différente de celle des 2
+  // autres scores, affichée juste au-dessus de sa section plutôt qu'en haut.
+  const gnosisTierRank = (Number.isFinite(gnosisTier) && Number.isFinite(gnosisTierCount)) ? (' (' + gnosisTier + '/' + gnosisTierCount + ')') : '';
+  const gnosisTierCountHint = (Number.isFinite(s.gnosisTierUsers) && Number.isFinite(s.gnosisTotalUsers))
+    ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.gnosisTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.gnosisTotalUsers) + '</p>'
+    : '';
+  const gnosisTierSection = gnosisTierLabel
+    ? '<div class="install-modal-section">' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Gnosis' + gnosisTierRank + ' — ' + gnosisTierLabel + '</h4>' +
+        '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>' +
+        gnosisTierCountHint +
       '</div><div class="install-modal-divider"></div>'
     : '';
 
   const sections = [];
   if (votesScore !== null) {
-    const countHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
-      ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
-      : '';
     const valueLine = Number.isFinite(s.votesValue)
       ? '<p class="install-modal-text"><strong>' + s.votesValue.toLocaleString("fr-FR") + (s.votesValue > 1 ? ' voix reçues' : ' voix reçue') + '</strong> au total sur toutes tes idées.</p>'
       : '';
@@ -1231,14 +1264,10 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + formatPct(votesScore) + '%</h4>' +
         valueLine +
         '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.</p>' +
-        countHint +
       '</div>'
     );
   }
   if (notesScore !== null) {
-    const countHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
-      ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
-      : '';
     const valueLine = Number.isFinite(s.notesValue)
       ? '<p class="install-modal-text"><strong>Moyenne de ' + s.notesValue.toLocaleString("fr-FR") + '/100</strong> sur tes idées notées par l\'IA.</p>'
       : '';
@@ -1247,15 +1276,28 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         valueLine +
         '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>' +
-        countHint +
       '</div>'
     );
   }
 
-  // Ni idée postée, ni vote reçu, ni note IA : les deux scores n'existent pas encore
-  // (calculés uniquement à partir des idées postées) — explique le principe et incite
-  // à poster une idée plutôt que de laisser la modale vide.
-  if (votesScore === null && notesScore === null) {
+  if (gnosisScore !== null) {
+    const valueLine = (Number.isFinite(s.gnosisCorrect) && Number.isFinite(s.gnosisAnswered))
+      ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM du jour.</p>'
+      : '';
+    sections.push(
+      gnosisTierSection +
+      '<div class="install-modal-section">' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis — Top ' + formatPct(gnosisScore) + '%</h4>' +
+        valueLine +
+        '<p class="install-modal-text">Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.</p>' +
+      '</div>'
+    );
+  }
+
+  // Ni idée postée, ni vote reçu, ni note IA, ni réponse au QCM : les trois scores
+  // n'existent pas encore — explique le principe et incite à contribuer plutôt
+  // que de laisser la modale vide.
+  if (votesScore === null && notesScore === null && gnosisScore === null) {
     sections.push(
       '<div class="install-modal-section">' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator</h4>' +
@@ -1266,7 +1308,11 @@ function showUserScoreModal(votesScore, notesScore, tierLabel, stats, tier, tier
         '<p class="install-modal-text">Mesure la qualité de tes idées, notée par l\'IA.</p>' +
       '</div><div class="install-modal-divider"></div>' +
       '<div class="install-modal-section">' +
-        '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée</strong> : ces deux scores se débloquent dès ta première contribution à une arène.</p>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis</h4>' +
+        '<p class="install-modal-text">Mesure ta justesse au QCM du jour.</p>' +
+      '</div><div class="install-modal-divider"></div>' +
+      '<div class="install-modal-section">' +
+        '<p class="install-modal-text"><strong>Tu n\'as encore posté aucune idée ni répondu au QCM</strong> : ces scores se débloquent dès ta première contribution.</p>' +
       '</div>'
     );
   }
@@ -4674,6 +4720,8 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
+  modal.classList.toggle("qcm-frame-open", safePathname === "/qcm-du-jour");
+  modal.classList.toggle("about-frame-open", safePathname === "/about");
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
@@ -5199,7 +5247,9 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
-    #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh {
+    #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
@@ -13378,7 +13428,9 @@ function getNotificationDisplayTitle(notification, fallbackTitle) {
     "like_on_comment",
     "dislike_on_comment",
     "reply_to_comment",
-    "replacement_accepted"
+    "replacement_accepted",
+    "top5_idea_votes",
+    "top5_idea_ai_score"
   ]);
 
   if (detailedTypes.has(notification?.type)) {
@@ -15920,6 +15972,16 @@ if (notification.type === "majority_lost") {
   icon = "😬";
   title = "Votre camp vient de perdre la majorité";
   subtitle = "Ouvrir le débat";
+}
+if (notification.type === "top5_idea_votes") {
+  icon = "🔥";
+  title = "Votre idée entre dans un top 5 des plus soutenues";
+  subtitle = "Ouvrir l'idée";
+}
+if (notification.type === "top5_idea_ai_score") {
+  icon = "🏆";
+  title = "Votre idée entre dans un top 5 des mieux notées par l'IA";
+  subtitle = "Voir ta note IA";
 }
 if (notification.type === "analysis_scheduled") {
   icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
@@ -18717,6 +18779,10 @@ function setPoliticalCloudGroup(group) {
     _politicalCloudGroup = group;
     syncPoliticalCloudSwitch();
     applyPoliticalCloudCaption(group);
+    // La légende change de hauteur entre "Tout" et Gauche/Droite (1 ou 2 lignes en plus,
+    // le <br> mobile disparaissant en desktop) : resynchronise la hauteur de la section
+    // desktop, sinon le bandeau "À la une" qui suit peut recouvrir le bas de la légende.
+    syncCloudSectionHeight();
     // Teinte légèrement les bulles selon le nuage affiché (cf. .agon-cloud-political-*
     // dans style.css) — purement visuel, aucun impact sur le rendu lui-même.
     container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
@@ -21180,7 +21246,8 @@ function isSafeInternalModalUrl(modalUrl = "") {
       "/autres-sources",
       "/contributions",
       "/about",
-      "/contact"
+      "/contact",
+      "/qcm-du-jour"
     ].includes(parsedUrl.pathname);
   } catch (error) {
     return false;
@@ -31475,7 +31542,12 @@ function initDebateFloatingDockAutoReveal() {
 
   function update() {
     const scrollEl = document.scrollingElement || document.documentElement;
-    const nearBottom = window.scrollY + window.innerHeight >= scrollEl.scrollHeight - HIDE_NEAR_BOTTOM;
+    // Page trop courte pour scroller (peu d'arguments) : pas de "bas de page"
+    // à détecter, le dock doit rester visible en permanence, sinon le bouton
+    // retour reste invisible + pointer-events:none pour toute la visite
+    // (bloqué sans issue en PWA standalone, sans chrome navigateur).
+    const scrollable = scrollEl.scrollHeight - window.innerHeight > HIDE_NEAR_BOTTOM;
+    const nearBottom = scrollable && window.scrollY + window.innerHeight >= scrollEl.scrollHeight - HIDE_NEAR_BOTTOM;
     const shouldShow = !nearBottom;
     document.body.classList.toggle("debate-floating-dock-visible", shouldShow);
     ticking = false;
@@ -32138,6 +32210,8 @@ function _buildNotifPageItemHtml(notification) {
   if (notification.type === "reply_to_comment") { icon = "↩️"; title = "Quelqu'un a répondu à votre commentaire"; subtitle = "Ouvrir la réponse"; }
   if (notification.type === "majority_gained") { icon = "💪"; title = "Votre camp vient de prendre la majorité"; subtitle = "Ouvrir le débat"; }
   if (notification.type === "majority_lost") { icon = "😬"; title = "Votre camp vient de perdre la majorité"; subtitle = "Ouvrir le débat"; }
+  if (notification.type === "top5_idea_votes") { icon = "🔥"; title = "Votre idée entre dans un top 5 des plus soutenues"; subtitle = "Ouvrir l'idée"; }
+  if (notification.type === "top5_idea_ai_score") { icon = "🏆"; title = "Votre idée entre dans un top 5 des mieux notées par l'IA"; subtitle = "Voir ta note IA"; }
   if (notification.type === "analysis_scheduled") { icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">'; title = "L'arbitrage IA démarre dans 24h"; subtitle = "Ouvrir le débat"; }
   if (notification.type === "analysis_ready") { icon = "⚖️"; title = "L'arbitrage IA est disponible"; subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse"; }
 
@@ -34358,7 +34432,12 @@ function syncCloudSectionHeight(recomputeBase) {
   // ajoutée à la section pour qu'ils tombent sous la ligne de flottaison — le cloud
   // (flex:1) occupe tout l'espace visible, il faut scroller un peu pour voir les boutons.
   var belowFoldExtra = 0;
-  [document.getElementById('agon-cloud-mode-switch'), section.querySelector('.agon-tag-trends-caption')].forEach(function(el) {
+  [
+    document.getElementById('agon-cloud-mode-switch'),
+    document.getElementById('agon-political-cloud-switch'),
+    section.querySelector('.agon-tribunes-btn'),
+    section.querySelector('.agon-tag-trends-caption')
+  ].forEach(function(el) {
     if (!el) return;
     var cs = window.getComputedStyle(el);
     belowFoldExtra += el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
