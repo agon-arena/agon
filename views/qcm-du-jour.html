@@ -74,6 +74,7 @@
       box-sizing: border-box;
     }
     .qcm-panel {
+      position: relative;
       width: 100%;
       background: #ffffff;
       border: 1px solid #e5e7eb;
@@ -81,6 +82,30 @@
       padding: 24px;
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
+    }
+    .qcm-panel-close {
+      display: none;
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+      color: #4b5563;
+      font-size: 14px;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .qcm-panel-close:hover {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+    .page-qcm-du-jour.in-iframe .qcm-panel-close {
+      display: flex;
     }
     .qcm-panel h1 {
       margin: 0 0 4px;
@@ -256,6 +281,7 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
+    <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
     <h1><i class="fa-solid fa-circle-question"></i> QCM du jour</h1>
     <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 6 questions.</p>
     <div id="qcm-body">
@@ -263,7 +289,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260721-qcmbtnsym" defer></script>
+<script src="/script.min.js?v=20260721-qcmclosecard" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -271,6 +297,15 @@
   var questions = [];
   var answeredByQuestionId = {};
   var currentIndex = 0;
+
+  var closeBtn = document.getElementById('qcm-panel-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function () {
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
+      }
+    });
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');

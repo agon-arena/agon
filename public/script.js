@@ -5262,38 +5262,11 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
-    /* QCM du jour : pas de flèche retour en bas, mais une croix en haut à
-       droite de l'écran pour fermer la modale (même bouton
-       #debate-iframe-modal-close, juste repositionné + réhabillé pour cet
-       état). Visuel repris de .debate-image-lightbox-close (cercle translucide
-       + glyphe ✕), déjà utilisé ailleurs pour fermer un plein écran. */
+    /* QCM du jour : pas de flèche retour en bas — la fermeture se fait via une
+       croix posée directement dans le cadre .qcm-panel (même document que la
+       page /qcm-du-jour, cf. #qcm-panel-close), pas ce bouton du chrome parent. */
     #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close {
-      top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
-      bottom: auto !important;
-      left: auto !important;
-      right: 18px !important;
-      width: 42px !important;
-      height: 42px !important;
-      padding: 0 !important;
-      border-radius: 999px !important;
-      border-width: 0 !important;
-      background: rgba(255,255,255,0.16) !important;
-      color: #ffffff !important;
-      box-shadow: none !important;
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close:hover {
-      background: rgba(255,255,255,0.28) !important;
-      color: #ffffff !important;
-    }
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close svg {
-      display: none;
-    }
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close::after {
-      content: "✕";
-      font-size: 20px;
-      line-height: 1;
+      display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
        même document que #voices-float-badge) plutôt que ce bouton du parent —
