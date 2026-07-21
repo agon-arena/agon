@@ -709,14 +709,19 @@ window.addEventListener("pageshow", function() {
      de 26px (mobile) / 40px (desktop, cf. @media min-width:769px dans
      style.css) qui collapse avec le margin-top de ce bouton : sans cette
      compensation négative, l'espace au-dessus du bouton est bien plus grand
-     que l'espace en dessous (bottom margin 12px + debates-list margin-top
-     8px = 12px collapsé). Valeurs calibrées pour égaliser les deux côtés. */
+     que l'espace en dessous. Le margin-top règle l'espace au-dessus (relatif à
+     la légende), le margin-bottom règle l'espace en dessous (relatif au
+     bandeau "À la une") — ce sont deux réglages indépendants (le premier ne
+     fait que translater tout le flux qui suit, y compris le bandeau, sans
+     changer l'écart entre le bouton et lui). Valeurs calibrées pour égaliser
+     les deux côtés. */
   #home-qcm-du-jour-btn {
-    margin: -14px auto 12px;
+    margin: -23px auto 21px;
   }
   @media (min-width: 769px) {
     #home-qcm-du-jour-btn {
-      margin-top: -28px;
+      margin-top: -9px;
+      margin-bottom: -7px;
     }
   }
 
@@ -1166,7 +1171,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260721-swstaleheal" defer></script>
+<script src="/script.min.js?v=20260721-qcmbtnsym" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

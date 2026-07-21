@@ -33539,20 +33539,26 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const captionDocTop = sectionDocTop + offset;
   const gapAbove = captionDocTop - contentBottomDoc;
   const captionHeight = caption.getBoundingClientRect().height;
+  const captionBottomDoc = captionDocTop + captionHeight;
   // Le bouton "QCM du jour" est un vrai sibling en flux normal entre la section
-  // (dont la légende est sortie du flux, cf. ci-dessus) et #debates-list — sans
-  // compter sa hauteur ici, le calcul plaquerait le bandeau "À la une" juste
-  // sous la légende comme si le bouton n'existait pas, et le recouvrirait.
+  // (dont la légende est sortie du flux, cf. ci-dessus) et #debates-list. Sa
+  // position réelle sert de référence : le bandeau "À la une" est ensuite placé
+  // sous lui avec exactement le même vide qu'entre la légende et lui — sinon,
+  // sans en tenir compte du tout, le bandeau se plaquerait sous la légende
+  // comme si le bouton n'existait pas et le recouvrirait.
   const qcmBtn = document.getElementById('home-qcm-du-jour-btn');
-  let qcmBlockHeight = 0;
+  let bandTargetTop = captionBottomDoc + gapAbove;
   if (qcmBtn && isAgonVisibleElement(qcmBtn)) {
-    const qcmCs = window.getComputedStyle(qcmBtn);
-    qcmBlockHeight = qcmBtn.offsetHeight + (parseFloat(qcmCs.marginTop) || 0) + (parseFloat(qcmCs.marginBottom) || 0);
+    const qcmRect = qcmBtn.getBoundingClientRect();
+    const qcmTopDoc = qcmRect.top + scrollY;
+    const qcmBottomDoc = qcmRect.bottom + scrollY;
+    const gapAboveButton = Math.max(0, qcmTopDoc - captionBottomDoc);
+    bandTargetTop = qcmBottomDoc + gapAboveButton;
   }
   const bandEl = firstRow.querySelector('.theme-row-title') || firstRow;
   const bandDocTop = bandEl.getBoundingClientRect().top + scrollY;
   const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
-  const nextMarginTop = Math.round(currentMarginTop + (captionDocTop + captionHeight + gapAbove + qcmBlockHeight - bandDocTop));
+  const nextMarginTop = Math.round(currentMarginTop + (bandTargetTop - bandDocTop));
   if (!Number.isFinite(nextMarginTop)) {
     root.style.removeProperty('--agon-home-first-row-mt');
     return;
