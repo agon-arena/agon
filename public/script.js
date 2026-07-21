@@ -1390,7 +1390,14 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 }
 
 (function initUserScoreWidget() {
-  if (window !== window.top) return; // pas dans les iframes de modales internes
+  // Le badge doit rester visible dans l'iframe de la page débat (mode iframe
+  // mobile, cf. isIframeDebateLoadingOverlayContext) — son bandeau répliqué y
+  // est réellement affiché à l'écran, contrairement aux autres iframes de
+  // modales internes (notifications, contributions, création…) où le badge
+  // resterait caché derrière le contenu et ferait doublon avec celui de la
+  // page hôte.
+  const isDebateIframe = location.pathname === "/debate" && window.self !== window.top;
+  if (window !== window.top && !isDebateIframe) return;
   const key = getKey();
   if (!key) return;
   fetch(API + "/my-score?key=" + encodeURIComponent(key))
