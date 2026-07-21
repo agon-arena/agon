@@ -1126,6 +1126,15 @@ function renderUserScoreWidget(data) {
       body.page-debate .agon-user-score-widget-logo-overlay {
         max-width: min(210px, calc(100vw - 120px));
       }
+      /* Avec les 3 scores (Orator + Logos + Gnosis), le texte dépasse le
+         plafond ci-dessus et se fait tronquer (ellipsis) — plafond élargi
+         uniquement pour ce cas, les badges à 1-2 scores restent inchangés. */
+      body.page-home .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
+      body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
+      body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
+      body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
+        max-width: min(320px, calc(100vw - 40px));
+      }
       @media (max-width: 768px) {
         body.page-home-mobile .agon-user-score-widget-logo-overlay,
         body.page-tribunes .agon-user-score-widget-logo-overlay,
@@ -1153,13 +1162,22 @@ function renderUserScoreWidget(data) {
         body.page-debate .agon-user-score-widget-logo-overlay i {
           font-size: 8px;
         }
+        body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
+        body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
+        body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
+          max-width: min(260px, calc(100vw - 40px));
+        }
       }
     `;
     document.head.appendChild(style);
   }
 
+  const scoreCount = [votesScore, notesScore, gnosisScore].filter((v) => v !== null).length;
+
   const widget = document.createElement("a");
-  widget.className = "agon-user-score-widget" + (hasScore ? "" : " agon-user-score-widget-empty");
+  widget.className = "agon-user-score-widget" +
+    (hasScore ? "" : " agon-user-score-widget-empty") +
+    (scoreCount === 3 ? " agon-user-score-widget-triple" : "");
   widget.href = "/contributions";
   widget.setAttribute("aria-label", hasScore ? "Mes scores" : "Débloquer mes scores Orator et Logos");
   widget.addEventListener("click", (e) => {
