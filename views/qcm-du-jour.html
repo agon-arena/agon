@@ -266,6 +266,20 @@
     .qcm-next-btn.visible {
       display: block;
     }
+    .qcm-final-actions {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .qcm-final-actions .qcm-next-btn {
+      margin: 0;
+    }
+    .qcm-final-actions .qcm-btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
     .qcm-state-message {
       color: #6b7280;
       font-size: 15px;
@@ -444,7 +458,10 @@
       '<div class="qcm-final-score-value">' + correct + ' / ' + total + '</div>' +
       '<div class="qcm-final-score-label">bonnes réponses aujourd’hui</div>' +
       '</div>' +
-      '<button type="button" class="qcm-next-btn visible" id="qcm-restart-btn">Recommencer</button>';
+      '<div class="qcm-final-actions">' +
+      '<button type="button" class="qcm-next-btn visible qcm-btn-secondary" id="qcm-restart-btn">Recommencer</button>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-done-btn">Terminé</button>' +
+      '</div>';
 
     // Les réponses du jour sont verrouillées côté serveur (une seule par
     // question et par voterKey) : "Recommencer" repart de la question 1 pour
@@ -452,6 +469,16 @@
     document.getElementById('qcm-restart-btn').onclick = function () {
       currentIndex = 0;
       renderQuestion();
+    };
+    // "Terminé" : ferme la modale iframe (même mécanisme que la croix), ou
+    // repart vers l'accueil si la page est ouverte hors iframe (accès direct
+    // à /qcm-du-jour).
+    document.getElementById('qcm-done-btn').onclick = function () {
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
+      } else {
+        location.href = '/';
+      }
     };
   }
 
