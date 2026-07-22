@@ -15731,7 +15731,7 @@ async function adminBroadcastDaily() {
     const sent = (res.results || []).filter(r => r.status === "sent").length;
     showReplacementSuccessMessage(
       "Push envoyé",
-      `Notification envoyée à ${sent} / ${res.total} abonné(s).`,
+      `« ${res.body || ""} » envoyé à ${sent} / ${res.total} abonné(s).`,
       null,
       "🔔"
     );

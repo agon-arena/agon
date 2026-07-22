@@ -116,10 +116,34 @@
       text-align: center;
     }
     .qcm-panel .qcm-subtitle {
-      margin: 0 0 20px;
+      margin: 0 0 16px;
       color: #6b7280;
       font-size: 14px;
       text-align: center;
+    }
+    .qcm-slot-switcher {
+      display: none;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 0 20px;
+    }
+    .qcm-slot-switcher.visible {
+      display: flex;
+    }
+    .qcm-slot-btn {
+      padding: 6px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #4b5563;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-slot-btn.active {
+      border-color: #243038;
+      background: #243038;
+      color: #ffffff;
     }
     .qcm-progress {
       margin: 0 0 16px;
@@ -282,21 +306,26 @@
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
     <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
-    <h1><i class="fa-solid fa-circle-question"></i> QCM du jour</h1>
+    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">QCM du jour</span></h1>
     <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 6 questions.</p>
+    <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
     <div id="qcm-body">
       <p class="qcm-state-message">Chargement du QCM du jour…</p>
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260721-badgeindebateiframe" defer></script>
+<script src="/script.min.js?v=20260722-pushwaves" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
+  var titleText = document.getElementById('qcm-title-text');
+  var slotSwitcher = document.getElementById('qcm-slot-switcher');
   var voterKey = null;
   var questions = [];
   var answeredByQuestionId = {};
   var currentIndex = 0;
+  var currentSlot = null;
+  var slotsStatus = null;
 
   var closeBtn = document.getElementById('qcm-panel-close');
   if (closeBtn) {
@@ -389,7 +418,7 @@
     fetch('/api/daily-quiz/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, slot: currentSlot })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -426,15 +455,43 @@
     };
   }
 
-  function init() {
-    voterKey = typeof getKey === 'function' ? getKey() : null;
+  function renderSlotSwitcher() {
+    var availableKeys = Object.keys(slotsStatus.slots).filter(function (k) { return slotsStatus.slots[k].available; });
+    if (availableKeys.length < 2) {
+      slotSwitcher.className = 'qcm-slot-switcher';
+      slotSwitcher.innerHTML = '';
+      return;
+    }
+    slotSwitcher.className = 'qcm-slot-switcher visible';
+    slotSwitcher.innerHTML = '';
+    availableKeys.forEach(function (slotKey) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'qcm-slot-btn' + (slotKey === currentSlot ? ' active' : '');
+      btn.textContent = slotsStatus.slots[slotKey].label;
+      btn.addEventListener('click', function () {
+        if (slotKey === currentSlot) return;
+        loadSlot(slotKey);
+      });
+      slotSwitcher.appendChild(btn);
+    });
+  }
 
-    fetch('/api/daily-quiz/today', { cache: 'no-store' })
+  function loadSlot(slotKey) {
+    currentSlot = slotKey;
+    currentIndex = 0;
+    questions = [];
+    answeredByQuestionId = {};
+    titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'QCM du jour';
+    renderSlotSwitcher();
+    renderMessage('Chargement du QCM…');
+
+    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         questions = Array.isArray(data.questions) ? data.questions : [];
         if (!questions.length) {
-          renderMessage('Le QCM du jour n’est pas encore prêt, reviens un peu plus tard.');
+          renderMessage('Ce QCM n’est pas encore prêt, reviens un peu plus tard.');
           return;
         }
         if (!voterKey) {
@@ -442,7 +499,7 @@
           renderQuestion();
           return;
         }
-        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey), { cache: 'no-store' })
           .then(function (res) { return res.json(); })
           .then(function (data) {
             (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
@@ -455,6 +512,29 @@
             }
           })
           .catch(function () { currentIndex = 0; renderQuestion(); });
+      })
+      .catch(function () {
+        renderMessage('Impossible de charger ce QCM pour le moment.');
+      });
+  }
+
+  function init() {
+    voterKey = typeof getKey === 'function' ? getKey() : null;
+
+    fetch('/api/daily-quiz/status', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (statusData) {
+        slotsStatus = statusData && statusData.slots ? statusData : { slots: {}, defaultSlot: null };
+        var params = new URLSearchParams(location.search);
+        var requestedSlot = params.get('slot');
+        var slotToLoad = (requestedSlot && slotsStatus.slots[requestedSlot] && slotsStatus.slots[requestedSlot].available)
+          ? requestedSlot
+          : slotsStatus.defaultSlot;
+        if (!slotToLoad) {
+          renderMessage('Le QCM du jour n’est pas encore prêt, reviens un peu plus tard.');
+          return;
+        }
+        loadSlot(slotToLoad);
       })
       .catch(function () {
         renderMessage('Impossible de charger le QCM du jour pour le moment.');

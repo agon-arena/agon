@@ -835,6 +835,35 @@ window.addEventListener("pageshow", function() {
   observer.observe(btn);
 })();
 </script>
+<script>
+(function () {
+  // Le QCM du jour a deux créneaux (matin ~9h, soir ~17h) : le bouton reprend
+  // le libellé du créneau le plus récent disponible, et pointe dessus
+  // directement (le soir prime sur le matin une fois généré, cf.
+  // /api/daily-quiz/status côté serveur).
+  fetch('/api/daily-quiz/status', { cache: 'no-store' })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var slot = data && data.defaultSlot;
+      var label = slot && data.slots && data.slots[slot] ? data.slots[slot].label : null;
+      if (!slot || !label) return;
+      var url = '/qcm-du-jour?slot=' + encodeURIComponent(slot);
+      ["home-qcm-du-jour-btn", "home-topbar-qcm-link"].forEach(function (id) {
+        var link = document.getElementById(id);
+        if (!link) return;
+        var span = link.querySelector('span');
+        if (span) span.textContent = label;
+        link.setAttribute('href', url);
+        link.onclick = function (e) {
+          e.preventDefault();
+          if (id === 'home-topbar-qcm-link' && typeof closeHomeTopbarMenu === 'function') closeHomeTopbarMenu();
+          openDebateIframeModal(url);
+        };
+      });
+    })
+    .catch(function () {});
+})();
+</script>
 
 <section id="debates-list" class="debates-list"></section>
 
@@ -1171,7 +1200,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260721-badgeindebateiframe" defer></script>
+<script src="/script.min.js?v=20260722-pushwaves" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -4807,7 +4807,7 @@ async function getBestIdeasData() {
 // Au tout premier passage après un démarrage/redémarrage serveur, on se contente
 // d'enregistrer l'état courant sans notifier : sinon chaque redémarrage ferait
 // paraître "nouveau" tout le top 5 déjà en place et spammerait ses auteurs.
-const TOP5_NOTIFY_CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const TOP5_NOTIFY_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const TOP5_NOTIFY_RANK_LIMIT = 5;
 const TOP5_NOTIFY_PERIODS = ["day", "week", "month"];
 const TOP5_NOTIFY_METRICS = ["votes", "aiScore"];
@@ -4824,7 +4824,15 @@ let _top5NotifyWarmedUp = false;
 async function checkTop5IdeaEntries() {
   let bestIdeas;
   try {
-    bestIdeas = await refreshBestIdeasCache();
+    // refreshBestIdeasCache() force toujours un recalcul complet (~7 Mo lus sur Supabase :
+    // 30j d'arguments + ai_analysis des débats liés), sans regarder si le cache est déjà
+    // frais. Ce check tourne toutes les 3h sans lien avec le trafic réel (contrairement à
+    // getBestIdeasData(), qui respecte le TTL de 3 min de la route /api/best-ideas) : sans
+    // garde-fou ici, il paie ce recalcul 8 fois/jour même à 3h du matin sans visiteur —
+    // cause de la hausse d'egress mesurée le 21/07/2026. Un top 5 n'a pas besoin d'une
+    // fraîcheur à la minute près : réutiliser un cache de moins de 3h suffit largement.
+    const cacheIsFreshEnough = _bestIdeasCache && (Date.now() - _bestIdeasCacheComputedAt < TOP5_NOTIFY_CHECK_INTERVAL_MS);
+    bestIdeas = cacheIsFreshEnough ? _bestIdeasCache : await refreshBestIdeasCache();
   } catch (e) {
     console.error("[top5-notify] Erreur calcul des classements:", e.message);
     return;
@@ -5635,19 +5643,26 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       return res.status(503).json({ error: "Configuration VAPID incomplète." });
     }
 
+    // Les publications se font par vagues (~8h et ~16h heure de Paris, cf.
+    // tryGenerateDailyQuiz) : avant 13h on suppose la vague du matin, sinon
+    // celle du soir. Seuil au milieu des deux vagues, avec un peu de marge
+    // si l'admin clique un peu en retard sur la vague du matin.
+    const isMorningWave = parisHour() < 13;
+    const body = isMorningWave ? "Les arènes du matin sont ouvertes." : "Les arènes du soir sont ouvertes.";
+
     const result = await broadcastPush(supabase, {
       publicKey: VAPID_PUBLIC_KEY,
       privateKey: VAPID_PRIVATE_KEY,
       subject: VAPID_SUBJECT
     }, {
       title: "L'arène des idées",
-      body: "Les arènes du jour sont ouvertes.",
+      body,
       url: "/",
       icon: "/icon-192-optimized.png",
       badge: "/icon-192-optimized.png"
     });
 
-    return res.json({ success: true, ...result });
+    return res.json({ success: true, wave: isMorningWave ? "morning" : "evening", body, ...result });
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Erreur envoi broadcast push.");
@@ -11057,6 +11072,19 @@ const DAILY_QUIZ_MIN_CANDIDATES = 8;
 const DAILY_QUIZ_MIN_VALID_QUESTIONS = 3;
 const DAILY_QUIZ_GENERATION_MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4o-mini";
 
+// Deux QCM par jour, un par vague de publication (~8h et ~16h heure de Paris) :
+// triggerHour = heure à partir de laquelle le scheduler tente la génération
+// (marge d'1h après la vague correspondante pour que les arènes soient là).
+const DAILY_QUIZ_SLOTS = {
+  morning: { label: "QCM du matin", triggerHour: 9 },
+  evening: { label: "QCM du soir", triggerHour: 17 }
+};
+const DAILY_QUIZ_SLOT_KEYS = Object.keys(DAILY_QUIZ_SLOTS);
+
+function isValidDailyQuizSlot(slot) {
+  return Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slot);
+}
+
 function parisDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Paris",
@@ -11103,12 +11131,12 @@ function dedupeDailyQuizCandidatesByQuestion(rows) {
 
 // Uniquement les arènes publiées depuis minuit (Paris) aujourd'hui — pas une
 // fenêtre glissante, qui remonterait sur l'actualité de la veille et casserait
-// la promesse "actualité du jour". Les publications se font par vagues
-// (~8h et ~16h heure de Paris) : le scheduler n'appelle cette fonction qu'à
-// partir de 17h (cf. tryGenerateDailyQuiz) pour laisser le temps aux deux
-// vagues du jour d'arriver. Pas de repli sur une autre journée si le volume
-// est insuffisant : la génération est simplement reportée au cycle suivant.
-async function fetchDailyQuizCandidateDebates() {
+// la promesse "actualité du jour". Pas de repli sur une autre journée si le
+// volume est insuffisant : la génération est simplement reportée au cycle
+// suivant. `excludeIds` retire les arènes déjà utilisées par l'autre créneau
+// du jour (le QCM du soir ne doit pas reposer sur les mêmes sujets que celui
+// du matin).
+async function fetchDailyQuizCandidateDebates(excludeIds = []) {
   const cutoff = parisStartOfDayIso();
   const { data, error } = await supabase
     .from("debates")
@@ -11118,7 +11146,9 @@ async function fetchDailyQuizCandidateDebates() {
     .order("created_at", { ascending: false })
     .limit(80);
   if (error) throw new Error(error.message);
-  return dedupeDailyQuizCandidatesByQuestion(data || []);
+  const excludeSet = new Set(excludeIds.map(String));
+  const rows = excludeSet.size ? (data || []).filter((row) => !excludeSet.has(String(row.id))) : (data || []);
+  return dedupeDailyQuizCandidatesByQuestion(rows);
 }
 
 function buildDailyQuizPrompt(candidates) {
@@ -11161,22 +11191,36 @@ function validateDailyQuizQuestions(rawQuestions, candidateIds) {
   return valid;
 }
 
-async function generateDailyQuizIfNeeded() {
+async function generateDailyQuizIfNeeded(slotKey) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey || !isValidDailyQuizSlot(slotKey)) return;
 
   const todayKey = parisDateKey();
   const { data: existing, error: existingError } = await supabase
     .from("daily_quiz")
     .select("id")
     .eq("quiz_date", todayKey)
+    .eq("slot", slotKey)
     .maybeSingle();
-  if (existingError) { console.error("[daily-quiz] vérification existant :", existingError.message); return; }
+  if (existingError) { console.error(`[daily-quiz:${slotKey}] vérification existant :`, existingError.message); return; }
   if (existing) return;
 
-  const candidates = await fetchDailyQuizCandidateDebates();
+  // Le QCM du soir ne doit pas reposer sur les mêmes arènes que celui du
+  // matin, déjà généré plus tôt dans la journée.
+  let excludeIds = [];
+  if (slotKey === "evening") {
+    const { data: morningRow } = await supabase
+      .from("daily_quiz")
+      .select("source_debate_ids")
+      .eq("quiz_date", todayKey)
+      .eq("slot", "morning")
+      .maybeSingle();
+    excludeIds = morningRow?.source_debate_ids || [];
+  }
+
+  const candidates = await fetchDailyQuizCandidateDebates(excludeIds);
   if (candidates.length < DAILY_QUIZ_MIN_CANDIDATES) {
-    console.warn(`[daily-quiz] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
+    console.warn(`[daily-quiz:${slotKey}] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
     return;
   }
 
@@ -11189,24 +11233,25 @@ async function generateDailyQuizIfNeeded() {
     });
     parsed = JSON.parse(content);
   } catch (error) {
-    console.error("[daily-quiz] génération IA :", error.message);
+    console.error(`[daily-quiz:${slotKey}] génération IA :`, error.message);
     return;
   }
 
   const validated = validateDailyQuizQuestions(parsed?.questions, candidates.map((c) => c.id));
   if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS) {
-    console.warn(`[daily-quiz] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
+    console.warn(`[daily-quiz:${slotKey}] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
     return;
   }
 
-  const questions = validated.map((q, index) => ({ id: `q${index + 1}`, ...q }));
+  const questions = validated.map((q, index) => ({ id: `${slotKey}-q${index + 1}`, ...q }));
   const { error: insertError } = await supabase.from("daily_quiz").insert({
     quiz_date: todayKey,
+    slot: slotKey,
     questions,
     source_debate_ids: questions.map((q) => q.sourceDebateId)
   });
-  if (insertError) { console.error("[daily-quiz] insertion :", insertError.message); return; }
-  console.log(`[daily-quiz] QCM du ${todayKey} généré (${questions.length} questions).`);
+  if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
+  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
 }
 
 // Même garde-fou que ANALYSIS_SCHEDULER_ENABLED : seule l'instance Render génère
@@ -11220,17 +11265,15 @@ const DAILY_QUIZ_SCHEDULER_ENABLED = (() => {
 })();
 
 if (DAILY_QUIZ_SCHEDULER_ENABLED) {
-  const tryGenerateDailyQuiz = () => {
-    // Les arènes du jour arrivent par 2 vagues (~8h et ~16h heure de Paris,
-    // cf. cadence observée) : générer plus tôt ne verrait que la vague du
-    // matin, voire rien du tout. On attend 17h (marge d'1h après la 2e
-    // vague) pour que fetchDailyQuizCandidateDebates (bornée à minuit-Paris,
-    // sans repli sur la veille) ait un vrai volume de la journée en cours.
-    if (parisHour() < 17) return;
-    generateDailyQuizIfNeeded().catch((err) => console.error("[daily-quiz scheduler]", err.message));
+  const tryGenerateDailyQuizzes = () => {
+    const hour = parisHour();
+    for (const [slotKey, config] of Object.entries(DAILY_QUIZ_SLOTS)) {
+      if (hour < config.triggerHour) continue;
+      generateDailyQuizIfNeeded(slotKey).catch((err) => console.error(`[daily-quiz:${slotKey} scheduler]`, err.message));
+    }
   };
-  tryGenerateDailyQuiz();
-  setInterval(tryGenerateDailyQuiz, 20 * 60 * 1000).unref();
+  tryGenerateDailyQuizzes();
+  setInterval(tryGenerateDailyQuizzes, 20 * 60 * 1000).unref();
 }
 
 const _dailyQuizStatsCache = new Map();
@@ -11258,18 +11301,46 @@ async function getDailyQuizStats(quizDate, questionId) {
   return result;
 }
 
-app.get("/api/daily-quiz/today", async (req, res) => {
+// Renseigne le bandeau/bouton d'accueil : quels créneaux sont prêts
+// aujourd'hui, avec leur libellé, plus une recommandation de créneau par
+// défaut (le plus récent disponible — le soir prime sur le matin une fois
+// généré).
+app.get("/api/daily-quiz/status", async (req, res) => {
   try {
     const todayKey = parisDateKey();
     const { data, error } = await supabase
       .from("daily_quiz")
-      .select("quiz_date, questions")
+      .select("slot")
+      .eq("quiz_date", todayKey);
+    if (error) throw new Error(error.message);
+    const availableSlots = new Set((data || []).map((row) => row.slot));
+    const slots = {};
+    for (const slotKey of DAILY_QUIZ_SLOT_KEYS) {
+      slots[slotKey] = { available: availableSlots.has(slotKey), label: DAILY_QUIZ_SLOTS[slotKey].label };
+    }
+    const defaultSlot = availableSlots.has("evening") ? "evening" : (availableSlots.has("morning") ? "morning" : null);
+    res.json({ date: todayKey, slots, defaultSlot });
+  } catch (error) {
+    res.status(500).json({ date: null, slots: {}, defaultSlot: null, error: error.message });
+  }
+});
+
+app.get("/api/daily-quiz/today", async (req, res) => {
+  try {
+    const todayKey = parisDateKey();
+    const slot = String(req.query.slot || "").trim();
+    if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, questions: [], error: "Créneau invalide." });
+
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, slot, questions")
       .eq("quiz_date", todayKey)
+      .eq("slot", slot)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    if (!data) return res.json({ date: todayKey, questions: [] });
+    if (!data) return res.json({ date: todayKey, slot, label: DAILY_QUIZ_SLOTS[slot].label, questions: [] });
     const questions = (data.questions || []).map((q) => ({ id: q.id, question: q.question, options: q.options }));
-    res.json({ date: data.quiz_date, questions });
+    res.json({ date: data.quiz_date, slot: data.slot, label: DAILY_QUIZ_SLOTS[slot].label, questions });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
   }
@@ -11279,21 +11350,26 @@ app.get("/api/daily-quiz/results", async (req, res) => {
   try {
     const voterKey = String(req.query.voterKey || "").trim();
     const todayKey = parisDateKey();
+    const slot = String(req.query.slot || "").trim();
+    if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, answers: [], error: "Créneau invalide." });
     if (!voterKey) return res.json({ date: todayKey, answers: [] });
 
     const { data: quizRow, error: quizError } = await supabase
       .from("daily_quiz")
       .select("questions")
       .eq("quiz_date", todayKey)
+      .eq("slot", slot)
       .maybeSingle();
     if (quizError) throw new Error(quizError.message);
     const questionsById = new Map((quizRow?.questions || []).map((q) => [q.id, q]));
+    if (!questionsById.size) return res.json({ date: todayKey, answers: [] });
 
     const { data: answerRows, error: answersError } = await supabase
       .from("daily_quiz_answers")
       .select("question_id, option_index")
       .eq("quiz_date", todayKey)
-      .eq("voter_key", voterKey);
+      .eq("voter_key", voterKey)
+      .in("question_id", [...questionsById.keys()]);
     if (answersError) throw new Error(answersError.message);
 
     const answers = [];
@@ -11322,7 +11398,8 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     const voterKey = String(req.body?.voterKey || "").trim();
     const questionId = String(req.body?.questionId || "").trim();
     const optionIndex = Number(req.body?.optionIndex);
-    if (!voterKey || !questionId || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3) {
+    const slot = String(req.body?.slot || "").trim();
+    if (!voterKey || !questionId || !isValidDailyQuizSlot(slot) || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3) {
       return res.status(400).json({ error: "Requête invalide." });
     }
 
@@ -11331,6 +11408,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       .from("daily_quiz")
       .select("questions")
       .eq("quiz_date", todayKey)
+      .eq("slot", slot)
       .maybeSingle();
     if (quizError) throw new Error(quizError.message);
     const question = (quizRow?.questions || []).find((q) => q.id === questionId);
@@ -11389,6 +11467,24 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
 
 app.get("/qcm-du-jour", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
+});
+
+// Déclenchement manuel (admin) : contourne l'heure de déclenchement du
+// scheduler (utile pour forcer une régénération ou tester), mais respecte
+// toujours "un seul QCM par (date, créneau)" sauf ?force=1.
+app.post("/api/admin/daily-quiz/generate", requireAdmin, rateLimit("admin-ai", 10), async (req, res) => {
+  const slot = String(req.body?.slot || "").trim();
+  if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ ok: false, error: "Créneau invalide." });
+  try {
+    if (req.body?.force === true) {
+      const { error } = await supabase.from("daily_quiz").delete().eq("quiz_date", parisDateKey()).eq("slot", slot);
+      if (error) throw new Error(error.message);
+    }
+    await generateDailyQuizIfNeeded(slot);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 /* ================================================================= */
