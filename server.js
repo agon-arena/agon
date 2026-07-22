@@ -232,6 +232,14 @@ const VEILLE_MEDIAS_PATH = (process.env.VEILLE_MEDIAS_PATH || path.join(__dirnam
 const VEILLE_YOUTUBE_PATH = (process.env.VEILLE_YOUTUBE_PATH || path.join(__dirname, "..", "bot veille", "youtube-chaines.json")).trim();
 
 let _veilleMediasCache = null;
+let _veilleMediasCacheComputedAt = 0;
+// TTL 5 min : sans ça, un média ajouté/modifié dans veille_medias sur Supabase
+// restait invisible (ex. onglet Personnalisé) jusqu'au prochain redémarrage
+// du serveur, le cache n'étant chargé qu'une fois au boot.
+const VEILLE_MEDIAS_CACHE_TTL_MS = 5 * 60 * 1000;
+function veilleMediasCacheIsStale() {
+  return !_veilleMediasCache || Date.now() - _veilleMediasCacheComputedAt > VEILLE_MEDIAS_CACHE_TTL_MS;
+}
 
 function normalizeVeilleMediaOrientation(nom, domain, orientation) {
   const mediaName = String(nom || "")
@@ -296,6 +304,7 @@ async function _loadVeilleMediasFromSupabase() {
     const { data, error } = await supabase.from("veille_medias").select("*").order("nom");
     if (error || !data?.length) return false;
     _veilleMediasCache = _processMediasRows(data);
+    _veilleMediasCacheComputedAt = Date.now();
     return true;
   } catch (_) { return false; }
 }
@@ -1284,7 +1293,7 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
 
   // Nuages gauche/droite : seules les sources du camp comptent — il faut la
   // liste veille_medias (orientations) avant de compter quoi que ce soit.
-  if (politicalGroup !== "mixed" && !_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+  if (politicalGroup !== "mixed" && veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
   const orientationMaps = politicalGroup === "mixed" ? null : buildCloudMediaOrientationMaps();
 
   const { data: allDebates, error } = await supabase
@@ -4944,7 +4953,7 @@ app.post("/api/contact", async (req, res) => {
 
 app.get("/api/about/medias", async (req, res) => {
   try {
-    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+    if (veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
     res.setHeader("Cache-Control", "no-store");
     res.json({ medias: readVeilleMedias() });
   } catch (error) {
@@ -4955,7 +4964,7 @@ app.get("/api/about/medias", async (req, res) => {
 
 app.get("/about", async (req, res) => {
   try {
-    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+    if (veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
     const template = fs.readFileSync(path.join(__dirname, "views/about.html"), "utf8");
     const items = readVeilleMedias();
     const listHtml = items.length
@@ -9245,7 +9254,7 @@ const OPINION_CUSTOM_MEDIA_GROUP_ORDER = [
 
 app.get("/api/opinion-articles/custom-media-options", async (req, res) => {
   try {
-    if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+    if (veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
     const byGroup = new Map();
     for (const media of readVeilleMedias()) {
       const nom = String(media.nom || "").trim();
@@ -10035,7 +10044,7 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
     // gauche/droite : publication refusée, le sujet reste en attente pour être
     // corrigé (autre groupe ou autres sources).
     if (resolvedPoliticalGroup !== "mixed") {
-      if (!_veilleMediasCache) await _loadVeilleMediasFromSupabase();
+      if (veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
       const campSourceCount = countCloudSourcesForGroup(
         { media_extras: allExtras, source_url: sourceUrl },
         resolvedPoliticalGroup,
