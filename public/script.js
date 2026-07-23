@@ -1450,12 +1450,16 @@ function renderAgonTimeWidget() {
         text-align: center;
         max-width: min(220px, calc(100vw - 40px));
       }
-      .agon-time-widget-logo-overlay {
-        position: absolute;
-        left: 50%;
-        bottom: -30px;
+      /* Pages où le badge de score est en overlay sur le logo (accueil,
+         tribunes, débat mobile) : le bandeau (.topbar) n'a que la hauteur du
+         logo, pas de place en flux normal sous le score. Le compteur y est
+         donc positionné en fixed, ses coordonnées calculées en JS à partir du
+         rect réel du badge de score, et bornées pour rester dans le bandeau
+         blanc, plutôt que devinées en CSS. */
+      .agon-time-widget-fixed-below-score {
+        position: fixed;
         transform: translateX(-50%);
-        z-index: 18;
+        z-index: 19;
         box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
       }
       @keyframes agon-time-widget-blink {
@@ -1523,8 +1527,26 @@ function renderAgonTimeWidget() {
   }
 
   if (scoreWidget.classList.contains("agon-user-score-widget-logo-overlay")) {
-    widget.classList.add("agon-time-widget-logo-overlay");
-    scoreWidget.insertAdjacentElement("afterend", widget);
+    // Overlay sur le logo (pas de place en flux normal, cf. commentaire CSS
+    // ci-dessus) : positionné en fixed, ancré au rect réel du badge de score
+    // et borné au bas du bandeau, recalculé au resize.
+    widget.classList.add("agon-time-widget-fixed-below-score");
+    document.body.appendChild(widget);
+    const positionBelowScore = () => {
+      const scoreRect = scoreWidget.getBoundingClientRect();
+      const topbarEl = document.querySelector(".topbar");
+      const topbarRect = topbarEl ? topbarEl.getBoundingClientRect() : null;
+      const gap = 4;
+      let top = scoreRect.bottom + gap;
+      if (topbarRect) top = Math.min(top, topbarRect.bottom - widget.offsetHeight - 4);
+      widget.style.top = Math.round(top) + "px";
+      widget.style.left = Math.round(scoreRect.left + scoreRect.width / 2) + "px";
+    };
+    positionBelowScore();
+    window.addEventListener("resize", positionBelowScore);
+    // Rejoue le calcul une fois les polices/icônes chargées (peut légèrement
+    // changer la largeur du badge de score juste après le premier rendu).
+    setTimeout(positionBelowScore, 300);
   } else if (scoreWidget.classList.contains("agon-user-score-widget-inline")) {
     scoreWidget.insertAdjacentElement("afterend", widget);
   } else {
