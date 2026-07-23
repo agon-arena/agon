@@ -2943,10 +2943,13 @@ window.addEventListener("pageshow", function() {
       // résultat (cf. loadMoreTribunesArticles, qui force un dernier
       // applyFilter() dans ce cas précis). Demande du 20/07/2026.
       if (tribunesHasMore) {
+        // Sentinelle silencieuse (pas de buildTribunesGlobalSentinelHtml) : son
+        // bouton "Fais défiler..." ne doit pas s'afficher en double à côté du
+        // message "Chargement des liens…" ci-dessus.
         list.innerHTML = '<div class="tribunes-empty-loading">' +
             '<span class="load-more-spinner" aria-hidden="true"></span>' +
             '<span>Chargement des liens…</span>' +
-          '</div>' + buildTribunesGlobalSentinelHtml();
+          '</div>' + '<div id="tribunes-infinite-scroll-sentinel" class="load-more-container" aria-busy="true"></div>';
         initTribunesGlobalLoadMore();
         syncTribunesMobileBottomViewport();
         return;
