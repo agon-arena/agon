@@ -1449,10 +1449,18 @@ function renderAgonTimeWidget() {
     const style = document.createElement("style");
     style.id = "agon-time-widget-styles";
     style.textContent = `
-      .agon-time-widget-row {
-        display: flex;
-        justify-content: center;
-        padding: 4px 12px 0;
+      .agon-time-widget-anchor {
+        position: relative;
+        overflow: visible;
+      }
+      .agon-time-widget-logo-overlay {
+        position: absolute;
+        top: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 18;
+        max-width: min(220px, calc(100vw - 40px));
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
       }
       .agon-time-widget {
         display: inline-flex;
@@ -1544,16 +1552,19 @@ function renderAgonTimeWidget() {
     maybeBlink();
   }
 
-  // Toujours en flux normal (jamais en position absolute/fixed devinée en
-  // pixels) : une nouvelle ligne centrée, insérée avant .topbar-inner donc
-  // au-dessus du logo — le bandeau grandit pour l'accueillir, ce qui
-  // garantit qu'il reste dans le cadre blanc.
-  const newRow = document.createElement("div");
-  newRow.className = "agon-time-widget-row";
-  newRow.appendChild(widget);
-  const topbarInner = document.querySelector(".topbar-inner");
-  if (topbarInner) topbarInner.insertAdjacentElement("beforebegin", newRow);
-  else document.querySelector(".topbar")?.appendChild(newRow);
+  // Superposé sur le logo (en haut), comme le badge de score l'est déjà en
+  // bas — en position absolute donc sans jamais pousser le logo ni changer
+  // la hauteur du bandeau, quels que soient les marges/paddings autour du
+  // logo sur telle ou telle page.
+  const logoEl = document.querySelector(".home-logo");
+  const anchor = logoEl ? logoEl.parentElement : null;
+  if (anchor) {
+    anchor.classList.add("agon-time-widget-anchor");
+    widget.classList.add("agon-time-widget-logo-overlay");
+    anchor.appendChild(widget);
+  } else {
+    document.querySelector(".topbar-inner")?.appendChild(widget);
+  }
 }
 
 function showAgonTimeWidgetExplanation() {
