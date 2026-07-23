@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script src="/no-zoom.js?v=20260603" defer></script>
+  <title>Parallèle historique du jour | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192-optimized.png">
+  <meta name="theme-color" content="#243038">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agôn">
+  <link rel="stylesheet" href="/style.min.css?v=20260721-scoretabs">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script>
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.self !== window.top) {
+        document.body.classList.add('in-iframe');
+        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+      }
+    });
+  </script>
+  <style>
+    /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038),
+       posé sur html et body (cf. qcm-du-jour.html pour la justification). */
+    html:has(body.page-parallele-historique) {
+      background-color: #243038;
+    }
+    body.page-parallele-historique {
+      min-height: 100vh;
+      background-color: #243038;
+    }
+    .page-parallele-historique .topbar-inner {
+      justify-content: center;
+      padding: 2px 0;
+    }
+    .page-parallele-historique .home-brand-block {
+      flex: 0 0 auto;
+      margin-left: 0;
+    }
+    .page-parallele-historique .home-logo {
+      width: 110px;
+    }
+    @media (max-width: 768px) {
+      .page-parallele-historique .home-logo {
+        width: 70px;
+      }
+      .page-parallele-historique .topbar-inner {
+        padding: 0;
+      }
+    }
+    .ph-page-shell {
+      width: min(100% - 32px, 900px);
+      margin: 112px auto 48px;
+    }
+    .page-parallele-historique.in-iframe .ph-page-shell {
+      margin: 20px auto;
+    }
+    @media (min-width: 769px) {
+      .ph-page-shell {
+        width: min(100% - 64px, 1200px);
+      }
+    }
+    .ph-panel,
+    .ph-panel * {
+      box-sizing: border-box;
+    }
+    .ph-panel {
+      position: relative;
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .ph-panel:focus {
+      outline: none;
+    }
+    .ph-panel-close {
+      display: none;
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
+      color: #4b5563;
+      font-size: 14px;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .ph-panel-close:hover {
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+    .ph-panel-close:focus-visible {
+      outline: 2px solid #243038;
+      outline-offset: 2px;
+    }
+    .page-parallele-historique.in-iframe .ph-panel-close {
+      display: flex;
+    }
+    .ph-panel h1 {
+      margin: 0 0 4px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 34px;
+      line-height: 1;
+      color: #111827;
+      text-align: center;
+    }
+    .ph-panel .ph-subtitle {
+      margin: 0 0 20px;
+      color: #6b7280;
+      font-size: 14px;
+      text-align: center;
+    }
+    .ph-topic-title {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+    }
+    .ph-topic-summary {
+      margin: 0 0 22px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #374151;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .ph-section {
+      margin: 0 0 20px;
+    }
+    .ph-section h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 19px;
+      font-weight: 700;
+      color: #243038;
+      letter-spacing: 0.01em;
+    }
+    .ph-section h2 i {
+      font-size: 15px;
+      color: #f5b642;
+    }
+    .ph-section p {
+      margin: 0;
+      color: #374151;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    .ph-historical-image {
+      margin: 10px 0 14px;
+    }
+    .ph-historical-image img {
+      display: block;
+      width: 100%;
+      max-height: 320px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .ph-historical-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .ph-historical-image figcaption a {
+      color: #9ca3af;
+    }
+    .ph-sources {
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px dashed #d1d5db;
+    }
+    .ph-sources-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #b45309;
+    }
+    .ph-sources ul {
+      margin: 0;
+      padding: 0 0 0 18px;
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .ph-sources a {
+      color: #243038;
+    }
+    .ph-no-sources {
+      margin: 0;
+      color: #9ca3af;
+      font-size: 13px;
+      font-style: italic;
+    }
+    .ph-state-message {
+      color: #6b7280;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body class="page-parallele-historique">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+    <div class="home-brand-block">
+      <div class="home-brand-main">
+        <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+      </div>
+    </div>
+  </div>
+</header>
+<main class="ph-page-shell">
+  <section class="ph-panel" id="ph-panel" tabindex="-1" aria-live="polite">
+    <button type="button" class="ph-panel-close" id="ph-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <h1><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</h1>
+    <p class="ph-subtitle">Un événement d'actualité éclairé par un précédent du passé.</p>
+    <div id="ph-body">
+      <p class="ph-state-message">Chargement…</p>
+    </div>
+  </section>
+</main>
+<script src="/script.min.js?v=20260723-timewidgetnobg" defer></script>
+<script>
+(function () {
+  var body = document.getElementById('ph-body');
+  var panel = document.getElementById('ph-panel');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="ph-state-message">Chargement du parallèle historique du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="ph-state-message">Le parallèle historique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    body.innerHTML =
+      '<p class="ph-state-message">Aucun parallèle historique sérieux n’a pu être établi pour l’actualité d’aujourd’hui.</p>' +
+      (reason ? '<p class="ph-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="ph-state-message">Impossible de charger le parallèle historique pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderPublished(content) {
+    var sources = Array.isArray(content.sources) ? content.sources : [];
+    // Aucune des références n'a de lien vérifié (l'IA n'a pas de recherche
+    // documentaire réelle, cf. lib/parallele-historique.js) : on l'affiche
+    // clairement comme indicatif plutôt que comme une source cliquable fiable.
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources historiques';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="ph-no-sources">Aucune source détaillée disponible pour ce parallèle.</p>';
+
+    // Image réelle du précédent historique (API Wikipedia, jamais générée ni
+    // devinée par l'IA, cf. lib/parallele-historique.js) — absente pour une
+    // bonne partie des sujets, donc affichée seulement si trouvée.
+    var imageHtml = '';
+    if (content.historical_event_image_url) {
+      imageHtml =
+        '<figure class="ph-historical-image">' +
+        '<img src="' + escapeHtml(content.historical_event_image_url) + '" alt="' + escapeHtml(content.historical_event_title) + '" loading="lazy" onerror="this.closest(\'.ph-historical-image\').remove();">' +
+        (content.historical_event_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(content.historical_event_image_page_url) + '" target="_blank" rel="noopener noreferrer">Image : Wikipedia</a></figcaption>'
+          : '<figcaption>Image : Wikipedia</figcaption>') +
+        '</figure>';
+    }
+
+    body.innerHTML =
+      '<p class="ph-topic-title">' + escapeHtml(content.current_topic_title) + '</p>' +
+      '<p class="ph-topic-summary">' + escapeHtml(content.current_topic_summary) + '</p>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-scroll"></i> Le précédent historique</h2>' +
+      '<p><strong>' + escapeHtml(content.historical_event_title) + '</strong> — ' + escapeHtml(content.historical_event_date) + '</p>' +
+      imageHtml +
+      '<p>' + escapeHtml(content.historical_context) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui se répète</h2>' +
+      '<p>' + escapeHtml(content.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La différence essentielle</h2>' +
+      '<p>' + escapeHtml(content.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(content.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="ph-sources">' +
+      '<p class="ph-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>';
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  // Le backend ne fait jamais plus d'un appel IA par jour (verrouillé côté
+  // Supabase, cf. lib/parallele-historique.js) : si la génération est déjà
+  // en cours quand cette page s'ouvre, on repasse simplement voir l'état un
+  // peu plus tard, sans jamais déclencher nous-mêmes de génération.
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadContent, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadContent() {
+    fetch('/api/parallele-historique/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function closeModal() {
+    if (window.self !== window.top) {
+      try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
+    } else {
+      location.href = '/';
+    }
+  }
+
+  var closeBtn = document.getElementById('ph-panel-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+  // Échap ferme la modale iframe : le keydown posé par le parent
+  // (script.js) écoute sur son propre document, qui ne reçoit pas les
+  // événements clavier une fois le focus passé dans cette iframe — on
+  // reproduit donc ici le même mécanisme que le bouton de fermeture.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  function init() {
+    renderLoading();
+    // Premier (et seul, hors "generating") fetch déclenché ici, au chargement
+    // de CETTE page — elle-même chargée uniquement à l'ouverture de la
+    // modale iframe (openDebateIframeModal) : rien ne part depuis l'accueil.
+    loadContent();
+    // Focus initial sur le panneau : rend la fermeture au clavier (Échap)
+    // immédiatement fonctionnelle sans clic préalable de l'utilisateur dans
+    // l'iframe, et donne un point d'entrée cohérent aux lecteurs d'écran.
+    if (panel && typeof panel.focus === 'function') panel.focus();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      init();
+      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+    });
+  } else {
+    init();
+    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+  }
+})();
+</script>
+</body>
+</html>

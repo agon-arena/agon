@@ -21,6 +21,7 @@ const {
   normalizeTag,
   extractRawTagsFromItem
 } = require("./lib/tagTrends");
+const { createParalleleHistoriqueService } = require("./lib/parallele-historique");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -11263,6 +11264,130 @@ async function generateDailyQuizIfNeeded(slotKey) {
   console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
 }
 
+/* ================================================================= */
+/*   Parallèle historique du jour — lib/parallele-historique.js porte */
+/*   toute la logique métier ; server.js ne fait qu'injecter ses      */
+/*   dépendances et exposer des routes minces.                       */
+/* ================================================================= */
+
+// Source de vérité des sujets publiés par Agôn : les arènes créées par le
+// bot/admin (creator_key AGON_ADMIN_CREATOR_KEY), même critère que le QCM
+// du jour ci-dessus (fetchDailyQuizCandidateDebates) — pas une deuxième
+// façon de définir "publié aujourd'hui", juste une projection différente
+// (forme attendue par lib/parallele-historique.js) de la même source.
+function extractParalleleHistoriqueSources(row) {
+  const sources = [];
+  const seen = new Set();
+  (Array.isArray(row.media_extras) ? row.media_extras : []).forEach((extra) => {
+    if (!extra || typeof extra !== "object") return;
+    if (String(extra.type || "source").trim() !== "source") return;
+    const url = String(extra.url || extra.source_url || "").trim();
+    const name = String(extra.source || extra.media || extra.publisher || "").trim();
+    const key = url || name;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    sources.push({ name: name || null, url: url || null });
+  });
+  if (!sources.length && row.source_url) sources.push({ name: null, url: String(row.source_url).trim() });
+  return sources;
+}
+
+// Une même actu est souvent publiée 2-3 fois (variantes gauche/droite/générale
+// du même sujet) : on les regroupe par cloud_label — le même identifiant de
+// sujet que les Bulles Agôn (getCloudLabelFromDebate/normalizeCloudLabel,
+// définis plus haut), pas une nouvelle notion de "sujet". À label égal, on ne
+// garde que la variante la mieux sourcée (countCloudSources, déjà existant),
+// puis la plus longue en cas d'égalité — "la version la plus complète".
+function isParalleleHistoriqueDebateMoreComplete(candidate, current) {
+  const candidateSources = countCloudSources(candidate);
+  const currentSources = countCloudSources(current);
+  if (candidateSources !== currentSources) return candidateSources > currentSources;
+  return String(candidate.content || "").trim().length > String(current.content || "").trim().length;
+}
+
+// Deux clés de regroupement, pas une seule : le cloud_label IA n'est pas
+// toujours strictement identique entre variantes d'un même sujet (deux
+// arènes peuvent porter sur exactement la même actualité avec des labels
+// légèrement différents — observé en conditions réelles : "Circonstance
+// raciste à Crépol" vs "Circonstance aggravante racisme" pour la même
+// question mot pour mot). On fusionne donc aussi par question normalisée
+// (même règle que dedupeDailyQuizCandidatesByQuestion) : si une ligne
+// partage SOIT son cloud_label SOIT sa question avec un groupe existant,
+// elle rejoint ce groupe plutôt que d'en créer un nouveau.
+function dedupeParalleleHistoriqueTopicsByCloudLabel(rows) {
+  const groups = [];
+  const indexByLabel = new Map();
+  const indexByQuestion = new Map();
+
+  for (const row of rows) {
+    const labelKey = normalizeCloudLabel(getCloudLabelFromDebate(row));
+    const questionKey = String(row.question || "").trim().toLowerCase();
+    if (!labelKey && !questionKey) continue;
+
+    let groupIndex = -1;
+    if (labelKey && indexByLabel.has(labelKey)) groupIndex = indexByLabel.get(labelKey);
+    else if (questionKey && indexByQuestion.has(questionKey)) groupIndex = indexByQuestion.get(questionKey);
+
+    if (groupIndex === -1) {
+      groupIndex = groups.length;
+      groups.push(row);
+    } else if (isParalleleHistoriqueDebateMoreComplete(row, groups[groupIndex])) {
+      groups[groupIndex] = row;
+    }
+
+    if (labelKey) indexByLabel.set(labelKey, groupIndex);
+    if (questionKey) indexByQuestion.set(questionKey, groupIndex);
+  }
+
+  return groups;
+}
+
+async function getPublishedTopicsForDate(dateKey) {
+  const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
+  const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  // Pool plus large que les 10 sujets finaux (même logique que le QCM, cf.
+  // fetchDailyQuizCandidateDebates.limit(80)) : après déduplication par
+  // sujet, il faut assez de candidats bruts pour espérer atteindre 10
+  // sujets réellement distincts.
+  const { data, error } = await supabase
+    .from("debates")
+    .select("id, question, content, category, source_url, media_extras, created_at, cloud_label, keywords")
+    .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
+    .gte("created_at", cutoff)
+    .lt("created_at", nextDayCutoff)
+    .order("created_at", { ascending: false })
+    .limit(80);
+  if (error) throw new Error(error.message);
+
+  const distinctTopics = dedupeParalleleHistoriqueTopicsByCloudLabel(data || []).slice(0, 10);
+
+  return distinctTopics.map((row) => ({
+    id: String(row.id),
+    title: String(row.question || "").trim(),
+    summary: String(row.content || "").trim().slice(0, 600),
+    publishedAt: row.created_at,
+    category: row.category || null,
+    sources: extractParalleleHistoriqueSources(row)
+  }));
+}
+
+const PARALLELE_HISTORIQUE_MODEL = process.env.OPENAI_PARALLELE_HISTORIQUE_MODEL || "gpt-4o-mini";
+
+const paralleleHistoriqueService = createParalleleHistoriqueService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  dateKeyFor: parisDateKey,
+  model: PARALLELE_HISTORIQUE_MODEL,
+  // Même convention que le reste du projet : Render = prod, tout le reste
+  // (Mac local, etc.) = dev. Ce log ne contient jamais le prompt complet,
+  // la clé API ni la réponse brute — juste sujets transmis + modèle.
+  debugLogging: !process.env.RENDER
+});
+
 // Même garde-fou que ANALYSIS_SCHEDULER_ENABLED : seule l'instance Render génère
 // le QCM (le Mac local reste passif). AGON_DAILY_QUIZ_SCHEDULER=on|off force le
 // comportement (ex. =on en local pour tester sans Render).
@@ -11273,16 +11398,36 @@ const DAILY_QUIZ_SCHEDULER_ENABLED = (() => {
   return Boolean(process.env.RENDER);
 })();
 
-if (DAILY_QUIZ_SCHEDULER_ENABLED) {
-  const tryGenerateDailyQuizzes = () => {
+// Interrupteur indépendant (mêmes règles que ci-dessus) pour le parallèle
+// historique : peut être activé/désactivé sans toucher au QCM.
+const PARALLELE_HISTORIQUE_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_PARALLELE_HISTORIQUE_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+// Déclenché à partir de la même heure que le QCM du matin : les 10 sujets
+// du jour sont normalement déjà publiés à ce moment-là.
+const PARALLELE_HISTORIQUE_TRIGGER_HOUR = 9;
+
+if (DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED) {
+  // Un seul setInterval partagé entre QCM et parallèle historique, chacun
+  // gardé par son propre interrupteur — pas de scheduler dupliqué.
+  const tryRunDailySchedulers = () => {
     const hour = parisHour();
-    for (const [slotKey, config] of Object.entries(DAILY_QUIZ_SLOTS)) {
-      if (hour < config.triggerHour) continue;
-      generateDailyQuizIfNeeded(slotKey).catch((err) => console.error(`[daily-quiz:${slotKey} scheduler]`, err.message));
+    if (DAILY_QUIZ_SCHEDULER_ENABLED) {
+      for (const [slotKey, config] of Object.entries(DAILY_QUIZ_SLOTS)) {
+        if (hour < config.triggerHour) continue;
+        generateDailyQuizIfNeeded(slotKey).catch((err) => console.error(`[daily-quiz:${slotKey} scheduler]`, err.message));
+      }
+    }
+    if (PARALLELE_HISTORIQUE_SCHEDULER_ENABLED && hour >= PARALLELE_HISTORIQUE_TRIGGER_HOUR) {
+      paralleleHistoriqueService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[parallele-historique scheduler]", err.message));
     }
   };
-  tryGenerateDailyQuizzes();
-  setInterval(tryGenerateDailyQuizzes, 20 * 60 * 1000).unref();
+  tryRunDailySchedulers();
+  setInterval(tryRunDailySchedulers, 20 * 60 * 1000).unref();
 }
 
 const _dailyQuizStatsCache = new Map();
@@ -11476,6 +11621,35 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
 
 app.get("/qcm-du-jour", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
+});
+
+// Parallèle historique du jour — page autonome (cf. views/parallele-historique.html).
+app.get("/parallele-historique", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/parallele-historique.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/parallele-historique/today", rateLimit("parallele-historique-today", 60), async (req, res) => {
+  try {
+    const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[parallele-historique] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/parallele-historique/generate", requireAdmin, rateLimit("parallele-historique-generate", 10), async (req, res) => {
+  try {
+    const result = await paralleleHistoriqueService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[parallele-historique] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
 });
 
 // Déclenchement manuel (admin) : contourne l'heure de déclenchement du
