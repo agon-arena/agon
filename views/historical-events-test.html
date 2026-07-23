@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test — Ce jour dans l'Histoire | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/historical-events-test.css?v=20260724">
+</head>
+<body class="het-body">
+  <main class="het-page">
+    <p class="het-kicker">Page de test isolée — non liée à l'accueil</p>
+    <h1 class="het-title">Ce jour dans l'Histoire</h1>
+    <p class="het-date" id="het-date-display">12 mars</p>
+
+    <form class="het-date-form" id="het-date-form">
+      <label for="het-date-input">Date à tester (format MM-DD)</label>
+      <div class="het-date-form-row">
+        <input type="text" id="het-date-input" name="date" value="03-12" placeholder="MM-DD" maxlength="5" autocomplete="off">
+        <button type="submit">Charger</button>
+      </div>
+      <p class="het-date-error" id="het-date-error" hidden></p>
+    </form>
+
+    <p class="het-status" id="het-status" role="status" aria-live="polite">Chargement…</p>
+
+    <div class="het-cards" id="het-cards"></div>
+  </main>
+
+  <script src="/historical-events-test-page.js?v=20260724"></script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+/* Page de test isolée — "Ce jour dans l'Histoire" (GET /historical-events-test).
+   Fichier dédié, non chargé par les autres vues : ne pas fusionner dans style.css
+   tant que la fonctionnalité n'est pas branchée à l'accueil. */
+
+.het-body {
+  margin: 0;
+  min-height: 100vh;
+  background: #243038;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.het-page {
+  box-sizing: border-box;
+  width: min(100% - 32px, 1100px);
+  margin: 0 auto;
+  padding: 40px 0 56px;
+}
+
+.het-kicker {
+  margin: 0 0 4px;
+  color: #9cc3f0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.het-title {
+  margin: 0;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 40px;
+  line-height: 1.05;
+  color: #ffffff;
+  text-align: center;
+}
+
+.het-date {
+  margin: 4px 0 24px;
+  color: #cbd5e1;
+  font-size: 15px;
+  text-align: center;
+}
+
+.het-date-form {
+  box-sizing: border-box;
+  width: min(100%, 420px);
+  margin: 0 auto 28px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.het-date-form label {
+  display: block;
+  margin: 0 0 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.het-date-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.het-date-form input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.het-date-form button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 999px;
+  background: #516776;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.het-date-form button:hover {
+  background: #3f525f;
+}
+
+.het-date-error {
+  margin: 8px 0 0;
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.het-status {
+  margin: 0 0 20px;
+  color: #cbd5e1;
+  font-size: 15px;
+  text-align: center;
+}
+
+.het-status.het-status-error {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
+.het-status[hidden] {
+  display: none;
+}
+
+.het-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .het-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.het-card {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.het-card-image {
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  display: block;
+  background: #e5e7eb;
+}
+
+.het-card-body {
+  padding: 16px 18px 20px;
+}
+
+.het-card-category {
+  margin: 0 0 6px;
+  color: #516776;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.het-card-year {
+  margin: 0 0 4px;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 26px;
+  color: #111827;
+  line-height: 1;
+}
+
+.het-card-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.het-card-summary-short {
+  margin: 0 0 10px;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.het-card-toggle {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.het-card-toggle:hover {
+  background: #eef3f6;
+}
+
+.het-card-summary-long {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.het-card-summary-long[hidden] {
+  display: none;
+}
+
+.het-card-meta {
+  margin: 0 0 6px;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.het-card-meta strong {
+  color: #374151;
+}
+
+.het-card-credit {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.het-card-source-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #516776;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.het-card-empty {
+  padding: 24px 18px;
+  color: #6b7280;
+  font-size: 14px;
+  text-align: center;
+}

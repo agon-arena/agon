@@ -13,7 +13,9 @@
     "docs:compare": "node tools/cleanup-compare.js",
     "docs:youtube": "node tools/youtube-source-audit.js",
     "docs:iframe": "node tools/iframe-modal-audit.js",
-    "docs:data": "node tools/api-data-audit.js"
+    "docs:data": "node tools/api-data-audit.js",
+    "test:historical-events": "node --test",
+    "audit:historical-events": "node tools/historical-events-audit.js"
   },
   "license": "ISC",
   "dependencies": {

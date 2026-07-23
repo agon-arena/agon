@@ -1,0 +1,232 @@
+"use strict";
+
+// Page de test isolée "Ce jour dans l'Histoire" (views/historical-events-test.html).
+// Fichier dédié, jamais chargé par les autres pages — ne touche pas à script.js.
+// Toutes les données de l'API sont insérées via textContent/createElement,
+// jamais innerHTML, puisqu'elles ne sont pas sous notre contrôle direct.
+
+(function () {
+  var CATEGORY_ORDER = ["france", "europe", "world"];
+  var CATEGORY_LABELS = {
+    france: "Histoire de France",
+    europe: "Histoire européenne",
+    world: "Histoire du monde"
+  };
+  var DATE_KEY_PATTERN = /^\d{2}-\d{2}$/;
+  var DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  var dateForm = document.getElementById("het-date-form");
+  var dateInput = document.getElementById("het-date-input");
+  var dateError = document.getElementById("het-date-error");
+  var dateDisplay = document.getElementById("het-date-display");
+  var statusEl = document.getElementById("het-status");
+  var cardsEl = document.getElementById("het-cards");
+
+  function isValidDateKey(value) {
+    if (!DATE_KEY_PATTERN.test(value)) return false;
+    var month = Number(value.slice(0, 2));
+    var day = Number(value.slice(3, 5));
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > DAYS_IN_MONTH[month - 1]) return false;
+    return true;
+  }
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text || "";
+    statusEl.hidden = !text;
+    statusEl.classList.toggle("het-status-error", !!isError);
+  }
+
+  function clearCards() {
+    while (cardsEl.firstChild) cardsEl.removeChild(cardsEl.firstChild);
+  }
+
+  function formatDateDisplay(dateKey) {
+    var months = [
+      "janvier", "février", "mars", "avril", "mai", "juin",
+      "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+    ];
+    var month = Number(dateKey.slice(0, 2));
+    var day = Number(dateKey.slice(3, 5));
+    if (!month || !day || !months[month - 1]) return dateKey;
+    return String(day) + " " + months[month - 1];
+  }
+
+  function buildEmptyCard(categoryKey) {
+    var card = document.createElement("article");
+    card.className = "het-card";
+
+    var body = document.createElement("div");
+    body.className = "het-card-body";
+
+    var category = document.createElement("p");
+    category.className = "het-card-category";
+    category.textContent = CATEGORY_LABELS[categoryKey] || categoryKey;
+    body.appendChild(category);
+
+    var empty = document.createElement("p");
+    empty.className = "het-card-empty";
+    empty.textContent = "Aucun événement disponible pour cette catégorie ce jour-là.";
+    body.appendChild(empty);
+
+    card.appendChild(body);
+    return card;
+  }
+
+  function buildEventCard(categoryKey, event) {
+    var card = document.createElement("article");
+    card.className = "het-card";
+
+    var title = typeof event.title === "string" ? event.title : "";
+    var yearDisplay = typeof event.year_display === "string" ? event.year_display : "";
+
+    if (event.image_url) {
+      var img = document.createElement("img");
+      img.className = "het-card-image";
+      img.src = event.image_url;
+      img.alt = title
+        ? "Illustration — " + title + (yearDisplay ? " (" + yearDisplay + ")" : "")
+        : "Illustration historique";
+      img.loading = "lazy";
+      card.appendChild(img);
+    }
+
+    var body = document.createElement("div");
+    body.className = "het-card-body";
+
+    var category = document.createElement("p");
+    category.className = "het-card-category";
+    category.textContent = CATEGORY_LABELS[categoryKey] || categoryKey;
+    body.appendChild(category);
+
+    if (yearDisplay) {
+      var year = document.createElement("p");
+      year.className = "het-card-year";
+      year.textContent = yearDisplay;
+      body.appendChild(year);
+    }
+
+    var titleEl = document.createElement("h2");
+    titleEl.className = "het-card-title";
+    titleEl.textContent = title;
+    body.appendChild(titleEl);
+
+    if (event.summary_short) {
+      var summaryShort = document.createElement("p");
+      summaryShort.className = "het-card-summary-short";
+      summaryShort.textContent = event.summary_short;
+      body.appendChild(summaryShort);
+    }
+
+    if (event.summary_long) {
+      var toggleId = "het-summary-long-" + categoryKey;
+      var toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "het-card-toggle";
+      toggle.textContent = "En savoir plus";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-controls", toggleId);
+      body.appendChild(toggle);
+
+      var summaryLong = document.createElement("p");
+      summaryLong.className = "het-card-summary-long";
+      summaryLong.id = toggleId;
+      summaryLong.textContent = event.summary_long;
+      summaryLong.hidden = true;
+      body.appendChild(summaryLong);
+
+      toggle.addEventListener("click", function () {
+        var isHidden = summaryLong.hidden;
+        summaryLong.hidden = !isHidden;
+        toggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
+        toggle.textContent = isHidden ? "Réduire" : "En savoir plus";
+      });
+    }
+
+    if (event.location) {
+      var location = document.createElement("p");
+      location.className = "het-card-meta";
+      var locationLabel = document.createElement("strong");
+      locationLabel.textContent = "Lieu : ";
+      location.appendChild(locationLabel);
+      location.appendChild(document.createTextNode(event.location));
+      body.appendChild(location);
+    }
+
+    if (event.historical_source_name) {
+      var sourceMeta = document.createElement("p");
+      sourceMeta.className = "het-card-meta";
+      var sourceLabel = document.createElement("strong");
+      sourceLabel.textContent = "Source : ";
+      sourceMeta.appendChild(sourceLabel);
+      sourceMeta.appendChild(document.createTextNode(event.historical_source_name));
+      body.appendChild(sourceMeta);
+    }
+
+    if (event.historical_source_url) {
+      var sourceLink = document.createElement("a");
+      sourceLink.className = "het-card-source-link";
+      sourceLink.href = event.historical_source_url;
+      sourceLink.target = "_blank";
+      sourceLink.rel = "noopener noreferrer";
+      sourceLink.textContent = "Voir la source historique";
+      body.appendChild(sourceLink);
+    }
+
+    if (event.image_credit) {
+      var credit = document.createElement("p");
+      credit.className = "het-card-credit";
+      credit.textContent = event.image_credit;
+      body.appendChild(credit);
+    }
+
+    card.appendChild(body);
+    return card;
+  }
+
+  function renderEvents(dateKey, events) {
+    clearCards();
+    CATEGORY_ORDER.forEach(function (categoryKey) {
+      var event = events ? events[categoryKey] : null;
+      cardsEl.appendChild(event ? buildEventCard(categoryKey, event) : buildEmptyCard(categoryKey));
+    });
+  }
+
+  function loadDate(dateKey) {
+    dateError.hidden = true;
+    dateError.textContent = "";
+    dateDisplay.textContent = formatDateDisplay(dateKey);
+    clearCards();
+    setStatus("Chargement…", false);
+
+    fetch("/api/historical-events/" + encodeURIComponent(dateKey), { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Réponse API inattendue (HTTP " + response.status + ").");
+        return response.json();
+      })
+      .then(function (data) {
+        if (!data || !data.events) throw new Error("Réponse API invalide (pas de champ events).");
+        setStatus("", false);
+        renderEvents(dateKey, data.events);
+      })
+      .catch(function (error) {
+        clearCards();
+        setStatus("Impossible de charger les événements du " + formatDateDisplay(dateKey) + " : " + error.message, true);
+      });
+  }
+
+  dateForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var value = String(dateInput.value || "").trim();
+    if (!isValidDateKey(value)) {
+      dateError.textContent = "Date invalide : utilise le format MM-DD (ex. 03-12), avec un mois 01-12 et un jour valide pour ce mois.";
+      dateError.hidden = false;
+      clearCards();
+      setStatus("", false);
+      return;
+    }
+    loadDate(value);
+  });
+
+  loadDate(dateInput.value);
+})();

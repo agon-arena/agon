@@ -148,6 +148,13 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public", { maxAge: "2m" }));
 
+const { createHistoricalEventsRouter } = require("./routes/historical-events");
+app.use("/api/historical-events", createHistoricalEventsRouter());
+// Page de test isolée, non liée à l'accueil (cf. views/historical-events-test.html).
+app.get("/historical-events-test", (req, res) => {
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/historical-events-test.html"));
+});
+
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
 // ATTENTION : basé sur req.ip. Si l'app est derrière un proxy (Render, Heroku,
 // Nginx…), activer app.set('trust proxy', 1) pour que req.ip soit l'IP réelle
