@@ -1408,21 +1408,42 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 })();
 
 // Compte à rebours de 60 min de bonne santé numérique, sous le badge de
-// score dans le bandeau du haut. Redémarre à chaque nouvelle session
-// (sessionStorage, pas de blocage à zéro, juste un repère visuel qui passe
-// au rouge dans les 10 dernières minutes).
+// score dans le bandeau du haut. Mesure le temps actif cumulé (pas une
+// horloge murale) : en pause dès qu'on quitte l'onglet/l'app, reprend sans
+// repartir de zéro au retour — persisté en sessionStorage pour survivre aux
+// navigations entre pages du site (pas de blocage à zéro une fois écoulé,
+// juste un repère visuel qui passe au rouge dans les 10 dernières minutes).
 const AGON_TIME_WIDGET_MINUTES = 60;
 const AGON_TIME_WIDGET_WARNING_S = 10 * 60;
 function renderAgonTimeWidget() {
   const scoreWidget = document.querySelector(".agon-user-score-widget");
   if (!scoreWidget || document.querySelector(".agon-time-widget")) return;
 
-  const startKey = "agon_time_widget_start";
-  let startedAt = Number(sessionStorage.getItem(startKey));
-  if (!Number.isFinite(startedAt) || !startedAt) {
-    startedAt = Date.now();
-    try { sessionStorage.setItem(startKey, String(startedAt)); } catch (e) {}
+  const elapsedKey = "agon_time_widget_elapsed_ms";
+  let baseElapsedMs = Number(sessionStorage.getItem(elapsedKey)) || 0;
+  let resumedAt = Date.now();
+  let running = !document.hidden;
+  function currentElapsedMs() {
+    return baseElapsedMs + (running ? Date.now() - resumedAt : 0);
   }
+  function persistElapsed() {
+    try { sessionStorage.setItem(elapsedKey, String(currentElapsedMs())); } catch (e) {}
+  }
+  function pauseTimeWidget() {
+    if (!running) return;
+    baseElapsedMs += Date.now() - resumedAt;
+    running = false;
+    persistElapsed();
+  }
+  function resumeTimeWidget() {
+    if (running) return;
+    resumedAt = Date.now();
+    running = true;
+  }
+  document.addEventListener("visibilitychange", () => { document.hidden ? pauseTimeWidget() : resumeTimeWidget(); });
+  window.addEventListener("blur", pauseTimeWidget);
+  window.addEventListener("focus", resumeTimeWidget);
+  window.addEventListener("pagehide", pauseTimeWidget);
 
   if (!document.getElementById("agon-time-widget-styles")) {
     const style = document.createElement("style");
@@ -1487,7 +1508,7 @@ function renderAgonTimeWidget() {
     wasBlinkActive = shouldBlink;
   }
   function tick() {
-    const remaining = Math.max(0, AGON_TIME_WIDGET_MINUTES * 60 - Math.floor((Date.now() - startedAt) / 1000));
+    const remaining = Math.max(0, AGON_TIME_WIDGET_MINUTES * 60 - Math.floor(currentElapsedMs() / 1000));
     const isExpired = remaining <= 0;
     if (isExpired) {
       widget.querySelector("span").textContent = "Attention à ta santé numérique !";
@@ -1500,6 +1521,10 @@ function renderAgonTimeWidget() {
     widget.classList.toggle("agon-time-widget-expired", isExpired);
     expired = isExpired;
     maybeBlink();
+    // Persisté à chaque tick (pas seulement à la pause) pour ne pas perdre
+    // les dernières secondes actives si la page se ferme/navigue sans que
+    // pagehide/blur n'ait le temps de se déclencher proprement.
+    if (running) persistElapsed();
   }
   tick();
   setInterval(tick, 1000);
