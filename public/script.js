@@ -1569,7 +1569,7 @@ function showAgonTimeWidgetExplanation() {
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
     '<h3 class="install-modal-title"><i class="fa-regular fa-clock"></i> Temps passé</h3>' +
-    '<p class="install-modal-text">Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes d\'affilée sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p>' +
+    '<p class="install-modal-text">Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p>' +
     '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
   const close = () => overlay.remove();
