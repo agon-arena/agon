@@ -1449,6 +1449,11 @@ function renderAgonTimeWidget() {
     const style = document.createElement("style");
     style.id = "agon-time-widget-styles";
     style.textContent = `
+      .agon-time-widget-row {
+        display: flex;
+        justify-content: center;
+        padding: 4px 12px 0;
+      }
       .agon-time-widget {
         display: inline-flex;
         align-items: center;
@@ -1544,7 +1549,7 @@ function renderAgonTimeWidget() {
   // au-dessus du logo — le bandeau grandit pour l'accueillir, ce qui
   // garantit qu'il reste dans le cadre blanc.
   const newRow = document.createElement("div");
-  newRow.className = "agon-user-score-row";
+  newRow.className = "agon-time-widget-row";
   newRow.appendChild(widget);
   const topbarInner = document.querySelector(".topbar-inner");
   if (topbarInner) topbarInner.insertAdjacentElement("beforebegin", newRow);
