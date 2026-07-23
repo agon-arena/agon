@@ -1461,6 +1461,11 @@ function renderAgonTimeWidget() {
         z-index: 18;
         max-width: min(220px, calc(100vw - 40px));
       }
+      @media (max-width: 768px) {
+        .agon-time-widget-logo-overlay {
+          top: -1px;
+        }
+      }
       .agon-time-widget {
         display: inline-flex;
         align-items: center;
@@ -4960,6 +4965,7 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
   modal.classList.toggle("qcm-frame-open", safePathname === "/qcm-du-jour");
+  modal.classList.toggle("parallele-historique-frame-open", safePathname === "/parallele-historique");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
@@ -5488,13 +5494,16 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
-    /* QCM du jour : pas de flèche retour en bas — la fermeture se fait via une
-       croix posée directement dans le cadre .qcm-panel (même document que la
-       page /qcm-du-jour, cf. #qcm-panel-close), pas ce bouton du chrome parent. */
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close {
+    /* QCM du jour et Parallèle historique : pas de flèche retour en bas — la
+       fermeture se fait via une croix posée directement dans le cadre de la
+       page (même document, cf. #qcm-panel-close / #ph-panel-close), pas ce
+       bouton du chrome parent. */
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close,
+    #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-close {
       display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,

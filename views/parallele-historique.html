@@ -84,10 +84,27 @@
     .ph-panel:focus {
       outline: none;
     }
+    /* Enveloppe de hauteur nulle : porte le "position: sticky" (donc reste
+       visible en scrollant) sans réserver d'espace dans le flux — la croix
+       elle-même est positionnée en absolute à l'intérieur, dans le coin
+       haut-gauche du CADRE de contenu (.ph-panel), jamais dans le bandeau
+       blanc du haut ni ailleurs sur l'écran : sticky respecte les bornes de
+       .ph-panel (n'apparaît qu'une fois le panneau atteint, disparaît avec lui). */
+    .ph-panel-close-sticky {
+      position: sticky;
+      /* .topbar (le bandeau blanc du logo) est lui-même sticky/top:0 dans
+         style.css — sans ce décalage, notre propre sticky se colle au même
+         niveau que lui et la croix se retrouve "dans" le bandeau au lieu de
+         rester au niveau du cadre de contenu juste en dessous. Hauteur
+         mesurée en JS (--ph-topbar-height), avec un repli raisonnable. */
+      top: calc(var(--ph-topbar-height, 64px) + 14px);
+      height: 0;
+      z-index: 20;
+    }
     .ph-panel-close {
       display: none;
       position: absolute;
-      top: 14px;
+      top: 0;
       right: 14px;
       width: 30px;
       height: 30px;
@@ -99,7 +116,7 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      z-index: 1;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
     .ph-panel-close:hover {
       background: #e5e7eb;
@@ -238,7 +255,9 @@
 </header>
 <main class="ph-page-shell">
   <section class="ph-panel" id="ph-panel" tabindex="-1" aria-live="polite">
-    <button type="button" class="ph-panel-close" id="ph-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <div class="ph-panel-close-sticky">
+      <button type="button" class="ph-panel-close" id="ph-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
     <h1><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</h1>
     <p class="ph-subtitle">Un événement d'actualité éclairé par un précédent du passé.</p>
     <div id="ph-body">
@@ -246,7 +265,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260723-timewidgetnobg" defer></script>
+<script src="/script.min.js?v=20260723-timewidgetmobile" defer></script>
 <script>
 (function () {
   var body = document.getElementById('ph-body');
@@ -397,7 +416,15 @@
     if (e.key === 'Escape') closeModal();
   });
 
+  function syncTopbarHeightVar() {
+    var topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    document.documentElement.style.setProperty('--ph-topbar-height', topbar.getBoundingClientRect().height + 'px');
+  }
+
   function init() {
+    syncTopbarHeightVar();
+    window.addEventListener('resize', syncTopbarHeightVar);
     renderLoading();
     // Premier (et seul, hors "generating") fetch déclenché ici, au chargement
     // de CETTE page — elle-même chargée uniquement à l'ouverture de la

@@ -83,10 +83,23 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
+    /* Enveloppe de hauteur nulle : porte le "position: sticky" (donc reste
+       visible en scrollant) sans réserver d'espace dans le flux. .topbar (le
+       bandeau blanc du logo) est lui-même sticky/top:0 dans style.css — sans
+       ce décalage, notre propre sticky se collerait au même niveau que lui
+       et la croix se retrouverait "dans" le bandeau au lieu de rester au
+       niveau du cadre de contenu (.qcm-panel) juste en dessous. Hauteur
+       mesurée en JS (--qcm-topbar-height), avec un repli raisonnable. */
+    .qcm-panel-close-sticky {
+      position: sticky;
+      top: calc(var(--qcm-topbar-height, 64px) + 14px);
+      height: 0;
+      z-index: 20;
+    }
     .qcm-panel-close {
       display: none;
       position: absolute;
-      top: 14px;
+      top: 0;
       right: 14px;
       width: 30px;
       height: 30px;
@@ -98,7 +111,7 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      z-index: 1;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
     .qcm-panel-close:hover {
       background: #e5e7eb;
@@ -329,7 +342,9 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    <div class="qcm-panel-close-sticky">
+      <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
     <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">QCM du jour</span></h1>
     <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 6 questions.</p>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
@@ -338,7 +353,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260723-timewidgetnobg" defer></script>
+<script src="/script.min.js?v=20260723-timewidgetmobile" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -556,7 +571,15 @@
       });
   }
 
+  function syncTopbarHeightVar() {
+    var topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+    document.documentElement.style.setProperty('--qcm-topbar-height', topbar.getBoundingClientRect().height + 'px');
+  }
+
   function init() {
+    syncTopbarHeightVar();
+    window.addEventListener('resize', syncTopbarHeightVar);
     voterKey = typeof getKey === 'function' ? getKey() : null;
 
     fetch('/api/daily-quiz/status', { cache: 'no-store' })
