@@ -1403,8 +1403,158 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   fetch(API + "/my-score?key=" + encodeURIComponent(key))
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => { if (data) renderUserScoreWidget(data); })
+    .then(renderAgonTimeWidget)
     .catch(() => {});
 })();
+
+// Compte à rebours de 60 min de bonne santé numérique, sous le badge de
+// score dans le bandeau du haut. Redémarre à chaque nouvelle session
+// (sessionStorage, pas de blocage à zéro, juste un repère visuel qui passe
+// au rouge dans les 10 dernières minutes).
+const AGON_TIME_WIDGET_MINUTES = 60;
+const AGON_TIME_WIDGET_WARNING_S = 10 * 60;
+function renderAgonTimeWidget() {
+  const scoreWidget = document.querySelector(".agon-user-score-widget");
+  if (!scoreWidget || document.querySelector(".agon-time-widget")) return;
+
+  const startKey = "agon_time_widget_start";
+  let startedAt = Number(sessionStorage.getItem(startKey));
+  if (!Number.isFinite(startedAt) || !startedAt) {
+    startedAt = Date.now();
+    try { sessionStorage.setItem(startKey, String(startedAt)); } catch (e) {}
+  }
+
+  if (!document.getElementById("agon-time-widget-styles")) {
+    const style = document.createElement("style");
+    style.id = "agon-time-widget-styles";
+    style.textContent = `
+      .agon-time-widget {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: #fff;
+        color: #111827;
+        border: 1px solid #111827;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .agon-time-widget i { font-size: 10px; color: #9cc3f0; }
+      .agon-time-widget-warning { border-color: #d64545; color: #d64545; }
+      .agon-time-widget-warning i { color: #d64545; }
+      .agon-time-widget-expired {
+        white-space: normal;
+        text-align: center;
+        max-width: min(220px, calc(100vw - 40px));
+      }
+      .agon-time-widget-logo-overlay {
+        position: absolute;
+        left: 50%;
+        bottom: -30px;
+        transform: translateX(-50%);
+        z-index: 18;
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+      }
+      @keyframes agon-time-widget-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.15; }
+      }
+      .agon-time-widget-blinking {
+        animation: agon-time-widget-blink 0.4s ease-in-out 3;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const widget = document.createElement("button");
+  widget.type = "button";
+  widget.className = "agon-time-widget";
+  widget.setAttribute("aria-label", "Temps passé sur agôn aujourd'hui");
+  widget.innerHTML = '<i class="fa-regular fa-clock"></i><span></span>';
+  widget.addEventListener("click", showAgonTimeWidgetExplanation);
+
+  // Une fois les 60 min dépassées, le badge bascule sur un message d'alerte
+  // et clignote 3 fois à chaque transition vers l'état "visible + dépassé"
+  // (montage de la page déjà expirée, ou passage à 0 pendant que le badge
+  // est déjà à l'écran, ou retour dans le viewport après en être sorti) —
+  // état unifié pour ne jamais déclencher deux clignotements pour le même
+  // "aperçu", sans pour autant bloquer quoi que ce soit.
+  let expired = false;
+  let visible = false;
+  let wasBlinkActive = false;
+  function maybeBlink() {
+    const shouldBlink = expired && visible;
+    if (shouldBlink && !wasBlinkActive) {
+      widget.classList.remove("agon-time-widget-blinking");
+      void widget.offsetWidth;
+      widget.classList.add("agon-time-widget-blinking");
+    }
+    wasBlinkActive = shouldBlink;
+  }
+  function tick() {
+    const remaining = Math.max(0, AGON_TIME_WIDGET_MINUTES * 60 - Math.floor((Date.now() - startedAt) / 1000));
+    const isExpired = remaining <= 0;
+    if (isExpired) {
+      widget.querySelector("span").textContent = "Attention à ta santé numérique !";
+    } else {
+      const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
+      const ss = String(remaining % 60).padStart(2, "0");
+      widget.querySelector("span").textContent = mm + ":" + ss;
+    }
+    widget.classList.toggle("agon-time-widget-warning", remaining <= AGON_TIME_WIDGET_WARNING_S);
+    widget.classList.toggle("agon-time-widget-expired", isExpired);
+    expired = isExpired;
+    maybeBlink();
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((entries) => {
+      visible = entries[0].isIntersecting;
+      maybeBlink();
+    }).observe(widget);
+  } else {
+    visible = true;
+    maybeBlink();
+  }
+
+  if (scoreWidget.classList.contains("agon-user-score-widget-logo-overlay")) {
+    widget.classList.add("agon-time-widget-logo-overlay");
+    scoreWidget.insertAdjacentElement("afterend", widget);
+  } else if (scoreWidget.classList.contains("agon-user-score-widget-inline")) {
+    scoreWidget.insertAdjacentElement("afterend", widget);
+  } else {
+    const row = scoreWidget.closest(".agon-user-score-row");
+    const newRow = document.createElement("div");
+    newRow.className = "agon-user-score-row";
+    newRow.appendChild(widget);
+    if (row) row.insertAdjacentElement("afterend", newRow);
+    else scoreWidget.insertAdjacentElement("afterend", widget);
+  }
+}
+
+function showAgonTimeWidgetExplanation() {
+  const existing = document.getElementById("agon-time-widget-overlay");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "agon-time-widget-overlay";
+  overlay.className = "install-modal-overlay";
+  overlay.style.display = "flex";
+  overlay.innerHTML =
+    '<div class="install-modal" onclick="event.stopPropagation()">' +
+    '<h3 class="install-modal-title"><i class="fa-regular fa-clock"></i> Temps passé</h3>' +
+    '<p class="install-modal-text">Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes d\'affilée sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p>' +
+    '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
+    '</div>';
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector(".install-modal-android-btn").addEventListener("click", close);
+  document.body.appendChild(overlay);
+}
 
 function isAgonMobileCloudViewport() {
   const viewportWidth = Math.min(

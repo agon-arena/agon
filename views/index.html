@@ -698,28 +698,37 @@ window.addEventListener("pageshow", function() {
 </p>
 </section>
 
-<div style="text-align:center;">
+<div class="home-secondary-actions">
   <a href="/qcm-du-jour" id="home-qcm-du-jour-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
     <i class="fa-solid fa-circle-question"></i>
     <span>QCM du jour</span>
+  </a>
+  <a href="/parallele-historique" id="home-parallele-historique-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/parallele-historique')">
+    <i class="fa-solid fa-landmark"></i>
+    <span>Parallèle historique</span>
   </a>
 </div>
 <style>
   /* Le paragraphe .agon-tag-trends-caption juste au-dessus a un margin-bottom
      de 26px (mobile) / 40px (desktop, cf. @media min-width:769px dans
-     style.css) qui collapse avec le margin-top de ce bouton : sans cette
-     compensation négative, l'espace au-dessus du bouton est bien plus grand
-     que l'espace en dessous. Le margin-top règle l'espace au-dessus (relatif à
+     style.css) qui collapse avec le margin-top de ce bloc : sans cette
+     compensation négative, l'espace au-dessus est bien plus grand que
+     l'espace en dessous. Le margin-top règle l'espace au-dessus (relatif à
      la légende), le margin-bottom règle l'espace en dessous (relatif au
      bandeau "À la une") — ce sont deux réglages indépendants (le premier ne
      fait que translater tout le flux qui suit, y compris le bandeau, sans
-     changer l'écart entre le bouton et lui). Valeurs calibrées pour égaliser
-     les deux côtés. */
-  #home-qcm-du-jour-btn {
+     changer l'écart entre le bloc et lui). Valeurs calibrées pour égaliser
+     les deux côtés (reprises telles quelles du bouton QCM solo). */
+  .home-secondary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     margin: -23px auto 21px;
   }
   @media (min-width: 769px) {
-    #home-qcm-du-jour-btn {
+    .home-secondary-actions {
       margin-top: -9px;
       margin-bottom: -7px;
     }
@@ -1200,7 +1209,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260722-pushwaves" defer></script>
+<script src="/script.min.js?v=20260723-timewidgetalert" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
