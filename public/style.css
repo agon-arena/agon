@@ -310,6 +310,15 @@ html.thematic-scroll body {
   opacity: 1;
   flex-shrink: 0;
 }
+/* Règle générale, toutes pages confondues : translateY plutôt que margin
+   pour ne rien décaler dans le flux (les nombreuses règles .home-logo
+   spécifiques à chaque page ne fixent que width/height, jamais transform,
+   donc ce décalage vertical s'additionne sans rien écraser). */
+@media (max-width: 768px) {
+  .home-logo {
+    transform: translateY(2px);
+  }
+}
 @media (min-width: 769px) {
   .page-create .topbar-inner.topbar-home {
     position: relative;
