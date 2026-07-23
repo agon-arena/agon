@@ -1450,18 +1450,6 @@ function renderAgonTimeWidget() {
         text-align: center;
         max-width: min(220px, calc(100vw - 40px));
       }
-      /* Pages où le badge de score est en overlay sur le logo (accueil,
-         tribunes, débat mobile) : le bandeau (.topbar) n'a que la hauteur du
-         logo, pas de place en flux normal sous le score. Le compteur y est
-         donc positionné en fixed, ses coordonnées calculées en JS à partir du
-         rect réel du badge de score, et bornées pour rester dans le bandeau
-         blanc, plutôt que devinées en CSS. */
-      .agon-time-widget-fixed-below-score {
-        position: fixed;
-        transform: translateX(-50%);
-        z-index: 19;
-        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
-      }
       @keyframes agon-time-widget-blink {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.15; }
@@ -1526,36 +1514,20 @@ function renderAgonTimeWidget() {
     maybeBlink();
   }
 
-  if (scoreWidget.classList.contains("agon-user-score-widget-logo-overlay")) {
-    // Overlay sur le logo (pas de place en flux normal, cf. commentaire CSS
-    // ci-dessus) : positionné en fixed, ancré au rect réel du badge de score
-    // et borné au bas du bandeau, recalculé au resize.
-    widget.classList.add("agon-time-widget-fixed-below-score");
-    document.body.appendChild(widget);
-    const positionBelowScore = () => {
-      const scoreRect = scoreWidget.getBoundingClientRect();
-      const topbarEl = document.querySelector(".topbar");
-      const topbarRect = topbarEl ? topbarEl.getBoundingClientRect() : null;
-      const gap = 4;
-      let top = scoreRect.bottom + gap;
-      if (topbarRect) top = Math.min(top, topbarRect.bottom - widget.offsetHeight - 4);
-      widget.style.top = Math.round(top) + "px";
-      widget.style.left = Math.round(scoreRect.left + scoreRect.width / 2) + "px";
-    };
-    positionBelowScore();
-    window.addEventListener("resize", positionBelowScore);
-    // Rejoue le calcul une fois les polices/icônes chargées (peut légèrement
-    // changer la largeur du badge de score juste après le premier rendu).
-    setTimeout(positionBelowScore, 300);
-  } else if (scoreWidget.classList.contains("agon-user-score-widget-inline")) {
-    scoreWidget.insertAdjacentElement("afterend", widget);
+  // Toujours en flux normal (jamais en position absolute/fixed devinée en
+  // pixels) : une nouvelle ligne centrée, juste après la ligne du score,
+  // quelle que soit la page — le bandeau grandit pour l'accueillir, ce qui
+  // garantit qu'il reste dans le cadre blanc au lieu de déborder dessous.
+  const newRow = document.createElement("div");
+  newRow.className = "agon-user-score-row";
+  newRow.appendChild(widget);
+  const existingScoreRow = scoreWidget.closest(".agon-user-score-row");
+  if (existingScoreRow) {
+    existingScoreRow.insertAdjacentElement("afterend", newRow);
   } else {
-    const row = scoreWidget.closest(".agon-user-score-row");
-    const newRow = document.createElement("div");
-    newRow.className = "agon-user-score-row";
-    newRow.appendChild(widget);
-    if (row) row.insertAdjacentElement("afterend", newRow);
-    else scoreWidget.insertAdjacentElement("afterend", widget);
+    const topbarInner = document.querySelector(".topbar-inner");
+    if (topbarInner) topbarInner.insertAdjacentElement("afterend", newRow);
+    else document.querySelector(".topbar")?.appendChild(newRow);
   }
 }
 
