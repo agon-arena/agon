@@ -1540,20 +1540,15 @@ function renderAgonTimeWidget() {
   }
 
   // Toujours en flux normal (jamais en position absolute/fixed devinée en
-  // pixels) : une nouvelle ligne centrée, juste après la ligne du score,
-  // quelle que soit la page — le bandeau grandit pour l'accueillir, ce qui
-  // garantit qu'il reste dans le cadre blanc au lieu de déborder dessous.
+  // pixels) : une nouvelle ligne centrée, insérée avant .topbar-inner donc
+  // au-dessus du logo — le bandeau grandit pour l'accueillir, ce qui
+  // garantit qu'il reste dans le cadre blanc.
   const newRow = document.createElement("div");
   newRow.className = "agon-user-score-row";
   newRow.appendChild(widget);
-  const existingScoreRow = scoreWidget.closest(".agon-user-score-row");
-  if (existingScoreRow) {
-    existingScoreRow.insertAdjacentElement("afterend", newRow);
-  } else {
-    const topbarInner = document.querySelector(".topbar-inner");
-    if (topbarInner) topbarInner.insertAdjacentElement("afterend", newRow);
-    else document.querySelector(".topbar")?.appendChild(newRow);
-  }
+  const topbarInner = document.querySelector(".topbar-inner");
+  if (topbarInner) topbarInner.insertAdjacentElement("beforebegin", newRow);
+  else document.querySelector(".topbar")?.appendChild(newRow);
 }
 
 function showAgonTimeWidgetExplanation() {
