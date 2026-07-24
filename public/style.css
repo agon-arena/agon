@@ -11721,10 +11721,10 @@ body.is-standalone .home-topbar-login-icon {
   z-index: 10002;
   display: none;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   width: min(260px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
-  padding: 10px;
+  padding: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 18px;
   background: #ffffff;
@@ -11760,7 +11760,7 @@ body.is-standalone .home-topbar-login-icon {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 12px;
+  padding: 8px 12px;
   border-radius: 12px;
   cursor: pointer;
   font: inherit;
@@ -11788,7 +11788,7 @@ body.is-standalone .home-topbar-login-icon {
   display:inline-flex;
   align-items:center;
   gap:10px;
-  padding:11px 12px;
+  padding:8px 12px;
   border-radius:12px;
   cursor:pointer;
   font:inherit;

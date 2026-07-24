@@ -1,0 +1,107 @@
+"use strict";
+
+// Prompt de la "Pensée philosophique du jour". Isolé du reste du backend pour
+// pouvoir être relu/ajusté sans toucher à lib/pensee-philosophique.js (qui ne
+// fait qu'orchestrer génération + validation + stockage).
+
+const MAX_PENSEES_HINT = 3;
+
+const RESPONSE_SCHEMA_HINT = `Format de réponse strict — un unique objet JSON, sans texte avant ni après, sans balises Markdown (pas de \`\`\`), sous l'une des deux formes suivantes.
+
+Si au moins une pensée sérieuse est possible (1 à ${MAX_PENSEES_HINT} pensées, jamais plus) :
+{
+  "status": "published",
+  "pensees": [
+    {
+      "current_topic_id": "identifiant du sujet choisi, recopié exactement tel que fourni",
+      "current_topic_title": "titre du sujet choisi",
+      "current_topic_summary": "résumé très bref de l'actualité",
+      "philosophical_concept": "nom du concept ou de l'idée philosophique",
+      "philosopher_name": "philosophe ou courant de pensée associé (ex: \\"Hannah Arendt\\", \\"les Stoïciens\\")",
+      "concept_origin": "contexte ou époque d'apparition du concept",
+      "concept_explanation": "explication claire et accessible du concept",
+      "shared_mechanism": "ce qui, dans l'actualité, fait vraiment écho au concept",
+      "essential_difference": "la limite de l'analogie : où le concept cesse de bien s'appliquer",
+      "conclusion": "conclusion prudente sur la portée et les limites du rapprochement",
+      "sources": [
+        { "title": "string", "author": "string|null", "publisher": "string|null", "year": "string|null", "url": "string ou null — voir règle URL ci-dessous" }
+      ]
+      // "sources" est secondaire : un seul titre général que tu connais suffit, pas besoin d'être exhaustif ni précis sur auteur/éditeur/année si tu n'en es pas sûr — un tableau vide [] est tout à fait acceptable et ne doit jamais te faire hésiter à inclure cette pensée si le rapprochement lui-même est solide.
+    }
+  ]
+}
+
+Si aucun rapprochement philosophique sérieux n'est possible parmi les sujets fournis :
+{
+  "status": "insufficient",
+  "reason": "explication brève du refus"
+}`;
+
+function formatTopicsForPrompt(topics) {
+  return topics
+    .map((topic, index) => {
+      const lines = [
+        `${index + 1}. id:${topic.id}`,
+        `   Titre : ${String(topic.title || "").trim()}`,
+        `   Résumé : ${String(topic.summary || "").trim()}`
+      ];
+      if (topic.category) lines.push(`   Catégorie : ${String(topic.category).trim()}`);
+      const sourceUrls = (Array.isArray(topic.sources) ? topic.sources : [])
+        .map((s) => s && s.url)
+        .filter(Boolean);
+      lines.push(
+        sourceUrls.length
+          ? `   URL(s) réelle(s) disponible(s) pour cette actu (les seules que tu as le droit de citer comme url) : ${sourceUrls.join(", ")}`
+          : "   Aucune URL fournie pour cette actu."
+      );
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
+function buildPenseePhilosophiquePrompt(topics) {
+  if (!Array.isArray(topics) || !topics.length) {
+    throw new Error("buildPenseePhilosophiquePrompt: la liste de sujets ne peut pas être vide.");
+  }
+
+  return [
+    "Tu es un rédacteur spécialisé en philosophie qui prépare la rubrique \"Pensée philosophique du jour\" du site Agôn.",
+    "",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "",
+    formatTopicsForPrompt(topics),
+    "",
+    "=== ÉTAPE 1 — Choisir les sujets qui s'y prêtent vraiment ===",
+    "Pour CHAQUE sujet, mobilise activement et sérieusement tes connaissances philosophiques réelles avant de conclure quoi que ce soit — beaucoup de sujets qui semblent purement factuels ou techniques ont en réalité un concept philosophique solide derrière eux (ex. surveillance de masse et vie privée → le panoptique de Bentham/Foucault ; désinformation en ligne → la caverne de Platon ou la post-vérité chez Hannah Arendt ; obéissance dans une hiérarchie → la banalité du mal). Ne t'arrête pas à la première impression : cherche vraiment, sur chaque sujet.",
+    "Puis évalue chaque piste trouvée selon ces critères :",
+    "- intérêt philosophique du sujet ;",
+    "- existence d'un concept, d'une notion ou d'un courant réellement établi que tu connais avec une confiance raisonnable (pas une vague association d'idées, et pas un concept inventé) ;",
+    "- précision du mécanisme réellement comparable entre le concept et l'actualité ;",
+    "- utilité pédagogique du rapprochement pour un lecteur non spécialiste en philosophie ;",
+    "- risque de rapprochement abusif, plaqué ou artificiel ;",
+    "- test de spécificité : ce concept est-il vraiment le plus précis pour ce mécanisme, ou un autre concept tout aussi connu collerait-il presque aussi bien ? Si oui, c'est probablement un rapprochement trop générique — cherche le concept qui correspond le plus finement au mécanisme en jeu, pas le premier qui vient à l'esprit.",
+    "",
+    "Un sujet ne suffit PAS à justifier une pensée simplement parce qu'il évoque vaguement une grande question (\"la liberté\", \"la justice\", \"la vérité\") : il faut un concept précis, nommé, dont le mécanisme éclaire vraiment ce qui se joue dans l'actualité — pas une association superficielle de vocabulaire.",
+    "",
+    `=== IMPORTANT — Le nombre de pensées n'est PAS fixé à l'avance ===`,
+    `Publie entre 1 et ${MAX_PENSEES_HINT} pensées, mais UNIQUEMENT celles qui répondent vraiment aux critères ci-dessus. N'en ajoute JAMAIS une deuxième ou une troisième juste pour atteindre un quota — une seule bonne pensée vaut mieux que plusieurs dont certaines sont artificielles ou approximatives. Si un seul sujet s'y prête vraiment, publie-en une seule. Chaque pensée incluse doit porter sur un sujet différent (jamais deux pensées sur le même current_topic_id).`,
+    "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de concept que tu connais avec confiance — pas par défaut ou par prudence excessive.",
+    "",
+    "=== ÉTAPE 2 — Produire chaque pensée retenue ===",
+    "Pour chaque sujet retenu, rédige une pensée contenant : un résumé très bref de l'actualité, le nom du concept philosophique, le philosophe ou courant qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",
+    "Pour chaque pensée, le texte principal (explication du concept + ce qui fait écho + limite de l'analogie + conclusion) doit faire environ 80 à 120 mots, hors sources.",
+    "",
+    "=== RÈGLES ÉDITORIALES OBLIGATOIRES (s'appliquent à chaque pensée) ===",
+    "- N'invente aucun concept, aucune citation, aucun auteur. Si tu n'es pas certain d'un fait précis (date, attribution exacte), n'écris pas de sources plutôt que d'en inventer une.",
+    "- RÈGLE URL (stricte) : tu n'as accès à aucune recherche documentaire réelle. Le champ \"url\" de chaque source doit valoir null, SAUF s'il s'agit d'une des URL listées explicitement ci-dessus pour l'actu concernée (recopiée exactement telle quelle). N'invente jamais une URL vers un livre, une encyclopédie, un article ou un site — même une URL qui te semble plausible. Une url inventée sera automatiquement rejetée.",
+    "- Pour le titre, l'auteur, l'éditeur/organisme et l'année de chaque source : ne les indique que si tu es raisonnablement sûr du fait. Une référence incertaine doit être omise du tableau \"sources\" plutôt que devinée.",
+    "- Évite toute analogie avec le nazisme, les génocides ou les crimes de masse, sauf si le sujet d'actualité lui-même porte explicitement sur ce thème — même quand le concept philosophique lui-même en est historiquement issu (ex. la banalité du mal).",
+    "- La conclusion doit préciser clairement les limites du rapprochement, pas seulement ce qui rend le concept pertinent.",
+    "- Reste compréhensible pour un lecteur non spécialiste en philosophie — évite le jargon non expliqué.",
+    "- Ton sobre, informatif, non sensationnaliste — pas de dramatisation, pas de point d'exclamation.",
+    "",
+    RESPONSE_SCHEMA_HINT
+  ].join("\n");
+}
+
+module.exports = { buildPenseePhilosophiquePrompt, MAX_PENSEES_HINT };

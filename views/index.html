@@ -48,7 +48,7 @@
        donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
        réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
        déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260723-logonudge">
+  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
   <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -424,9 +424,17 @@
             <i class="fa-regular fa-folder-open"></i>
             <span>Scores, classements et contributions</span>
           </a>
+          <a href="/historical-events-test" class="home-topbar-menu-item" id="home-topbar-historical-events-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/historical-events-test')">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Ce jour dans l'Histoire</span>
+          </a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
             <i class="fa-solid fa-list-check"></i>
             <span>QCM du jour</span>
+          </a>
+          <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
+            <i class="fa-solid fa-landmark"></i>
+            <span>Éclairages</span>
           </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
@@ -707,9 +715,9 @@ window.addEventListener("pageshow", function() {
     <i class="fa-solid fa-circle-question"></i>
     <span>QCM du jour</span>
   </a>
-  <a href="/parallele-historique" id="home-parallele-historique-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/parallele-historique')">
-    <i class="fa-solid fa-landmark"></i>
-    <span>Parallèle historique</span>
+  <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/eclairages')">
+    <i class="fa-solid fa-lightbulb"></i>
+    <span>Éclairages</span>
   </a>
 </div>
 <style>
@@ -754,10 +762,10 @@ window.addEventListener("pageshow", function() {
   }
   /* Mobile : les 3 segments doivent rester sur une seule ligne (la barre
      n'a qu'une hauteur) — vu leurs textes de longueurs très différentes
-     ("Ce jour dans l'Histoire" / "QCM du matin" / "Parallèle historique"),
-     ça implique de partager la largeur à parts égales (flex:1) avec une
-     police plus compacte et un retour à la ligne du texte à l'intérieur du
-     segment si besoin. */
+     ("Ce jour dans l'Histoire" / "QCM du matin" / "Éclairages"), ça implique
+     de partager la largeur à parts égales (flex:1) avec une police plus
+     compacte et un retour à la ligne du texte à l'intérieur du segment si
+     besoin. */
   @media (max-width: 768px) {
     .home-secondary-actions {
       width: min(100% - 32px, 480px);
@@ -1262,7 +1270,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260724-restoreclosearrow" defer></script>
+<script src="/script.min.js?v=20260724-buildsync" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -1075,6 +1075,10 @@ function renderUserScoreWidget(data) {
   };
   const hasScore = votesScore !== null || notesScore !== null || gnosisScore !== null;
 
+  maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, () =>
+    showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount)
+  );
+
   if (!document.getElementById("agon-user-score-styles")) {
     const style = document.createElement("style");
     style.id = "agon-user-score-styles";
@@ -1236,6 +1240,68 @@ function renderUserScoreWidget(data) {
     if (topbarInner) topbarInner.insertAdjacentElement("afterend", row);
     else topbar.appendChild(row);
   }
+}
+
+// Fenêtre visible dès qu'un des 3 scores a changé depuis la dernière visite
+// (comparaison à une valeur mémorisée en localStorage) — pas seulement le
+// badge discret du bandeau, qu'on peut facilement ne pas remarquer.
+// Aucune notification au tout premier chargement connu (pas de valeur de
+// référence à comparer) : seulement à partir de la 2e visite, quand une
+// évolution est réellement détectable.
+const AGON_SCORE_CHANGE_BASELINE_KEY = "agon_last_known_scores";
+function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail) {
+  // Pas de valeur mémorisée (tout premier chargement connu) : traité comme
+  // une base à null/null/null plutôt qu'un "rien à comparer, on ignore" —
+  // un score qui apparaît pour la première fois (null -> une vraie valeur)
+  // doit lui aussi déclencher la notification, pas seulement une évolution
+  // entre deux valeurs déjà connues.
+  let previous = { votesScore: null, notesScore: null, gnosisScore: null };
+  try {
+    const stored = JSON.parse(localStorage.getItem(AGON_SCORE_CHANGE_BASELINE_KEY) || "null");
+    if (stored) previous = stored;
+  } catch (e) {}
+  try {
+    localStorage.setItem(AGON_SCORE_CHANGE_BASELINE_KEY, JSON.stringify({ votesScore, notesScore, gnosisScore }));
+  } catch (e) {}
+
+  const changes = [];
+  if (votesScore !== null && previous.votesScore !== votesScore) {
+    changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Orator", value: votesScore });
+  }
+  if (notesScore !== null && previous.notesScore !== notesScore) {
+    changes.push({ icon: AGON_LOGOS_ICON, label: "Logos", value: notesScore });
+  }
+  if (gnosisScore !== null && previous.gnosisScore !== gnosisScore) {
+    changes.push({ icon: '<i class="fa-solid fa-brain"></i>', label: "Gnosis", value: gnosisScore });
+  }
+  if (!changes.length) return;
+  showScoreChangeNotification(changes, openDetail);
+}
+
+function showScoreChangeNotification(changes, openDetail) {
+  const existing = document.getElementById("agon-score-change-overlay");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "agon-score-change-overlay";
+  overlay.className = "install-modal-overlay";
+  overlay.style.display = "flex";
+  const lines = changes
+    .map((c) => '<p class="install-modal-text">' + c.icon + ' <strong>' + c.label + '</strong> — désormais Top ' + formatPct(c.value) + '%</p>')
+    .join("");
+  overlay.innerHTML =
+    '<div class="install-modal" onclick="event.stopPropagation()">' +
+    '<h3 class="install-modal-title">Ton score a évolué</h3>' +
+    lines +
+    '<button class="install-modal-android-btn" type="button" style="display:flex" id="agon-score-change-detail-btn">Voir le détail</button>' +
+    '</div>';
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector("#agon-score-change-detail-btn").addEventListener("click", () => {
+    close();
+    if (typeof openDetail === "function") openDetail();
+  });
+  document.body.appendChild(overlay);
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
@@ -1462,7 +1528,7 @@ function renderAgonTimeWidget() {
       }
       .agon-time-widget-logo-overlay {
         position: absolute;
-        top: 0px;
+        top: 4px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 18;
@@ -4973,6 +5039,10 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
   modal.classList.toggle("qcm-frame-open", safePathname === "/qcm-du-jour");
   modal.classList.toggle("parallele-historique-frame-open", safePathname === "/parallele-historique");
+  modal.classList.toggle("pensee-philosophique-frame-open", safePathname === "/pensee-philosophique");
+  modal.classList.toggle("mecanisme-sociologique-frame-open", safePathname === "/mecanisme-sociologique");
+  modal.classList.toggle("eclairages-frame-open", safePathname === "/eclairages");
+  modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
@@ -5502,6 +5572,10 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.pensee-philosophique-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.mecanisme-sociologique-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.eclairages-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.historical-events-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }

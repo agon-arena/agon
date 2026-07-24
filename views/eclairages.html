@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script src="/no-zoom.js?v=20260603" defer></script>
+  <title>Éclairages | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192-optimized.png">
+  <meta name="theme-color" content="#243038">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agôn">
+  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script>
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.self !== window.top) {
+        document.body.classList.add('in-iframe');
+        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+      }
+    });
+  </script>
+  <style>
+    /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038),
+       posé sur html et body (cf. qcm-du-jour.html pour la justification). */
+    html:has(body.page-eclairages) {
+      background-color: #243038;
+    }
+    body.page-eclairages {
+      min-height: 100vh;
+      background-color: #243038;
+    }
+    .page-eclairages .topbar-inner {
+      justify-content: center;
+      padding: 2px 0;
+    }
+    .page-eclairages .home-brand-block {
+      flex: 0 0 auto;
+      margin-left: 0;
+    }
+    .page-eclairages .home-logo {
+      width: 110px;
+    }
+    @media (max-width: 768px) {
+      .page-eclairages .home-logo {
+        width: 70px;
+      }
+      .page-eclairages .topbar-inner {
+        padding: 0;
+      }
+    }
+    .ecl-page-shell {
+      width: min(100% - 32px, 900px);
+      margin: 112px auto 48px;
+    }
+    .page-eclairages.in-iframe .ecl-page-shell {
+      /* Marge basse un peu plus généreuse que le haut : laisse un peu de
+         mou pour scroller légèrement au-delà du bas du contenu plutôt que
+         de s'arrêter pile dessus. */
+      margin: 20px auto 60px;
+    }
+    @media (min-width: 769px) {
+      .ecl-page-shell {
+        width: min(100% - 64px, 1200px);
+      }
+    }
+    .ecl-panel,
+    .ecl-panel * {
+      box-sizing: border-box;
+    }
+    .ecl-panel {
+      position: relative;
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .ecl-panel:focus {
+      outline: none;
+    }
+    .ecl-panel h1 {
+      margin: 0 0 4px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 34px;
+      line-height: 1;
+      color: #111827;
+      text-align: center;
+    }
+    .ecl-panel .ecl-subtitle {
+      margin: 0 0 24px;
+      color: #6b7280;
+      font-size: 14px;
+      text-align: center;
+    }
+    /* Les trois rubriques (parallèle historique / pensée philosophique /
+       mécanisme sociologique) sont des blocs indépendants (chacun son propre
+       appel API, son propre menu "jours précédents") réunis sur une seule
+       page — un simple séparateur visuel marque où finit l'un et commence
+       l'autre. */
+    .ecl-block + .ecl-block {
+      margin-top: 32px;
+      padding-top: 28px;
+      border-top: 1px solid #e5e7eb;
+    }
+    /* Chaque bloc s'ouvre comme un menu (accordéon) : replié par défaut, le
+       contenu (et son premier appel API) n'est chargé qu'au premier clic —
+       cohérent avec le principe du site de ne rien charger sans interaction
+       explicite de l'utilisateur. */
+    .ecl-block-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 6px 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: center;
+    }
+    .ecl-block-toggle-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .ecl-block-toggle-title i {
+      color: #f5b642;
+    }
+    .ecl-block-toggle:hover .ecl-block-toggle-title {
+      color: #243038;
+    }
+    .ecl-block-chevron {
+      color: #9ca3af;
+      font-size: 15px;
+      transition: transform 0.2s ease;
+    }
+    .ecl-block-toggle[aria-expanded="true"] .ecl-block-chevron {
+      transform: rotate(180deg);
+    }
+    .ecl-block-content {
+      margin-top: 16px;
+    }
+    .ecl-block-content[hidden] {
+      display: none;
+    }
+    .ecl-block-collapse {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 24px;
+      padding: 8px 0 0;
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      background: none;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .ecl-block-collapse:hover {
+      color: #243038;
+    }
+    .ecl-block-subtitle {
+      margin: 0 0 8px;
+      color: #6b7280;
+      font-size: 14px;
+      text-align: center;
+    }
+    /* Menu discret "jours précédents" : un simple lien texte, pas un bouton
+       proéminent — la consultation de l'historique reste secondaire par
+       rapport au contenu du jour, qui doit rester la première chose vue.
+       Mêmes classes .ph-*/.pp-*/.ms-* que les pages dédiées (styles
+       identiques, simplement dupliqués ici puisque chaque bloc reste un
+       widget autonome). */
+    /* text-align (pas flex + align-items) : dans un conteneur flex,
+       text-align n'a aucun effet sur la position des enfants — c'est
+       align-items qui centre, et si pour une raison ou une autre ça ne
+       prenait pas, le bouton se retrouvait collé à gauche malgré la règle.
+       Un simple bloc + text-align:center est une technique de centrage bien
+       plus robuste pour un bouton (élément de niveau inline par défaut). */
+    .ph-history, .pp-history, .ms-history {
+      width: 100%;
+      text-align: center;
+      margin: 0 0 48px;
+    }
+    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle {
+      display: block;
+      width: fit-content;
+      margin: 0 auto;
+      border: none;
+      background: none;
+      padding: 4px 6px;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover {
+      color: #243038;
+      text-decoration: underline;
+    }
+    .ph-history-panel, .pp-history-panel, .ms-history-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden] {
+      display: none;
+    }
+    .ph-history-date, .pp-history-date, .ms-history-date {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #374151;
+    }
+    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled) {
+      background: #eef3f6;
+    }
+    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .ph-history-today, .pp-history-today, .ms-history-today {
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover {
+      background: #eef3f6;
+    }
+    /* 1 à 3 parallèles/pensées/mécanismes possibles le même jour (jamais un
+       nombre fixe) : le premier n'a pas de marge/séparateur au-dessus, les
+       suivants si — pour marquer clairement où commence chaque élément
+       indépendant. */
+    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme {
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9ca3af;
+      text-align: center;
+    }
+    .ph-topic-title, .pp-topic-title, .ms-topic-title {
+      margin: 0 0 8px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+    }
+    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary {
+      margin: 0 0 22px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #374151;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .ph-section, .pp-section, .ms-section {
+      margin: 0 0 20px;
+    }
+    .ph-section h2, .pp-section h2, .ms-section h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 19px;
+      font-weight: 700;
+      color: #243038;
+      letter-spacing: 0.01em;
+    }
+    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i {
+      font-size: 15px;
+      color: #f5b642;
+    }
+    .ph-section p, .pp-section p, .ms-section p {
+      margin: 0;
+      color: #374151;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    .ph-historical-image {
+      margin: 10px auto 14px;
+      max-width: 280px;
+    }
+    .ph-historical-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .ph-historical-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .ph-historical-image figcaption a {
+      color: #9ca3af;
+    }
+    .pp-concept-meta {
+      margin: 0 0 10px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .pp-concept-image {
+      margin: 10px auto 14px;
+      max-width: 280px;
+    }
+    .pp-concept-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .pp-concept-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .pp-concept-image figcaption a {
+      color: #9ca3af;
+    }
+    .ms-concept-meta {
+      margin: 0 0 10px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .ms-concept-image {
+      margin: 10px auto 14px;
+      max-width: 280px;
+    }
+    .ms-concept-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .ms-concept-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .ms-concept-image figcaption a {
+      color: #9ca3af;
+    }
+    .ph-sources, .pp-sources, .ms-sources {
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px dashed #d1d5db;
+    }
+    .ph-sources-label, .pp-sources-label, .ms-sources-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #b45309;
+    }
+    .ph-sources ul, .pp-sources ul, .ms-sources ul {
+      margin: 0;
+      padding: 0 0 0 18px;
+      color: #6b7280;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .ph-sources a, .pp-sources a, .ms-sources a {
+      color: #243038;
+    }
+    .ph-no-sources, .pp-no-sources, .ms-no-sources {
+      margin: 0;
+      color: #9ca3af;
+      font-size: 13px;
+      font-style: italic;
+    }
+    .ph-state-message, .pp-state-message, .ms-state-message {
+      color: #6b7280;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    #ph-body, #pp-body, #ms-body {
+      padding-top: 24px;
+    }
+  </style>
+</head>
+<body class="page-eclairages">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+    <div class="home-brand-block">
+      <div class="home-brand-main">
+        <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+      </div>
+    </div>
+  </div>
+</header>
+<main class="ecl-page-shell">
+  <section class="ecl-panel" id="ecl-panel" tabindex="-1" aria-live="polite">
+    <h1><i class="fa-solid fa-lightbulb"></i> Éclairages</h1>
+    <p class="ecl-subtitle">L'actualité du jour éclairée par l'histoire et la philosophie.</p>
+
+    <div class="ecl-block">
+      <button type="button" class="ecl-block-toggle" id="ph-block-toggle" aria-expanded="false" aria-controls="ph-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="ph-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="ph-title-text">Parallèle historique du jour</span> — un événement d'actualité éclairé par un précédent du passé.</p>
+
+        <div class="ph-history">
+          <button type="button" class="ph-history-toggle" id="ph-history-toggle" aria-expanded="false" aria-controls="ph-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="ph-history-panel" id="ph-history-panel" hidden>
+            <button type="button" class="ph-history-arrow" id="ph-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="ph-history-date" id="ph-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="ph-history-arrow" id="ph-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="ph-history-today" id="ph-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="ph-body">
+          <p class="ph-state-message">Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="ph-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
+
+    <div class="ecl-block">
+      <button type="button" class="ecl-block-toggle" id="pp-block-toggle" aria-expanded="false" aria-controls="pp-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-brain"></i> Pensée philosophique du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="pp-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="pp-title-text">Pensée philosophique du jour</span> — un événement d'actualité éclairé par une idée philosophique.</p>
+
+        <div class="pp-history">
+          <button type="button" class="pp-history-toggle" id="pp-history-toggle" aria-expanded="false" aria-controls="pp-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="pp-history-panel" id="pp-history-panel" hidden>
+            <button type="button" class="pp-history-arrow" id="pp-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="pp-history-date" id="pp-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="pp-history-arrow" id="pp-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="pp-history-today" id="pp-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="pp-body">
+          <p class="pp-state-message">Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="pp-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
+
+    <div class="ecl-block">
+      <button type="button" class="ecl-block-toggle" id="ms-block-toggle" aria-expanded="false" aria-controls="ms-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-people-group"></i> Mécanisme sociologique du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="ms-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="ms-title-text">Mécanisme sociologique du jour</span> — un événement d'actualité éclairé par un mécanisme sociologique.</p>
+
+        <div class="ms-history">
+          <button type="button" class="ms-history-toggle" id="ms-history-toggle" aria-expanded="false" aria-controls="ms-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="ms-history-panel" id="ms-history-panel" hidden>
+            <button type="button" class="ms-history-arrow" id="ms-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="ms-history-date" id="ms-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="ms-history-arrow" id="ms-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="ms-history-today" id="ms-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="ms-body">
+          <p class="ms-state-message">Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="ms-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/script.min.js?v=20260724-buildsync" defer></script>
+<script>
+// Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
+// focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
+// contenu chargé au premier clic seulement — cf. window.eclBlocks, rempli
+// par chacun des deux scripts de contenu ci-dessous).
+(function () {
+  var panel = document.getElementById('ecl-panel');
+
+  function closeModal() {
+    if (window.self !== window.top) {
+      try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
+    } else {
+      location.href = '/';
+    }
+  }
+
+  // Échap ferme la modale iframe : le keydown posé par le parent
+  // (script.js) écoute sur son propre document, qui ne reçoit pas les
+  // événements clavier une fois le focus passé dans cette iframe — on
+  // reproduit donc ici le même mécanisme que le bouton de fermeture.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // window.eclBlocks : liste de { toggleId, contentId, onFirstOpen } que
+  // chaque script de contenu (ph/pp) enregistre pour son propre bloc —
+  // garde la logique d'accordéon générique, sans dépendre des détails de
+  // chaque rubrique.
+  window.eclBlocks = window.eclBlocks || [];
+  function registerAccordionBlock(config) {
+    var toggle = document.getElementById(config.toggleId);
+    var content = document.getElementById(config.contentId);
+    if (!toggle || !content) return;
+    var loaded = false;
+
+    function open() {
+      var wasOpen = toggle.getAttribute('aria-expanded') === 'true';
+      // Accordéon : ouvrir ce bloc referme tous les autres.
+      window.eclBlocks.forEach(function (other) {
+        if (other === entry) return;
+        other.toggle.setAttribute('aria-expanded', 'false');
+        other.content.hidden = true;
+      });
+      toggle.setAttribute('aria-expanded', 'true');
+      content.hidden = false;
+      if (!wasOpen && !loaded) {
+        loaded = true;
+        config.onFirstOpen();
+      }
+    }
+
+    function collapse() {
+      toggle.setAttribute('aria-expanded', 'false');
+      content.hidden = true;
+    }
+
+    toggle.addEventListener('click', function () {
+      var isOpen = toggle.getAttribute('aria-expanded') === 'true';
+      if (isOpen) collapse(); else open();
+    });
+
+    // Bouton "Masquer" en bas du contenu déplié : évite de devoir remonter
+    // jusqu'au titre pour replier un long bloc déjà ouvert.
+    var collapseButton = config.collapseButtonId ? document.getElementById(config.collapseButtonId) : null;
+    if (collapseButton) {
+      collapseButton.addEventListener('click', collapse);
+    }
+
+    var entry = { toggle: toggle, content: content };
+    window.eclBlocks.push(entry);
+  }
+  window.eclRegisterAccordionBlock = registerAccordionBlock;
+
+  function init() {
+    if (panel && typeof panel.focus === 'function') panel.focus();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      init();
+      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+    });
+  } else {
+    init();
+    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+  }
+})();
+</script>
+<script>
+// Bloc "Parallèle historique du jour" — logique identique à
+// views/parallele-historique.html, juste sans la gestion de la modale
+// (fermeture/Échap/focus), déjà prise en charge par le script partagé ci-dessus.
+(function () {
+  var body = document.getElementById('ph-body');
+  var titleText = document.getElementById('ph-title-text');
+  var historyToggle = document.getElementById('ph-history-toggle');
+  var historyPanel = document.getElementById('ph-history-panel');
+  var historyDateInput = document.getElementById('ph-history-date');
+  var historyTodayBtn = document.getElementById('ph-history-today');
+  var historyPrevBtn = document.getElementById('ph-history-prev');
+  var historyNextBtn = document.getElementById('ph-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="ph-state-message">Chargement du parallèle historique du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="ph-state-message">Le parallèle historique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucun parallèle historique sérieux n’a pu être établi pour l’actualité de ce jour-là.'
+      : 'Aucun parallèle historique sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="ph-state-message">' + intro + '</p>' +
+      (reason ? '<p class="ph-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="ph-state-message">Aucun parallèle historique n’a été généré ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="ph-state-message">Impossible de charger le parallèle historique pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOneParallel(parallel, index, total) {
+    var sources = Array.isArray(parallel.sources) ? parallel.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources historiques';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="ph-no-sources">Aucune source détaillée disponible pour ce parallèle.</p>';
+
+    var imageHtml = '';
+    if (parallel.historical_event_image_url) {
+      var isPressImage = parallel.historical_event_image_source === "press";
+      var captionText = "Image : " + (parallel.historical_event_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? parallel.current_topic_title : parallel.historical_event_title;
+      imageHtml =
+        '<figure class="ph-historical-image">' +
+        '<img src="' + escapeHtml(parallel.historical_event_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.ph-historical-image\').remove();">' +
+        (parallel.historical_event_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(parallel.historical_event_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="ph-parallel-count">Parallèle ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="ph-parallel">' +
+      countLabel +
+      '<p class="ph-topic-title">' + escapeHtml(parallel.current_topic_title) + '</p>' +
+      '<p class="ph-topic-summary">' + escapeHtml(parallel.current_topic_summary) + '</p>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-scroll"></i> Le précédent historique</h2>' +
+      '<p><strong>' + escapeHtml(parallel.historical_event_title) + '</strong> — ' + escapeHtml(parallel.historical_event_date) + '</p>' +
+      imageHtml +
+      '<p>' + escapeHtml(parallel.historical_context) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui se répète</h2>' +
+      '<p>' + escapeHtml(parallel.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La différence essentielle</h2>' +
+      '<p>' + escapeHtml(parallel.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="ph-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(parallel.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="ph-sources">' +
+      '<p class="ph-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var parallels = Array.isArray(content.parallels)
+      ? content.parallels
+      : (content.current_topic_id ? [content] : []);
+    if (!parallels.length) { renderError(); return; }
+    body.innerHTML = parallels.map(function (p, i) { return renderOneParallel(p, i, parallels.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Parallèle historique du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/parallele-historique/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Parallèle historique du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/parallele-historique/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/parallele-historique/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé ci-dessus) : rien
+  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'ph-block-toggle',
+      contentId: 'ph-block-content',
+      collapseButtonId: 'ph-block-collapse',
+      onFirstOpen: function () {
+        renderLoading();
+        loadToday();
+      }
+    });
+  }
+})();
+</script>
+<script>
+// Bloc "Pensée philosophique du jour" — logique identique à
+// views/pensee-philosophique.html, juste sans la gestion de la modale
+// (fermeture/Échap/focus), déjà prise en charge par le script partagé plus haut.
+(function () {
+  var body = document.getElementById('pp-body');
+  var titleText = document.getElementById('pp-title-text');
+  var historyToggle = document.getElementById('pp-history-toggle');
+  var historyPanel = document.getElementById('pp-history-panel');
+  var historyDateInput = document.getElementById('pp-history-date');
+  var historyTodayBtn = document.getElementById('pp-history-today');
+  var historyPrevBtn = document.getElementById('pp-history-prev');
+  var historyNextBtn = document.getElementById('pp-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="pp-state-message">Chargement de la pensée philosophique du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="pp-state-message">La pensée philosophique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucun rapprochement philosophique sérieux n’a pu être établi pour l’actualité de ce jour-là.'
+      : 'Aucun rapprochement philosophique sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="pp-state-message">' + intro + '</p>' +
+      (reason ? '<p class="pp-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="pp-state-message">Aucune pensée philosophique n’a été générée ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="pp-state-message">Impossible de charger la pensée philosophique pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOnePensee(pensee, index, total) {
+    var sources = Array.isArray(pensee.sources) ? pensee.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="pp-no-sources">Aucune source détaillée disponible pour cette pensée.</p>';
+
+    var imageHtml = '';
+    if (pensee.philosophical_concept_image_url) {
+      var isPressImage = pensee.philosophical_concept_image_source === "press";
+      var captionText = "Image : " + (pensee.philosophical_concept_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? pensee.current_topic_title : pensee.philosopher_name;
+      imageHtml =
+        '<figure class="pp-concept-image">' +
+        '<img src="' + escapeHtml(pensee.philosophical_concept_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.pp-concept-image\').remove();">' +
+        (pensee.philosophical_concept_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(pensee.philosophical_concept_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="pp-pensee-count">Pensée ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="pp-pensee">' +
+      countLabel +
+      '<p class="pp-topic-title">' + escapeHtml(pensee.current_topic_title) + '</p>' +
+      '<p class="pp-topic-summary">' + escapeHtml(pensee.current_topic_summary) + '</p>' +
+      '<div class="pp-section">' +
+      '<h2><i class="fa-solid fa-lightbulb"></i> ' + escapeHtml(pensee.philosophical_concept) + '</h2>' +
+      '<p class="pp-concept-meta"><strong>' + escapeHtml(pensee.philosopher_name) + '</strong> — ' + escapeHtml(pensee.concept_origin) + '</p>' +
+      imageHtml +
+      '<p>' + escapeHtml(pensee.concept_explanation) + '</p>' +
+      '</div>' +
+      '<div class="pp-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
+      '<p>' + escapeHtml(pensee.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="pp-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
+      '<p>' + escapeHtml(pensee.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="pp-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(pensee.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="pp-sources">' +
+      '<p class="pp-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var pensees = Array.isArray(content.pensees) ? content.pensees : [];
+    if (!pensees.length) { renderError(); return; }
+    body.innerHTML = pensees.map(function (p, i) { return renderOnePensee(p, i, pensees.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Pensée philosophique du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/pensee-philosophique/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Pensée philosophique du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/pensee-philosophique/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/pensee-philosophique/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
+  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'pp-block-toggle',
+      contentId: 'pp-block-content',
+      collapseButtonId: 'pp-block-collapse',
+      onFirstOpen: function () {
+        renderLoading();
+        loadToday();
+      }
+    });
+  }
+})();
+</script>
+<script>
+// Bloc "Mécanisme sociologique du jour" — logique identique à
+// views/mecanisme-sociologique.html, juste sans la gestion de la modale
+// (fermeture/Échap/focus), déjà prise en charge par le script partagé plus haut.
+(function () {
+  var body = document.getElementById('ms-body');
+  var titleText = document.getElementById('ms-title-text');
+  var historyToggle = document.getElementById('ms-history-toggle');
+  var historyPanel = document.getElementById('ms-history-panel');
+  var historyDateInput = document.getElementById('ms-history-date');
+  var historyTodayBtn = document.getElementById('ms-history-today');
+  var historyPrevBtn = document.getElementById('ms-history-prev');
+  var historyNextBtn = document.getElementById('ms-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="ms-state-message">Chargement du mécanisme sociologique du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="ms-state-message">Le mécanisme sociologique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucun rapprochement sociologique sérieux n’a pu être établi pour l’actualité de ce jour-là.'
+      : 'Aucun rapprochement sociologique sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="ms-state-message">' + intro + '</p>' +
+      (reason ? '<p class="ms-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="ms-state-message">Aucun mécanisme sociologique n’a été généré ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="ms-state-message">Impossible de charger le mécanisme sociologique pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOneMecanisme(mecanisme, index, total) {
+    var sources = Array.isArray(mecanisme.sources) ? mecanisme.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="ms-no-sources">Aucune source détaillée disponible pour ce mécanisme.</p>';
+
+    var imageHtml = '';
+    if (mecanisme.sociological_concept_image_url) {
+      var isPressImage = mecanisme.sociological_concept_image_source === "press";
+      var captionText = "Image : " + (mecanisme.sociological_concept_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? mecanisme.current_topic_title : mecanisme.sociologist_name;
+      imageHtml =
+        '<figure class="ms-concept-image">' +
+        '<img src="' + escapeHtml(mecanisme.sociological_concept_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.ms-concept-image\').remove();">' +
+        (mecanisme.sociological_concept_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(mecanisme.sociological_concept_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="ms-mecanisme-count">Mécanisme ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="ms-mecanisme">' +
+      countLabel +
+      '<p class="ms-topic-title">' + escapeHtml(mecanisme.current_topic_title) + '</p>' +
+      '<p class="ms-topic-summary">' + escapeHtml(mecanisme.current_topic_summary) + '</p>' +
+      '<div class="ms-section">' +
+      '<h2><i class="fa-solid fa-lightbulb"></i> ' + escapeHtml(mecanisme.sociological_concept) + '</h2>' +
+      '<p class="ms-concept-meta"><strong>' + escapeHtml(mecanisme.sociologist_name) + '</strong> — ' + escapeHtml(mecanisme.concept_origin) + '</p>' +
+      imageHtml +
+      '<p>' + escapeHtml(mecanisme.concept_explanation) + '</p>' +
+      '</div>' +
+      '<div class="ms-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
+      '<p>' + escapeHtml(mecanisme.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="ms-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
+      '<p>' + escapeHtml(mecanisme.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="ms-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(mecanisme.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="ms-sources">' +
+      '<p class="ms-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var mecanismes = Array.isArray(content.mecanismes) ? content.mecanismes : [];
+    if (!mecanismes.length) { renderError(); return; }
+    body.innerHTML = mecanismes.map(function (m, i) { return renderOneMecanisme(m, i, mecanismes.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Mécanisme sociologique du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/mecanisme-sociologique/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Mécanisme sociologique du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/mecanisme-sociologique/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/mecanisme-sociologique/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
+  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'ms-block-toggle',
+      contentId: 'ms-block-content',
+      collapseButtonId: 'ms-block-collapse',
+      onFirstOpen: function () {
+        renderLoading();
+        loadToday();
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

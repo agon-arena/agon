@@ -22,6 +22,8 @@ const {
   extractRawTagsFromItem
 } = require("./lib/tagTrends");
 const { createParalleleHistoriqueService } = require("./lib/parallele-historique");
+const { createPenseePhilosophiqueService } = require("./lib/pensee-philosophique");
+const { createMecanismeSociologiqueService } = require("./lib/mecanisme-sociologique");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -154,6 +156,19 @@ app.use("/api/historical-events", createHistoricalEventsRouter());
 app.get("/historical-events-test", (req, res) => {
   res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/historical-events-test.html"));
 });
+
+// Réutilisé par le QCM "Ce jour dans l'Histoire" (cf. section QCM du jour) —
+// valide et met en cache data/historical-events/events.json au chargement ;
+// si le fichier est invalide (édité en parallèle par un autre chantier), on
+// log et on continue sans planter le serveur plutôt que de faire échouer
+// tout le démarrage pour une fonctionnalité annexe.
+const { createHistoricalEventsRepository } = require("./lib/historical-events/repository");
+let historicalEventsRepository = null;
+try {
+  historicalEventsRepository = createHistoricalEventsRepository();
+} catch (error) {
+  console.error("[historical-events] chargement du repository (QCM Ce jour dans l'Histoire indisponible) :", error.message);
+}
 
 // ── Rate limiter in-process (pas de dépendance externe) ─────────────────────
 // ATTENTION : basé sur req.ip. Si l'app est derrière un proxy (Render, Heroku,
@@ -11103,9 +11118,17 @@ const DAILY_QUIZ_TOPIC_LOOKBACK_DAYS = 6;
 // Deux QCM par jour, un par vague de publication (~8h et ~16h heure de Paris) :
 // triggerHour = heure à partir de laquelle le scheduler tente la génération
 // (marge d'1h après la vague correspondante pour que les arènes soient là).
+// ce_jour_histoire : mêmes données que le jour, pas de génération à
+// attendre, déclenché à la même heure que le QCM du matin. eclairages
+// dépend du contenu généré par les 3 services de la page /eclairages
+// (parallèle historique, pensée philosophique, mécanisme sociologique,
+// tous déclenchés à 9h) : décalé à 10h pour leur laisser le temps d'être
+// publiés avant qu'on essaie de les quizzer.
 const DAILY_QUIZ_SLOTS = {
   morning: { label: "QCM du matin", triggerHour: 9 },
-  evening: { label: "QCM du soir", triggerHour: 17 }
+  evening: { label: "QCM du soir", triggerHour: 17 },
+  ce_jour_histoire: { label: "QCM Ce jour dans l'Histoire", triggerHour: 9 },
+  eclairages: { label: "QCM Éclairages", triggerHour: 10 }
 };
 const DAILY_QUIZ_SLOT_KEYS = Object.keys(DAILY_QUIZ_SLOTS);
 
@@ -11178,9 +11201,15 @@ function dailyQuizTopicKeysForDebate(row) {
 async function fetchRecentDailyQuizTopicKeys(daysBack) {
   const todayKey = parisDateKey();
   const cutoffKey = parisDateKey(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
+  // Scopé aux créneaux actu (morning/evening) : les créneaux narratifs
+  // (ce_jour_histoire, eclairages) stockent des ids d'événements/éclairages
+  // dans source_debate_ids, pas des ids d'arènes — les mélanger
+  // ferait échouer le .in("id", …) plus bas contre la colonne debates.id
+  // (type entier) dès qu'un de ces ids non numériques s'y glisserait.
   const { data: recentQuizRows, error: quizError } = await supabase
     .from("daily_quiz")
     .select("source_debate_ids")
+    .in("slot", ["morning", "evening"])
     .gte("quiz_date", cutoffKey)
     .lt("quiz_date", todayKey);
   if (quizError) throw new Error(quizError.message);
@@ -11268,6 +11297,204 @@ function validateDailyQuizQuestions(rawQuestions, candidateIds) {
   return valid;
 }
 
+// ── QCM "Ce jour dans l'Histoire" et "Parallèle historique" ────────────────
+// Deux créneaux narratifs de plus (même table/schéma daily_quiz), mais avec
+// bien moins de matière première par jour (1 à 3 événements ou parallèles)
+// qu'un pool d'arènes actu : la règle "une question par source, jamais deux
+// fois la même" du QCM actu ne tient pas ici, sous peine de ne jamais
+// atteindre un nombre de questions correct — plusieurs questions par
+// événement/parallèle sont donc autorisées (bornées), avec une cible de
+// questions plus petite en conséquence.
+const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 6;
+const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
+const DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM = 2;
+
+// Uniquement les événements "reviewed" (sources/résumés complets et
+// vérifiés, cf. validateEvent) — jamais un "draft" incomplet comme matière
+// première d'un QCM.
+async function fetchCeJourHistoireQuizCandidates() {
+  if (!historicalEventsRepository) return [];
+  const todayKey = parisDateKey();
+  const month = Number(todayKey.slice(5, 7));
+  const day = Number(todayKey.slice(8, 10));
+  const events = historicalEventsRepository.getByMonthDay(month, day);
+  return events.filter((e) => e && e.review_status === "reviewed" && String(e.summary_long || "").trim());
+}
+
+function buildCeJourHistoireQuizPrompt(events) {
+  const list = events
+    .map((e) => `- id:${e.id} | ${e.year_display || e.year} | ${String(e.title || "").trim()}\n  ${String(e.summary_long || "").trim().slice(0, 900).replace(/\s+/g, " ")}`)
+    .join("\n");
+  return [
+    `Tu écris un QCM d'histoire en français à partir des événements "Ce jour dans l'Histoire" ci-dessous, jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par événement (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
+    "Règles strictes :",
+    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
+    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- Pas de question fermée oui/non, pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
+    "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
+    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
+    "",
+    "Événements disponibles :",
+    list
+  ].join("\n");
+}
+
+// "QCM Éclairages" pioche dans les 3 rubriques de la page /eclairages
+// (parallèle historique, pensée philosophique, mécanisme sociologique) —
+// un seul QCM combiné plutôt qu'un par rubrique, pour matcher la page qui
+// les réunit déjà. Réutilise generateIfNeeded de chaque service plutôt que
+// de relire les tables directement : idempotent (renvoie le contenu déjà
+// publié s'il existe, ne déclenche une génération que s'il manque), même
+// comportement que /api/<rubrique>/today. Chaque service est interrogé
+// indépendamment (une rubrique en échec n'empêche pas les 2 autres de
+// contribuer), puis les éléments sont taggés par `type` pour un formatage
+// adapté à leurs champs propres dans le prompt.
+async function fetchEclairagesQuizCandidates() {
+  const [parallels, pensees, mecanismes] = await Promise.all([
+    (async () => {
+      try {
+        const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.parallels : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "parallele", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture parallèle historique :", error.message);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const result = await penseePhilosophiqueService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.pensees : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "pensee", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture pensée philosophique :", error.message);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const result = await mecanismeSociologiqueService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.mecanismes : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "mecanisme", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture mécanisme sociologique :", error.message);
+        return [];
+      }
+    })()
+  ]);
+  return [...parallels, ...pensees, ...mecanismes];
+}
+
+// Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
+// mais champs "concept" propres à chaque rubrique — formatage par type plutôt
+// qu'un seul gabarit générique.
+function formatEclairagesItemForPrompt(item) {
+  const common = `${String(item.current_topic_title || "").trim()}`;
+  const sharedMechanism = String(item.shared_mechanism || "").trim().slice(0, 500).replace(/\s+/g, " ");
+  const essentialDifference = String(item.essential_difference || "").trim().slice(0, 500).replace(/\s+/g, " ");
+  if (item.type === "parallele") {
+    return `- id:${item.current_topic_id} | Type : parallèle historique | Actualité : ${common} | Précédent historique : ${String(item.historical_event_title || "").trim()}\n  Contexte historique : ${String(item.historical_context || "").trim().slice(0, 700).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  }
+  if (item.type === "pensee") {
+    return `- id:${item.current_topic_id} | Type : pensée philosophique | Actualité : ${common} | Concept : ${String(item.philosophical_concept || "").trim()} (${String(item.philosopher_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  }
+  return `- id:${item.current_topic_id} | Type : mécanisme sociologique | Actualité : ${common} | Concept : ${String(item.sociological_concept || "").trim()} (${String(item.sociologist_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+}
+
+function buildEclairagesQuizPrompt(items) {
+  const list = items.map(formatEclairagesItemForPrompt).join("\n");
+  return [
+    `Tu écris un QCM en français à partir des éclairages ci-dessous (une actualité du jour éclairée par un précédent historique, un concept philosophique ou un mécanisme sociologique), jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
+    "Règles strictes :",
+    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
+    "- Les questions peuvent porter sur l'événement/concept lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
+    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- Pas de question fermée oui/non.",
+    "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
+    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
+    "",
+    "Éclairages disponibles :",
+    list
+  ].join("\n");
+}
+
+const DAILY_QUIZ_NARRATIVE_SLOTS = {
+  ce_jour_histoire: { fetchCandidates: fetchCeJourHistoireQuizCandidates, buildPrompt: buildCeJourHistoireQuizPrompt },
+  eclairages: { fetchCandidates: fetchEclairagesQuizCandidates, buildPrompt: buildEclairagesQuizPrompt }
+};
+
+// Validation adaptée aux QCM narratifs : contrairement à
+// validateDailyQuizQuestions (QCM actu, une seule question par source
+// jamais réutilisée), une même source peut porter plusieurs questions
+// (maxPerSource) puisque le pool de candidats est bien plus restreint (1 à
+// 3 éléments/jour au lieu de 8+ arènes).
+function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, maxPerSource) {
+  if (!Array.isArray(rawQuestions)) return [];
+  const validIds = new Set(validSourceIds.map(String));
+  const countPerSource = new Map();
+  const valid = [];
+  for (const item of rawQuestions) {
+    const question = String(item?.question || "").trim();
+    const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
+    const correctIndex = Number(item?.correctIndex);
+    const explanation = String(item?.explanation || "").trim();
+    const sourceId = String(item?.sourceId ?? "").trim();
+    if (!question || options.length !== 4) continue;
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+    if (!sourceId || !validIds.has(sourceId)) continue;
+    const usedCount = countPerSource.get(sourceId) || 0;
+    if (usedCount >= maxPerSource) continue;
+    countPerSource.set(sourceId, usedCount + 1);
+    valid.push({ question, options, correctIndex, explanation, sourceDebateId: sourceId });
+    if (valid.length >= maxTotal) break;
+  }
+  return valid;
+}
+
+async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const candidates = await config.fetchCandidates();
+  if (!candidates.length) {
+    console.warn(`[daily-quiz:${slotKey}] contenu du jour indisponible, génération reportée.`);
+    return;
+  }
+
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: config.buildPrompt(candidates) }], {
+      model: DAILY_QUIZ_GENERATION_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[daily-quiz:${slotKey}] génération IA :`, error.message);
+    return;
+  }
+
+  const sourceIds = candidates.map((c) => String(c.id || c.current_topic_id));
+  const validated = validateNarrativeQuizQuestions(
+    parsed?.questions,
+    sourceIds,
+    DAILY_QUIZ_QUESTION_COUNT_NARRATIVE,
+    DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM
+  );
+  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+    console.warn(`[daily-quiz:${slotKey}] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
+    return;
+  }
+
+  const questions = validated.map((q, index) => ({ id: `${slotKey}-q${index + 1}`, ...q }));
+  const { error: insertError } = await supabase.from("daily_quiz").insert({
+    quiz_date: todayKey,
+    slot: slotKey,
+    questions,
+    source_debate_ids: questions.map((q) => q.sourceDebateId)
+  });
+  if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
+  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
+}
+
 async function generateDailyQuizIfNeeded(slotKey) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !isValidDailyQuizSlot(slotKey)) return;
@@ -11281,6 +11508,12 @@ async function generateDailyQuizIfNeeded(slotKey) {
     .maybeSingle();
   if (existingError) { console.error(`[daily-quiz:${slotKey}] vérification existant :`, existingError.message); return; }
   if (existing) return;
+
+  const narrativeConfig = DAILY_QUIZ_NARRATIVE_SLOTS[slotKey];
+  if (narrativeConfig) {
+    await generateNarrativeDailyQuiz(slotKey, todayKey, narrativeConfig);
+    return;
+  }
 
   // Le QCM du soir ne doit pas reposer sur les mêmes arènes que celui du
   // matin, déjà généré plus tôt dans la journée.
@@ -11410,6 +11643,68 @@ function dedupeParalleleHistoriqueTopicsByCloudLabel(rows) {
   return groups;
 }
 
+function shiftDateKeyDays(dateKey, deltaDays) {
+  const [y, m, d] = String(dateKey).split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
+
+// Une actualité qui continue de faire l'actu (suites d'un procès, d'une
+// catastrophe...) génère une NOUVELLE arène chaque jour, avec un nouvel id —
+// l'exclusion same-day entre les 3 rubriques (par id, cf.
+// getPenseePhilosophiqueExcludedTopicIds) ne suffit donc pas à éviter de
+// retraiter le même fait plusieurs jours d'affilée. On regarde ici, sur les
+// ECLAIRAGES_LOOKBACK_DAYS derniers jours, quels sujets ont déjà été traités
+// par L'UNE des 3 rubriques (parallèle historique, pensée philosophique,
+// mécanisme sociologique), et on en déduit leur cloud_label/question — les
+// mêmes clés de regroupement que dedupeParalleleHistoriqueTopicsByCloudLabel
+// — pour les exclure des candidats du jour, quel que soit leur id.
+const ECLAIRAGES_LOOKBACK_DAYS = 7;
+const ECLAIRAGES_TABLES = ["parallele_historique", "pensee_philosophique", "mecanisme_sociologique"];
+
+async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
+  const startDateKey = shiftDateKeyDays(dateKey, -ECLAIRAGES_LOOKBACK_DAYS);
+  const recentIds = new Set();
+  for (const table of ECLAIRAGES_TABLES) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("current_topic_id")
+      .eq("status", "published")
+      .gte("date", startDateKey)
+      .lt("date", dateKey);
+    if (error) {
+      console.error(`[eclairages] lecture historique récente (${table}) :`, error.message);
+      continue;
+    }
+    (data || []).forEach((row) => {
+      String(row.current_topic_id || "").split(",").map((id) => id.trim()).filter(Boolean).forEach((id) => recentIds.add(id));
+    });
+  }
+
+  if (!recentIds.size) return { labelKeys: new Set(), questionKeys: new Set() };
+
+  const { data: recentDebates, error: debatesError } = await supabase
+    .from("debates")
+    .select("id, question, cloud_label, keywords, category")
+    .in("id", [...recentIds]);
+  if (debatesError) {
+    console.error("[eclairages] lecture des sujets récemment traités :", debatesError.message);
+    return { labelKeys: new Set(), questionKeys: new Set() };
+  }
+
+  const labelKeys = new Set();
+  const questionKeys = new Set();
+  (recentDebates || []).forEach((row) => {
+    const labelKey = normalizeCloudLabel(getCloudLabelFromDebate(row));
+    if (labelKey) labelKeys.add(labelKey);
+    const questionKey = String(row.question || "").trim().toLowerCase();
+    if (questionKey) questionKeys.add(questionKey);
+  });
+  return { labelKeys, questionKeys };
+}
+
 async function getPublishedTopicsForDate(dateKey) {
   const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
   const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -11420,7 +11715,7 @@ async function getPublishedTopicsForDate(dateKey) {
   // sujets réellement distincts.
   const { data, error } = await supabase
     .from("debates")
-    .select("id, question, content, category, source_url, media_extras, created_at, cloud_label, keywords")
+    .select("id, question, content, category, source_url, media_extras, created_at, cloud_label, keywords, image_url")
     .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
     .gte("created_at", cutoff)
     .lt("created_at", nextDayCutoff)
@@ -11428,7 +11723,16 @@ async function getPublishedTopicsForDate(dateKey) {
     .limit(80);
   if (error) throw new Error(error.message);
 
-  const distinctTopics = dedupeParalleleHistoriqueTopicsByCloudLabel(data || []).slice(0, 10);
+  const dedupedTopics = dedupeParalleleHistoriqueTopicsByCloudLabel(data || []);
+
+  const { labelKeys, questionKeys } = await getRecentlyCoveredEclairagesTopicKeys(dateKey);
+  const distinctTopics = dedupedTopics.filter((row) => {
+    const labelKey = normalizeCloudLabel(getCloudLabelFromDebate(row));
+    if (labelKey && labelKeys.has(labelKey)) return false;
+    const questionKey = String(row.question || "").trim().toLowerCase();
+    if (questionKey && questionKeys.has(questionKey)) return false;
+    return true;
+  }).slice(0, 10);
 
   return distinctTopics.map((row) => ({
     id: String(row.id),
@@ -11436,11 +11740,30 @@ async function getPublishedTopicsForDate(dateKey) {
     summary: String(row.content || "").trim().slice(0, 600),
     publishedAt: row.created_at,
     category: row.category || null,
-    sources: extractParalleleHistoriqueSources(row)
+    sources: extractParalleleHistoriqueSources(row),
+    // Image déjà publiée avec l'arène du sujet actuel (illustration de
+    // l'actu, pas du précédent historique) — repli si Wikipedia ne trouve
+    // rien de pertinent pour le précédent, cf. attachHistoricalEventImageToOne.
+    currentTopicImageUrl: row.image_url || null
   }));
 }
 
-const PARALLELE_HISTORIQUE_MODEL = process.env.OPENAI_PARALLELE_HISTORIQUE_MODEL || "gpt-4o-mini";
+const PARALLELE_HISTORIQUE_MODEL = process.env.OPENAI_PARALLELE_HISTORIQUE_MODEL || "gpt-4.1-mini";
+
+// debates.image_url n'est en pratique jamais renseigné par le bot de veille
+// (vérifié : 0 image sur 1633 arènes admin) — le vrai mécanisme d'image du
+// site est l'aperçu de lien existant (getExternalLinkPreview, déjà utilisé
+// pour les vignettes "Autres actus"), qui va chercher l'og:image de la page
+// source réelle, avec cache mémoire + disque déjà en place.
+async function fetchPressPreviewImage(sourceUrl) {
+  if (!sourceUrl) return null;
+  const preview = await getExternalLinkPreview(sourceUrl);
+  if (!preview || !preview.image) return null;
+  // siteName vient de og:site_name / publisher (ou du domaine à défaut,
+  // cf. buildPreviewFromHtml) : la vraie source à afficher pour créditer
+  // l'image, jamais un libellé générique inventé.
+  return { imageUrl: preview.image, siteName: preview.siteName || null };
+}
 
 const paralleleHistoriqueService = createParalleleHistoriqueService({
   supabase,
@@ -11448,11 +11771,132 @@ const paralleleHistoriqueService = createParalleleHistoriqueService({
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
+  fetchPressPreviewImage,
   dateKeyFor: parisDateKey,
   model: PARALLELE_HISTORIQUE_MODEL,
   // Même convention que le reste du projet : Render = prod, tout le reste
   // (Mac local, etc.) = dev. Ce log ne contient jamais le prompt complet,
   // la clé API ni la réponse brute — juste sujets transmis + modèle.
+  debugLogging: !process.env.RENDER
+});
+
+const PENSEE_PHILOSOPHIQUE_MODEL = process.env.OPENAI_PENSEE_PHILOSOPHIQUE_MODEL || "gpt-4.1-mini";
+
+// Le parallèle historique a toujours priorité sur le choix du sujet du jour
+// (cas réel observé : "Crépol" traité par les deux rubriques à la fois) :
+// on attend/déclenche sa génération du jour, puis on renvoie les sujets
+// qu'il a couverts pour que la pensée philosophique les exclue. Si un autre
+// appelant a déjà réservé le créneau (status "generating"), on patiente
+// quelques secondes plutôt que d'ignorer l'exclusion — sans bloquer
+// indéfiniment (10 tentatives × 1,5 s, largement sous GENERATING_STALE_MS).
+async function getPenseePhilosophiqueExcludedTopicIds(dateKey) {
+  let result;
+  try {
+    result = await paralleleHistoriqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[pensee-philosophique] attente du parallèle historique :", err.message);
+    return new Set();
+  }
+
+  let attempts = 0;
+  while (result && result.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    result = await paralleleHistoriqueService.getByDate(dateKey);
+    attempts++;
+  }
+
+  if (!result || result.status !== "published" || !result.content) return new Set();
+  const parallels = Array.isArray(result.content.parallels)
+    ? result.content.parallels
+    : (result.content.current_topic_id ? [result.content] : []);
+  return new Set(parallels.map((p) => String(p.current_topic_id)).filter(Boolean));
+}
+
+// Même pool de sujets que le parallèle historique (getPublishedTopicsForDate,
+// ci-dessus) : "une actu du jour" désigne la même source de vérité pour les
+// deux rubriques, pas une deuxième définition de "publié aujourd'hui".
+const penseePhilosophiqueService = createPenseePhilosophiqueService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getPenseePhilosophiqueExcludedTopicIds,
+  // Repli "presse" pour l'image, même fonction que le parallèle historique
+  // (aucune spécificité "pensée philosophique" côté server.js).
+  fetchPressPreviewImage,
+  dateKeyFor: parisDateKey,
+  model: PENSEE_PHILOSOPHIQUE_MODEL,
+  debugLogging: !process.env.RENDER
+});
+
+const MECANISME_SOCIOLOGIQUE_MODEL = process.env.OPENAI_MECANISME_SOCIOLOGIQUE_MODEL || "gpt-4.1-mini";
+
+// Le parallèle historique et la pensée philosophique ont toujours priorité
+// sur le choix du sujet du jour : on attend/déclenche leur génération du
+// jour dans cet ordre (penseePhilosophiqueService.generateIfNeeded attend
+// déjà lui-même le parallèle historique en interne, cf.
+// getPenseePhilosophiqueExcludedTopicIds), puis on renvoie l'union des
+// sujets qu'ils ont couverts pour que le mécanisme sociologique les exclue.
+async function getMecanismeSociologiqueExcludedTopicIds(dateKey) {
+  const excluded = new Set();
+
+  let paralleleResult;
+  try {
+    paralleleResult = await paralleleHistoriqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[mecanisme-sociologique] attente du parallèle historique :", err.message);
+    paralleleResult = null;
+  }
+  let attempts = 0;
+  while (paralleleResult && paralleleResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    paralleleResult = await paralleleHistoriqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (paralleleResult && paralleleResult.status === "published" && paralleleResult.content) {
+    const parallels = Array.isArray(paralleleResult.content.parallels)
+      ? paralleleResult.content.parallels
+      : (paralleleResult.content.current_topic_id ? [paralleleResult.content] : []);
+    parallels.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  let penseeResult;
+  try {
+    penseeResult = await penseePhilosophiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[mecanisme-sociologique] attente de la pensée philosophique :", err.message);
+    penseeResult = null;
+  }
+  attempts = 0;
+  while (penseeResult && penseeResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    penseeResult = await penseePhilosophiqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (penseeResult && penseeResult.status === "published" && penseeResult.content) {
+    const pensees = Array.isArray(penseeResult.content.pensees) ? penseeResult.content.pensees : [];
+    pensees.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  return excluded;
+}
+
+// Même pool de sujets que les deux autres rubriques (getPublishedTopicsForDate,
+// ci-dessus) : "une actu du jour" désigne la même source de vérité pour les
+// trois rubriques, pas une troisième définition de "publié aujourd'hui".
+const mecanismeSociologiqueService = createMecanismeSociologiqueService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getMecanismeSociologiqueExcludedTopicIds,
+  // Repli "presse" pour l'image, même fonction que les deux autres rubriques
+  // (aucune spécificité "mécanisme sociologique" côté server.js).
+  fetchPressPreviewImage,
+  dateKeyFor: parisDateKey,
+  model: MECANISME_SOCIOLOGIQUE_MODEL,
   debugLogging: !process.env.RENDER
 });
 
@@ -11478,9 +11922,33 @@ const PARALLELE_HISTORIQUE_SCHEDULER_ENABLED = (() => {
 // du jour sont normalement déjà publiés à ce moment-là.
 const PARALLELE_HISTORIQUE_TRIGGER_HOUR = 9;
 
-if (DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED) {
-  // Un seul setInterval partagé entre QCM et parallèle historique, chacun
-  // gardé par son propre interrupteur — pas de scheduler dupliqué.
+// Interrupteur indépendant (mêmes règles) pour la pensée philosophique :
+// peut être activé/désactivé sans toucher au QCM ni au parallèle historique.
+const PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_PENSEE_PHILOSOPHIQUE_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const PENSEE_PHILOSOPHIQUE_TRIGGER_HOUR = 9;
+
+// Interrupteur indépendant (mêmes règles) pour le mécanisme sociologique :
+// peut être activé/désactivé sans toucher aux deux autres rubriques.
+const MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_MECANISME_SOCIOLOGIQUE_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const MECANISME_SOCIOLOGIQUE_TRIGGER_HOUR = 9;
+
+if (
+  DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED ||
+  PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED || MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED
+) {
+  // Un seul setInterval partagé entre QCM, parallèle historique, pensée
+  // philosophique et mécanisme sociologique, chacun gardé par son propre
+  // interrupteur — pas de scheduler dupliqué.
   const tryRunDailySchedulers = () => {
     const hour = parisHour();
     if (DAILY_QUIZ_SCHEDULER_ENABLED) {
@@ -11493,9 +11961,44 @@ if (DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED) {
       paralleleHistoriqueService.generateIfNeeded(new Date())
         .catch((err) => console.error("[parallele-historique scheduler]", err.message));
     }
+    if (PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED && hour >= PENSEE_PHILOSOPHIQUE_TRIGGER_HOUR) {
+      penseePhilosophiqueService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[pensee-philosophique scheduler]", err.message));
+    }
+    if (MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED && hour >= MECANISME_SOCIOLOGIQUE_TRIGGER_HOUR) {
+      mecanismeSociologiqueService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[mecanisme-sociologique scheduler]", err.message));
+    }
   };
   tryRunDailySchedulers();
   setInterval(tryRunDailySchedulers, 20 * 60 * 1000).unref();
+}
+
+// Le contenu d'un QCM (questions/options/corrections) est figé une fois
+// généré pour le jour : re-fetcher daily_quiz à chaque clic sur une réponse
+// (un aller-retour Supabase par clic, pour TOUS les visiteurs sur ce
+// créneau) ralentissait inutilement la réponse. TTL 5 min, largement
+// suffisant vu que /api/daily-quiz/today a déjà chargé le même contenu à
+// l'ouverture de la page.
+const _dailyQuizQuestionsCache = new Map();
+const DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function getDailyQuizQuestions(quizDate, slot) {
+  const cacheKey = `${quizDate}:${slot}`;
+  const cached = _dailyQuizQuestionsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) return cached.questions;
+
+  const { data, error } = await supabase
+    .from("daily_quiz")
+    .select("questions")
+    .eq("quiz_date", quizDate)
+    .eq("slot", slot)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const questions = data?.questions || [];
+  _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions });
+  return questions;
 }
 
 const _dailyQuizStatsCache = new Map();
@@ -11540,7 +12043,15 @@ app.get("/api/daily-quiz/status", async (req, res) => {
     for (const slotKey of DAILY_QUIZ_SLOT_KEYS) {
       slots[slotKey] = { available: availableSlots.has(slotKey), label: DAILY_QUIZ_SLOTS[slotKey].label };
     }
-    const defaultSlot = availableSlots.has("evening") ? "evening" : (availableSlots.has("morning") ? "morning" : null);
+    // Priorité aux créneaux actu (evening > morning), puis n'importe quel
+    // autre créneau disponible (narratif) plutôt que rien — un jour où seuls
+    // ce_jour_histoire/eclairages auraient généré ne doit pas
+    // laisser la page "pas prêt" alors qu'il y a bien un QCM à afficher.
+    const defaultSlot = availableSlots.has("evening")
+      ? "evening"
+      : availableSlots.has("morning")
+        ? "morning"
+        : (DAILY_QUIZ_SLOT_KEYS.find((key) => availableSlots.has(key)) || null);
     res.json({ date: todayKey, slots, defaultSlot });
   } catch (error) {
     res.status(500).json({ date: null, slots: {}, defaultSlot: null, error: error.message });
@@ -11626,24 +12137,19 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     }
 
     const todayKey = parisDateKey();
-    const { data: quizRow, error: quizError } = await supabase
-      .from("daily_quiz")
-      .select("questions")
-      .eq("quiz_date", todayKey)
-      .eq("slot", slot)
-      .maybeSingle();
-    if (quizError) throw new Error(quizError.message);
-    const question = (quizRow?.questions || []).find((q) => q.id === questionId);
+    // Indépendantes l'une de l'autre : parallélisées plutôt qu'attendues en
+    // séquence (questions quasi toujours servies depuis le cache mémoire,
+    // donc en pratique un seul aller-retour Supabase réel ici, pas deux).
+    const [questions, existingAnswerResult] = await Promise.all([
+      getDailyQuizQuestions(todayKey, slot),
+      supabase.from("daily_quiz_answers").select("option_index")
+        .eq("quiz_date", todayKey).eq("voter_key", voterKey).eq("question_id", questionId).maybeSingle()
+    ]);
+    const question = questions.find((q) => q.id === questionId);
     if (!question) return res.status(404).json({ error: "QCM introuvable." });
 
-    const { data: existingAnswer, error: existingError } = await supabase
-      .from("daily_quiz_answers")
-      .select("option_index")
-      .eq("quiz_date", todayKey)
-      .eq("voter_key", voterKey)
-      .eq("question_id", questionId)
-      .maybeSingle();
-    if (existingError) throw new Error(existingError.message);
+    if (existingAnswerResult.error) throw new Error(existingAnswerResult.error.message);
+    const existingAnswer = existingAnswerResult.data;
 
     let finalOptionIndex = optionIndex;
     if (existingAnswer) {
@@ -11708,6 +12214,36 @@ app.get("/api/parallele-historique/today", rateLimit("parallele-historique-today
   }
 });
 
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/parallele-historique/dates", rateLimit("parallele-historique-dates", 60), async (req, res) => {
+  try {
+    const dates = await paralleleHistoriqueService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[parallele-historique] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/parallele-historique/:date", rateLimit("parallele-historique-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await paralleleHistoriqueService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[parallele-historique] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
 // Déclenchement manuel réservé à l'admin (tests / retry) : force une
 // nouvelle génération même si un contenu existe déjà pour aujourd'hui.
 app.post("/api/parallele-historique/generate", requireAdmin, rateLimit("parallele-historique-generate", 10), async (req, res) => {
@@ -11716,6 +12252,133 @@ app.post("/api/parallele-historique/generate", requireAdmin, rateLimit("parallel
     res.json(result);
   } catch (error) {
     console.error("[parallele-historique] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Pensée philosophique du jour — page autonome (cf. views/pensee-philosophique.html).
+app.get("/pensee-philosophique", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/pensee-philosophique.html"));
+});
+
+// Éclairages — page unique regroupant le parallèle historique et la pensée
+// philosophique du jour (cf. views/eclairages.html), point d'entrée depuis
+// l'accueil. /parallele-historique et /pensee-philosophique restent
+// accessibles telles quelles (liens directs éventuels), mais ne sont plus
+// liées depuis l'accueil.
+app.get("/eclairages", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/eclairages.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/pensee-philosophique/today", rateLimit("pensee-philosophique-today", 60), async (req, res) => {
+  try {
+    const result = await penseePhilosophiqueService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[pensee-philosophique] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/pensee-philosophique/dates", rateLimit("pensee-philosophique-dates", 60), async (req, res) => {
+  try {
+    const dates = await penseePhilosophiqueService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[pensee-philosophique] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/pensee-philosophique/:date", rateLimit("pensee-philosophique-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await penseePhilosophiqueService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[pensee-philosophique] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/pensee-philosophique/generate", requireAdmin, rateLimit("pensee-philosophique-generate", 10), async (req, res) => {
+  try {
+    const result = await penseePhilosophiqueService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[pensee-philosophique] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Mécanisme sociologique du jour — page autonome (cf. views/mecanisme-sociologique.html).
+app.get("/mecanisme-sociologique", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/mecanisme-sociologique.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/mecanisme-sociologique/today", rateLimit("mecanisme-sociologique-today", 60), async (req, res) => {
+  try {
+    const result = await mecanismeSociologiqueService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[mecanisme-sociologique] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/mecanisme-sociologique/dates", rateLimit("mecanisme-sociologique-dates", 60), async (req, res) => {
+  try {
+    const dates = await mecanismeSociologiqueService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[mecanisme-sociologique] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/mecanisme-sociologique/:date", rateLimit("mecanisme-sociologique-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await mecanismeSociologiqueService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[mecanisme-sociologique] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/mecanisme-sociologique/generate", requireAdmin, rateLimit("mecanisme-sociologique-generate", 10), async (req, res) => {
+  try {
+    const result = await mecanismeSociologiqueService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[mecanisme-sociologique] /generate :", error.message);
     res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
   }
 });
@@ -11730,6 +12393,7 @@ app.post("/api/admin/daily-quiz/generate", requireAdmin, rateLimit("admin-ai", 1
     if (req.body?.force === true) {
       const { error } = await supabase.from("daily_quiz").delete().eq("quiz_date", parisDateKey()).eq("slot", slot);
       if (error) throw new Error(error.message);
+      _dailyQuizQuestionsCache.delete(`${parisDateKey()}:${slot}`);
     }
     await generateDailyQuizIfNeeded(slot);
     res.json({ ok: true });

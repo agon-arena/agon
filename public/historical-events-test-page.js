@@ -6,12 +6,11 @@
 // jamais innerHTML, puisqu'elles ne sont pas sous notre contrôle direct.
 
 (function () {
-  var CATEGORY_ORDER = ["france", "europe", "world", "culture_science"];
+  var CATEGORY_ORDER = ["france", "europe", "world"];
   var CATEGORY_LABELS = {
     france: "Histoire de France",
     europe: "Histoire européenne",
-    world: "Histoire du monde",
-    culture_science: "Culture, sciences & société"
+    world: "Histoire du monde"
   };
   var DATE_KEY_PATTERN = /^\d{2}-\d{2}$/;
   var DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -79,25 +78,17 @@
     return String(day) + " " + months[month - 1];
   }
 
-  function buildEmptyCard(categoryKey) {
-    var card = document.createElement("article");
-    card.className = "het-card";
-
-    var body = document.createElement("div");
-    body.className = "het-card-body";
-
-    var category = document.createElement("p");
-    category.className = "het-card-category";
-    category.textContent = CATEGORY_LABELS[categoryKey] || categoryKey;
-    body.appendChild(category);
-
-    var empty = document.createElement("p");
-    empty.className = "het-card-empty";
-    empty.textContent = "Aucun événement disponible pour cette catégorie ce jour-là.";
-    body.appendChild(empty);
-
-    card.appendChild(body);
-    return card;
+  // "il y a N ans" par rapport à l'année en cours — year peut être négatif
+  // (avant J.-C., cf. validateEvent) : la soustraction reste correcte telle
+  // quelle. Pas de texte si l'année est absente/invalide ou dans le futur
+  // (rien de sensé à afficher dans ce cas).
+  function formatYearsAgo(year) {
+    if (!Number.isInteger(year)) return "";
+    var diff = new Date().getFullYear() - year;
+    if (diff < 0) return "";
+    if (diff === 0) return "Cette année";
+    if (diff === 1) return "Il y a 1 an";
+    return "Il y a " + diff.toLocaleString("fr-FR") + " ans";
   }
 
   function buildEventCard(categoryKey, event) {
@@ -131,6 +122,14 @@
       year.className = "het-card-year";
       year.textContent = yearDisplay;
       body.appendChild(year);
+    }
+
+    var yearsAgoText = formatYearsAgo(event.year);
+    if (yearsAgoText) {
+      var yearsAgo = document.createElement("p");
+      yearsAgo.className = "het-card-years-ago";
+      yearsAgo.textContent = yearsAgoText;
+      body.appendChild(yearsAgo);
     }
 
     var titleEl = document.createElement("h2");
@@ -242,11 +241,14 @@
     return card;
   }
 
+  // Catégorie sans événement ce jour-là : on n'affiche rien plutôt qu'une
+  // carte "Aucun événement disponible" — seules les catégories réellement
+  // renseignées apparaissent.
   function renderEvents(dateKey, events) {
     clearCards();
     CATEGORY_ORDER.forEach(function (categoryKey) {
       var event = events ? events[categoryKey] : null;
-      cardsEl.appendChild(event ? buildEventCard(categoryKey, event) : buildEmptyCard(categoryKey));
+      if (event) cardsEl.appendChild(buildEventCard(categoryKey, event));
     });
   }
 

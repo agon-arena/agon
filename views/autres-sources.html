@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260723-logonudge">
+  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -1261,9 +1261,17 @@
             <i class="fa-regular fa-folder-open"></i>
             <span>Scores, classements et contributions</span>
           </a>
+          <a href="/historical-events-test" class="home-topbar-menu-item" id="home-topbar-historical-events-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/historical-events-test')">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>Ce jour dans l'Histoire</span>
+          </a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
             <i class="fa-solid fa-list-check"></i>
             <span>QCM du jour</span>
+          </a>
+          <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
+            <i class="fa-solid fa-landmark"></i>
+            <span>Éclairages</span>
           </a>
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
@@ -1640,7 +1648,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260724-restoreclosearrow" defer></script>
+<script src="/script.min.js?v=20260724-buildsync" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

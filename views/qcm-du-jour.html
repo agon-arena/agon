@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260723-logonudge">
+  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -62,7 +62,10 @@
       margin: 112px auto 48px;
     }
     .page-qcm-du-jour.in-iframe .qcm-page-shell {
-      margin: 20px auto;
+      /* Marge basse un peu plus généreuse que le haut : laisse un peu de
+         mou pour scroller légèrement au-delà du bas du contenu plutôt que
+         de s'arrêter pile dessus. */
+      margin: 20px auto 60px;
     }
     @media (min-width: 769px) {
       .qcm-page-shell {
@@ -82,43 +85,6 @@
       padding: 24px;
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
-    }
-    /* Enveloppe de hauteur nulle : porte le "position: sticky" (donc reste
-       visible en scrollant) sans réserver d'espace dans le flux. .topbar (le
-       bandeau blanc du logo) est lui-même sticky/top:0 dans style.css — sans
-       ce décalage, notre propre sticky se collerait au même niveau que lui
-       et la croix se retrouverait "dans" le bandeau au lieu de rester au
-       niveau du cadre de contenu (.qcm-panel) juste en dessous. Hauteur
-       mesurée en JS (--qcm-topbar-height), avec un repli raisonnable. */
-    .qcm-panel-close-sticky {
-      position: sticky;
-      top: calc(var(--qcm-topbar-height, 64px) + 14px);
-      height: 0;
-      z-index: 20;
-    }
-    .qcm-panel-close {
-      display: none;
-      position: absolute;
-      top: 0;
-      right: 14px;
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      border: 1px solid #e5e7eb;
-      background: #f3f4f6;
-      color: #4b5563;
-      font-size: 14px;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    }
-    .qcm-panel-close:hover {
-      background: #e5e7eb;
-      color: #1f2937;
-    }
-    .page-qcm-du-jour.in-iframe .qcm-panel-close {
-      display: flex;
     }
     .qcm-panel h1 {
       margin: 0 0 4px;
@@ -342,36 +308,80 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <div class="qcm-panel-close-sticky">
-      <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
-    </div>
     <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">QCM du jour</span></h1>
     <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 10 questions.</p>
+    <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
     <div id="qcm-body">
       <p class="qcm-state-message">Chargement du QCM du jour…</p>
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-restoreclosearrow" defer></script>
+<script src="/script.min.js?v=20260724-buildsync" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
   var titleText = document.getElementById('qcm-title-text');
+  var categorySwitcher = document.getElementById('qcm-category-switcher');
   var slotSwitcher = document.getElementById('qcm-slot-switcher');
   var voterKey = null;
   var questions = [];
   var answeredByQuestionId = {};
   var currentIndex = 0;
   var currentSlot = null;
+  var currentCategory = null;
   var slotsStatus = null;
 
-  var closeBtn = document.getElementById('qcm-panel-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function () {
-      if (window.self !== window.top) {
-        try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
-      }
+  // "QCM actu" (matin/soir, actualité du jour) vs "QCM humanités" (Ce jour
+  // dans l'Histoire / Éclairages) : deux onglets de haut niveau, le
+  // sélecteur de créneaux existant (#qcm-slot-switcher) ne montrant plus
+  // que les créneaux de la catégorie active, comme sous-choix.
+  var CATEGORY_BY_SLOT = {
+    morning: 'actu',
+    evening: 'actu',
+    ce_jour_histoire: 'histoire',
+    eclairages: 'histoire'
+  };
+  var CATEGORY_ORDER = ['actu', 'histoire'];
+  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM humanités' };
+
+  function availableSlotKeysInCategory(category) {
+    return Object.keys(slotsStatus.slots).filter(function (k) {
+      return slotsStatus.slots[k].available && CATEGORY_BY_SLOT[k] === category;
+    });
+  }
+
+  // Préférence au sein d'une catégorie : le soir prime sur le matin (déjà le
+  // cas avant), sinon le premier créneau disponible dans l'ordre déclaré.
+  function pickDefaultSlotForCategory(category) {
+    var keys = availableSlotKeysInCategory(category);
+    if (category === 'actu' && keys.indexOf('evening') !== -1) return 'evening';
+    if (category === 'actu' && keys.indexOf('morning') !== -1) return 'morning';
+    return keys[0] || null;
+  }
+
+  function renderCategorySwitcher() {
+    var availableCategories = CATEGORY_ORDER.filter(function (c) { return availableSlotKeysInCategory(c).length > 0; });
+    if (availableCategories.length < 2) {
+      categorySwitcher.className = 'qcm-slot-switcher';
+      categorySwitcher.innerHTML = '';
+      return;
+    }
+    categorySwitcher.className = 'qcm-slot-switcher visible';
+    categorySwitcher.innerHTML = '';
+    CATEGORY_ORDER.forEach(function (category) {
+      if (availableCategories.indexOf(category) === -1) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'qcm-slot-btn' + (category === currentCategory ? ' active' : '');
+      btn.textContent = CATEGORY_LABELS[category];
+      btn.addEventListener('click', function () {
+        if (category === currentCategory) return;
+        var slotToLoad = pickDefaultSlotForCategory(category);
+        if (!slotToLoad) return;
+        loadSlot(slotToLoad);
+      });
+      categorySwitcher.appendChild(btn);
     });
   }
 
@@ -509,7 +519,7 @@
   }
 
   function renderSlotSwitcher() {
-    var availableKeys = Object.keys(slotsStatus.slots).filter(function (k) { return slotsStatus.slots[k].available; });
+    var availableKeys = availableSlotKeysInCategory(currentCategory);
     if (availableKeys.length < 2) {
       slotSwitcher.className = 'qcm-slot-switcher';
       slotSwitcher.innerHTML = '';
@@ -532,10 +542,12 @@
 
   function loadSlot(slotKey) {
     currentSlot = slotKey;
+    currentCategory = CATEGORY_BY_SLOT[slotKey] || currentCategory;
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
     titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'QCM du jour';
+    renderCategorySwitcher();
     renderSlotSwitcher();
     renderMessage('Chargement du QCM…');
 
@@ -571,15 +583,7 @@
       });
   }
 
-  function syncTopbarHeightVar() {
-    var topbar = document.querySelector('.topbar');
-    if (!topbar) return;
-    document.documentElement.style.setProperty('--qcm-topbar-height', topbar.getBoundingClientRect().height + 'px');
-  }
-
   function init() {
-    syncTopbarHeightVar();
-    window.addEventListener('resize', syncTopbarHeightVar);
     voterKey = typeof getKey === 'function' ? getKey() : null;
 
     fetch('/api/daily-quiz/status', { cache: 'no-store' })

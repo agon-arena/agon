@@ -14,7 +14,10 @@
   box-sizing: border-box;
   width: min(100% - 32px, 1100px);
   margin: 0 auto;
-  padding: 40px 0 56px;
+  /* Padding bas un peu plus généreux que le haut : laisse un peu de mou pour
+     scroller légèrement au-delà du bas du contenu plutôt que de s'arrêter
+     pile dessus. */
+  padding: 40px 0 90px;
 }
 
 .het-kicker {
@@ -116,15 +119,30 @@
   display: none;
 }
 
+/* Flex plutôt que grid : avec des colonnes grid en 1fr, les cartes
+   s'étirent toujours pour remplir les 3 colonnes même s'il n'y en a qu'une
+   ou deux, qui se retrouvent alors collées à gauche au lieu d'être
+   centrées. En flex, chaque carte garde une largeur fixe (ne grandit pas)
+   et justify-content:center centre la ligne, qu'il y ait 1, 2 ou 3 cartes. */
 .het-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  /* flex-start plutôt que le stretch par défaut : sans ça, déplier "En
+     savoir plus" sur une carte agrandit sa hauteur, et le stretch par
+     défaut étire aussi les cartes voisines de la même ligne pour matcher —
+     chaque carte garde sa propre hauteur, indépendamment des autres. */
+  align-items: flex-start;
   gap: 20px;
 }
 
+.het-cards .het-card {
+  flex: 0 1 340px;
+}
+
 @media (max-width: 900px) {
-  .het-cards {
-    grid-template-columns: 1fr;
+  .het-cards .het-card {
+    flex-basis: 100%;
   }
 }
 
@@ -165,6 +183,13 @@
   font-size: 26px;
   color: #111827;
   line-height: 1;
+}
+
+.het-card-years-ago {
+  margin: 0 0 10px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-style: italic;
 }
 
 .het-card-title {
@@ -264,9 +289,43 @@
   text-decoration: underline;
 }
 
-.het-card-empty {
-  padding: 24px 18px;
-  color: #6b7280;
-  font-size: 14px;
-  text-align: center;
+/* Desktop : plus de place par carte (340px de large, cartes centrées côte à
+   côte) qu'en mobile — les tailles ci-dessus étaient calibrées pour le mobile,
+   trop petites une fois affichées sur grand écran. */
+@media (min-width: 901px) {
+  .het-card-category {
+    font-size: 13px;
+  }
+  .het-card-year {
+    font-size: 30px;
+  }
+  .het-card-years-ago {
+    font-size: 13px;
+  }
+  .het-card-title {
+    font-size: 19px;
+  }
+  .het-card-summary-short {
+    font-size: 16px;
+  }
+  .het-card-toggle {
+    font-size: 14px;
+  }
+  .het-card-summary-long,
+  .het-card-why-it-matters,
+  .het-card-anecdote {
+    font-size: 15px;
+  }
+  .het-card-anecdote strong {
+    font-size: 12px;
+  }
+  .het-card-meta {
+    font-size: 14px;
+  }
+  .het-card-credit {
+    font-size: 12px;
+  }
+  .het-card-source-link {
+    font-size: 14px;
+  }
 }
