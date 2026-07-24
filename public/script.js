@@ -1136,10 +1136,17 @@ function renderUserScoreWidget(data) {
         max-width: min(320px, calc(100vw - 40px));
       }
       @media (max-width: 768px) {
+        /* Variante "inline" (toutes les pages hors accueil/tribunes/débat,
+           qui utilisent la variante superposée au logo ci-dessous) : simple
+           décalage vertical, sans toucher au flux ni au transform horizontal
+           de la variante superposée (sélecteur exclu explicitement). */
+        .agon-user-score-widget:not(.agon-user-score-widget-logo-overlay) {
+          transform: translateY(2px);
+        }
         body.page-home-mobile .agon-user-score-widget-logo-overlay,
         body.page-tribunes .agon-user-score-widget-logo-overlay,
         body.page-debate .agon-user-score-widget-logo-overlay {
-          bottom: 12px;
+          bottom: 10px;
         }
       }
       @media (max-width: 480px) {
@@ -1150,7 +1157,7 @@ function renderUserScoreWidget(data) {
         body.page-home-mobile .agon-user-score-widget-logo-overlay,
         body.page-tribunes .agon-user-score-widget-logo-overlay,
         body.page-debate .agon-user-score-widget-logo-overlay {
-          bottom: 11px;
+          bottom: 9px;
           transform: translateX(-50%);
           max-width: min(168px, calc(100vw - 116px));
           font-size: 8.5px;
