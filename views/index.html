@@ -729,13 +729,20 @@ window.addEventListener("pageshow", function() {
      plutôt que 3 pastilles dorées séparées qui juraient avec le reste de la
      page. Les 3 liens sont des segments à parts égales d'une seule barre. */
   .home-secondary-actions {
+    position: relative;
+    z-index: 135;
     display: flex;
     width: max-content;
     max-width: 100%;
     margin: -23px auto 30px;
     border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    /* Quasi-opaque (pas juste vitré à 8% comme le switch Bulles Actu/Agôn) :
+       la marge négative ci-dessus fait remonter ce bandeau sur le bas du
+       nuage de bulles juste au-dessus — avec un fond trop transparent, les
+       bulles derrière transparaissaient et rendaient le haut du texte
+       illisible. */
+    background: rgba(28, 42, 51, 0.94);
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
     overflow: hidden;
   }
