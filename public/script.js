@@ -5041,6 +5041,8 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("parallele-historique-frame-open", safePathname === "/parallele-historique");
   modal.classList.toggle("pensee-philosophique-frame-open", safePathname === "/pensee-philosophique");
   modal.classList.toggle("mecanisme-sociologique-frame-open", safePathname === "/mecanisme-sociologique");
+  modal.classList.toggle("concept-du-jour-frame-open", safePathname === "/concept-du-jour");
+  modal.classList.toggle("citation-du-jour-frame-open", safePathname === "/citation-du-jour");
   modal.classList.toggle("eclairages-frame-open", safePathname === "/eclairages");
   modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
@@ -5574,6 +5576,8 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.pensee-philosophique-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.mecanisme-sociologique-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.concept-du-jour-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.citation-du-jour-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.eclairages-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.historical-events-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {

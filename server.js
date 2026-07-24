@@ -24,6 +24,8 @@ const {
 const { createParalleleHistoriqueService } = require("./lib/parallele-historique");
 const { createPenseePhilosophiqueService } = require("./lib/pensee-philosophique");
 const { createMecanismeSociologiqueService } = require("./lib/mecanisme-sociologique");
+const { createConceptDuJourService } = require("./lib/concept-du-jour");
+const { createCitationDuJourService } = require("./lib/citation-du-jour");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -11107,6 +11109,13 @@ const DAILY_QUIZ_QUESTION_COUNT = 10;
 const DAILY_QUIZ_MIN_CANDIDATES = 13;
 const DAILY_QUIZ_MIN_VALID_QUESTIONS = 5;
 const DAILY_QUIZ_GENERATION_MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4o-mini";
+// QCM narratifs (Ce jour dans l'Histoire / Éclairages) : gpt-4.1-mini plutôt
+// que gpt-4o-mini. La matière première vient déjà de générations gpt-4.1-mini
+// (les 3 services Éclairages, cf. lib/parallele-historique.js et consorts) —
+// autant garder la même qualité pour les quizzer correctement plutôt que de
+// dégrader avec un modèle plus faible sur un contenu déjà exigeant (concepts
+// philosophiques/sociologiques, nuances historiques).
+const DAILY_QUIZ_NARRATIVE_MODEL = process.env.OPENAI_DAILY_QUIZ_NARRATIVE_MODEL || "gpt-4.1-mini";
 // Une même actu reste souvent à l'affiche plusieurs jours d'affilée : sans
 // garde-fou, le QCM repose sur les mêmes arènes (donc quasi les mêmes
 // questions) plusieurs jours de suite. On exclut des candidats du jour tout
@@ -11330,6 +11339,8 @@ function buildCeJourHistoireQuizPrompt(events) {
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
     "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- Les 4 options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique (ex. \"l'affaire X s'est déroulée dans tel climat\" / \"l'affaire Y s'est déroulée dans tel climat\") : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
+    "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source (ex. écris \"le caractère raciste des faits\" plutôt que \"le racisme aggravant\").",
     "- Pas de question fermée oui/non, pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
     'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
@@ -11350,7 +11361,7 @@ function buildCeJourHistoireQuizPrompt(events) {
 // contribuer), puis les éléments sont taggés par `type` pour un formatage
 // adapté à leurs champs propres dans le prompt.
 async function fetchEclairagesQuizCandidates() {
-  const [parallels, pensees, mecanismes] = await Promise.all([
+  const [parallels, pensees, mecanismes, concepts, citations] = await Promise.all([
     (async () => {
       try {
         const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
@@ -11380,9 +11391,29 @@ async function fetchEclairagesQuizCandidates() {
         console.error("[daily-quiz:eclairages] lecture mécanisme sociologique :", error.message);
         return [];
       }
+    })(),
+    (async () => {
+      try {
+        const result = await conceptDuJourService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.concepts : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "concept", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture concept du jour :", error.message);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const result = await citationDuJourService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.citations : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "citation", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture citation du jour :", error.message);
+        return [];
+      }
     })()
   ]);
-  return [...parallels, ...pensees, ...mecanismes];
+  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations];
 }
 
 // Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
@@ -11398,17 +11429,27 @@ function formatEclairagesItemForPrompt(item) {
   if (item.type === "pensee") {
     return `- id:${item.current_topic_id} | Type : pensée philosophique | Actualité : ${common} | Concept : ${String(item.philosophical_concept || "").trim()} (${String(item.philosopher_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
-  return `- id:${item.current_topic_id} | Type : mécanisme sociologique | Actualité : ${common} | Concept : ${String(item.sociological_concept || "").trim()} (${String(item.sociologist_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  if (item.type === "mecanisme") {
+    return `- id:${item.current_topic_id} | Type : mécanisme sociologique | Actualité : ${common} | Concept : ${String(item.sociological_concept || "").trim()} (${String(item.sociologist_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  }
+  if (item.type === "concept") {
+    return `- id:${item.current_topic_id} | Type : concept du jour | Actualité : ${common} | Concept : ${String(item.concept_name || "").trim()} (${String(item.concept_originator || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  }
+  return `- id:${item.current_topic_id} | Type : citation du jour | Actualité : ${common} | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.quote_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
 }
 
 function buildEclairagesQuizPrompt(items) {
   const list = items.map(formatEclairagesItemForPrompt).join("\n");
   return [
-    `Tu écris un QCM en français à partir des éclairages ci-dessous (une actualité du jour éclairée par un précédent historique, un concept philosophique ou un mécanisme sociologique), jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
+    `Tu écris un QCM en français à partir des éclairages ci-dessous (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal ou une citation d'auteur), jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
-    "- Les questions peuvent porter sur l'événement/concept lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
+    "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
+    "- Les questions peuvent porter sur l'événement/concept/citation lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
+    "- Quand une question porte sur la différence essentielle ou la limite du rapprochement, reformule fidèlement ce que dit le texte fourni — jamais une reformulation approximative ou une comparaison que le texte ne fait pas explicitement.",
     "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- Les 4 options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
+    "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
     "- Pas de question fermée oui/non.",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
     'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
@@ -11462,7 +11503,7 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   let parsed;
   try {
     const content = await _callOpenAI(apiKey, [{ role: "user", content: config.buildPrompt(candidates) }], {
-      model: DAILY_QUIZ_GENERATION_MODEL,
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" }
     });
@@ -11900,6 +11941,201 @@ const mecanismeSociologiqueService = createMecanismeSociologiqueService({
   debugLogging: !process.env.RENDER
 });
 
+const CONCEPT_DU_JOUR_MODEL = process.env.OPENAI_CONCEPT_DU_JOUR_MODEL || "gpt-4.1-mini";
+
+// Les trois autres rubriques Éclairages ont toujours priorité sur le choix
+// du sujet du jour : on attend/déclenche leur génération du jour dans cet
+// ordre (mecanismeSociologiqueService.generateIfNeeded attend déjà lui-même
+// le parallèle historique et la pensée philosophique en interne, cf.
+// getMecanismeSociologiqueExcludedTopicIds), puis on renvoie l'union des
+// sujets qu'elles ont couverts pour que le concept du jour les exclue.
+async function getConceptDuJourExcludedTopicIds(dateKey) {
+  const excluded = new Set();
+
+  let paralleleResult;
+  try {
+    paralleleResult = await paralleleHistoriqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[concept-du-jour] attente du parallèle historique :", err.message);
+    paralleleResult = null;
+  }
+  let attempts = 0;
+  while (paralleleResult && paralleleResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    paralleleResult = await paralleleHistoriqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (paralleleResult && paralleleResult.status === "published" && paralleleResult.content) {
+    const parallels = Array.isArray(paralleleResult.content.parallels)
+      ? paralleleResult.content.parallels
+      : (paralleleResult.content.current_topic_id ? [paralleleResult.content] : []);
+    parallels.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  let penseeResult;
+  try {
+    penseeResult = await penseePhilosophiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[concept-du-jour] attente de la pensée philosophique :", err.message);
+    penseeResult = null;
+  }
+  attempts = 0;
+  while (penseeResult && penseeResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    penseeResult = await penseePhilosophiqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (penseeResult && penseeResult.status === "published" && penseeResult.content) {
+    const pensees = Array.isArray(penseeResult.content.pensees) ? penseeResult.content.pensees : [];
+    pensees.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  let mecanismeResult;
+  try {
+    mecanismeResult = await mecanismeSociologiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[concept-du-jour] attente du mécanisme sociologique :", err.message);
+    mecanismeResult = null;
+  }
+  attempts = 0;
+  while (mecanismeResult && mecanismeResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    mecanismeResult = await mecanismeSociologiqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (mecanismeResult && mecanismeResult.status === "published" && mecanismeResult.content) {
+    const mecanismes = Array.isArray(mecanismeResult.content.mecanismes) ? mecanismeResult.content.mecanismes : [];
+    mecanismes.forEach((m) => { if (m.current_topic_id) excluded.add(String(m.current_topic_id)); });
+  }
+
+  return excluded;
+}
+
+// Même pool de sujets que les trois autres rubriques (getPublishedTopicsForDate,
+// ci-dessus) : "une actu du jour" désigne la même source de vérité pour les
+// quatre rubriques, pas une quatrième définition de "publié aujourd'hui".
+const conceptDuJourService = createConceptDuJourService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getConceptDuJourExcludedTopicIds,
+  // Repli "presse" pour l'image, même fonction que les trois autres rubriques
+  // (aucune spécificité "concept du jour" côté server.js).
+  fetchPressPreviewImage,
+  dateKeyFor: parisDateKey,
+  model: CONCEPT_DU_JOUR_MODEL,
+  debugLogging: !process.env.RENDER
+});
+
+const CITATION_DU_JOUR_MODEL = process.env.OPENAI_CITATION_DU_JOUR_MODEL || "gpt-4.1-mini";
+
+// Les quatre autres rubriques Éclairages ont toujours priorité sur le choix
+// du sujet du jour : on attend/déclenche leur génération du jour dans cet
+// ordre (conceptDuJourService.generateIfNeeded attend déjà lui-même le
+// parallèle historique, la pensée philosophique et le mécanisme
+// sociologique en interne, cf. getConceptDuJourExcludedTopicIds), puis on
+// renvoie l'union des sujets qu'elles ont couverts pour que la citation du
+// jour les exclue.
+async function getCitationDuJourExcludedTopicIds(dateKey) {
+  const excluded = new Set();
+
+  let paralleleResult;
+  try {
+    paralleleResult = await paralleleHistoriqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[citation-du-jour] attente du parallèle historique :", err.message);
+    paralleleResult = null;
+  }
+  let attempts = 0;
+  while (paralleleResult && paralleleResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    paralleleResult = await paralleleHistoriqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (paralleleResult && paralleleResult.status === "published" && paralleleResult.content) {
+    const parallels = Array.isArray(paralleleResult.content.parallels)
+      ? paralleleResult.content.parallels
+      : (paralleleResult.content.current_topic_id ? [paralleleResult.content] : []);
+    parallels.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  let penseeResult;
+  try {
+    penseeResult = await penseePhilosophiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[citation-du-jour] attente de la pensée philosophique :", err.message);
+    penseeResult = null;
+  }
+  attempts = 0;
+  while (penseeResult && penseeResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    penseeResult = await penseePhilosophiqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (penseeResult && penseeResult.status === "published" && penseeResult.content) {
+    const pensees = Array.isArray(penseeResult.content.pensees) ? penseeResult.content.pensees : [];
+    pensees.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
+  }
+
+  let mecanismeResult;
+  try {
+    mecanismeResult = await mecanismeSociologiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[citation-du-jour] attente du mécanisme sociologique :", err.message);
+    mecanismeResult = null;
+  }
+  attempts = 0;
+  while (mecanismeResult && mecanismeResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    mecanismeResult = await mecanismeSociologiqueService.getByDate(dateKey);
+    attempts++;
+  }
+  if (mecanismeResult && mecanismeResult.status === "published" && mecanismeResult.content) {
+    const mecanismes = Array.isArray(mecanismeResult.content.mecanismes) ? mecanismeResult.content.mecanismes : [];
+    mecanismes.forEach((m) => { if (m.current_topic_id) excluded.add(String(m.current_topic_id)); });
+  }
+
+  let conceptResult;
+  try {
+    conceptResult = await conceptDuJourService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[citation-du-jour] attente du concept du jour :", err.message);
+    conceptResult = null;
+  }
+  attempts = 0;
+  while (conceptResult && conceptResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    conceptResult = await conceptDuJourService.getByDate(dateKey);
+    attempts++;
+  }
+  if (conceptResult && conceptResult.status === "published" && conceptResult.content) {
+    const concepts = Array.isArray(conceptResult.content.concepts) ? conceptResult.content.concepts : [];
+    concepts.forEach((c) => { if (c.current_topic_id) excluded.add(String(c.current_topic_id)); });
+  }
+
+  return excluded;
+}
+
+// Même pool de sujets que les quatre autres rubriques (getPublishedTopicsForDate,
+// ci-dessus) : "une actu du jour" désigne la même source de vérité pour les
+// cinq rubriques, pas une cinquième définition de "publié aujourd'hui".
+const citationDuJourService = createCitationDuJourService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getCitationDuJourExcludedTopicIds,
+  // Repli "presse" pour l'image, même fonction que les quatre autres
+  // rubriques (aucune spécificité "citation du jour" côté server.js).
+  fetchPressPreviewImage,
+  dateKeyFor: parisDateKey,
+  model: CITATION_DU_JOUR_MODEL,
+  debugLogging: !process.env.RENDER
+});
+
 // Même garde-fou que ANALYSIS_SCHEDULER_ENABLED : seule l'instance Render génère
 // le QCM (le Mac local reste passif). AGON_DAILY_QUIZ_SCHEDULER=on|off force le
 // comportement (ex. =on en local pour tester sans Render).
@@ -11942,13 +12178,35 @@ const MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED = (() => {
 })();
 const MECANISME_SOCIOLOGIQUE_TRIGGER_HOUR = 9;
 
+// Interrupteur indépendant (mêmes règles) pour le concept du jour : peut
+// être activé/désactivé sans toucher aux trois autres rubriques.
+const CONCEPT_DU_JOUR_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_CONCEPT_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const CONCEPT_DU_JOUR_TRIGGER_HOUR = 9;
+
+// Interrupteur indépendant (mêmes règles) pour la citation du jour : peut
+// être activé/désactivé sans toucher aux quatre autres rubriques.
+const CITATION_DU_JOUR_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_CITATION_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const CITATION_DU_JOUR_TRIGGER_HOUR = 9;
+
 if (
   DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED ||
-  PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED || MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED
+  PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED || MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED ||
+  CONCEPT_DU_JOUR_SCHEDULER_ENABLED || CITATION_DU_JOUR_SCHEDULER_ENABLED
 ) {
   // Un seul setInterval partagé entre QCM, parallèle historique, pensée
-  // philosophique et mécanisme sociologique, chacun gardé par son propre
-  // interrupteur — pas de scheduler dupliqué.
+  // philosophique, mécanisme sociologique, concept du jour et citation du
+  // jour, chacun gardé par son propre interrupteur — pas de scheduler
+  // dupliqué.
   const tryRunDailySchedulers = () => {
     const hour = parisHour();
     if (DAILY_QUIZ_SCHEDULER_ENABLED) {
@@ -11968,6 +12226,14 @@ if (
     if (MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED && hour >= MECANISME_SOCIOLOGIQUE_TRIGGER_HOUR) {
       mecanismeSociologiqueService.generateIfNeeded(new Date())
         .catch((err) => console.error("[mecanisme-sociologique scheduler]", err.message));
+    }
+    if (CONCEPT_DU_JOUR_SCHEDULER_ENABLED && hour >= CONCEPT_DU_JOUR_TRIGGER_HOUR) {
+      conceptDuJourService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[concept-du-jour scheduler]", err.message));
+    }
+    if (CITATION_DU_JOUR_SCHEDULER_ENABLED && hour >= CITATION_DU_JOUR_TRIGGER_HOUR) {
+      citationDuJourService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[citation-du-jour scheduler]", err.message));
     }
   };
   tryRunDailySchedulers();
@@ -12379,6 +12645,124 @@ app.post("/api/mecanisme-sociologique/generate", requireAdmin, rateLimit("mecani
     res.json(result);
   } catch (error) {
     console.error("[mecanisme-sociologique] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Concept du jour — page autonome (cf. views/concept-du-jour.html).
+app.get("/concept-du-jour", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/concept-du-jour.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/concept-du-jour/today", rateLimit("concept-du-jour-today", 60), async (req, res) => {
+  try {
+    const result = await conceptDuJourService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[concept-du-jour] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/concept-du-jour/dates", rateLimit("concept-du-jour-dates", 60), async (req, res) => {
+  try {
+    const dates = await conceptDuJourService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[concept-du-jour] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/concept-du-jour/:date", rateLimit("concept-du-jour-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await conceptDuJourService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[concept-du-jour] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/concept-du-jour/generate", requireAdmin, rateLimit("concept-du-jour-generate", 10), async (req, res) => {
+  try {
+    const result = await conceptDuJourService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[concept-du-jour] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Citation du jour — page autonome (cf. views/citation-du-jour.html).
+app.get("/citation-du-jour", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/citation-du-jour.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/citation-du-jour/today", rateLimit("citation-du-jour-today", 60), async (req, res) => {
+  try {
+    const result = await citationDuJourService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[citation-du-jour] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/citation-du-jour/dates", rateLimit("citation-du-jour-dates", 60), async (req, res) => {
+  try {
+    const dates = await citationDuJourService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[citation-du-jour] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/citation-du-jour/:date", rateLimit("citation-du-jour-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await citationDuJourService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[citation-du-jour] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/citation-du-jour/generate", requireAdmin, rateLimit("citation-du-jour-generate", 10), async (req, res) => {
+  try {
+    const result = await citationDuJourService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[citation-du-jour] /generate :", error.message);
     res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
   }
 });

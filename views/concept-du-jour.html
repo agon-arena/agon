@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Mécanisme sociologique du jour | agôn</title>
+  <title>Concept du jour | agôn</title>
   <link rel="icon" type="image/png" href="/favicon-64.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192-optimized.png">
@@ -29,52 +29,52 @@
   <style>
     /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038),
        posé sur html et body (cf. qcm-du-jour.html pour la justification). */
-    html:has(body.page-mecanisme-sociologique) {
+    html:has(body.page-concept-du-jour) {
       background-color: #243038;
     }
-    body.page-mecanisme-sociologique {
+    body.page-concept-du-jour {
       min-height: 100vh;
       background-color: #243038;
     }
-    .page-mecanisme-sociologique .topbar-inner {
+    .page-concept-du-jour .topbar-inner {
       justify-content: center;
       padding: 2px 0;
     }
-    .page-mecanisme-sociologique .home-brand-block {
+    .page-concept-du-jour .home-brand-block {
       flex: 0 0 auto;
       margin-left: 0;
     }
-    .page-mecanisme-sociologique .home-logo {
+    .page-concept-du-jour .home-logo {
       width: 110px;
     }
     @media (max-width: 768px) {
-      .page-mecanisme-sociologique .home-logo {
+      .page-concept-du-jour .home-logo {
         width: 70px;
       }
-      .page-mecanisme-sociologique .topbar-inner {
+      .page-concept-du-jour .topbar-inner {
         padding: 0;
       }
     }
-    .ms-page-shell {
+    .cj-page-shell {
       width: min(100% - 32px, 900px);
       margin: 112px auto 48px;
     }
-    .page-mecanisme-sociologique.in-iframe .ms-page-shell {
+    .page-concept-du-jour.in-iframe .cj-page-shell {
       /* Marge basse un peu plus généreuse que le haut : laisse un peu de
          mou pour scroller légèrement au-delà du bas du contenu plutôt que
          de s'arrêter pile dessus. */
       margin: 20px auto 60px;
     }
     @media (min-width: 769px) {
-      .ms-page-shell {
+      .cj-page-shell {
         width: min(100% - 64px, 1200px);
       }
     }
-    .ms-panel,
-    .ms-panel * {
+    .cj-panel,
+    .cj-panel * {
       box-sizing: border-box;
     }
-    .ms-panel {
+    .cj-panel {
       position: relative;
       width: 100%;
       background: #ffffff;
@@ -84,10 +84,10 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
-    .ms-panel:focus {
+    .cj-panel:focus {
       outline: none;
     }
-    .ms-panel h1 {
+    .cj-panel h1 {
       margin: 0 0 4px;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 34px;
@@ -95,7 +95,7 @@
       color: #111827;
       text-align: center;
     }
-    .ms-panel .ms-subtitle {
+    .cj-panel .cj-subtitle {
       margin: 0 0 8px;
       color: #6b7280;
       font-size: 14px;
@@ -103,8 +103,8 @@
     }
     /* Menu discret "jours précédents" : un simple lien texte, pas un bouton
        proéminent — la consultation de l'historique reste secondaire par
-       rapport au mécanisme du jour, qui doit rester la première chose vue. */
-    .ms-history {
+       rapport au concept du jour, qui doit rester la première chose vue. */
+    .cj-history {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -112,7 +112,7 @@
       text-align: center;
       margin: 0 0 48px;
     }
-    .ms-history-toggle {
+    .cj-history-toggle {
       display: block;
       width: fit-content;
       margin: 0 auto;
@@ -125,28 +125,28 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
-    .ms-history-toggle:hover {
+    .cj-history-toggle:hover {
       color: #243038;
       text-decoration: underline;
     }
-    .ms-history-panel {
+    .cj-history-panel {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       margin-top: 8px;
     }
-    .ms-history-panel[hidden] {
+    .cj-history-panel[hidden] {
       display: none;
     }
-    .ms-history-date {
+    .cj-history-date {
       padding: 6px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 13px;
       color: #374151;
     }
-    .ms-history-arrow {
+    .cj-history-arrow {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -160,14 +160,14 @@
       font-size: 12px;
       cursor: pointer;
     }
-    .ms-history-arrow:hover:not(:disabled) {
+    .cj-history-arrow:hover:not(:disabled) {
       background: #eef3f6;
     }
-    .ms-history-arrow:disabled {
+    .cj-history-arrow:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .ms-history-today {
+    .cj-history-today {
       padding: 6px 12px;
       border: 1px solid #d1d5db;
       border-radius: 999px;
@@ -177,18 +177,19 @@
       font-weight: 700;
       cursor: pointer;
     }
-    .ms-history-today:hover {
+    .cj-history-today:hover {
       background: #eef3f6;
     }
-    /* 1 à 3 mécanismes possibles le même jour (jamais un nombre fixe) : le
-       premier n'a pas de marge/séparateur au-dessus, les suivants si — pour
-       marquer clairement où commence chaque mécanisme indépendant. */
-    .ms-mecanisme + .ms-mecanisme {
+    /* En pratique un seul concept par jour (jamais un nombre fixe côté
+       affichage) : le premier n'a pas de marge/séparateur au-dessus, les
+       suivants si — pour marquer clairement où commence chaque concept
+       indépendant. */
+    .cj-concept + .cj-concept {
       margin-top: 28px;
       padding-top: 24px;
       border-top: 1px solid #e5e7eb;
     }
-    .ms-mecanisme-count {
+    .cj-concept-count {
       margin: 0 0 6px;
       font-size: 11px;
       font-weight: 700;
@@ -197,14 +198,26 @@
       color: #9ca3af;
       text-align: center;
     }
-    .ms-topic-title {
+    .cj-domain-badge {
+      display: inline-block;
+      margin: 0 0 8px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .cj-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
       line-height: 1.3;
     }
-    .ms-topic-summary {
+    .cj-topic-summary {
       margin: 0 0 22px;
       padding-bottom: 20px;
       border-bottom: 1px solid #e5e7eb;
@@ -212,10 +225,10 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .ms-section {
+    .cj-section {
       margin: 0 0 20px;
     }
-    .ms-section h2 {
+    .cj-section h2 {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -226,49 +239,49 @@
       color: #243038;
       letter-spacing: 0.01em;
     }
-    .ms-section h2 i {
+    .cj-section h2 i {
       font-size: 15px;
       color: #f5b642;
     }
-    .ms-section p {
+    .cj-section p {
       margin: 0;
       color: #374151;
       font-size: 15px;
       line-height: 1.55;
     }
-    .ms-concept-meta {
+    .cj-concept-meta {
       margin: 0 0 10px;
       color: #6b7280;
       font-size: 13px;
     }
-    .ms-concept-image {
+    .cj-concept-image {
       margin: 10px auto 14px;
       max-width: 280px;
     }
-    .ms-concept-image img {
+    .cj-concept-image img {
       display: block;
       width: 100%;
       height: auto;
       border-radius: 8px;
       border: 1px solid #e5e7eb;
     }
-    .ms-concept-image figcaption {
+    .cj-concept-image figcaption {
       margin-top: 4px;
       font-size: 11px;
       color: #9ca3af;
       text-align: right;
     }
-    .ms-concept-image figcaption a {
+    .cj-concept-image figcaption a {
       color: #9ca3af;
     }
-    .ms-sources {
+    .cj-sources {
       margin-top: 24px;
       padding: 14px 16px;
       border-radius: 8px;
       background: #f9fafb;
       border: 1px dashed #d1d5db;
     }
-    .ms-sources-label {
+    .cj-sources-label {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -279,33 +292,33 @@
       text-transform: uppercase;
       color: #b45309;
     }
-    .ms-sources ul {
+    .cj-sources ul {
       margin: 0;
       padding: 0 0 0 18px;
       color: #6b7280;
       font-size: 13px;
       line-height: 1.6;
     }
-    .ms-sources a {
+    .cj-sources a {
       color: #243038;
     }
-    .ms-no-sources {
+    .cj-no-sources {
       margin: 0;
       color: #9ca3af;
       font-size: 13px;
       font-style: italic;
     }
-    .ms-state-message {
+    .cj-state-message {
       color: #6b7280;
       font-size: 15px;
       line-height: 1.4;
     }
-    #ms-body {
+    #cj-body {
       padding-top: 24px;
     }
   </style>
 </head>
-<body class="page-mecanisme-sociologique">
+<body class="page-concept-du-jour">
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
     <div class="home-brand-block">
@@ -315,44 +328,54 @@
     </div>
   </div>
 </header>
-<main class="ms-page-shell">
-  <section class="ms-panel" id="ms-panel" tabindex="-1" aria-live="polite">
-    <h1><i class="fa-solid fa-people-group"></i> <span id="ms-title-text">Mécanisme sociologique du jour</span></h1>
-    <p class="ms-subtitle">Un événement d'actualité éclairé par un mécanisme sociologique.</p>
+<main class="cj-page-shell">
+  <section class="cj-panel" id="cj-panel" tabindex="-1" aria-live="polite">
+    <h1><i class="fa-solid fa-shapes"></i> <span id="cj-title-text">Concept du jour</span></h1>
+    <p class="cj-subtitle">Un événement d'actualité éclairé par un concept de psychologie, sociologie, rhétorique, économie, science politique, philosophie ou sciences.</p>
 
-    <div class="ms-history">
-      <button type="button" class="ms-history-toggle" id="ms-history-toggle" aria-expanded="false" aria-controls="ms-history-panel">
+    <div class="cj-history">
+      <button type="button" class="cj-history-toggle" id="cj-history-toggle" aria-expanded="false" aria-controls="cj-history-panel">
         <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
       </button>
-      <div class="ms-history-panel" id="ms-history-panel" hidden>
-        <button type="button" class="ms-history-arrow" id="ms-history-prev" aria-label="Jour précédent">
+      <div class="cj-history-panel" id="cj-history-panel" hidden>
+        <button type="button" class="cj-history-arrow" id="cj-history-prev" aria-label="Jour précédent">
           <i class="fa-solid fa-chevron-left"></i>
         </button>
-        <input type="date" class="ms-history-date" id="ms-history-date" aria-label="Choisir une date précédente">
-        <button type="button" class="ms-history-arrow" id="ms-history-next" aria-label="Jour suivant">
+        <input type="date" class="cj-history-date" id="cj-history-date" aria-label="Choisir une date précédente">
+        <button type="button" class="cj-history-arrow" id="cj-history-next" aria-label="Jour suivant">
           <i class="fa-solid fa-chevron-right"></i>
         </button>
-        <button type="button" class="ms-history-today" id="ms-history-today" hidden>Revenir à aujourd'hui</button>
+        <button type="button" class="cj-history-today" id="cj-history-today" hidden>Revenir à aujourd'hui</button>
       </div>
     </div>
 
-    <div id="ms-body">
-      <p class="ms-state-message">Chargement…</p>
+    <div id="cj-body">
+      <p class="cj-state-message">Chargement…</p>
     </div>
   </section>
 </main>
 <script src="/script.min.js?v=20260724-citationdujour" defer></script>
 <script>
 (function () {
-  var body = document.getElementById('ms-body');
-  var panel = document.getElementById('ms-panel');
-  var titleText = document.getElementById('ms-title-text');
-  var historyToggle = document.getElementById('ms-history-toggle');
-  var historyPanel = document.getElementById('ms-history-panel');
-  var historyDateInput = document.getElementById('ms-history-date');
-  var historyTodayBtn = document.getElementById('ms-history-today');
-  var historyPrevBtn = document.getElementById('ms-history-prev');
-  var historyNextBtn = document.getElementById('ms-history-next');
+  var DOMAIN_LABELS = {
+    psychologie: "Psychologie",
+    sociologie: "Sociologie",
+    rhetorique: "Rhétorique et argumentation",
+    economie: "Économie",
+    science_politique: "Science politique",
+    philosophie: "Philosophie",
+    sciences: "Sciences"
+  };
+
+  var body = document.getElementById('cj-body');
+  var panel = document.getElementById('cj-panel');
+  var titleText = document.getElementById('cj-title-text');
+  var historyToggle = document.getElementById('cj-history-toggle');
+  var historyPanel = document.getElementById('cj-history-panel');
+  var historyDateInput = document.getElementById('cj-history-date');
+  var historyTodayBtn = document.getElementById('cj-history-today');
+  var historyPrevBtn = document.getElementById('cj-history-prev');
+  var historyNextBtn = document.getElementById('cj-history-next');
   var pollTimer = null;
   var pollAttempts = 0;
   var MAX_POLL_ATTEMPTS = 5;
@@ -369,34 +392,34 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="ms-state-message">Chargement du mécanisme sociologique du jour…</p>';
+    body.innerHTML = '<p class="cj-state-message">Chargement du concept du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="ms-state-message">Le mécanisme sociologique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="cj-state-message">Le concept du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
     var intro = viewedDateKey
-      ? 'Aucun rapprochement sociologique sérieux n’a pu être établi pour l’actualité de ce jour-là.'
-      : 'Aucun rapprochement sociologique sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
+      ? 'Aucun rapprochement conceptuel sérieux n’a pu être établi pour l’actualité de ce jour-là.'
+      : 'Aucun rapprochement conceptuel sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
     body.innerHTML =
-      '<p class="ms-state-message">' + intro + '</p>' +
-      (reason ? '<p class="ms-state-message">' + escapeHtml(reason) + '</p>' : '');
+      '<p class="cj-state-message">' + intro + '</p>' +
+      (reason ? '<p class="cj-state-message">' + escapeHtml(reason) + '</p>' : '');
   }
 
   function renderNotFound() {
-    body.innerHTML = '<p class="ms-state-message">Aucun mécanisme sociologique n’a été généré ce jour-là.</p>';
+    body.innerHTML = '<p class="cj-state-message">Aucun concept du jour n’a été généré ce jour-là.</p>';
   }
 
   function renderError() {
-    body.innerHTML = '<p class="ms-state-message">Impossible de charger le mécanisme sociologique pour le moment. Réessaie un peu plus tard.</p>';
+    body.innerHTML = '<p class="cj-state-message">Impossible de charger le concept du jour pour le moment. Réessaie un peu plus tard.</p>';
   }
 
-  function renderOneMecanisme(mecanisme, index, total) {
-    var sources = Array.isArray(mecanisme.sources) ? mecanisme.sources : [];
+  function renderOneConcept(concept, index, total) {
+    var sources = Array.isArray(concept.sources) ? concept.sources : [];
     // Aucune des références n'a de lien vérifié (l'IA n'a pas de recherche
-    // documentaire réelle, cf. lib/mecanisme-sociologique.js) : on l'affiche
+    // documentaire réelle, cf. lib/concept-du-jour.js) : on l'affiche
     // clairement comme indicatif plutôt que comme une source cliquable fiable.
     var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
     var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
@@ -408,60 +431,60 @@
             ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
             : '<li>' + text + '</li>';
         }).join('') + '</ul>'
-      : '<p class="ms-no-sources">Aucune source détaillée disponible pour ce mécanisme.</p>';
+      : '<p class="cj-no-sources">Aucune source détaillée disponible pour ce concept.</p>';
 
-    // Portrait du sociologue (API Wikipedia), ou à défaut l'image déjà
-    // publiée avec l'arène du sujet d'actualité (repli "press") — jamais
-    // générée ni devinée par l'IA, cf. lib/mecanisme-sociologique.js.
-    // Absente pour une partie des sujets, donc affichée seulement si trouvée.
-    // Toujours créditée (sociological_concept_image_credit, jamais une
-    // image affichée sans indiquer sa provenance).
+    // Portrait/illustration du penseur ou courant cité (API Wikipedia), ou à
+    // défaut l'image déjà publiée avec l'arène du sujet d'actualité (repli
+    // "press") — jamais générée ni devinée par l'IA, cf.
+    // lib/concept-du-jour.js. Absente pour une partie des sujets, donc
+    // affichée seulement si trouvée. Toujours créditée
+    // (concept_image_credit, jamais une image affichée sans indiquer sa
+    // provenance).
     var imageHtml = '';
-    if (mecanisme.sociological_concept_image_url) {
-      var isPressImage = mecanisme.sociological_concept_image_source === "press";
-      var captionText = "Image : " + (mecanisme.sociological_concept_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
-      var captionAlt = isPressImage ? mecanisme.current_topic_title : mecanisme.sociologist_name;
+    if (concept.concept_image_url) {
+      var isPressImage = concept.concept_image_source === "press";
+      var captionText = "Image : " + (concept.concept_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? concept.current_topic_title : concept.concept_originator;
       imageHtml =
-        '<figure class="ms-concept-image">' +
-        '<img src="' + escapeHtml(mecanisme.sociological_concept_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.ms-concept-image\').remove();">' +
-        (mecanisme.sociological_concept_image_page_url
-          ? '<figcaption><a href="' + escapeHtml(mecanisme.sociological_concept_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+        '<figure class="cj-concept-image">' +
+        '<img src="' + escapeHtml(concept.concept_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.cj-concept-image\').remove();">' +
+        (concept.concept_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(concept.concept_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
           : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
         '</figure>';
     }
 
-    // Le nombre de mécanismes n'est jamais fixe (1 à 3, cf.
-    // lib/mecanisme-sociologique.js) : l'étiquette "Mécanisme X/N" n'apparaît
-    // que s'il y en a effectivement plusieurs aujourd'hui.
     var countLabel = total > 1
-      ? '<p class="ms-mecanisme-count">Mécanisme ' + (index + 1) + ' / ' + total + '</p>'
+      ? '<p class="cj-concept-count">Concept ' + (index + 1) + ' / ' + total + '</p>'
       : '';
+    var domainLabel = DOMAIN_LABELS[concept.concept_domain] || concept.concept_domain;
 
     return (
-      '<article class="ms-mecanisme">' +
+      '<article class="cj-concept">' +
       countLabel +
-      '<p class="ms-topic-title">' + escapeHtml(mecanisme.current_topic_title) + '</p>' +
-      '<p class="ms-topic-summary">' + escapeHtml(mecanisme.current_topic_summary) + '</p>' +
-      '<div class="ms-section">' +
-      '<h2><i class="fa-solid fa-lightbulb"></i> ' + escapeHtml(mecanisme.sociological_concept) + '</h2>' +
-      '<p class="ms-concept-meta"><strong>' + escapeHtml(mecanisme.sociologist_name) + '</strong> — ' + escapeHtml(mecanisme.concept_origin) + '</p>' +
+      '<p class="cj-topic-title">' + escapeHtml(concept.current_topic_title) + '</p>' +
+      '<p class="cj-topic-summary">' + escapeHtml(concept.current_topic_summary) + '</p>' +
+      '<div class="cj-section">' +
+      '<span class="cj-domain-badge">' + escapeHtml(domainLabel) + '</span>' +
+      '<h2><i class="fa-solid fa-lightbulb"></i> ' + escapeHtml(concept.concept_name) + '</h2>' +
+      '<p class="cj-concept-meta"><strong>' + escapeHtml(concept.concept_originator) + '</strong> — ' + escapeHtml(concept.concept_origin) + '</p>' +
       imageHtml +
-      '<p>' + escapeHtml(mecanisme.concept_explanation) + '</p>' +
+      '<p>' + escapeHtml(concept.concept_explanation) + '</p>' +
       '</div>' +
-      '<div class="ms-section">' +
+      '<div class="cj-section">' +
       '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
-      '<p>' + escapeHtml(mecanisme.shared_mechanism) + '</p>' +
+      '<p>' + escapeHtml(concept.shared_mechanism) + '</p>' +
       '</div>' +
-      '<div class="ms-section">' +
+      '<div class="cj-section">' +
       '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
-      '<p>' + escapeHtml(mecanisme.essential_difference) + '</p>' +
+      '<p>' + escapeHtml(concept.essential_difference) + '</p>' +
       '</div>' +
-      '<div class="ms-section">' +
+      '<div class="cj-section">' +
       '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
-      '<p>' + escapeHtml(mecanisme.conclusion) + '</p>' +
+      '<p>' + escapeHtml(concept.conclusion) + '</p>' +
       '</div>' +
-      '<div class="ms-sources">' +
-      '<p class="ms-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      '<div class="cj-sources">' +
+      '<p class="cj-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
       sourcesHtml +
       '</div>' +
       '</article>'
@@ -469,9 +492,9 @@
   }
 
   function renderPublished(content) {
-    var mecanismes = Array.isArray(content.mecanismes) ? content.mecanismes : [];
-    if (!mecanismes.length) { renderError(); return; }
-    body.innerHTML = mecanismes.map(function (m, i) { return renderOneMecanisme(m, i, mecanismes.length); }).join('');
+    var concepts = Array.isArray(content.concepts) ? content.concepts : [];
+    if (!concepts.length) { renderError(); return; }
+    body.innerHTML = concepts.map(function (c, i) { return renderOneConcept(c, i, concepts.length); }).join('');
   }
 
   function stopPolling() {
@@ -479,9 +502,9 @@
   }
 
   // Le backend ne fait jamais plus d'un appel IA par jour (verrouillé côté
-  // Supabase, cf. lib/mecanisme-sociologique.js) : si la génération est déjà
-  // en cours quand cette page s'ouvre, on repasse simplement voir l'état un
-  // peu plus tard, sans jamais déclencher nous-mêmes de génération.
+  // Supabase, cf. lib/concept-du-jour.js) : si la génération est déjà en
+  // cours quand cette page s'ouvre, on repasse simplement voir l'état un peu
+  // plus tard, sans jamais déclencher nous-mêmes de génération.
   function handleResult(data) {
     var status = data && data.status;
     if (status === 'published' && data.content) {
@@ -512,10 +535,10 @@
 
   function loadToday() {
     viewedDateKey = null;
-    if (titleText) titleText.textContent = 'Mécanisme sociologique du jour';
+    if (titleText) titleText.textContent = 'Concept du jour';
     if (historyTodayBtn) historyTodayBtn.hidden = true;
     updateHistoryArrowsState();
-    fetch('/api/mecanisme-sociologique/today', { cache: 'no-store' })
+    fetch('/api/concept-du-jour/today', { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(handleResult)
       .catch(function () {
@@ -526,16 +549,16 @@
 
   // Consultation d'un jour précédent (menu discret) : jamais de sondage
   // "generating" en boucle, jamais de déclenchement de génération — une
-  // simple lecture (cf. GET /api/mecanisme-sociologique/:date, lecture seule).
+  // simple lecture (cf. GET /api/concept-du-jour/:date, lecture seule).
   function loadHistoricalDate(dateKey) {
     stopPolling();
     pollAttempts = 0;
     viewedDateKey = dateKey;
-    if (titleText) titleText.textContent = 'Mécanisme sociologique du ' + formatFrenchDate(dateKey);
+    if (titleText) titleText.textContent = 'Concept du ' + formatFrenchDate(dateKey);
     if (historyTodayBtn) historyTodayBtn.hidden = false;
     updateHistoryArrowsState();
     renderLoading();
-    fetch('/api/mecanisme-sociologique/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+    fetch('/api/concept-du-jour/' + encodeURIComponent(dateKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(handleResult)
       .catch(function () {
@@ -601,14 +624,14 @@
   function ensureHistoryDatesLoaded() {
     if (historyDatesLoaded) return;
     historyDatesLoaded = true;
-    fetch('/api/mecanisme-sociologique/dates', { cache: 'no-store' })
+    fetch('/api/concept-du-jour/dates', { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         var dates = Array.isArray(data && data.dates) ? data.dates : [];
         if (!dates.length || !historyDateInput) return;
         // Bornes larges (min/max) plutôt qu'une liste exhaustive à cocher :
         // reste discret, une date sans contenu affiche simplement "aucun
-        // mécanisme ce jour-là" (cf. renderNotFound) plutôt que de bloquer.
+        // concept ce jour-là" (cf. renderNotFound) plutôt que de bloquer.
         historyDateInput.max = dates[0];
         historyDateInput.min = dates[dates.length - 1];
         updateHistoryArrowsState();

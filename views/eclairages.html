@@ -194,12 +194,12 @@
        prenait pas, le bouton se retrouvait collé à gauche malgré la règle.
        Un simple bloc + text-align:center est une technique de centrage bien
        plus robuste pour un bouton (élément de niveau inline par défaut). */
-    .ph-history, .pp-history, .ms-history {
+    .ph-history, .pp-history, .ms-history, .cj-history, .cd-history {
       width: 100%;
       text-align: center;
       margin: 0 0 48px;
     }
-    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle {
+    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle, .cj-history-toggle, .cd-history-toggle {
       display: block;
       width: fit-content;
       margin: 0 auto;
@@ -212,28 +212,28 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
-    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover {
+    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover, .cj-history-toggle:hover, .cd-history-toggle:hover {
       color: #243038;
       text-decoration: underline;
     }
-    .ph-history-panel, .pp-history-panel, .ms-history-panel {
+    .ph-history-panel, .pp-history-panel, .ms-history-panel, .cj-history-panel, .cd-history-panel {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       margin-top: 8px;
     }
-    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden] {
+    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden], .cj-history-panel[hidden], .cd-history-panel[hidden] {
       display: none;
     }
-    .ph-history-date, .pp-history-date, .ms-history-date {
+    .ph-history-date, .pp-history-date, .ms-history-date, .cj-history-date, .cd-history-date {
       padding: 6px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 13px;
       color: #374151;
     }
-    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow {
+    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow, .cj-history-arrow, .cd-history-arrow {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -247,14 +247,14 @@
       font-size: 12px;
       cursor: pointer;
     }
-    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled) {
+    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled), .cj-history-arrow:hover:not(:disabled), .cd-history-arrow:hover:not(:disabled) {
       background: #eef3f6;
     }
-    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled {
+    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled, .cj-history-arrow:disabled, .cd-history-arrow:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .ph-history-today, .pp-history-today, .ms-history-today {
+    .ph-history-today, .pp-history-today, .ms-history-today, .cj-history-today, .cd-history-today {
       padding: 6px 12px;
       border: 1px solid #d1d5db;
       border-radius: 999px;
@@ -264,19 +264,19 @@
       font-weight: 700;
       cursor: pointer;
     }
-    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover {
+    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover, .cj-history-today:hover, .cd-history-today:hover {
       background: #eef3f6;
     }
     /* 1 à 3 parallèles/pensées/mécanismes possibles le même jour (jamais un
        nombre fixe) : le premier n'a pas de marge/séparateur au-dessus, les
        suivants si — pour marquer clairement où commence chaque élément
        indépendant. */
-    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme {
+    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme, .cj-concept + .cj-concept, .cd-citation + .cd-citation {
       margin-top: 28px;
       padding-top: 24px;
       border-top: 1px solid #e5e7eb;
     }
-    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count {
+    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count, .cj-concept-count, .cd-citation-count {
       margin: 0 0 6px;
       font-size: 11px;
       font-weight: 700;
@@ -285,14 +285,14 @@
       color: #9ca3af;
       text-align: center;
     }
-    .ph-topic-title, .pp-topic-title, .ms-topic-title {
+    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title, .cd-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
       line-height: 1.3;
     }
-    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary {
+    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary, .cd-topic-summary {
       margin: 0 0 22px;
       padding-bottom: 20px;
       border-bottom: 1px solid #e5e7eb;
@@ -300,10 +300,10 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .ph-section, .pp-section, .ms-section {
+    .ph-section, .pp-section, .ms-section, .cj-section, .cd-section {
       margin: 0 0 20px;
     }
-    .ph-section h2, .pp-section h2, .ms-section h2 {
+    .ph-section h2, .pp-section h2, .ms-section h2, .cj-section h2, .cd-section h2 {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -314,11 +314,11 @@
       color: #243038;
       letter-spacing: 0.01em;
     }
-    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i {
+    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i, .cj-section h2 i, .cd-section h2 i {
       font-size: 15px;
       color: #f5b642;
     }
-    .ph-section p, .pp-section p, .ms-section p {
+    .ph-section p, .pp-section p, .ms-section p, .cj-section p, .cd-section p {
       margin: 0;
       color: #374151;
       font-size: 15px;
@@ -394,14 +394,100 @@
     .ms-concept-image figcaption a {
       color: #9ca3af;
     }
-    .ph-sources, .pp-sources, .ms-sources {
+    .cj-concept-meta {
+      margin: 0 0 10px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .cj-domain-badge {
+      display: inline-block;
+      margin: 0 0 8px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .cj-concept-image {
+      margin: 10px auto 14px;
+      max-width: 280px;
+    }
+    .cj-concept-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .cj-concept-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .cj-concept-image figcaption a {
+      color: #9ca3af;
+    }
+    .cd-quote-block {
+      margin: 0 0 10px;
+      padding: 18px 20px;
+      border-left: 4px solid #f5b642;
+      background: #f9fafb;
+      border-radius: 0 8px 8px 0;
+    }
+    .cd-quote-block p {
+      margin: 0;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 22px;
+      font-style: italic;
+      line-height: 1.35;
+      color: #111827;
+    }
+    .cd-quote-block cite {
+      display: block;
+      margin-top: 8px;
+      font-style: normal;
+      font-size: 14px;
+      font-weight: 700;
+      color: #6b7280;
+    }
+    .cd-quote-origin {
+      margin: 0 0 20px;
+      color: #6b7280;
+      font-size: 13px;
+      font-style: italic;
+    }
+    .cd-author-image {
+      margin: 10px auto 14px;
+      max-width: 280px;
+    }
+    .cd-author-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .cd-author-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .cd-author-image figcaption a {
+      color: #9ca3af;
+    }
+    .ph-sources, .pp-sources, .ms-sources, .cj-sources, .cd-sources {
       margin-top: 24px;
       padding: 14px 16px;
       border-radius: 8px;
       background: #f9fafb;
       border: 1px dashed #d1d5db;
     }
-    .ph-sources-label, .pp-sources-label, .ms-sources-label {
+    .ph-sources-label, .pp-sources-label, .ms-sources-label, .cj-sources-label, .cd-sources-label {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -412,28 +498,28 @@
       text-transform: uppercase;
       color: #b45309;
     }
-    .ph-sources ul, .pp-sources ul, .ms-sources ul {
+    .ph-sources ul, .pp-sources ul, .ms-sources ul, .cj-sources ul, .cd-sources ul {
       margin: 0;
       padding: 0 0 0 18px;
       color: #6b7280;
       font-size: 13px;
       line-height: 1.6;
     }
-    .ph-sources a, .pp-sources a, .ms-sources a {
+    .ph-sources a, .pp-sources a, .ms-sources a, .cj-sources a, .cd-sources a {
       color: #243038;
     }
-    .ph-no-sources, .pp-no-sources, .ms-no-sources {
+    .ph-no-sources, .pp-no-sources, .ms-no-sources, .cj-no-sources, .cd-no-sources {
       margin: 0;
       color: #9ca3af;
       font-size: 13px;
       font-style: italic;
     }
-    .ph-state-message, .pp-state-message, .ms-state-message {
+    .ph-state-message, .pp-state-message, .ms-state-message, .cj-state-message, .cd-state-message {
       color: #6b7280;
       font-size: 15px;
       line-height: 1.4;
     }
-    #ph-body, #pp-body, #ms-body {
+    #ph-body, #pp-body, #ms-body, #cj-body, #cd-body {
       padding-top: 24px;
     }
   </style>
@@ -554,9 +640,77 @@
         </button>
       </div>
     </div>
+
+    <div class="ecl-block">
+      <button type="button" class="ecl-block-toggle" id="cj-block-toggle" aria-expanded="false" aria-controls="cj-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-shapes"></i> Concept du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="cj-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="cj-title-text">Concept du jour</span> — un événement d'actualité éclairé par un concept de psychologie, sociologie, rhétorique, économie, science politique, philosophie ou sciences.</p>
+
+        <div class="cj-history">
+          <button type="button" class="cj-history-toggle" id="cj-history-toggle" aria-expanded="false" aria-controls="cj-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="cj-history-panel" id="cj-history-panel" hidden>
+            <button type="button" class="cj-history-arrow" id="cj-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="cj-history-date" id="cj-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="cj-history-arrow" id="cj-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="cj-history-today" id="cj-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="cj-body">
+          <p class="cj-state-message">Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="cj-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
+
+    <div class="ecl-block">
+      <button type="button" class="ecl-block-toggle" id="cd-block-toggle" aria-expanded="false" aria-controls="cd-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-quote-left"></i> Citation du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="cd-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="cd-title-text">Citation du jour</span> — un événement d'actualité éclairé par la citation d'un auteur célèbre.</p>
+
+        <div class="cd-history">
+          <button type="button" class="cd-history-toggle" id="cd-history-toggle" aria-expanded="false" aria-controls="cd-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="cd-history-panel" id="cd-history-panel" hidden>
+            <button type="button" class="cd-history-arrow" id="cd-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="cd-history-date" id="cd-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="cd-history-arrow" id="cd-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="cd-history-today" id="cd-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="cd-body">
+          <p class="cd-state-message">Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="cd-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-buildsync" defer></script>
+<script src="/script.min.js?v=20260724-citationdujour" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1494,6 +1648,592 @@
       toggleId: 'ms-block-toggle',
       contentId: 'ms-block-content',
       collapseButtonId: 'ms-block-collapse',
+      onFirstOpen: function () {
+        renderLoading();
+        loadToday();
+      }
+    });
+  }
+})();
+</script>
+<script>
+// Bloc "Concept du jour" — logique identique à views/concept-du-jour.html,
+// juste sans la gestion de la modale (fermeture/Échap/focus), déjà prise en
+// charge par le script partagé plus haut.
+(function () {
+  var DOMAIN_LABELS = {
+    psychologie: "Psychologie",
+    sociologie: "Sociologie",
+    rhetorique: "Rhétorique et argumentation",
+    economie: "Économie",
+    science_politique: "Science politique",
+    philosophie: "Philosophie",
+    sciences: "Sciences"
+  };
+
+  var body = document.getElementById('cj-body');
+  var titleText = document.getElementById('cj-title-text');
+  var historyToggle = document.getElementById('cj-history-toggle');
+  var historyPanel = document.getElementById('cj-history-panel');
+  var historyDateInput = document.getElementById('cj-history-date');
+  var historyTodayBtn = document.getElementById('cj-history-today');
+  var historyPrevBtn = document.getElementById('cj-history-prev');
+  var historyNextBtn = document.getElementById('cj-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="cj-state-message">Chargement du concept du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="cj-state-message">Le concept du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucun rapprochement conceptuel sérieux n’a pu être établi pour l’actualité de ce jour-là.'
+      : 'Aucun rapprochement conceptuel sérieux n’a pu être établi pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="cj-state-message">' + intro + '</p>' +
+      (reason ? '<p class="cj-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="cj-state-message">Aucun concept du jour n’a été généré ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="cj-state-message">Impossible de charger le concept du jour pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOneConcept(concept, index, total) {
+    var sources = Array.isArray(concept.sources) ? concept.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="cj-no-sources">Aucune source détaillée disponible pour ce concept.</p>';
+
+    var imageHtml = '';
+    if (concept.concept_image_url) {
+      var isPressImage = concept.concept_image_source === "press";
+      var captionText = "Image : " + (concept.concept_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? concept.current_topic_title : concept.concept_originator;
+      imageHtml =
+        '<figure class="cj-concept-image">' +
+        '<img src="' + escapeHtml(concept.concept_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.cj-concept-image\').remove();">' +
+        (concept.concept_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(concept.concept_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="cj-concept-count">Concept ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+    var domainLabel = DOMAIN_LABELS[concept.concept_domain] || concept.concept_domain;
+
+    return (
+      '<article class="cj-concept">' +
+      countLabel +
+      '<p class="cj-topic-title">' + escapeHtml(concept.current_topic_title) + '</p>' +
+      '<p class="cj-topic-summary">' + escapeHtml(concept.current_topic_summary) + '</p>' +
+      '<div class="cj-section">' +
+      '<span class="cj-domain-badge">' + escapeHtml(domainLabel) + '</span>' +
+      '<h2><i class="fa-solid fa-lightbulb"></i> ' + escapeHtml(concept.concept_name) + '</h2>' +
+      '<p class="cj-concept-meta"><strong>' + escapeHtml(concept.concept_originator) + '</strong> — ' + escapeHtml(concept.concept_origin) + '</p>' +
+      imageHtml +
+      '<p>' + escapeHtml(concept.concept_explanation) + '</p>' +
+      '</div>' +
+      '<div class="cj-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
+      '<p>' + escapeHtml(concept.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="cj-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
+      '<p>' + escapeHtml(concept.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="cj-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(concept.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="cj-sources">' +
+      '<p class="cj-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var concepts = Array.isArray(content.concepts) ? content.concepts : [];
+    if (!concepts.length) { renderError(); return; }
+    body.innerHTML = concepts.map(function (c, i) { return renderOneConcept(c, i, concepts.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Concept du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/concept-du-jour/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Concept du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/concept-du-jour/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/concept-du-jour/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
+  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'cj-block-toggle',
+      contentId: 'cj-block-content',
+      collapseButtonId: 'cj-block-collapse',
+      onFirstOpen: function () {
+        renderLoading();
+        loadToday();
+      }
+    });
+  }
+})();
+</script>
+<script>
+// Bloc "Citation du jour" — logique identique à views/citation-du-jour.html,
+// juste sans la gestion de la modale (fermeture/Échap/focus), déjà prise en
+// charge par le script partagé plus haut.
+(function () {
+  var body = document.getElementById('cd-body');
+  var titleText = document.getElementById('cd-title-text');
+  var historyToggle = document.getElementById('cd-history-toggle');
+  var historyPanel = document.getElementById('cd-history-panel');
+  var historyDateInput = document.getElementById('cd-history-date');
+  var historyTodayBtn = document.getElementById('cd-history-today');
+  var historyPrevBtn = document.getElementById('cd-history-prev');
+  var historyNextBtn = document.getElementById('cd-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="cd-state-message">Chargement de la citation du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="cd-state-message">La citation du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucune citation pertinente et authentique n’a pu être établie pour l’actualité de ce jour-là.'
+      : 'Aucune citation pertinente et authentique n’a pu être établie pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="cd-state-message">' + intro + '</p>' +
+      (reason ? '<p class="cd-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="cd-state-message">Aucune citation du jour n’a été générée ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="cd-state-message">Impossible de charger la citation du jour pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOneCitation(citation, index, total) {
+    var sources = Array.isArray(citation.sources) ? citation.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="cd-no-sources">Aucune source détaillée disponible pour cette citation.</p>';
+
+    var imageHtml = '';
+    if (citation.quote_author_image_url) {
+      var isPressImage = citation.quote_author_image_source === "press";
+      var captionText = "Image : " + (citation.quote_author_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
+      var captionAlt = isPressImage ? citation.current_topic_title : citation.quote_author;
+      imageHtml =
+        '<figure class="cd-author-image">' +
+        '<img src="' + escapeHtml(citation.quote_author_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.cd-author-image\').remove();">' +
+        (citation.quote_author_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(citation.quote_author_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="cd-citation-count">Citation ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="cd-citation">' +
+      countLabel +
+      '<p class="cd-topic-title">' + escapeHtml(citation.current_topic_title) + '</p>' +
+      '<p class="cd-topic-summary">' + escapeHtml(citation.current_topic_summary) + '</p>' +
+      '<blockquote class="cd-quote-block">' +
+      '<p>« ' + escapeHtml(citation.quote_text) + ' »</p>' +
+      '<cite>— ' + escapeHtml(citation.quote_author) + '</cite>' +
+      '</blockquote>' +
+      imageHtml +
+      '<p class="cd-quote-origin">' + escapeHtml(citation.quote_origin) + '</p>' +
+      '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-lightbulb"></i> Ce que dit cette citation</h2>' +
+      '<p>' + escapeHtml(citation.quote_explanation) + '</p>' +
+      '</div>' +
+      '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
+      '<p>' + escapeHtml(citation.shared_mechanism) + '</p>' +
+      '</div>' +
+      '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
+      '<p>' + escapeHtml(citation.essential_difference) + '</p>' +
+      '</div>' +
+      '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
+      '<p>' + escapeHtml(citation.conclusion) + '</p>' +
+      '</div>' +
+      '<div class="cd-sources">' +
+      '<p class="cd-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var citations = Array.isArray(content.citations) ? content.citations : [];
+    if (!citations.length) { renderError(); return; }
+    body.innerHTML = citations.map(function (c, i) { return renderOneCitation(c, i, citations.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+      }
+    } else {
+      stopPolling();
+      renderError();
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Citation du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/citation-du-jour/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Citation du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/citation-du-jour/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/citation-du-jour/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
+  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'cd-block-toggle',
+      contentId: 'cd-block-content',
+      collapseButtonId: 'cd-block-collapse',
       onFirstOpen: function () {
         renderLoading();
         loadToday();
