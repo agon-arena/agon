@@ -18,13 +18,18 @@ function createHistoricalEventsRouter(options = {}) {
   const router = express.Router();
 
   function handle(res, buildResult) {
-    try {
-      res.json(buildResult());
-    } catch (err) {
-      // Erreur de lecture/validation du fichier local (JSON invalide, dataset
-      // invalide, etc.) : jamais de fuite de stack, message clair seulement.
-      res.status(500).json({ error: err.message });
-    }
+    // Promise.resolve(...).then(buildResult) gère aussi bien un résultat
+    // synchrone qu'une Promise : le service est async depuis l'ajout du
+    // repli d'image Wikipedia (cf. lib/historical-events/service.js), mais
+    // cette fonction reste écrite pour ne pas dépendre de ce détail.
+    Promise.resolve()
+      .then(buildResult)
+      .then((result) => res.json(result))
+      .catch((err) => {
+        // Erreur de lecture/validation du fichier local (JSON invalide, dataset
+        // invalide, etc.) : jamais de fuite de stack, message clair seulement.
+        res.status(500).json({ error: err.message });
+      });
   }
 
   router.get("/today", (req, res) => {

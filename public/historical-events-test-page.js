@@ -41,12 +41,56 @@
     return getParisDateKey();
   }
 
-  var dateForm = document.getElementById("het-date-form");
-  var dateInput = document.getElementById("het-date-input");
-  var dateError = document.getElementById("het-date-error");
+  var monthSelect = document.getElementById("het-date-month");
+  var daySelect = document.getElementById("het-date-day");
   var dateDisplay = document.getElementById("het-date-display");
   var statusEl = document.getElementById("het-status");
   var cardsEl = document.getElementById("het-cards");
+
+  var MONTH_NAMES = [
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+  ];
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  function populateMonthSelect() {
+    MONTH_NAMES.forEach(function (name, index) {
+      var option = document.createElement("option");
+      option.value = pad2(index + 1);
+      option.textContent = name;
+      monthSelect.appendChild(option);
+    });
+  }
+
+  // Reconstruit les options du menu "jour" selon le mois choisi (28/29/30/31
+  // jours) — en conservant le jour déjà sélectionné s'il reste valide dans le
+  // nouveau mois, sinon en le ramenant au dernier jour valide (ex. 31 -> 30).
+  function populateDaySelect(month, preferredDay) {
+    var daysInMonth = DAYS_IN_MONTH[month - 1];
+    var targetDay = Math.min(preferredDay || 1, daysInMonth);
+    while (daySelect.firstChild) daySelect.removeChild(daySelect.firstChild);
+    for (var day = 1; day <= daysInMonth; day++) {
+      var option = document.createElement("option");
+      option.value = pad2(day);
+      option.textContent = String(day);
+      if (day === targetDay) option.selected = true;
+      daySelect.appendChild(option);
+    }
+  }
+
+  function currentDateKeyFromSelects() {
+    return monthSelect.value + "-" + daySelect.value;
+  }
+
+  function setSelectsFromDateKey(dateKey) {
+    var month = Number(dateKey.slice(0, 2));
+    var day = Number(dateKey.slice(3, 5));
+    monthSelect.value = pad2(month);
+    populateDaySelect(month, day);
+  }
 
   function isValidDateKey(value) {
     if (!DATE_KEY_PATTERN.test(value)) return false;
@@ -91,9 +135,45 @@
     return "Il y a " + diff.toLocaleString("fr-FR") + " ans";
   }
 
-  function buildEventCard(categoryKey, event) {
-    var card = document.createElement("article");
-    card.className = "het-card";
+  var CATEGORY_ICONS = {
+    france: "fa-solid fa-landmark",
+    europe: "fa-solid fa-earth-europe",
+    world: "fa-solid fa-globe"
+  };
+
+  // Bloc accordéon d'une catégorie (France/Europe/Monde) — même visuel que
+  // les blocs .ecl-block de views/eclairages.html : titre cliquable replié
+  // par défaut, contenu déplié en dessous, "Masquer" en bas. registerBlock
+  // (défini plus bas) gère l'accordéon (un seul ouvert à la fois).
+  function buildCategoryBlock(categoryKey, event) {
+    var block = document.createElement("div");
+    block.className = "het-block";
+
+    var contentId = "het-block-content-" + categoryKey;
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "het-block-toggle";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-controls", contentId);
+
+    var toggleTitle = document.createElement("span");
+    toggleTitle.className = "het-block-toggle-title";
+    var toggleIcon = document.createElement("i");
+    toggleIcon.className = CATEGORY_ICONS[categoryKey] || "fa-solid fa-clock-rotate-left";
+    toggleTitle.appendChild(toggleIcon);
+    toggleTitle.appendChild(document.createTextNode(" " + (CATEGORY_LABELS[categoryKey] || categoryKey)));
+    toggle.appendChild(toggleTitle);
+
+    var chevron = document.createElement("i");
+    chevron.className = "fa-solid fa-chevron-down het-block-chevron";
+    toggle.appendChild(chevron);
+
+    block.appendChild(toggle);
+
+    var content = document.createElement("div");
+    content.className = "het-block-content";
+    content.id = contentId;
+    content.hidden = true;
 
     var title = typeof event.title === "string" ? event.title : "";
     var yearDisplay = typeof event.year_display === "string" ? event.year_display : "";
@@ -106,16 +186,11 @@
         ? "Illustration — " + title + (yearDisplay ? " (" + yearDisplay + ")" : "")
         : "Illustration historique";
       img.loading = "lazy";
-      card.appendChild(img);
+      content.appendChild(img);
     }
 
     var body = document.createElement("div");
     body.className = "het-card-body";
-
-    var category = document.createElement("p");
-    category.className = "het-card-category";
-    category.textContent = CATEGORY_LABELS[categoryKey] || categoryKey;
-    body.appendChild(category);
 
     if (yearDisplay) {
       var year = document.createElement("p");
@@ -237,8 +312,54 @@
       body.appendChild(credit);
     }
 
-    card.appendChild(body);
-    return card;
+    content.appendChild(body);
+
+    var collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "het-block-collapse";
+    var collapseIcon = document.createElement("i");
+    collapseIcon.className = "fa-solid fa-chevron-up";
+    collapseButton.appendChild(collapseIcon);
+    collapseButton.appendChild(document.createTextNode(" Masquer"));
+    content.appendChild(collapseButton);
+
+    block.appendChild(content);
+
+    registerAccordionBlock(toggle, content, collapseButton);
+
+    return block;
+  }
+
+  // Accordéon : un seul bloc ouvert à la fois. openBlocks liste les
+  // { toggle, content } déjà enregistrés pour pouvoir refermer les autres
+  // quand l'un d'eux s'ouvre — même principe que window.eclRegisterAccordionBlock
+  // dans views/eclairages.html, simplifié ici (pas de chargement API différé :
+  // les 3 catégories sont déjà toutes chargées ensemble).
+  var accordionBlocks = [];
+  function registerAccordionBlock(toggle, content, collapseButton) {
+    var entry = { toggle: toggle, content: content };
+    accordionBlocks.push(entry);
+
+    function open() {
+      accordionBlocks.forEach(function (other) {
+        if (other === entry) return;
+        other.toggle.setAttribute("aria-expanded", "false");
+        other.content.hidden = true;
+      });
+      toggle.setAttribute("aria-expanded", "true");
+      content.hidden = false;
+    }
+
+    function collapse() {
+      toggle.setAttribute("aria-expanded", "false");
+      content.hidden = true;
+    }
+
+    toggle.addEventListener("click", function () {
+      var isOpen = toggle.getAttribute("aria-expanded") === "true";
+      if (isOpen) collapse(); else open();
+    });
+    collapseButton.addEventListener("click", collapse);
   }
 
   // Catégorie sans événement ce jour-là : on n'affiche rien plutôt qu'une
@@ -246,15 +367,14 @@
   // renseignées apparaissent.
   function renderEvents(dateKey, events) {
     clearCards();
+    accordionBlocks = [];
     CATEGORY_ORDER.forEach(function (categoryKey) {
       var event = events ? events[categoryKey] : null;
-      if (event) cardsEl.appendChild(buildEventCard(categoryKey, event));
+      if (event) cardsEl.appendChild(buildCategoryBlock(categoryKey, event));
     });
   }
 
   function loadDate(dateKey) {
-    dateError.hidden = true;
-    dateError.textContent = "";
     dateDisplay.textContent = formatDateDisplay(dateKey);
     clearCards();
     setStatus("Chargement…", false);
@@ -275,23 +395,22 @@
       });
   }
 
-  dateForm.addEventListener("submit", function (event) {
-    event.preventDefault();
-    var value = String(dateInput.value || "").trim();
-    if (!isValidDateKey(value)) {
-      dateError.textContent = "Date invalide : utilise le format MM-DD (ex. 03-12), avec un mois 01-12 et un jour valide pour ce mois.";
-      dateError.hidden = false;
-      clearCards();
-      setStatus("", false);
-      return;
-    }
-    loadDate(value);
+  // Changer le mois reconstruit d'abord la liste des jours valides (28-31
+  // selon le mois) avant de recharger — sinon un jour comme "31" resterait
+  // sélectionné en passant sur un mois qui n'en compte pas autant.
+  monthSelect.addEventListener("change", function () {
+    populateDaySelect(Number(monthSelect.value), Number(daySelect.value));
+    loadDate(currentDateKeyFromSelects());
+  });
+  daySelect.addEventListener("change", function () {
+    loadDate(currentDateKeyFromSelects());
   });
 
   // Sélection automatique du bon jour à l'ouverture : date du jour (heure de
   // Paris), sauf ?testDate=MM-DD en développement local (cf. IS_DEV_ENVIRONMENT
   // et resolveInitialDateKey ci-dessus).
+  populateMonthSelect();
   var initialDateKey = resolveInitialDateKey();
-  dateInput.value = initialDateKey;
+  setSelectsFromDateKey(initialDateKey);
   loadDate(initialDateKey);
 })();

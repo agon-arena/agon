@@ -39,9 +39,32 @@
   text-align: center;
 }
 
+/* Panneau blanc unique — même visuel que .ecl-panel dans views/eclairages.html
+   (fond blanc, coins arrondis, ombre portée) : les 3 catégories vivent
+   maintenant dedans comme des blocs accordéon, plutôt que 3 cartes séparées
+   posées directement sur le fond sombre de la page. */
+.het-panel,
+.het-panel * {
+  box-sizing: border-box;
+}
+.het-panel {
+  width: min(100% - 32px, 900px);
+  margin: 24px auto 0;
+  padding: 24px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  color: #111827;
+}
+.het-panel .het-title {
+  color: #111827;
+}
+.het-panel .het-date {
+  color: #6b7280;
+}
+
 .het-date {
   margin: 4px 0 24px;
-  color: #cbd5e1;
   font-size: 15px;
   text-align: center;
 }
@@ -52,14 +75,14 @@
   margin: 0 auto 28px;
   padding: 14px 16px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
 }
 
 .het-date-form label {
   display: block;
   margin: 0 0 6px;
-  color: #cbd5e1;
+  color: #6b7280;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -71,41 +94,21 @@
   gap: 8px;
 }
 
-.het-date-form input {
+.het-date-form select {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid #d1d5db;
-  font-size: 14px;
-}
-
-.het-date-form button {
-  flex: 0 0 auto;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 999px;
-  background: #516776;
-  color: #ffffff;
-  font-weight: 700;
+  background: #ffffff;
   font-size: 14px;
   cursor: pointer;
 }
 
-.het-date-form button:hover {
-  background: #3f525f;
-}
-
-.het-date-error {
-  margin: 8px 0 0;
-  color: #fca5a5;
-  font-size: 13px;
-}
-
 .het-status {
   margin: 0 0 20px;
-  color: #cbd5e1;
+  color: #6b7280;
   font-size: 15px;
   text-align: center;
 }
@@ -119,53 +122,103 @@
   display: none;
 }
 
-/* Flex plutôt que grid : avec des colonnes grid en 1fr, les cartes
-   s'étirent toujours pour remplir les 3 colonnes même s'il n'y en a qu'une
-   ou deux, qui se retrouvent alors collées à gauche au lieu d'être
-   centrées. En flex, chaque carte garde une largeur fixe (ne grandit pas)
-   et justify-content:center centre la ligne, qu'il y ait 1, 2 ou 3 cartes. */
+/* Un bloc accordéon par catégorie (France/Europe/Monde), même visuel que les
+   blocs .ecl-block de views/eclairages.html : replié par défaut, un seul
+   ouvert à la fois, "Masquer" en bas du contenu déplié. Empilés verticalement
+   dans le panneau blanc plutôt qu'en grille de cartes séparées. */
 .het-cards {
+  display: block;
+}
+
+.het-block + .het-block {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.het-block-toggle {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
-  /* flex-start plutôt que le stretch par défaut : sans ça, déplier "En
-     savoir plus" sur une carte agrandit sa hauteur, et le stretch par
-     défaut étire aussi les cartes voisines de la même ligne pour matcher —
-     chaque carte garde sa propre hauteur, indépendamment des autres. */
-  align-items: flex-start;
-  gap: 20px;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: center;
 }
 
-.het-cards .het-card {
-  flex: 0 1 340px;
-}
-
-@media (max-width: 900px) {
-  .het-cards .het-card {
-    flex-basis: 100%;
-  }
-}
-
-.het-card {
+.het-block-toggle-title {
   display: flex;
-  flex-direction: column;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  align-items: center;
+  gap: 8px;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.het-block-toggle-title i {
+  color: #f5b642;
+}
+
+.het-block-toggle:hover .het-block-toggle-title {
+  color: #243038;
+}
+
+.het-block-chevron {
+  color: #9ca3af;
+  font-size: 15px;
+  transition: transform 0.2s ease;
+}
+
+.het-block-toggle[aria-expanded="true"] .het-block-chevron {
+  transform: rotate(180deg);
+}
+
+.het-block-content {
+  margin-top: 16px;
+}
+
+.het-block-content[hidden] {
+  display: none;
+}
+
+.het-block-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 24px;
+  padding: 8px 0 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  background: none;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.het-block-collapse:hover {
+  color: #243038;
 }
 
 .het-card-image {
   width: 100%;
-  height: 190px;
+  max-height: 280px;
   object-fit: cover;
   display: block;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
   background: #e5e7eb;
 }
 
 .het-card-body {
-  padding: 16px 18px 20px;
+  padding: 14px 0 0;
 }
 
 .het-card-category {
