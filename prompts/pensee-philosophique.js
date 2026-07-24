@@ -4,11 +4,11 @@
 // pouvoir être relu/ajusté sans toucher à lib/pensee-philosophique.js (qui ne
 // fait qu'orchestrer génération + validation + stockage).
 
-const MAX_PENSEES_HINT = 3;
+const MAX_PENSEES_HINT = 1;
 
 const RESPONSE_SCHEMA_HINT = `Format de réponse strict — un unique objet JSON, sans texte avant ni après, sans balises Markdown (pas de \`\`\`), sous l'une des deux formes suivantes.
 
-Si au moins une pensée sérieuse est possible (1 à ${MAX_PENSEES_HINT} pensées, jamais plus) :
+Si une pensée sérieuse est possible, choisis UNIQUEMENT le sujet le plus pertinent parmi ceux fournis (un seul, jamais plusieurs) :
 {
   "status": "published",
   "pensees": [
@@ -83,15 +83,15 @@ function buildPenseePhilosophiquePrompt(topics) {
     "",
     "Un sujet ne suffit PAS à justifier une pensée simplement parce qu'il évoque vaguement une grande question (\"la liberté\", \"la justice\", \"la vérité\") : il faut un concept précis, nommé, dont le mécanisme éclaire vraiment ce qui se joue dans l'actualité — pas une association superficielle de vocabulaire.",
     "",
-    `=== IMPORTANT — Le nombre de pensées n'est PAS fixé à l'avance ===`,
-    `Publie entre 1 et ${MAX_PENSEES_HINT} pensées, mais UNIQUEMENT celles qui répondent vraiment aux critères ci-dessus. N'en ajoute JAMAIS une deuxième ou une troisième juste pour atteindre un quota — une seule bonne pensée vaut mieux que plusieurs dont certaines sont artificielles ou approximatives. Si un seul sujet s'y prête vraiment, publie-en une seule. Chaque pensée incluse doit porter sur un sujet différent (jamais deux pensées sur le même current_topic_id).`,
+    `=== IMPORTANT — UNE SEULE pensée, la plus pertinente ===`,
+    "Choisis un seul sujet parmi ceux fournis : celui pour lequel le rapprochement philosophique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs pensées le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de concept que tu connais avec confiance — pas par défaut ou par prudence excessive.",
     "",
-    "=== ÉTAPE 2 — Produire chaque pensée retenue ===",
-    "Pour chaque sujet retenu, rédige une pensée contenant : un résumé très bref de l'actualité, le nom du concept philosophique, le philosophe ou courant qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",
-    "Pour chaque pensée, le texte principal (explication du concept + ce qui fait écho + limite de l'analogie + conclusion) doit faire environ 80 à 120 mots, hors sources.",
+    "=== ÉTAPE 2 — Produire la pensée retenue ===",
+    "Pour le sujet retenu, rédige une pensée contenant : un résumé très bref de l'actualité, le nom du concept philosophique, le philosophe ou courant qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",
+    "Le texte principal (explication du concept + ce qui fait écho + limite de l'analogie + conclusion) doit faire environ 80 à 120 mots, hors sources.",
     "",
-    "=== RÈGLES ÉDITORIALES OBLIGATOIRES (s'appliquent à chaque pensée) ===",
+    "=== RÈGLES ÉDITORIALES OBLIGATOIRES ===",
     "- N'invente aucun concept, aucune citation, aucun auteur. Si tu n'es pas certain d'un fait précis (date, attribution exacte), n'écris pas de sources plutôt que d'en inventer une.",
     "- RÈGLE URL (stricte) : tu n'as accès à aucune recherche documentaire réelle. Le champ \"url\" de chaque source doit valoir null, SAUF s'il s'agit d'une des URL listées explicitement ci-dessus pour l'actu concernée (recopiée exactement telle quelle). N'invente jamais une URL vers un livre, une encyclopédie, un article ou un site — même une URL qui te semble plausible. Une url inventée sera automatiquement rejetée.",
     "- Pour le titre, l'auteur, l'éditeur/organisme et l'année de chaque source : ne les indique que si tu es raisonnablement sûr du fait. Une référence incertaine doit être omise du tableau \"sources\" plutôt que devinée.",

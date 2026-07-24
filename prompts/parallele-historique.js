@@ -4,11 +4,11 @@
 // pouvoir être relu/ajusté sans toucher à lib/parallele-historique.js (qui ne
 // fait qu'orchestrer génération + validation + stockage).
 
-const MAX_PARALLELS_HINT = 3;
+const MAX_PARALLELS_HINT = 1;
 
 const RESPONSE_SCHEMA_HINT = `Format de réponse strict — un unique objet JSON, sans texte avant ni après, sans balises Markdown (pas de \`\`\`), sous l'une des deux formes suivantes.
 
-Si au moins un parallèle sérieux est possible (1 à ${MAX_PARALLELS_HINT} parallèles, jamais plus) :
+Si un parallèle sérieux est possible, choisis UNIQUEMENT le sujet le plus pertinent parmi ceux fournis (un seul, jamais plusieurs) :
 {
   "status": "published",
   "parallels": [
@@ -82,15 +82,15 @@ function buildParalleleHistoriquePrompt(topics) {
     "",
     "Un sujet ne suffit PAS à justifier un parallèle simplement parce qu'il partage le même pays, le même thème général, les mêmes acteurs ou un vocabulaire similaire : il faut un mécanisme politique, social, économique, culturel ou géopolitique réellement comparable, pas une coïncidence de surface.",
     "",
-    `=== IMPORTANT — Le nombre de parallèles n'est PAS fixé à l'avance ===`,
-    `Publie entre 1 et ${MAX_PARALLELS_HINT} parallèles, mais UNIQUEMENT ceux qui répondent vraiment aux critères ci-dessus. N'en ajoute JAMAIS un deuxième ou un troisième juste pour atteindre un quota — un seul bon parallèle vaut mieux que plusieurs dont certains sont artificiels ou approximatifs. Si un seul sujet s'y prête vraiment, publie-en un seul. Chaque parallèle inclus doit être choisi sur un sujet différent (jamais deux parallèles sur le même current_topic_id).`,
+    `=== IMPORTANT — UN SEUL parallèle, le plus pertinent ===`,
+    "Choisis un seul sujet parmi ceux fournis : celui pour lequel le précédent historique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs parallèles le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de précédent que tu connais avec confiance — pas par défaut ou par prudence excessive.",
     "",
-    "=== ÉTAPE 2 — Produire chaque parallèle retenu ===",
-    "Pour chaque sujet retenu, rédige un parallèle contenant : un résumé très bref de l'actualité, un précédent historique précis, sa date ou période, son contexte, le mécanisme commun, la différence essentielle, une conclusion prudente, et les sources historiques disponibles.",
-    "Pour chaque parallèle, le texte principal (contexte + mécanisme commun + différence essentielle + conclusion) doit faire environ 80 à 120 mots, hors sources.",
+    "=== ÉTAPE 2 — Produire le parallèle retenu ===",
+    "Pour le sujet retenu, rédige un parallèle contenant : un résumé très bref de l'actualité, un précédent historique précis, sa date ou période, son contexte, le mécanisme commun, la différence essentielle, une conclusion prudente, et les sources historiques disponibles.",
+    "Le texte principal (contexte + mécanisme commun + différence essentielle + conclusion) doit faire environ 80 à 120 mots, hors sources.",
     "",
-    "=== RÈGLES ÉDITORIALES OBLIGATOIRES (s'appliquent à chaque parallèle) ===",
+    "=== RÈGLES ÉDITORIALES OBLIGATOIRES ===",
     "- N'écris jamais la formule \"l'Histoire se répète\" ni une variante équivalente : chaque parallèle a des limites, jamais une répétition mécanique.",
     "- N'invente aucune source, citation, date ou acteur. Si tu n'es pas certain d'un fait précis, n'écris pas de sources plutôt que d'en inventer une.",
     "- RÈGLE URL (stricte) : tu n'as accès à aucune recherche documentaire réelle. Le champ \"url\" de chaque source doit valoir null, SAUF s'il s'agit d'une des URL listées explicitement ci-dessus pour l'actu concernée (recopiée exactement telle quelle). N'invente jamais une URL vers un livre, une encyclopédie, un article ou un site — même une URL qui te semble plausible. Une url inventée sera automatiquement rejetée.",

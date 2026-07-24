@@ -4,11 +4,11 @@
 // pouvoir être relu/ajusté sans toucher à lib/mecanisme-sociologique.js (qui
 // ne fait qu'orchestrer génération + validation + stockage).
 
-const MAX_MECANISMES_HINT = 3;
+const MAX_MECANISMES_HINT = 1;
 
 const RESPONSE_SCHEMA_HINT = `Format de réponse strict — un unique objet JSON, sans texte avant ni après, sans balises Markdown (pas de \`\`\`), sous l'une des deux formes suivantes.
 
-Si au moins un mécanisme sérieux est possible (1 à ${MAX_MECANISMES_HINT} mécanismes, jamais plus) :
+Si un mécanisme sérieux est possible, choisis UNIQUEMENT le sujet le plus pertinent parmi ceux fournis (un seul, jamais plusieurs) :
 {
   "status": "published",
   "mecanismes": [
@@ -83,15 +83,15 @@ function buildMecanismeSociologiquePrompt(topics) {
     "",
     "Un sujet ne suffit PAS à justifier un mécanisme simplement parce qu'il évoque vaguement un fait social (\"la société\", \"les inégalités\", \"les médias\") : il faut un concept précis, nommé, dont le mécanisme éclaire vraiment ce qui se joue dans l'actualité — pas une association superficielle de vocabulaire.",
     "",
-    `=== IMPORTANT — Le nombre de mécanismes n'est PAS fixé à l'avance ===`,
-    `Publie entre 1 et ${MAX_MECANISMES_HINT} mécanismes, mais UNIQUEMENT ceux qui répondent vraiment aux critères ci-dessus. N'en ajoute JAMAIS un deuxième ou un troisième juste pour atteindre un quota — un seul bon mécanisme vaut mieux que plusieurs dont certains sont artificiels ou approximatifs. Si un seul sujet s'y prête vraiment, publie-en un seul. Chaque mécanisme inclus doit porter sur un sujet différent (jamais deux mécanismes sur le même current_topic_id).`,
+    `=== IMPORTANT — UN SEUL mécanisme, le plus pertinent ===`,
+    "Choisis un seul sujet parmi ceux fournis : celui pour lequel le rapprochement sociologique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs mécanismes le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de concept que tu connais avec confiance — pas par défaut ou par prudence excessive.",
     "",
-    "=== ÉTAPE 2 — Produire chaque mécanisme retenu ===",
-    "Pour chaque sujet retenu, rédige un mécanisme contenant : un résumé très bref de l'actualité, le nom du concept sociologique, le sociologue ou courant/école qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",
-    "Pour chaque mécanisme, le texte principal (explication du concept + ce qui fait écho + limite de l'analogie + conclusion) doit faire environ 80 à 120 mots, hors sources.",
+    "=== ÉTAPE 2 — Produire le mécanisme retenu ===",
+    "Pour le sujet retenu, rédige un mécanisme contenant : un résumé très bref de l'actualité, le nom du concept sociologique, le sociologue ou courant/école qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",
+    "Le texte principal (explication du concept + ce qui fait écho + limite de l'analogie + conclusion) doit faire environ 80 à 120 mots, hors sources.",
     "",
-    "=== RÈGLES ÉDITORIALES OBLIGATOIRES (s'appliquent à chaque mécanisme) ===",
+    "=== RÈGLES ÉDITORIALES OBLIGATOIRES ===",
     "- N'invente aucun concept, aucune citation, aucun auteur. Si tu n'es pas certain d'un fait précis (date, attribution exacte), n'écris pas de sources plutôt que d'en inventer une.",
     "- RÈGLE URL (stricte) : tu n'as accès à aucune recherche documentaire réelle. Le champ \"url\" de chaque source doit valoir null, SAUF s'il s'agit d'une des URL listées explicitement ci-dessus pour l'actu concernée (recopiée exactement telle quelle). N'invente jamais une URL vers un livre, une encyclopédie, un article ou un site — même une URL qui te semble plausible. Une url inventée sera automatiquement rejetée.",
     "- Pour le titre, l'auteur, l'éditeur/organisme et l'année de chaque source : ne les indique que si tu es raisonnablement sûr du fait. Une référence incertaine doit être omise du tableau \"sources\" plutôt que devinée.",
