@@ -1,14 +1,46 @@
 # Base d'événements historiques quotidiens
 
-Architecture isolée pour une future fonctionnalité "Ce jour-là" : jusqu'à
-3 événements par jour de l'année (un par catégorie `france` / `europe` /
-`world`). Rien n'est encore branché sur les routes publiques ni sur
-l'interface — ceci ne met en place que les fondations données/outillage.
+Architecture pour la fonctionnalité "Ce jour-là" : jusqu'à 4 événements par
+jour de l'année (un par catégorie `france` / `europe` / `world` /
+`culture_science`). Branchée sur une route API (`/api/historical-events`) et
+une page de test isolée (`/historical-events-test`, non liée à l'accueil) —
+cf. section "Routeur API" plus bas.
+
+## Lots de données externes ("cartes-jour-annee-aout-semaine-1" et suivants)
+
+Un lot externe (dossier `index.json` + `schema.json` + `days/MM-DD.json`,
+un objet par catégorie avec `why_it_matters`, `anecdote`,
+`anecdote_reliability`, `tags`, `sources[]`) se fusionne dans
+`events.json` via :
+
+```bash
+node tools/historical-events-merge-daily-batch.js <dossier-source> --write
+```
+
+Dry-run par défaut (sans `--write`). `--force` autorise le remplacement d'un
+événement déjà présent sur le même `date_key`/`category`. Le script corrige
+automatiquement (avec avertissement journalisé) toute incohérence entre la
+clé de catégorie du fichier jour et le champ `category` interne de
+l'événement — la clé fait foi, car c'est elle qui définit l'emplacement réel
+dans l'interface.
+
+La source primaire (`historical_source_name`/`_url`, obligatoires) est
+dérivée de `sources[0]` ; `sources[1]` alimente la source secondaire. Les
+champs de notation éditoriale (`date_certainty`, `historical_importance`,
+`narrative_strength`, `image_relevance`, `image_rights_verified`), absents
+de ces lots, sont laissés à `null` plutôt que d'inventer une valeur — le
+validateur les accepte désormais en optionnel (stricts uniquement quand
+renseignés).
 
 ## Fichiers
 
 - `data/historical-events/events.json` — source de vérité éditoriale (tableau
-  d'événements). Vide pour l'instant (`[]`), à remplir progressivement.
+  d'événements), à remplir progressivement. 24 événements à ce stade (12 mars
+  + 1-7 août).
+- `tools/historical-events-merge-daily-batch.js` — fusionne un lot externe
+  "jour par jour" (`index.json` + `days/MM-DD.json`) dans `events.json`.
+  Dry-run par défaut ; `--write` pour écrire, `--force` pour remplacer un
+  créneau `date_key`/`category` déjà occupé.
 - `data/historical-events/credits.csv` — feuille de calcul dédiée au suivi des
   droits/crédits image (une ligne par `id`), pratique pour la recherche
   d'images avant de reporter les champs `image_*` dans `events.json`.
@@ -37,38 +69,59 @@ historical_source_url, secondary_source_name, secondary_source_url,
 date_certainty, historical_importance, narrative_strength, image_relevance,
 image_filename, image_source_url, image_original_url, image_author,
 image_date, image_institution, image_license, image_license_url,
-image_credit, image_rights_verified, content_warnings, review_status, notes`.
+image_credit, image_rights_verified, content_warnings, review_status, notes,
+why_it_matters, anecdote, anecdote_reliability, tags, sources`.
 
 `date_key` est toujours `MM-DD` (dérivé de `month`/`day`, vérifié par le
 validateur). `id` : minuscules/chiffres/tirets uniquement.
 
+`date_certainty`, `historical_importance`, `narrative_strength`,
+`image_relevance`, `image_rights_verified`, `why_it_matters`, `anecdote`,
+`anecdote_reliability`, `tags` et `sources` sont **optionnels** au niveau du
+validateur générique (les événements du workflow éditorial complet n'ont pas
+les champs narratifs, les lots externes légers n'ont pas les notations) —
+mais strictement validés dès qu'ils sont renseignés.
+
 ### Valeurs autorisées
 
-- `category` : `france`, `europe`, `world`
-- `period` : `antiquity`, `middle_ages`, `early_modern`, `revolution_19th`,
-  `20th_century`, `21st_century`
+- `category` : `france`, `europe`, `world`, `culture_science`
+- `period` : `antiquity`, `middle_ages`, `renaissance`, `early_modern`,
+  `french_revolution`, `revolution_empire`, `revolution_19th`,
+  `world_war_1`, `world_war_2`, `decolonization`, `20th_century`,
+  `21st_century`, `contemporary`
 - `review_status` : `draft`, `reviewed`, `validated`, `rejected`
-- `date_certainty` : `high`, `medium`, `low`
+- `date_certainty` : `high`, `medium`, `low` (ou absent)
+- `anecdote_reliability` : `well_attested`, `traditional`, `debated`,
+  `uncertain` (ou absent — mais obligatoire dès qu'`anecdote` est renseigné).
+  **`uncertain` n'est jamais exposée publiquement** : `public-mapper.js`
+  retire le texte de l'anecdote avant même l'API, ce n'est pas qu'un masquage
+  côté interface.
 - `historical_importance` / `narrative_strength` / `image_relevance` :
-  entiers 1 à 5
+  entiers 1 à 5 (ou absent)
+- `sources` : tableau de `{ title, url }` (12 maximum) — alternative à
+  `historical_source_name`/`_url` pour les lots qui n'utilisent pas ce
+  vocabulaire
+- `tags` : tableau de chaînes (60 caractères max chacune)
 
 ### Règles du validateur
 
 - dates plausibles (`month` 1-12, `day` valide pour ce mois, 29 février
   toléré) et `date_key` cohérent avec `month`/`day`
 - valeurs autorisées pour `category`, `period`, `review_status`,
-  `date_certainty`
+  `date_certainty`, `anecdote_reliability`
 - pas de doublon : ni `id` en double, ni deux événements sur le même couple
   `date_key`/`category` (donc jamais plus d'un événement par catégorie et par
-  jour, soit 3 maximum)
+  jour, soit 4 maximum)
 - URLs (`historical_source_url`, `secondary_source_url`, `image_source_url`,
-  `image_original_url`, `image_license_url`) au format `http(s)://…` quand
-  renseignées ; `historical_source_url` et `historical_source_name`
-  obligatoires (source primaire)
+  `image_original_url`, `image_license_url`, `sources[].url`) au format
+  `http(s)://…` quand renseignées ; `historical_source_url` et
+  `historical_source_name` obligatoires (source primaire — dérivée de
+  `sources[0]` par le script de fusion pour les lots externes)
 - `summary_short` et `summary_long` non vides et dans les bornes de longueur
 - `image_license` obligatoire si `image_rights_verified` est vrai
 - `image_filename` obligatoire si `review_status = "validated"`
 - `date_certainty = "high"` obligatoire si `review_status = "validated"`
+- `anecdote_reliability` obligatoire dès qu'`anecdote` est renseignée
 
 ## Commandes
 
@@ -139,27 +192,30 @@ Modules isolés, sans accès réseau ni appel IA, qui lisent uniquement
 }
 ```
 
-### Routeur API préparé (non branché)
+### Routeur API (branché)
 
-`routes/historical-events.js` exporte `createHistoricalEventsRouter()` — un
-`express.Router()` autonome avec `GET /today` et `GET /:dateKey`
-(`?onlyValidated=true` en option). Il n'est chargé par aucun fichier
-existant. Pour le brancher plus tard, dans `server.js`, ajouter (2 lignes,
-après les autres `require`/`app.use`) :
+`routes/historical-events.js` exporte `createHistoricalEventsRouter()`,
+monté dans `server.js` sur `/api/historical-events` : `GET /today` et
+`GET /:dateKey` (`?onlyValidated=true` en option).
 
-```js
-const { createHistoricalEventsRouter } = require("./routes/historical-events");
-app.use("/api/historical-events", createHistoricalEventsRouter());
-```
+### Page de test isolée
+
+`GET /historical-events-test` sert `views/historical-events-test.html`
+(`public/historical-events-test-page.js` + `.css`, jamais chargés par
+`script.js`/`style.css`) — sélectionne automatiquement la date du jour
+(heure de Paris), avec un champ de saisie manuelle pour tester n'importe
+quelle date. En développement local (`localhost`/`127.0.0.1` uniquement),
+`?testDate=MM-DD` force la date au chargement — ignoré sur tout autre nom
+d'hôte (donc jamais actif sur le site déployé).
 
 ## Reste à faire
 
-- Peupler `data/historical-events/events.json` (365/366 jours × jusqu'à 3
-  catégories) — volontairement non fait ici.
-- Exécuter la migration SQL sur Supabase (manuel, non fait ici).
-- Lancer un premier `--live` une fois des événements `validated` présents.
-- Décider et brancher la route API + l'affichage produit (aucune route ni
-  vue modifiée par ce chantier).
+- Peupler le reste de `data/historical-events/events.json` (365/366 jours ×
+  jusqu'à 4 catégories) — 8 jours couverts à ce stade (12 mars + 1-7 août).
+- Exécuter la migration SQL mise à jour sur Supabase si `--live` doit être
+  utilisé (non fait ici, l'API publique lit directement le fichier local).
+- Décider si l'affichage doit rejoindre l'accueil ou rester une page de test
+  isolée à terme.
 - Décider si `credits.csv` reste un outil de travail ponctuel ou si son
   contenu doit être fusionné automatiquement dans `events.json` (pas de
   script de fusion pour l'instant, fusion manuelle).

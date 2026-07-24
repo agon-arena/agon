@@ -6,14 +6,41 @@
 // jamais innerHTML, puisqu'elles ne sont pas sous notre contrôle direct.
 
 (function () {
-  var CATEGORY_ORDER = ["france", "europe", "world"];
+  var CATEGORY_ORDER = ["france", "europe", "world", "culture_science"];
   var CATEGORY_LABELS = {
     france: "Histoire de France",
     europe: "Histoire européenne",
-    world: "Histoire du monde"
+    world: "Histoire du monde",
+    culture_science: "Culture, sciences & société"
   };
   var DATE_KEY_PATTERN = /^\d{2}-\d{2}$/;
   var DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  // "?testDate=MM-DD" ne fonctionne qu'en dev (localhost) : jamais de forçage
+  // de date possible sur le site déployé, même sur cette page de test.
+  var IS_DEV_ENVIRONMENT = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+
+  // Même logique que parisDateKey() côté serveur (server.js) : "aujourd'hui"
+  // doit rester cohérent avec le reste du site, pas l'heure locale du visiteur.
+  function getParisDateKey(date) {
+    var parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(date || new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ""; };
+    return get("month") + "-" + get("day");
+  }
+
+  function resolveInitialDateKey() {
+    if (IS_DEV_ENVIRONMENT) {
+      var params = new URLSearchParams(window.location.search);
+      var testDate = params.get("testDate");
+      // isValidDateKey (définie plus bas, mais les déclarations de fonction
+      // sont hoistées) vérifie aussi que le mois/jour sont plausibles — le
+      // pattern seul laisserait passer un "99-99" qui ferait échouer l'API.
+      if (testDate && isValidDateKey(testDate)) return testDate;
+    }
+    return getParisDateKey();
+  }
 
   var dateForm = document.getElementById("het-date-form");
   var dateInput = document.getElementById("het-date-input");
@@ -118,7 +145,14 @@
       body.appendChild(summaryShort);
     }
 
-    if (event.summary_long) {
+    // "En savoir plus" assemble, dans cet ordre : summary_long, why_it_matters,
+    // puis l'anecdote précédée de "Le détail étonnant" — jamais affichée si
+    // anecdote_reliability vaut "uncertain" (déjà retirée côté serveur par
+    // public-mapper.js, revérifié ici en filet de sécurité).
+    var hasMoreToShow = !!(event.summary_long || event.why_it_matters ||
+      (event.anecdote && event.anecdote_reliability !== "uncertain"));
+
+    if (hasMoreToShow) {
       var toggleId = "het-summary-long-" + categoryKey;
       var toggle = document.createElement("button");
       toggle.type = "button";
@@ -128,16 +162,40 @@
       toggle.setAttribute("aria-controls", toggleId);
       body.appendChild(toggle);
 
-      var summaryLong = document.createElement("p");
-      summaryLong.className = "het-card-summary-long";
-      summaryLong.id = toggleId;
-      summaryLong.textContent = event.summary_long;
-      summaryLong.hidden = true;
-      body.appendChild(summaryLong);
+      var moreDetails = document.createElement("div");
+      moreDetails.className = "het-card-more";
+      moreDetails.id = toggleId;
+      moreDetails.hidden = true;
+
+      if (event.summary_long) {
+        var summaryLong = document.createElement("p");
+        summaryLong.className = "het-card-summary-long";
+        summaryLong.textContent = event.summary_long;
+        moreDetails.appendChild(summaryLong);
+      }
+
+      if (event.why_it_matters) {
+        var whyItMatters = document.createElement("p");
+        whyItMatters.className = "het-card-why-it-matters";
+        whyItMatters.textContent = event.why_it_matters;
+        moreDetails.appendChild(whyItMatters);
+      }
+
+      if (event.anecdote && event.anecdote_reliability !== "uncertain") {
+        var anecdote = document.createElement("p");
+        anecdote.className = "het-card-anecdote";
+        var anecdoteLabel = document.createElement("strong");
+        anecdoteLabel.textContent = "Le détail étonnant";
+        anecdote.appendChild(anecdoteLabel);
+        anecdote.appendChild(document.createTextNode(event.anecdote));
+        moreDetails.appendChild(anecdote);
+      }
+
+      body.appendChild(moreDetails);
 
       toggle.addEventListener("click", function () {
-        var isHidden = summaryLong.hidden;
-        summaryLong.hidden = !isHidden;
+        var isHidden = moreDetails.hidden;
+        moreDetails.hidden = !isHidden;
         toggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
         toggle.textContent = isHidden ? "Réduire" : "En savoir plus";
       });
@@ -228,5 +286,10 @@
     loadDate(value);
   });
 
-  loadDate(dateInput.value);
+  // Sélection automatique du bon jour à l'ouverture : date du jour (heure de
+  // Paris), sauf ?testDate=MM-DD en développement local (cf. IS_DEV_ENVIRONMENT
+  // et resolveInitialDateKey ci-dessus).
+  var initialDateKey = resolveInitialDateKey();
+  dateInput.value = initialDateKey;
+  loadDate(initialDateKey);
 })();

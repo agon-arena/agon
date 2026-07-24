@@ -78,10 +78,10 @@ function serviceWithFixture() {
   return createHistoricalEventsService({ repository });
 }
 
-test("les catégories sont retournées dans l'ordre france, europe, world", () => {
+test("les catégories sont retournées dans l'ordre france, europe, world, culture_science", () => {
   const service = serviceWithFixture();
   const result = service.getEventsForDateKey("03-12");
-  assert.deepEqual(Object.keys(result.events), ["france", "europe", "world"]);
+  assert.deepEqual(Object.keys(result.events), ["france", "europe", "world", "culture_science"]);
 });
 
 test("une catégorie absente vaut null", () => {
@@ -91,10 +91,10 @@ test("une catégorie absente vaut null", () => {
   assert.notEqual(result.events.france, null);
 });
 
-test("une date sans aucun événement renvoie les 3 catégories à null", () => {
+test("une date sans aucun événement renvoie les 4 catégories à null", () => {
   const service = serviceWithFixture();
   const result = service.getEventsForDateKey("01-01");
-  assert.deepEqual(result, { date_key: "01-01", events: { france: null, europe: null, world: null } });
+  assert.deepEqual(result, { date_key: "01-01", events: { france: null, europe: null, world: null, culture_science: null } });
 });
 
 test("le mapper public retire les champs internes et fournit image_url", () => {
@@ -139,4 +139,60 @@ test("getEventsForMonthDay produit le même résultat que getEventsForDateKey", 
   const byDateKey = service.getEventsForDateKey("03-12");
   const byMonthDay = service.getEventsForMonthDay(3, 12);
   assert.deepEqual(byMonthDay, byDateKey);
+});
+
+test("une anecdote 'uncertain' n'est jamais exposée publiquement (même masquée côté client)", () => {
+  const repository = createHistoricalEventsRepository({
+    filePath: "fixture.json",
+    readFileSync: () => JSON.stringify([
+      baseEvent({
+        id: "evt-uncertain",
+        anecdote: "Détail non confirmé.",
+        anecdote_reliability: "uncertain"
+      })
+    ])
+  });
+  const service = createHistoricalEventsService({ repository });
+  const result = service.getEventsForDateKey("03-12");
+  assert.equal(result.events.france.anecdote, null);
+  assert.equal(result.events.france.anecdote_reliability, "uncertain");
+});
+
+test("une anecdote bien attestée est exposée, avec why_it_matters/tags/sources", () => {
+  const repository = createHistoricalEventsRepository({
+    filePath: "fixture.json",
+    readFileSync: () => JSON.stringify([
+      baseEvent({
+        id: "evt-well-attested",
+        why_it_matters: "Ça compte parce que...",
+        anecdote: "Un détail vérifié.",
+        anecdote_reliability: "well_attested",
+        tags: ["a", "b"],
+        sources: [{ title: "Source X", url: "https://example.org/x" }]
+      })
+    ])
+  });
+  const service = createHistoricalEventsService({ repository });
+  const result = service.getEventsForDateKey("03-12");
+  const event = result.events.france;
+  assert.equal(event.anecdote, "Un détail vérifié.");
+  assert.equal(event.why_it_matters, "Ça compte parce que...");
+  assert.deepEqual(event.tags, ["a", "b"]);
+  assert.deepEqual(event.sources, [{ title: "Source X", url: "https://example.org/x" }]);
+});
+
+test("muter le tableau sources/tags renvoyé ne touche pas le cache du repository", () => {
+  const repository = createHistoricalEventsRepository({
+    filePath: "fixture.json",
+    readFileSync: () => JSON.stringify([
+      baseEvent({ id: "evt-mut", tags: ["a"], sources: [{ title: "S", url: "https://example.org/s" }] })
+    ])
+  });
+  const service = createHistoricalEventsService({ repository });
+  const first = service.getEventsForDateKey("03-12").events.france;
+  first.tags.push("intrus");
+  first.sources.push({ title: "faux", url: "https://example.org/faux" });
+  const second = service.getEventsForDateKey("03-12").events.france;
+  assert.deepEqual(second.tags, ["a"]);
+  assert.deepEqual(second.sources, [{ title: "S", url: "https://example.org/s" }]);
 });

@@ -199,8 +199,13 @@
   background: #eef3f6;
 }
 
-.het-card-summary-long {
-  margin: 0 0 12px;
+.het-card-more[hidden] {
+  display: none;
+}
+
+.het-card-summary-long,
+.het-card-why-it-matters {
+  margin: 0 0 10px;
   padding: 10px 12px;
   border-radius: 8px;
   background: #f3f4f6;
@@ -209,8 +214,25 @@
   line-height: 1.5;
 }
 
-.het-card-summary-long[hidden] {
-  display: none;
+.het-card-anecdote {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px dashed #fdba74;
+  color: #7c2d12;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.het-card-anecdote strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .het-card-meta {

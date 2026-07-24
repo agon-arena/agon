@@ -131,3 +131,75 @@ test("validateDataset accepte jusqu'à 3 événements/jour (un par catégorie)",
   const result = validateDataset(events);
   assert.equal(result.ok, true, JSON.stringify(result.errors));
 });
+
+// --- Lot "cartes-jour-annee-aout-semaine-1" : culture_science, nouvelles
+// periods, champs narratifs (why_it_matters/anecdote/anecdote_reliability/
+// tags/sources), champs de notation devenus optionnels. ---
+
+test("category accepte culture_science", () => {
+  const result = validateEvent(baseEvent({ category: "culture_science" }));
+  assert.equal(result.ok, true, result.errors.join(" | "));
+});
+
+test("period accepte les nouvelles valeurs (ex. world_war_2)", () => {
+  const result = validateEvent(baseEvent({ period: "world_war_2" }));
+  assert.equal(result.ok, true, result.errors.join(" | "));
+});
+
+test("date_certainty/historical_importance/narrative_strength/image_relevance/image_rights_verified absents sont acceptés", () => {
+  const result = validateEvent(baseEvent({
+    date_certainty: null,
+    historical_importance: null,
+    narrative_strength: null,
+    image_relevance: null,
+    image_rights_verified: null
+  }));
+  assert.equal(result.ok, true, result.errors.join(" | "));
+});
+
+test("historical_importance présent mais hors bornes reste rejeté", () => {
+  const result = validateEvent(baseEvent({ historical_importance: 9 }));
+  assert.equal(result.ok, false);
+});
+
+test("why_it_matters, anecdote (avec anecdote_reliability) et sources valides sont acceptés", () => {
+  const result = validateEvent(baseEvent({
+    why_it_matters: "Cet événement compte parce que...",
+    anecdote: "Un détail savoureux et vérifié.",
+    anecdote_reliability: "well_attested",
+    tags: ["histoire", "france"],
+    sources: [{ title: "Une source", url: "https://example.org/source" }]
+  }));
+  assert.equal(result.ok, true, result.errors.join(" | "));
+});
+
+test("anecdote_reliability hors liste est rejetée", () => {
+  const result = validateEvent(baseEvent({ anecdote: "x", anecdote_reliability: "certaine" }));
+  assert.equal(result.ok, false);
+});
+
+test("anecdote sans anecdote_reliability est rejetée", () => {
+  const result = validateEvent(baseEvent({ anecdote: "x", anecdote_reliability: null }));
+  assert.equal(result.ok, false);
+});
+
+test("sources mal formées (url manquante) sont rejetées", () => {
+  const result = validateEvent(baseEvent({ sources: [{ title: "Une source" }] }));
+  assert.equal(result.ok, false);
+});
+
+test("tags avec un élément non-chaîne est rejeté", () => {
+  const result = validateEvent(baseEvent({ tags: ["ok", 42] }));
+  assert.equal(result.ok, false);
+});
+
+test("why_it_matters/anecdote/tags/sources absents (undefined) restent acceptés (compatibilité avec les événements existants)", () => {
+  const event = baseEvent();
+  delete event.why_it_matters;
+  delete event.anecdote;
+  delete event.anecdote_reliability;
+  delete event.tags;
+  delete event.sources;
+  const result = validateEvent(event);
+  assert.equal(result.ok, true, result.errors.join(" | "));
+});
