@@ -723,13 +723,21 @@ window.addEventListener("pageshow", function() {
      fait que translater tout le flux qui suit, y compris le bandeau, sans
      changer l'écart entre le bloc et lui). Valeurs calibrées pour égaliser
      les deux côtés (reprises telles quelles du bouton QCM solo). */
+  /* Bandeau unique façon "switch" (même langage visuel que le sélecteur
+     Bulles Actu/Agôn juste au-dessus : anneau clair + fond vitré translucide
+     + anneau sombre en renfort, cf. .agon-cloud-mode-switch dans style.css)
+     plutôt que 3 pastilles dorées séparées qui juraient avec le reste de la
+     page. Les 3 liens sont des segments à parts égales d'une seule barre. */
   .home-secondary-actions {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+    width: max-content;
+    max-width: 100%;
     margin: -23px auto 30px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
   }
   @media (min-width: 769px) {
     .home-secondary-actions {
@@ -737,23 +745,20 @@ window.addEventListener("pageshow", function() {
       margin-bottom: -7px;
     }
   }
-  /* Mobile : les 3 boutons doivent rester sur une seule ligne (pas empilés) —
-     vu leurs textes de longueurs très différentes ("Ce jour dans l'Histoire"
-     / "QCM du matin" / "Parallèle historique"), ça implique de partager la
-     largeur à parts égales (flex:1) avec une police plus compacte et un
-     retour à la ligne du texte à l'intérieur de chaque bouton si besoin,
-     plutôt que de les laisser passer à la ligne suivante (flex-wrap) ou
-     déborder (nowrap sans rétrécir). */
+  /* Mobile : les 3 segments doivent rester sur une seule ligne (la barre
+     n'a qu'une hauteur) — vu leurs textes de longueurs très différentes
+     ("Ce jour dans l'Histoire" / "QCM du matin" / "Parallèle historique"),
+     ça implique de partager la largeur à parts égales (flex:1) avec une
+     police plus compacte et un retour à la ligne du texte à l'intérieur du
+     segment si besoin. */
   @media (max-width: 768px) {
     .home-secondary-actions {
-      flex-wrap: nowrap;
-      gap: 6px;
+      width: min(100% - 32px, 480px);
     }
     .home-secondary-actions .home-qcm-btn {
       flex: 1 1 0;
-      width: auto;
       min-width: 0;
-      padding: 7px 6px;
+      padding: 8px 6px;
       gap: 4px;
       white-space: normal;
       text-align: center;
@@ -765,11 +770,11 @@ window.addEventListener("pageshow", function() {
     }
   }
 
-  /* Bouton QCM du jour : mis en valeur (couleur propre, plus imposant que
-     .agon-tribunes-btn) plutôt que le style discret partagé avec "Autres
-     actus" — il doit sauter aux yeux la première fois qu'on le voit. Fond
-     sombre assorti à la palette du site + liseré et texte or, plutôt qu'une
-     couleur criarde. */
+  /* Segment du bandeau : plat et transparent au repos (le fond vitré vient du
+     conteneur), un simple surlignage clair au survol — même transition que
+     .agon-tribunes-btn. Un filet vertical sépare les segments entre eux
+     (::after, sauf sur le dernier), même technique que le séparateur du
+     switch Gauche/Tout/Droite. */
   .home-qcm-btn {
     position: relative;
     overflow: hidden;
@@ -778,30 +783,40 @@ window.addEventListener("pageshow", function() {
     align-items: center;
     justify-content: center;
     gap: 7px;
-    width: max-content;
-    padding: 8px 18px;
-    border: 1px solid rgba(245, 182, 66, 0.55);
-    border-radius: 999px;
-    background: linear-gradient(135deg, #1c2a33, #2e3d47);
-    color: #f5c877;
+    flex: 0 0 auto;
+    min-width: 160px;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 12px;
+    font-weight: 700;
     letter-spacing: 0.02em;
     text-decoration: none;
+    white-space: nowrap;
     cursor: pointer;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .home-qcm-btn:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
   }
   .home-qcm-btn i,
   .home-qcm-btn span {
     position: relative;
     z-index: 2;
-    font-size: 14px;
+    font-size: 13px;
   }
   .home-qcm-btn:hover {
-    border-color: rgba(245, 182, 66, 0.9);
-    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
   }
   /* Reflet posé par le script ci-dessous : ne balaie le bouton que pendant
      les premières secondes ET seulement quand il est réellement visible à
@@ -1240,7 +1255,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260724-timewidgetup2px" defer></script>
+<script src="/script.min.js?v=20260724-restoreclosearrow" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -5505,14 +5505,6 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
-    /* QCM du jour et Parallèle historique : pas de flèche retour en bas — la
-       fermeture se fait via une croix posée directement dans le cadre de la
-       page (même document, cf. #qcm-panel-close / #ph-panel-close), pas ce
-       bouton du chrome parent. */
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close,
-    #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-close {
-      display: none !important;
-    }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
        même document que #voices-float-badge) plutôt que ce bouton du parent —
        un seul document à positionner par rapport au bandeau bas au lieu de
