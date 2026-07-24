@@ -11088,6 +11088,13 @@ const DAILY_QUIZ_QUESTION_COUNT = 6;
 const DAILY_QUIZ_MIN_CANDIDATES = 8;
 const DAILY_QUIZ_MIN_VALID_QUESTIONS = 3;
 const DAILY_QUIZ_GENERATION_MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4o-mini";
+// Une même actu reste souvent à l'affiche plusieurs jours d'affilée : sans
+// garde-fou, le QCM repose sur les mêmes arènes (donc quasi les mêmes
+// questions) plusieurs jours de suite. On exclut des candidats du jour tout
+// sujet déjà utilisé comme source de QCM dans les N jours précédents (cf.
+// fetchRecentDailyQuizTopicKeys), sur le même principe de regroupement que
+// dedupeParalleleHistoriqueTopicsByCloudLabel (cloud_label OU question).
+const DAILY_QUIZ_TOPIC_LOOKBACK_DAYS = 6;
 
 // Deux QCM par jour, un par vague de publication (~8h et ~16h heure de Paris) :
 // triggerHour = heure à partir de laquelle le scheduler tente la génération
@@ -11146,25 +11153,74 @@ function dedupeDailyQuizCandidatesByQuestion(rows) {
   return deduped;
 }
 
+// Clés de regroupement d'un sujet pour un candidat de QCM — même principe que
+// dedupeParalleleHistoriqueTopicsByCloudLabel : cloud_label ET question
+// normalisée, pas un seul des deux (le cloud_label IA n'est pas toujours
+// strictement identique entre deux jours sur la même actu).
+function dailyQuizTopicKeysForDebate(row) {
+  const keys = [];
+  const labelKey = normalizeCloudLabel(getCloudLabelFromDebate(row));
+  if (labelKey) keys.push(labelKey);
+  const questionKey = String(row?.question || "").trim().toLowerCase();
+  if (questionKey) keys.push(questionKey);
+  return keys;
+}
+
+// Sujets déjà utilisés comme source de QCM dans les `daysBack` jours qui
+// précèdent aujourd'hui (bornes exclusives sur aujourd'hui : le jour même est
+// géré séparément via `excludeIds` dans generateDailyQuizIfNeeded). Ressort
+// les debates correspondants pour recalculer leurs clés de sujet plutôt que
+// de stocker les clés elles-mêmes, qui ne le sont pas dans `daily_quiz`.
+async function fetchRecentDailyQuizTopicKeys(daysBack) {
+  const todayKey = parisDateKey();
+  const cutoffKey = parisDateKey(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
+  const { data: recentQuizRows, error: quizError } = await supabase
+    .from("daily_quiz")
+    .select("source_debate_ids")
+    .gte("quiz_date", cutoffKey)
+    .lt("quiz_date", todayKey);
+  if (quizError) throw new Error(quizError.message);
+
+  const recentIds = Array.from(new Set((recentQuizRows || []).flatMap((row) => row.source_debate_ids || []).map(String)));
+  if (!recentIds.length) return new Set();
+
+  const { data: recentDebates, error: debatesError } = await supabase
+    .from("debates")
+    .select("id, question, cloud_label, keywords")
+    .in("id", recentIds);
+  if (debatesError) throw new Error(debatesError.message);
+
+  const keys = new Set();
+  for (const row of recentDebates || []) {
+    for (const key of dailyQuizTopicKeysForDebate(row)) keys.add(key);
+  }
+  return keys;
+}
+
 // Uniquement les arènes publiées depuis minuit (Paris) aujourd'hui — pas une
 // fenêtre glissante, qui remonterait sur l'actualité de la veille et casserait
 // la promesse "actualité du jour". Pas de repli sur une autre journée si le
 // volume est insuffisant : la génération est simplement reportée au cycle
 // suivant. `excludeIds` retire les arènes déjà utilisées par l'autre créneau
 // du jour (le QCM du soir ne doit pas reposer sur les mêmes sujets que celui
-// du matin).
-async function fetchDailyQuizCandidateDebates(excludeIds = []) {
+// du matin). `recentTopicKeys` retire en plus les sujets déjà couverts les
+// jours précédents (cf. fetchRecentDailyQuizTopicKeys), pour varier les
+// questions d'un jour à l'autre sur une actu qui reste à la une plusieurs jours.
+async function fetchDailyQuizCandidateDebates(excludeIds = [], recentTopicKeys = new Set()) {
   const cutoff = parisStartOfDayIso();
   const { data, error } = await supabase
     .from("debates")
-    .select("id, question, content, category, cloud_label")
+    .select("id, question, content, category, cloud_label, keywords")
     .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
     .gte("created_at", cutoff)
     .order("created_at", { ascending: false })
     .limit(80);
   if (error) throw new Error(error.message);
   const excludeSet = new Set(excludeIds.map(String));
-  const rows = excludeSet.size ? (data || []).filter((row) => !excludeSet.has(String(row.id))) : (data || []);
+  let rows = excludeSet.size ? (data || []).filter((row) => !excludeSet.has(String(row.id))) : (data || []);
+  if (recentTopicKeys.size) {
+    rows = rows.filter((row) => !dailyQuizTopicKeysForDebate(row).some((key) => recentTopicKeys.has(key)));
+  }
   return dedupeDailyQuizCandidatesByQuestion(rows);
 }
 
@@ -11235,7 +11291,8 @@ async function generateDailyQuizIfNeeded(slotKey) {
     excludeIds = morningRow?.source_debate_ids || [];
   }
 
-  const candidates = await fetchDailyQuizCandidateDebates(excludeIds);
+  const recentTopicKeys = await fetchRecentDailyQuizTopicKeys(DAILY_QUIZ_TOPIC_LOOKBACK_DAYS);
+  const candidates = await fetchDailyQuizCandidateDebates(excludeIds, recentTopicKeys);
   if (candidates.length < DAILY_QUIZ_MIN_CANDIDATES) {
     console.warn(`[daily-quiz:${slotKey}] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
     return;

@@ -143,6 +143,23 @@
       font-size: 14px;
       text-align: center;
     }
+    /* 1 à 3 parallèles possibles le même jour (jamais un nombre fixe) : le
+       premier n'a pas de marge/séparateur au-dessus, les suivants si — pour
+       marquer clairement où commence chaque parallèle indépendant. */
+    .ph-parallel + .ph-parallel {
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .ph-parallel-count {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9ca3af;
+      text-align: center;
+    }
     .ph-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
@@ -299,8 +316,8 @@
     body.innerHTML = '<p class="ph-state-message">Impossible de charger le parallèle historique pour le moment. Réessaie un peu plus tard.</p>';
   }
 
-  function renderPublished(content) {
-    var sources = Array.isArray(content.sources) ? content.sources : [];
+  function renderOneParallel(parallel, index, total) {
+    var sources = Array.isArray(parallel.sources) ? parallel.sources : [];
     // Aucune des références n'a de lien vérifié (l'IA n'a pas de recherche
     // documentaire réelle, cf. lib/parallele-historique.js) : on l'affiche
     // clairement comme indicatif plutôt que comme une source cliquable fiable.
@@ -320,41 +337,58 @@
     // devinée par l'IA, cf. lib/parallele-historique.js) — absente pour une
     // bonne partie des sujets, donc affichée seulement si trouvée.
     var imageHtml = '';
-    if (content.historical_event_image_url) {
+    if (parallel.historical_event_image_url) {
       imageHtml =
         '<figure class="ph-historical-image">' +
-        '<img src="' + escapeHtml(content.historical_event_image_url) + '" alt="' + escapeHtml(content.historical_event_title) + '" loading="lazy" onerror="this.closest(\'.ph-historical-image\').remove();">' +
-        (content.historical_event_image_page_url
-          ? '<figcaption><a href="' + escapeHtml(content.historical_event_image_page_url) + '" target="_blank" rel="noopener noreferrer">Image : Wikipedia</a></figcaption>'
+        '<img src="' + escapeHtml(parallel.historical_event_image_url) + '" alt="' + escapeHtml(parallel.historical_event_title) + '" loading="lazy" onerror="this.closest(\'.ph-historical-image\').remove();">' +
+        (parallel.historical_event_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(parallel.historical_event_image_page_url) + '" target="_blank" rel="noopener noreferrer">Image : Wikipedia</a></figcaption>'
           : '<figcaption>Image : Wikipedia</figcaption>') +
         '</figure>';
     }
 
-    body.innerHTML =
-      '<p class="ph-topic-title">' + escapeHtml(content.current_topic_title) + '</p>' +
-      '<p class="ph-topic-summary">' + escapeHtml(content.current_topic_summary) + '</p>' +
+    // Le nombre de parallèles n'est jamais fixe (1 à 3, cf.
+    // lib/parallele-historique.js) : l'étiquette "Parallèle X/N" n'apparaît
+    // que s'il y en a effectivement plusieurs aujourd'hui.
+    var countLabel = total > 1
+      ? '<p class="ph-parallel-count">Parallèle ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="ph-parallel">' +
+      countLabel +
+      '<p class="ph-topic-title">' + escapeHtml(parallel.current_topic_title) + '</p>' +
+      '<p class="ph-topic-summary">' + escapeHtml(parallel.current_topic_summary) + '</p>' +
       '<div class="ph-section">' +
       '<h2><i class="fa-solid fa-scroll"></i> Le précédent historique</h2>' +
-      '<p><strong>' + escapeHtml(content.historical_event_title) + '</strong> — ' + escapeHtml(content.historical_event_date) + '</p>' +
+      '<p><strong>' + escapeHtml(parallel.historical_event_title) + '</strong> — ' + escapeHtml(parallel.historical_event_date) + '</p>' +
       imageHtml +
-      '<p>' + escapeHtml(content.historical_context) + '</p>' +
+      '<p>' + escapeHtml(parallel.historical_context) + '</p>' +
       '</div>' +
       '<div class="ph-section">' +
       '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui se répète</h2>' +
-      '<p>' + escapeHtml(content.shared_mechanism) + '</p>' +
+      '<p>' + escapeHtml(parallel.shared_mechanism) + '</p>' +
       '</div>' +
       '<div class="ph-section">' +
       '<h2><i class="fa-solid fa-code-compare"></i> La différence essentielle</h2>' +
-      '<p>' + escapeHtml(content.essential_difference) + '</p>' +
+      '<p>' + escapeHtml(parallel.essential_difference) + '</p>' +
       '</div>' +
       '<div class="ph-section">' +
       '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
-      '<p>' + escapeHtml(content.conclusion) + '</p>' +
+      '<p>' + escapeHtml(parallel.conclusion) + '</p>' +
       '</div>' +
       '<div class="ph-sources">' +
       '<p class="ph-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
       sourcesHtml +
-      '</div>';
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var parallels = Array.isArray(content.parallels) ? content.parallels : [];
+    if (!parallels.length) { renderError(); return; }
+    body.innerHTML = parallels.map(function (p, i) { return renderOneParallel(p, i, parallels.length); }).join('');
   }
 
   function stopPolling() {
