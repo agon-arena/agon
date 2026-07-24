@@ -1462,7 +1462,7 @@ function renderAgonTimeWidget() {
       }
       .agon-time-widget-logo-overlay {
         position: absolute;
-        top: 2px;
+        top: 0px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 18;
@@ -1470,7 +1470,7 @@ function renderAgonTimeWidget() {
       }
       @media (max-width: 768px) {
         .agon-time-widget-logo-overlay {
-          top: -1px;
+          top: -3px;
         }
       }
       .agon-time-widget {

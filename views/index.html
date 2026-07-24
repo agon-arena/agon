@@ -737,6 +737,18 @@ window.addEventListener("pageshow", function() {
       margin-bottom: -7px;
     }
   }
+  /* Mobile : 3 boutons de largeurs de texte très différentes ("Ce jour dans
+     l'Histoire" / "QCM du matin" / "Parallèle historique") se répartissaient
+     en 2 + 1 mal aligné avec le flex-wrap ci-dessus — empilés en colonne à
+     largeur commune, ça s'aligne proprement. */
+  @media (max-width: 768px) {
+    .home-secondary-actions {
+      flex-direction: column;
+    }
+    .home-secondary-actions .home-qcm-btn {
+      width: min(100%, 280px);
+    }
+  }
 
   /* Bouton QCM du jour : mis en valeur (couleur propre, plus imposant que
      .agon-tribunes-btn) plutôt que le style discret partagé avec "Autres
@@ -1213,7 +1225,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260723-scorebadgemobile" defer></script>
+<script src="/script.min.js?v=20260724-timewidgetup2px" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

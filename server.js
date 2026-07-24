@@ -4286,14 +4286,14 @@ function getUserContributionTierLabel(tier) {
 
 // Paliers de volume pour le score Gnosis (QCM du jour) : mêmes proportions que
 // USER_SCORE_TIERS (1 / 3 / 9 / +) mais mises à l'échelle du rythme du QCM
-// (6 questions/jour) plutôt que du rythme de publication d'idées — sinon un
-// visiteur qui répond tous les jours se retrouverait comparé à quelqu'un qui
-// n'a répondu qu'une fois.
+// (10 questions/jour, cf. DAILY_QUIZ_QUESTION_COUNT) plutôt que du rythme de
+// publication d'idées — sinon un visiteur qui répond tous les jours se
+// retrouverait comparé à quelqu'un qui n'a répondu qu'une fois.
 const GNOSIS_SCORE_TIERS = [
-  { tier: 1, max: 6, label: "6 questions répondues ou moins" },
-  { tier: 2, max: 18, label: "7 à 18 questions répondues" },
-  { tier: 3, max: 54, label: "19 à 54 questions répondues" },
-  { tier: 4, max: Infinity, label: "55 questions répondues ou plus" }
+  { tier: 1, max: 10, label: "10 questions répondues ou moins" },
+  { tier: 2, max: 30, label: "11 à 30 questions répondues" },
+  { tier: 3, max: 90, label: "31 à 90 questions répondues" },
+  { tier: 4, max: Infinity, label: "91 questions répondues ou plus" }
 ];
 
 function getGnosisTier(count) {
@@ -11084,9 +11084,13 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
 /*   QCM du jour — généré chaque matin à partir des arènes AI d'Agôn */
 /* ================================================================= */
 
-const DAILY_QUIZ_QUESTION_COUNT = 6;
-const DAILY_QUIZ_MIN_CANDIDATES = 8;
-const DAILY_QUIZ_MIN_VALID_QUESTIONS = 3;
+const DAILY_QUIZ_QUESTION_COUNT = 10;
+// Chaque question valide consomme un candidat distinct (sourceDebateId non
+// réutilisé, cf. validateDailyQuizQuestions) : le plancher doit rester au-dessus
+// de DAILY_QUIZ_QUESTION_COUNT sous peine de ne jamais pouvoir l'atteindre —
+// même marge proportionnelle qu'avant (8/6 ≈ 1,33x la cible).
+const DAILY_QUIZ_MIN_CANDIDATES = 13;
+const DAILY_QUIZ_MIN_VALID_QUESTIONS = 5;
 const DAILY_QUIZ_GENERATION_MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4o-mini";
 // Une même actu reste souvent à l'affiche plusieurs jours d'affilée : sans
 // garde-fou, le QCM repose sur les mêmes arènes (donc quasi les mêmes
