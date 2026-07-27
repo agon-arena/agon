@@ -122,17 +122,32 @@
     return String(day) + " " + months[month - 1];
   }
 
+  function formatEventTitle(dateKey, event) {
+    var title = typeof event.title === "string" ? event.title.trim() : "";
+    var dateText = formatDateDisplay(dateKey);
+    var yearDisplay = typeof event.year_display === "string" ? event.year_display.trim() : "";
+    var yearsAgoText = formatYearsAgo(event.year);
+    var prefix = dateText ? "Le " + dateText : "";
+
+    if (yearDisplay) prefix += (prefix ? " " : "") + yearDisplay;
+    if (yearsAgoText) prefix += (prefix ? ", " : "") + yearsAgoText;
+    if (!prefix) return title;
+    return title ? prefix + ", " + title : prefix;
+  }
+
   // "il y a N ans" par rapport à l'année en cours — year peut être négatif
   // (avant J.-C., cf. validateEvent) : la soustraction reste correcte telle
   // quelle. Pas de texte si l'année est absente/invalide ou dans le futur
   // (rien de sensé à afficher dans ce cas).
+  // Minuscule car toujours intégré au milieu de la phrase-titre combinée
+  // (cf. buildCategoryBlock) : "Le 28 juillet 1794, il y a 232 ans, ...".
   function formatYearsAgo(year) {
     if (!Number.isInteger(year)) return "";
     var diff = new Date().getFullYear() - year;
     if (diff < 0) return "";
-    if (diff === 0) return "Cette année";
-    if (diff === 1) return "Il y a 1 an";
-    return "Il y a " + diff.toLocaleString("fr-FR") + " ans";
+    if (diff === 0) return "cette année";
+    if (diff === 1) return "il y a 1 an";
+    return "il y a " + diff.toLocaleString("fr-FR") + " ans";
   }
 
   var CATEGORY_ICONS = {
@@ -145,7 +160,7 @@
   // les blocs .ecl-block de views/eclairages.html : titre cliquable replié
   // par défaut, contenu déplié en dessous, "Masquer" en bas. registerBlock
   // (défini plus bas) gère l'accordéon (un seul ouvert à la fois).
-  function buildCategoryBlock(categoryKey, event) {
+  function buildCategoryBlock(categoryKey, dateKey, event) {
     var block = document.createElement("div");
     block.className = "het-block";
 
@@ -178,38 +193,12 @@
     var title = typeof event.title === "string" ? event.title : "";
     var yearDisplay = typeof event.year_display === "string" ? event.year_display : "";
 
-    if (event.image_url) {
-      var img = document.createElement("img");
-      img.className = "het-card-image";
-      img.src = event.image_url;
-      img.alt = title
-        ? "Illustration — " + title + (yearDisplay ? " (" + yearDisplay + ")" : "")
-        : "Illustration historique";
-      img.loading = "lazy";
-      content.appendChild(img);
-    }
-
     var body = document.createElement("div");
     body.className = "het-card-body";
 
-    if (yearDisplay) {
-      var year = document.createElement("p");
-      year.className = "het-card-year";
-      year.textContent = yearDisplay;
-      body.appendChild(year);
-    }
-
-    var yearsAgoText = formatYearsAgo(event.year);
-    if (yearsAgoText) {
-      var yearsAgo = document.createElement("p");
-      yearsAgo.className = "het-card-years-ago";
-      yearsAgo.textContent = yearsAgoText;
-      body.appendChild(yearsAgo);
-    }
-
     var titleEl = document.createElement("h2");
     titleEl.className = "het-card-title";
-    titleEl.textContent = title;
+    titleEl.textContent = formatEventTitle(dateKey, event);
     body.appendChild(titleEl);
 
     if (event.summary_short) {
@@ -217,6 +206,49 @@
       summaryShort.className = "het-card-summary-short";
       summaryShort.textContent = event.summary_short;
       body.appendChild(summaryShort);
+    }
+
+    if (event.image_url) {
+      var figure = document.createElement("figure");
+      figure.className = "het-card-figure";
+
+      var img = document.createElement("img");
+      img.className = "het-card-image";
+      img.src = event.image_url;
+      img.alt = title
+        ? "Illustration — " + title + (yearDisplay ? " (" + yearDisplay + ")" : "")
+        : "Illustration historique";
+      img.loading = "lazy";
+      figure.appendChild(img);
+
+      if (title || event.image_page_url) {
+        var imageMeta = document.createElement("figcaption");
+        imageMeta.className = "het-card-image-meta";
+
+        function appendImageMetaSeparator() {
+          if (imageMeta.firstChild) imageMeta.appendChild(document.createTextNode(" / "));
+        }
+
+        if (title) {
+          var imageCaption = document.createElement("em");
+          imageCaption.textContent = title;
+          imageMeta.appendChild(imageCaption);
+        }
+
+        if (event.image_page_url) {
+          appendImageMetaSeparator();
+          var imageSourceLink = document.createElement("a");
+          imageSourceLink.href = event.image_page_url;
+          imageSourceLink.target = "_blank";
+          imageSourceLink.rel = "noopener noreferrer";
+          imageSourceLink.textContent = "Source de l'image";
+          imageMeta.appendChild(imageSourceLink);
+        }
+
+        figure.appendChild(imageMeta);
+      }
+
+      body.appendChild(figure);
     }
 
     // "En savoir plus" assemble, dans cet ordre : summary_long, why_it_matters,
@@ -245,18 +277,25 @@
       moreDetails.id = toggleId;
       moreDetails.hidden = true;
 
-      if (event.summary_long) {
-        var summaryLong = document.createElement("p");
-        summaryLong.className = "het-card-summary-long";
-        summaryLong.textContent = event.summary_long;
-        moreDetails.appendChild(summaryLong);
-      }
+      if (event.summary_long || event.why_it_matters) {
+        var moreBlock = document.createElement("div");
+        moreBlock.className = "het-card-more-block";
 
-      if (event.why_it_matters) {
-        var whyItMatters = document.createElement("p");
-        whyItMatters.className = "het-card-why-it-matters";
-        whyItMatters.textContent = event.why_it_matters;
-        moreDetails.appendChild(whyItMatters);
+        if (event.summary_long) {
+          var summaryLong = document.createElement("p");
+          summaryLong.className = "het-card-summary-long";
+          summaryLong.textContent = event.summary_long;
+          moreBlock.appendChild(summaryLong);
+        }
+
+        if (event.why_it_matters) {
+          var whyItMatters = document.createElement("p");
+          whyItMatters.className = "het-card-why-it-matters";
+          whyItMatters.textContent = event.why_it_matters;
+          moreBlock.appendChild(whyItMatters);
+        }
+
+        moreDetails.appendChild(moreBlock);
       }
 
       if (event.anecdote && event.anecdote_reliability !== "uncertain") {
@@ -307,13 +346,6 @@
       sourceLink.rel = "noopener noreferrer";
       sourceLink.textContent = "Voir la source historique";
       body.appendChild(sourceLink);
-    }
-
-    if (event.image_credit) {
-      var credit = document.createElement("p");
-      credit.className = "het-card-credit";
-      credit.textContent = event.image_credit;
-      body.appendChild(credit);
     }
 
     content.appendChild(body);
@@ -374,7 +406,7 @@
     accordionBlocks = [];
     CATEGORY_ORDER.forEach(function (categoryKey) {
       var event = events ? events[categoryKey] : null;
-      if (event) cardsEl.appendChild(buildCategoryBlock(categoryKey, event));
+      if (event) cardsEl.appendChild(buildCategoryBlock(categoryKey, dateKey, event));
     });
   }
 

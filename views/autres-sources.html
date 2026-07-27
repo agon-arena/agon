@@ -982,7 +982,7 @@
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
@@ -1649,7 +1649,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260724-citationdujour" defer></script>
+<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1676,6 +1676,19 @@ window.addEventListener("pageshow", function() {
   var tribunesNextOffset = 0;
   var tribunesHasMore = false;
   var tribunesPageLoading = false;
+
+  // Pool scopé à l'onglet orientation actif (Gauche/Droite/Généraliste/Nouvelles
+  // positives/Actualités régionales) — filtré côté serveur via ?orientation=,
+  // pagination indépendante de allArticles (qui reste réservé à 'custom').
+  // Un seul tableau partagé (pas cinq) : orientationLoadedForFilter dit à qui
+  // il appartient actuellement, retagué à chaque bascule d'onglet.
+  var orientationArticles = [];
+  var orientationNextOffset = 0;
+  var orientationHasMore = false;
+  var orientationPageLoading = false;
+  var orientationLoaded = false;
+  var orientationFetchToken = 0;
+  var orientationLoadedForFilter = '';
   // rowId → articles du groupe pas encore matérialisés en cartes dans le carrousel
   var tribunesPendingBatches = {};
   var tribunesGlobalObserver = null;
@@ -2957,14 +2970,30 @@ window.addEventListener("pageshow", function() {
         syncTribunesMobileBottomViewport();
         return;
       }
-      // Filtre étroit (Personnalisé, Nouvelles positives...) dont les
-      // correspondances peuvent être loin dans les pages pas encore
-      // chargées : tant qu'il reste des pages à parcourir (tribunesHasMore),
-      // on affiche un sablier plutôt que "Aucun article" — le message
-      // définitif n'apparaît qu'une fois toutes les pages épuisées sans
-      // résultat (cf. loadMoreTribunesArticles, qui force un dernier
-      // applyFilter() dans ce cas précis). Demande du 20/07/2026.
-      if (tribunesHasMore) {
+      // Même logique pour les 5 onglets d'orientation, désormais chargés à la demande
+      // (cf. loadOrientationArticles) plutôt que refiltrés depuis un pool déjà en mémoire :
+      // le premier render() d'un onglet fraîchement sélectionné arrive avant la résolution
+      // du fetch.
+      if (currentFilter !== 'recommande' && currentFilter !== 'custom' &&
+          (!orientationLoaded || orientationLoadedForFilter !== currentFilter)) {
+        list.innerHTML = '<div class="tribunes-empty-loading">' +
+            '<span class="load-more-spinner" aria-hidden="true"></span>' +
+            '<span>Chargement des articles…</span>' +
+          '</div>';
+        syncTribunesMobileBottomViewport();
+        return;
+      }
+      // Filtre étroit (Personnalisé) dont les correspondances peuvent être loin dans les
+      // pages pas encore chargées : tant qu'il reste des pages à parcourir (tribunesHasMore,
+      // pool allArticles), on affiche un sablier plutôt que "Aucun article" — le message
+      // définitif n'apparaît qu'une fois toutes les pages épuisées sans résultat (cf.
+      // loadMoreTribunesArticles, qui force un dernier applyFilter() dans ce cas précis).
+      // Demande du 20/07/2026. Restreint à 'custom' (seul consommateur restant de ce pool
+      // depuis le passage des onglets d'orientation en filtrage serveur) : sans ce garde-fou,
+      // un résultat "recommande" vide de façon transitoire tombait ici et affichait
+      // "Chargement des liens…" indéfiniment, tribunesHasMore restant vrai pour le pool
+      // allArticles sans rapport avec l'onglet actif — bug reproduit et corrigé le 27/07/2026.
+      if (currentFilter === 'custom' && tribunesHasMore) {
         // Sentinelle silencieuse (pas de buildTribunesGlobalSentinelHtml) : son
         // bouton "Fais défiler..." ne doit pas s'afficher en double à côté du
         // message "Chargement des liens…" ci-dessus.
@@ -3065,9 +3094,12 @@ window.addEventListener("pageshow", function() {
         var pending = tribunesPendingBatches[row.id];
         if (!pending || !pending.length) {
           // Pool épuisé et plus aucune page serveur à venir : la sentinelle ne
-          // servira plus. Tant que tribunesHasMore est vrai, on la garde — les
-          // pages suivantes réalimentent le pool via appendArticlesToCarousels.
-          if (!tribunesHasMore) {
+          // servira plus. Tant que la piste de pagination active (custom → tribunesHasMore,
+          // orientation → orientationHasMore, recommande → jamais, liste fixe) est vraie, on
+          // la garde — les pages suivantes réalimentent le pool via appendArticlesToCarousels.
+          var rowHasMore = currentFilter === 'custom' ? tribunesHasMore
+            : (currentFilter === 'recommande' ? false : orientationHasMore);
+          if (!rowHasMore) {
             var done = row.querySelector('.tribunes-load-sentinel');
             if (done) done.remove();
           }
@@ -3342,10 +3374,12 @@ window.addEventListener("pageshow", function() {
   }
 
   // 'recommande' n'est pas une orientation mais une liste déjà calculée côté serveur
-  // (cf. loadRecommendedArticles/recommendedArticles) : pas de filtrage sur allArticles.
-  // 'center' (médias généralistes, ex-onglet par défaut) reste accessible via le menu
-  // déroulant #tribunes-orientation-filter, filtré comme gauche/droite/positif/régional via
-  // orientationClass. 'custom' reste à part (sélection par média, toute orientation confondue).
+  // (cf. loadRecommendedArticles/recommendedArticles). Les 5 onglets d'orientation
+  // (Gauche/Droite/Généraliste/Nouvelles positives/Actualités régionales) sont désormais
+  // filtrés côté serveur aussi (cf. loadOrientationArticles, ?orientation= sur
+  // /api/opinion-articles) : orientationArticles ne contient déjà que les articles du
+  // groupe demandé, plus besoin de refiltrer ici. 'custom' reste à part (sélection par
+  // média, toute orientation confondue, sur le pool allArticles resté mélangé).
   function articlesInScope() {
     if (currentFilter === 'recommande') return recommendedArticles;
     if (currentFilter === 'custom') {
@@ -3353,7 +3387,7 @@ window.addEventListener("pageshow", function() {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
     }
-    return allArticles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+    return orientationLoadedForFilter === currentFilter ? orientationArticles : [];
   }
 
   // Listes déroulantes (média / thématique) construites à partir des articles de
@@ -3393,7 +3427,10 @@ window.addEventListener("pageshow", function() {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
     } else {
-      filtered = articles.filter(function(article) { return orientationClass(article.orientation) === currentFilter; });
+      // left/right/center/positive/regional : articles déjà scopé par le serveur
+      // (orientationArticles en entier via computeFiltered(), ou une page fraîche via
+      // appendArticlesToCarousels) — plus de prédicat d'orientation à appliquer ici.
+      filtered = articles;
     }
     if (currentMedia) filtered = filtered.filter(function(article) { return article.source === currentMedia; });
     if (currentType) filtered = filtered.filter(function(article) { return article.type === currentType; });
@@ -3409,7 +3446,9 @@ window.addEventListener("pageshow", function() {
   }
 
   function computeFiltered() {
-    return filterArticlesList(allArticles);
+    if (currentFilter === 'recommande') return filterArticlesList(recommendedArticles);
+    if (currentFilter === 'custom') return filterArticlesList(allArticles);
+    return filterArticlesList(orientationLoadedForFilter === currentFilter ? orientationArticles : []);
   }
 
   // Tags de filtres actifs, fermables — même mécanique que la page index
@@ -3520,6 +3559,16 @@ window.addEventListener("pageshow", function() {
     orientationFilterEl.value = currentFilter;
   }
 
+  var ORIENTATION_TAB_FILTERS = ['left', 'right', 'center', 'positive', 'regional'];
+
+  // Déclenche le fetch scopé au changement d'onglet (cf. loadOrientationArticles) — no-op
+  // pour 'recommande'/'custom' (déjà gérés ailleurs) et si l'onglet est déjà chargé/en cours.
+  function ensureOrientationArticlesLoaded(filterKey) {
+    if (ORIENTATION_TAB_FILTERS.indexOf(filterKey) === -1) return;
+    if (orientationLoadedForFilter === filterKey && (orientationLoaded || orientationPageLoading)) return;
+    loadOrientationArticles(filterKey);
+  }
+
   if (switchEl) {
     switchEl.addEventListener('click', function(event) {
       var btn = event.target.closest('[data-filter]');
@@ -3531,6 +3580,7 @@ window.addEventListener("pageshow", function() {
       });
       syncExtraFilterButtons('');
       syncOrientationFilterSelect();
+      ensureOrientationArticlesLoaded(currentFilter);
       applyFilter();
     });
   }
@@ -3548,6 +3598,7 @@ window.addEventListener("pageshow", function() {
         });
       }
       syncOrientationFilterSelect();
+      ensureOrientationArticlesLoaded(nextFilter);
       applyFilter();
       // Premier passage sur "Personnalisé" sans média coché : ouvre direct le
       // picker, sinon l'onglet n'affiche qu'un message vide sans indice.
@@ -3568,6 +3619,7 @@ window.addEventListener("pageshow", function() {
       });
     }
     syncOrientationFilterSelect();
+    ensureOrientationArticlesLoaded(currentFilter);
     applyFilter();
     if (value === 'custom' && !customMediaSelection.size) openTribunesCustomMediaPicker();
   }
@@ -3662,8 +3714,12 @@ window.addEventListener("pageshow", function() {
   // charge la page suivante de 60 articles et réalimente les pools des carrousels. ──
   function buildTribunesGlobalSentinelHtml() {
     // 'recommande' est une liste fixe (pas de pagination serveur propre) : pas de
-    // scroll infini à proposer, même si tribunesHasMore reste vrai pour le pool général.
-    if (!tribunesHasMore || currentFilter === 'recommande') return '';
+    // scroll infini à proposer. Un seul élément sentinelle réutilisé par tous les onglets :
+    // 'custom' reste sur tribunesHasMore (pool allArticles), les 5 onglets d'orientation
+    // utilisent désormais leur propre piste de pagination (orientationHasMore).
+    if (currentFilter === 'recommande') return '';
+    var hasMore = currentFilter === 'custom' ? tribunesHasMore : orientationHasMore;
+    if (!hasMore) return '';
     return '<div id="tribunes-infinite-scroll-sentinel" class="load-more-container" aria-busy="false">' +
       '<button class="button button-small" type="button">Fais défiler pour charger la suite</button>' +
       '</div>';
@@ -3750,6 +3806,9 @@ window.addEventListener("pageshow", function() {
   // filtre actif), enchaîne la suivante — équivalent de la boucle de
   // loadMoreOtherDebates côté index.
   function maybeChainNextTribunesPage() {
+    // Seul 'custom' passe encore par cette piste de pagination (allArticles) — les onglets
+    // d'orientation ont la leur (cf. maybeChainNextOrientationPage), 'recommande' n'en a pas.
+    if (currentFilter !== 'custom') return;
     if (!tribunesHasMore || tribunesPageLoading) return;
     var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
     if (!sentinel) return;
@@ -3759,8 +3818,13 @@ window.addEventListener("pageshow", function() {
     }
   }
 
+  // Point d'entrée unique lié à la sentinelle globale (cf. initTribunesGlobalLoadMore) :
+  // 'custom' reste sur ce corps historique (allArticles/tribunesNextOffset/tribunesHasMore,
+  // inchangé), les 5 onglets d'orientation délèguent à loadMoreOrientationArticles.
   function loadMoreTribunesArticles() {
-    if (currentFilter === 'recommande' || tribunesPageLoading || !tribunesHasMore) return;
+    if (currentFilter === 'recommande') return;
+    if (currentFilter !== 'custom') { loadMoreOrientationArticles(); return; }
+    if (tribunesPageLoading || !tribunesHasMore) return;
     tribunesPageLoading = true;
     setTribunesGlobalSentinelLoading(true);
     fetch('/api/opinion-articles?limit=' + TRIBUNES_PAGE_SIZE + '&offset=' + tribunesNextOffset, { cache: 'no-store' })
@@ -3798,6 +3862,87 @@ window.addEventListener("pageshow", function() {
       });
   }
 
+  // Charge la première page pour un onglet d'orientation donné (left/right/center/positive/
+  // regional) — filtré côté serveur (cf. ?orientation= sur /api/opinion-articles), donc
+  // sans compétition avec le volume "régional"/"généraliste" qui noyait ces onglets quand le
+  // filtrage se faisait côté client sur allArticles. orientationFetchToken invalide les
+  // réponses en retard si l'utilisateur change d'onglet avant que le fetch ne résolve.
+  function loadOrientationArticles(filterKey) {
+    var token = ++orientationFetchToken;
+    orientationLoaded = false;
+    orientationArticles = [];
+    orientationLoadedForFilter = filterKey;
+    orientationHasMore = false;
+    orientationNextOffset = 0;
+    applyFilter(); // affiche immédiatement l'état "chargement"
+    return fetch('/api/opinion-articles?orientation=' + encodeURIComponent(filterKey) +
+        '&limit=' + TRIBUNES_INITIAL_FETCH_LIMIT + '&offset=0', { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        if (token !== orientationFetchToken) return;
+        orientationArticles = Array.isArray(data.articles) ? data.articles : [];
+        orientationNextOffset = orientationArticles.length;
+        orientationHasMore = data.hasMore === true && orientationArticles.length > 0;
+        orientationLoaded = true;
+        if (currentFilter === filterKey) applyFilter();
+      })
+      .catch(function() {
+        if (token !== orientationFetchToken) return;
+        orientationArticles = [];
+        orientationLoaded = true;
+        if (currentFilter === filterKey) applyFilter();
+      });
+  }
+
+  function loadMoreOrientationArticles() {
+    if (orientationPageLoading || !orientationHasMore) return;
+    var filterKey = currentFilter;
+    var token = orientationFetchToken;
+    orientationPageLoading = true;
+    setTribunesGlobalSentinelLoading(true);
+    fetch('/api/opinion-articles?orientation=' + encodeURIComponent(filterKey) +
+        '&limit=' + TRIBUNES_PAGE_SIZE + '&offset=' + orientationNextOffset, { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        if (token !== orientationFetchToken) return;
+        var page = Array.isArray(data.articles) ? data.articles : [];
+        orientationNextOffset += page.length;
+        orientationHasMore = data.hasMore === true && page.length > 0;
+        var knownLinks = {};
+        orientationArticles.forEach(function(a) { knownLinks[a.link || a.id] = true; });
+        var fresh = page.filter(function(a) { return !knownLinks[a.link || a.id]; });
+        orientationArticles = orientationArticles.concat(fresh);
+        populateMediaFilter();
+        appendArticlesToCarousels(fresh);
+        if (!orientationHasMore) {
+          removeTribunesGlobalSentinel();
+          if (!list.querySelector('.tribunes-theme-section')) applyFilter();
+        }
+      })
+      .catch(function() {
+        if (token !== orientationFetchToken) return;
+        orientationHasMore = false;
+        removeTribunesGlobalSentinel();
+        if (!list.querySelector('.tribunes-theme-section')) applyFilter();
+      })
+      .then(function() {
+        if (token !== orientationFetchToken) return;
+        orientationPageLoading = false;
+        setTribunesGlobalSentinelLoading(false);
+        maybeChainNextOrientationPage();
+      });
+  }
+
+  function maybeChainNextOrientationPage() {
+    if (!orientationHasMore || orientationPageLoading) return;
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (!sentinel) return;
+    var rect = sentinel.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 600 && rect.bottom > -600) {
+      setTimeout(loadMoreOrientationArticles, 60);
+    }
+  }
+
   function loadArticles() {
     if (refreshBtn) {
       refreshBtn.disabled = true;
@@ -3832,8 +3977,19 @@ window.addEventListener("pageshow", function() {
   var recommendedArticles = [];
   var recommendedLoaded = false;
 
-  function loadRecommendedArticles() {
-    if (typeof getVisitorKey !== 'function') { recommendedLoaded = true; return; }
+  function loadRecommendedArticles(attempt) {
+    attempt = attempt || 0;
+    // getVisitorKey vient de script.min.js, chargé en defer : ce bloc inline s'exécute au
+    // parsing de la page, donc avant que le script deferred ait tourné. Sans retry, la
+    // fonction abandonnait immédiatement (recommendedLoaded=true, liste vide) — l'onglet
+    // Recommandé affichait alors "Pas encore de recommandation" en permanence, pas juste au
+    // premier chargement. Plafonné à 2s (40×50ms) pour ne pas boucler indéfiniment dans le
+    // cas, très improbable, où script.min.js ne charge jamais.
+    if (typeof getVisitorKey !== 'function') {
+      if (attempt >= 40) { recommendedLoaded = true; return; }
+      setTimeout(function() { loadRecommendedArticles(attempt + 1); }, 50);
+      return;
+    }
     fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()), { cache: 'no-store' })
       .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
       .then(function(data) { recommendedArticles = Array.isArray(data.articles) ? data.articles : []; })

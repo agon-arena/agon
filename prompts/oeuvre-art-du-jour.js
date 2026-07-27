@@ -5,8 +5,9 @@
 // qu'orchestrer génération + validation + stockage).
 //
 // Jumelle de citation-du-jour dans son principe (choisie en écho à
-// l'actualité du jour, présentation volontairement simple — pas de section
-// expliquant le rapprochement avec l'actu), adaptée au domaine des arts
+// l'actualité du jour, présentation qui reste simple — pas les 4 sections
+// complètes des autres rubriques, juste un unique petit paragraphe
+// news_connection qui rend le lien explicite), adaptée au domaine des arts
 // visuels : peinture, sculpture, photographie, etc.
 //
 // Garde-fou éditorial renforcé propre à cette rubrique : contrairement à un
@@ -31,6 +32,7 @@ Si tu disposes d'une œuvre réelle et bien documentée, en écho à l'un des su
       "artwork_date": "date ou période de création (ex: \\"1889\\", \\"vers 1503-1506\\", \\"XVIIe siècle\\")",
       "artwork_description": "description de l'œuvre elle-même : ce qu'elle représente, sa technique/son style, ce qui la rend notable, 2 à 4 phrases",
       "artist_presentation": "brève présentation de l'artiste (qui il/elle est, pourquoi il/elle est connu(e)), 2 à 4 phrases",
+      "news_connection": "un petit paragraphe (2 à 3 phrases) qui rend explicite le lien avec le sujet d'actualité choisi : nomme le sujet et explique en quoi l'œuvre y fait écho — SANS analyse approfondie ni limite du rapprochement, juste de quoi comprendre pourquoi cette œuvre a été choisie aujourd'hui",
       "sources": [
         { "title": "string", "author": "string|null", "publisher": "string|null", "year": "string|null", "url": "string ou null — voir règle URL ci-dessous" }
       ]
@@ -82,8 +84,8 @@ function buildOeuvreArtDuJourPrompt(topics) {
     "Parcours les sujets ci-dessus et cherche, pour chacun, si une œuvre d'art réelle et bien connue de toi ferait écho à son thème — une résonance thématique, visuelle, morale ou historique suffit, pas besoin d'un lien littéral. Choisis un seul sujet, celui pour lequel le rapprochement est le plus naturel et le moins forcé. Si aucun sujet ne se prête à une œuvre dont tu es vraiment sûr, réponds \"insufficient\".",
     "",
     "=== Ce qu'il faut produire ===",
-    "Pour le sujet retenu : le titre exact de l'œuvre, son artiste, sa date ou période de création, une description de l'œuvre elle-même (ce qu'elle représente, sa technique/son style, ce qui la rend notable), et une présentation brève de l'artiste (qui il/elle est, pourquoi il/elle est connu(e), en 2 à 4 phrases).",
-    "Ne mentionne PAS le sujet d'actualité ni le rapprochement dans le texte produit : la description de l'œuvre et la présentation de l'artiste doivent se suffire à elles-mêmes, sans aucune référence à l'actualité du jour — seul le champ \"current_topic_id\" indique le sujet choisi.",
+    "Pour le sujet retenu : le titre exact de l'œuvre, son artiste, sa date ou période de création, une description de l'œuvre elle-même (ce qu'elle représente, sa technique/son style, ce qui la rend notable), une présentation brève de l'artiste (qui il/elle est, pourquoi il/elle est connu(e), en 2 à 4 phrases), et un petit paragraphe (\"news_connection\", 2 à 3 phrases) qui nomme le sujet d'actualité choisi et explique simplement en quoi l'œuvre y fait écho.",
+    "\"news_connection\" doit rester court et clair, pas une analyse : une ou deux phrases suffisent souvent à dire quel est le sujet et pourquoi l'œuvre résonne avec lui. Ne force jamais ce paragraphe à sembler plus pertinent que le rapprochement ne l'est réellement — reste honnête sur le caractère plus ou moins direct du lien.",
     "",
     "=== RÈGLES ÉDITORIALES OBLIGATOIRES ===",
     "- N'invente jamais un titre, un artiste, une date ou un détail de l'œuvre. Si tu n'es pas certain d'un détail précis (date exacte, lieu de conservation), reste général plutôt que d'inventer un détail.",

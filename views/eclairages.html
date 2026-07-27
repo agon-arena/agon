@@ -54,12 +54,6 @@
       .page-eclairages .topbar-inner {
         padding: 0;
       }
-      /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
-         du bas du contenu une fois un bloc déplié (concept/citation/etc.),
-         plutôt que de s'arrêter juste dessus. */
-      .page-eclairages.in-iframe .ecl-page-shell {
-        margin-bottom: 160px;
-      }
     }
     .ecl-page-shell {
       width: min(100% - 32px, 900px);
@@ -70,6 +64,19 @@
          mou pour scroller légèrement au-delà du bas du contenu plutôt que
          de s'arrêter pile dessus. */
       margin: 20px auto 60px;
+    }
+    /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
+       spécificité) : un margin-bottom placé avant un margin raccourci
+       équivalent serait écrasé par lui, peu importe le media query — c'était
+       le cas jusqu'ici, ce qui annulait silencieusement ce correctif mobile. */
+    @media (max-width: 768px) {
+      /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
+         du bas du contenu une fois un bloc déplié (concept/citation/etc.),
+         plutôt que de s'arrêter juste dessus. Relevé 160→220px le 27/07/2026
+         (demande : encore un peu plus de mou en mobile). */
+      .page-eclairages.in-iframe .ecl-page-shell {
+        margin-bottom: 220px;
+      }
     }
     @media (min-width: 769px) {
       .ecl-page-shell {
@@ -809,7 +816,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-citationdujour" defer></script>
+<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -2273,6 +2280,10 @@
       imageHtml +
       '<p class="cd-quote-origin">' + escapeHtml(citation.quote_origin) + '</p>' +
       '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-newspaper"></i> Le lien avec l\'actualité</h2>' +
+      '<p>' + escapeHtml(citation.news_connection) + '</p>' +
+      '</div>' +
+      '<div class="cd-section">' +
       '<h2><i class="fa-solid fa-user"></i> L\'auteur</h2>' +
       '<p>' + escapeHtml(citation.author_presentation) + '</p>' +
       '</div>' +
@@ -2566,6 +2577,10 @@
       '<div class="oa-section">' +
       '<h2><i class="fa-solid fa-image"></i> L\'œuvre</h2>' +
       '<p>' + escapeHtml(oeuvre.artwork_description) + '</p>' +
+      '</div>' +
+      '<div class="oa-section">' +
+      '<h2><i class="fa-solid fa-newspaper"></i> Le lien avec l\'actualité</h2>' +
+      '<p>' + escapeHtml(oeuvre.news_connection) + '</p>' +
       '</div>' +
       '<div class="oa-section">' +
       '<h2><i class="fa-solid fa-user"></i> L\'artiste</h2>' +

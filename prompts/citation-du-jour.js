@@ -4,12 +4,12 @@
 // être relu/ajusté sans toucher à lib/citation-du-jour.js (qui ne fait
 // qu'orchestrer génération + validation + stockage).
 //
-// Rubrique choisie en écho à l'actualité du jour (comme les trois autres
-// rubriques Éclairages), mais à la présentation volontairement simple : la
-// citation et son sujet d'actualité ne sont jamais mis en regard l'un de
-// l'autre dans le texte produit (pas de "ce que dit cette citation"/"ce qui
-// fait écho"/etc.) — le lien avec l'actualité ne sert qu'à choisir QUELLE
-// citation retenir, jamais à la présenter comme un rapprochement.
+// Rubrique choisie en écho à l'actualité du jour (comme les autres
+// rubriques Éclairages), avec une présentation qui reste volontairement
+// simple : pas des 4 sections complètes des autres rubriques ("ce que dit
+// cette citation"/"ce qui fait écho"/"la limite du rapprochement"/
+// "conclusion"), juste un unique petit paragraphe (news_connection) qui
+// rend le lien avec l'actualité explicite pour le lecteur.
 //
 // Garde-fou éditorial renforcé propre aux citations : contrairement à un
 // concept ou un mécanisme (qui peut être reformulé sans risque), une
@@ -32,6 +32,7 @@ Si tu disposes d'une citation authentique dont tu es sûr, en écho à l'un des 
       "quote_author": "nom de l'auteur de la citation",
       "quote_origin": "contexte précis mais court de la citation : ouvrage, discours, interview, année si tu la connais",
       "author_presentation": "brève présentation de l'auteur et de son œuvre (qui il/elle est, pourquoi il/elle est connu(e)), 2 à 4 phrases",
+      "news_connection": "un petit paragraphe (2 à 3 phrases) qui rend explicite le lien avec le sujet d'actualité choisi : nomme le sujet et explique en quoi la citation y fait écho — SANS analyse approfondie ni limite du rapprochement, juste de quoi comprendre pourquoi cette citation a été choisie aujourd'hui",
       "sources": [
         { "title": "string", "author": "string|null", "publisher": "string|null", "year": "string|null", "url": "string ou null — voir règle URL ci-dessous" }
       ]
@@ -82,8 +83,8 @@ function buildCitationDuJourPrompt(topics) {
     "Parcours les sujets ci-dessus et cherche, pour chacun, si une citation authentique et bien connue de toi ferait écho à son thème — une résonance thématique, morale ou historique suffit, pas besoin d'un lien littéral. Choisis un seul sujet, celui pour lequel le rapprochement est le plus naturel et le moins forcé. Si aucun sujet ne se prête à une citation dont tu es vraiment sûr, réponds \"insufficient\".",
     "",
     "=== Ce qu'il faut produire ===",
-    "Pour le sujet retenu : une seule citation, avec le texte exact, son auteur, l'origine précise (ouvrage, discours, année si tu la connais), et une présentation brève de l'auteur (qui il/elle est, pourquoi il/elle est connu(e), en 2 à 4 phrases).",
-    "Ne mentionne PAS le sujet d'actualité ni le rapprochement dans le texte produit : la citation et la présentation de l'auteur doivent se suffire à elles-mêmes, sans aucune référence à l'actualité du jour — seul le champ \"current_topic_id\" indique le sujet choisi, il ne doit apparaître nulle part ailleurs dans le texte.",
+    "Pour le sujet retenu : une seule citation, avec le texte exact, son auteur, l'origine précise (ouvrage, discours, année si tu la connais), une présentation brève de l'auteur (qui il/elle est, pourquoi il/elle est connu(e), en 2 à 4 phrases), et un petit paragraphe (\"news_connection\", 2 à 3 phrases) qui nomme le sujet d'actualité choisi et explique simplement en quoi la citation y fait écho.",
+    "\"news_connection\" doit rester court et clair, pas une analyse : une ou deux phrases suffisent souvent à dire quel est le sujet et pourquoi la citation résonne avec lui. Ne force jamais ce paragraphe à sembler plus pertinent que le rapprochement ne l'est réellement — reste honnête sur le caractère plus ou moins direct du lien.",
     "",
     "=== RÈGLES ÉDITORIALES OBLIGATOIRES ===",
     "- N'invente jamais un mot de la citation, jamais l'auteur, jamais le contexte. Si tu n'es pas certain d'un détail précis (date exacte, ouvrage exact), reste général plutôt que d'inventer un détail.",

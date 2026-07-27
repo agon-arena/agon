@@ -5927,6 +5927,14 @@ function ensureDebateIframeModal() {
       if (!isCurrentDebateIframeModalNavigation(readyFrame, readyHref, readyPathname)) return;
       window.__agonIframeCurrentPathname = readyPathname;
       syncDebateIframeModalPageClass(readyPathname);
+      // Contrairement à agon:iframe-page-context, ce message ne restaurait pas la visibilité
+      // du bouton fermeture : s'il avait été masqué juste avant (ex. agon:notification-back-
+      // transition-start) puis que la page embarquée suivante répondait par ce message plutôt
+      // que par agon:notification-target-ready (seul autre chemin qui le restaure), le bouton
+      // restait invisible pour le reste de la session iframe — reproductible sur qcm-du-jour
+      // et toute autre page embarquée utilisant ce protocole (about, contact, notifications,
+      // autres-sources, les pages "éclairages"...).
+      setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(readyPathname));
 
       let shouldKeepLoadingUntilNotificationTarget = false;
 

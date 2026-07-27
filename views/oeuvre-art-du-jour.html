@@ -320,7 +320,7 @@
 <main class="oa-page-shell">
   <section class="oa-panel" id="oa-panel" tabindex="-1" aria-live="polite">
     <h1><i class="fa-solid fa-palette"></i> <span id="oa-title-text">Œuvre d'art du jour</span></h1>
-    <p class="oa-subtitle">Une œuvre d'art réelle, avec une brève présentation de l'œuvre et de son artiste.</p>
+    <p class="oa-subtitle">Une œuvre d'art réelle en écho à l'actualité du jour, avec une brève présentation de l'œuvre et de son artiste.</p>
 
     <div class="oa-history">
       <button type="button" class="oa-history-toggle" id="oa-history-toggle" aria-expanded="false" aria-controls="oa-history-panel">
@@ -343,7 +343,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-citationdujour" defer></script>
+<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
 <script>
 (function () {
   var body = document.getElementById('oa-body');
@@ -441,6 +441,10 @@
       '<div class="oa-section">' +
       '<h2><i class="fa-solid fa-image"></i> L\'œuvre</h2>' +
       '<p>' + escapeHtml(oeuvre.artwork_description) + '</p>' +
+      '</div>' +
+      '<div class="oa-section">' +
+      '<h2><i class="fa-solid fa-newspaper"></i> Le lien avec l\'actualité</h2>' +
+      '<p>' + escapeHtml(oeuvre.news_connection) + '</p>' +
       '</div>' +
       '<div class="oa-section">' +
       '<h2><i class="fa-solid fa-user"></i> L\'artiste</h2>' +

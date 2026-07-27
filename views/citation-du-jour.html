@@ -328,7 +328,7 @@
 <main class="cd-page-shell">
   <section class="cd-panel" id="cd-panel" tabindex="-1" aria-live="polite">
     <h1><i class="fa-solid fa-quote-left"></i> <span id="cd-title-text">Citation du jour</span></h1>
-    <p class="cd-subtitle">Une citation authentique, avec une brève présentation de son auteur.</p>
+    <p class="cd-subtitle">Une citation authentique en écho à l'actualité du jour, avec une brève présentation de son auteur.</p>
 
     <div class="cd-history">
       <button type="button" class="cd-history-toggle" id="cd-history-toggle" aria-expanded="false" aria-controls="cd-history-panel">
@@ -351,7 +351,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-citationdujour" defer></script>
+<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
 <script>
 (function () {
   var body = document.getElementById('cd-body');
@@ -422,10 +422,10 @@
 
     // Portrait de l'auteur de la citation (API Wikipedia) — jamais générée
     // ni devinée par l'IA, cf. lib/citation-du-jour.js. Pas de repli
-    // "presse" ici (rubrique sans sujet d'actualité associé) : absente si
-    // aucun portrait pertinent n'est trouvé. Toujours créditée
-    // (quote_author_image_credit, jamais une image affichée sans indiquer sa
-    // provenance).
+    // "presse" ici (l'image représente l'auteur cité, jamais le sujet
+    // d'actualité) : absente si aucun portrait pertinent n'est trouvé.
+    // Toujours créditée (quote_author_image_credit, jamais une image
+    // affichée sans indiquer sa provenance).
     var imageHtml = '';
     if (citation.quote_author_image_url) {
       var captionText = "Image : " + (citation.quote_author_image_credit || "Wikipedia");
@@ -451,6 +451,10 @@
       '</blockquote>' +
       imageHtml +
       '<p class="cd-quote-origin">' + escapeHtml(citation.quote_origin) + '</p>' +
+      '<div class="cd-section">' +
+      '<h2><i class="fa-solid fa-newspaper"></i> Le lien avec l\'actualité</h2>' +
+      '<p>' + escapeHtml(citation.news_connection) + '</p>' +
+      '</div>' +
       '<div class="cd-section">' +
       '<h2><i class="fa-solid fa-user"></i> L\'auteur</h2>' +
       '<p>' + escapeHtml(citation.author_presentation) + '</p>' +

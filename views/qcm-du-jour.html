@@ -67,6 +67,16 @@
          de s'arrêter pile dessus. */
       margin: 20px auto 60px;
     }
+    /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
+       spécificité) : un margin-bottom placé avant un margin raccourci
+       équivalent serait écrasé par lui, peu importe le media query. */
+    @media (max-width: 768px) {
+      /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
+         du bas du contenu (cf. même traitement sur /eclairages). */
+      .page-qcm-du-jour.in-iframe .qcm-page-shell {
+        margin-bottom: 160px;
+      }
+    }
     @media (min-width: 769px) {
       .qcm-page-shell {
         width: min(100% - 64px, 1200px);
@@ -380,7 +390,7 @@
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
     <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">QCM du jour</span></h1>
-    <p class="qcm-subtitle">Teste-toi sur l'actualité du jour, en 10 questions.</p>
+    <p class="qcm-subtitle" id="qcm-subtitle-text">Teste-toi sur l'actualité du jour, en 10 questions.</p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
     <div id="qcm-body">
@@ -388,11 +398,12 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260724-citationdujour" defer></script>
+<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
   var titleText = document.getElementById('qcm-title-text');
+  var subtitleText = document.getElementById('qcm-subtitle-text');
   var categorySwitcher = document.getElementById('qcm-category-switcher');
   var slotSwitcher = document.getElementById('qcm-slot-switcher');
   var voterKey = null;
@@ -403,18 +414,29 @@
   var currentCategory = null;
   var slotsStatus = null;
 
-  // "QCM actu" (matin/soir, actualité du jour) vs "QCM culture générale" (Ce
-  // jour dans l'Histoire / Éclairages) : deux onglets de haut niveau, le
-  // sélecteur de créneaux existant (#qcm-slot-switcher) ne montrant plus
-  // que les créneaux de la catégorie active, comme sous-choix.
+  // Trois onglets de haut niveau : "QCM actu" (matin/soir, actualité du
+  // jour), "QCM culture générale" (un seul créneau combiné culture_generale,
+  // cf. server.js fetchCultureGeneraleQuizCandidates) et "QCM révision"
+  // (d'anciennes questions de culture générale piochées au hasard, cf.
+  // server.js generateResampledDailyQuiz — ne compte pas pour le score
+  // Gnosis, cf. QCM_SUBTITLE_BY_CATEGORY et renderFinalScore ci-dessous).
+  // Le sélecteur de créneaux existant (#qcm-slot-switcher) ne montre plus
+  // que les créneaux de la catégorie active, comme sous-choix — reste
+  // masqué pour "histoire"/"revision" tant qu'elles ne contiennent qu'un
+  // seul créneau chacune.
   var CATEGORY_BY_SLOT = {
     morning: 'actu',
     evening: 'actu',
-    ce_jour_histoire: 'histoire',
-    eclairages: 'histoire'
+    culture_generale: 'histoire',
+    revision: 'revision'
   };
-  var CATEGORY_ORDER = ['actu', 'histoire'];
-  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM Culture Générale' };
+  var CATEGORY_ORDER = ['actu', 'histoire', 'revision'];
+  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM Culture Générale', revision: 'QCM Révision' };
+  var QCM_SUBTITLE_BY_CATEGORY = {
+    actu: "Teste-toi sur l'actualité du jour, en 10 questions.",
+    histoire: "Teste-toi sur l'histoire et les éclairages du jour.",
+    revision: "D'anciennes questions de culture générale, piochées au hasard — ne compte pas pour ton score Gnosis."
+  };
 
   function availableSlotKeysInCategory(category) {
     return Object.keys(slotsStatus.slots).filter(function (k) {
@@ -727,13 +749,20 @@
       var a = answeredByQuestionId[q.id];
       if (a && a.correct) correct += 1;
     });
+    // Le QCM Révision recycle d'anciennes questions déjà posées : pas un
+    // test de connaissances fraîchement acquises, donc explicitement exclu
+    // du score Gnosis côté serveur (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS) —
+    // on le redit ici plutôt que de laisser croire au message habituel.
+    var scoreHint = currentCategory === 'revision'
+      ? 'Ce QCM Révision ne compte pas pour ton score Gnosis — c\'est juste l\'occasion de retester d\'anciennes questions.'
+      : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).';
     body.innerHTML =
       '<div class="qcm-final-score">' +
       '<i class="fa-solid fa-trophy"></i>' +
       '<div class="qcm-final-score-value">' + correct + ' / ' + total + '</div>' +
       '<div class="qcm-final-score-label">bonnes réponses aujourd’hui</div>' +
       '</div>' +
-      '<p class="qcm-final-score-hint">Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).</p>' +
+      '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible qcm-btn-secondary" id="qcm-restart-btn">Recommencer</button>' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-done-btn">Terminé</button>' +
@@ -787,6 +816,7 @@
     questions = [];
     answeredByQuestionId = {};
     titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'QCM du jour';
+    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || QCM_SUBTITLE_BY_CATEGORY.actu;
     renderCategorySwitcher();
     renderSlotSwitcher();
     renderMessage('Chargement du QCM…');

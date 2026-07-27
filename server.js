@@ -4416,9 +4416,18 @@ async function computeUserScores() {
   // même principe que Logos (une moyenne/ratio, pas un total qui grossit
   // avec le volume) — palier propre basé sur le nombre de questions
   // répondues plutôt que sur le nombre d'idées postées.
-  const { data: allQuizAnswers, error: quizAnswersError } = await fetchAllSupabaseRows(() =>
+  const { data: rawQuizAnswers, error: quizAnswersError } = await fetchAllSupabaseRows(() =>
     supabase.from("daily_quiz_answers").select("voter_key, quiz_date, question_id, option_index"));
   if (quizAnswersError) throw quizAnswersError;
+
+  // daily_quiz_answers n'a pas de colonne "slot" dédiée, mais question_id
+  // est toujours préfixé par le slot d'origine (ex. "revision-q3", cf.
+  // generateResampledDailyQuiz) : suffit à exclure le QCM Révision du score
+  // Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS) sans migration de schéma.
+  const gnosisExcludedQuestionPrefixes = [...DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS].map((slot) => `${slot}-`);
+  const allQuizAnswers = (rawQuizAnswers || []).filter((a) =>
+    !gnosisExcludedQuestionPrefixes.some((prefix) => String(a.question_id || "").startsWith(prefix))
+  );
 
   const quizDates = [...new Set((allQuizAnswers || []).map((a) => a.quiz_date).filter(Boolean))];
   const correctIndexByDateAndQuestion = new Map();
@@ -9259,9 +9268,21 @@ async function getOpinionArticlesSelection() {
 // mémoire, chaque requête n'en découpe qu'une tranche. Sans limit, réponse
 // complète (compat ascendante) ; total/hasMore permettent au front d'alimenter
 // sa sentinelle de scroll infini.
+const OPINION_ARTICLES_VALID_ORIENTATIONS = ["left", "right", "center", "positive", "regional"];
+
 app.get("/api/opinion-articles", async (req, res) => {
   try {
-    const articles = await getOpinionArticlesSelection();
+    let articles = await getOpinionArticlesSelection();
+    // Filtrage par orientation avant pagination (onglets Gauche/Droite/Généraliste/Nouvelles
+    // positives/Actualités régionales, cf. autres-sources.html) : sans ça, ces onglets
+    // filtraient côté client un pool mélangé trié par date globale, où "gauche" (~12% du
+    // volume) était noyé sous le "régional"/"généraliste" à fort débit — seules 5 cartes
+    // gauche apparaissaient dans les 120 premières lignes du pool. getOpinionOrientationGroup
+    // est le même classifieur déjà utilisé par /recommended et le bucketing interne.
+    const orientationQuery = String(req.query.orientation || "").trim().toLowerCase();
+    if (OPINION_ARTICLES_VALID_ORIENTATIONS.includes(orientationQuery)) {
+      articles = articles.filter((a) => getOpinionOrientationGroup(a.orientation) === orientationQuery);
+    }
     const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
     if (!limit) {
@@ -11264,22 +11285,36 @@ const DAILY_QUIZ_NARRATIVE_MODEL = process.env.OPENAI_DAILY_QUIZ_NARRATIVE_MODEL
 // dedupeParalleleHistoriqueTopicsByCloudLabel (cloud_label OU question).
 const DAILY_QUIZ_TOPIC_LOOKBACK_DAYS = 6;
 
-// Deux QCM par jour, un par vague de publication (~8h et ~16h heure de Paris) :
-// triggerHour = heure à partir de laquelle le scheduler tente la génération
-// (marge d'1h après la vague correspondante pour que les arènes soient là).
-// ce_jour_histoire : mêmes données que le jour, pas de génération à
-// attendre, déclenché à la même heure que le QCM du matin. eclairages
-// dépend du contenu généré par les 3 services de la page /eclairages
-// (parallèle historique, pensée philosophique, mécanisme sociologique,
-// tous déclenchés à 9h) : décalé à 10h pour leur laisser le temps d'être
-// publiés avant qu'on essaie de les quizzer.
+// QCM actu (matin/soir), un par vague de publication (~8h et ~16h heure de
+// Paris) : triggerHour = heure à partir de laquelle le scheduler tente la
+// génération (marge d'1h après la vague correspondante pour que les arènes
+// soient là). culture_generale : les événements "Ce jour dans l'Histoire"
+// sont disponibles dès le début de journée (pas de génération à attendre),
+// déclenché à la même heure que le QCM du matin — les éclairages, eux,
+// dépendent du contenu généré par les 6 services de la page /eclairages et
+// peuvent n'être pris en compte qu'à une tentative ultérieure du scheduler
+// (toutes les 20 min) si l'actu du jour n'est pas encore publiée.
 const DAILY_QUIZ_SLOTS = {
   morning: { label: "QCM du matin", triggerHour: 9 },
   evening: { label: "QCM du soir", triggerHour: 17 },
-  ce_jour_histoire: { label: "QCM Ce jour dans l'Histoire", triggerHour: 9 },
-  eclairages: { label: "QCM Éclairages", triggerHour: 10 }
+  // Un seul créneau combinant "Ce jour dans l'Histoire" et les éclairages
+  // (cf. fetchCultureGeneraleQuizCandidates) plutôt que deux créneaux
+  // séparés : les événements historiques sont disponibles dès le début de
+  // journée, ce qui permet au QCM de se générer même les jours où l'actu du
+  // jour (et donc les éclairages) n'est pas encore publiée.
+  culture_generale: { label: "QCM Culture Générale", triggerHour: 9 },
+  // Pioche aléatoire dans les anciens QCM Culture Générale (aucun appel IA,
+  // cf. DAILY_QUIZ_RESAMPLE_SLOTS) : prêt dès qu'il existe assez d'anciennes
+  // questions, pas besoin d'attendre une vague de publication — triggerHour
+  // à 0 plutôt que 9.
+  revision: { label: "QCM Révision", triggerHour: 0 }
 };
 const DAILY_QUIZ_SLOT_KEYS = Object.keys(DAILY_QUIZ_SLOTS);
+// Score Gnosis (justesse au QCM) : le QCM Révision recycle des questions
+// déjà posées, ce n'est pas un test de connaissances fraîchement acquises
+// sur l'actualité du jour — exclu explicitement, cf. calcul plus bas et le
+// message dédié côté frontend (qcm-du-jour.html).
+const DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS = new Set(["revision"]);
 
 function isValidDailyQuizSlot(slot) {
   return Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slot);
@@ -11350,11 +11385,11 @@ function dailyQuizTopicKeysForDebate(row) {
 async function fetchRecentDailyQuizTopicKeys(daysBack) {
   const todayKey = parisDateKey();
   const cutoffKey = parisDateKey(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
-  // Scopé aux créneaux actu (morning/evening) : les créneaux narratifs
-  // (ce_jour_histoire, eclairages) stockent des ids d'événements/éclairages
-  // dans source_debate_ids, pas des ids d'arènes — les mélanger
-  // ferait échouer le .in("id", …) plus bas contre la colonne debates.id
-  // (type entier) dès qu'un de ces ids non numériques s'y glisserait.
+  // Scopé aux créneaux actu (morning/evening) : le créneau narratif
+  // (culture_generale) stocke des ids d'événements/éclairages dans
+  // source_debate_ids, pas des ids d'arènes — les mélanger ferait échouer
+  // le .in("id", …) plus bas contre la colonne debates.id (type entier) dès
+  // qu'un de ces ids non numériques s'y glisserait.
   const { data: recentQuizRows, error: quizError } = await supabase
     .from("daily_quiz")
     .select("source_debate_ids")
@@ -11582,38 +11617,21 @@ async function fetchCeJourHistoireQuizCandidates() {
   return events.filter((e) => e && e.review_status === "reviewed" && String(e.summary_long || "").trim());
 }
 
-function buildCeJourHistoireQuizPrompt(events) {
-  const list = events
-    .map((e) => `- id:${e.id} | ${e.year_display || e.year} | ${String(e.title || "").trim()}\n  ${String(e.summary_long || "").trim().slice(0, 900).replace(/\s+/g, " ")}`)
-    .join("\n");
-  return [
-    `Tu écris un QCM d'histoire en français à partir des événements "Ce jour dans l'Histoire" ci-dessous, jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par événement (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
-    "Règles strictes :",
-    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
-    "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique (ex. \"l'affaire X s'est déroulée dans tel climat\" / \"l'affaire Y s'est déroulée dans tel climat\") : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
-    "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source (ex. écris \"le caractère raciste des faits\" plutôt que \"le racisme aggravant\").",
-    "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous. Pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
-    "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
-    "",
-    ...buildQuestionFormatsPromptBlock("sourceId"),
-    "",
-    "Événements disponibles :",
-    list
-  ].join("\n");
-}
-
-// "QCM Éclairages" pioche dans les 3 rubriques de la page /eclairages
-// (parallèle historique, pensée philosophique, mécanisme sociologique) —
-// un seul QCM combiné plutôt qu'un par rubrique, pour matcher la page qui
-// les réunit déjà. Réutilise generateIfNeeded de chaque service plutôt que
-// de relire les tables directement : idempotent (renvoie le contenu déjà
-// publié s'il existe, ne déclenche une génération que s'il manque), même
-// comportement que /api/<rubrique>/today. Chaque service est interrogé
-// indépendamment (une rubrique en échec n'empêche pas les 2 autres de
-// contribuer), puis les éléments sont taggés par `type` pour un formatage
-// adapté à leurs champs propres dans le prompt.
+// Pioche dans les 6 rubriques de la page /eclairages (parallèle historique,
+// pensée philosophique, mécanisme sociologique, concept du jour, citation
+// du jour, œuvre d'art du jour) — un seul pool combiné plutôt qu'un par
+// rubrique, pour matcher la page qui les réunit déjà. Réutilise
+// generateIfNeeded de chaque service plutôt que de relire les tables
+// directement : idempotent (renvoie le contenu déjà publié s'il existe, ne
+// déclenche une génération que s'il manque), même comportement que
+// /api/<rubrique>/today. Chaque service est interrogé indépendamment (une
+// rubrique en échec n'empêche pas les autres de contribuer), puis les
+// éléments sont taggés par `type` pour un formatage adapté à leurs champs
+// propres dans le prompt (cf. formatEclairagesItemForPrompt). Utilisé à la
+// fois seul (autres appelants éventuels) et combiné avec "Ce jour dans
+// l'Histoire" par fetchCultureGeneraleQuizCandidates ci-dessous.
 async function fetchEclairagesQuizCandidates() {
-  const [parallels, pensees, mecanismes, concepts, citations] = await Promise.all([
+  const [parallels, pensees, mecanismes, concepts, citations, oeuvres] = await Promise.all([
     (async () => {
       try {
         const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
@@ -11658,17 +11676,24 @@ async function fetchEclairagesQuizCandidates() {
       try {
         const result = await citationDuJourService.generateIfNeeded(new Date());
         const items = result?.status === "published" ? result.content?.citations : null;
-        // Pas de current_topic_id ici (citation simplifiée, sans lien avec
-        // l'actualité) : un id constant suffit, il n'y a jamais qu'une seule
-        // citation candidate par jour (MAX_CITATIONS_PER_DAY = 1).
-        return Array.isArray(items) ? items.map((item) => ({ ...item, type: "citation", id: "citation" })) : [];
+        return Array.isArray(items) ? items.map((item) => ({ type: "citation", ...item })) : [];
       } catch (error) {
         console.error("[daily-quiz:eclairages] lecture citation du jour :", error.message);
         return [];
       }
+    })(),
+    (async () => {
+      try {
+        const result = await oeuvreArtDuJourService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.oeuvres : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "oeuvre", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture œuvre d'art du jour :", error.message);
+        return [];
+      }
     })()
   ]);
-  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations];
+  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations, ...oeuvres];
 }
 
 // Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
@@ -11690,20 +11715,47 @@ function formatEclairagesItemForPrompt(item) {
   if (item.type === "concept") {
     return `- id:${item.current_topic_id} | Type : concept du jour | Actualité : ${common} | Concept : ${String(item.concept_name || "").trim()} (${String(item.concept_originator || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
-  // Citation du jour : rubrique simplifiée, sans lien avec l'actualité du
-  // jour (ni current_topic_*, ni mécanisme commun/différence essentielle) —
-  // juste la citation et une présentation de son auteur.
-  return `- id:${item.id} | Type : citation du jour | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 300).replace(/\s+/g, " ")}\n  Présentation de l'auteur : ${String(item.author_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
+  if (item.type === "oeuvre") {
+    return `- id:${item.current_topic_id} | Type : œuvre d'art du jour | Actualité : ${common} | Œuvre : ${String(item.artwork_title || "").trim()} (${String(item.artist_name || "").trim()}, ${String(item.artwork_date || "").trim()})\n  Description de l'œuvre : ${String(item.artwork_description || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Présentation de l'artiste : ${String(item.artist_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
+  }
+  // Citation du jour : présentation simplifiée à l'affichage (pas de
+  // shared_mechanism/essential_difference montrés au lecteur), mais choisie
+  // en écho à un sujet d'actualité comme les autres — current_topic_id est
+  // bien présent (cf. lib/citation-du-jour.js).
+  return `- id:${item.current_topic_id} | Type : citation du jour | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 300).replace(/\s+/g, " ")}\n  Présentation de l'auteur : ${String(item.author_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
 }
 
-function buildEclairagesQuizPrompt(items) {
-  const list = items.map(formatEclairagesItemForPrompt).join("\n");
+// Combine "Ce jour dans l'Histoire" et les 6 rubriques Éclairages en un
+// seul pool de candidats pour un unique QCM "Culture Générale" — demandé
+// explicitement pour que ce QCM puisse se générer dès que l'UNE des deux
+// sources a assez de matière (les événements historiques sont disponibles
+// dès le début de journée, les éclairages dépendent de la publication de
+// l'actualité du jour par le bot de veille, souvent plus tardive).
+async function fetchCultureGeneraleQuizCandidates() {
+  const [historicalEvents, eclairagesItems] = await Promise.all([
+    fetchCeJourHistoireQuizCandidates(),
+    fetchEclairagesQuizCandidates()
+  ]);
+  const taggedHistoricalEvents = historicalEvents.map((e) => ({ type: "histoire", ...e }));
+  return [...taggedHistoricalEvents, ...eclairagesItems];
+}
+
+function formatCultureGeneraleItemForPrompt(item) {
+  if (item.type === "histoire") {
+    return `- id:${item.id} | Type : Ce jour dans l'Histoire | ${item.year_display || item.year} | ${String(item.title || "").trim()}\n  ${String(item.summary_long || "").trim().slice(0, 900).replace(/\s+/g, " ")}`;
+  }
+  return formatEclairagesItemForPrompt(item);
+}
+
+function buildCultureGeneraleQuizPrompt(items) {
+  const list = items.map(formatCultureGeneraleItemForPrompt).join("\n");
   return [
-    `Tu écris un QCM en français à partir des éclairages ci-dessous (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal ou une citation d'auteur), jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
+    `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur ou une œuvre d'art) — jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
-    "- Les questions peuvent porter sur l'événement/concept/citation lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
+    "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
+    "- Pour un élément d'éclairage, les questions peuvent porter sur l'événement/concept/citation/œuvre lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
     "- Quand une question porte sur la différence essentielle ou la limite du rapprochement, reformule fidèlement ce que dit le texte fourni — jamais une reformulation approximative ou une comparaison que le texte ne fait pas explicitement.",
     "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
     "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
@@ -11712,14 +11764,13 @@ function buildEclairagesQuizPrompt(items) {
     "",
     ...buildQuestionFormatsPromptBlock("sourceId"),
     "",
-    "Éclairages disponibles :",
+    "Éléments disponibles :",
     list
   ].join("\n");
 }
 
 const DAILY_QUIZ_NARRATIVE_SLOTS = {
-  ce_jour_histoire: { fetchCandidates: fetchCeJourHistoireQuizCandidates, buildPrompt: buildCeJourHistoireQuizPrompt },
-  eclairages: { fetchCandidates: fetchEclairagesQuizCandidates, buildPrompt: buildEclairagesQuizPrompt }
+  culture_generale: { fetchCandidates: fetchCultureGeneraleQuizCandidates, buildPrompt: buildCultureGeneraleQuizPrompt }
 };
 
 // Validation adaptée aux QCM narratifs : contrairement à
@@ -11790,9 +11841,59 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
 }
 
+// ── QCM "Révision" ──────────────────────────────────────────────────────
+// Troisième type de QCM, à côté de "actu" et "culture générale" : pas de
+// génération IA, juste un tirage aléatoire de questions déjà posées dans
+// d'anciens QCM Culture Générale (slot culture_generale) — permet de
+// réviser sans jamais interroger OpenAI. Explicitement exclu du score
+// Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS plus bas et le message dédié
+// côté frontend, qcm-du-jour.html) : ce ne sont pas des connaissances
+// fraîchement acquises sur l'actualité du jour, la logique du score ne
+// s'applique pas.
+const DAILY_QUIZ_RESAMPLE_SLOTS = {
+  revision: { sourceSlot: "culture_generale", count: DAILY_QUIZ_QUESTION_COUNT_NARRATIVE, lookbackDays: 90 }
+};
+
+function shuffledCopy(arr) {
+  const copy = arr.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+async function generateResampledDailyQuiz(slotKey, todayKey, config) {
+  const cutoffKey = parisDateKey(new Date(Date.now() - config.lookbackDays * 24 * 60 * 60 * 1000));
+  const { data, error } = await supabase
+    .from("daily_quiz")
+    .select("questions")
+    .eq("slot", config.sourceSlot)
+    .gte("quiz_date", cutoffKey)
+    .lt("quiz_date", todayKey);
+  if (error) { console.error(`[daily-quiz:${slotKey}] lecture du pool de questions :`, error.message); return; }
+
+  const pool = (data || []).flatMap((row) => (Array.isArray(row.questions) ? row.questions : []));
+  if (pool.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+    console.warn(`[daily-quiz:${slotKey}] pool encore trop petit (${pool.length} question(s) disponible(s)), génération reportée.`);
+    return;
+  }
+
+  const picked = shuffledCopy(pool).slice(0, config.count);
+  const questions = picked.map((q, index) => ({ ...q, id: `${slotKey}-q${index + 1}` }));
+
+  const { error: insertError } = await supabase.from("daily_quiz").insert({
+    quiz_date: todayKey,
+    slot: slotKey,
+    questions,
+    source_debate_ids: questions.map((q) => q.sourceDebateId)
+  });
+  if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
+  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} question(s) piochée(s) parmi ${pool.length}).`);
+}
+
 async function generateDailyQuizIfNeeded(slotKey) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !isValidDailyQuizSlot(slotKey)) return;
+  if (!isValidDailyQuizSlot(slotKey)) return;
 
   const todayKey = parisDateKey();
   const { data: existing, error: existingError } = await supabase
@@ -11803,6 +11904,19 @@ async function generateDailyQuizIfNeeded(slotKey) {
     .maybeSingle();
   if (existingError) { console.error(`[daily-quiz:${slotKey}] vérification existant :`, existingError.message); return; }
   if (existing) return;
+
+  // Le QCM Révision ne fait aucun appel IA (juste un tirage dans les
+  // anciens QCM Culture Générale, cf. DAILY_QUIZ_RESAMPLE_SLOTS) : traité en
+  // premier, avant le garde-fou "clé API requise" ci-dessous qui ne
+  // concerne que les deux autres types de QCM.
+  const resampleConfig = DAILY_QUIZ_RESAMPLE_SLOTS[slotKey];
+  if (resampleConfig) {
+    await generateResampledDailyQuiz(slotKey, todayKey, resampleConfig);
+    return;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
 
   const narrativeConfig = DAILY_QUIZ_NARRATIVE_SLOTS[slotKey];
   if (narrativeConfig) {
@@ -12576,9 +12690,9 @@ app.get("/api/daily-quiz/status", async (req, res) => {
       slots[slotKey] = { available: availableSlots.has(slotKey), label: DAILY_QUIZ_SLOTS[slotKey].label };
     }
     // Priorité aux créneaux actu (evening > morning), puis n'importe quel
-    // autre créneau disponible (narratif) plutôt que rien — un jour où seuls
-    // ce_jour_histoire/eclairages auraient généré ne doit pas
-    // laisser la page "pas prêt" alors qu'il y a bien un QCM à afficher.
+    // autre créneau disponible (narratif) plutôt que rien — un jour où seul
+    // culture_generale aurait généré ne doit pas laisser la page "pas prêt"
+    // alors qu'il y a bien un QCM à afficher.
     const defaultSlot = availableSlots.has("evening")
       ? "evening"
       : availableSlots.has("morning")
