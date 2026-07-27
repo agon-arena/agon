@@ -228,13 +228,17 @@
 
     if (hasMoreToShow) {
       var toggleId = "het-summary-long-" + categoryKey;
-      var toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "het-card-toggle";
-      toggle.textContent = "En savoir plus";
-      toggle.setAttribute("aria-expanded", "false");
-      toggle.setAttribute("aria-controls", toggleId);
-      body.appendChild(toggle);
+      // Nommé différemment de "toggle" (le bouton d'en-tête de catégorie,
+      // déclaré plus haut) : "var" n'a pas de portée de bloc, un même nom
+      // ici écraserait la référence utilisée par registerAccordionBlock plus
+      // bas et rendrait l'en-tête de catégorie non cliquable.
+      var moreToggle = document.createElement("button");
+      moreToggle.type = "button";
+      moreToggle.className = "het-card-toggle";
+      moreToggle.textContent = "En savoir plus";
+      moreToggle.setAttribute("aria-expanded", "false");
+      moreToggle.setAttribute("aria-controls", toggleId);
+      body.appendChild(moreToggle);
 
       var moreDetails = document.createElement("div");
       moreDetails.className = "het-card-more";
@@ -267,11 +271,11 @@
 
       body.appendChild(moreDetails);
 
-      toggle.addEventListener("click", function () {
+      moreToggle.addEventListener("click", function () {
         var isHidden = moreDetails.hidden;
         moreDetails.hidden = !isHidden;
-        toggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
-        toggle.textContent = isHidden ? "Réduire" : "En savoir plus";
+        moreToggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
+        moreToggle.textContent = isHidden ? "Réduire" : "En savoir plus";
       });
     }
 
