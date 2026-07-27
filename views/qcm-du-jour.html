@@ -59,13 +59,12 @@
     }
     .qcm-page-shell {
       width: min(100% - 32px, 900px);
-      margin: 112px auto 48px;
+      margin: 112px auto 180px;
     }
     .page-qcm-du-jour.in-iframe .qcm-page-shell {
-      /* Marge basse un peu plus généreuse que le haut : laisse un peu de
-         mou pour scroller légèrement au-delà du bas du contenu plutôt que
-         de s'arrêter pile dessus. */
-      margin: 20px auto 60px;
+      /* Marge basse généreuse : laisse scroller au-delà du bas du contenu
+         plutôt que de s'arrêter pile dessus. */
+      margin: 20px auto 180px;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
        spécificité) : un margin-bottom placé avant un margin raccourci
@@ -74,7 +73,7 @@
       /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
          du bas du contenu (cf. même traitement sur /eclairages). */
       .page-qcm-du-jour.in-iframe .qcm-page-shell {
-        margin-bottom: 160px;
+        margin-bottom: 260px;
       }
     }
     @media (min-width: 769px) {
@@ -398,7 +397,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260727-iframeclosefix" defer></script>
+<script src="/script.min.js?v=20260727-iframeclose-qcm" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');

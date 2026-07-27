@@ -14,10 +14,9 @@
   box-sizing: border-box;
   width: min(100% - 32px, 1100px);
   margin: 0 auto;
-  /* Padding bas un peu plus généreux que le haut : laisse un peu de mou pour
-     scroller légèrement au-delà du bas du contenu plutôt que de s'arrêter
-     pile dessus. */
-  padding: 40px 0 90px;
+  /* Padding bas généreux : laisse scroller au-delà du bas du contenu plutôt
+     que de s'arrêter pile dessus. */
+  padding: 40px 0 180px;
 }
 
 .het-kicker {

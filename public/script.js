@@ -5795,6 +5795,16 @@ function ensureDebateIframeModal() {
         padding: 0;
         border-radius: 999px;
       }
+      #debate-iframe-modal.open.qcm-frame-open #debate-iframe-modal-close,
+      #debate-iframe-modal.open.eclairages-frame-open #debate-iframe-modal-close,
+      #debate-iframe-modal.open.historical-events-frame-open #debate-iframe-modal-close {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        bottom: calc(34px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+        z-index: 10002 !important;
+      }
     }
     @media (min-width: 769px) {
       #debate-iframe-modal.open {
