@@ -54,6 +54,12 @@
       .page-eclairages .topbar-inner {
         padding: 0;
       }
+      /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
+         du bas du contenu une fois un bloc déplié (concept/citation/etc.),
+         plutôt que de s'arrêter juste dessus. */
+      .page-eclairages.in-iframe .ecl-page-shell {
+        margin-bottom: 160px;
+      }
     }
     .ecl-page-shell {
       width: min(100% - 32px, 900px);
@@ -111,10 +117,22 @@
       padding-top: 28px;
       border-top: 1px solid #e5e7eb;
     }
+    /* Un bloc masqué (rubrique non complétée aujourd'hui, cf. .ecl-block[hidden]
+       plus bas) compte quand même comme "précédent" pour le sélecteur
+       ".ecl-block + .ecl-block" ci-dessus : sans ce correctif, le premier bloc
+       réellement visible hériterait d'une bordure/marge flottante en haut du
+       panneau. Reposé dynamiquement par window.eclUpdateFirstVisibleBlockStyling. */
+    .ecl-block--first-visible {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+      border-top: none !important;
+    }
     /* Chaque bloc s'ouvre comme un menu (accordéon) : replié par défaut, le
-       contenu (et son premier appel API) n'est chargé qu'au premier clic —
-       cohérent avec le principe du site de ne rien charger sans interaction
-       explicite de l'utilisateur. */
+       contenu ne se déplie qu'au premier clic. Le bloc lui-même reste
+       entièrement masqué (cf. .ecl-block[hidden] posé en HTML) tant que le
+       statut du jour de sa rubrique n'est pas connu, et le reste si elle n'a
+       pas été complétée — seule une rubrique "published" aujourd'hui
+       apparaît sur cette page. */
     .ecl-block-toggle {
       display: flex;
       align-items: center;
@@ -194,12 +212,12 @@
        prenait pas, le bouton se retrouvait collé à gauche malgré la règle.
        Un simple bloc + text-align:center est une technique de centrage bien
        plus robuste pour un bouton (élément de niveau inline par défaut). */
-    .ph-history, .pp-history, .ms-history, .cj-history, .cd-history {
+    .ph-history, .pp-history, .ms-history, .cj-history, .cd-history, .oa-history {
       width: 100%;
       text-align: center;
       margin: 0 0 48px;
     }
-    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle, .cj-history-toggle, .cd-history-toggle {
+    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle, .cj-history-toggle, .cd-history-toggle, .oa-history-toggle {
       display: block;
       width: fit-content;
       margin: 0 auto;
@@ -212,28 +230,28 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
-    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover, .cj-history-toggle:hover, .cd-history-toggle:hover {
+    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover, .cj-history-toggle:hover, .cd-history-toggle:hover, .oa-history-toggle:hover {
       color: #243038;
       text-decoration: underline;
     }
-    .ph-history-panel, .pp-history-panel, .ms-history-panel, .cj-history-panel, .cd-history-panel {
+    .ph-history-panel, .pp-history-panel, .ms-history-panel, .cj-history-panel, .cd-history-panel, .oa-history-panel {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       margin-top: 8px;
     }
-    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden], .cj-history-panel[hidden], .cd-history-panel[hidden] {
+    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden], .cj-history-panel[hidden], .cd-history-panel[hidden], .oa-history-panel[hidden] {
       display: none;
     }
-    .ph-history-date, .pp-history-date, .ms-history-date, .cj-history-date, .cd-history-date {
+    .ph-history-date, .pp-history-date, .ms-history-date, .cj-history-date, .cd-history-date, .oa-history-date {
       padding: 6px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 13px;
       color: #374151;
     }
-    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow, .cj-history-arrow, .cd-history-arrow {
+    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow, .cj-history-arrow, .cd-history-arrow, .oa-history-arrow {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -247,14 +265,14 @@
       font-size: 12px;
       cursor: pointer;
     }
-    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled), .cj-history-arrow:hover:not(:disabled), .cd-history-arrow:hover:not(:disabled) {
+    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled), .cj-history-arrow:hover:not(:disabled), .cd-history-arrow:hover:not(:disabled), .oa-history-arrow:hover:not(:disabled) {
       background: #eef3f6;
     }
-    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled, .cj-history-arrow:disabled, .cd-history-arrow:disabled {
+    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled, .cj-history-arrow:disabled, .cd-history-arrow:disabled, .oa-history-arrow:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .ph-history-today, .pp-history-today, .ms-history-today, .cj-history-today, .cd-history-today {
+    .ph-history-today, .pp-history-today, .ms-history-today, .cj-history-today, .cd-history-today, .oa-history-today {
       padding: 6px 12px;
       border: 1px solid #d1d5db;
       border-radius: 999px;
@@ -264,19 +282,19 @@
       font-weight: 700;
       cursor: pointer;
     }
-    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover, .cj-history-today:hover, .cd-history-today:hover {
+    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover, .cj-history-today:hover, .cd-history-today:hover, .oa-history-today:hover {
       background: #eef3f6;
     }
     /* 1 à 3 parallèles/pensées/mécanismes possibles le même jour (jamais un
        nombre fixe) : le premier n'a pas de marge/séparateur au-dessus, les
        suivants si — pour marquer clairement où commence chaque élément
        indépendant. */
-    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme, .cj-concept + .cj-concept, .cd-citation + .cd-citation {
+    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme, .cj-concept + .cj-concept, .cd-citation + .cd-citation, .oa-oeuvre + .oa-oeuvre {
       margin-top: 28px;
       padding-top: 24px;
       border-top: 1px solid #e5e7eb;
     }
-    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count, .cj-concept-count, .cd-citation-count {
+    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count, .cj-concept-count, .cd-citation-count, .oa-oeuvre-count {
       margin: 0 0 6px;
       font-size: 11px;
       font-weight: 700;
@@ -285,14 +303,14 @@
       color: #9ca3af;
       text-align: center;
     }
-    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title, .cd-topic-title {
+    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
       line-height: 1.3;
     }
-    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary, .cd-topic-summary {
+    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary {
       margin: 0 0 22px;
       padding-bottom: 20px;
       border-bottom: 1px solid #e5e7eb;
@@ -300,10 +318,10 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .ph-section, .pp-section, .ms-section, .cj-section, .cd-section {
+    .ph-section, .pp-section, .ms-section, .cj-section, .cd-section, .oa-section {
       margin: 0 0 20px;
     }
-    .ph-section h2, .pp-section h2, .ms-section h2, .cj-section h2, .cd-section h2 {
+    .ph-section h2, .pp-section h2, .ms-section h2, .cj-section h2, .cd-section h2, .oa-section h2 {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -314,11 +332,11 @@
       color: #243038;
       letter-spacing: 0.01em;
     }
-    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i, .cj-section h2 i, .cd-section h2 i {
+    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i, .cj-section h2 i, .cd-section h2 i, .oa-section h2 i {
       font-size: 15px;
       color: #f5b642;
     }
-    .ph-section p, .pp-section p, .ms-section p, .cj-section p, .cd-section p {
+    .ph-section p, .pp-section p, .ms-section p, .cj-section p, .cd-section p, .oa-section p {
       margin: 0;
       color: #374151;
       font-size: 15px;
@@ -480,14 +498,55 @@
     .cd-author-image figcaption a {
       color: #9ca3af;
     }
-    .ph-sources, .pp-sources, .ms-sources, .cj-sources, .cd-sources {
+    /* L'œuvre elle-même est l'image centrale de la rubrique (contrairement
+       au portrait secondaire de citation-du-jour) : mise en avant, plus
+       grande, juste sous le titre. */
+    .oa-artwork-image {
+      margin: 0 0 14px;
+    }
+    .oa-artwork-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 480px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    .oa-artwork-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .oa-artwork-image figcaption a {
+      color: #9ca3af;
+    }
+    .oa-artwork-title {
+      margin: 0 0 4px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #111827;
+      text-align: center;
+    }
+    .oa-artwork-meta {
+      margin: 0 0 20px;
+      color: #6b7280;
+      font-size: 13px;
+      font-style: italic;
+      text-align: center;
+    }
+    .ph-sources, .pp-sources, .ms-sources, .cj-sources, .cd-sources, .oa-sources {
       margin-top: 24px;
       padding: 14px 16px;
       border-radius: 8px;
       background: #f9fafb;
       border: 1px dashed #d1d5db;
     }
-    .ph-sources-label, .pp-sources-label, .ms-sources-label, .cj-sources-label, .cd-sources-label {
+    .ph-sources-label, .pp-sources-label, .ms-sources-label, .cj-sources-label, .cd-sources-label, .oa-sources-label {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -508,16 +567,20 @@
     .ph-sources a, .pp-sources a, .ms-sources a, .cj-sources a, .cd-sources a {
       color: #243038;
     }
-    .ph-no-sources, .pp-no-sources, .ms-no-sources, .cj-no-sources, .cd-no-sources {
+    .ph-no-sources, .pp-no-sources, .ms-no-sources, .cj-no-sources, .cd-no-sources, .oa-no-sources {
       margin: 0;
       color: #9ca3af;
       font-size: 13px;
       font-style: italic;
     }
-    .ph-state-message, .pp-state-message, .ms-state-message, .cj-state-message, .cd-state-message {
+    .ph-state-message, .pp-state-message, .ms-state-message, .cj-state-message, .cd-state-message, .oa-state-message {
       color: #6b7280;
       font-size: 15px;
       line-height: 1.4;
+    }
+    .ecl-state-spinner {
+      margin-right: 6px;
+      color: #516776;
     }
     #ph-body, #pp-body, #ms-body, #cj-body, #cd-body {
       padding-top: 24px;
@@ -538,8 +601,10 @@
   <section class="ecl-panel" id="ecl-panel" tabindex="-1" aria-live="polite">
     <h1><i class="fa-solid fa-lightbulb"></i> Éclairages</h1>
     <p class="ecl-subtitle">L'actualité du jour éclairée par l'histoire et la philosophie.</p>
+    <p class="ecl-subtitle" id="ecl-loading-message">Chargement des rubriques du jour…</p>
+    <p class="ecl-subtitle" id="ecl-empty-message" hidden>Aucune rubrique n'est disponible pour le moment. Reviens un peu plus tard.</p>
 
-    <div class="ecl-block">
+    <div class="ecl-block" hidden>
       <button type="button" class="ecl-block-toggle" id="ph-block-toggle" aria-expanded="false" aria-controls="ph-block-content">
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
@@ -564,7 +629,7 @@
         </div>
 
         <div id="ph-body">
-          <p class="ph-state-message">Chargement…</p>
+          <p class="ph-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
         <button type="button" class="ecl-block-collapse" id="ph-block-collapse">
@@ -573,7 +638,7 @@
       </div>
     </div>
 
-    <div class="ecl-block">
+    <div class="ecl-block" hidden>
       <button type="button" class="ecl-block-toggle" id="pp-block-toggle" aria-expanded="false" aria-controls="pp-block-content">
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-brain"></i> Pensée philosophique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
@@ -598,7 +663,7 @@
         </div>
 
         <div id="pp-body">
-          <p class="pp-state-message">Chargement…</p>
+          <p class="pp-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
         <button type="button" class="ecl-block-collapse" id="pp-block-collapse">
@@ -607,7 +672,7 @@
       </div>
     </div>
 
-    <div class="ecl-block">
+    <div class="ecl-block" hidden>
       <button type="button" class="ecl-block-toggle" id="ms-block-toggle" aria-expanded="false" aria-controls="ms-block-content">
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-people-group"></i> Mécanisme sociologique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
@@ -632,7 +697,7 @@
         </div>
 
         <div id="ms-body">
-          <p class="ms-state-message">Chargement…</p>
+          <p class="ms-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
         <button type="button" class="ecl-block-collapse" id="ms-block-collapse">
@@ -641,7 +706,7 @@
       </div>
     </div>
 
-    <div class="ecl-block">
+    <div class="ecl-block" hidden>
       <button type="button" class="ecl-block-toggle" id="cj-block-toggle" aria-expanded="false" aria-controls="cj-block-content">
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-shapes"></i> Concept du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
@@ -666,7 +731,7 @@
         </div>
 
         <div id="cj-body">
-          <p class="cj-state-message">Chargement…</p>
+          <p class="cj-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
         <button type="button" class="ecl-block-collapse" id="cj-block-collapse">
@@ -675,7 +740,7 @@
       </div>
     </div>
 
-    <div class="ecl-block">
+    <div class="ecl-block" hidden>
       <button type="button" class="ecl-block-toggle" id="cd-block-toggle" aria-expanded="false" aria-controls="cd-block-content">
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-quote-left"></i> Citation du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
@@ -700,10 +765,44 @@
         </div>
 
         <div id="cd-body">
-          <p class="cd-state-message">Chargement…</p>
+          <p class="cd-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
         <button type="button" class="ecl-block-collapse" id="cd-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
+
+    <div class="ecl-block" hidden>
+      <button type="button" class="ecl-block-toggle" id="oa-block-toggle" aria-expanded="false" aria-controls="oa-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-palette"></i> Œuvre d'art du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="oa-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="oa-title-text">Œuvre d'art du jour</span> — un événement d'actualité éclairé par une œuvre d'art.</p>
+
+        <div class="oa-history">
+          <button type="button" class="oa-history-toggle" id="oa-history-toggle" aria-expanded="false" aria-controls="oa-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="oa-history-panel" id="oa-history-panel" hidden>
+            <button type="button" class="oa-history-arrow" id="oa-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="oa-history-date" id="oa-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="oa-history-arrow" id="oa-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="oa-history-today" id="oa-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="oa-body">
+          <p class="oa-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="oa-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
       </div>
@@ -784,6 +883,40 @@
   }
   window.eclRegisterAccordionBlock = registerAccordionBlock;
 
+  // Chaque rubrique appelle notifySettled(visible) une seule fois, une fois
+  // son statut du jour connu (publié -> visible, sinon -> masqué). Une fois
+  // les 6 rubriques réglées, on retire le message "Chargement…" et, si
+  // aucune n'est disponible, on affiche un message plutôt qu'une page vide.
+  var ECL_TOTAL_BLOCKS = 6;
+  var eclSettledCount = 0;
+  var eclVisibleCount = 0;
+  window.eclNotifyBlockSettled = function (visible) {
+    eclSettledCount += 1;
+    if (visible) eclVisibleCount += 1;
+    if (eclSettledCount >= ECL_TOTAL_BLOCKS) {
+      var loadingMsg = document.getElementById('ecl-loading-message');
+      if (loadingMsg) loadingMsg.hidden = true;
+      if (eclVisibleCount === 0) {
+        var emptyMsg = document.getElementById('ecl-empty-message');
+        if (emptyMsg) emptyMsg.hidden = false;
+      }
+    }
+  };
+
+  // Le séparateur (bordure + marge) entre blocs est posé en CSS via
+  // ".ecl-block + .ecl-block", qui s'applique dès qu'un bloc masqué précède
+  // un bloc visible dans le DOM — d'où ce recalcul à chaque révélation pour
+  // que seul le premier bloc réellement visible en soit dispensé.
+  window.eclUpdateFirstVisibleBlockStyling = function () {
+    var blocks = document.querySelectorAll('.ecl-block');
+    var foundFirst = false;
+    blocks.forEach(function (b) {
+      if (b.hidden) return;
+      b.classList.toggle('ecl-block--first-visible', !foundFirst);
+      foundFirst = true;
+    });
+  };
+
   function init() {
     if (panel && typeof panel.focus === 'function') panel.focus();
   }
@@ -817,6 +950,19 @@
   var MAX_POLL_ATTEMPTS = 5;
   var POLL_INTERVAL_MS = 4000;
   var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -825,11 +971,11 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="ph-state-message">Chargement du parallèle historique du jour…</p>';
+    body.innerHTML = '<p class="ph-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement du parallèle historique du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="ph-state-message">Le parallèle historique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="ph-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Le parallèle historique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
@@ -929,12 +1075,15 @@
     if (status === 'published' && data.content) {
       stopPolling();
       renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
     } else if (status === 'insufficient') {
       stopPolling();
       renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'not_found') {
       stopPolling();
       renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
       pollAttempts += 1;
@@ -942,10 +1091,12 @@
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
+        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
       renderError();
+      if (!viewedDateKey) notifySettled(false);
     }
   }
 
@@ -960,6 +1111,7 @@
       .catch(function () {
         stopPolling();
         renderError();
+        notifySettled(false);
       });
   }
 
@@ -1071,19 +1223,21 @@
     historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
   }
 
-  // Bloc replié par défaut (accordéon, cf. script partagé ci-dessus) : rien
-  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  // Bloc replié par défaut (accordéon, cf. script partagé ci-dessus) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
   if (typeof window.eclRegisterAccordionBlock === 'function') {
     window.eclRegisterAccordionBlock({
       toggleId: 'ph-block-toggle',
       contentId: 'ph-block-content',
       collapseButtonId: 'ph-block-collapse',
-      onFirstOpen: function () {
-        renderLoading();
-        loadToday();
-      }
+      onFirstOpen: function () {}
     });
   }
+
+  renderLoading();
+  loadToday();
 })();
 </script>
 <script>
@@ -1104,6 +1258,19 @@
   var MAX_POLL_ATTEMPTS = 5;
   var POLL_INTERVAL_MS = 4000;
   var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -1112,11 +1279,11 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="pp-state-message">Chargement de la pensée philosophique du jour…</p>';
+    body.innerHTML = '<p class="pp-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement de la pensée philosophique du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="pp-state-message">La pensée philosophique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="pp-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> La pensée philosophique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
@@ -1214,12 +1381,15 @@
     if (status === 'published' && data.content) {
       stopPolling();
       renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
     } else if (status === 'insufficient') {
       stopPolling();
       renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'not_found') {
       stopPolling();
       renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
       pollAttempts += 1;
@@ -1227,10 +1397,12 @@
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
+        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
       renderError();
+      if (!viewedDateKey) notifySettled(false);
     }
   }
 
@@ -1245,6 +1417,7 @@
       .catch(function () {
         stopPolling();
         renderError();
+        notifySettled(false);
       });
   }
 
@@ -1356,19 +1529,21 @@
     historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
   }
 
-  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
-  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
   if (typeof window.eclRegisterAccordionBlock === 'function') {
     window.eclRegisterAccordionBlock({
       toggleId: 'pp-block-toggle',
       contentId: 'pp-block-content',
       collapseButtonId: 'pp-block-collapse',
-      onFirstOpen: function () {
-        renderLoading();
-        loadToday();
-      }
+      onFirstOpen: function () {}
     });
   }
+
+  renderLoading();
+  loadToday();
 })();
 </script>
 <script>
@@ -1389,6 +1564,19 @@
   var MAX_POLL_ATTEMPTS = 5;
   var POLL_INTERVAL_MS = 4000;
   var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -1397,11 +1585,11 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="ms-state-message">Chargement du mécanisme sociologique du jour…</p>';
+    body.innerHTML = '<p class="ms-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement du mécanisme sociologique du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="ms-state-message">Le mécanisme sociologique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="ms-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Le mécanisme sociologique du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
@@ -1499,12 +1687,15 @@
     if (status === 'published' && data.content) {
       stopPolling();
       renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
     } else if (status === 'insufficient') {
       stopPolling();
       renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'not_found') {
       stopPolling();
       renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
       pollAttempts += 1;
@@ -1512,10 +1703,12 @@
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
+        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
       renderError();
+      if (!viewedDateKey) notifySettled(false);
     }
   }
 
@@ -1530,6 +1723,7 @@
       .catch(function () {
         stopPolling();
         renderError();
+        notifySettled(false);
       });
   }
 
@@ -1641,19 +1835,21 @@
     historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
   }
 
-  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
-  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
   if (typeof window.eclRegisterAccordionBlock === 'function') {
     window.eclRegisterAccordionBlock({
       toggleId: 'ms-block-toggle',
       contentId: 'ms-block-content',
       collapseButtonId: 'ms-block-collapse',
-      onFirstOpen: function () {
-        renderLoading();
-        loadToday();
-      }
+      onFirstOpen: function () {}
     });
   }
+
+  renderLoading();
+  loadToday();
 })();
 </script>
 <script>
@@ -1684,6 +1880,19 @@
   var MAX_POLL_ATTEMPTS = 5;
   var POLL_INTERVAL_MS = 4000;
   var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -1692,11 +1901,11 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="cj-state-message">Chargement du concept du jour…</p>';
+    body.innerHTML = '<p class="cj-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement du concept du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="cj-state-message">Le concept du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="cj-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Le concept du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
@@ -1796,12 +2005,15 @@
     if (status === 'published' && data.content) {
       stopPolling();
       renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
     } else if (status === 'insufficient') {
       stopPolling();
       renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'not_found') {
       stopPolling();
       renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
       pollAttempts += 1;
@@ -1809,10 +2021,12 @@
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
+        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
       renderError();
+      if (!viewedDateKey) notifySettled(false);
     }
   }
 
@@ -1827,6 +2041,7 @@
       .catch(function () {
         stopPolling();
         renderError();
+        notifySettled(false);
       });
   }
 
@@ -1938,19 +2153,21 @@
     historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
   }
 
-  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
-  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
   if (typeof window.eclRegisterAccordionBlock === 'function') {
     window.eclRegisterAccordionBlock({
       toggleId: 'cj-block-toggle',
       contentId: 'cj-block-content',
       collapseButtonId: 'cj-block-collapse',
-      onFirstOpen: function () {
-        renderLoading();
-        loadToday();
-      }
+      onFirstOpen: function () {}
     });
   }
+
+  renderLoading();
+  loadToday();
 })();
 </script>
 <script>
@@ -1971,6 +2188,19 @@
   var MAX_POLL_ATTEMPTS = 5;
   var POLL_INTERVAL_MS = 4000;
   var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -1979,11 +2209,11 @@
   }
 
   function renderLoading() {
-    body.innerHTML = '<p class="cd-state-message">Chargement de la citation du jour…</p>';
+    body.innerHTML = '<p class="cd-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement de la citation du jour…</p>';
   }
 
   function renderGenerating() {
-    body.innerHTML = '<p class="cd-state-message">La citation du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+    body.innerHTML = '<p class="cd-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> La citation du jour est en cours de préparation, ça ne devrait plus être long…</p>';
   }
 
   function renderInsufficient(reason) {
@@ -2019,12 +2249,10 @@
 
     var imageHtml = '';
     if (citation.quote_author_image_url) {
-      var isPressImage = citation.quote_author_image_source === "press";
-      var captionText = "Image : " + (citation.quote_author_image_credit || (isPressImage ? "source de l'actualité" : "Wikipedia"));
-      var captionAlt = isPressImage ? citation.current_topic_title : citation.quote_author;
+      var captionText = "Image : " + (citation.quote_author_image_credit || "Wikipedia");
       imageHtml =
         '<figure class="cd-author-image">' +
-        '<img src="' + escapeHtml(citation.quote_author_image_url) + '" alt="' + escapeHtml(captionAlt) + '" loading="lazy" onerror="this.closest(\'.cd-author-image\').remove();">' +
+        '<img src="' + escapeHtml(citation.quote_author_image_url) + '" alt="' + escapeHtml(citation.quote_author) + '" loading="lazy" onerror="this.closest(\'.cd-author-image\').remove();">' +
         (citation.quote_author_image_page_url
           ? '<figcaption><a href="' + escapeHtml(citation.quote_author_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
           : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
@@ -2038,8 +2266,6 @@
     return (
       '<article class="cd-citation">' +
       countLabel +
-      '<p class="cd-topic-title">' + escapeHtml(citation.current_topic_title) + '</p>' +
-      '<p class="cd-topic-summary">' + escapeHtml(citation.current_topic_summary) + '</p>' +
       '<blockquote class="cd-quote-block">' +
       '<p>« ' + escapeHtml(citation.quote_text) + ' »</p>' +
       '<cite>— ' + escapeHtml(citation.quote_author) + '</cite>' +
@@ -2047,20 +2273,8 @@
       imageHtml +
       '<p class="cd-quote-origin">' + escapeHtml(citation.quote_origin) + '</p>' +
       '<div class="cd-section">' +
-      '<h2><i class="fa-solid fa-lightbulb"></i> Ce que dit cette citation</h2>' +
-      '<p>' + escapeHtml(citation.quote_explanation) + '</p>' +
-      '</div>' +
-      '<div class="cd-section">' +
-      '<h2><i class="fa-solid fa-arrows-rotate"></i> Ce qui fait écho</h2>' +
-      '<p>' + escapeHtml(citation.shared_mechanism) + '</p>' +
-      '</div>' +
-      '<div class="cd-section">' +
-      '<h2><i class="fa-solid fa-code-compare"></i> La limite du rapprochement</h2>' +
-      '<p>' + escapeHtml(citation.essential_difference) + '</p>' +
-      '</div>' +
-      '<div class="cd-section">' +
-      '<h2><i class="fa-solid fa-circle-info"></i> Conclusion</h2>' +
-      '<p>' + escapeHtml(citation.conclusion) + '</p>' +
+      '<h2><i class="fa-solid fa-user"></i> L\'auteur</h2>' +
+      '<p>' + escapeHtml(citation.author_presentation) + '</p>' +
       '</div>' +
       '<div class="cd-sources">' +
       '<p class="cd-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
@@ -2085,12 +2299,15 @@
     if (status === 'published' && data.content) {
       stopPolling();
       renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
     } else if (status === 'insufficient') {
       stopPolling();
       renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'not_found') {
       stopPolling();
       renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
       pollAttempts += 1;
@@ -2098,10 +2315,12 @@
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
+        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
       renderError();
+      if (!viewedDateKey) notifySettled(false);
     }
   }
 
@@ -2116,6 +2335,7 @@
       .catch(function () {
         stopPolling();
         renderError();
+        notifySettled(false);
       });
   }
 
@@ -2227,19 +2447,316 @@
     historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
   }
 
-  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : rien
-  // n'est chargé tant que l'utilisateur ne l'ouvre pas explicitement.
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
   if (typeof window.eclRegisterAccordionBlock === 'function') {
     window.eclRegisterAccordionBlock({
       toggleId: 'cd-block-toggle',
       contentId: 'cd-block-content',
       collapseButtonId: 'cd-block-collapse',
-      onFirstOpen: function () {
-        renderLoading();
-        loadToday();
-      }
+      onFirstOpen: function () {}
     });
   }
+
+  renderLoading();
+  loadToday();
+})();
+</script>
+<script>
+// Bloc "Œuvre d'art du jour" — logique identique à
+// views/oeuvre-art-du-jour.html, juste sans la gestion de la modale
+// (fermeture/Échap/focus), déjà prise en charge par le script partagé plus haut.
+(function () {
+  var body = document.getElementById('oa-body');
+  var titleText = document.getElementById('oa-title-text');
+  var historyToggle = document.getElementById('oa-history-toggle');
+  var historyPanel = document.getElementById('oa-history-panel');
+  var historyDateInput = document.getElementById('oa-history-date');
+  var historyTodayBtn = document.getElementById('oa-history-today');
+  var historyPrevBtn = document.getElementById('oa-history-prev');
+  var historyNextBtn = document.getElementById('oa-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="oa-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement de l\'œuvre d\'art du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="oa-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> L\'œuvre d\'art du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucune œuvre d\'art n\'a pu être établie avec confiance ce jour-là.'
+      : 'Aucune œuvre d\'art n\'a pu être établie avec confiance aujourd\'hui.';
+    body.innerHTML =
+      '<p class="oa-state-message">' + intro + '</p>' +
+      (reason ? '<p class="oa-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="oa-state-message">Aucune œuvre d\'art du jour n\'a été générée ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="oa-state-message">Impossible de charger l\'œuvre d\'art du jour pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  function renderOneOeuvre(oeuvre, index, total) {
+    var sources = Array.isArray(oeuvre.sources) ? oeuvre.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="oa-no-sources">Aucune source détaillée disponible pour cette œuvre.</p>';
+
+    var imageHtml = '';
+    if (oeuvre.artwork_image_url) {
+      var captionText = "Image : " + (oeuvre.artwork_image_credit || "Wikipedia");
+      imageHtml =
+        '<figure class="oa-artwork-image">' +
+        '<img src="' + escapeHtml(oeuvre.artwork_image_url) + '" alt="' + escapeHtml(oeuvre.artwork_title) + '" loading="lazy" onerror="this.closest(\'.oa-artwork-image\').remove();">' +
+        (oeuvre.artwork_image_page_url
+          ? '<figcaption><a href="' + escapeHtml(oeuvre.artwork_image_page_url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
+
+    var countLabel = total > 1
+      ? '<p class="oa-oeuvre-count">Œuvre ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    return (
+      '<article class="oa-oeuvre">' +
+      countLabel +
+      imageHtml +
+      '<p class="oa-artwork-title">' + escapeHtml(oeuvre.artwork_title) + '</p>' +
+      '<p class="oa-artwork-meta">' + escapeHtml(oeuvre.artist_name) + ' — ' + escapeHtml(oeuvre.artwork_date) + '</p>' +
+      '<div class="oa-section">' +
+      '<h2><i class="fa-solid fa-image"></i> L\'œuvre</h2>' +
+      '<p>' + escapeHtml(oeuvre.artwork_description) + '</p>' +
+      '</div>' +
+      '<div class="oa-section">' +
+      '<h2><i class="fa-solid fa-user"></i> L\'artiste</h2>' +
+      '<p>' + escapeHtml(oeuvre.artist_presentation) + '</p>' +
+      '</div>' +
+      '<div class="oa-sources">' +
+      '<p class="oa-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var oeuvres = Array.isArray(content.oeuvres) ? content.oeuvres : [];
+    if (!oeuvres.length) { renderError(); return; }
+    body.innerHTML = oeuvres.map(function (o, i) { return renderOneOeuvre(o, i, oeuvres.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+        if (!viewedDateKey) notifySettled(false);
+      }
+    } else {
+      stopPolling();
+      renderError();
+      if (!viewedDateKey) notifySettled(false);
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = "Œuvre d'art du jour";
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/oeuvre-art-du-jour/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+        notifySettled(false);
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = "Œuvre d'art du " + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/oeuvre-art-du-jour/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/oeuvre-art-du-jour/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'oa-block-toggle',
+      contentId: 'oa-block-content',
+      collapseButtonId: 'oa-block-collapse',
+      onFirstOpen: function () {}
+    });
+  }
+
+  renderLoading();
+  loadToday();
 })();
 </script>
 </body>

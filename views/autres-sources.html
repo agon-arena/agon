@@ -1516,6 +1516,8 @@ window.addEventListener("pageshow", function() {
 
     <div id="tribunes-custom-media-page-banner" class="tribunes-custom-media-page-banner" style="display:none;"></div>
 
+    <div id="tribunes-recommended" class="tribunes-recommended-wrap" style="display:none;"></div>
+
     <div class="tribunes-list" id="tribunes-list">
       <div class="tribunes-initial-loading" aria-label="Chargement">
         <img src="/sablier-96.png" alt="" class="tribunes-initial-loading-img">
@@ -1686,6 +1688,11 @@ window.addEventListener("pageshow", function() {
   function tribunesInitialCountForGroup(groupKey) {
     var isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (groupKey === 'a-la-une') return isMobile ? 1 : 4;
+    // Section recommandée : liste fixe et courte (cf. OPINION_ARTICLES_RECOMMENDED_CAP côté
+    // serveur, 12), rendue en dehors de #tribunes-list donc jamais atteinte par la sentinelle
+    // de lazy-load — tout doit être matérialisé d'un coup, sinon le reliquat resterait bloqué
+    // dans tribunesPendingBatches indéfiniment.
+    if (groupKey === 'recommande') return 12;
     return isMobile ? 2 : 5;
   }
 
@@ -2374,6 +2381,7 @@ window.addEventListener("pageshow", function() {
 
   function openCardArticle(card) {
     if (!card || !card.dataset) return;
+    trackOpinionArticleClick(card.dataset.link, card.__article);
     if (card.dataset.videoId) { openVideoModal(card.dataset.videoId); return; }
     var link = card.dataset.link;
     if (!link) return;
@@ -2460,12 +2468,20 @@ window.addEventListener("pageshow", function() {
     });
   }
 
-  function attachCardLinkHandlers() {
-    list.querySelectorAll('.tribunes-item[data-link]').forEach(bindTribunesCardHandlers);
+  function attachCardLinkHandlers(container) {
+    (container || list).querySelectorAll('.tribunes-item[data-link]').forEach(bindTribunesCardHandlers);
   }
 
-  function attachCarouselArrows() {
-    list.querySelectorAll('.tribunes-carousel-arrow').forEach(function(btn) {
+  // container optionnel (défaut #tribunes-list) : permet de rejouer le branchement sur un
+  // conteneur externe comme #tribunes-recommended (cf. renderRecommendedSection) sans
+  // toucher aux appels existants. Volontairement pas un simple passage à document : cette
+  // fonction n'a pas de garde anti-double-binding (contrairement à bindTribunesCardHandlers),
+  // et le rendu recommandé n'a lieu qu'une fois — une portée document empilerait les
+  // listeners de flèches à chaque changement d'onglet (chaque render() rappelle cette
+  // fonction sur #tribunes-list, jamais sur #tribunes-recommended).
+  function attachCarouselArrows(container) {
+    var scope = container || list;
+    scope.querySelectorAll('.tribunes-carousel-arrow').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
@@ -2492,7 +2508,7 @@ window.addEventListener("pageshow", function() {
         scheduleCarouselStateUpdate(row);
       });
     });
-    list.querySelectorAll('.tribunes-row-jump-start').forEach(function(btn) {
+    scope.querySelectorAll('.tribunes-row-jump-start').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
@@ -2500,7 +2516,7 @@ window.addEventListener("pageshow", function() {
         scheduleCarouselStateUpdate(row);
       });
     });
-    list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
+    scope.querySelectorAll('.tribunes-carousel').forEach(function(row) {
       row.__tribunesControls = collectCarouselControls(row);
       bindTribunesMobileOneCardSwipe(row);
       row.addEventListener('scroll', function() {
@@ -2746,8 +2762,8 @@ window.addEventListener("pageshow", function() {
     syncCarouselDots(row, { lightweight: true });
   }
 
-  function updateAllCarouselArrowStates() {
-    list.querySelectorAll('.tribunes-carousel').forEach(updateCarouselArrowState);
+  function updateAllCarouselArrowStates(container) {
+    (container || list).querySelectorAll('.tribunes-carousel').forEach(updateCarouselArrowState);
   }
 
   var allCarouselStateRaf = 0;
@@ -3228,7 +3244,13 @@ window.addEventListener("pageshow", function() {
       }, { rootMargin: '60px' })
     : null;
 
-  function observeForPreview(card, article) {
+  // eager (optionnel) : saute l'IntersectionObserver et va chercher l'aperçu tout de suite.
+  // Nécessaire pour la section recommandée (cf. renderRecommendedSection) : previewObserver
+  // est déconnecté et recréé à chaque render() (donc à chaque changement d'onglet), qui ne
+  // scanne que les cartes de #tribunes-list — une carte recommandée pas encore entrée dans
+  // le viewport à ce moment-là resterait sinon bloquée sur le spinner de chargement. Le volume
+  // limité de cette section (12 cartes) rend le coût du eager-fetch acceptable.
+  function observeForPreview(card, article, eager) {
     card.__article = article;
     if (thumbSpinObserver) thumbSpinObserver.observe(card);
     if (article.type === 'youtube') {
@@ -3243,7 +3265,7 @@ window.addEventListener("pageshow", function() {
       applyPreviewToCard(article, article.source_preview, card);
       return;
     }
-    if (!('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
+    if (eager || !('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
     if (!previewObserver) {
       previewObserver = new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
@@ -3794,6 +3816,54 @@ window.addEventListener("pageshow", function() {
       });
   }
 
+  // Section "Recommandé pour vous" : indépendante du pipeline d'onglets (applyFilter/render
+  // ne voient que le sous-ensemble de l'orientation active) — sinon les recommandations
+  // seraient limitées à l'onglet courant, ce qui viderait l'intérêt d'une personnalisation
+  // cross-orientation. Vit hors de #tribunes-list, jamais touchée par un changement d'onglet.
+  function loadRecommendedArticles() {
+    var container = document.getElementById('tribunes-recommended');
+    if (!container || typeof getVisitorKey !== 'function') return;
+    fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()), { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        var items = Array.isArray(data.articles) ? data.articles : [];
+        if (!items.length) return; // reste caché, pas de titre vide
+        renderRecommendedSection(items, container);
+      })
+      .catch(function() {});
+  }
+
+  function renderRecommendedSection(items, container) {
+    container.innerHTML = renderThemeSection({ key: 'recommande', label: 'Recommandé pour vous', items: items });
+    container.style.display = '';
+    var row = document.getElementById('tribunes-row-recommande');
+    var sentinel = row && row.querySelector('.tribunes-load-sentinel');
+    if (sentinel) sentinel.remove(); // liste fixe, pas de scroll infini
+    attachCardLinkHandlers(container);
+    attachCarouselArrows(container);
+    updateAllCarouselArrowStates(container);
+    var byLink = {};
+    items.forEach(function(a) { if (a.link) byLink[a.link] = a; });
+    container.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
+      var article = byLink[card.dataset.link];
+      if (article) observeForPreview(card, article, true);
+    });
+  }
+
+  function trackOpinionArticleClick(link, article) {
+    if (!link || typeof getVisitorKey !== 'function') return;
+    fetch('/api/opinion-articles/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visitorKey: getVisitorKey(),
+        link: link,
+        category: article && article.category,
+        orientation: article && article.orientation
+      })
+    }).catch(function() {});
+  }
+
   // Actualiser = rechargement complet de la page (même comportement que le
   // bouton Actualiser de l'index), pas un simple re-fetch des articles.
   if (refreshBtn) refreshBtn.addEventListener('click', function() {
@@ -3804,6 +3874,7 @@ window.addEventListener("pageshow", function() {
   });
 
   loadArticles();
+  loadRecommendedArticles();
 })();
 </script>
 </body>

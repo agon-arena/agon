@@ -26,6 +26,7 @@ const { createPenseePhilosophiqueService } = require("./lib/pensee-philosophique
 const { createMecanismeSociologiqueService } = require("./lib/mecanisme-sociologique");
 const { createConceptDuJourService } = require("./lib/concept-du-jour");
 const { createCitationDuJourService } = require("./lib/citation-du-jour");
+const { createOeuvreArtDuJourService } = require("./lib/oeuvre-art-du-jour");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -8067,6 +8068,10 @@ const OPINION_ARTICLES_RETENTION_DAYS = 7;
 // Un QCM par jour : 30 jours suffisent largement pour les stats/debug, sans
 // accumuler indéfiniment (même logique que les autres tables purgées ici).
 const DAILY_QUIZ_RETENTION_DAYS = 30;
+// Clics sur les cartes Autres actus (cf. /api/opinion-articles/recommended) : doit survivre
+// nettement plus longtemps que opinion_articles (7j) pour garder un profil d'affinité
+// exploitable sur un visiteur qui revient occasionnellement, sans grossir indéfiniment.
+const OPINION_ARTICLE_CLICKS_RETENTION_DAYS = 45;
 const RETENTION_DELETE_BATCH_SIZE = 500;
 const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
 
@@ -8110,6 +8115,7 @@ async function runDataRetentionCleanup() {
   await pruneOldRows("opinion_articles", OPINION_ARTICLES_RETENTION_DAYS);
   await pruneOldRows("daily_quiz", DAILY_QUIZ_RETENTION_DAYS);
   await pruneOldRows("daily_quiz_answers", DAILY_QUIZ_RETENTION_DAYS);
+  await pruneOldRows("opinion_article_clicks", OPINION_ARTICLE_CLICKS_RETENTION_DAYS);
 }
 
 runDataRetentionCleanup().catch((err) => console.error("[retention] purge initiale :", err.message));
@@ -8579,8 +8585,16 @@ app.post("/api/veille/opinion-articles/remove", rateLimit("veille-opinion-articl
 // 250→400 et 4000→6000 le 20/07/2026 (même demande) : egress mesuré ~300 Mo/jour tout
 // confondu (storage média inclus), la part de cette API (JSON texte, cache 5 min) y reste
 // marginale même au plafond relevé — cf. aussi le cap interne de fetchOpinionArticleSelectionRows.
-const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 400;
-const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 6000;
+// Relevé 400→800 et 6000→10000 le 26/07/2026 (même demande, ~2400 articles bruts/jour
+// ingérés côté bot veille contre ~2900 cartes visibles au plafond précédent) : audit du
+// storage média (2 vidéos, 1 image sur 1982 débats) et du cache /api/debates (cache-buster
+// `_` déjà ignoré côté clé de cache, cf. getDebatesApiCacheKey) ne montre aucun poste
+// d'egress DB/storage significatif à ce jour — le plafond précédent n'était donc pas motivé
+// par un risque de coût réel mais par prudence. OPINION_ARTICLES_SOURCE_SOFT_LIMIT inchangé
+// (préserve la diversité de la première passe round-robin) : la hausse profite surtout à la
+// passe fallback (source non plafonnée) qui remplit le nouveau volume disponible.
+const OPINION_ARTICLES_TYPE_BUCKET_LIMIT = 800;
+const OPINION_ARTICLES_SELECTION_SCAN_LIMIT = 10000;
 const OPINION_ARTICLES_SOURCE_SOFT_LIMIT = 10;
 // Même classification que getMediaOrientationGroup côté bot veille (veille-mixte.js,
 // server.js) : "gauche"/"droite" couvrent aussi les familles proches (écolo, souverainiste,
@@ -8622,7 +8636,7 @@ function normalizeOpinionArticleOrientationForSource(article) {
 }
 
 async function fetchOpinionArticleSelectionRows(limit = OPINION_ARTICLES_SELECTION_SCAN_LIMIT) {
-  const safeLimit = Math.max(1, Math.min(6000, Number(limit || OPINION_ARTICLES_SELECTION_SCAN_LIMIT)));
+  const safeLimit = Math.max(1, Math.min(OPINION_ARTICLES_SELECTION_SCAN_LIMIT, Number(limit || OPINION_ARTICLES_SELECTION_SCAN_LIMIT)));
   const rows = [];
   const pageSize = 1000;
   for (let from = 0; from < safeLimit; from += pageSize) {
@@ -9259,6 +9273,132 @@ app.get("/api/opinion-articles", async (req, res) => {
     res.json({ articles: page, total: articles.length, hasMore: offset + page.length < articles.length });
   } catch (error) {
     res.status(500).json({ articles: [], total: 0, hasMore: false, error: error.message });
+  }
+});
+
+// Clic sur une carte Autres actus (source du signal de /api/opinion-articles/recommended
+// ci-dessous). Même convention fire-and-forget que POST /api/track-visit : pas de rate
+// limit (endpoint analytics à faible enjeu, même niveau de confiance que le reste de cette
+// app sans authentification), réponse immédiate avant l'insert. category/orientation sont
+// re-normalisées côté serveur plutôt que de faire confiance au payload client : la table
+// alimente ensuite des comparaisons de filtre (topCategories.has(...)), qui doivent toujours
+// porter sur l'ensemble de valeurs connu.
+app.post("/api/opinion-articles/click", (req, res) => {
+  const { visitorKey, link, category, orientation } = req.body || {};
+  if (!visitorKey || !link) {
+    return res.status(400).json({ error: "visitorKey et link requis" });
+  }
+  res.json({ success: true });
+  supabase
+    .from("opinion_article_clicks")
+    .insert({
+      visitor_key: String(visitorKey),
+      article_link: String(link),
+      category: normalizeOpinionArticleCategory(category) || null,
+      orientation_group: getOpinionOrientationGroup(orientation),
+      created_at: nowIso()
+    })
+    .then(({ error }) => { if (error) console.error("opinion-articles click:", error); });
+});
+
+const OPINION_ARTICLE_CLICKS_HISTORY_LIMIT = 200;
+const OPINION_ARTICLES_RECOMMENDED_CAP = 12;
+const OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES = 3;
+const OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS = 2;
+const OPINION_ARTICLES_RECOMMENDED_TRENDING_WINDOW_DAYS = 3;
+const OPINION_ARTICLES_RECOMMENDED_TRENDING_SCAN_LIMIT = 3000;
+const OPINION_ARTICLES_RECOMMENDED_FALLBACK_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let _opinionArticlesTrendingFallbackCache = null;
+let _opinionArticlesTrendingFallbackCacheComputedAt = 0;
+
+// Palier 2 de /api/opinion-articles/recommended (visiteur sans historique de clic) :
+// articles les plus cliqués tous visiteurs confondus sur une fenêtre récente. C'est le
+// palier le plus sollicité (tout nouveau visiteur y tombe), d'où le cache mémoire — évite
+// de rescanner opinion_article_clicks à chaque chargement de page.
+async function getTrendingOpinionArticleLinksFallback() {
+  if (_opinionArticlesTrendingFallbackCache && Date.now() - _opinionArticlesTrendingFallbackCacheComputedAt < OPINION_ARTICLES_RECOMMENDED_FALLBACK_CACHE_TTL_MS) {
+    return _opinionArticlesTrendingFallbackCache;
+  }
+  const cutoff = new Date(Date.now() - OPINION_ARTICLES_RECOMMENDED_TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("opinion_article_clicks")
+    .select("article_link")
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(OPINION_ARTICLES_RECOMMENDED_TRENDING_SCAN_LIMIT);
+  if (error) { console.error("trending fallback:", error.message); return []; }
+  const counts = new Map();
+  for (const row of data || []) {
+    if (!row.article_link) continue;
+    counts.set(row.article_link, (counts.get(row.article_link) || 0) + 1);
+  }
+  const ranked = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([link]) => link);
+  _opinionArticlesTrendingFallbackCache = ranked;
+  _opinionArticlesTrendingFallbackCacheComputedAt = Date.now();
+  return ranked;
+}
+
+// Section "Recommandé pour vous" (Autres actus) : 3 paliers, du plus au moins personnalisé.
+// 1) Historique de clic du visiteur : top catégories/orientations cliquées, filtré sur le
+//    pool déjà caché de getOpinionArticlesSelection() (aucun nouveau read sur opinion_articles).
+// 2) Aucun historique, ou rien à recommander dedans (niche sans candidat frais) : tendance
+//    globale récente (cf. getTrendingOpinionArticleLinksFallback ci-dessus).
+// 3) Table de clics quasi vide (ex. juste après déploiement) : les plus récents non cliqués.
+app.get("/api/opinion-articles/recommended", async (req, res) => {
+  try {
+    const visitorKey = String(req.query.visitorKey || "").trim();
+    if (!visitorKey) return res.json({ articles: [] });
+
+    const pool = await getOpinionArticlesSelection();
+    if (!pool.length) return res.json({ articles: [] });
+
+    const { data: clickRows, error } = await supabase
+      .from("opinion_article_clicks")
+      .select("article_link, category, orientation_group")
+      .eq("visitor_key", visitorKey)
+      .order("created_at", { ascending: false })
+      .limit(OPINION_ARTICLE_CLICKS_HISTORY_LIMIT);
+    if (error) throw new Error(error.message);
+
+    const clickedLinks = new Set((clickRows || []).map((r) => r.article_link));
+    let recommended = [];
+
+    if (clickRows && clickRows.length) {
+      const categoryFreq = new Map();
+      const orientationFreq = new Map();
+      for (const row of clickRows) {
+        if (row.category) categoryFreq.set(row.category, (categoryFreq.get(row.category) || 0) + 1);
+        if (row.orientation_group) orientationFreq.set(row.orientation_group, (orientationFreq.get(row.orientation_group) || 0) + 1);
+      }
+      const topCategories = new Set(Array.from(categoryFreq.entries())
+        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES).map(([c]) => c));
+      const topOrientations = new Set(Array.from(orientationFreq.entries())
+        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS).map(([o]) => o));
+
+      recommended = pool
+        .filter((a) => !clickedLinks.has(a.link))
+        .filter((a) => topCategories.has(a.category) || topOrientations.has(getOpinionOrientationGroup(a.orientation)))
+        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
+        .slice(0, OPINION_ARTICLES_RECOMMENDED_CAP);
+    }
+
+    if (!recommended.length) {
+      const trendingLinks = await getTrendingOpinionArticleLinksFallback();
+      const byLink = new Map(pool.map((a) => [a.link, a]));
+      recommended = trendingLinks
+        .filter((link) => !clickedLinks.has(link) && byLink.has(link))
+        .slice(0, OPINION_ARTICLES_RECOMMENDED_CAP)
+        .map((link) => byLink.get(link));
+    }
+
+    if (!recommended.length) {
+      recommended = pool.filter((a) => !clickedLinks.has(a.link)).slice(0, OPINION_ARTICLES_RECOMMENDED_CAP);
+    }
+
+    res.json({ articles: recommended });
+  } catch (error) {
+    res.status(500).json({ articles: [], error: error.message });
   }
 });
 
@@ -11266,6 +11406,23 @@ async function fetchDailyQuizCandidateDebates(excludeIds = [], recentTopicKeys =
   return dedupeDailyQuizCandidatesByQuestion(rows);
 }
 
+// Bloc de règles partagé par les 3 builders de prompt QCM, décrivant les 4
+// formats de question possibles. `sourceIdField` vaut "sourceDebateId" (QCM
+// actu) ou "sourceId" (QCM narratifs) — seul ce nom de champ change d'un
+// builder à l'autre, le reste est identique.
+function buildQuestionFormatsPromptBlock(sourceIdField) {
+  return [
+    "=== Formats de question possibles ===",
+    "Choisis librement, pour chaque question, le format le plus adapté au sujet — varie-les naturellement au fil du QCM plutôt que de produire systématiquement le même format :",
+    "- \"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
+    "- \"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1.",
+    "- \"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte.",
+    "- \"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format.",
+    "",
+    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association","question":"...","options":["..."] (absent pour association),"correctIndex":0 (absent pour association),"pairs":[{"left":"...","right":"..."}] (uniquement pour association),"explanation":"...","${sourceIdField}":"id fourni"}]}.`
+  ];
+}
+
 function buildDailyQuizPrompt(candidates) {
   const list = candidates
     .map((c) => `- id:${c.id} | ${String(c.question || "").trim()}\n  ${String(c.content || "").trim().slice(0, 500).replace(/\s+/g, " ")}`)
@@ -11275,14 +11432,113 @@ function buildDailyQuizPrompt(candidates) {
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
     "- Une question par sujet distinct (utilise des \"id\" différents pour sourceDebateId), en couvrant des thèmes variés.",
-    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
-    "- Pas de question fermée oui/non, pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
+    "- Pour le format \"qcm\" (voir formats possibles ci-dessous), pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous, pas d'un \"qcm\" à 4 options déguisé.",
+    "- Pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
-    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceDebateId":"id fourni"}]}.',
+    "",
+    ...buildQuestionFormatsPromptBlock("sourceDebateId"),
     "",
     "Arènes disponibles :",
     list
   ].join("\n");
+}
+
+function shuffleArray(arr) {
+  const copy = arr.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+// Les modèles ont un biais de position bien connu (la bonne réponse se
+// retrouve trop souvent en première position) : constaté en pratique sur ce
+// projet (un lot généré où les 5 questions "qcm" avaient toutes
+// correctIndex:0). Demander à l'IA de varier la position dans le prompt ne
+// suffit pas à corriger ce biais de façon fiable — on mélange donc
+// nous-mêmes l'ordre des options après validation, en se basant sur les
+// index (pas sur le texte) pour rester correct même si deux options ont un
+// texte identique.
+function shuffleOptionsPreservingCorrectIndex(options, correctIndex) {
+  const shuffledPositions = shuffleArray(options.map((_, i) => i));
+  return {
+    options: shuffledPositions.map((originalIndex) => options[originalIndex]),
+    correctIndex: shuffledPositions.indexOf(correctIndex)
+  };
+}
+
+// Types de questions QCM possibles (indépendant du `type` de rubrique
+// source utilisé ailleurs — ex. formatEclairagesItemForPrompt distingue
+// parallele/pensee/mecanisme/concept/citation, un concept totalement
+// différent — d'où le nom "questionType" dans ce qui suit, jamais "type"
+// seul, pour ne pas confondre les deux dans les fonctions qui touchent aux
+// deux à la fois).
+const QUESTION_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous", "association"]);
+// Marqueur du "trou" dans une question de type texte_a_trous — identique
+// dans le prompt, le validateur et le rendu client.
+const FILL_BLANK_MARKER = "___";
+// "association" n'a pas de correctIndex fourni par l'IA (pas un choix
+// unique parmi des options, mais un appariement de plusieurs paires) : on
+// réutilise la colonne existante daily_quiz_answers.option_index comme
+// indicateur binaire "l'utilisateur a-t-il tout apparié correctement",
+// jamais comme un vrai index d'option. Sentinelle fixe plutôt que dérivée,
+// pour que toute la chaîne de lecture existante (computeUserScores,
+// getDailyQuizStats, GET /results) continue de fonctionner sans changement :
+// il suffit de comparer ce même 1 des deux côtés.
+const ASSOCIATION_CORRECT_INDEX = 1;
+
+// Valide les 3-4 paires {left,right} d'une question "association" : chaînes
+// non vides et raisonnablement courtes, aucun doublon ni côté gauche ni
+// côté droit (un doublon rendrait l'appariement ambigu côté client).
+function validateAssociationPairs(rawPairs) {
+  if (!Array.isArray(rawPairs)) return null;
+  const pairs = [];
+  const seenLefts = new Set();
+  const seenRights = new Set();
+  for (const raw of rawPairs) {
+    const left = String(raw?.left || "").trim();
+    const right = String(raw?.right || "").trim();
+    if (!left || !right || left.length > 200 || right.length > 300) return null;
+    const leftKey = left.toLowerCase();
+    const rightKey = right.toLowerCase();
+    if (seenLefts.has(leftKey) || seenRights.has(rightKey)) return null;
+    seenLefts.add(leftKey);
+    seenRights.add(rightKey);
+    pairs.push({ left, right });
+  }
+  if (pairs.length < 3 || pairs.length > 4) return null;
+  return pairs;
+}
+
+// Normalise et valide les champs communs aux 4 formats de question — la
+// logique de dédup par source (sourceDebateId/sourceId, un ou plusieurs par
+// source selon l'appelant) reste propre à validateDailyQuizQuestions et
+// validateNarrativeQuizQuestions, qui appellent ce helper puis y ajoutent
+// cette vérification. Une réponse de forme inconnue/invalide renvoie null,
+// jamais une exception (traitée comme une question ignorée par l'appelant).
+function validateQuestionItemCore(item) {
+  const questionType = QUESTION_TYPES.has(item?.type) ? item.type : "qcm";
+  const question = String(item?.question || "").trim();
+  const explanation = String(item?.explanation || "").trim();
+  if (!question) return null;
+
+  if (questionType === "association") {
+    const pairs = validateAssociationPairs(item?.pairs);
+    if (!pairs) return null;
+    return { type: questionType, question, pairs, correctIndex: ASSOCIATION_CORRECT_INDEX, explanation };
+  }
+
+  const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
+  const correctIndex = Number(item?.correctIndex);
+  // qcm/texte_a_trous : 4 options, comme avant l'introduction des formats
+  // vrai_faux/association. vrai_faux : exactement 2 (ex. ["Vrai","Faux"]).
+  const expectedLength = questionType === "vrai_faux" ? 2 : 4;
+  if (options.length !== expectedLength) return null;
+  if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= expectedLength) return null;
+  if (questionType === "texte_a_trous" && !question.includes(FILL_BLANK_MARKER)) return null;
+  const shuffled = shuffleOptionsPreservingCorrectIndex(options, correctIndex);
+  return { type: questionType, question, options: shuffled.options, correctIndex: shuffled.correctIndex, explanation };
 }
 
 function validateDailyQuizQuestions(rawQuestions, candidateIds) {
@@ -11291,16 +11547,12 @@ function validateDailyQuizQuestions(rawQuestions, candidateIds) {
   const usedSourceIds = new Set();
   const valid = [];
   for (const item of rawQuestions) {
-    const question = String(item?.question || "").trim();
-    const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
-    const correctIndex = Number(item?.correctIndex);
-    const explanation = String(item?.explanation || "").trim();
+    const core = validateQuestionItemCore(item);
+    if (!core) continue;
     const sourceDebateId = String(item?.sourceDebateId ?? "").trim();
-    if (!question || options.length !== 4) continue;
-    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
     if (!sourceDebateId || !validCandidateIds.has(sourceDebateId) || usedSourceIds.has(sourceDebateId)) continue;
     usedSourceIds.add(sourceDebateId);
-    valid.push({ question, options, correctIndex, explanation, sourceDebateId });
+    valid.push({ ...core, sourceDebateId });
     if (valid.length >= DAILY_QUIZ_QUESTION_COUNT) break;
   }
   return valid;
@@ -11338,12 +11590,12 @@ function buildCeJourHistoireQuizPrompt(events) {
     `Tu écris un QCM d'histoire en français à partir des événements "Ce jour dans l'Histoire" ci-dessous, jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par événement (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
-    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
-    "- Les 4 options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique (ex. \"l'affaire X s'est déroulée dans tel climat\" / \"l'affaire Y s'est déroulée dans tel climat\") : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
+    "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique (ex. \"l'affaire X s'est déroulée dans tel climat\" / \"l'affaire Y s'est déroulée dans tel climat\") : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
     "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source (ex. écris \"le caractère raciste des faits\" plutôt que \"le racisme aggravant\").",
-    "- Pas de question fermée oui/non, pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
+    "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous. Pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
-    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
+    "",
+    ...buildQuestionFormatsPromptBlock("sourceId"),
     "",
     "Événements disponibles :",
     list
@@ -11406,7 +11658,10 @@ async function fetchEclairagesQuizCandidates() {
       try {
         const result = await citationDuJourService.generateIfNeeded(new Date());
         const items = result?.status === "published" ? result.content?.citations : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "citation", ...item })) : [];
+        // Pas de current_topic_id ici (citation simplifiée, sans lien avec
+        // l'actualité) : un id constant suffit, il n'y a jamais qu'une seule
+        // citation candidate par jour (MAX_CITATIONS_PER_DAY = 1).
+        return Array.isArray(items) ? items.map((item) => ({ ...item, type: "citation", id: "citation" })) : [];
       } catch (error) {
         console.error("[daily-quiz:eclairages] lecture citation du jour :", error.message);
         return [];
@@ -11435,7 +11690,10 @@ function formatEclairagesItemForPrompt(item) {
   if (item.type === "concept") {
     return `- id:${item.current_topic_id} | Type : concept du jour | Actualité : ${common} | Concept : ${String(item.concept_name || "").trim()} (${String(item.concept_originator || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
-  return `- id:${item.current_topic_id} | Type : citation du jour | Actualité : ${common} | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.quote_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+  // Citation du jour : rubrique simplifiée, sans lien avec l'actualité du
+  // jour (ni current_topic_*, ni mécanisme commun/différence essentielle) —
+  // juste la citation et une présentation de son auteur.
+  return `- id:${item.id} | Type : citation du jour | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 300).replace(/\s+/g, " ")}\n  Présentation de l'auteur : ${String(item.author_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
 }
 
 function buildEclairagesQuizPrompt(items) {
@@ -11447,12 +11705,12 @@ function buildEclairagesQuizPrompt(items) {
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
     "- Les questions peuvent porter sur l'événement/concept/citation lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
     "- Quand une question porte sur la différence essentielle ou la limite du rapprochement, reformule fidèlement ce que dit le texte fourni — jamais une reformulation approximative ou une comparaison que le texte ne fait pas explicitement.",
-    "- 4 options par question, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
-    "- Les 4 options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
+    "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
     "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
-    "- Pas de question fermée oui/non.",
+    "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
-    'Réponds uniquement en JSON strict, sous la forme {"questions":[{"question":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"...","sourceId":"id fourni"}]}.',
+    "",
+    ...buildQuestionFormatsPromptBlock("sourceId"),
     "",
     "Éclairages disponibles :",
     list
@@ -11475,18 +11733,14 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   const countPerSource = new Map();
   const valid = [];
   for (const item of rawQuestions) {
-    const question = String(item?.question || "").trim();
-    const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
-    const correctIndex = Number(item?.correctIndex);
-    const explanation = String(item?.explanation || "").trim();
+    const core = validateQuestionItemCore(item);
+    if (!core) continue;
     const sourceId = String(item?.sourceId ?? "").trim();
-    if (!question || options.length !== 4) continue;
-    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
     if (!sourceId || !validIds.has(sourceId)) continue;
     const usedCount = countPerSource.get(sourceId) || 0;
     if (usedCount >= maxPerSource) continue;
     countPerSource.set(sourceId, usedCount + 1);
-    valid.push({ question, options, correctIndex, explanation, sourceDebateId: sourceId });
+    valid.push({ ...core, sourceDebateId: sourceId });
     if (valid.length >= maxTotal) break;
   }
   return valid;
@@ -12039,63 +12293,7 @@ const CITATION_DU_JOUR_MODEL = process.env.OPENAI_CITATION_DU_JOUR_MODEL || "gpt
 // renvoie l'union des sujets qu'elles ont couverts pour que la citation du
 // jour les exclue.
 async function getCitationDuJourExcludedTopicIds(dateKey) {
-  const excluded = new Set();
-
-  let paralleleResult;
-  try {
-    paralleleResult = await paralleleHistoriqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
-  } catch (err) {
-    console.error("[citation-du-jour] attente du parallèle historique :", err.message);
-    paralleleResult = null;
-  }
-  let attempts = 0;
-  while (paralleleResult && paralleleResult.status === "generating" && attempts < 10) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    paralleleResult = await paralleleHistoriqueService.getByDate(dateKey);
-    attempts++;
-  }
-  if (paralleleResult && paralleleResult.status === "published" && paralleleResult.content) {
-    const parallels = Array.isArray(paralleleResult.content.parallels)
-      ? paralleleResult.content.parallels
-      : (paralleleResult.content.current_topic_id ? [paralleleResult.content] : []);
-    parallels.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
-  }
-
-  let penseeResult;
-  try {
-    penseeResult = await penseePhilosophiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
-  } catch (err) {
-    console.error("[citation-du-jour] attente de la pensée philosophique :", err.message);
-    penseeResult = null;
-  }
-  attempts = 0;
-  while (penseeResult && penseeResult.status === "generating" && attempts < 10) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    penseeResult = await penseePhilosophiqueService.getByDate(dateKey);
-    attempts++;
-  }
-  if (penseeResult && penseeResult.status === "published" && penseeResult.content) {
-    const pensees = Array.isArray(penseeResult.content.pensees) ? penseeResult.content.pensees : [];
-    pensees.forEach((p) => { if (p.current_topic_id) excluded.add(String(p.current_topic_id)); });
-  }
-
-  let mecanismeResult;
-  try {
-    mecanismeResult = await mecanismeSociologiqueService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
-  } catch (err) {
-    console.error("[citation-du-jour] attente du mécanisme sociologique :", err.message);
-    mecanismeResult = null;
-  }
-  attempts = 0;
-  while (mecanismeResult && mecanismeResult.status === "generating" && attempts < 10) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    mecanismeResult = await mecanismeSociologiqueService.getByDate(dateKey);
-    attempts++;
-  }
-  if (mecanismeResult && mecanismeResult.status === "published" && mecanismeResult.content) {
-    const mecanismes = Array.isArray(mecanismeResult.content.mecanismes) ? mecanismeResult.content.mecanismes : [];
-    mecanismes.forEach((m) => { if (m.current_topic_id) excluded.add(String(m.current_topic_id)); });
-  }
+  const excluded = await getConceptDuJourExcludedTopicIds(dateKey);
 
   let conceptResult;
   try {
@@ -12104,7 +12302,7 @@ async function getCitationDuJourExcludedTopicIds(dateKey) {
     console.error("[citation-du-jour] attente du concept du jour :", err.message);
     conceptResult = null;
   }
-  attempts = 0;
+  let attempts = 0;
   while (conceptResult && conceptResult.status === "generating" && attempts < 10) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     conceptResult = await conceptDuJourService.getByDate(dateKey);
@@ -12119,8 +12317,12 @@ async function getCitationDuJourExcludedTopicIds(dateKey) {
 }
 
 // Même pool de sujets que les quatre autres rubriques (getPublishedTopicsForDate,
-// ci-dessus) : "une actu du jour" désigne la même source de vérité pour les
-// cinq rubriques, pas une cinquième définition de "publié aujourd'hui".
+// plus haut) : "une actu du jour" désigne la même source de vérité pour les
+// cinq rubriques, pas une cinquième définition de "publié aujourd'hui". La
+// citation du jour choisit son sujet comme les autres, mais sa présentation
+// reste volontairement simple (cf. lib/citation-du-jour.js et
+// prompts/citation-du-jour.js) : pas de repli "presse" pour l'image — elle
+// représente l'auteur cité, jamais le sujet d'actualité.
 const citationDuJourService = createCitationDuJourService({
   supabase,
   callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
@@ -12128,11 +12330,60 @@ const citationDuJourService = createCitationDuJourService({
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
   getExcludedTopicIds: getCitationDuJourExcludedTopicIds,
-  // Repli "presse" pour l'image, même fonction que les quatre autres
-  // rubriques (aucune spécificité "citation du jour" côté server.js).
-  fetchPressPreviewImage,
   dateKeyFor: parisDateKey,
   model: CITATION_DU_JOUR_MODEL,
+  debugLogging: !process.env.RENDER
+});
+
+const OEUVRE_ART_DU_JOUR_MODEL = process.env.OPENAI_OEUVRE_ART_DU_JOUR_MODEL || "gpt-4.1-mini";
+
+// Les cinq autres rubriques Éclairages ont toujours priorité sur le choix
+// du sujet du jour : on attend/déclenche leur génération du jour dans cet
+// ordre (citationDuJourService.generateIfNeeded attend déjà lui-même les
+// quatre autres en interne, cf. getCitationDuJourExcludedTopicIds), puis on
+// renvoie l'union des sujets qu'elles ont couverts pour que l'œuvre d'art
+// du jour les exclue.
+async function getOeuvreArtDuJourExcludedTopicIds(dateKey) {
+  const excluded = await getCitationDuJourExcludedTopicIds(dateKey);
+
+  let citationResult;
+  try {
+    citationResult = await citationDuJourService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[oeuvre-art-du-jour] attente de la citation du jour :", err.message);
+    citationResult = null;
+  }
+  let attempts = 0;
+  while (citationResult && citationResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    citationResult = await citationDuJourService.getByDate(dateKey);
+    attempts++;
+  }
+  if (citationResult && citationResult.status === "published" && citationResult.content) {
+    const citations = Array.isArray(citationResult.content.citations) ? citationResult.content.citations : [];
+    citations.forEach((c) => { if (c.current_topic_id) excluded.add(String(c.current_topic_id)); });
+  }
+
+  return excluded;
+}
+
+// Même pool de sujets que les cinq autres rubriques (getPublishedTopicsForDate,
+// plus haut) : "une actu du jour" désigne la même source de vérité pour les
+// six rubriques, pas une sixième définition de "publié aujourd'hui". L'œuvre
+// d'art du jour choisit son sujet comme les autres, mais sa présentation
+// reste volontairement simple (cf. lib/oeuvre-art-du-jour.js et
+// prompts/oeuvre-art-du-jour.js) : pas de repli "presse" pour l'image —
+// c'est l'œuvre elle-même (ou l'artiste en repli) qui est représentée,
+// jamais le sujet d'actualité.
+const oeuvreArtDuJourService = createOeuvreArtDuJourService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getOeuvreArtDuJourExcludedTopicIds,
+  dateKeyFor: parisDateKey,
+  model: OEUVRE_ART_DU_JOUR_MODEL,
   debugLogging: !process.env.RENDER
 });
 
@@ -12198,15 +12449,26 @@ const CITATION_DU_JOUR_SCHEDULER_ENABLED = (() => {
 })();
 const CITATION_DU_JOUR_TRIGGER_HOUR = 9;
 
+// Interrupteur indépendant (mêmes règles) pour l'œuvre d'art du jour : peut
+// être activé/désactivé sans toucher aux cinq autres rubriques.
+const OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_OEUVRE_ART_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const OEUVRE_ART_DU_JOUR_TRIGGER_HOUR = 9;
+
 if (
   DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED ||
   PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED || MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED ||
-  CONCEPT_DU_JOUR_SCHEDULER_ENABLED || CITATION_DU_JOUR_SCHEDULER_ENABLED
+  CONCEPT_DU_JOUR_SCHEDULER_ENABLED || CITATION_DU_JOUR_SCHEDULER_ENABLED ||
+  OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED
 ) {
   // Un seul setInterval partagé entre QCM, parallèle historique, pensée
-  // philosophique, mécanisme sociologique, concept du jour et citation du
-  // jour, chacun gardé par son propre interrupteur — pas de scheduler
-  // dupliqué.
+  // philosophique, mécanisme sociologique, concept du jour, citation du
+  // jour et œuvre d'art du jour, chacun gardé par son propre interrupteur —
+  // pas de scheduler dupliqué.
   const tryRunDailySchedulers = () => {
     const hour = parisHour();
     if (DAILY_QUIZ_SCHEDULER_ENABLED) {
@@ -12234,6 +12496,10 @@ if (
     if (CITATION_DU_JOUR_SCHEDULER_ENABLED && hour >= CITATION_DU_JOUR_TRIGGER_HOUR) {
       citationDuJourService.generateIfNeeded(new Date())
         .catch((err) => console.error("[citation-du-jour scheduler]", err.message));
+    }
+    if (OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED && hour >= OEUVRE_ART_DU_JOUR_TRIGGER_HOUR) {
+      oeuvreArtDuJourService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[oeuvre-art-du-jour scheduler]", err.message));
     }
   };
   tryRunDailySchedulers();
@@ -12324,6 +12590,27 @@ app.get("/api/daily-quiz/status", async (req, res) => {
   }
 });
 
+// Ne renvoie jamais la bonne réponse avant que l'utilisateur ait répondu
+// (cf. POST /answer, seul endroit qui la révèle). Pour "association", ne
+// renvoie surtout pas `pairs` tel quel (le mapping correct) : seulement les
+// deux colonnes séparées, `rights` mélangé — l'appariement se fait par
+// valeur texte côté client, pas par position, donc mélanger `lefts` n'aurait
+// aucun intérêt.
+function stripQuestionForClient(q) {
+  const type = q.type || "qcm";
+  if (type === "association") {
+    const pairs = Array.isArray(q.pairs) ? q.pairs : [];
+    return {
+      id: q.id,
+      type,
+      question: q.question,
+      lefts: pairs.map((p) => p.left),
+      rights: shuffleArray(pairs.map((p) => p.right))
+    };
+  }
+  return { id: q.id, type, question: q.question, options: q.options };
+}
+
 app.get("/api/daily-quiz/today", async (req, res) => {
   try {
     const todayKey = parisDateKey();
@@ -12338,7 +12625,7 @@ app.get("/api/daily-quiz/today", async (req, res) => {
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return res.json({ date: todayKey, slot, label: DAILY_QUIZ_SLOTS[slot].label, questions: [] });
-    const questions = (data.questions || []).map((q) => ({ id: q.id, question: q.question, options: q.options }));
+    const questions = (data.questions || []).map(stripQuestionForClient);
     res.json({ date: data.quiz_date, slot: data.slot, label: DAILY_QUIZ_SLOTS[slot].label, questions });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
@@ -12383,7 +12670,10 @@ app.get("/api/daily-quiz/results", async (req, res) => {
         correctIndex: question.correctIndex,
         explanation: question.explanation,
         stats,
-        totalAnswers: total
+        totalAnswers: total,
+        // Réveil des bonnes paires pour la reprise de session (l'utilisateur
+        // a déjà répondu à cette question) — cf. POST /answer, même règle.
+        ...((question.type || "qcm") === "association" ? { pairs: question.pairs } : {})
       });
     }
     res.json({ date: todayKey, answers });
@@ -12392,13 +12682,30 @@ app.get("/api/daily-quiz/results", async (req, res) => {
   }
 });
 
+// Compare la proposition d'appariement de l'utilisateur (tableau {left,right})
+// aux paires réellement correctes de la question : vrai seulement si TOUTES
+// les paires sont correctes (pas de score partiel, cf. plan — reste cohérent
+// avec les autres formats, tous notés tout-ou-rien).
+function isAssociationAnswerFullyCorrect(submittedPairs, correctPairs) {
+  if (!Array.isArray(submittedPairs) || submittedPairs.length !== correctPairs.length) return false;
+  const correctByLeft = new Map(correctPairs.map((p) => [p.left, p.right]));
+  const seenLefts = new Set();
+  for (const raw of submittedPairs) {
+    const left = String(raw?.left || "").trim();
+    const right = String(raw?.right || "").trim();
+    if (!left || !right || seenLefts.has(left) || !correctByLeft.has(left)) return false;
+    seenLefts.add(left);
+    if (correctByLeft.get(left) !== right) return false;
+  }
+  return seenLefts.size === correctPairs.length;
+}
+
 app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
   try {
     const voterKey = String(req.body?.voterKey || "").trim();
     const questionId = String(req.body?.questionId || "").trim();
-    const optionIndex = Number(req.body?.optionIndex);
     const slot = String(req.body?.slot || "").trim();
-    if (!voterKey || !questionId || !isValidDailyQuizSlot(slot) || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3) {
+    if (!voterKey || !questionId || !isValidDailyQuizSlot(slot)) {
       return res.status(400).json({ error: "Requête invalide." });
     }
 
@@ -12416,6 +12723,25 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
 
     if (existingAnswerResult.error) throw new Error(existingAnswerResult.error.message);
     const existingAnswer = existingAnswerResult.data;
+
+    // "association" n'envoie pas optionIndex (pas un choix unique parmi des
+    // options) : on calcule nous-mêmes si l'appariement soumis est
+    // intégralement correct, et on le code dans la même colonne
+    // option_index que les autres formats (0/1), cf. ASSOCIATION_CORRECT_INDEX
+    // et le plan associé — le reste de la route (idempotence, stats,
+    // computeUserScores) n'a besoin d'aucune autre modification.
+    const questionType = question.type || "qcm";
+    let optionIndex;
+    if (questionType === "association") {
+      const allCorrect = isAssociationAnswerFullyCorrect(req.body?.associationAnswer, question.pairs || []);
+      optionIndex = allCorrect ? ASSOCIATION_CORRECT_INDEX : 0;
+    } else {
+      optionIndex = Number(req.body?.optionIndex);
+      const maxIndex = (Array.isArray(question.options) ? question.options.length : 4) - 1;
+      if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > maxIndex) {
+        return res.status(400).json({ error: "Requête invalide." });
+      }
+    }
 
     let finalOptionIndex = optionIndex;
     if (existingAnswer) {
@@ -12452,7 +12778,10 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       explanation: question.explanation,
       optionIndex: finalOptionIndex,
       stats,
-      totalAnswers: total
+      totalAnswers: total,
+      // Réveil des bonnes paires uniquement une fois la réponse soumise —
+      // jamais avant (cf. GET /today, qui ne renvoie pas ce mapping).
+      ...(questionType === "association" ? { pairs: question.pairs } : {})
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -12763,6 +13092,65 @@ app.post("/api/citation-du-jour/generate", requireAdmin, rateLimit("citation-du-
     res.json(result);
   } catch (error) {
     console.error("[citation-du-jour] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Œuvre d'art du jour — page autonome (cf. views/oeuvre-art-du-jour.html).
+app.get("/oeuvre-art-du-jour", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/oeuvre-art-du-jour.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/oeuvre-art-du-jour/today", rateLimit("oeuvre-art-du-jour-today", 60), async (req, res) => {
+  try {
+    const result = await oeuvreArtDuJourService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[oeuvre-art-du-jour] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/oeuvre-art-du-jour/dates", rateLimit("oeuvre-art-du-jour-dates", 60), async (req, res) => {
+  try {
+    const dates = await oeuvreArtDuJourService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[oeuvre-art-du-jour] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/oeuvre-art-du-jour/:date", rateLimit("oeuvre-art-du-jour-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await oeuvreArtDuJourService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[oeuvre-art-du-jour] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/oeuvre-art-du-jour/generate", requireAdmin, rateLimit("oeuvre-art-du-jour-generate", 10), async (req, res) => {
+  try {
+    const result = await oeuvreArtDuJourService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[oeuvre-art-du-jour] /generate :", error.message);
     res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
   }
 });

@@ -294,6 +294,77 @@
       font-size: 13px;
       line-height: 1.4;
     }
+    /* Badge cosmétique au-dessus de la question pour les formats
+       vrai_faux/texte_a_trous : rend la variété de formats visible sans
+       toucher au reste de la mise en page. */
+    .qcm-type-badge {
+      display: inline-block;
+      margin: 0 0 8px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    /* Marqueur "___" d'une question texte_a_trous, mis en valeur dans le
+       texte de la question — jamais introduit avant l'échappement HTML
+       (cf. renderChoiceQuestion), donc toujours sûr à afficher. */
+    .qcm-blank {
+      display: inline-block;
+      min-width: 46px;
+      padding: 0 4px;
+      border-bottom: 2px solid #516776;
+      color: #516776;
+      font-weight: 700;
+      text-align: center;
+    }
+    .qcm-assoc-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .qcm-assoc-left {
+      flex: 1 1 auto;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f9fafb;
+      color: #1f2937;
+      font-size: 14px;
+    }
+    .qcm-assoc-select {
+      flex: 1 1 auto;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #1f2937;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .qcm-assoc-select:disabled {
+      cursor: default;
+      opacity: 0.85;
+    }
+    .qcm-assoc-select.is-correct {
+      border-color: #1f9d55;
+      background: #f0fdf4;
+      color: #166534;
+    }
+    .qcm-assoc-select.is-wrong {
+      border-color: #d64545;
+      background: #fef2f2;
+      color: #991b1b;
+    }
+    .qcm-assoc-correct-hint {
+      flex: 1 1 auto;
+      font-size: 12px;
+      color: #1f9d55;
+    }
   </style>
 </head>
 <body class="page-qcm-du-jour">
@@ -332,8 +403,8 @@
   var currentCategory = null;
   var slotsStatus = null;
 
-  // "QCM actu" (matin/soir, actualité du jour) vs "QCM humanités" (Ce jour
-  // dans l'Histoire / Éclairages) : deux onglets de haut niveau, le
+  // "QCM actu" (matin/soir, actualité du jour) vs "QCM culture générale" (Ce
+  // jour dans l'Histoire / Éclairages) : deux onglets de haut niveau, le
   // sélecteur de créneaux existant (#qcm-slot-switcher) ne montrant plus
   // que les créneaux de la catégorie active, comme sous-choix.
   var CATEGORY_BY_SLOT = {
@@ -343,7 +414,7 @@
     eclairages: 'histoire'
   };
   var CATEGORY_ORDER = ['actu', 'histoire'];
-  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'Qcm Humanités' };
+  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM Culture Générale' };
 
   function availableSlotKeysInCategory(category) {
     return Object.keys(slotsStatus.slots).filter(function (k) {
@@ -400,13 +471,58 @@
     return Math.round((count / total) * 100);
   }
 
+  // Libellés du badge cosmétique affiché au-dessus de la question pour les
+  // formats autres que "qcm" classique — rend la variété de formats visible
+  // sans rien changer d'autre à la mise en page.
+  var QUESTION_TYPE_BADGE_LABELS = {
+    vrai_faux: 'Vrai ou faux ?',
+    texte_a_trous: 'Texte à trous',
+    association: 'Association'
+  };
+  var FILL_BLANK_MARKER = '___';
+
+  function renderTypeBadge(type) {
+    var label = QUESTION_TYPE_BADGE_LABELS[type];
+    return label ? '<span class="qcm-type-badge">' + escapeHtml(label) + '</span>' : '';
+  }
+
+  // Point d'entrée unique : dispatché selon le format de la question
+  // courante. "association" a une interaction fondamentalement différente
+  // (appariement, pas un choix unique) et un rendu dédié ; les 3 autres
+  // formats partagent le même rendu à options (renderChoiceQuestion), la
+  // boucle sur question.options étant déjà générique (2 ou 4 options).
   function renderQuestion() {
     var question = questions[currentIndex];
     var answer = answeredByQuestionId[question.id];
+    if ((question.type || 'qcm') === 'association') {
+      renderAssociationQuestion(question, answer);
+    } else {
+      renderChoiceQuestion(question, answer);
+    }
+  }
+
+  // Câblage partagé du bouton "Question suivante" / "Voir mon score",
+  // identique quel que soit le format de question qui vient d'être répondu.
+  function wireNextButton(nextBtn) {
+    var isLast = currentIndex === questions.length - 1;
+    nextBtn.textContent = isLast ? 'Voir mon score' : 'Question suivante';
+    nextBtn.className = 'qcm-next-btn visible';
+    nextBtn.onclick = function () {
+      if (isLast) renderFinalScore();
+      else { currentIndex += 1; renderQuestion(); }
+    };
+  }
+
+  function renderChoiceQuestion(question, answer) {
+    var type = question.type || 'qcm';
+    var questionHtml = type === 'texte_a_trous'
+      ? escapeHtml(question.question).split(FILL_BLANK_MARKER).join('<span class="qcm-blank">' + FILL_BLANK_MARKER + '</span>')
+      : escapeHtml(question.question);
 
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderTypeBadge(type);
+    html += '<p class="qcm-question">' + questionHtml + '</p>';
     html += '<div class="qcm-options" id="qcm-options"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
@@ -423,14 +539,14 @@
         '<span class="qcm-option-label">' + escapeHtml(optionText) + '</span>' +
         '<span class="qcm-option-pct"></span>' +
         '</span>';
-      btn.addEventListener('click', function () { submitAnswer(question, index); });
+      btn.addEventListener('click', function () { submitChoiceAnswer(question, index); });
       optionsEl.appendChild(btn);
     });
 
-    if (answer) applyAnswerState(question, answer);
+    if (answer) applyChoiceAnswerState(question, answer);
   }
 
-  function applyAnswerState(question, answer) {
+  function applyChoiceAnswerState(question, answer) {
     var optionsEl = document.getElementById('qcm-options');
     var buttons = optionsEl.querySelectorAll('.qcm-option-btn');
     var total = answer.totalAnswers || 0;
@@ -450,17 +566,10 @@
       '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
       escapeHtml(answer.explanation || '');
 
-    var nextBtn = document.getElementById('qcm-next-btn');
-    var isLast = currentIndex === questions.length - 1;
-    nextBtn.textContent = isLast ? 'Voir mon score' : 'Question suivante';
-    nextBtn.className = 'qcm-next-btn visible';
-    nextBtn.onclick = function () {
-      if (isLast) renderFinalScore();
-      else { currentIndex += 1; renderQuestion(); }
-    };
+    wireNextButton(document.getElementById('qcm-next-btn'));
   }
 
-  function submitAnswer(question, optionIndex) {
+  function submitChoiceAnswer(question, optionIndex) {
     var optionsEl = document.getElementById('qcm-options');
     optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = true; });
 
@@ -473,11 +582,142 @@
       .then(function (data) {
         if (data.error) throw new Error(data.error);
         answeredByQuestionId[question.id] = data;
-        applyAnswerState(question, data);
+        applyChoiceAnswerState(question, data);
       })
       .catch(function () {
         optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = false; });
       });
+  }
+
+  // ── Format "association" : relier chaque élément de question.lefts à
+  // l'élément de question.rights qui lui correspond. Un <select> natif par
+  // ligne plutôt qu'un glisser-déposer ou un système de clic-appariement :
+  // aucune dépendance, tactile/clavier/lecteur d'écran gratuits, cohérent
+  // avec le reste du site (vanilla JS, sans framework). ─────────────────
+  function renderAssociationQuestion(question, answer) {
+    var html = '';
+    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderTypeBadge('association');
+    html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += '<div id="qcm-assoc-rows"></div>';
+    html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-assoc-submit-btn" disabled>Valider</button>';
+    html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
+    body.innerHTML = html;
+
+    var rowsEl = document.getElementById('qcm-assoc-rows');
+    var lefts = question.lefts || [];
+    var rights = question.rights || [];
+    var selects = lefts.map(function (leftText) {
+      var row = document.createElement('div');
+      row.className = 'qcm-assoc-row';
+      var leftSpan = document.createElement('span');
+      leftSpan.className = 'qcm-assoc-left';
+      leftSpan.textContent = leftText;
+      var select = document.createElement('select');
+      select.className = 'qcm-assoc-select';
+      var placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choisis…';
+      select.appendChild(placeholder);
+      rights.forEach(function (rightText) {
+        var opt = document.createElement('option');
+        opt.value = rightText;
+        opt.textContent = rightText;
+        select.appendChild(opt);
+      });
+      row.appendChild(leftSpan);
+      row.appendChild(select);
+      rowsEl.appendChild(row);
+      return select;
+    });
+
+    var submitBtn = document.getElementById('qcm-assoc-submit-btn');
+    function updateSubmitEnabled() {
+      submitBtn.disabled = selects.some(function (s) { return !s.value; });
+    }
+    selects.forEach(function (select) {
+      select.addEventListener('change', updateSubmitEnabled);
+    });
+    submitBtn.onclick = function () {
+      var pairsGuess = lefts.map(function (leftText, index) {
+        return { left: leftText, right: selects[index].value };
+      });
+      submitAssociationAnswer(question, pairsGuess, selects, submitBtn);
+    };
+
+    // Reprise de session (page rechargée après une réponse déjà envoyée) :
+    // le serveur ne connaît que le verdict global (tout correct ou non, cf.
+    // POST /answer), pas le choix exact fait pour chaque ligne à l'époque —
+    // applyAssociationAnswerState gère ce cas en pré-remplissant chaque
+    // <select> avec la bonne réponse plutôt qu'en essayant de deviner ce qui
+    // avait été choisi.
+    if (answer) applyAssociationAnswerState(question, answer, selects);
+  }
+
+  function submitAssociationAnswer(question, pairsGuess, selects, submitBtn) {
+    selects.forEach(function (s) { s.disabled = true; });
+    submitBtn.disabled = true;
+
+    fetch('/api/daily-quiz/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, associationAnswer: pairsGuess })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        answeredByQuestionId[question.id] = data;
+        applyAssociationAnswerState(question, data, selects);
+      })
+      .catch(function () {
+        selects.forEach(function (s) { s.disabled = false; });
+        submitBtn.disabled = false;
+      });
+  }
+
+  // `selects` reflète soit un choix réel de l'utilisateur qui vient de
+  // répondre (chaque <select> a une valeur, comparée à la bonne réponse),
+  // soit une reprise de session où le serveur ne renvoie que le verdict
+  // global (cf. commentaire dans renderAssociationQuestion) : dans ce
+  // second cas chaque <select> est encore vide, on le pré-remplit alors
+  // directement avec la bonne réponse plutôt que d'afficher un faux "raté"
+  // sur une ligne où l'utilisateur n'a en réalité rien choisi ici.
+  function applyAssociationAnswerState(question, answer, selects) {
+    var lefts = question.lefts || [];
+    var correctByLeft = {};
+    (answer.pairs || []).forEach(function (p) { correctByLeft[p.left] = p.right; });
+
+    selects.forEach(function (select, index) {
+      var leftText = lefts[index];
+      var correctRight = correctByLeft[leftText];
+      var chosen = select.value;
+      select.disabled = true;
+      if (!chosen) {
+        select.value = correctRight;
+        return;
+      }
+      if (chosen === correctRight) {
+        select.classList.add('is-correct');
+      } else {
+        select.classList.add('is-wrong');
+        var hint = document.createElement('span');
+        hint.className = 'qcm-assoc-correct-hint';
+        hint.textContent = 'Bonne réponse : ' + correctRight;
+        select.parentNode.appendChild(hint);
+      }
+    });
+
+    var submitBtn = document.getElementById('qcm-assoc-submit-btn');
+    if (submitBtn) submitBtn.remove();
+
+    var feedback = document.getElementById('qcm-feedback');
+    feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
+    feedback.innerHTML =
+      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
+      escapeHtml(answer.explanation || '');
+
+    wireNextButton(document.getElementById('qcm-next-btn'));
   }
 
   function renderFinalScore() {
