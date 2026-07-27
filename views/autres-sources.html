@@ -1471,6 +1471,7 @@ window.addEventListener("pageshow", function() {
 
           <div class="tribunes-filters-row">
             <select id="tribunes-orientation-filter" class="tribunes-media-filter" aria-label="Filtrer par orientation ou rubrique">
+              <option value="recommande">Recommandé</option>
               <option value="center">Généralistes</option>
               <optgroup label="Orientation politique">
                 <option value="left">Gauche</option>
@@ -1502,7 +1503,7 @@ window.addEventListener("pageshow", function() {
 
       <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
         <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
-        <button type="button" id="tribunes-filter-center" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="center">Généraliste</button>
+        <button type="button" id="tribunes-filter-recommande" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="recommande">Recommandé</button>
         <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
       </div>
 
@@ -1515,8 +1516,6 @@ window.addEventListener("pageshow", function() {
     </div>
 
     <div id="tribunes-custom-media-page-banner" class="tribunes-custom-media-page-banner" style="display:none;"></div>
-
-    <div id="tribunes-recommended" class="tribunes-recommended-wrap" style="display:none;"></div>
 
     <div class="tribunes-list" id="tribunes-list">
       <div class="tribunes-initial-loading" aria-label="Chargement">
@@ -1657,7 +1656,7 @@ window.addEventListener("pageshow", function() {
   if (!list) return;
 
   var allArticles = [];
-  var currentFilter = 'center';
+  var currentFilter = 'recommande';
   var currentMedia = '';
   var currentType = '';
   var currentSearchQuery = '';
@@ -1688,11 +1687,6 @@ window.addEventListener("pageshow", function() {
   function tribunesInitialCountForGroup(groupKey) {
     var isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (groupKey === 'a-la-une') return isMobile ? 1 : 4;
-    // Section recommandée : liste fixe et courte (cf. OPINION_ARTICLES_RECOMMENDED_CAP côté
-    // serveur, 12), rendue en dehors de #tribunes-list donc jamais atteinte par la sentinelle
-    // de lazy-load — tout doit être matérialisé d'un coup, sinon le reliquat resterait bloqué
-    // dans tribunesPendingBatches indéfiniment.
-    if (groupKey === 'recommande') return 12;
     return isMobile ? 2 : 5;
   }
 
@@ -2468,20 +2462,12 @@ window.addEventListener("pageshow", function() {
     });
   }
 
-  function attachCardLinkHandlers(container) {
-    (container || list).querySelectorAll('.tribunes-item[data-link]').forEach(bindTribunesCardHandlers);
+  function attachCardLinkHandlers() {
+    list.querySelectorAll('.tribunes-item[data-link]').forEach(bindTribunesCardHandlers);
   }
 
-  // container optionnel (défaut #tribunes-list) : permet de rejouer le branchement sur un
-  // conteneur externe comme #tribunes-recommended (cf. renderRecommendedSection) sans
-  // toucher aux appels existants. Volontairement pas un simple passage à document : cette
-  // fonction n'a pas de garde anti-double-binding (contrairement à bindTribunesCardHandlers),
-  // et le rendu recommandé n'a lieu qu'une fois — une portée document empilerait les
-  // listeners de flèches à chaque changement d'onglet (chaque render() rappelle cette
-  // fonction sur #tribunes-list, jamais sur #tribunes-recommended).
-  function attachCarouselArrows(container) {
-    var scope = container || list;
-    scope.querySelectorAll('.tribunes-carousel-arrow').forEach(function(btn) {
+  function attachCarouselArrows() {
+    list.querySelectorAll('.tribunes-carousel-arrow').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
@@ -2508,7 +2494,7 @@ window.addEventListener("pageshow", function() {
         scheduleCarouselStateUpdate(row);
       });
     });
-    scope.querySelectorAll('.tribunes-row-jump-start').forEach(function(btn) {
+    list.querySelectorAll('.tribunes-row-jump-start').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var row = document.getElementById(btn.dataset.row);
         if (!row) return;
@@ -2516,7 +2502,7 @@ window.addEventListener("pageshow", function() {
         scheduleCarouselStateUpdate(row);
       });
     });
-    scope.querySelectorAll('.tribunes-carousel').forEach(function(row) {
+    list.querySelectorAll('.tribunes-carousel').forEach(function(row) {
       row.__tribunesControls = collectCarouselControls(row);
       bindTribunesMobileOneCardSwipe(row);
       row.addEventListener('scroll', function() {
@@ -2762,8 +2748,8 @@ window.addEventListener("pageshow", function() {
     syncCarouselDots(row, { lightweight: true });
   }
 
-  function updateAllCarouselArrowStates(container) {
-    (container || list).querySelectorAll('.tribunes-carousel').forEach(updateCarouselArrowState);
+  function updateAllCarouselArrowStates() {
+    list.querySelectorAll('.tribunes-carousel').forEach(updateCarouselArrowState);
   }
 
   var allCarouselStateRaf = 0;
@@ -2959,6 +2945,18 @@ window.addEventListener("pageshow", function() {
     }
     tribunesPendingBatches = {};
     if (!articles.length) {
+      // Onglet par défaut : le premier render() peut arriver avant que
+      // loadRecommendedArticles() ait résolu (fetch séparé, en parallèle de
+      // loadArticles()) — distingue "en cours de chargement" de "vraiment vide"
+      // pour ne pas afficher le message définitif à tort.
+      if (currentFilter === 'recommande' && !recommendedLoaded) {
+        list.innerHTML = '<div class="tribunes-empty-loading">' +
+            '<span class="load-more-spinner" aria-hidden="true"></span>' +
+            '<span>Chargement des recommandations…</span>' +
+          '</div>';
+        syncTribunesMobileBottomViewport();
+        return;
+      }
       // Filtre étroit (Personnalisé, Nouvelles positives...) dont les
       // correspondances peuvent être loin dans les pages pas encore
       // chargées : tant qu'il reste des pages à parcourir (tribunesHasMore),
@@ -2980,7 +2978,9 @@ window.addEventListener("pageshow", function() {
       }
       var emptyMessage = currentSearchQuery
         ? 'Aucun article ne correspond à votre recherche.'
-        : (currentFilter === 'center'
+        : (currentFilter === 'recommande'
+          ? 'Pas encore de recommandation pour vous.'
+          : (currentFilter === 'center'
           ? 'Aucun article généraliste pour le moment.'
           : (currentFilter === 'positive'
             ? 'Aucune nouvelle positive pour le moment.'
@@ -2988,7 +2988,7 @@ window.addEventListener("pageshow", function() {
               ? 'Aucune actualité régionale pour le moment.'
               : (currentFilter === 'custom'
                 ? (customMediaSelection.size ? 'Aucun article pour les médias sélectionnés.' : 'Choisis tes médias pour voir leurs articles.')
-                : 'Aucun article de ce côté pour le moment.'))));
+                : 'Aucun article de ce côté pour le moment.')))));
       list.innerHTML = '<p class="tribunes-empty">' + emptyMessage + '</p>'
         + buildTribunesGlobalSentinelHtml();
       initTribunesGlobalLoadMore();
@@ -3250,7 +3250,7 @@ window.addEventListener("pageshow", function() {
   // scanne que les cartes de #tribunes-list — une carte recommandée pas encore entrée dans
   // le viewport à ce moment-là resterait sinon bloquée sur le spinner de chargement. Le volume
   // limité de cette section (12 cartes) rend le coût du eager-fetch acceptable.
-  function observeForPreview(card, article, eager) {
+  function observeForPreview(card, article) {
     card.__article = article;
     if (thumbSpinObserver) thumbSpinObserver.observe(card);
     if (article.type === 'youtube') {
@@ -3265,7 +3265,7 @@ window.addEventListener("pageshow", function() {
       applyPreviewToCard(article, article.source_preview, card);
       return;
     }
-    if (eager || !('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
+    if (!('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
     if (!previewObserver) {
       previewObserver = new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
@@ -3341,11 +3341,13 @@ window.addEventListener("pageshow", function() {
     return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
   }
 
-  // 'center' (médias généralistes) a son propre onglet (Généraliste, ex-Tout,
-  // demande du 20/07/2026) : filtré comme gauche/droite/positif/régional via
-  // orientationClass. 'custom' reste à part (sélection par média, toute
-  // orientation confondue).
+  // 'recommande' n'est pas une orientation mais une liste déjà calculée côté serveur
+  // (cf. loadRecommendedArticles/recommendedArticles) : pas de filtrage sur allArticles.
+  // 'center' (médias généralistes, ex-onglet par défaut) reste accessible via le menu
+  // déroulant #tribunes-orientation-filter, filtré comme gauche/droite/positif/régional via
+  // orientationClass. 'custom' reste à part (sélection par média, toute orientation confondue).
   function articlesInScope() {
+    if (currentFilter === 'recommande') return recommendedArticles;
     if (currentFilter === 'custom') {
       return allArticles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
@@ -3384,7 +3386,9 @@ window.addEventListener("pageshow", function() {
   // donnée — utilisé pour la liste complète comme pour les articles d'une nouvelle page.
   function filterArticlesList(articles) {
     var filtered;
-    if (currentFilter === 'custom') {
+    if (currentFilter === 'recommande') {
+      filtered = recommendedArticles;
+    } else if (currentFilter === 'custom') {
       filtered = articles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
       });
@@ -3414,6 +3418,7 @@ window.addEventListener("pageshow", function() {
   var TRIBUNES_FILTER_TAG_LABELS = {
     left: 'Gauche',
     right: 'Droite',
+    center: 'Généraliste',
     regional: 'Actualités régionales',
     positive: 'Nouvelles positives',
     custom: 'Personnalisé'
@@ -3431,10 +3436,10 @@ window.addEventListener("pageshow", function() {
     if (!container) return;
     var tags = [];
     if (currentSearchQuery) tags.push(tribunesFilterTagHtml('search', currentSearchQuery));
-    // 'center' (Généraliste) est le filtre neutre/par défaut (ex-"Tout") :
+    // 'recommande' est le filtre neutre/par défaut (remplace l'ex-Généraliste) :
     // pas de tag pour lui-même, sinon la croix "retirer" ne ferait que
     // revenir au même état (cf. removeTribunesFilterTag -> setTribunesOrientationFilter('')).
-    if (currentFilter !== 'center' && TRIBUNES_FILTER_TAG_LABELS[currentFilter]) {
+    if (currentFilter !== 'recommande' && TRIBUNES_FILTER_TAG_LABELS[currentFilter]) {
       tags.push(tribunesFilterTagHtml('orientation', TRIBUNES_FILTER_TAG_LABELS[currentFilter]));
     }
     if (currentMedia) tags.push(tribunesFilterTagHtml('media', currentMedia));
@@ -3533,13 +3538,13 @@ window.addEventListener("pageshow", function() {
   extraFilterBtns.forEach(function(extraBtn) {
     extraBtn.addEventListener('click', function() {
       var isActive = extraBtn.classList.contains(extraBtn.dataset.activeClass);
-      var nextFilter = isActive ? 'center' : extraBtn.dataset.extraFilter;
+      var nextFilter = isActive ? 'recommande' : extraBtn.dataset.extraFilter;
       currentFilter = nextFilter;
       currentMedia = '';
       syncExtraFilterButtons(isActive ? '' : extraBtn.dataset.extraFilter);
       if (switchEl) {
         switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
-          seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'center' : false);
+          seg.classList.toggle('tribunes-filter-segment-active', isActive ? seg.dataset.filter === 'recommande' : false);
         });
       }
       syncOrientationFilterSelect();
@@ -3552,14 +3557,14 @@ window.addEventListener("pageshow", function() {
 
   function setTribunesOrientationFilter(value) {
     var isExtra = value === 'positive' || value === 'regional' || value === 'custom';
-    currentFilter = value || 'center';
+    currentFilter = value || 'recommande';
     currentMedia = '';
     syncExtraFilterButtons(isExtra ? value : '');
     if (switchEl) {
       switchEl.querySelectorAll('.tribunes-filter-segment').forEach(function(seg) {
         // Filtre extra actif → aucun segment allumé, comme au clic direct
         // sur les boutons Nouvelles positives / Actualités régionales.
-        seg.classList.toggle('tribunes-filter-segment-active', !isExtra && seg.dataset.filter === (value || 'center'));
+        seg.classList.toggle('tribunes-filter-segment-active', !isExtra && seg.dataset.filter === (value || 'recommande'));
       });
     }
     syncOrientationFilterSelect();
@@ -3656,7 +3661,9 @@ window.addEventListener("pageshow", function() {
   // (#index-infinite-scroll-sentinel + loadMoreOtherDebates) : chaque déclenchement
   // charge la page suivante de 60 articles et réalimente les pools des carrousels. ──
   function buildTribunesGlobalSentinelHtml() {
-    if (!tribunesHasMore) return '';
+    // 'recommande' est une liste fixe (pas de pagination serveur propre) : pas de
+    // scroll infini à proposer, même si tribunesHasMore reste vrai pour le pool général.
+    if (!tribunesHasMore || currentFilter === 'recommande') return '';
     return '<div id="tribunes-infinite-scroll-sentinel" class="load-more-container" aria-busy="false">' +
       '<button class="button button-small" type="button">Fais défiler pour charger la suite</button>' +
       '</div>';
@@ -3753,7 +3760,7 @@ window.addEventListener("pageshow", function() {
   }
 
   function loadMoreTribunesArticles() {
-    if (tribunesPageLoading || !tribunesHasMore) return;
+    if (currentFilter === 'recommande' || tribunesPageLoading || !tribunesHasMore) return;
     tribunesPageLoading = true;
     setTribunesGlobalSentinelLoading(true);
     fetch('/api/opinion-articles?limit=' + TRIBUNES_PAGE_SIZE + '&offset=' + tribunesNextOffset, { cache: 'no-store' })
@@ -3816,38 +3823,25 @@ window.addEventListener("pageshow", function() {
       });
   }
 
-  // Section "Recommandé pour vous" : indépendante du pipeline d'onglets (applyFilter/render
-  // ne voient que le sous-ensemble de l'orientation active) — sinon les recommandations
-  // seraient limitées à l'onglet courant, ce qui viderait l'intérêt d'une personnalisation
-  // cross-orientation. Vit hors de #tribunes-list, jamais touchée par un changement d'onglet.
+  // Onglet "Recommandé" (remplace l'ancien onglet par défaut Généraliste, resté accessible
+  // via le menu déroulant #tribunes-orientation-filter) : recommendedArticles est une liste
+  // séparée de allArticles (pas une orientation, un résultat déjà personnalisé côté serveur),
+  // branchée dans le pipeline de rendu normal via articlesInScope()/filterArticlesList()
+  // ci-dessous. recommendedLoaded distingue "en cours de chargement" de "vraiment vide" dans
+  // le message d'état de render().
+  var recommendedArticles = [];
+  var recommendedLoaded = false;
+
   function loadRecommendedArticles() {
-    var container = document.getElementById('tribunes-recommended');
-    if (!container || typeof getVisitorKey !== 'function') return;
+    if (typeof getVisitorKey !== 'function') { recommendedLoaded = true; return; }
     fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()), { cache: 'no-store' })
       .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-      .then(function(data) {
-        var items = Array.isArray(data.articles) ? data.articles : [];
-        if (!items.length) return; // reste caché, pas de titre vide
-        renderRecommendedSection(items, container);
-      })
-      .catch(function() {});
-  }
-
-  function renderRecommendedSection(items, container) {
-    container.innerHTML = renderThemeSection({ key: 'recommande', label: 'Recommandé pour vous', items: items });
-    container.style.display = '';
-    var row = document.getElementById('tribunes-row-recommande');
-    var sentinel = row && row.querySelector('.tribunes-load-sentinel');
-    if (sentinel) sentinel.remove(); // liste fixe, pas de scroll infini
-    attachCardLinkHandlers(container);
-    attachCarouselArrows(container);
-    updateAllCarouselArrowStates(container);
-    var byLink = {};
-    items.forEach(function(a) { if (a.link) byLink[a.link] = a; });
-    container.querySelectorAll('.tribunes-item[data-link]').forEach(function(card) {
-      var article = byLink[card.dataset.link];
-      if (article) observeForPreview(card, article, true);
-    });
+      .then(function(data) { recommendedArticles = Array.isArray(data.articles) ? data.articles : []; })
+      .catch(function() { recommendedArticles = []; })
+      .then(function() {
+        recommendedLoaded = true;
+        if (currentFilter === 'recommande') applyFilter();
+      });
   }
 
   function trackOpinionArticleClick(link, article) {
