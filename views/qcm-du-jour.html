@@ -31,6 +31,7 @@
        Posé à la fois sur html et body : html a déjà ce fond par défaut (cf.
        style.css ligne ~14068), mais sans hauteur de body qui couvre tout le
        viewport, une bande plus claire pouvait apparaître sous une carte courte. */
+    html,
     html:has(body.page-qcm-du-jour) {
       background-color: #243038;
     }
@@ -42,6 +43,7 @@
       content: "";
       display: block;
       height: 220px;
+      background-color: #243038;
       flex: 0 0 auto;
     }
     body.page-qcm-du-jour.in-iframe::after {

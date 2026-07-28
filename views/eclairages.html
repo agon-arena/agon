@@ -29,6 +29,7 @@
   <style>
     /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038),
        posé sur html et body (cf. qcm-du-jour.html pour la justification). */
+    html,
     html:has(body.page-eclairages) {
       background-color: #243038;
     }
@@ -40,6 +41,7 @@
       content: "";
       display: block;
       height: 240px;
+      background-color: #243038;
       flex: 0 0 auto;
     }
     body.page-eclairages.in-iframe::after {
