@@ -831,18 +831,18 @@ window.addEventListener("pageshow", function() {
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
   }
-  /* Reflet posé par le script ci-dessous : ne balaie le bouton que pendant
+  /* Grand reflet posé par le script ci-dessous : ne balaie les boutons que pendant
      les premières secondes ET seulement quand il est réellement visible à
      l'écran (IntersectionObserver) — coupé définitivement ensuite. */
   .home-qcm-btn::before {
     content: "";
     position: absolute;
     top: 0;
-    left: -75%;
-    width: 45%;
+    left: -115%;
+    width: 78%;
     height: 100%;
-    background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.65), transparent);
-    transform: skewX(-22deg);
+    background: linear-gradient(115deg, transparent 12%, rgba(255, 255, 255, 0.78) 48%, transparent 84%);
+    transform: skewX(-20deg);
     pointer-events: none;
     z-index: 1;
     opacity: 0;
@@ -851,11 +851,11 @@ window.addEventListener("pageshow", function() {
     animation: homeQcmBtnShine 2.4s ease-in-out infinite;
   }
   @keyframes homeQcmBtnShine {
-    0% { left: -75%; opacity: 0; }
+    0% { left: -115%; opacity: 0; }
     12% { opacity: 1; }
     40% { opacity: 1; }
-    60% { left: 130%; opacity: 0; }
-    100% { left: 130%; opacity: 0; }
+    60% { left: 145%; opacity: 0; }
+    100% { left: 145%; opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     .home-qcm-btn.home-qcm-btn-animate::before {
@@ -865,15 +865,27 @@ window.addEventListener("pageshow", function() {
 </style>
 <script>
 (function () {
-  var btn = document.getElementById("home-qcm-du-jour-btn");
-  if (!btn) return;
+  var buttons = [
+    "home-historical-events-btn",
+    "home-qcm-du-jour-btn",
+    "home-eclairages-btn"
+  ].map(function (id) {
+    return document.getElementById(id);
+  }).filter(Boolean);
+  if (!buttons.length) return;
 
   var ATTENTION_DURATION_MS = 6000;
   var stopTimer = null;
   var observer = null;
 
+  function setAnimated(enabled) {
+    buttons.forEach(function (btn) {
+      btn.classList.toggle("home-qcm-btn-animate", enabled);
+    });
+  }
+
   function stop() {
-    btn.classList.remove("home-qcm-btn-animate");
+    setAnimated(false);
     if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
     if (observer) { observer.disconnect(); observer = null; }
   }
@@ -881,26 +893,28 @@ window.addEventListener("pageshow", function() {
   if (!("IntersectionObserver" in window)) {
     // Repli sans coupure "hors écran" si l'API manque : seule la coupure au
     // bout de quelques secondes s'applique.
-    btn.classList.add("home-qcm-btn-animate");
+    setAnimated(true);
     stopTimer = setTimeout(stop, ATTENTION_DURATION_MS);
     return;
   }
 
   var startedAt = null;
   observer = new IntersectionObserver(function (entries) {
-    var visible = entries[0] && entries[0].isIntersecting;
+    var visible = entries.some(function (entry) { return entry && entry.isIntersecting; });
     if (visible) {
-      btn.classList.add("home-qcm-btn-animate");
+      setAnimated(true);
       if (!startedAt) {
         startedAt = Date.now();
         stopTimer = setTimeout(stop, ATTENTION_DURATION_MS);
       }
     } else {
-      btn.classList.remove("home-qcm-btn-animate");
+      setAnimated(false);
     }
   }, { threshold: 0.4 });
 
-  observer.observe(btn);
+  buttons.forEach(function (btn) {
+    observer.observe(btn);
+  });
 })();
 </script>
 <script>
