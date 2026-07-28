@@ -41,15 +41,12 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- style.min.css reste bloquant : il pilote toute la mise en page (dont les
-       positions des bulles du nuage), un retard ici casse visuellement la page.
-       Google Fonts / Font Awesome sont des CDN externes purement cosmétiques
-       (police de repli + icônes) : un léger retard n'abîme pas la mise en page,
-       donc on les charge en non-bloquant pour ne pas attendre leur aller-retour
-       réseau avant le premier rendu. Filet de sécurité au cas où onload ne se
-       déclenche pas (Safari/PWA) : bascule forcée après 3s. -->
+  <!-- style.min.css et Google Fonts restent bloquants sur l'accueil : sinon
+       l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
+       particulièrement visible en standalone mobile au lancement depuis le
+       cache du service worker. Font Awesome peut rester non bloquant. -->
   <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
-  <link id="agon-font-preload" rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
@@ -58,7 +55,7 @@
        dessus laissait ces mêmes icônes vides (cf. capture bas d'écran vide, 18/07/2026). -->
   <link rel="preload" as="font" type="font/woff2" href="/vendor/fontawesome/webfonts/fa-solid-900.woff2" crossorigin>
   <noscript>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   </noscript>
   <script>
@@ -67,7 +64,7 @@
         if (!link || link.rel === 'stylesheet') return;
         link.rel = 'stylesheet';
       }
-      ['agon-font-preload', 'agon-fa-preload'].forEach(function (id) {
+      ['agon-fa-preload'].forEach(function (id) {
         var link = document.getElementById(id);
         if (!link) return;
         link.addEventListener('load', function () { swap(link); }, { once: true });
@@ -92,6 +89,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
       background: radial-gradient(circle at center, #243038 0%, #101820 55%, #05070a 100%);
       color: #ffffff;
       opacity: 1;
@@ -1270,7 +1268,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260727-freezediag" defer></script>
+<script src="/script.min.js?v=20260727-fontready" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

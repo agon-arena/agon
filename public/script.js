@@ -641,10 +641,11 @@ window.forceFullPageRefresh = forceFullPageRefresh;
 
   let introSequenceDone = false;
   let contentReady = false;
+  let fontsReady = false;
   let hidden = false;
 
   function tryHide() {
-    if (hidden || !introSequenceDone || !contentReady) return;
+    if (hidden || !introSequenceDone || !contentReady || !fontsReady) return;
     hidden = true;
     try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
     loader.classList.add('is-hiding');
@@ -664,6 +665,19 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     contentReady = true;
     tryHide();
   }, { once: true });
+
+  const markFontsReady = function() {
+    fontsReady = true;
+    tryHide();
+  };
+  if (document.fonts && document.fonts.ready) {
+    Promise.race([
+      document.fonts.ready,
+      wait(1800)
+    ]).then(markFontsReady).catch(markFontsReady);
+  } else {
+    setTimeout(markFontsReady, 500);
+  }
 
   // Filet de sécurité absolu
   setTimeout(function() {
