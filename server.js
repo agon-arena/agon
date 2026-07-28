@@ -9323,7 +9323,6 @@ app.post("/api/opinion-articles/click", (req, res) => {
 });
 
 const OPINION_ARTICLE_CLICKS_HISTORY_LIMIT = 200;
-const OPINION_ARTICLES_RECOMMENDED_CAP = 12;
 const OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES = 3;
 const OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS = 2;
 const OPINION_ARTICLES_RECOMMENDED_TRENDING_WINDOW_DAYS = 3;
@@ -9400,8 +9399,7 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
       recommended = pool
         .filter((a) => !clickedLinks.has(a.link))
         .filter((a) => topCategories.has(a.category) || topOrientations.has(getOpinionOrientationGroup(a.orientation)))
-        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
-        .slice(0, OPINION_ARTICLES_RECOMMENDED_CAP);
+        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
     }
 
     if (!recommended.length) {
@@ -9409,12 +9407,11 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
       const byLink = new Map(pool.map((a) => [a.link, a]));
       recommended = trendingLinks
         .filter((link) => !clickedLinks.has(link) && byLink.has(link))
-        .slice(0, OPINION_ARTICLES_RECOMMENDED_CAP)
         .map((link) => byLink.get(link));
     }
 
     if (!recommended.length) {
-      recommended = pool.filter((a) => !clickedLinks.has(a.link)).slice(0, OPINION_ARTICLES_RECOMMENDED_CAP);
+      recommended = pool.filter((a) => !clickedLinks.has(a.link));
     }
 
     res.json({ articles: recommended });
