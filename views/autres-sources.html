@@ -1669,10 +1669,6 @@ window.addEventListener("pageshow", function() {
   var TRIBUNES_INITIAL_FETCH_LIMIT = 120;
   var TRIBUNES_PAGE_SIZE = 60;
   var TRIBUNES_CAROUSEL_BATCH = 5;
-  // "À la une" reprend tous les articles datés de la page : sans plafond, la
-  // rangée s'étendrait sur des centaines de cartes. 30 suffisent pour une
-  // vitrine de fraîcheur — au-delà, les rubriques thématiques prennent le relais.
-  var TRIBUNES_A_LA_UNE_MAX = 30;
   var tribunesNextOffset = 0;
   var tribunesHasMore = false;
   var tribunesPageLoading = false;
@@ -1693,10 +1689,9 @@ window.addEventListener("pageshow", function() {
   var tribunesPendingBatches = {};
   var tribunesGlobalObserver = null;
 
-  // "À la une" est plafonnée à TRIBUNES_A_LA_UNE_MAX articles (cf.
-  // buildALaUneGroup) et n'affiche que très peu de cartes au chargement
-  // initial — 1 en mobile, 4 en desktop — le reste se charge en scrollant
-  // comme les autres rubriques (tribunesPendingBatches).
+  // "À la une" n'affiche que très peu de cartes au chargement initial — 1 en
+  // mobile, 4 en desktop — le reste se charge en scrollant comme les autres
+  // rubriques (tribunesPendingBatches).
   function tribunesInitialCountForGroup(groupKey) {
     var isMobile = window.matchMedia('(max-width: 768px)').matches;
     if (groupKey === 'a-la-une') return isMobile ? 1 : 4;
@@ -2885,7 +2880,7 @@ window.addEventListener("pageshow", function() {
         return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
       });
     if (!items.length) return null;
-    return { key: 'a-la-une', label: 'Dernières actualités', items: orderCarouselItems(items).slice(0, TRIBUNES_A_LA_UNE_MAX) };
+    return { key: 'a-la-une', label: 'Dernières actualités', items: orderCarouselItems(items) };
   }
 
   function groupByTheme(articles) {
@@ -3780,6 +3775,15 @@ window.addEventListener("pageshow", function() {
     }
     var needsFullRender = false;
     visible.forEach(function(article) {
+      if (article.published_at) {
+        var aLaUneRow = document.getElementById('tribunes-row-a-la-une');
+        if (!aLaUneRow) {
+          needsFullRender = true;
+        } else {
+          (tribunesPendingBatches['tribunes-row-a-la-une'] = tribunesPendingBatches['tribunes-row-a-la-une'] || []).push(article);
+          aLaUneRow.dataset.carouselTotal = String((Number(aLaUneRow.dataset.carouselTotal) || 0) + 1);
+        }
+      }
       var category = normalizeCategory(article.category) || 'Société - éducation';
       var rowId = 'tribunes-row-' + categoryKey(category);
       var row = document.getElementById(rowId);
