@@ -39,6 +39,10 @@
       min-height: 100vh;
       background-color: #243038;
     }
+    body.page-qcm-du-jour.in-iframe {
+      box-sizing: border-box;
+      padding-bottom: 360px;
+    }
     .page-qcm-du-jour .topbar-inner {
       justify-content: center;
       padding: 2px 0;
@@ -63,18 +67,15 @@
       margin: 112px auto 180px;
     }
     .page-qcm-du-jour.in-iframe .qcm-page-shell {
-      /* Marge basse généreuse : laisse scroller au-delà du bas du contenu
-         plutôt que de s'arrêter pile dessus, sans ajouter de bandeau
-         artificiel sous la page. */
-      margin: 20px auto 360px;
+      margin: 20px auto 0;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
        spécificité) : un margin-bottom placé avant un margin raccourci
        équivalent serait écrasé par lui, peu importe le media query. */
     @media (max-width: 768px) {
-      /* Plus de mou en bas qu'en desktop, directement porté par la page. */
-      .page-qcm-du-jour.in-iframe .qcm-page-shell {
-        margin-bottom: clamp(360px, 42vh, 520px);
+      /* Vraie zone scrollable en bas, sans pseudo-bandeau ajouté au DOM. */
+      body.page-qcm-du-jour.in-iframe {
+        padding-bottom: clamp(360px, 42vh, 520px);
       }
     }
     @media (min-width: 769px) {
