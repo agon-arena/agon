@@ -13297,10 +13297,15 @@ const DIAG_LOGS_FILE = path.join(__dirname, "diag-refresh-logs.json");
 
 app.post("/api/admin/diag/push-logs", requireAdmin, express.json(), (req, res) => {
   try {
-    const { startup_log, refresh_log, sent_at } = req.body || {};
+    const { startup_log, refresh_log, freeze_log, sent_at } = req.body || {};
     let existing = [];
     try { existing = JSON.parse(fs.readFileSync(DIAG_LOGS_FILE, "utf8")); } catch (_) {}
-    existing.unshift({ sent_at: sent_at || new Date().toISOString(), startup_log: startup_log || [], refresh_log: refresh_log || [] });
+    existing.unshift({
+      sent_at: sent_at || new Date().toISOString(),
+      startup_log: startup_log || [],
+      refresh_log: refresh_log || [],
+      freeze_log: freeze_log || []
+    });
     if (existing.length > 5) existing.length = 5;
     fs.writeFileSync(DIAG_LOGS_FILE, JSON.stringify(existing, null, 2), "utf8");
     res.json({ ok: true });

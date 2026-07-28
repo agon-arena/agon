@@ -1270,7 +1270,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260727-iframeclose-qcm" defer></script>
+<script src="/script.min.js?v=20260727-freezediag" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -2023,6 +2023,7 @@ window.addEventListener("pageshow", function() {
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
       <button onclick="showDiagTab('startup')" id="diag-tab-startup" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;font-weight:600;">Startups</button>
       <button onclick="showDiagTab('refresh')" id="diag-tab-refresh" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Events</button>
+      <button onclick="showDiagTab('freeze')" id="diag-tab-freeze" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Freeze</button>
       <button onclick="showDiagTab('server')" id="diag-tab-server" style="padding:6px 14px;border-radius:20px;border:1px solid #3a5060;background:#243038;color:#a8c4d0;font-size:13px;cursor:pointer;">Serveur</button>
       <button onclick="pushDiagToServer()" id="diag-push-btn" style="padding:6px 14px;border-radius:20px;border:1px solid #1a4a2a;background:#0e2818;color:#7ecfa0;font-size:13px;cursor:pointer;">Envoyer</button>
       <button onclick="clearDiagLogs()" style="padding:6px 14px;border-radius:20px;border:1px solid #5a2020;background:#2a1010;color:#e07070;font-size:13px;cursor:pointer;margin-left:auto;">Effacer</button>
@@ -2060,6 +2061,7 @@ window.addEventListener("pageshow", function() {
     currentTab = tab;
     document.getElementById("diag-tab-startup").style.fontWeight = tab === "startup" ? "700" : "400";
     document.getElementById("diag-tab-refresh").style.fontWeight = tab === "refresh" ? "700" : "400";
+    document.getElementById("diag-tab-freeze").style.fontWeight = tab === "freeze" ? "700" : "400";
     document.getElementById("diag-tab-server").style.fontWeight = tab === "server" ? "700" : "400";
     setStatus("");
     var el = document.getElementById("agon-diagnostic-content");
@@ -2075,16 +2077,22 @@ window.addEventListener("pageshow", function() {
           el.innerHTML = batches.map(function(b){
             var sentAt = b.sent_at ? b.sent_at.replace("T"," ").replace(/\.\d+Z$/," UTC") : "?";
             var startups = (b.startup_log || []).map(fmt).join("") || '<p style="color:#4a6a7a;">—</p>';
+            var refresh = (b.refresh_log || []).map(fmt).join("") || '<p style="color:#4a6a7a;">—</p>';
+            var freeze = (b.freeze_log || []).map(fmt).join("") || '<p style="color:#4a6a7a;">—</p>';
             return '<div style="border:1px solid #2d3f4a;border-radius:10px;padding:12px;margin-bottom:14px;">'
               + '<div style="color:#7ab4e0;font-size:11px;margin-bottom:8px;">Envoyé le ' + sentAt + '</div>'
               + '<div style="color:#a8c4d0;font-size:11px;font-weight:700;margin-bottom:6px;">Startups :</div>'
-              + startups + '</div>';
+              + startups
+              + '<div style="color:#a8c4d0;font-size:11px;font-weight:700;margin:10px 0 6px;">Events :</div>'
+              + refresh
+              + '<div style="color:#a8c4d0;font-size:11px;font-weight:700;margin:10px 0 6px;">Freeze :</div>'
+              + freeze + '</div>';
           }).join("");
         })
         .catch(function(){ el.innerHTML = '<p style="color:#e07070;font-size:13px;">Erreur de chargement.</p>'; });
       return;
     }
-    var key = tab === "startup" ? "agon_startup_log" : "agon_refresh_log";
+    var key = tab === "startup" ? "agon_startup_log" : tab === "freeze" ? "agon_freeze_log" : "agon_refresh_log";
     var entries = [];
     try { entries = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
     if (!entries.length) {
@@ -2100,12 +2108,14 @@ window.addEventListener("pageshow", function() {
     setStatus("Envoi en cours…", "#7ab4e0");
     var startup_log = [];
     var refresh_log = [];
+    var freeze_log = [];
     try { startup_log = JSON.parse(localStorage.getItem("agon_startup_log") || "[]"); } catch(e) {}
     try { refresh_log = JSON.parse(localStorage.getItem("agon_refresh_log") || "[]"); } catch(e) {}
+    try { freeze_log = JSON.parse(localStorage.getItem("agon_freeze_log") || "[]"); } catch(e) {}
     fetch("/api/admin/diag/push-logs", {
       method: "POST",
       headers: Object.assign({ "Content-Type": "application/json" }, { "x-admin-token": localStorage.getItem("admin_token") || "" }),
-      body: JSON.stringify({ startup_log: startup_log, refresh_log: refresh_log, sent_at: new Date().toISOString() })
+      body: JSON.stringify({ startup_log: startup_log, refresh_log: refresh_log, freeze_log: freeze_log, sent_at: new Date().toISOString() })
     }).then(function(r){ return r.json(); })
       .then(function(d){
         if (btn) btn.disabled = false;
@@ -2135,6 +2145,7 @@ window.addEventListener("pageshow", function() {
   window.clearDiagLogs = function() {
     try { localStorage.removeItem("agon_startup_log"); } catch(e) {}
     try { localStorage.removeItem("agon_refresh_log"); } catch(e) {}
+    try { localStorage.removeItem("agon_freeze_log"); } catch(e) {}
     showDiagTab(currentTab);
   };
 })();

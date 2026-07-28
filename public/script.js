@@ -72,10 +72,62 @@ const COLOR_B_BORDER   = '#AEC0CC';
 // pour éviter console.log + localStorage synchrone à chaque interaction).
 const __AGON_DEBUG_REFRESH_ENABLED = true;
 const AGON_LAST_LIFECYCLE_SNAPSHOT_KEY = "agon_last_lifecycle_snapshot";
+const AGON_LAST_HEARTBEAT_KEY = "agon_last_heartbeat";
+const AGON_FREEZE_LOG_KEY = "agon_freeze_log";
 let __agonLastHiddenAt = 0;
 let __agonLastVisibleAt = Date.now();
 let __agonLastUserInputAt = 0;
 let __agonLastRuntimeError = null;
+
+function __agonGetModalDebugContext() {
+  try {
+    const modal = document.getElementById("debate-iframe-modal");
+    const closeButton = document.getElementById("debate-iframe-modal-close");
+    const frame = document.getElementById("debate-iframe-modal-frame");
+    const closeRect = closeButton ? closeButton.getBoundingClientRect() : null;
+    const closeStyle = closeButton ? window.getComputedStyle(closeButton) : null;
+    return {
+      modalExists: !!modal,
+      modalOpen: window.__agonDebateModalOpen === true || !!modal?.classList?.contains("open"),
+      iframePathname: String(window.__agonIframeCurrentPathname || ""),
+      modalClassName: modal ? String(modal.className || "") : "",
+      frameSrc: frame ? String(frame.getAttribute("src") || frame.src || "") : "",
+      scrollLockMode: typeof _debateModalScrollLockMode !== "undefined" ? String(_debateModalScrollLockMode || "") : "",
+      htmlOverflow: document.documentElement.style.overflow || "",
+      bodyOverflow: document.body?.style?.overflow || "",
+      bodyPosition: document.body?.style?.position || "",
+      bodyTop: document.body?.style?.top || "",
+      closeButtonExists: !!closeButton,
+      closeButtonDisplay: closeStyle?.display || "",
+      closeButtonVisibility: closeStyle?.visibility || "",
+      closeButtonOpacity: closeStyle?.opacity || "",
+      closeButtonPointerEvents: closeStyle?.pointerEvents || "",
+      closeButtonRect: closeRect ? {
+        x: Math.round(closeRect.x),
+        y: Math.round(closeRect.y),
+        width: Math.round(closeRect.width),
+        height: Math.round(closeRect.height)
+      } : null
+    };
+  } catch (e) {
+    return { modalDebugError: String(e?.message || e || "") };
+  }
+}
+
+function __agonStoreFreezeLog(entry = {}) {
+  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  try {
+    const prev = JSON.parse(localStorage.getItem(AGON_FREEZE_LOG_KEY) || "[]");
+    prev.unshift({
+      timestamp: new Date().toISOString(),
+      url: String(window.location.href || ""),
+      ...__agonGetDebugRuntimeContext(),
+      ...entry
+    });
+    if (prev.length > 20) prev.length = 20;
+    localStorage.setItem(AGON_FREEZE_LOG_KEY, JSON.stringify(prev));
+  } catch (e) {}
+}
 
 function __agonGetDebugRuntimeContext(extra = {}) {
   const now = Date.now();
@@ -122,6 +174,7 @@ function __agonGetDebugRuntimeContext(extra = {}) {
     memory,
     connection,
     lastRuntimeError: __agonLastRuntimeError,
+    modal: __agonGetModalDebugContext(),
     ...extra
   };
 }
@@ -196,6 +249,12 @@ function __agonRecordReloadReason(reason) {
       if (rawLifecycle) lastLifecycleSnapshot = JSON.parse(rawLifecycle);
     } catch (e) {}
 
+    let lastHeartbeat = null;
+    try {
+      const rawHeartbeat = localStorage.getItem(AGON_LAST_HEARTBEAT_KEY);
+      if (rawHeartbeat) lastHeartbeat = JSON.parse(rawHeartbeat);
+    } catch (e) {}
+
     let lastReloadReason = null;
     try {
       const raw = sessionStorage.getItem(AGON_LAST_RELOAD_REASON_KEY);
@@ -213,6 +272,9 @@ function __agonRecordReloadReason(reason) {
     // déchargée proprement : processus WebKit tué (mémoire) ou crashé.
     const lifecycleAgeMs = lastLifecycleSnapshot?.timestamp
       ? Date.now() - new Date(lastLifecycleSnapshot.timestamp).getTime()
+      : null;
+    const heartbeatAgeMs = lastHeartbeat?.timestamp
+      ? Date.now() - new Date(lastHeartbeat.timestamp).getTime()
       : null;
     const lifecycleWasCleanUnload =
       lastLifecycleSnapshot?.reason === "pagehide" ||
@@ -285,6 +347,11 @@ function __agonRecordReloadReason(reason) {
         previousLifecycleTimeSinceHiddenMs: lastLifecycleSnapshot?.timeSinceHiddenMs ?? null,
         previousLifecycleLastRuntimeError: lastLifecycleSnapshot?.lastRuntimeError || null,
         previousLifecycleMemory: lastLifecycleSnapshot?.memory || null,
+        previousLifecycleModal: lastLifecycleSnapshot?.modal || null,
+        previousHeartbeatAt: lastHeartbeat?.timestamp || null,
+        previousHeartbeatAgeMs: heartbeatAgeMs,
+        previousHeartbeatUrl: lastHeartbeat?.url || null,
+        previousHeartbeatModal: lastHeartbeat?.modal || null,
         ...__agonGetDebugRuntimeContext()
       };
       console.log("[AGON DEBUG STARTUP]", entry);
@@ -361,6 +428,47 @@ document.addEventListener("visibilitychange", () => {
   }
   __agonDebugRefreshLog("document-visibilitychange", "rerender", { hidden: document.hidden });
 });
+
+(function __agonBindFreezeHeartbeat() {
+  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  const HEARTBEAT_INTERVAL_MS = 5000;
+  const STALL_THRESHOLD_MS = 12000;
+  let expectedNextBeat = Date.now() + HEARTBEAT_INTERVAL_MS;
+
+  function writeHeartbeat(reason = "heartbeat") {
+    try {
+      localStorage.setItem(AGON_LAST_HEARTBEAT_KEY, JSON.stringify({
+        reason,
+        timestamp: new Date().toISOString(),
+        url: String(window.location.href || ""),
+        ...__agonGetDebugRuntimeContext()
+      }));
+    } catch (e) {}
+  }
+
+  writeHeartbeat("startup");
+  window.addEventListener("pagehide", () => writeHeartbeat("pagehide"), true);
+  document.addEventListener("visibilitychange", () => {
+    expectedNextBeat = Date.now() + HEARTBEAT_INTERVAL_MS;
+    writeHeartbeat(document.hidden ? "hidden" : "visible");
+  }, true);
+
+  window.setInterval(() => {
+    const now = Date.now();
+    const driftMs = now - expectedNextBeat;
+    const wasVisible = !document.hidden;
+    writeHeartbeat("interval");
+    if (wasVisible && driftMs > STALL_THRESHOLD_MS) {
+      __agonStoreFreezeLog({
+        source: "heartbeat",
+        type: "main-thread-stall",
+        driftMs,
+        thresholdMs: STALL_THRESHOLD_MS
+      });
+    }
+    expectedNextBeat = now + HEARTBEAT_INTERVAL_MS;
+  }, HEARTBEAT_INTERVAL_MS);
+})();
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
