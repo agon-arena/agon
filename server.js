@@ -4263,6 +4263,10 @@ const USER_SCORE_CACHE_TTL_MS = 15 * 60 * 1000;
 
 // Score% = part de la population dont la valeur est strictement supérieure
 // à celle de l'utilisateur — ex: 2% signifie que 98% des autres ont moins.
+// Pire percentile possible (cf. bornage 99,9% dans buildPercentileScoreMap) —
+// valeur renvoyée pour un axe où le contributeur n'a encore rien posté/répondu.
+const USER_SCORE_WORST = 99.9;
+
 function buildPercentileScoreMap(valueByAuthorKey) {
   const entries = [...valueByAuthorKey.entries()];
   const n = entries.length;
@@ -4549,10 +4553,13 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
     const gnosisTier = gnosisTierByAuthorKey.get(key) || null;
+    // Rien posté / rien répondu sur un axe : pas de percentile calculable,
+    // donc pire note plutôt que "pas de score" (encourage à contribuer au
+    // lieu de masquer l'onglet).
     res.json({
-      votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : null,
-      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : null,
-      gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : null,
+      votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : USER_SCORE_WORST,
+      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : USER_SCORE_WORST,
+      gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : USER_SCORE_WORST,
       tierLabel: tier ? getUserContributionTierLabel(tier) : null,
       tier: tier || null,
       tierCount: USER_SCORE_TIERS.length,

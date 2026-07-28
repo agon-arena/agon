@@ -831,15 +831,15 @@ window.addEventListener("pageshow", function() {
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
   }
-  /* Grand reflet posé par le script ci-dessous : ne balaie les boutons que pendant
+  /* Grand reflet posé par le script ci-dessous : ne balaie la barre que pendant
      les premières secondes ET seulement quand il est réellement visible à
      l'écran (IntersectionObserver) — coupé définitivement ensuite. */
-  .home-qcm-btn::before {
+  .home-secondary-actions::before {
     content: "";
     position: absolute;
     top: 0;
     left: -115%;
-    width: 78%;
+    width: 46%;
     height: 100%;
     background: linear-gradient(115deg, transparent 12%, rgba(255, 255, 255, 0.78) 48%, transparent 84%);
     transform: skewX(-20deg);
@@ -847,41 +847,33 @@ window.addEventListener("pageshow", function() {
     z-index: 1;
     opacity: 0;
   }
-  .home-qcm-btn.home-qcm-btn-animate::before {
+  .home-secondary-actions.home-secondary-actions-animate::before {
     animation: homeQcmBtnShine 2.4s ease-in-out infinite;
   }
   @keyframes homeQcmBtnShine {
     0% { left: -115%; opacity: 0; }
     12% { opacity: 1; }
     40% { opacity: 1; }
-    60% { left: 145%; opacity: 0; }
-    100% { left: 145%; opacity: 0; }
+    60% { left: 155%; opacity: 0; }
+    100% { left: 155%; opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .home-qcm-btn.home-qcm-btn-animate::before {
+    .home-secondary-actions.home-secondary-actions-animate::before {
       animation: none;
     }
   }
 </style>
 <script>
 (function () {
-  var buttons = [
-    "home-historical-events-btn",
-    "home-qcm-du-jour-btn",
-    "home-eclairages-btn"
-  ].map(function (id) {
-    return document.getElementById(id);
-  }).filter(Boolean);
-  if (!buttons.length) return;
+  var secondaryActions = document.querySelector(".home-secondary-actions");
+  if (!secondaryActions) return;
 
   var ATTENTION_DURATION_MS = 6000;
   var stopTimer = null;
   var observer = null;
 
   function setAnimated(enabled) {
-    buttons.forEach(function (btn) {
-      btn.classList.toggle("home-qcm-btn-animate", enabled);
-    });
+    secondaryActions.classList.toggle("home-secondary-actions-animate", enabled);
   }
 
   function stop() {
@@ -912,9 +904,7 @@ window.addEventListener("pageshow", function() {
     }
   }, { threshold: 0.4 });
 
-  buttons.forEach(function (btn) {
-    observer.observe(btn);
-  });
+  observer.observe(secondaryActions);
 })();
 </script>
 <script>
@@ -1282,7 +1272,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260727-fontready" defer></script>
+<script src="/script.min.js?v=20260728-scoreworst" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
