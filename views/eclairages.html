@@ -37,16 +37,6 @@
       min-height: 100vh;
       background-color: #243038;
     }
-    body.page-eclairages::after {
-      content: "";
-      display: block;
-      height: 240px;
-      background-color: #243038;
-      flex: 0 0 auto;
-    }
-    body.page-eclairages.in-iframe::after {
-      height: 340px;
-    }
     .page-eclairages .topbar-inner {
       justify-content: center;
       padding: 2px 0;
@@ -72,23 +62,18 @@
     }
     .page-eclairages.in-iframe .ecl-page-shell {
       /* Marge basse généreuse : laisse scroller au-delà du bas du contenu
-         plutôt que de s'arrêter pile dessus. */
-      margin: 20px auto 180px;
+         plutôt que de s'arrêter pile dessus, sans ajouter de bandeau
+         artificiel sous la page. */
+      margin: 20px auto 380px;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
        spécificité) : un margin-bottom placé avant un margin raccourci
        équivalent serait écrasé par lui, peu importe le media query — c'était
        le cas jusqu'ici, ce qui annulait silencieusement ce correctif mobile. */
     @media (max-width: 768px) {
-      /* Plus de mou en bas qu'en desktop : laisse davantage scroller au-delà
-         du bas du contenu une fois un bloc déplié (concept/citation/etc.),
-         plutôt que de s'arrêter juste dessus. Relevé 160→220px le 27/07/2026
-         (demande : encore un peu plus de mou en mobile). */
+      /* Plus de mou en bas qu'en desktop, directement porté par la page. */
       .page-eclairages.in-iframe .ecl-page-shell {
-        margin-bottom: 300px;
-      }
-      body.page-eclairages.in-iframe::after {
-        height: clamp(420px, 46vh, 620px);
+        margin-bottom: clamp(400px, 46vh, 580px);
       }
     }
     @media (min-width: 769px) {

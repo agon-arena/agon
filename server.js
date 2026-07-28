@@ -196,6 +196,13 @@ function rateLimit(key, max) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
+function isRenderScopedTaskEnabled(envName) {
+  const forced = String(process.env[envName] || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+}
+
 app.use((req, res, next) => {
   res.setHeader(
     "Permissions-Policy",
@@ -4861,6 +4868,7 @@ const TOP5_NOTIFY_METRIC_LABELS = {
   votes: "des idées les plus soutenues",
   aiScore: "des idées les mieux notées par l'IA"
 };
+const TOP5_NOTIFY_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("AGON_TOP5_NOTIFY_SCHEDULER");
 
 let _top5NotifyPreviousEntrants = new Map();
 let _top5NotifyWarmedUp = false;
@@ -4938,10 +4946,14 @@ async function checkTop5IdeaEntries() {
   }
 }
 
-setInterval(() => {
+if (TOP5_NOTIFY_SCHEDULER_ENABLED) {
+  setInterval(() => {
+    checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
+  }, TOP5_NOTIFY_CHECK_INTERVAL_MS).unref();
   checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
-}, TOP5_NOTIFY_CHECK_INTERVAL_MS).unref();
-checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
+} else {
+  console.log("[top5-notify] scheduler désactivé hors Render (forcer avec AGON_TOP5_NOTIFY_SCHEDULER=on).");
+}
 
 app.get("/api/best-ideas", rateLimit("bestIdeas", 60), async (req, res) => {
   const period = ["day", "week", "month"].includes(String(req.query.period)) ? String(req.query.period) : "day";
@@ -13336,89 +13348,98 @@ app.listen(PORT, "0.0.0.0", async () => {
   initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
   _loadVeilleMediasFromSupabase().then(ok => console.log(`[veille-medias] cache ${ok ? "chargé depuis Supabase" : "fichier local (fallback)"}`)).catch(console.error);
   const _readJsonFile = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return fallback; } };
-  // Migration one-shot debate-content.json → debates.content
-  try {
-    const localContent = _readJsonFile(debateContentMetaPath, {});
-    const entries = Object.entries(localContent).filter(([, v]) => v);
-    if (entries.length) {
-      const { data: dbRows } = await supabase.from("debates")
-        .select("id, content")
-        .in("id", entries.map(([id]) => id));
-      const dbMap = {};
-      for (const row of (dbRows || [])) dbMap[String(row.id)] = String(row.content || "");
-      const toMigrate = entries.filter(([id, content]) => content.length > (dbMap[id] || "").length);
-      if (toMigrate.length) {
-        await Promise.all(toMigrate.map(([id, content]) =>
-          supabase.from("debates").update({ content }).eq("id", id).then(() => {}).catch(() => {})
-        ));
-        console.log(`[Agôn] Content migré vers Supabase : ${toMigrate.length} débats.`);
+  const startupMigrationsEnabled = isRenderScopedTaskEnabled("AGON_STARTUP_MIGRATIONS");
+  if (startupMigrationsEnabled) {
+    // Migration one-shot debate-content.json → debates.content
+    try {
+      const localContent = _readJsonFile(debateContentMetaPath, {});
+      const entries = Object.entries(localContent).filter(([, v]) => v);
+      if (entries.length) {
+        const { data: dbRows } = await supabase.from("debates")
+          .select("id, content")
+          .in("id", entries.map(([id]) => id));
+        const dbMap = {};
+        for (const row of (dbRows || [])) dbMap[String(row.id)] = String(row.content || "");
+        const toMigrate = entries.filter(([id, content]) => content.length > (dbMap[id] || "").length);
+        if (toMigrate.length) {
+          await Promise.all(toMigrate.map(([id, content]) =>
+            supabase.from("debates").update({ content }).eq("id", id).then(() => {}).catch(() => {})
+          ));
+          console.log(`[Agôn] Content migré vers Supabase : ${toMigrate.length} débats.`);
+        }
       }
+    } catch (e) {
+      console.error("[Agôn] Erreur migration debate-content:", e.message);
     }
-  } catch (e) {
-    console.error("[Agôn] Erreur migration debate-content:", e.message);
-  }
-  // Migration one-shot debate-assets.json → debates.image_url / video_url
-  try {
-    const localAssets = _readJsonFile(debateAssetsMetaPath, {});
-    const entries = Object.entries(localAssets).filter(([, v]) => v && typeof v === "object" && (v.image_url || v.video_url));
-    if (entries.length) {
-      const { data: dbRows } = await supabase.from("debates")
-        .select("id, image_url, video_url")
-        .in("id", entries.map(([id]) => id));
-      const dbMap = {};
-      for (const row of (dbRows || [])) dbMap[String(row.id)] = row;
-      const toMigrate = entries.filter(([id, v]) => {
-        const db = dbMap[id] || {};
-        return (v.image_url && !db.image_url) || (v.video_url && !db.video_url);
-      });
-      if (toMigrate.length) {
-        await Promise.all(toMigrate.map(([id, v]) => {
+
+    // Migration one-shot debate-assets.json → debates.image_url / video_url
+    try {
+      const localAssets = _readJsonFile(debateAssetsMetaPath, {});
+      const entries = Object.entries(localAssets).filter(([, v]) => v && typeof v === "object" && (v.image_url || v.video_url));
+      if (entries.length) {
+        const { data: dbRows } = await supabase.from("debates")
+          .select("id, image_url, video_url")
+          .in("id", entries.map(([id]) => id));
+        const dbMap = {};
+        for (const row of (dbRows || [])) dbMap[String(row.id)] = row;
+        const toMigrate = entries.filter(([id, v]) => {
           const db = dbMap[id] || {};
-          return supabase.from("debates").update({
-            image_url: db.image_url || v.image_url || "",
-            video_url: db.video_url || v.video_url || ""
-          }).eq("id", id).then(() => {}).catch(() => {});
-        }));
-        console.log(`[Agôn] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
+          return (v.image_url && !db.image_url) || (v.video_url && !db.video_url);
+        });
+        if (toMigrate.length) {
+          await Promise.all(toMigrate.map(([id, v]) => {
+            const db = dbMap[id] || {};
+            return supabase.from("debates").update({
+              image_url: db.image_url || v.image_url || "",
+              video_url: db.video_url || v.video_url || ""
+            }).eq("id", id).then(() => {}).catch(() => {});
+          }));
+          console.log(`[Agôn] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
+        }
       }
+    } catch (e) {
+      console.error("[Agôn] Erreur migration debate-assets:", e.message);
     }
-  } catch (e) {
-    console.error("[Agôn] Erreur migration debate-assets:", e.message);
-  }
-  // Migration one-shot debate-keywords.json → debates.keywords
-  try {
-    const localKeywords = _readJsonFile(debateKeywordsMetaPath, {});
-    const entries = Object.entries(localKeywords).filter(([, v]) => Array.isArray(v) && v.length);
-    if (entries.length) {
-      const { data: dbRows } = await supabase.from("debates").select("id, keywords").in("id", entries.map(([id]) => id));
-      const dbMap = {};
-      for (const row of (dbRows || [])) dbMap[String(row.id)] = row.keywords;
-      const toMigrate = entries.filter(([id, v]) => !(dbMap[id] && dbMap[id].length));
-      if (toMigrate.length) {
-        await Promise.all(toMigrate.map(([id, keywords]) =>
-          supabase.from("debates").update({ keywords }).eq("id", id).then(() => {}).catch(() => {})
-        ));
-        console.log(`[Agôn] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
+
+    // Migration one-shot debate-keywords.json → debates.keywords
+    try {
+      const localKeywords = _readJsonFile(debateKeywordsMetaPath, {});
+      const entries = Object.entries(localKeywords).filter(([, v]) => Array.isArray(v) && v.length);
+      if (entries.length) {
+        const { data: dbRows } = await supabase.from("debates").select("id, keywords").in("id", entries.map(([id]) => id));
+        const dbMap = {};
+        for (const row of (dbRows || [])) dbMap[String(row.id)] = row.keywords;
+        const toMigrate = entries.filter(([id, v]) => !(dbMap[id] && dbMap[id].length));
+        if (toMigrate.length) {
+          await Promise.all(toMigrate.map(([id, keywords]) =>
+            supabase.from("debates").update({ keywords }).eq("id", id).then(() => {}).catch(() => {})
+          ));
+          console.log(`[Agôn] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
+        }
       }
+    } catch (e) {
+      console.error("[Agôn] Erreur migration keywords:", e.message);
     }
-  } catch (e) {
-    console.error("[Agôn] Erreur migration keywords:", e.message);
-  }
-  // Migration one-shot stories.json → table stories
-  try {
-    const localStories = _readJsonFile(storiesMetaPath, []);
-    if (Array.isArray(localStories) && localStories.length) {
-      const { data: existing } = await supabase.from("stories").select("story_id");
-      const existingIds = new Set((existing || []).map(r => r.story_id));
-      const toMigrate = localStories.filter(s => s.story_id && !existingIds.has(s.story_id));
-      if (toMigrate.length) {
-        await Promise.all(toMigrate.map(s => upsertStory(s)));
-        console.log(`[Agôn] Stories migrées vers Supabase : ${toMigrate.length} stories.`);
+
+    // Migration one-shot stories.json → table stories
+    try {
+      const localStories = _readJsonFile(storiesMetaPath, []);
+      if (Array.isArray(localStories) && localStories.length) {
+        const { data: existing } = await supabase.from("stories").select("story_id");
+        const existingIds = new Set((existing || []).map(r => r.story_id));
+        const toMigrate = localStories.filter(s => s.story_id && !existingIds.has(s.story_id));
+        if (toMigrate.length) {
+          await Promise.all(toMigrate.map(s => upsertStory(s)));
+          console.log(`[Agôn] Stories migrées vers Supabase : ${toMigrate.length} stories.`);
+        }
       }
+    } catch (e) {
+      console.error("[Agôn] Erreur migration stories:", e.message);
     }
-  } catch (e) {
-    console.error("[Agôn] Erreur migration stories:", e.message);
+  } else {
+    console.log("[Agôn] Migrations de démarrage désactivées hors Render (forcer avec AGON_STARTUP_MIGRATIONS=on).");
   }
+
   // Chargement tag_exclusions depuis Supabase → public/tag-exclusions.json + mémoire
   try {
     const { data, error } = await supabase.from("app_config").select("value").eq("key", "tag_exclusions").maybeSingle();
