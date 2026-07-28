@@ -3708,12 +3708,10 @@ window.addEventListener("pageshow", function() {
   // (#index-infinite-scroll-sentinel + loadMoreOtherDebates) : chaque déclenchement
   // charge la page suivante de 60 articles et réalimente les pools des carrousels. ──
   function buildTribunesGlobalSentinelHtml() {
-    // 'recommande' est une liste fixe (pas de pagination serveur propre) : pas de
-    // scroll infini à proposer. Un seul élément sentinelle réutilisé par tous les onglets :
-    // 'custom' reste sur tribunesHasMore (pool allArticles), les 5 onglets d'orientation
-    // utilisent désormais leur propre piste de pagination (orientationHasMore).
-    if (currentFilter === 'recommande') return '';
-    var hasMore = currentFilter === 'custom' ? tribunesHasMore : orientationHasMore;
+    // Un seul élément sentinelle réutilisé par tous les onglets : Recommandé,
+    // custom et orientations ont chacun leur piste de pagination.
+    var hasMore = currentFilter === 'recommande' ? recommendedHasMore
+      : (currentFilter === 'custom' ? tribunesHasMore : orientationHasMore);
     if (!hasMore) return '';
     return '<div id="tribunes-infinite-scroll-sentinel" class="load-more-container" aria-busy="false">' +
       '<button class="button button-small" type="button">Fais défiler pour charger la suite</button>' +
@@ -3767,7 +3765,7 @@ window.addEventListener("pageshow", function() {
   // anciennes, elles s'ajoutent en fin de rangée). Nouvelle rubrique = re-render
   // complet, cas rare une fois les 120 premiers articles chargés.
   function appendArticlesToCarousels(pageArticles) {
-    var visible = filterArticlesList(pageArticles);
+    var visible = currentFilter === 'recommande' ? pageArticles : filterArticlesList(pageArticles);
     if (!visible.length) return;
     if (!list.querySelector('.tribunes-theme-section')) {
       applyFilter();
@@ -3810,8 +3808,8 @@ window.addEventListener("pageshow", function() {
   // filtre actif), enchaîne la suivante — équivalent de la boucle de
   // loadMoreOtherDebates côté index.
   function maybeChainNextTribunesPage() {
-    // Seul 'custom' passe encore par cette piste de pagination (allArticles) — les onglets
-    // d'orientation ont la leur (cf. maybeChainNextOrientationPage), 'recommande' n'en a pas.
+    // Seul 'custom' passe encore par cette piste de pagination (allArticles) —
+    // les onglets Recommandé et orientation ont la leur.
     if (currentFilter !== 'custom') return;
     if (!tribunesHasMore || tribunesPageLoading) return;
     var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
@@ -3826,7 +3824,7 @@ window.addEventListener("pageshow", function() {
   // 'custom' reste sur ce corps historique (allArticles/tribunesNextOffset/tribunesHasMore,
   // inchangé), les 5 onglets d'orientation délèguent à loadMoreOrientationArticles.
   function loadMoreTribunesArticles() {
-    if (currentFilter === 'recommande') return;
+    if (currentFilter === 'recommande') { loadMoreRecommendedArticles(); return; }
     if (currentFilter !== 'custom') { loadMoreOrientationArticles(); return; }
     if (tribunesPageLoading || !tribunesHasMore) return;
     tribunesPageLoading = true;
@@ -3980,6 +3978,9 @@ window.addEventListener("pageshow", function() {
   // le message d'état de render().
   var recommendedArticles = [];
   var recommendedLoaded = false;
+  var recommendedNextOffset = 0;
+  var recommendedHasMore = false;
+  var recommendedPageLoading = false;
 
   function loadRecommendedArticles(attempt) {
     attempt = attempt || 0;
@@ -3994,14 +3995,68 @@ window.addEventListener("pageshow", function() {
       setTimeout(function() { loadRecommendedArticles(attempt + 1); }, 50);
       return;
     }
-    fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()), { cache: 'no-store' })
+    fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()) +
+        '&limit=' + TRIBUNES_INITIAL_FETCH_LIMIT + '&offset=0', { cache: 'no-store' })
       .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
-      .then(function(data) { recommendedArticles = Array.isArray(data.articles) ? data.articles : []; })
-      .catch(function() { recommendedArticles = []; })
+      .then(function(data) {
+        recommendedArticles = Array.isArray(data.articles) ? data.articles : [];
+        recommendedNextOffset = recommendedArticles.length;
+        recommendedHasMore = data.hasMore === true && recommendedArticles.length > 0;
+      })
+      .catch(function() {
+        recommendedArticles = [];
+        recommendedNextOffset = 0;
+        recommendedHasMore = false;
+      })
       .then(function() {
         recommendedLoaded = true;
         if (currentFilter === 'recommande') applyFilter();
       });
+  }
+
+  function loadMoreRecommendedArticles() {
+    if (recommendedPageLoading || !recommendedHasMore || typeof getVisitorKey !== 'function') return;
+    recommendedPageLoading = true;
+    setTribunesGlobalSentinelLoading(true);
+    fetch('/api/opinion-articles/recommended?visitorKey=' + encodeURIComponent(getVisitorKey()) +
+        '&limit=' + TRIBUNES_PAGE_SIZE + '&offset=' + recommendedNextOffset, { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        var page = Array.isArray(data.articles) ? data.articles : [];
+        recommendedNextOffset += page.length;
+        recommendedHasMore = data.hasMore === true && page.length > 0;
+        var knownLinks = {};
+        recommendedArticles.forEach(function(article) { knownLinks[article.link || article.id] = true; });
+        var fresh = page.filter(function(article) { return !knownLinks[article.link || article.id]; });
+        recommendedArticles = recommendedArticles.concat(fresh);
+        populateMediaFilter();
+        appendArticlesToCarousels(fresh);
+        if (!recommendedHasMore) {
+          removeTribunesGlobalSentinel();
+          if (!list.querySelector('.tribunes-theme-section')) applyFilter();
+        }
+      })
+      .catch(function() {
+        recommendedHasMore = false;
+        removeTribunesGlobalSentinel();
+        if (!list.querySelector('.tribunes-theme-section')) applyFilter();
+      })
+      .then(function() {
+        recommendedPageLoading = false;
+        setTribunesGlobalSentinelLoading(false);
+        maybeChainNextRecommendedPage();
+      });
+  }
+
+  function maybeChainNextRecommendedPage() {
+    if (currentFilter !== 'recommande') return;
+    if (!recommendedHasMore || recommendedPageLoading) return;
+    var sentinel = document.getElementById('tribunes-infinite-scroll-sentinel');
+    if (!sentinel) return;
+    var rect = sentinel.getBoundingClientRect();
+    if (rect.top < window.innerHeight + 600 && rect.bottom > -600) {
+      setTimeout(loadMoreRecommendedArticles, 60);
+    }
   }
 
   function trackOpinionArticleClick(link, article) {

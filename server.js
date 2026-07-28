@@ -9414,7 +9414,15 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
       recommended = pool.filter((a) => !clickedLinks.has(a.link));
     }
 
-    res.json({ articles: recommended });
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+    if (!limit) {
+      return res.json({ articles: recommended, total: recommended.length, hasMore: false });
+    }
+    const rawOffset = Number.parseInt(String(req.query.offset ?? ""), 10);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? rawOffset : 0;
+    const page = recommended.slice(offset, offset + limit);
+    res.json({ articles: page, total: recommended.length, hasMore: offset + page.length < recommended.length });
   } catch (error) {
     res.status(500).json({ articles: [], error: error.message });
   }
