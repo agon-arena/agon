@@ -10,6 +10,18 @@
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.het-body::after {
+  content: "";
+  display: block;
+  height: 320px;
+}
+
+@media (max-width: 768px) {
+  .het-body::after {
+    height: clamp(400px, 44vh, 580px);
+  }
+}
+
 .het-page {
   box-sizing: border-box;
   width: min(100% - 32px, 1100px);

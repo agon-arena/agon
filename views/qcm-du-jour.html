@@ -38,6 +38,15 @@
       min-height: 100vh;
       background-color: #243038;
     }
+    body.page-qcm-du-jour::after {
+      content: "";
+      display: block;
+      height: 220px;
+      flex: 0 0 auto;
+    }
+    body.page-qcm-du-jour.in-iframe::after {
+      height: 320px;
+    }
     .page-qcm-du-jour .topbar-inner {
       justify-content: center;
       padding: 2px 0;
@@ -74,6 +83,9 @@
          du bas du contenu (cf. même traitement sur /eclairages). */
       .page-qcm-du-jour.in-iframe .qcm-page-shell {
         margin-bottom: 260px;
+      }
+      body.page-qcm-du-jour.in-iframe::after {
+        height: clamp(380px, 42vh, 560px);
       }
     }
     @media (min-width: 769px) {

@@ -36,6 +36,15 @@
       min-height: 100vh;
       background-color: #243038;
     }
+    body.page-eclairages::after {
+      content: "";
+      display: block;
+      height: 240px;
+      flex: 0 0 auto;
+    }
+    body.page-eclairages.in-iframe::after {
+      height: 340px;
+    }
     .page-eclairages .topbar-inner {
       justify-content: center;
       padding: 2px 0;
@@ -75,6 +84,9 @@
          (demande : encore un peu plus de mou en mobile). */
       .page-eclairages.in-iframe .ecl-page-shell {
         margin-bottom: 300px;
+      }
+      body.page-eclairages.in-iframe::after {
+        height: clamp(420px, 46vh, 620px);
       }
     }
     @media (min-width: 769px) {
