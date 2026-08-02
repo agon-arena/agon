@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>QCM du jour | agôn</title>
+  <title>Mes connaissances | agôn</title>
   <link rel="icon" type="image/png" href="/favicon-64.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192-optimized.png">
@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260802-header15">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-scorepopupclose1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -321,6 +321,82 @@
       font-size: 13px;
       line-height: 1.4;
     }
+    /* Onglet "Mes acquis" : une carte par question déjà réussie, groupées
+       sous leur rubrique d'origine — même esprit que les cartes Éclairages
+       (fond blanc cassé, titre + explication), sans reprendre leur mise en
+       page riche (images/sources), les acquis n'ayant que question+explication. */
+    .qcm-acquis-group + .qcm-acquis-group {
+      margin-top: 26px;
+    }
+    .qcm-acquis-group-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 20px;
+      color: #243038;
+    }
+    .qcm-acquis-group-title i {
+      font-size: 16px;
+      color: #516776;
+    }
+    .qcm-acquis-card {
+      padding: 14px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+    .qcm-acquis-card.is-validated {
+      border-color: #bbe6cc;
+      background: #f3fbf6;
+    }
+    .qcm-acquis-card + .qcm-acquis-card {
+      margin-top: 10px;
+    }
+    .qcm-acquis-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .qcm-acquis-question {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.35;
+    }
+    .qcm-acquis-explanation {
+      margin: 0;
+      font-size: 13.5px;
+      color: #4b5563;
+      line-height: 1.45;
+    }
+    /* Progression vers la validation (4 bonnes réponses à intervalles
+       croissants — 3j/7j/1mois, cf. server.js DAILY_QUIZ_ACQUIS_VALIDATION_STREAK) : une
+       pastille "n / 3" tant que ce n'est pas acquis, un badge vert une fois
+       validé. */
+    .qcm-acquis-badge {
+      flex: 0 0 auto;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #516776;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .qcm-acquis-badge.is-validated {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #1f9d55;
+      color: #ffffff;
+    }
+    .qcm-acquis-badge.is-validated i {
+      font-size: 11px;
+    }
     /* Badge cosmétique au-dessus de la question pour les formats
        vrai_faux/texte_a_trous : rend la variété de formats visible sans
        toucher au reste de la mise en page. */
@@ -406,16 +482,16 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">QCM du jour</span></h1>
+    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">Mes connaissances</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text">Teste-toi sur l'actualité du jour, en 10 questions.</p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
     <div id="qcm-body">
-      <p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement du QCM du jour…</p>
+      <p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement de tes connaissances…</p>
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
+<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -433,32 +509,56 @@
 
   // Trois onglets de haut niveau : "QCM actu" (matin/soir, actualité du
   // jour), "QCM culture générale" (un seul créneau combiné culture_generale,
-  // cf. server.js fetchCultureGeneraleQuizCandidates) et "QCM révision"
-  // (d'anciennes questions de culture générale piochées au hasard, cf.
-  // server.js generateResampledDailyQuiz — ne compte pas pour le score
-  // Gnosis, cf. QCM_SUBTITLE_BY_CATEGORY et renderFinalScore ci-dessous).
+  // cf. server.js fetchCultureGeneraleQuizCandidates, qui réinjecte aussi des
+  // repasses de répétition espacée propres à chaque visiteur) et "Mes acquis"
+  // (lecture seule de la banque personnelle, pas un QCM à répondre).
+  // Plus de QCM Révision (retiré le 02/08/2026, devenu redondant avec la
+  // répétition espacée intégrée à Culture Générale).
   // Le sélecteur de créneaux existant (#qcm-slot-switcher) ne montre plus
-  // que les créneaux de la catégorie active, comme sous-choix — reste
-  // masqué pour "histoire"/"revision" tant qu'elles ne contiennent qu'un
-  // seul créneau chacune.
+  // que les créneaux de la catégorie active, comme sous-choix — reste masqué
+  // pour "histoire" tant qu'elle ne contient qu'un seul créneau.
   var CATEGORY_BY_SLOT = {
     morning: 'actu',
     evening: 'actu',
-    culture_generale: 'histoire',
-    revision: 'revision'
+    culture_generale: 'histoire'
   };
-  var CATEGORY_ORDER = ['actu', 'histoire', 'revision'];
-  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM Culture Générale', revision: 'QCM Révision' };
+  // "acquis" n'est pas un créneau (aucune entrée dans DAILY_QUIZ_SLOTS côté
+  // serveur, pas de quiz à répondre) : un onglet à part, toujours visible
+  // (cf. isCategoryAvailable), qui affiche la banque de questions déjà
+  // réussies plutôt que de charger un QCM — voir loadAcquis ci-dessous.
+  var CATEGORY_ORDER = ['actu', 'histoire', 'acquis'];
+  var CATEGORY_LABELS = { actu: 'QCM actu', histoire: 'QCM Culture Générale', acquis: 'Mes acquis' };
   var QCM_SUBTITLE_BY_CATEGORY = {
     actu: "Teste-toi sur l'actualité du jour, en 10 questions.",
-    histoire: "Teste-toi sur l'histoire et les éclairages du jour.",
-    revision: "D'anciennes questions de culture générale, piochées au hasard — ne compte pas pour ton score Gnosis."
+    histoire: "Teste-toi sur l'histoire et les éclairages du jour. Certaines questions déjà réussies reviennent de temps en temps pour valider tes acquis.",
+    acquis: "Les questions de culture générale auxquelles tu as déjà bien répondu, avec leur explication. 4 bonnes réponses à intervalles croissants (3 jours, 7 jours, 1 mois) pour les valider définitivement."
+  };
+  // Rubrique d'origine (sourceType, cf. server.js generateNarrativeDailyQuiz)
+  // de chaque question de culture générale — mêmes icônes/libellés que la
+  // page Éclairages et "Ce jour dans l'Histoire", pour que la banque
+  // d'acquis se sente comme le même univers.
+  var ACQUIS_SOURCE_TYPE_ORDER = ['histoire', 'parallele', 'pensee', 'mecanisme', 'concept', 'citation', 'oeuvre'];
+  var ACQUIS_SOURCE_TYPE_META = {
+    histoire: { icon: 'fa-clock-rotate-left', label: "Ce jour dans l'Histoire" },
+    parallele: { icon: 'fa-landmark', label: 'Parallèle historique' },
+    pensee: { icon: 'fa-brain', label: 'Pensée philosophique' },
+    mecanisme: { icon: 'fa-people-group', label: 'Mécanisme sociologique' },
+    concept: { icon: 'fa-shapes', label: 'Concept du jour' },
+    citation: { icon: 'fa-quote-left', label: 'Citation du jour' },
+    oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" }
   };
 
   function availableSlotKeysInCategory(category) {
     return Object.keys(slotsStatus.slots).filter(function (k) {
       return slotsStatus.slots[k].available && CATEGORY_BY_SLOT[k] === category;
     });
+  }
+
+  // "acquis" n'a pas de créneau à vérifier : toujours affiché, son propre
+  // état vide gère le cas "rien encore" (cf. renderAcquisEmpty).
+  function isCategoryAvailable(category) {
+    if (category === 'acquis') return true;
+    return availableSlotKeysInCategory(category).length > 0;
   }
 
   // Préférence au sein d'une catégorie : le soir prime sur le matin (déjà le
@@ -471,7 +571,7 @@
   }
 
   function renderCategorySwitcher() {
-    var availableCategories = CATEGORY_ORDER.filter(function (c) { return availableSlotKeysInCategory(c).length > 0; });
+    var availableCategories = CATEGORY_ORDER.filter(isCategoryAvailable);
     if (availableCategories.length < 2) {
       categorySwitcher.className = 'qcm-slot-switcher';
       categorySwitcher.innerHTML = '';
@@ -487,6 +587,7 @@
       btn.textContent = CATEGORY_LABELS[category];
       btn.addEventListener('click', function () {
         if (category === currentCategory) return;
+        if (category === 'acquis') { loadAcquis(); return; }
         var slotToLoad = pickDefaultSlotForCategory(category);
         if (!slotToLoad) return;
         loadSlot(slotToLoad);
@@ -769,13 +870,7 @@
       var a = answeredByQuestionId[q.id];
       if (a && a.correct) correct += 1;
     });
-    // Le QCM Révision recycle d'anciennes questions déjà posées : pas un
-    // test de connaissances fraîchement acquises, donc explicitement exclu
-    // du score Gnosis côté serveur (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS) —
-    // on le redit ici plutôt que de laisser croire au message habituel.
-    var scoreHint = currentCategory === 'revision'
-      ? 'Ce QCM Révision ne compte pas pour ton score Gnosis — c\'est juste l\'occasion de retester d\'anciennes questions.'
-      : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).';
+    var scoreHint = 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).';
     body.innerHTML =
       '<div class="qcm-final-score">' +
       '<i class="fa-solid fa-trophy"></i>' +
@@ -829,19 +924,81 @@
     });
   }
 
+  function renderAcquisEmpty() {
+    renderMessage("Réponds à des questions de QCM Culture Générale pour commencer à remplir ta banque d'acquis.");
+  }
+
+  // Une carte par question déjà réussie (question en titre, explication en
+  // contenu — même esprit que les cartes Éclairages), regroupées sous leur
+  // rubrique d'origine dans l'ordre ACQUIS_SOURCE_TYPE_ORDER.
+  function renderAcquisList(items) {
+    if (!items.length) { renderAcquisEmpty(); return; }
+    var bySourceType = {};
+    items.forEach(function (item) {
+      var key = ACQUIS_SOURCE_TYPE_META[item.sourceType] ? item.sourceType : 'histoire';
+      (bySourceType[key] = bySourceType[key] || []).push(item);
+    });
+    var html = '<div class="qcm-acquis-list">';
+    ACQUIS_SOURCE_TYPE_ORDER.forEach(function (key) {
+      var group = bySourceType[key];
+      if (!group || !group.length) return;
+      var meta = ACQUIS_SOURCE_TYPE_META[key];
+      html += '<div class="qcm-acquis-group">';
+      html += '<h2 class="qcm-acquis-group-title"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</h2>';
+      group.forEach(function (item) {
+        var target = item.target || 3;
+        var badgeHtml = item.validated
+          ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
+          : '<span class="qcm-acquis-badge">' + item.streak + ' / ' + target + '</span>';
+        html += '<article class="qcm-acquis-card' + (item.validated ? ' is-validated' : '') + '">';
+        html += '<div class="qcm-acquis-card-head"><p class="qcm-acquis-question">' + escapeHtml(item.question) + '</p>' + badgeHtml + '</div>';
+        html += '<p class="qcm-acquis-explanation">' + escapeHtml(item.explanation) + '</p>';
+        html += '</article>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
+  // banque personnelle de l'utilisateur plutôt que de démarrer un QCM.
+  function loadAcquis() {
+    currentCategory = 'acquis';
+    currentSlot = null;
+    titleText.textContent = CATEGORY_LABELS.acquis;
+    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.acquis;
+    renderCategorySwitcher();
+    renderSlotSwitcher();
+
+    if (!voterKey) {
+      renderAcquisEmpty();
+      return;
+    }
+    renderMessage('Chargement de tes acquis…');
+    fetch('/api/daily-quiz/acquis?voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        renderAcquisList(Array.isArray(data.acquis) ? data.acquis : []);
+      })
+      .catch(function () {
+        renderMessage('Impossible de charger tes acquis pour le moment.');
+      });
+  }
+
   function loadSlot(slotKey) {
     currentSlot = slotKey;
     currentCategory = CATEGORY_BY_SLOT[slotKey] || currentCategory;
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
-    titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'QCM du jour';
+    titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'Mes connaissances';
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || QCM_SUBTITLE_BY_CATEGORY.actu;
     renderCategorySwitcher();
     renderSlotSwitcher();
     renderMessage('Chargement du QCM…');
 
-    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey), { cache: 'no-store' })
+    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         questions = Array.isArray(data.questions) ? data.questions : [];
@@ -876,7 +1033,7 @@
   function init() {
     voterKey = typeof getKey === 'function' ? getKey() : null;
 
-    fetch('/api/daily-quiz/status', { cache: 'no-store' })
+    fetch('/api/daily-quiz/status' + (voterKey ? '?voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (statusData) {
         slotsStatus = statusData && statusData.slots ? statusData : { slots: {}, defaultSlot: null };
@@ -886,13 +1043,13 @@
           ? requestedSlot
           : slotsStatus.defaultSlot;
         if (!slotToLoad) {
-          renderMessage('Le QCM du jour n’est pas encore prêt, reviens un peu plus tard.');
+          renderMessage('Rien n’est encore prêt, reviens un peu plus tard.');
           return;
         }
         loadSlot(slotToLoad);
       })
       .catch(function () {
-        renderMessage('Impossible de charger le QCM du jour pour le moment.');
+        renderMessage('Impossible de charger Mes connaissances pour le moment.');
       });
   }
 

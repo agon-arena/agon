@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon9">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-scorepopupclose1">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -237,9 +237,11 @@
         transform: none !important;
         align-self: center !important;
         justify-self: center !important;
-        position: fixed !important;
-        top: 12px !important;
-        right: 0 !important;
+        /* Même ancrage que sur l'index : l'icône appartient au bandeau et
+           défile avec lui, au lieu de rester flottante dans la fenêtre. */
+        position: absolute !important;
+        top: 6px !important;
+        right: -27px !important;
         z-index: 2 !important;
       }
     }
@@ -249,9 +251,9 @@
         height: 104px !important;
         border-radius: 16px !important;
         margin: 0 !important;
-        position: fixed !important;
-        top: 8px !important;
-        right: 8px !important;
+        position: absolute !important;
+        top: -1px !important;
+        right: -16px !important;
         z-index: 2 !important;
       }
       body.is-standalone.page-tribunes .topbar {
@@ -664,9 +666,16 @@
       margin: 0 -14px 0 0;
       visibility: hidden;
     }
-    /* Sentinelle globale de pagination : même habillage que sur l'index. */
+    /* Sentinelle globale de pagination : déclenche le chargement au scroll
+       mais reste invisible (pas de bandeau "Fais défiler..."), comme
+       .tribunes-load-sentinel pour les rangées de carrousels. */
     #tribunes-infinite-scroll-sentinel {
-      padding: 18px 0 10px;
+      padding: 0;
+      margin: 0;
+      height: 1px;
+      min-height: 0;
+      overflow: hidden;
+      visibility: hidden;
     }
     .tribunes-carousel .tribunes-item {
       box-sizing: border-box;
@@ -676,6 +685,13 @@
     }
     .tribunes-thumb {
       aspect-ratio: 1.65 / 1;
+    }
+    .tribunes-thumb.tribunes-thumb-video {
+      background: #000000;
+    }
+    .tribunes-thumb.tribunes-thumb-video .tribunes-thumb-img {
+      object-fit: contain;
+      object-position: center;
     }
     .tribunes-item-body {
       position: relative;
@@ -721,6 +737,33 @@
       box-shadow: none;
       white-space: nowrap;
     }
+    .tribunes-video-duration {
+      position: absolute;
+      right: 7px;
+      bottom: 7px;
+      z-index: 5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      min-height: 20px;
+      box-sizing: border-box;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(15, 18, 20, 0.86);
+      color: #ffffff;
+      font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .tribunes-video-duration[hidden] {
+      display: none;
+    }
     .tribunes-thumb .debate-card-top-badges {
       top: 8px;
       right: auto;
@@ -765,19 +808,28 @@
       position: relative;
       z-index: 1;
       align-self: stretch;
-      display: flex;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr);
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
       margin-top: -12px;
       padding-top: 4px;
     }
+    .tribunes-options-btn {
+      transform: translateY(4px);
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      padding: 0;
+      justify-self: start;
+    }
     .tribunes-arena-btn {
       transform: translateY(4px);
-      width: auto;
+      width: 100%;
+      min-width: 0;
       min-height: 26px;
-      padding: 3px 10px;
-      font-size: 0.7rem;
+      padding: 3px 7px;
+      font-size: 0.67rem;
       white-space: nowrap;
       /* Palette neutre de la page (titres #111827, pilule active #1a1f24)
          plutôt que le bleu-vert #243038 du style global. */
@@ -796,20 +848,76 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 4px;
+      width: 100%;
+      min-width: 0;
       min-height: 26px;
-      padding: 3px 10px;
-      /* Même famille que le bouton notifications de la topbar et le fond des
-         filtres : #f3f4f6 / #e5e7eb / #111827. */
-      border: 1px solid #e5e7eb;
+      padding: 3px 7px;
+      /* Même contour que le bouton "···" (.debate-card-options-btn). */
+      border: 1.5px solid rgba(36, 48, 56, 0.3);
       border-radius: 999px;
       background: #f3f4f6;
       color: #111827;
-      font-size: 0.7rem;
+      font-size: 0.67rem;
       font-weight: 800;
       text-decoration: none;
       cursor: pointer;
       white-space: nowrap;
+    }
+    .tribunes-share-menu {
+      position: fixed;
+      z-index: 100001;
+      display: none;
+      min-width: 184px;
+      padding: 7px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    }
+    .tribunes-share-menu.is-open {
+      display: grid;
+      gap: 3px;
+    }
+    .tribunes-share-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #111827;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+    }
+    .tribunes-share-menu-item:hover,
+    .tribunes-share-menu-item:focus-visible {
+      background: #f3f4f6;
+      outline: none;
+    }
+    .tribunes-share-menu-item i {
+      width: 18px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .tribunes-share-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(82px + env(safe-area-inset-bottom));
+      z-index: 100002;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #111827;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      pointer-events: none;
     }
     .tribunes-source-btn:hover,
     .tribunes-source-btn:focus-visible {
@@ -1285,7 +1393,7 @@
           </a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
             <i class="fa-solid fa-list-check"></i>
-            <span>QCM du jour</span>
+            <span>Mes connaissances</span>
           </a>
           <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
@@ -1564,23 +1672,14 @@ window.addEventListener("pageshow", function() {
 </button>
 
 <script>
-/* Restaure la position des flèches calculée à la visite précédente
-   (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
-   avant le premier rendu, pour éviter le saut depuis la position CSS de repli
-   le temps que script.min.js soit parsé. */
+/* Les 3 boutons flottants (flèches haut/bas + retour) sont verrouillés sur
+   leur position CSS fixe sur cette page (cf. syncIndexFloatingScrollButtonsWithBottomNav
+   dans script.js, qui les ignore désormais) : plus de recalage dynamique ni
+   de restauration depuis sessionStorage, donc plus aucun saut possible. Une
+   éventuelle position mémorisée par une session précédente (avant ce
+   verrouillage) est ignorée. */
 (function () {
-  try {
-    var raw = sessionStorage.getItem("agonFloatingScrollBtnPos:" + location.pathname);
-    if (!raw) return;
-    var s = JSON.parse(raw);
-    if (!s || s.w !== window.innerWidth) return;
-    var up = document.querySelector(".index-floating-scroll-up");
-    var down = document.querySelector(".index-floating-scroll-down");
-    if (up && s.up) up.style.left = s.up;
-    if (down && s.down) down.style.left = s.down;
-    var back = document.querySelector(".tribunes-mobile-back-button");
-    if (back && s.back) back.style.left = s.back;
-  } catch (e) {}
+  try { sessionStorage.removeItem("agonFloatingScrollBtnPos:" + location.pathname); } catch (e) {}
 })();
 </script>
 
@@ -1651,6 +1750,17 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-video-modal-frame-wrap" id="tribunes-video-modal-frame-wrap"></div>
   </div>
 </div>
+<div class="tribunes-share-menu" id="tribunes-share-menu" role="menu" aria-label="Partager cet article">
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="copy" role="menuitem"><i class="fa-solid fa-link" style="color:#2563eb"></i><span>Copier le lien</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="qrcode" role="menuitem"><i class="fa-solid fa-qrcode" style="color:#374151"></i><span>QR Code</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="x" role="menuitem"><i class="fa-brands fa-x-twitter" style="color:#111827"></i><span>X</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="instagram" role="menuitem"><i class="fa-brands fa-instagram" style="color:#e1306c"></i><span>Instagram</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="whatsapp" role="menuitem"><i class="fa-brands fa-whatsapp" style="color:#25d366"></i><span>WhatsApp</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="email" role="menuitem"><i class="fa-solid fa-envelope" style="color:#ea4335"></i><span>Email</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="linkedin" role="menuitem"><i class="fa-brands fa-linkedin-in" style="color:#0a66c2"></i><span>LinkedIn</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="mastodon" role="menuitem"><i class="fa-brands fa-mastodon" style="color:#6364ff"></i><span>Mastodon</span></button>
+  <button type="button" class="tribunes-share-menu-item" data-tribunes-share="reddit" role="menuitem"><i class="fa-brands fa-reddit-alien" style="color:#ff4500"></i><span>Reddit</span></button>
+</div>
 <div class="tribunes-custom-media-modal" id="tribunes-custom-media-modal" role="dialog" aria-modal="true" aria-label="Choisir mes médias">
   <div class="tribunes-custom-media-modal-inner">
     <button type="button" class="tribunes-custom-media-modal-close" id="tribunes-custom-media-modal-close" aria-label="Fermer">✕</button>
@@ -1667,7 +1777,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
+<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1679,6 +1789,9 @@ window.addEventListener("pageshow", function() {
   var currentType = '';
   var currentSearchQuery = '';
   var initialHeaderScrollRestored = false;
+  var tribunesShareMenu = document.getElementById('tribunes-share-menu');
+  var tribunesShareArticle = null;
+  var tribunesShareButton = null;
 
   // ── Pagination façon index : chargement initial de 120 articles puis pages de 60
   // via la sentinelle globale en bas de page, et matérialisation par lots de 5
@@ -2314,6 +2427,39 @@ window.addEventListener("pageshow", function() {
     return t > 0 && (Date.now() - t) < NEW_BADGE_DURATION_MS;
   }
 
+  function getVideoDurationSeconds(article, preview) {
+    var raw = article && article.video_duration_seconds;
+    if (!(Number(raw) > 0)) raw = preview && (preview.durationSeconds || preview.videoDurationSeconds);
+    if (!(Number(raw) > 0) && article && article.source_preview) {
+      raw = article.source_preview.durationSeconds || article.source_preview.videoDurationSeconds;
+    }
+    var seconds = Math.round(Number(raw));
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  }
+
+  function formatVideoDuration(seconds) {
+    var total = Math.max(0, Math.round(Number(seconds) || 0));
+    if (!total) return '';
+    var hours = Math.floor(total / 3600);
+    var minutes = Math.floor((total % 3600) / 60);
+    var remainingSeconds = total % 60;
+    return hours > 0
+      ? hours + ':' + String(minutes).padStart(2, '0') + ':' + String(remainingSeconds).padStart(2, '0')
+      : minutes + ':' + String(remainingSeconds).padStart(2, '0');
+  }
+
+  function updateVideoDurationBadge(card, article, preview) {
+    if (!card) return;
+    var badge = card.querySelector('.tribunes-video-duration');
+    if (!badge) return;
+    var seconds = getVideoDurationSeconds(article, preview);
+    var label = formatVideoDuration(seconds);
+    badge.textContent = label;
+    badge.hidden = !label;
+    if (label) badge.setAttribute('aria-label', 'Durée de la vidéo : ' + label);
+    else badge.removeAttribute('aria-label');
+  }
+
   function renderItem(article) {
     var badge = article.orientation
       ? '<span class="tribunes-badge ' + orientationClass(article.orientation) + '">' + escapeHtml(article.orientation) + '</span>'
@@ -2328,15 +2474,20 @@ window.addEventListener("pageshow", function() {
     var videoId = article.type === 'youtube' ? getYouTubeVideoId(article.link) : '';
     var videoAttr = videoId ? ' data-video-id="' + escapeHtml(videoId) + '"' : '';
     var playBadge = videoId ? '<div class="tribunes-play-badge" aria-hidden="true"></div>' : '';
+    var durationLabel = videoId ? formatVideoDuration(getVideoDurationSeconds(article, article.source_preview)) : '';
+    var durationBadge = videoId
+      ? '<span class="tribunes-video-duration"' + (durationLabel ? '' : ' hidden') + '>' + escapeHtml(durationLabel) + '</span>'
+      : '';
     var titleClick = videoId
       ? ' onclick="event.preventDefault(); openVideoModal(this.dataset.videoId)"'
       : ' onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"';
     return '' +
       '<li class="tribunes-item" data-link="' + escapeHtml(article.link) + '"' + videoAttr + ' role="link" tabindex="0">' +
-        '<div class="tribunes-thumb tribunes-thumb-loading">' +
+        '<div class="tribunes-thumb tribunes-thumb-loading' + (videoId ? ' tribunes-thumb-video' : '') + '">' +
           newBadge +
           (dateBadgeLabel ? '<time class="tribunes-image-date" datetime="' + escapeHtml(dateIso) + '">' + escapeHtml(dateBadgeLabel) + '</time>' : '') +
           playBadge +
+          durationBadge +
           '<div class="tribunes-thumb-loader" aria-label="Chargement de l’image">' +
             '<img class="tribunes-thumb-loader-img" src="/sablier-96.png" alt="">' +
             '<span>Chargement de l’image…</span>' +
@@ -2352,8 +2503,9 @@ window.addEventListener("pageshow", function() {
           '<a class="tribunes-title" href="' + escapeHtml(article.link) + '"' + videoAttr + (videoId ? '' : ' target="_blank" rel="noopener noreferrer"') + titleClick + '>' + escapeHtml(article.title) + '</a>' +
           summary +
           '<div class="tribunes-arena-actions">' +
-            '<a class="tribunes-source-btn" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer" onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>' +
-            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir une arène</a>' +
+            '<button type="button" class="debate-card-options-btn tribunes-options-btn" aria-label="Options de partage" aria-expanded="false" onclick="event.preventDefault(); event.stopPropagation(); toggleTribunesShareMenu(this)">···</button>' +
+            '<a class="tribunes-source-btn" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer" onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir source</a>' +
+            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir arène</a>' +
           '</div>' +
         '</div>' +
       '</li>';
@@ -2440,6 +2592,158 @@ window.addEventListener("pageshow", function() {
     anchor.remove();
   }
   window.openCardArticle = openCardArticle;
+
+  function closeTribunesShareMenu() {
+    if (tribunesShareMenu) tribunesShareMenu.classList.remove('is-open');
+    if (tribunesShareButton) tribunesShareButton.setAttribute('aria-expanded', 'false');
+    tribunesShareArticle = null;
+    tribunesShareButton = null;
+  }
+
+  function positionTribunesShareMenu(button) {
+    if (!tribunesShareMenu || !button) return;
+    var spacing = 8;
+    var buttonRect = button.getBoundingClientRect();
+    var menuRect = tribunesShareMenu.getBoundingClientRect();
+    var left = buttonRect.left;
+    var top = buttonRect.top - menuRect.height - spacing;
+
+    if (left + menuRect.width > window.innerWidth - spacing) {
+      left = window.innerWidth - menuRect.width - spacing;
+    }
+    left = Math.max(spacing, left);
+
+    if (top < spacing) top = buttonRect.bottom + spacing;
+    if (top + menuRect.height > window.innerHeight - spacing) {
+      top = Math.max(spacing, window.innerHeight - menuRect.height - spacing);
+    }
+
+    tribunesShareMenu.style.left = Math.round(left) + 'px';
+    tribunesShareMenu.style.top = Math.round(top) + 'px';
+  }
+
+  function toggleTribunesShareMenu(button) {
+    if (!tribunesShareMenu || !button) return;
+    var wasOpen = tribunesShareMenu.classList.contains('is-open') && tribunesShareButton === button;
+    closeTribunesShareMenu();
+    if (wasOpen) return;
+
+    var card = button.closest('.tribunes-item');
+    if (!card) return;
+    tribunesShareArticle = card.__article || {
+      link: card.dataset.link || '',
+      title: card.querySelector('.tribunes-title')?.textContent || ''
+    };
+    tribunesShareButton = button;
+    button.setAttribute('aria-expanded', 'true');
+    tribunesShareMenu.classList.add('is-open');
+    positionTribunesShareMenu(button);
+  }
+  window.toggleTribunesShareMenu = toggleTribunesShareMenu;
+
+  function showTribunesShareToast(message) {
+    document.querySelector('.tribunes-share-toast')?.remove();
+    var toast = document.createElement('div');
+    toast.className = 'tribunes-share-toast';
+    toast.setAttribute('role', 'status');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    window.setTimeout(function() { toast.remove(); }, 1800);
+  }
+
+  function copyTribunesShareLink(url) {
+    var fallbackCopy = function() {
+      var field = document.createElement('textarea');
+      field.value = url;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      field.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      field.remove();
+      showTribunesShareToast('Lien copié');
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(function() { showTribunesShareToast('Lien copié'); })
+        .catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
+  function shareTribunesArticle(platform) {
+    var article = tribunesShareArticle || {};
+    var url = String(article.link || '').trim();
+    var title = String(article.title || '').trim();
+    if (!url) return;
+
+    closeTribunesShareMenu();
+    if (platform === 'copy') {
+      copyTribunesShareLink(url);
+      return;
+    }
+    if (platform === 'qrcode') {
+      if (typeof showQrCodeModal === 'function') {
+        showQrCodeModal(title || 'QR code de l\'article', url, 'Scannez ce QR code pour ouvrir cet article.', (title ? title + '\n\n' : '') + url);
+      }
+      return;
+    }
+    if (platform === 'instagram') {
+      var instaMessage = (title ? title + '\n\n' : '') + url;
+      var afterInstaCopy = function(copied) {
+        if (copied && typeof showInstagramShareCopySuccessMessage === 'function') {
+          showInstagramShareCopySuccessMessage();
+        } else if (typeof showShareCopyManualMessage === 'function') {
+          showShareCopyManualMessage('Copie manuelle du texte', instaMessage, 'La copie automatique n\'a pas fonctionné. Sélectionnez puis copiez le texte ci-dessous pour Instagram.', '📸');
+        }
+      };
+      if (typeof writeTextToClipboard === 'function') {
+        writeTextToClipboard(instaMessage).then(afterInstaCopy).catch(function() { afterInstaCopy(false); });
+      } else {
+        copyTribunesShareLink(url);
+      }
+      return;
+    }
+
+    var encodedUrl = encodeURIComponent(url);
+    var encodedTitle = encodeURIComponent(title);
+    var targetUrl = '';
+    if (platform === 'x') targetUrl = 'https://twitter.com/intent/tweet?text=' + encodedTitle + '&url=' + encodedUrl;
+    if (platform === 'whatsapp') targetUrl = 'https://wa.me/?text=' + encodeURIComponent((title ? title + ' ' : '') + url);
+    if (platform === 'email') targetUrl = 'mailto:?subject=' + encodedTitle + '&body=' + encodeURIComponent((title ? title + '\n\n' : '') + url);
+    if (platform === 'linkedin') targetUrl = 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodedUrl;
+    if (platform === 'mastodon') targetUrl = 'https://mastodon.social/share?text=' + encodeURIComponent((title ? title + ' ' : '') + url);
+    if (platform === 'reddit') targetUrl = 'https://www.reddit.com/submit?url=' + encodedUrl + '&title=' + encodedTitle;
+
+    if (platform === 'email') {
+      window.location.href = targetUrl;
+    } else if (targetUrl) {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  if (tribunesShareMenu) {
+    tribunesShareMenu.addEventListener('click', function(event) {
+      var action = event.target.closest('[data-tribunes-share]');
+      if (!action) return;
+      event.preventDefault();
+      event.stopPropagation();
+      shareTribunesArticle(action.dataset.tribunesShare || '');
+    });
+  }
+
+  document.addEventListener('click', function(event) {
+    if (event.target.closest('#tribunes-share-menu, .tribunes-options-btn')) return;
+    closeTribunesShareMenu();
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') closeTribunesShareMenu();
+  });
+  window.addEventListener('scroll', closeTribunesShareMenu, { passive: true, capture: true });
+  window.addEventListener('resize', closeTribunesShareMenu, { passive: true });
 
   // Équivalent de scrollToAdjacentSection (index) pour les sections thématiques
   // de cette page. L'offset compense la partie visible du header épinglé
@@ -2914,6 +3218,31 @@ window.addEventListener("pageshow", function() {
       if (!buckets[key]) buckets[key] = { key: key, label: category, items: [] };
       buckets[key].items.push(a);
     });
+    // "Espace jeunes" est une catégorie si rare dans le flux qu'elle n'apparaît
+    // jamais dans les ~100-200 premiers articles du pool trié par date globale
+    // (constaté : son article le plus récent est à la position ~1480 sur 5284) —
+    // sans ça sa rangée n'apparaît qu'après des dizaines de pages de scroll
+    // infini, contrairement aux autres thématiques bien plus fournies. Complétée
+    // par un lot dédié récupéré indépendamment (cf. loadEspaceJeunesSeed),
+    // seulement pour les vues non filtrées par orientation politique (Recommandé/
+    // Personnalisé) : Gauche/Droite/... restent strictement scopées côté serveur.
+    if ((currentFilter === 'recommande' || currentFilter === 'custom') && espaceJeunesSeedArticles.length) {
+      var jeunesKey = categoryKey('Espace jeunes');
+      var seedItems = currentFilter === 'custom'
+        ? espaceJeunesSeedArticles.filter(function(a) { return customMediaSelectionKeys.has(computeArticleMediaKey(a)); })
+        : espaceJeunesSeedArticles;
+      if (seedItems.length) {
+        var existingLinks = {};
+        (buckets[jeunesKey] ? buckets[jeunesKey].items : []).forEach(function(a) { existingLinks[a.link || a.id] = true; });
+        var extra = seedItems.filter(function(a) { return !existingLinks[a.link || a.id]; });
+        if (extra.length) {
+          if (!buckets[jeunesKey]) buckets[jeunesKey] = { key: jeunesKey, label: 'Espace jeunes', items: [] };
+          buckets[jeunesKey].items = buckets[jeunesKey].items.concat(extra).sort(function(a, b) {
+            return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+          });
+        }
+      }
+    }
     var groups = CATEGORY_OPTIONS
       .map(function(category) { return buckets[categoryKey(category)]; })
       .filter(Boolean)
@@ -3311,9 +3640,11 @@ window.addEventListener("pageshow", function() {
       return;
     }
     if (article.source_preview) {
-      previewCacheByLink[article.link] = article.source_preview;
       applyPreviewToCard(article, article.source_preview, card);
-      return;
+      if (article.type !== 'youtube' || getVideoDurationSeconds(article, article.source_preview) > 0) {
+        previewCacheByLink[article.link] = article.source_preview;
+        return;
+      }
     }
     if (!('IntersectionObserver' in window)) { fetchPreviewFor(article); return; }
     if (!previewObserver) {
@@ -3369,10 +3700,13 @@ window.addEventListener("pageshow", function() {
     if (preview) {
       article.source_preview = preview;
       article.source_image = preview.image || '';
+      var durationSeconds = getVideoDurationSeconds(article, preview);
+      if (durationSeconds) article.video_duration_seconds = durationSeconds;
       var arenaBtn = li && li.querySelector('.tribunes-arena-btn');
       if (arenaBtn) arenaBtn.href = createArenaHref(article);
     }
     if (!li) return;
+    updateVideoDurationBadge(li, article, preview);
     var thumb = li.querySelector('.tribunes-thumb');
     if (!thumb) return;
     var img = thumb.querySelector('.tribunes-thumb-img');
@@ -4005,6 +4339,23 @@ window.addEventListener("pageshow", function() {
   var recommendedHasMore = false;
   var recommendedPageLoading = false;
 
+  // Lot dédié pour la rangée "Espace jeunes" (cf. groupByTheme) : catégorie trop
+  // rare pour compter sur sa présence naturelle dans les premières pages du pool
+  // trié par date globale — un fetch filtré côté serveur la fait remonter tout de
+  // suite, comme les autres thématiques.
+  var espaceJeunesSeedArticles = [];
+  function loadEspaceJeunesSeed() {
+    fetch('/api/opinion-articles?category=' + encodeURIComponent('Espace jeunes') + '&limit=20&offset=0', { cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : Promise.reject(); })
+      .then(function(data) {
+        espaceJeunesSeedArticles = Array.isArray(data.articles) ? data.articles : [];
+        if (espaceJeunesSeedArticles.length && (currentFilter === 'recommande' || currentFilter === 'custom')) {
+          applyFilter();
+        }
+      })
+      .catch(function() {});
+  }
+
   function loadRecommendedArticles(attempt) {
     attempt = attempt || 0;
     // getVisitorKey vient de script.min.js, chargé en defer : ce bloc inline s'exécute au
@@ -4107,6 +4458,7 @@ window.addEventListener("pageshow", function() {
 
   loadArticles();
   loadRecommendedArticles();
+  loadEspaceJeunesSeed();
 })();
 </script>
 </body>

@@ -1421,6 +1421,34 @@ font-family: "Barlow Condensed", sans-serif;
   font-size:15px;
 }
 
+.agon-video-duration-badge{
+  position:absolute;
+  right:10px;
+  bottom:10px;
+  z-index:12;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:36px;
+  min-height:24px;
+  padding:3px 7px;
+  border-radius:6px;
+  background:rgba(15,23,42,0.88);
+  color:#ffffff;
+  font-size:12px;
+  font-weight:700;
+  line-height:1;
+  letter-spacing:0.02em;
+  font-variant-numeric:tabular-nums;
+  box-shadow:0 3px 10px rgba(0,0,0,0.24);
+  pointer-events:none;
+  box-sizing:border-box;
+}
+
+.agon-video-duration-badge[hidden]{
+  display:none !important;
+}
+
 @media (max-width: 768px) {
   .debate-card-sound-toggle{
     right:10px;
@@ -24025,6 +24053,11 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-tribunes {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    /* Cette page a un thème clair (#tribunes-list en #dbe5e1) contrairement
+       aux autres pages listées ci-dessus (thème sombre) : le fond #243038
+       imposé plus haut pour combler la safe-area laissait une bande bleu
+       nuit visible sous la liste quand son contenu n'atteint pas 100vh. */
+    background-color: #dbe5e1 !important;
   }
 
   body.page-home-mobile:not(.admin-edit-open)::after,

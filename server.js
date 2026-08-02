@@ -2159,6 +2159,26 @@ function extractJsonLikeValueFromScripts(html, keys, maxLength = 500) {
   return "";
 }
 
+function parseVideoDurationSeconds(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return 0;
+
+  if (/^\d+(?:\.\d+)?$/.test(value)) {
+    const seconds = Math.round(Number(value));
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  }
+
+  const isoMatch = value.match(/^P(?:([0-9]+)D)?(?:T(?:([0-9]+)H)?(?:([0-9]+)M)?(?:([0-9]+(?:\.[0-9]+)?)S)?)?$/i);
+  if (!isoMatch) return 0;
+  const seconds = Math.round(
+    Number(isoMatch[1] || 0) * 86400 +
+    Number(isoMatch[2] || 0) * 3600 +
+    Number(isoMatch[3] || 0) * 60 +
+    Number(isoMatch[4] || 0)
+  );
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
 function extractRawImageUrlsFromHtml(html, baseUrl) {
   const urlPattern = /https?:\/\/[^"'\s<>]+?(?:jpe?g|png|webp|avif)(?:\?[^"'\s<>]*)?/gi;
   const found = html.match(urlPattern) || [];
@@ -2309,6 +2329,12 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
   );
 
   const isYouTubeDomain = domain === "youtube.com" || domain === "youtu.be";
+  const videoDurationSeconds = isYouTubeDomain
+    ? parseVideoDurationSeconds(
+        extractJsonLikeValueFromScripts(html, ["lengthSeconds"], 20) ||
+        pickStructuredValue(jsonLdObjects, ["duration"])
+      )
+    : 0;
 
   // Sur YouTube, "author"/"creator" en JSON-LD désigne souvent l'auteur d'un
   // commentaire (schema.org/Comment) et non la chaîne propriétaire de la vidéo :
@@ -2331,7 +2357,8 @@ function buildPreviewFromHtml(html, requestedUrl, finalUrl) {
     description,
     image,
     siteName: siteName || domain,
-    ...(author ? { author } : {})
+    ...(author ? { author } : {}),
+    ...(videoDurationSeconds ? { videoDurationSeconds } : {})
   };
 }
 
@@ -2519,6 +2546,10 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
       merged.author = preview.author;
     }
 
+    if (!merged.videoDurationSeconds && Number(preview.videoDurationSeconds) > 0) {
+      merged.videoDurationSeconds = Math.round(Number(preview.videoDurationSeconds));
+    }
+
     if (!merged.domain && preview.domain) {
       merged.domain = preview.domain;
     }
@@ -2530,6 +2561,9 @@ function mergeExternalPreviewCandidates(emptyPreview, previews = []) {
     if (!merged.description && preview.description) merged.description = preview.description;
     if (!merged.siteName && preview.siteName) merged.siteName = preview.siteName;
     if (!merged.author && preview.author) merged.author = preview.author;
+    if (!merged.videoDurationSeconds && Number(preview.videoDurationSeconds) > 0) {
+      merged.videoDurationSeconds = Math.round(Number(preview.videoDurationSeconds));
+    }
     if (!merged.finalUrl && preview.finalUrl) merged.finalUrl = preview.finalUrl;
     if (!merged.canonicalUrl && preview.canonicalUrl) merged.canonicalUrl = preview.canonicalUrl;
   }
@@ -2882,6 +2916,9 @@ async function getExternalLinkPreview(sourceUrl) {
   } catch (error) {
     return null;
   }
+  const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
+  const isYouTubeDomain = domain === "youtube.com" || domain === "youtu.be";
+  const hasRequiredYouTubeDuration = (preview) => !isYouTubeDomain || Number(preview?.videoDurationSeconds) > 0;
 
   try {
     await assertSafeExternalUrl(safeUrl);
@@ -2890,11 +2927,11 @@ async function getExternalLinkPreview(sourceUrl) {
   }
 
   const cached = getCachedPreview(safeUrl);
-  if (cached && hasPreviewImage(cached)) return cached;
+  if (cached && hasPreviewImage(cached) && hasRequiredYouTubeDuration(cached)) return cached;
   if (cached && !hasPreviewImage(cached) && !shouldRetryPreviewWithoutImage(safeUrl)) return cached;
 
   const persistedPreview = cached || readPersistentPreview(safeUrl);
-  if (persistedPreview && hasPreviewImage(persistedPreview) && isMeaningfulPreviewData(persistedPreview, safeUrl)) {
+  if (persistedPreview && hasPreviewImage(persistedPreview) && isMeaningfulPreviewData(persistedPreview, safeUrl) && hasRequiredYouTubeDuration(persistedPreview)) {
     setCachedPreview(safeUrl, persistedPreview, 1000 * 60 * 60 * 24);
     externalPreviewNoImageRetryAfter.delete(safeUrl);
     return persistedPreview;
@@ -2905,7 +2942,6 @@ async function getExternalLinkPreview(sourceUrl) {
     return inFlightRequest;
   }
 
-  const domain = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
   const emptyPreview = {
     url: safeUrl,
     finalUrl: safeUrl,
@@ -4433,12 +4469,12 @@ async function computeUserScores() {
   if (quizAnswersError) throw quizAnswersError;
 
   // daily_quiz_answers n'a pas de colonne "slot" dédiée, mais question_id
-  // est toujours préfixé par le slot d'origine (ex. "revision-q3", cf.
-  // generateResampledDailyQuiz) : suffit à exclure le QCM Révision du score
-  // Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS) sans migration de schéma.
-  const gnosisExcludedQuestionPrefixes = [...DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS].map((slot) => `${slot}-`);
+  // est toujours préfixé par son origine (ex. "revision-...", "cgreview-...",
+  // cf. getDailyQuizQuestions) : suffit à exclure ces repasses du score
+  // Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES) sans
+  // migration de schéma.
   const allQuizAnswers = (rawQuizAnswers || []).filter((a) =>
-    !gnosisExcludedQuestionPrefixes.some((prefix) => String(a.question_id || "").startsWith(prefix))
+    !DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES.some((prefix) => String(a.question_id || "").startsWith(prefix))
   );
 
   const quizDates = [...new Set((allQuizAnswers || []).map((a) => a.quiz_date).filter(Boolean))];
@@ -9191,8 +9227,14 @@ function attachOpinionArticlePreviews(articles) {
         source_preview: {
           image: preview.image || "",
           title: preview.title || "",
-          description: preview.description || ""
-        }
+          description: preview.description || "",
+          ...(Number(preview.videoDurationSeconds) > 0
+            ? { durationSeconds: Math.round(Number(preview.videoDurationSeconds)) }
+            : {})
+        },
+        ...(Number(preview.videoDurationSeconds) > 0
+          ? { video_duration_seconds: Math.round(Number(preview.videoDurationSeconds)) }
+          : {})
       };
     }
     // Les miniatures YouTube sont déjà servies par i.ytimg.com côté client :
@@ -9307,6 +9349,15 @@ app.get("/api/opinion-articles", async (req, res) => {
     const orientationQuery = String(req.query.orientation || "").trim().toLowerCase();
     if (OPINION_ARTICLES_VALID_ORIENTATIONS.includes(orientationQuery)) {
       articles = articles.filter((a) => getOpinionOrientationGroup(a.orientation) === orientationQuery);
+    }
+    // Filtrage par catégorie (cf. loadEspaceJeunesSeed côté autres-sources.html) : "Espace
+    // jeunes" est une catégorie si rare dans le flux qu'elle n'apparaît jamais dans les
+    // premières pages du pool trié par date globale (même classe de problème que le filtrage
+    // par orientation ci-dessus) — un fetch dédié la fait remonter indépendamment de sa
+    // profondeur réelle dans le pool.
+    const categoryQuery = String(req.query.category || "").trim();
+    if (categoryQuery) {
+      articles = articles.filter((a) => a.category === categoryQuery);
     }
     const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
@@ -11336,19 +11387,31 @@ const DAILY_QUIZ_SLOTS = {
   // séparés : les événements historiques sont disponibles dès le début de
   // journée, ce qui permet au QCM de se générer même les jours où l'actu du
   // jour (et donc les éclairages) n'est pas encore publiée.
-  culture_generale: { label: "QCM Culture Générale", triggerHour: 9 },
-  // Pioche aléatoire dans les anciens QCM Culture Générale (aucun appel IA,
-  // cf. DAILY_QUIZ_RESAMPLE_SLOTS) : prêt dès qu'il existe assez d'anciennes
-  // questions, pas besoin d'attendre une vague de publication — triggerHour
-  // à 0 plutôt que 9.
-  revision: { label: "QCM Révision", triggerHour: 0 }
+  culture_generale: { label: "QCM Culture Générale", triggerHour: 9 }
 };
 const DAILY_QUIZ_SLOT_KEYS = Object.keys(DAILY_QUIZ_SLOTS);
-// Score Gnosis (justesse au QCM) : le QCM Révision recycle des questions
-// déjà posées, ce n'est pas un test de connaissances fraîchement acquises
-// sur l'actualité du jour — exclu explicitement, cf. calcul plus bas et le
-// message dédié côté frontend (qcm-du-jour.html).
-const DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS = new Set(["revision"]);
+// Score Gnosis (justesse au QCM) : les repasses de répétition espacée
+// injectées dans Culture Générale ("cgreview-", cf. plus bas) ne sont pas un
+// test de connaissances fraîchement acquises sur l'actualité du jour —
+// exclues explicitement du calcul plus bas et via le message dédié côté
+// frontend (qcm-du-jour.html).
+const DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES = ["cgreview-"];
+
+// Répétition espacée pour "Mes acquis" (demande du 02/08/2026) : une question
+// de culture générale n'est "validée" (✓ vert côté frontend) qu'après
+// DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à des intervalles
+// croissants — jamais plusieurs fois le même jour, l'intervalle grandit à
+// chaque palier franchi. Une mauvaise réponse en repasse remet le compteur à
+// 0 (courbe à la Anki) : la question redevient due au plus court intervalle.
+// Tant qu'elle n'est pas validée, elle est réinjectée dans le QCM Culture
+// Générale du visiteur concerné dès que son intervalle est atteint (cf.
+// fetchCultureGeneraleReviewInjectionForToday) — jamais dans la ligne
+// partagée daily_quiz, donc invisible pour les autres visiteurs.
+const DAILY_QUIZ_ACQUIS_VALIDATION_STREAK = 4;
+// Index 0 = délai avant que la 2e bonne réponse compte, index 1 = avant la
+// 3e, index 2 = avant la 4e (qui valide définitivement). Un streak revenu à 0
+// après un échec réutilise l'index 0 (le plus court délai).
+const DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS = [3, 7, 30];
 
 function isValidDailyQuizSlot(slot) {
   return Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slot);
@@ -11853,6 +11916,12 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   }
 
   const sourceIds = candidates.map((c) => String(c.id || c.current_topic_id));
+  // Rubrique d'origine de chaque candidat (histoire/parallele/pensee/mecanisme/
+  // concept/citation/oeuvre) — reportée sur les questions générées pour
+  // pouvoir les regrouper plus tard (cf. GET /api/daily-quiz/acquis, "Mes
+  // acquis" côté qcm-du-jour.html) sans avoir à interroger 6 services
+  // différents rétroactivement.
+  const sourceTypeById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), c.type]));
   const validated = validateNarrativeQuizQuestions(
     parsed?.questions,
     sourceIds,
@@ -11864,7 +11933,11 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
     return;
   }
 
-  const questions = validated.map((q, index) => ({ id: `${slotKey}-q${index + 1}`, ...q }));
+  const questions = validated.map((q, index) => ({
+    id: `${slotKey}-q${index + 1}`,
+    ...q,
+    sourceType: sourceTypeById.get(q.sourceDebateId) || null
+  }));
   const { error: insertError } = await supabase.from("daily_quiz").insert({
     quiz_date: todayKey,
     slot: slotKey,
@@ -11875,55 +11948,187 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
 }
 
-// ── QCM "Révision" ──────────────────────────────────────────────────────
-// Troisième type de QCM, à côté de "actu" et "culture générale" : pas de
-// génération IA, juste un tirage aléatoire de questions déjà posées dans
-// d'anciens QCM Culture Générale (slot culture_generale) — permet de
-// réviser sans jamais interroger OpenAI. Explicitement exclu du score
-// Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_SLOTS plus bas et le message dédié
-// côté frontend, qcm-du-jour.html) : ce ne sont pas des connaissances
-// fraîchement acquises sur l'actualité du jour, la logique du score ne
-// s'applique pas.
-const DAILY_QUIZ_RESAMPLE_SLOTS = {
-  revision: { sourceSlot: "culture_generale", count: DAILY_QUIZ_QUESTION_COUNT_NARRATIVE, lookbackDays: 90 }
-};
-
-function shuffledCopy(arr) {
-  const copy = arr.slice();
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
+// Décode l'id d'une repasse de répétition espacée ("cgreview-{sourceDebateId}",
+// cf. fetchCultureGeneraleReviewInjectionForToday) pour retrouver le
+// sourceDebateId d'origine.
+function parseCultureGeneraleReviewRef(questionId) {
+  const m = /^cgreview-(.+)$/.exec(String(questionId || ""));
+  return m ? m[1] : null;
 }
 
-async function generateResampledDailyQuiz(slotKey, todayKey, config) {
-  const cutoffKey = parisDateKey(new Date(Date.now() - config.lookbackDays * 24 * 60 * 60 * 1000));
-  const { data, error } = await supabase
-    .from("daily_quiz")
-    .select("questions")
-    .eq("slot", config.sourceSlot)
-    .gte("quiz_date", cutoffKey)
-    .lt("quiz_date", todayKey);
-  if (error) { console.error(`[daily-quiz:${slotKey}] lecture du pool de questions :`, error.message); return; }
+// Historique complet des réponses de ce visiteur aux questions de culture
+// générale — premières fois (culture_generale-qN) et repasses de répétition
+// espacée (cgreview-{sourceDebateId}) confondues, jamais le QCM Révision
+// (resté un entraînement libre, hors suivi) ni le QCM actu (hors périmètre).
+// Renvoie les événements triés chronologiquement (un par réponse, groupables
+// par sourceDebateId côté appelant) ainsi qu'un index du contenu par
+// sourceDebateId — les deux structures dont ont besoin fetchUserAcquis et
+// fetchCultureGeneraleReviewInjectionForToday.
+async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
+  const key = String(voterKey || "").trim();
+  if (!key) return { events: [], contentBySourceId: new Map() };
 
-  const pool = (data || []).flatMap((row) => (Array.isArray(row.questions) ? row.questions : []));
-  if (pool.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
-    console.warn(`[daily-quiz:${slotKey}] pool encore trop petit (${pool.length} question(s) disponible(s)), génération reportée.`);
-    return;
+  const { data: answerRows, error: answersError } = await fetchAllSupabaseRows(() =>
+    supabase.from("daily_quiz_answers")
+      .select("quiz_date, question_id, option_index")
+      .eq("voter_key", key));
+  if (answersError) throw new Error(answersError.message);
+
+  const originalAnswers = [];
+  const reviewAnswers = [];
+  for (const row of answerRows || []) {
+    const qid = String(row.question_id || "");
+    if (qid.startsWith("culture_generale-")) {
+      originalAnswers.push({ quizDate: row.quiz_date, questionId: qid, optionIndex: row.option_index });
+    } else if (qid.startsWith("cgreview-")) {
+      const sourceDebateId = parseCultureGeneraleReviewRef(qid);
+      if (sourceDebateId) reviewAnswers.push({ quizDate: row.quiz_date, sourceDebateId, optionIndex: row.option_index });
+    }
+  }
+  if (!originalAnswers.length && !reviewAnswers.length) return { events: [], contentBySourceId: new Map() };
+
+  const quizDates = [...new Set(originalAnswers.map((a) => a.quizDate).filter(Boolean))];
+  const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
+    supabase.from("daily_quiz").select("quiz_date, questions").eq("slot", "culture_generale").in("quiz_date", chunk));
+  if (quizRowsError) throw new Error(quizRowsError.message);
+
+  // contentBySourceId couvre aussi les repasses : une question posée le jour
+  // J réapparaît en repasse un jour ultérieur sans jamais avoir sa propre
+  // ligne daily_quiz, mais son sourceDebateId a forcément été vu ce jour J
+  // (seules les questions déjà répondues sont éligibles à une repasse).
+  const contentBySourceId = new Map();
+  const originalByDateAndId = new Map();
+  for (const row of quizRows || []) {
+    for (const q of (row.questions || [])) {
+      originalByDateAndId.set(`${row.quiz_date}:${q.id}`, q);
+      if (q.sourceDebateId) contentBySourceId.set(q.sourceDebateId, q);
+    }
   }
 
-  const picked = shuffledCopy(pool).slice(0, config.count);
-  const questions = picked.map((q, index) => ({ ...q, id: `${slotKey}-q${index + 1}` }));
+  const events = [];
+  for (const a of originalAnswers) {
+    const question = originalByDateAndId.get(`${a.quizDate}:${a.questionId}`);
+    if (!question || !question.sourceDebateId) continue;
+    events.push({
+      sourceDebateId: question.sourceDebateId,
+      quizDate: a.quizDate,
+      correct: Number(a.optionIndex) === Number(question.correctIndex)
+    });
+  }
+  for (const a of reviewAnswers) {
+    const question = contentBySourceId.get(a.sourceDebateId);
+    if (!question) continue; // contenu hors fenêtre de rétention (DAILY_QUIZ_RETENTION_DAYS) : ignoré
+    events.push({
+      sourceDebateId: a.sourceDebateId,
+      quizDate: a.quizDate,
+      correct: Number(a.optionIndex) === Number(question.correctIndex)
+    });
+  }
+  events.sort((x, y) => (x.quizDate < y.quizDate ? -1 : x.quizDate > y.quizDate ? 1 : 0));
+  return { events, contentBySourceId };
+}
 
-  const { error: insertError } = await supabase.from("daily_quiz").insert({
-    quiz_date: todayKey,
-    slot: slotKey,
-    questions,
-    source_debate_ids: questions.map((q) => q.sourceDebateId)
+// Rejoue l'historique de chaque sourceDebateId dans l'ordre chronologique
+// pour en déduire son état actuel : streak (0 à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK),
+// date de la dernière réponse et si la question est déjà validée.
+function computeCultureGeneraleStreaks(events) {
+  const bySource = new Map();
+  events.forEach((e) => {
+    if (!bySource.has(e.sourceDebateId)) bySource.set(e.sourceDebateId, []);
+    bySource.get(e.sourceDebateId).push(e);
   });
-  if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
-  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} question(s) piochée(s) parmi ${pool.length}).`);
+  const result = new Map();
+  for (const [sourceDebateId, list] of bySource) {
+    let streak = 0;
+    let everCorrect = false;
+    let lastQuizDate = null;
+    for (const e of list) {
+      lastQuizDate = e.quizDate;
+      if (e.correct) {
+        streak = Math.min(streak + 1, DAILY_QUIZ_ACQUIS_VALIDATION_STREAK);
+        everCorrect = true;
+      } else {
+        streak = 0;
+      }
+    }
+    result.set(sourceDebateId, {
+      streak,
+      everCorrect,
+      lastQuizDate,
+      validated: streak >= DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
+    });
+  }
+  return result;
+}
+
+// Toute question déjà répondue au moins une fois (ratée ou réussie) entre
+// dans le cycle de repasses tant qu'elle n'est pas validée — sinon une
+// question ratée dès sa première apparition ne reviendrait jamais et ne
+// pourrait donc jamais être validée. Streak à 0 (jamais réussie, ou remise à
+// 0 après un échec en repasse) utilise le plus court délai (index 0),
+// exactement comme un échec en repasse.
+function isCultureGeneraleReviewDueToday(state, todayKey) {
+  if (state.validated || !state.lastQuizDate) return false;
+  const intervalIndex = Math.min(Math.max(state.streak - 1, 0), DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS.length - 1);
+  const intervalDays = DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS[intervalIndex];
+  const dueDateKey = parisDateKey(new Date(new Date(`${state.lastQuizDate}T00:00:00Z`).getTime() + intervalDays * 24 * 60 * 60 * 1000));
+  return todayKey >= dueDateKey;
+}
+
+// Questions à réinjecter aujourd'hui dans le QCM Culture Générale de ce
+// visiteur (cf. getDailyQuizQuestions) : toutes celles dont l'intervalle de
+// répétition espacée est atteint, sans plafond — les plus en retard
+// d'abord. Id "cgreview-{sourceDebateId}" — jamais persistées dans
+// daily_quiz, recalculées à chaque appel (pas de cache, cf. getDailyQuizQuestions).
+async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
+  const { events, contentBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  if (!events.length) return [];
+  const streaks = computeCultureGeneraleStreaks(events);
+  const due = [];
+  for (const [sourceDebateId, state] of streaks) {
+    if (!isCultureGeneraleReviewDueToday(state, todayKey)) continue;
+    const question = contentBySourceId.get(sourceDebateId);
+    if (!question) continue;
+    due.push({ sourceDebateId, lastQuizDate: state.lastQuizDate, question });
+  }
+  due.sort((a, b) => (a.lastQuizDate < b.lastQuizDate ? -1 : a.lastQuizDate > b.lastQuizDate ? 1 : 0));
+  return due.map(({ question, sourceDebateId }) => ({
+    ...question,
+    id: `cgreview-${sourceDebateId}`
+  }));
+}
+
+// "Mes acquis" (cf. GET /api/daily-quiz/acquis, qcm-du-jour.html) : banque
+// personnelle des questions de culture générale déjà répondues correctement
+// au moins une fois, avec leur progression vers la validation complète
+// (DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à intervalles
+// croissants, cf. computeCultureGeneraleStreaks) — jamais le QCM actu, hors
+// périmètre (connaissances factuelles/durables plutôt que suivi de
+// l'actualité du jour).
+async function fetchUserAcquis(voterKey) {
+  const { events, contentBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  if (!events.length) return [];
+  const streaks = computeCultureGeneraleStreaks(events);
+
+  const acquis = [];
+  for (const [sourceDebateId, state] of streaks) {
+    if (!state.everCorrect) continue;
+    const question = contentBySourceId.get(sourceDebateId);
+    if (!question) continue;
+    acquis.push({
+      question: question.question,
+      explanation: question.explanation,
+      sourceType: question.sourceType || "histoire",
+      streak: state.streak,
+      validated: state.validated,
+      target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
+      quizDate: state.lastQuizDate
+    });
+  }
+
+  // Plus récent en premier — les acquis les plus frais sont les plus
+  // probables à intéresser l'utilisateur qui revient consulter sa banque.
+  return acquis.sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0));
 }
 
 async function generateDailyQuizIfNeeded(slotKey) {
@@ -11938,16 +12143,6 @@ async function generateDailyQuizIfNeeded(slotKey) {
     .maybeSingle();
   if (existingError) { console.error(`[daily-quiz:${slotKey}] vérification existant :`, existingError.message); return; }
   if (existing) return;
-
-  // Le QCM Révision ne fait aucun appel IA (juste un tirage dans les
-  // anciens QCM Culture Générale, cf. DAILY_QUIZ_RESAMPLE_SLOTS) : traité en
-  // premier, avant le garde-fou "clé API requise" ci-dessous qui ne
-  // concerne que les deux autres types de QCM.
-  const resampleConfig = DAILY_QUIZ_RESAMPLE_SLOTS[slotKey];
-  if (resampleConfig) {
-    await generateResampledDailyQuiz(slotKey, todayKey, resampleConfig);
-    return;
-  }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
@@ -12730,22 +12925,41 @@ if (
 const _dailyQuizQuestionsCache = new Map();
 const DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function getDailyQuizQuestions(quizDate, slot) {
+async function getDailyQuizQuestions(quizDate, slot, voterKey) {
   const cacheKey = `${quizDate}:${slot}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) return cached.questions;
+  let baseQuestions;
+  if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) {
+    baseQuestions = cached.questions;
+  } else {
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    baseQuestions = data?.questions || [];
+    _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
+  }
 
-  const { data, error } = await supabase
-    .from("daily_quiz")
-    .select("questions")
-    .eq("quiz_date", quizDate)
-    .eq("slot", slot)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+  // Culture Générale seulement : questions à repasser en répétition espacée,
+  // propres à ce visiteur (cf. fetchCultureGeneraleReviewInjectionForToday),
+  // ajoutées à la suite des questions IA du jour — jamais persistées dans la
+  // ligne partagée ci-dessus, donc invisibles pour les autres visiteurs. Pas
+  // de cache ici (contrairement à baseQuestions, partagé par tout le monde) :
+  // ce calcul doit refléter la réponse qu'on vient de soumettre immédiatement
+  // (sinon la question repasse due réapparaîtrait encore quelques minutes
+  // après avoir été répondue) — coût modeste, borné à l'historique d'un seul
+  // visiteur.
+  if (slot === "culture_generale") {
+    const key = String(voterKey || "").trim();
+    if (!key) return baseQuestions;
+    const reviewQuestions = await fetchCultureGeneraleReviewInjectionForToday(key, quizDate);
+    return reviewQuestions.length ? baseQuestions.concat(reviewQuestions) : baseQuestions;
+  }
 
-  const questions = data?.questions || [];
-  _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions });
-  return questions;
+  return baseQuestions;
 }
 
 const _dailyQuizStatsCache = new Map();
@@ -12786,6 +13000,7 @@ app.get("/api/daily-quiz/status", async (req, res) => {
       .eq("quiz_date", todayKey);
     if (error) throw new Error(error.message);
     const availableSlots = new Set((data || []).map((row) => row.slot));
+
     const slots = {};
     for (const slotKey of DAILY_QUIZ_SLOT_KEYS) {
       slots[slotKey] = { available: availableSlots.has(slotKey), label: DAILY_QUIZ_SLOTS[slotKey].label };
@@ -12798,7 +13013,7 @@ app.get("/api/daily-quiz/status", async (req, res) => {
       ? "evening"
       : availableSlots.has("morning")
         ? "morning"
-        : (DAILY_QUIZ_SLOT_KEYS.find((key) => availableSlots.has(key)) || null);
+        : (DAILY_QUIZ_SLOT_KEYS.find((key) => slots[key].available) || null);
     res.json({ date: todayKey, slots, defaultSlot });
   } catch (error) {
     res.status(500).json({ date: null, slots: {}, defaultSlot: null, error: error.message });
@@ -12832,16 +13047,13 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     const slot = String(req.query.slot || "").trim();
     if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, questions: [], error: "Créneau invalide." });
 
-    const { data, error } = await supabase
-      .from("daily_quiz")
-      .select("quiz_date, slot, questions")
-      .eq("quiz_date", todayKey)
-      .eq("slot", slot)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data) return res.json({ date: todayKey, slot, label: DAILY_QUIZ_SLOTS[slot].label, questions: [] });
-    const questions = (data.questions || []).map(stripQuestionForClient);
-    res.json({ date: data.quiz_date, slot: data.slot, label: DAILY_QUIZ_SLOTS[slot].label, questions });
+    // "culture_generale" seul est personnalisé par visiteur : getDailyQuizQuestions
+    // y ajoute les repasses de répétition espacée dues aujourd'hui si un
+    // voterKey est fourni (cf. fetchCultureGeneraleReviewInjectionForToday) —
+    // "morning"/"evening" restent purement partagés, sans effet du voterKey.
+    const voterKey = String(req.query.voterKey || "").trim();
+    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    res.json({ date: todayKey, slot, label: DAILY_QUIZ_SLOTS[slot].label, questions: questions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
   }
@@ -12855,14 +13067,8 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, answers: [], error: "Créneau invalide." });
     if (!voterKey) return res.json({ date: todayKey, answers: [] });
 
-    const { data: quizRow, error: quizError } = await supabase
-      .from("daily_quiz")
-      .select("questions")
-      .eq("quiz_date", todayKey)
-      .eq("slot", slot)
-      .maybeSingle();
-    if (quizError) throw new Error(quizError.message);
-    const questionsById = new Map((quizRow?.questions || []).map((q) => [q.id, q]));
+    const questionsForSlot = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    const questionsById = new Map(questionsForSlot.map((q) => [q.id, q]));
     if (!questionsById.size) return res.json({ date: todayKey, answers: [] });
 
     const { data: answerRows, error: answersError } = await supabase
@@ -12894,6 +13100,22 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     res.json({ date: todayKey, answers });
   } catch (error) {
     res.status(500).json({ date: null, answers: [], error: error.message });
+  }
+});
+
+// "Mes acquis" : banque personnelle des questions de culture générale déjà
+// répondues correctement par ce visiteur (cf. fetchUserAcquis), groupées
+// côté client par rubrique d'origine — même esprit que les pages Éclairages
+// et "Ce jour dans l'Histoire", mais reconstitué à partir de son propre
+// parcours de QCM plutôt que du contenu du jour.
+app.get("/api/daily-quiz/acquis", async (req, res) => {
+  try {
+    const voterKey = String(req.query.voterKey || "").trim();
+    if (!voterKey) return res.json({ acquis: [] });
+    const acquis = await fetchUserAcquis(voterKey);
+    res.json({ acquis });
+  } catch (error) {
+    res.status(500).json({ acquis: [], error: error.message });
   }
 });
 
@@ -12929,7 +13151,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     // séquence (questions quasi toujours servies depuis le cache mémoire,
     // donc en pratique un seul aller-retour Supabase réel ici, pas deux).
     const [questions, existingAnswerResult] = await Promise.all([
-      getDailyQuizQuestions(todayKey, slot),
+      getDailyQuizQuestions(todayKey, slot, voterKey),
       supabase.from("daily_quiz_answers").select("option_index")
         .eq("quiz_date", todayKey).eq("voter_key", voterKey).eq("question_id", questionId).maybeSingle()
     ]);

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon9">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-scorepopupclose1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -43,7 +43,7 @@
           <a href="/notifications" class="home-topbar-menu-item"><i class="fa-regular fa-bell"></i><span>Notifications</span></a>
           <a href="/contributions" class="home-topbar-menu-item"><i class="fa-regular fa-folder-open"></i><span>Scores, classements et contributions</span></a>
           <a href="/historical-events-test" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/historical-events-test')"><i class="fa-solid fa-clock-rotate-left"></i><span>Ce jour dans l'Histoire</span></a>
-          <a href="/qcm-du-jour" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')"><i class="fa-solid fa-list-check"></i><span>QCM du jour</span></a>
+          <a href="/qcm-du-jour" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')"><i class="fa-solid fa-list-check"></i><span>Mes connaissances</span></a>
           <a href="/eclairages" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/eclairages')"><i class="fa-solid fa-landmark"></i><span>Éclairages</span></a>
 <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); openDebateIframeModal('/about')">
   <i class="fa-regular fa-circle-question"></i>
@@ -82,7 +82,7 @@
   </section>
 </main>
 
-<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
+<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
 <script>
 document.getElementById('contact-form')?.addEventListener('submit', async function(event) {
   event.preventDefault();

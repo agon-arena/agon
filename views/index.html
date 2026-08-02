@@ -45,7 +45,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon14">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-scorepopupclose1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -428,7 +428,7 @@
           </a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
             <i class="fa-solid fa-list-check"></i>
-            <span>QCM du jour</span>
+            <span>Mes connaissances</span>
           </a>
           <a href="/eclairages" class="home-topbar-menu-item eclairages-link-unavailable" id="home-topbar-eclairages-link" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
@@ -711,7 +711,7 @@ window.addEventListener("pageshow", function() {
   </a>
   <a href="/qcm-du-jour" id="home-qcm-du-jour-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
     <i class="fa-solid fa-circle-question"></i>
-    <span>QCM du jour</span>
+    <span>Mes connaissances</span>
   </a>
   <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn eclairages-link-unavailable" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); openDebateIframeModal('/eclairages')">
     <i class="fa-solid fa-lightbulb"></i>
@@ -945,10 +945,10 @@ window.addEventListener("pageshow", function() {
 </script>
 <script>
 (function () {
-  // Le QCM du jour a deux créneaux (matin ~9h, soir ~17h) : le bouton reprend
-  // le libellé du créneau le plus récent disponible, et pointe dessus
-  // directement (le soir prime sur le matin une fois généré, cf.
-  // /api/daily-quiz/status côté serveur).
+  // Le QCM actu a deux créneaux (matin ~9h, soir ~17h) : le bouton "Mes
+  // connaissances" reprend le libellé du créneau le plus récent disponible,
+  // et pointe dessus directement (le soir prime sur le matin une fois
+  // généré, cf. /api/daily-quiz/status côté serveur).
   fetch('/api/daily-quiz/status', { cache: 'no-store' })
     .then(function (res) { return res.json(); })
     .then(function (data) {
@@ -1308,7 +1308,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
+<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

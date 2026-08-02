@@ -1386,14 +1386,31 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
     changes.push({ icon: '<i class="fa-solid fa-brain"></i>', label: "Gnosis", value: gnosisScore });
   }
   if (!changes.length) return;
+  // Arrivée depuis une notification "ton idée a été notée par l'IA" (cf.
+  // isAiScorePopupOverlayContext) : sa propre fenêtre détaillée va s'ouvrir
+  // pour expliquer CETTE note précise — inutile d'empiler par-dessus la
+  // notification générique du widget pour le même événement (le score global
+  // vient justement de changer à cause de cette même note).
+  if (typeof isAiScorePopupOverlayContext === "function" && isAiScorePopupOverlayContext()) return;
   showScoreChangeNotification(changes, openDetail);
 }
 
 function showScoreChangeNotification(changes, openDetail) {
-  const existing = document.getElementById("agon-score-change-overlay");
+  // Le widget de score s'initialise à la fois sur la page hôte et dans
+  // l'iframe /debate (cf. initUserScoreWidget, isDebateIframe) : sans ça,
+  // chaque contexte crée sa propre fenêtre dans son propre document quand les
+  // deux s'initialisent au même moment (ex. rechargement avec une arène
+  // restaurée automatiquement dans l'iframe), et on voit 2 fenêtres empilées.
+  // On pose toujours l'overlay dans le document le plus haut (même origine) :
+  // les deux contextes convergent alors vers le même élément, le retrait de
+  // l'"existing" ci-dessous garantit qu'il n'y en a jamais qu'un affiché.
+  let topDoc = document;
+  try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
+
+  const existing = topDoc.getElementById("agon-score-change-overlay");
   if (existing) existing.remove();
 
-  const overlay = document.createElement("div");
+  const overlay = topDoc.createElement("div");
   overlay.id = "agon-score-change-overlay";
   overlay.className = "install-modal-overlay";
   overlay.style.display = "flex";
@@ -1402,17 +1419,19 @@ function showScoreChangeNotification(changes, openDetail) {
     .join("");
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
+    '<button class="install-modal-close" type="button" aria-label="Fermer" id="agon-score-change-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
     '<h3 class="install-modal-title">Ton score a évolué</h3>' +
     lines +
     '<button class="install-modal-android-btn" type="button" style="display:flex" id="agon-score-change-detail-btn">Voir le détail</button>' +
     '</div>';
   const close = () => overlay.remove();
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector("#agon-score-change-close-btn").addEventListener("click", close);
   overlay.querySelector("#agon-score-change-detail-btn").addEventListener("click", () => {
     close();
     if (typeof openDetail === "function") openDetail();
   });
-  document.body.appendChild(overlay);
+  topDoc.body.appendChild(overlay);
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
@@ -1423,10 +1442,17 @@ function formatUserCount(n) {
 }
 
 function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount) {
-  const existing = document.getElementById("agon-user-score-overlay");
+  // Même raisonnement que showScoreChangeNotification : le badge (et donc ce
+  // clic) peut venir de l'iframe /debate, mais le détail doit toujours
+  // s'afficher dans le document le plus haut pour rester cohérent avec la
+  // notification qui a pu ouvrir ce détail (openDetail).
+  let topDoc = document;
+  try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
+
+  const existing = topDoc.getElementById("agon-user-score-overlay");
   if (existing) existing.remove();
 
-  const overlay = document.createElement("div");
+  const overlay = topDoc.createElement("div");
   overlay.id = "agon-user-score-overlay";
   overlay.className = "install-modal-overlay";
 
@@ -1473,7 +1499,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     ? '<p class="install-modal-text"><strong>Moyenne de ' + s.notesValue.toLocaleString("fr-FR") + '/100</strong> sur tes idées notées par l\'IA.</p>'
     : '';
   const gnosisValueLine = hasGnosisScore
-    ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM du jour.</p>'
+    ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM.</p>'
     : '';
   const votesExplanation = hasVotesScore
     ? 'Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.'
@@ -1482,7 +1508,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     ? 'Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car aucune de tes idées n\'a encore été évaluée.';
   const gnosisExplanation = hasGnosisScore
-    ? 'Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
+    ? 'Mesure ta justesse au QCM. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu au QCM.';
   const tabs = [
     {
@@ -1547,13 +1573,13 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 
   const close = () => {
     overlay.style.display = "none";
-    document.body.style.overflow = "";
+    topDoc.body.style.overflow = "";
   };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   overlay.querySelector(".install-modal-android-btn").addEventListener("click", close);
-  document.body.appendChild(overlay);
+  topDoc.body.appendChild(overlay);
   overlay.style.display = "flex";
-  document.body.style.overflow = "hidden";
+  topDoc.body.style.overflow = "hidden";
 }
 
 (function initUserScoreWidget() {
@@ -8055,8 +8081,107 @@ function normalizeSourcePreviewData(preview, sourceUrl = "") {
     domain,
     title,
     description,
-    image
+    image,
+    videoDurationSeconds: getAgonVideoDurationSeconds(safePreview)
   };
+}
+
+function getAgonVideoDurationSeconds(value) {
+  const rawValue = value && typeof value === "object"
+    ? (value.videoDurationSeconds ?? value.durationSeconds ?? value.video_duration_seconds ?? value.duration_seconds)
+    : value;
+  const seconds = Number(rawValue);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
+}
+
+function formatAgonVideoDuration(value) {
+  const totalSeconds = getAgonVideoDurationSeconds(value);
+  if (!totalSeconds) return "";
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function buildAgonVideoDurationBadgeHtml(value) {
+  const label = formatAgonVideoDuration(value);
+  return `<span class="agon-video-duration-badge" data-video-duration-badge${label ? "" : " hidden"}>${escapeHtml(label)}</span>`;
+}
+
+function updateAgonVideoDurationBadge(shell, value) {
+  const badge = shell?.querySelector?.("[data-video-duration-badge]");
+  if (!badge) return;
+
+  const seconds = getAgonVideoDurationSeconds(value);
+  const label = formatAgonVideoDuration(seconds);
+  if (seconds) shell.dataset.videoDurationSeconds = String(seconds);
+  badge.textContent = label;
+  badge.hidden = !label || shell.dataset.active === "true";
+}
+
+const pendingAgonYouTubeDurationHydrations = new Map();
+let agonYouTubeDurationObserver = null;
+
+async function hydrateAgonYouTubeDuration(shell) {
+  if (!shell || getAgonVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
+
+  const sourceUrl = String(shell.dataset.sourceUrl || "").trim();
+  if (!sourceUrl) return;
+
+  let pending = pendingAgonYouTubeDurationHydrations.get(sourceUrl);
+  if (!pending) {
+    pending = getIndexSourcePreviewData(sourceUrl, { forceRefresh: true })
+      .finally(() => pendingAgonYouTubeDurationHydrations.delete(sourceUrl));
+    pendingAgonYouTubeDurationHydrations.set(sourceUrl, pending);
+  }
+
+  try {
+    const preview = await pending;
+    const durationSeconds = getAgonVideoDurationSeconds(preview);
+    if (!durationSeconds) return;
+
+    document.querySelectorAll("[data-index-youtube-shell]").forEach((candidate) => {
+      if (String(candidate.dataset.sourceUrl || "").trim() === sourceUrl) {
+        updateAgonVideoDurationBadge(candidate, durationSeconds);
+      }
+    });
+  } catch (error) {
+    // Une durée indisponible ne doit jamais empêcher l'affichage de la vidéo.
+  }
+}
+
+function observeAgonYouTubeDurations(root = document) {
+  const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+  const shells = Array.from(scope.querySelectorAll("[data-index-youtube-shell]"));
+  if (!shells.length) return;
+
+  if (!agonYouTubeDurationObserver && typeof IntersectionObserver === "function") {
+    agonYouTubeDurationObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        agonYouTubeDurationObserver.unobserve(entry.target);
+        hydrateAgonYouTubeDuration(entry.target);
+      });
+    }, {
+      root: null,
+      rootMargin: "600px 0px",
+      threshold: 0.01
+    });
+  }
+
+  shells.forEach((shell) => {
+    if (getAgonVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
+    if (agonYouTubeDurationObserver) {
+      agonYouTubeDurationObserver.observe(shell);
+    } else {
+      hydrateAgonYouTubeDuration(shell);
+    }
+  });
 }
 
 function isWeakSourcePreviewData(preview, sourceUrl = "") {
@@ -9461,13 +9586,14 @@ function isIndexYouTubeSourceDebate(debate) {
   return !!String(embedData.videoId || "").trim();
 }
 
-function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
+function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "", sourcePreview = null) {
   const embedData = getEmbeddableSourceData(sourceUrl);
   if (!embedData.videoId || !embedData.embedUrl) return "";
 
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const safeVideoId = escapeAttribute(String(embedData.videoId || "").trim());
   const thumbnailUrl = `https://img.youtube.com/vi/${safeVideoId}/hqdefault.jpg`;
+  const durationSeconds = getAgonVideoDurationSeconds(sourcePreview);
 
   return `
     <div
@@ -9478,7 +9604,9 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
         class="debate-card-youtube-shell"
         data-index-youtube-shell
         data-embed-base="${escapeAttribute(embedData.embedUrl)}"
+        data-source-url="${escapeAttribute(sourceUrl)}"
         data-media-label="${escapeAttribute(mediaLabel || '')}"
+        data-video-duration-seconds="${durationSeconds || ''}"
         style="position:relative; width:100%; aspect-ratio:16 / 9; overflow:hidden; border-radius:0; background:#000;"
       >
         <button
@@ -9503,6 +9631,8 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "") {
             <span class="debate-card-youtube-label" style="position:absolute; left:12px; bottom:10px; padding:6px 10px; border-radius:999px; background:rgba(17,24,39,0.72); color:#fff; font-size:12px; font-weight:700;">${escapeHtml(mediaLabel || 'YouTube')}</span>
           </span>
         </button>
+
+        ${buildAgonVideoDurationBadgeHtml(durationSeconds)}
 
         ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
 
@@ -9571,6 +9701,7 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
             <span class="debate-card-local-video-label debate-card-youtube-label">Cliquer pour lire</span>
           </span>
         </button>
+        ${buildAgonVideoDurationBadgeHtml(0)}
         ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
         <video
           class="debate-card-youtube-iframe debate-card-local-video-player"
@@ -9859,7 +9990,7 @@ function renderIndexMediaItemHtml(item, debate, explicitSourcePreview = null, op
   if (isIndexYouTubeSourceDebate({ source_url: itemUrl })) {
     const ytBase = String(item.source || '').trim() || sourcePreview?.author || getDomainLabel(itemUrl);
     const ytLabel = sourceCount > 1 ? `${ytBase} + ${sourceCount} sources` : ytBase;
-    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel);
+    return buildIndexYouTubeEmbedHtml(itemUrl, safeDebateId, ytLabel, sourcePreview);
   }
 
   if (isXStatusUrl(itemUrl)) {
@@ -10342,8 +10473,7 @@ function getIndexDebateById(debateId) {
 
 function getIndexHydratableSourceUrls(debate) {
   if (!debate || typeof debate !== 'object') return false;
-  if (String(debate.image_url || '').trim()) return false;
-  if (String(debate.video_url || '').trim()) return false;
+  const hasPrimaryMedia = !!String(debate.image_url || '').trim() || !!String(debate.video_url || '').trim();
 
   const candidates = [];
   const sourceUrl = String(debate.source_url || '').trim();
@@ -10365,16 +10495,11 @@ function getIndexHydratableSourceUrls(debate) {
     if (isInstagramPostUrl(url)) return false;
 
     if (isIndexYouTubeSourceDebate({ source_url: url })) {
-      const hasCuratedName = extras.some((item) =>
-        item && String(item?.type || '').trim() === 'source'
-        && String(item?.url || '').trim() === url
-        && String(item?.source || '').trim()
-      );
-      if (hasCuratedName) return false;
       const preview = getResolvedIndexSourcePreview(url, debate);
-      if (String(preview?.author || '').trim()) return false;
-      return true;
+      return getAgonVideoDurationSeconds(preview) <= 0;
     }
+
+    if (hasPrimaryMedia) return false;
 
     const preview = getResolvedIndexSourcePreview(url, debate);
     const normalizedPreview = normalizeSourcePreviewData(preview, url);
@@ -10477,7 +10602,8 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
       const normalizedPreview = normalizeSourcePreviewData(preview, url);
       const hasUsableImage = String(normalizedPreview.image || '').trim();
       const hasUsableAuthor = String(preview?.author || '').trim();
-      if (!preview || (!hasUsableImage && !hasUsableAuthor)) return;
+      const hasUsableDuration = getAgonVideoDurationSeconds(preview) > 0;
+      if (!preview || (!hasUsableImage && !hasUsableAuthor && !hasUsableDuration)) return;
       previewMap[url] = preview;
       if (String(refreshedDebate.source_url || '').trim() === url) {
         refreshedDebate.source_preview = preview;
@@ -10516,6 +10642,7 @@ function ensureIndexMissingSourcePreviewObserver() {
 
 function observeIndexCardsMissingSourcePreview(root = document) {
   const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+  observeAgonYouTubeDurations(scope);
   const observer = ensureIndexMissingSourcePreviewObserver();
 
   scope.querySelectorAll('.debate-card[data-debate-id]').forEach((card) => {
@@ -10700,6 +10827,7 @@ function prepareIndexLocalVideoPoster(shell) {
   }
 
   const markReady = () => {
+    updateAgonVideoDurationBadge(shell, player.duration);
     shell.dataset.posterReady = player.readyState >= 2 ? 'true' : 'false';
     updateIndexLocalVideoShellOverlay(shell);
     syncIndexLocalVideoPosterVisibility(shell);
@@ -10707,6 +10835,7 @@ function prepareIndexLocalVideoPoster(shell) {
 
   const seekPreviewFrame = () => {
     const duration = Number(player.duration || 0);
+    updateAgonVideoDurationBadge(shell, duration);
     if (!Number.isFinite(duration) || duration <= 0.2) {
       markReady();
       return;
@@ -10766,6 +10895,7 @@ function updateIndexYouTubeShellOverlay(shell) {
   const poster = shell.querySelector('[data-index-youtube-poster]');
   const label = overlay?.querySelector('.debate-card-youtube-label');
   const soundButton = shell.querySelector('[data-index-youtube-sound-btn]');
+  const durationBadge = shell.querySelector('[data-video-duration-badge]');
   const isActive = shell.dataset.active === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
   const isMobile = window.innerWidth <= 768;
@@ -10789,9 +10919,10 @@ function updateIndexYouTubeShellOverlay(shell) {
     overlay.style.zIndex = '2';
     if (label) label.textContent = shell.dataset.mediaLabel || 'YouTube';
     if (soundButton) {
-      soundButton.style.display = isMobile ? 'inline-flex' : 'none';
+      soundButton.style.display = 'none';
       updateYtSourceSoundButton(soundButton, false);
     }
+    if (durationBadge) durationBadge.hidden = !durationBadge.textContent.trim();
     return;
   }
 
@@ -10815,6 +10946,7 @@ function updateIndexYouTubeShellOverlay(shell) {
     soundButton.style.display = isMobile ? 'inline-flex' : 'none';
     updateYtSourceSoundButton(soundButton, isUserActivated);
   }
+  if (durationBadge) durationBadge.hidden = true;
 }
 
 function unloadIndexYouTubeShell(shell) {
@@ -11065,6 +11197,7 @@ function updateIndexLocalVideoShellOverlay(shell) {
   const overlay = ensureIndexLocalVideoOverlayLayer(shell);
   const label = overlay?.querySelector('.debate-card-youtube-label');
   const soundButton = shell.querySelector('[data-index-local-video-sound-btn]');
+  const durationBadge = shell.querySelector('[data-video-duration-badge]');
   const isActive = shell.dataset.active === 'true';
   const isUserStarted = shell.dataset.userStarted === 'true';
   const isUserActivated = shell.dataset.userActivated === 'true';
@@ -11080,6 +11213,7 @@ function updateIndexLocalVideoShellOverlay(shell) {
       label.textContent = hasPosterReady ? 'Cliquer pour lire' : 'Vidéo importée';
     }
     if (soundButton) soundButton.style.display = 'none';
+    if (durationBadge) durationBadge.hidden = !durationBadge.textContent.trim();
     return;
   }
 
@@ -11089,6 +11223,7 @@ function updateIndexLocalVideoShellOverlay(shell) {
     overlay.style.cursor = '';
     if (label) label.textContent = 'Cliquer pour relire';
     if (soundButton) soundButton.style.display = 'none';
+    if (durationBadge) durationBadge.hidden = !durationBadge.textContent.trim();
     return;
   }
 
@@ -11104,6 +11239,7 @@ function updateIndexLocalVideoShellOverlay(shell) {
     soundButton.setAttribute('aria-label', isUserActivated ? 'Couper le son' : 'Activer le son');
     soundButton.setAttribute('title', isUserActivated ? 'Couper le son' : 'Activer le son');
   }
+  if (durationBadge) durationBadge.hidden = true;
 }
 
 function syncIndexLocalVideoPosterVisibility(shell) {
@@ -11992,6 +12128,7 @@ function initIndexYouTubeObserver(root = document) {
   state.observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       entry.target.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.35 ? 'true' : 'false';
+      if (entry.isIntersecting) hydrateAgonYouTubeDuration(entry.target);
     });
     scheduleIndexYouTubeActiveUpdate();
   }, {
@@ -26680,6 +26817,7 @@ function initDebateYouTubeShell(container) {
   shell.dataset.soundEnabled = 'false';
   ensureIndexYouTubeOverlayLayer(shell);
   updateIndexYouTubeShellOverlay(shell);
+  hydrateAgonYouTubeDuration(shell);
 
   const poster = shell.querySelector('[data-index-youtube-poster]');
   const overlay = shell.querySelector('[data-index-youtube-overlay]');
@@ -26806,7 +26944,8 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
   const safeUrl = String(sourceUrl || "").trim();
   if (!safeUrl) return;
-  if (!isWeakSourcePreviewData(preview, safeUrl)) return;
+  const needsYouTubeDuration = !!getYouTubeVideoId(safeUrl) && getAgonVideoDurationSeconds(preview) <= 0;
+  if (!needsYouTubeDuration && !isWeakSourcePreviewData(preview, safeUrl)) return;
 
   try {
     const response = await fetchJSON(API + "/link-preview", {
@@ -26817,7 +26956,8 @@ async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
       body: JSON.stringify({ url: safeUrl })
     });
 
-    if (!response?.preview || isWeakSourcePreviewData(response.preview, safeUrl)) {
+    const responseHasYouTubeDuration = getAgonVideoDurationSeconds(response?.preview) > 0;
+    if (!response?.preview || (!responseHasYouTubeDuration && isWeakSourcePreviewData(response.preview, safeUrl))) {
       return;
     }
 
@@ -26904,7 +27044,7 @@ function renderDebateSourcePreview(sourceUrl, sourcePreviewData = null) {
   const ytContainer = document.createElement('div');
   ytContainer.id = 'debate-source-yt-container';
   const ytMediaLabel = sourcePreviewData?.author || getDomainLabel(sourceUrl);
-  ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "", ytMediaLabel);
+  ytContainer.innerHTML = buildIndexYouTubeEmbedHtml(sourceUrl, "", ytMediaLabel, sourcePreviewData);
   sourcePreviewWrap.appendChild(ytContainer);
   sourcePreviewWrap.style.display = "block";
   updateDebateSourcePreviewVerticalOffset();
@@ -34007,7 +34147,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const gapAbove = captionDocTop - contentBottomDoc;
   const captionHeight = caption.getBoundingClientRect().height;
   const captionBottomDoc = captionDocTop + captionHeight;
-  // Le bouton "QCM du jour" est un vrai sibling en flux normal entre la section
+  // Le bouton "Mes connaissances" est un vrai sibling en flux normal entre la section
   // (dont la légende est sortie du flux, cf. ci-dessus) et #debates-list. Sa
   // position réelle sert de référence : le bandeau "À la une" est ensuite placé
   // sous lui avec exactement le même vide qu'entre la légende et lui — sinon,
@@ -34663,6 +34803,12 @@ if (document.readyState === "loading") {
 }
 
 function syncIndexFloatingScrollButtonsWithBottomNav() {
+  // Page Autres actus : les 3 boutons flottants (flèches haut/bas + retour)
+  // restent verrouillés sur leur position CSS de repli, pas de recalage
+  // dynamique — celui-ci pouvait les décaler de façon intermittente (ex :
+  // badge de notifications qui apparaît après le dernier resync et change
+  // la largeur de l'item "Alertes" utilisée dans le calcul).
+  if (document.body.classList.contains("page-tribunes")) return;
   const up = document.querySelector(".index-floating-scroll-up");
   const down = document.querySelector(".index-floating-scroll-down");
   const nav = document.querySelector(".home-bottom-nav");
