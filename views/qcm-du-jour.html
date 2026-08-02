@@ -468,6 +468,113 @@
       font-size: 12px;
       color: #1f9d55;
     }
+    /* Format "qcm_multi" : boutons à bascule (coche visible une fois
+       sélectionné), même gabarit que .qcm-option-btn mais sans la barre de
+       remplissage (les stats agrégées ne représentent pas un choix par
+       option ici, cf. commentaire côté serveur — pas de %). */
+    .qcm-multi-hint {
+      margin: -12px 0 14px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .qcm-option-btn-multi .qcm-option-row {
+      justify-content: flex-start;
+      gap: 10px;
+    }
+    .qcm-option-check {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 5px;
+      background: #ffffff;
+      color: transparent;
+      font-size: 12px;
+      transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+    .qcm-option-btn-multi.is-selected .qcm-option-check {
+      border-color: #243038;
+      background: #243038;
+      color: #ffffff;
+    }
+    .qcm-option-btn-multi.answered.is-correct .qcm-option-check {
+      border-color: #1f9d55;
+      background: #1f9d55;
+      color: #ffffff;
+    }
+    .qcm-option-btn-multi.answered.is-wrong-picked .qcm-option-check {
+      border-color: #d64545;
+      background: #d64545;
+      color: #ffffff;
+    }
+    /* Format "ordre" : deux zones — la séquence choisie (numérotée) et les
+       éléments encore disponibles — plutôt qu'un glisser-déposer. */
+    .qcm-order-hint {
+      margin: -12px 0 14px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .qcm-order-chosen {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 12px;
+      margin-bottom: 14px;
+    }
+    .qcm-order-pool {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .qcm-order-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f9fafb;
+      color: #1f2937;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-order-chip:disabled {
+      cursor: default;
+    }
+    .qcm-order-chip-chosen {
+      width: 100%;
+      background: #eef3f6;
+      border-color: #516776;
+    }
+    .qcm-order-chip-num {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: #243038;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .qcm-order-chip-static {
+      cursor: default;
+    }
+    .qcm-order-correct-label {
+      margin: 0 0 2px;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
   </style>
 </head>
 <body class="page-qcm-du-jour">
@@ -620,7 +727,10 @@
   var QUESTION_TYPE_BADGE_LABELS = {
     vrai_faux: 'Vrai ou faux ?',
     texte_a_trous: 'Texte à trous',
-    association: 'Association'
+    association: 'Association',
+    intrus: "Trouve l'intrus",
+    qcm_multi: 'Plusieurs réponses',
+    ordre: "Remets dans l'ordre"
   };
   var FILL_BLANK_MARKER = '___';
 
@@ -630,15 +740,20 @@
   }
 
   // Point d'entrée unique : dispatché selon le format de la question
-  // courante. "association" a une interaction fondamentalement différente
-  // (appariement, pas un choix unique) et un rendu dédié ; les 3 autres
-  // formats partagent le même rendu à options (renderChoiceQuestion), la
-  // boucle sur question.options étant déjà générique (2 ou 4 options).
+  // courante. "association"/"qcm_multi"/"ordre" ont chacun une interaction
+  // fondamentalement différente d'un choix unique et un rendu dédié ; les
+  // autres formats (dont "intrus", identique à "qcm" question ×
+  // 4 options) partagent le même rendu à options (renderChoiceQuestion).
   function renderQuestion() {
     var question = questions[currentIndex];
     var answer = answeredByQuestionId[question.id];
-    if ((question.type || 'qcm') === 'association') {
+    var type = question.type || 'qcm';
+    if (type === 'association') {
       renderAssociationQuestion(question, answer);
+    } else if (type === 'qcm_multi') {
+      renderMultiChoiceQuestion(question, answer);
+    } else if (type === 'ordre') {
+      renderOrderQuestion(question, answer);
     } else {
       renderChoiceQuestion(question, answer);
     }
@@ -853,6 +968,213 @@
 
     var submitBtn = document.getElementById('qcm-assoc-submit-btn');
     if (submitBtn) submitBtn.remove();
+
+    var feedback = document.getElementById('qcm-feedback');
+    feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
+    feedback.innerHTML =
+      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
+      escapeHtml(answer.explanation || '');
+
+    wireNextButton(document.getElementById('qcm-next-btn'));
+  }
+
+  // ── Format "qcm_multi" : plusieurs bonnes réponses parmi 4-5 options —
+  // boutons à bascule (pas de sélection immédiate comme "qcm", il faut
+  // pouvoir cocher/décocher avant de valider) + bouton "Valider" dédié, même
+  // principe que le bouton de "association" ci-dessus. ───────────────────
+  function renderMultiChoiceQuestion(question, answer) {
+    var html = '';
+    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderTypeBadge('qcm_multi');
+    html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
+    html += '<div class="qcm-options" id="qcm-options"></div>';
+    html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-multi-submit-btn" disabled>Valider</button>';
+    html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
+    body.innerHTML = html;
+
+    var optionsEl = document.getElementById('qcm-options');
+    var submitBtn = document.getElementById('qcm-multi-submit-btn');
+    var selected = {};
+    var buttons = question.options.map(function (optionText, index) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'qcm-option-btn qcm-option-btn-multi';
+      btn.innerHTML =
+        '<span class="qcm-option-row">' +
+        '<span class="qcm-option-check" aria-hidden="true"><i class="fa-solid fa-check"></i></span>' +
+        '<span class="qcm-option-label">' + escapeHtml(optionText) + '</span>' +
+        '</span>';
+      btn.addEventListener('click', function () {
+        if (selected[index]) { delete selected[index]; btn.classList.remove('is-selected'); }
+        else { selected[index] = true; btn.classList.add('is-selected'); }
+        submitBtn.disabled = !Object.keys(selected).length;
+      });
+      optionsEl.appendChild(btn);
+      return btn;
+    });
+
+    submitBtn.onclick = function () {
+      submitMultiChoiceAnswer(question, Object.keys(selected).map(Number), buttons, submitBtn);
+    };
+
+    if (answer) applyMultiChoiceAnswerState(answer, buttons);
+  }
+
+  function submitMultiChoiceAnswer(question, optionIndexes, buttons, submitBtn) {
+    buttons.forEach(function (btn) { btn.disabled = true; });
+    submitBtn.disabled = true;
+
+    fetch('/api/daily-quiz/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, optionIndexes: optionIndexes })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        answeredByQuestionId[question.id] = data;
+        applyMultiChoiceAnswerState(data, buttons);
+      })
+      .catch(function () {
+        buttons.forEach(function (btn) { btn.disabled = false; });
+        submitBtn.disabled = false;
+      });
+  }
+
+  // Reprise de session : le serveur ne renvoie que le verdict global + la
+  // vraie liste correctIndexes, jamais ce qui avait été coché à l'époque —
+  // chaque bouton n'est donc marqué "correct" ou neutre qu'à partir de
+  // correctIndexes, jamais "raté" individuellement lors d'une reprise (même
+  // limite que "association", cf. applyAssociationAnswerState).
+  function applyMultiChoiceAnswerState(answer, buttons) {
+    var correctSet = {};
+    (answer.correctIndexes || []).forEach(function (i) { correctSet[i] = true; });
+    buttons.forEach(function (btn, index) {
+      btn.disabled = true;
+      btn.classList.add('answered');
+      if (correctSet[index]) btn.classList.add('is-correct');
+      else if (btn.classList.contains('is-selected')) btn.classList.add('is-wrong-picked');
+    });
+
+    var submitBtn = document.getElementById('qcm-multi-submit-btn');
+    if (submitBtn) submitBtn.remove();
+
+    var feedback = document.getElementById('qcm-feedback');
+    feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
+    feedback.innerHTML =
+      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
+      escapeHtml(answer.explanation || '');
+
+    wireNextButton(document.getElementById('qcm-next-btn'));
+  }
+
+  // ── Format "ordre" : remettre 3-4 éléments dans leur ordre correct — tap
+  // pour construire la séquence (pas de glisser-déposer, aucune dépendance,
+  // tactile/clavier gratuits comme le <select> de "association") : chaque
+  // tap sur un élément disponible l'ajoute à la séquence choisie, un tap sur
+  // un élément déjà placé le retire (pour corriger sans tout recommencer). ─
+  function renderOrderQuestion(question, answer) {
+    var html = '';
+    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderTypeBadge('ordre');
+    html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
+    html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
+    html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
+    html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-order-submit-btn" disabled>Valider</button>';
+    html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
+    body.innerHTML = html;
+
+    var poolEl = document.getElementById('qcm-order-pool');
+    var chosenEl = document.getElementById('qcm-order-chosen');
+    var submitBtn = document.getElementById('qcm-order-submit-btn');
+    var items = question.items || [];
+    var chosenOrder = [];
+
+    function renderChosen() {
+      chosenEl.innerHTML = '';
+      chosenOrder.forEach(function (text, i) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'qcm-order-chip qcm-order-chip-chosen';
+        chip.innerHTML = '<span class="qcm-order-chip-num">' + (i + 1) + '</span><span>' + escapeHtml(text) + '</span>';
+        chip.addEventListener('click', function () {
+          chosenOrder.splice(i, 1);
+          renderChosen();
+          renderPool();
+        });
+        chosenEl.appendChild(chip);
+      });
+      submitBtn.disabled = chosenOrder.length !== items.length;
+    }
+
+    function renderPool() {
+      poolEl.innerHTML = '';
+      items.forEach(function (text) {
+        if (chosenOrder.indexOf(text) !== -1) return;
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'qcm-order-chip';
+        chip.textContent = text;
+        chip.addEventListener('click', function () {
+          chosenOrder.push(text);
+          renderChosen();
+          renderPool();
+        });
+        poolEl.appendChild(chip);
+      });
+    }
+    renderPool();
+    renderChosen();
+
+    submitBtn.onclick = function () {
+      submitOrderAnswer(question, chosenOrder.slice(), poolEl, chosenEl, submitBtn);
+    };
+
+    if (answer) applyOrderAnswerState(answer, poolEl, chosenEl, submitBtn, items);
+  }
+
+  function submitOrderAnswer(question, orderedItems, poolEl, chosenEl, submitBtn) {
+    submitBtn.disabled = true;
+    poolEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
+    chosenEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
+
+    fetch('/api/daily-quiz/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, orderedItems: orderedItems })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        answeredByQuestionId[question.id] = data;
+        applyOrderAnswerState(data, poolEl, chosenEl, submitBtn, question.items);
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        poolEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = false; });
+        chosenEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = false; });
+      });
+  }
+
+  // Affiche le bon ordre (révélé par le serveur une fois répondu) en lecture
+  // seule plutôt que de comparer élément par élément à ce qui avait été
+  // choisi — même limite de reprise de session que "association"/"qcm_multi" :
+  // seul le verdict global est connu après un rechargement de page.
+  function applyOrderAnswerState(answer, poolEl, chosenEl, submitBtn, fallbackItems) {
+    if (submitBtn) submitBtn.remove();
+    var correctItems = answer.items || fallbackItems || [];
+    poolEl.innerHTML = '';
+    chosenEl.innerHTML = '<p class="qcm-order-correct-label">Bon ordre :</p>';
+    correctItems.forEach(function (text, i) {
+      var chip = document.createElement('div');
+      chip.className = 'qcm-order-chip qcm-order-chip-chosen qcm-order-chip-static';
+      chip.innerHTML = '<span class="qcm-order-chip-num">' + (i + 1) + '</span><span>' + escapeHtml(text) + '</span>';
+      chosenEl.appendChild(chip);
+    });
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');

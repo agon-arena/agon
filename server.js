@@ -11542,16 +11542,49 @@ async function fetchDailyQuizCandidateDebates(excludeIds = [], recentTopicKeys =
 // formats de question possibles. `sourceIdField` vaut "sourceDebateId" (QCM
 // actu) ou "sourceId" (QCM narratifs) — seul ce nom de champ change d'un
 // builder à l'autre, le reste est identique.
-function buildQuestionFormatsPromptBlock(sourceIdField) {
+// Rotation de formats assignée à chaque question AVANT l'appel IA plutôt que
+// laissée à sa seule discrétion : "varie-les naturellement" ne suffit pas en
+// pratique, l'IA retombe facilement sur "qcm" pour tout le lot (retour
+// utilisateur du 03/08/2026, même classe de biais que le position bias déjà
+// documenté sur correctIndex, cf. shuffleOptionsPreservingCorrectIndex) —
+// une vraie variété se construit nous-mêmes, pas en espérant que l'IA la
+// choisisse d'elle-même. Les formats les plus contraints (association/
+// qcm_multi/ordre, qui exigent une structure particulière du sujet) sont
+// sous-représentés dans la rotation plutôt qu'à parts égales avec qcm/
+// vrai_faux/texte_a_trous/intrus — l'IA garde par ailleurs la liberté de
+// repasser sur "qcm" si le sujet retenu pour une question précise ne se
+// prête vraiment pas au format suggéré (cf. consigne plus bas).
+const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
+  "qcm", "qcm", "vrai_faux", "qcm", "texte_a_trous",
+  "intrus", "qcm", "association", "vrai_faux", "qcm_multi",
+  "qcm", "ordre", "vrai_faux", "qcm", "intrus"
+];
+
+function buildFormatAssignments(count) {
+  const shuffled = shuffleArray(DAILY_QUIZ_FORMAT_ROTATION_POOL);
+  const assignments = [];
+  for (let i = 0; i < count; i++) assignments.push(shuffled[i % shuffled.length]);
+  return assignments;
+}
+
+function buildQuestionFormatsPromptBlock(sourceIdField, questionCount) {
+  const assignments = buildFormatAssignments(questionCount);
   return [
     "=== Formats de question possibles ===",
-    "Choisis librement, pour chaque question, le format le plus adapté au sujet — varie-les naturellement au fil du QCM plutôt que de produire systématiquement le même format :",
     "- \"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
     "- \"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1.",
     "- \"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte.",
     "- \"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format.",
+    "- \"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus.",
+    "- \"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\" ; n'utilise ce format QUE si le sujet offre naturellement plusieurs bonnes réponses distinctes et sans ambiguïté au vu du texte.",
+    "- \"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; n'utilise ce format QUE si le sujet offre un ordre objectif et non discutable au vu du texte.",
     "",
-    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association","question":"...","options":["..."] (absent pour association),"correctIndex":0 (absent pour association),"pairs":[{"left":"...","right":"..."}] (uniquement pour association),"explanation":"...","${sourceIdField}":"id fourni"}]}.`
+    "=== Format suggéré, question par question (dans l'ordre) ===",
+    "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions :",
+    assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
+    "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet.",
+    "",
+    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","${sourceIdField}":"id fourni"}]}.`
   ];
 }
 
@@ -11568,7 +11601,7 @@ function buildDailyQuizPrompt(candidates) {
     "- Pas de question sur des détails insignifiants (dates exactes au jour près, chiffres secondaires).",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
     "",
-    ...buildQuestionFormatsPromptBlock("sourceDebateId"),
+    ...buildQuestionFormatsPromptBlock("sourceDebateId", DAILY_QUIZ_QUESTION_COUNT),
     "",
     "Arènes disponibles :",
     list
@@ -11606,19 +11639,20 @@ function shuffleOptionsPreservingCorrectIndex(options, correctIndex) {
 // différent — d'où le nom "questionType" dans ce qui suit, jamais "type"
 // seul, pour ne pas confondre les deux dans les fonctions qui touchent aux
 // deux à la fois).
-const QUESTION_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous", "association"]);
+const QUESTION_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous", "association", "intrus", "qcm_multi", "ordre"]);
 // Marqueur du "trou" dans une question de type texte_a_trous — identique
 // dans le prompt, le validateur et le rendu client.
 const FILL_BLANK_MARKER = "___";
-// "association" n'a pas de correctIndex fourni par l'IA (pas un choix
-// unique parmi des options, mais un appariement de plusieurs paires) : on
-// réutilise la colonne existante daily_quiz_answers.option_index comme
-// indicateur binaire "l'utilisateur a-t-il tout apparié correctement",
-// jamais comme un vrai index d'option. Sentinelle fixe plutôt que dérivée,
-// pour que toute la chaîne de lecture existante (computeUserScores,
-// getDailyQuizStats, GET /results) continue de fonctionner sans changement :
-// il suffit de comparer ce même 1 des deux côtés.
-const ASSOCIATION_CORRECT_INDEX = 1;
+// "association"/"qcm_multi"/"ordre" n'ont pas de correctIndex fourni par
+// l'IA (pas un choix unique parmi des options, mais un appariement, un choix
+// multiple ou un ordre) : on réutilise la colonne existante
+// daily_quiz_answers.option_index comme indicateur binaire "l'utilisateur a-
+// t-il tout réussi", jamais comme un vrai index d'option. Sentinelle fixe
+// plutôt que dérivée, pour que toute la chaîne de lecture existante
+// (computeUserScores, getDailyQuizStats, GET /results) continue de
+// fonctionner sans changement : il suffit de comparer ce même 1 des deux
+// côtés, quel que soit lequel des 3 formats est en jeu.
+const CUSTOM_GRADED_CORRECT_INDEX = 1;
 
 // Valide les 3-4 paires {left,right} d'une question "association" : chaînes
 // non vides et raisonnablement courtes, aucun doublon ni côté gauche ni
@@ -11643,7 +11677,52 @@ function validateAssociationPairs(rawPairs) {
   return pairs;
 }
 
-// Normalise et valide les champs communs aux 4 formats de question — la
+// Valide les options + correctIndexes (2 bonnes réponses ou plus, jamais
+// toutes) d'une question "qcm_multi" — choix multiple parmi 4-5 options.
+function validateQcmMultiOptions(rawOptions, rawCorrectIndexes) {
+  const options = Array.isArray(rawOptions) ? rawOptions.map((o) => String(o || "").trim()).filter(Boolean) : [];
+  if (options.length < 4 || options.length > 5) return null;
+  const correctIndexes = Array.isArray(rawCorrectIndexes) ? [...new Set(rawCorrectIndexes.map((n) => Number(n)))] : [];
+  if (correctIndexes.length < 2 || correctIndexes.length >= options.length) return null;
+  if (correctIndexes.some((i) => !Number.isInteger(i) || i < 0 || i >= options.length)) return null;
+  return { options, correctIndexes };
+}
+
+// Mélange les options d'une question "qcm_multi" en réindexant correctIndexes
+// en conséquence — variante à plusieurs bonnes réponses de
+// shuffleOptionsPreservingCorrectIndex.
+function shuffleOptionsPreservingCorrectIndexes(options, correctIndexes) {
+  const shuffledPositions = shuffleArray(options.map((_, i) => i));
+  const correctSet = new Set(correctIndexes);
+  const newCorrectIndexes = [];
+  shuffledPositions.forEach((originalIndex, newIndex) => {
+    if (correctSet.has(originalIndex)) newCorrectIndexes.push(newIndex);
+  });
+  return {
+    options: shuffledPositions.map((originalIndex) => options[originalIndex]),
+    correctIndexes: newCorrectIndexes
+  };
+}
+
+// Valide les 3-4 éléments d'une question "ordre" — fournis par l'IA dans
+// leur ordre correct, mélangés seulement à l'affichage (cf. stripQuestionForClient).
+function validateOrderItems(rawItems) {
+  if (!Array.isArray(rawItems)) return null;
+  const items = [];
+  const seen = new Set();
+  for (const raw of rawItems) {
+    const text = String(raw || "").trim();
+    if (!text || text.length > 200) return null;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    items.push(text);
+  }
+  if (items.length < 3 || items.length > 4) return null;
+  return items;
+}
+
+// Normalise et valide les champs communs aux formats de question — la
 // logique de dédup par source (sourceDebateId/sourceId, un ou plusieurs par
 // source selon l'appelant) reste propre à validateDailyQuizQuestions et
 // validateNarrativeQuizQuestions, qui appellent ce helper puis y ajoutent
@@ -11658,13 +11737,26 @@ function validateQuestionItemCore(item) {
   if (questionType === "association") {
     const pairs = validateAssociationPairs(item?.pairs);
     if (!pairs) return null;
-    return { type: questionType, question, pairs, correctIndex: ASSOCIATION_CORRECT_INDEX, explanation };
+    return { type: questionType, question, pairs, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
+  }
+
+  if (questionType === "qcm_multi") {
+    const validated = validateQcmMultiOptions(item?.options, item?.correctIndexes);
+    if (!validated) return null;
+    const shuffled = shuffleOptionsPreservingCorrectIndexes(validated.options, validated.correctIndexes);
+    return { type: questionType, question, options: shuffled.options, correctIndexes: shuffled.correctIndexes, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
+  }
+
+  if (questionType === "ordre") {
+    const items = validateOrderItems(item?.items);
+    if (!items) return null;
+    return { type: questionType, question, items, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
   }
 
   const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
   const correctIndex = Number(item?.correctIndex);
-  // qcm/texte_a_trous : 4 options, comme avant l'introduction des formats
-  // vrai_faux/association. vrai_faux : exactement 2 (ex. ["Vrai","Faux"]).
+  // qcm/texte_a_trous/intrus : 4 options, comme avant l'introduction des
+  // autres formats. vrai_faux : exactement 2 (ex. ["Vrai","Faux"]).
   const expectedLength = questionType === "vrai_faux" ? 2 : 4;
   if (options.length !== expectedLength) return null;
   if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= expectedLength) return null;
@@ -11859,7 +11951,7 @@ function buildCultureGeneraleQuizPrompt(items) {
     "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
     "",
-    ...buildQuestionFormatsPromptBlock("sourceId"),
+    ...buildQuestionFormatsPromptBlock("sourceId", DAILY_QUIZ_QUESTION_COUNT_NARRATIVE),
     "",
     "Éléments disponibles :",
     list
@@ -13038,6 +13130,14 @@ function stripQuestionForClient(q) {
       rights: shuffleArray(pairs.map((p) => p.right))
     };
   }
+  if (type === "ordre") {
+    // q.items est stocké dans le bon ordre (c'est la réponse) : le client ne
+    // doit jamais le recevoir tel quel, seulement mélangé.
+    return { id: q.id, type, question: q.question, items: shuffleArray(Array.isArray(q.items) ? q.items : []) };
+  }
+  // qcm/vrai_faux/texte_a_trous/intrus/qcm_multi partagent tous "options" —
+  // correctIndex/correctIndexes ne sont jamais inclus ici, seulement révélés
+  // après réponse (cf. POST /answer et GET /results).
   return { id: q.id, type, question: q.question, options: q.options };
 }
 
@@ -13092,9 +13192,11 @@ app.get("/api/daily-quiz/results", async (req, res) => {
         explanation: question.explanation,
         stats,
         totalAnswers: total,
-        // Réveil des bonnes paires pour la reprise de session (l'utilisateur
+        // Réveil de la vraie réponse pour la reprise de session (l'utilisateur
         // a déjà répondu à cette question) — cf. POST /answer, même règle.
-        ...((question.type || "qcm") === "association" ? { pairs: question.pairs } : {})
+        ...((question.type || "qcm") === "association" ? { pairs: question.pairs } : {}),
+        ...((question.type || "qcm") === "qcm_multi" ? { correctIndexes: question.correctIndexes } : {}),
+        ...((question.type || "qcm") === "ordre" ? { items: question.items } : {})
       });
     }
     res.json({ date: todayKey, answers });
@@ -13137,6 +13239,28 @@ function isAssociationAnswerFullyCorrect(submittedPairs, correctPairs) {
   return seenLefts.size === correctPairs.length;
 }
 
+// "qcm_multi" : correct seulement si l'ensemble des index cochés correspond
+// exactement à question.correctIndexes (ni oubli, ni ajout en trop).
+function isQcmMultiAnswerFullyCorrect(submittedIndexes, correctIndexes) {
+  if (!Array.isArray(submittedIndexes)) return false;
+  const submittedSet = new Set(submittedIndexes.map((n) => Number(n)));
+  if (submittedSet.size !== submittedIndexes.length) return false;
+  const correctSet = new Set(correctIndexes);
+  if (submittedSet.size !== correctSet.size) return false;
+  for (const i of submittedSet) if (!correctSet.has(i)) return false;
+  return true;
+}
+
+// "ordre" : correct seulement si la séquence soumise correspond exactement,
+// terme à terme, à question.items (l'ordre fourni par l'IA).
+function isOrderAnswerFullyCorrect(submittedItems, correctItems) {
+  if (!Array.isArray(submittedItems) || submittedItems.length !== correctItems.length) return false;
+  for (let i = 0; i < correctItems.length; i++) {
+    if (String(submittedItems[i] || "").trim() !== correctItems[i]) return false;
+  }
+  return true;
+}
+
 app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
   try {
     const voterKey = String(req.body?.voterKey || "").trim();
@@ -13161,17 +13285,23 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     if (existingAnswerResult.error) throw new Error(existingAnswerResult.error.message);
     const existingAnswer = existingAnswerResult.data;
 
-    // "association" n'envoie pas optionIndex (pas un choix unique parmi des
-    // options) : on calcule nous-mêmes si l'appariement soumis est
-    // intégralement correct, et on le code dans la même colonne
-    // option_index que les autres formats (0/1), cf. ASSOCIATION_CORRECT_INDEX
-    // et le plan associé — le reste de la route (idempotence, stats,
-    // computeUserScores) n'a besoin d'aucune autre modification.
+    // "association"/"qcm_multi"/"ordre" n'envoient pas optionIndex (pas un
+    // choix unique parmi des options) : on calcule nous-mêmes si la réponse
+    // soumise est intégralement correcte, et on le code dans la même colonne
+    // option_index que les autres formats (0/1), cf. CUSTOM_GRADED_CORRECT_INDEX
+    // — le reste de la route (idempotence, stats, computeUserScores) n'a
+    // besoin d'aucune autre modification.
     const questionType = question.type || "qcm";
     let optionIndex;
     if (questionType === "association") {
       const allCorrect = isAssociationAnswerFullyCorrect(req.body?.associationAnswer, question.pairs || []);
-      optionIndex = allCorrect ? ASSOCIATION_CORRECT_INDEX : 0;
+      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
+    } else if (questionType === "qcm_multi") {
+      const allCorrect = isQcmMultiAnswerFullyCorrect(req.body?.optionIndexes, question.correctIndexes || []);
+      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
+    } else if (questionType === "ordre") {
+      const allCorrect = isOrderAnswerFullyCorrect(req.body?.orderedItems, question.items || []);
+      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
     } else {
       optionIndex = Number(req.body?.optionIndex);
       const maxIndex = (Array.isArray(question.options) ? question.options.length : 4) - 1;
@@ -13216,9 +13346,12 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       optionIndex: finalOptionIndex,
       stats,
       totalAnswers: total,
-      // Réveil des bonnes paires uniquement une fois la réponse soumise —
-      // jamais avant (cf. GET /today, qui ne renvoie pas ce mapping).
-      ...(questionType === "association" ? { pairs: question.pairs } : {})
+      // Réveil de la vraie réponse uniquement une fois soumise — jamais
+      // avant (cf. GET /today, qui ne renvoie ni pairs, ni correctIndexes,
+      // ni items dans leur vrai ordre).
+      ...(questionType === "association" ? { pairs: question.pairs } : {}),
+      ...(questionType === "qcm_multi" ? { correctIndexes: question.correctIndexes } : {}),
+      ...(questionType === "ordre" ? { items: question.items } : {})
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
