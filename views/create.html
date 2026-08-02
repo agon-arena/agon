@@ -86,7 +86,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+<link rel="stylesheet" href="/style.min.css?v=20260802-header15">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -143,6 +143,72 @@
     body.in-iframe .create-back-link,
     body.in-iframe .topbar-back-arrow { display: none !important; }
     body.in-iframe .app-floating-refresh-btn { display: none !important; }
+    /* Même bandeau que /eclairages : logo seul, centré et mêmes dimensions.
+       Les contrôles existants restent dans le DOM pour les scripts/admin,
+       mais ne participent plus au bandeau visible. */
+    body.page-create .topbar,
+    body.page-create-mobile .topbar {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding-bottom: 0 !important;
+    }
+    body.page-create .topbar-inner.topbar-home,
+    body.page-create-mobile .topbar-inner.topbar-home {
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding: 2px 0 !important;
+      gap: 0 !important;
+    }
+    body.page-create .home-brand-block,
+    body.page-create-mobile .home-brand-block,
+    body.page-create .topbar-social,
+    body.page-create-mobile .topbar-social,
+    body.page-create .topbar-actions,
+    body.page-create-mobile .topbar-actions,
+    body.page-create .admin-controls-row,
+    body.page-create-mobile .admin-controls-row,
+    body.page-create .topbar-inner.topbar-home > :not(.home-brand-main),
+    body.page-create-mobile .topbar-inner.topbar-home > :not(.home-brand-main),
+    body.page-create .topbar > .agon-user-score-row,
+    body.page-create-mobile .topbar > .agon-user-score-row {
+      display: none !important;
+    }
+    body.page-create .home-brand-main,
+    body.page-create-mobile .home-brand-main {
+      display: flex !important;
+      position: static !important;
+      grid-area: auto !important;
+      flex: 0 0 auto !important;
+      align-items: center !important;
+      justify-content: center !important;
+      left: auto !important;
+      padding-left: 0 !important;
+      transform: none !important;
+      pointer-events: auto !important;
+    }
+    body.page-create .home-logo,
+    body.page-create-mobile .home-logo {
+      width: 116px !important;
+      height: auto !important;
+      max-height: 116px !important;
+      transform: translateY(2px) !important;
+    }
+    @media (max-width: 768px) {
+      body.page-create .topbar-inner.topbar-home,
+      body.page-create-mobile .topbar-inner.topbar-home {
+        padding: 0 !important;
+      }
+      body.page-create .home-logo,
+      body.page-create-mobile .home-logo {
+        width: 74px !important;
+        max-height: 74px !important;
+      }
+    }
   </style>
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
@@ -749,7 +815,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

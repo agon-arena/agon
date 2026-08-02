@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon9">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -237,9 +237,9 @@
         transform: none !important;
         align-self: center !important;
         justify-self: center !important;
-        position: absolute !important;
-        top: 4px !important;
-        right: -51px !important;
+        position: fixed !important;
+        top: 12px !important;
+        right: 0 !important;
         z-index: 2 !important;
       }
     }
@@ -248,7 +248,11 @@
         width: 104px !important;
         height: 104px !important;
         border-radius: 16px !important;
-        margin: -25px 0 -35px -52px !important;
+        margin: 0 !important;
+        position: fixed !important;
+        top: 8px !important;
+        right: 8px !important;
+        z-index: 2 !important;
       }
       body.is-standalone.page-tribunes .topbar {
         padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
@@ -643,6 +647,10 @@
       align-items: flex-start;
       overflow-y: hidden;
       padding-bottom: 26px;
+      /* Adoucit uniquement la fin basse de l'ombre avant la marge, sans
+         modifier les bords latéraux ni la rangée des points. */
+      -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
       transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     /* Sentinelle du chargement paresseux : invisible, ne doit peser ni dans le
@@ -950,8 +958,18 @@
        l'écran. On étire ce conteneur (pas le loader lui-même, pour garder le
        sablier bien visible juste sous l'en-tête, sans scroll) pour masquer
        cette bande pendant l'attente. */
-    #tribunes-list:has(.tribunes-initial-loading) {
+    #tribunes-list:has(.tribunes-initial-loading),
+    #tribunes-list:has(.tribunes-empty-loading) {
       min-height: 70vh;
+    }
+    /* Le loader "Chargement des recommandations" est injecté après le
+       premier rendu et peut raccourcir la liste avant la réponse réseau.
+       Pendant ces deux états seulement, le blanc cassé devient aussi le fond
+       du body : aucune bande bleue ne peut apparaître sous la liste, quelle
+       que soit la hauteur du viewport. */
+    body.page-tribunes:has(#tribunes-list .tribunes-initial-loading),
+    body.page-tribunes:has(#tribunes-list .tribunes-empty-loading) {
+      background-color: #dbe5e1 !important;
     }
     .tribunes-initial-loading {
       display: flex;
@@ -1649,7 +1667,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -2779,52 +2797,57 @@ window.addEventListener("pageshow", function() {
     var controls = row.__tribunesControls || collectCarouselControls(row);
     row.__tribunesControls = controls;
     var dots = controls && controls.dots ? controls.dots : section.querySelector('.tribunes-carousel-dots[data-row="' + cssEscape(row.id) + '"]');
-    var cards = [];
-    if (!options.lightweight || !dots) cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
-    var cardCount = Number(row.dataset.carouselTotal || 0) || Number(dots && dots.dataset.count || 0) || cards.length;
-    var maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-    if (cardCount <= 1 || maxScrollLeft <= 12) {
+    var cards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
+    var cardCount = cards.length;
+    var total = Math.max(cardCount, Number(row.dataset.carouselTotal || cardCount) || cardCount);
+    var dotCount = Math.min(10, cardCount);
+    if (dotCount <= 1) {
       if (dots) dots.style.display = 'none';
       return;
     }
     if (!dots) return;
     dots.style.display = '';
-    var dotCount = Math.min(10, Math.max(2, cardCount));
-    if (Number(dots.dataset.count || '0') !== dotCount) {
+    // L'indicateur suit l'index de la carte réellement centrée. Il ne dépend
+    // jamais du pourcentage de scroll : passer de la 1re à la 2e carte active
+    // donc toujours le 2e point, même si seules deux cartes sont chargées.
+    var activeCardIndex = getCurrentTribunesCardIndex(row, cards);
+    var penultimateSlot = Math.max(0, dotCount - 2);
+    var maxWindowStart = Math.max(0, cardCount - dotCount);
+    var windowStart = Math.max(0, Math.min(maxWindowStart, activeCardIndex - penultimateSlot));
+    var needsRebuild = Number(dots.dataset.count || '0') !== dotCount
+      || Number(dots.dataset.windowStart || '-1') !== windowStart;
+    if (needsRebuild) {
       dots.dataset.count = String(dotCount);
+      dots.dataset.windowStart = String(windowStart);
       dots.innerHTML = '';
+      var fragment = document.createDocumentFragment();
       for (var i = 0; i < dotCount; i += 1) {
-        var dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'tribunes-carousel-dot';
-        dot.setAttribute('aria-label', 'Aller à la page ' + (i + 1));
-        dot.dataset.index = String(i);
-        dot.addEventListener('click', function() {
-          var index = Number(this.dataset.index || '0');
-          if (isMobileTribunesCarousel()) {
-            var mobileCards = Array.prototype.slice.call(row.querySelectorAll('.tribunes-item'));
-            var mobileIndex = dotCount <= 1 ? 0 : Math.round(index * Math.max(0, mobileCards.length - 1) / (dotCount - 1));
-            scrollTribunesCarouselToCard(row, mobileIndex);
-            return;
-          }
-          var currentMaxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-          var targetLeft = dotCount <= 1 ? 0 : Math.round(index * currentMaxScrollLeft / (dotCount - 1));
-          row.scrollTo({ left: targetLeft, behavior: 'smooth' });
-          scheduleCarouselStateUpdate(row);
-        });
-        dots.appendChild(dot);
+        var cardIndex = windowStart + i;
+        var newDot = document.createElement('button');
+        newDot.type = 'button';
+        newDot.className = 'tribunes-carousel-dot';
+        newDot.dataset.cardIndex = String(cardIndex);
+        newDot.setAttribute('aria-label', 'Aller à la carte ' + (cardIndex + 1));
+        fragment.appendChild(newDot);
       }
+      dots.appendChild(fragment);
       var dotEls = Array.prototype.slice.call(dots.querySelectorAll('.tribunes-carousel-dot'));
-      if (dotCount >= 4) {
+      dotEls.forEach(function(dot) {
+        dot.onclick = function() {
+          scrollTribunesCarouselToCard(row, Number(this.dataset.cardIndex || '0'));
+        };
+      });
+      var hasMoreCards = windowStart + dotCount < cardCount || total > cardCount;
+      if (hasMoreCards && dotCount >= 4) {
         dotEls[dotCount - 1].classList.add('tribunes-carousel-dot--fade-3', 'tribunes-carousel-dot--pill');
         if (dotCount >= 5) dotEls[dotCount - 2].classList.add('tribunes-carousel-dot--fade-2');
         if (dotCount >= 6) dotEls[dotCount - 3].classList.add('tribunes-carousel-dot--fade-1');
       }
     }
-    var scrollLeft = Math.min(Math.max(0, row.scrollLeft), maxScrollLeft);
-    var activeIndex = maxScrollLeft > 12 ? Math.round(scrollLeft / maxScrollLeft * (dotCount - 1)) : 0;
-    if (dots.dataset.activeIndex === String(activeIndex)) return;
-    dots.dataset.activeIndex = String(activeIndex);
+    var activeIndex = activeCardIndex - windowStart;
+    var activeKey = activeCardIndex + ':' + windowStart;
+    if (!needsRebuild && dots.dataset.activeIndex === activeKey) return;
+    dots.dataset.activeIndex = activeKey;
     dots.querySelectorAll('.tribunes-carousel-dot').forEach(function(dot, index) {
       dot.classList.toggle('is-active', index === activeIndex);
     });

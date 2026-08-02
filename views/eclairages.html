@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-header15">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -50,11 +50,12 @@
       margin-left: 0;
     }
     .page-eclairages .home-logo {
-      width: 110px;
+      width: 116px;
+      transform: translateY(2px);
     }
     @media (max-width: 768px) {
       .page-eclairages .home-logo {
-        width: 70px;
+        width: 74px;
       }
       .page-eclairages .topbar-inner {
         padding: 0;
@@ -309,14 +310,14 @@
       color: #9ca3af;
       text-align: center;
     }
-    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title {
+    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title, .cd-topic-title, .oa-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
       line-height: 1.3;
     }
-    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary {
+    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary, .cd-topic-summary, .oa-topic-summary {
       margin: 0 0 22px;
       padding-bottom: 20px;
       border-bottom: 1px solid #e5e7eb;
@@ -585,9 +586,17 @@
       line-height: 1.4;
     }
     .ecl-state-spinner {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
       margin-right: 6px;
-      color: #516776;
+      vertical-align: middle;
+      background: url('/sablier-96.png') center / contain no-repeat;
+      color: transparent;
+      font-size: 0;
+      animation: eclHourglassSpin 0.9s linear infinite;
     }
+    @keyframes eclHourglassSpin { to { transform: rotate(360deg); } }
     #ph-body, #pp-body, #ms-body, #cj-body, #cd-body {
       padding-top: 24px;
     }
@@ -815,7 +824,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -851,6 +860,16 @@
     if (!toggle || !content) return;
     var loaded = false;
 
+    // scrollIntoView collerait le titre au tout bord haut, sous le bandeau
+    // sticky (.topbar) qui le recouvrirait alors partiellement — on calcule
+    // donc l'offset à la main pour laisser le bandeau au-dessus.
+    function scrollToggleIntoView() {
+      var topbar = document.querySelector('.topbar');
+      var offset = (topbar ? topbar.offsetHeight : 0) + 16;
+      var targetTop = window.pageYOffset + toggle.getBoundingClientRect().top - offset;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+    }
+
     function open() {
       var wasOpen = toggle.getAttribute('aria-expanded') === 'true';
       // Accordéon : ouvrir ce bloc referme tous les autres.
@@ -861,6 +880,7 @@
       });
       toggle.setAttribute('aria-expanded', 'true');
       content.hidden = false;
+      scrollToggleIntoView();
       if (!wasOpen && !loaded) {
         loaded = true;
         config.onFirstOpen();
@@ -870,6 +890,7 @@
     function collapse() {
       toggle.setAttribute('aria-expanded', 'false');
       content.hidden = true;
+      scrollToggleIntoView();
     }
 
     toggle.addEventListener('click', function () {
@@ -930,11 +951,11 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       init();
-      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.ecl-panel' });
     });
   } else {
     init();
-    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.ecl-panel' });
   }
 })();
 </script>
@@ -2272,6 +2293,8 @@
     return (
       '<article class="cd-citation">' +
       countLabel +
+      '<p class="cd-topic-title">' + escapeHtml(citation.current_topic_title || '') + '</p>' +
+      '<p class="cd-topic-summary">' + escapeHtml(citation.current_topic_summary || '') + '</p>' +
       '<blockquote class="cd-quote-block">' +
       '<p>« ' + escapeHtml(citation.quote_text) + ' »</p>' +
       '<cite>— ' + escapeHtml(citation.quote_author) + '</cite>' +
@@ -2570,6 +2593,8 @@
     return (
       '<article class="oa-oeuvre">' +
       countLabel +
+      '<p class="oa-topic-title">' + escapeHtml(oeuvre.current_topic_title || '') + '</p>' +
+      '<p class="oa-topic-summary">' + escapeHtml(oeuvre.current_topic_summary || '') + '</p>' +
       imageHtml +
       '<p class="oa-artwork-title">' + escapeHtml(oeuvre.artwork_title) + '</p>' +
       '<p class="oa-artwork-meta">' + escapeHtml(oeuvre.artist_name) + ' — ' + escapeHtml(oeuvre.artwork_date) + '</p>' +

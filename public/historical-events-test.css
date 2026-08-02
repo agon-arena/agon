@@ -14,6 +14,72 @@ html {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Bandeau logo — mêmes classes/valeurs que .topbar dans style.css (version
+   simplifiée, sans l'auto-hide au scroll, qui dépend de script.js non chargé
+   ici), dupliqué car cette page ne charge pas style.css (fichier isolé, cf.
+   en-tête du fichier). Sans lui, cette page n'avait pas le même espace en
+   haut que /qcm-du-jour et /eclairages. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background:
+    linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top / 100% 5px no-repeat,
+    #e9ebec;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-top: 5px;
+  box-sizing: border-box;
+}
+/* Seconde barre dégradée (couleurs inversées), sous le bandeau cette fois. */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 40;
+}
+.container {
+  width: min(1200px, 92%);
+  margin: 0 auto;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+  gap: 16px;
+}
+.home-brand-block {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.home-brand-main {
+  display: flex;
+  align-items: center;
+}
+.home-logo {
+  width: 116px;
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0;
+  transform: translateY(2px);
+}
+@media (max-width: 768px) {
+  .home-logo {
+    width: 74px;
+  }
+  .topbar-inner {
+    padding: 0;
+  }
+}
+
 .het-body::after {
   content: "";
   display: block;
@@ -34,6 +100,20 @@ html {
   /* Padding bas généreux : laisse scroller au-delà du bas du contenu plutôt
      que de s'arrêter pile dessus. */
   padding: 40px 0 180px;
+}
+/* En iframe (modale ouverte depuis l'accueil, cas d'usage réel de cette
+   page) : même principe que .page-eclairages.in-iframe .ecl-page-shell —
+   le padding-top "page autonome" (40px) laissait un grand vide au-dessus du
+   cadre, la modale ayant déjà son propre espace en haut. */
+.het-body.in-iframe .het-page {
+  /* 20px (même marge que .qcm-page-shell/.ecl-page-shell en iframe) + 16px :
+     ces pages sont des <main>, qui héritent en mobile d'un padding-top
+     générique de style.css (main { padding: 16px 0 28px 0 }) que cette page
+     isolée ne charge pas — reproduit ici en dur pour un total identique. */
+  padding-top: 36px;
+}
+.het-body.in-iframe .het-panel {
+  margin-top: 0;
 }
 
 .het-kicker {
@@ -85,41 +165,81 @@ html {
   text-align: center;
 }
 
-.het-date-form {
-  box-sizing: border-box;
-  width: min(100%, 420px);
-  margin: 0 auto 28px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+/* Menu discret "jours précédents" — mêmes classes/valeurs que .ph-history*
+   dans views/parallele-historique.html, dupliquées ici car cette page ne
+   charge pas ce fichier (isolé, cf. en-tête de historical-events-test.css). */
+.het-history {
+  width: 100%;
+  text-align: center;
+  margin: 0 0 28px;
 }
-
-.het-date-form label {
+.het-history-toggle {
   display: block;
-  margin: 0 0 6px;
+  width: fit-content;
+  margin: 0 auto;
+  border: none;
+  background: none;
+  padding: 4px 6px;
   color: #6b7280;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.het-date-form-row {
-  display: flex;
-  gap: 8px;
-}
-
-.het-date-form select {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: #ffffff;
-  font-size: 14px;
+  letter-spacing: 0.02em;
   cursor: pointer;
+}
+.het-history-toggle:hover {
+  color: #243038;
+  text-decoration: underline;
+}
+.het-history-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.het-history-panel[hidden] {
+  display: none;
+}
+.het-history-date {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+}
+.het-history-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+}
+.het-history-arrow:hover:not(:disabled) {
+  background: #eef3f6;
+}
+.het-history-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.het-history-today {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.het-history-today:hover {
+  background: #eef3f6;
 }
 
 .het-status {
@@ -128,6 +248,16 @@ html {
   font-size: 15px;
   text-align: center;
 }
+.het-loading-hourglass {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  margin-right: 7px;
+  vertical-align: middle;
+  object-fit: contain;
+  animation: hetHourglassSpin 0.9s linear infinite;
+}
+@keyframes hetHourglassSpin { to { transform: rotate(360deg); } }
 
 .het-status.het-status-error {
   color: #fca5a5;
@@ -420,4 +550,50 @@ html {
   .het-card-source-link {
     font-size: 14px;
   }
+}
+
+/* Dégradé + "suite ↓" en bas de page tant que du contenu dépasse en dessous
+   (ex. un bloc catégorie déplié) — même principe que .page-scroll-fade-hint
+   dans style.css (cf. attachPageScrollFadeHint), dupliqué ici car cette page
+   ne charge pas script.js/style.css (fichier isolé, cf. en-tête du fichier). */
+.het-scroll-fade-hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+  background: linear-gradient(180deg, transparent 0%, #ffffff 45%);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+  z-index: 500;
+}
+.het-scroll-fade-hint.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.het-scroll-fade-hint-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 4px 10px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.het-scroll-fade-hint-text:hover {
+  color: #374151;
+  border-color: #d1d5db;
 }

@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="stylesheet" href="/style.min.css?v=20260724-menucompact" />
+<link rel="stylesheet" href="/style.min.css?v=20260802-header15" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -36,6 +36,49 @@
     .page-notifications-mobile .topbar-actions {
       position: absolute;
       right: 16px;
+    }
+    /* Même bandeau que /eclairages : logo seul, centré et mêmes dimensions. */
+    body.page-contributions .topbar {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding-bottom: 0 !important;
+    }
+    body.page-contributions .topbar-inner.topbar-home {
+      display: flex !important;
+      justify-content: center !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      padding: 2px 0 !important;
+      gap: 0 !important;
+    }
+    body.page-contributions .home-brand-block {
+      flex: 0 0 auto !important;
+      width: auto !important;
+      margin-left: 0 !important;
+      justify-content: center !important;
+    }
+    body.page-contributions .home-logo {
+      width: 116px !important;
+      height: auto !important;
+      max-height: 116px !important;
+      transform: translateY(2px) !important;
+    }
+    body.page-contributions .topbar-message,
+    body.page-contributions .topbar-actions,
+    body.page-contributions .topbar-inner.topbar-home > :not(.home-brand-block),
+    body.page-contributions .topbar > .agon-user-score-row {
+      display: none !important;
+    }
+    @media (max-width: 768px) {
+      body.page-contributions .topbar-inner.topbar-home {
+        padding: 0 !important;
+      }
+      body.page-contributions .home-logo {
+        width: 74px !important;
+        max-height: 74px !important;
+      }
     }
     .home-bottom-nav { display: none !important; }
 
@@ -412,11 +455,6 @@
 
     <div class="home-brand-block">
       <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
-
-      <p class="topbar-message">
-         <strong>La vraie gloire<br> est convaincre.
-  <strong>
-      </p>
     </div>
 
     <div class="topbar-actions">
@@ -1161,6 +1199,6 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 </body>
 </html>

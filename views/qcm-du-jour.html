@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-header15">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -43,23 +43,29 @@
       box-sizing: border-box;
       padding-bottom: 360px;
     }
-    .page-qcm-du-jour .topbar-inner {
-      justify-content: center;
-      padding: 2px 0;
+    body.page-qcm-du-jour .topbar-inner {
+      justify-content: center !important;
+      padding: 2px 0 !important;
     }
-    .page-qcm-du-jour .home-brand-block {
-      flex: 0 0 auto;
-      margin-left: 0;
+    body.page-qcm-du-jour .home-brand-block {
+      flex: 0 0 auto !important;
+      margin-left: 0 !important;
     }
-    .page-qcm-du-jour .home-logo {
-      width: 110px;
+    body.page-qcm-du-jour .home-logo {
+      width: 116px !important;
+      transform: translateY(2px) !important;
+    }
+    body.page-qcm-du-jour .topbar > .agon-user-score-row,
+    body.page-qcm-du-jour .topbar-inner > :not(.home-brand-block),
+    body.page-qcm-du-jour .home-brand-block > :not(.home-brand-main) {
+      display: none !important;
     }
     @media (max-width: 768px) {
-      .page-qcm-du-jour .home-logo {
-        width: 70px;
+      body.page-qcm-du-jour .home-logo {
+        width: 74px !important;
       }
-      .page-qcm-du-jour .topbar-inner {
-        padding: 0;
+      body.page-qcm-du-jour .topbar-inner {
+        padding: 0 !important;
       }
     }
     .qcm-page-shell {
@@ -275,6 +281,16 @@
       font-size: 15px;
       line-height: 1.4;
     }
+    .qcm-loading-hourglass {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      margin-right: 7px;
+      vertical-align: middle;
+      object-fit: contain;
+      animation: qcmHourglassSpin 0.9s linear infinite;
+    }
+    @keyframes qcmHourglassSpin { to { transform: rotate(360deg); } }
     .qcm-final-score {
       text-align: center;
       padding: 8px 0;
@@ -395,11 +411,11 @@
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
     <div id="qcm-body">
-      <p class="qcm-state-message">Chargement du QCM du jour…</p>
+      <p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement du QCM du jour…</p>
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -486,7 +502,10 @@
   }
 
   function renderMessage(text) {
-    body.innerHTML = '<p class="qcm-state-message">' + escapeHtml(text) + '</p>';
+    var loadingHtml = /^Chargement\b/i.test(String(text || ''))
+      ? '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">'
+      : '';
+    body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(text) + '</p>';
   }
 
   function pct(count, total) {
@@ -884,11 +903,11 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       init();
-      attachPageScrollFadeHint('#ffffff');
+      attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.qcm-panel' });
     });
   } else {
     init();
-    attachPageScrollFadeHint('#ffffff');
+    attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.qcm-panel' });
   }
 })();
 </script>

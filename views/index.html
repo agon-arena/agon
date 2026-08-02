@@ -45,7 +45,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon14">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -430,7 +430,7 @@
             <i class="fa-solid fa-list-check"></i>
             <span>QCM du jour</span>
           </a>
-          <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
+          <a href="/eclairages" class="home-topbar-menu-item eclairages-link-unavailable" id="home-topbar-eclairages-link" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
             <span>Éclairages</span>
           </a>
@@ -713,7 +713,7 @@ window.addEventListener("pageshow", function() {
     <i class="fa-solid fa-circle-question"></i>
     <span>QCM du jour</span>
   </a>
-  <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/eclairages')">
+  <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn eclairages-link-unavailable" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); openDebateIframeModal('/eclairages')">
     <i class="fa-solid fa-lightbulb"></i>
     <span>Éclairages</span>
   </a>
@@ -831,6 +831,15 @@ window.addEventListener("pageshow", function() {
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
   }
+  .eclairages-link-unavailable,
+  .eclairages-link-unavailable:hover {
+    color: rgba(180, 185, 188, 0.48) !important;
+    background: rgba(110, 116, 120, 0.14) !important;
+    filter: grayscale(1);
+    opacity: 0.52;
+    cursor: not-allowed !important;
+    pointer-events: none;
+  }
   /* Grand reflet posé par le script ci-dessous : ne balaie la barre que pendant
      les premières secondes ET seulement quand il est réellement visible à
      l'écran (IntersectionObserver) — coupé définitivement ensuite. */
@@ -905,6 +914,33 @@ window.addEventListener("pageshow", function() {
   }, { threshold: 0.4 });
 
   observer.observe(secondaryActions);
+})();
+</script>
+<script>
+(function () {
+  // Désactivé par défaut dans le HTML pour éviter qu'un clic passe pendant
+  // le chargement. L'API ne l'active qu'après publication des 6 rubriques.
+  var statusTimer = null;
+  function refreshEclairagesAvailability() {
+    fetch('/api/eclairages/status', { cache: 'no-store' })
+      .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('status')); })
+      .then(function (data) {
+        if (!data || data.available !== true) return;
+        ["home-eclairages-btn", "home-topbar-eclairages-link"].forEach(function (id) {
+          var link = document.getElementById(id);
+          if (!link) return;
+          link.classList.remove('eclairages-link-unavailable');
+          link.setAttribute('aria-disabled', 'false');
+          link.removeAttribute('tabindex');
+        });
+        if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+      })
+      .catch(function () {});
+  }
+  refreshEclairagesAvailability();
+  // Si l'accueil reste ouvert pendant la génération, le bouton s'active
+  // automatiquement sans demander de rechargement manuel de la page.
+  statusTimer = setInterval(refreshEclairagesAvailability, 60 * 1000);
 })();
 </script>
 <script>
@@ -1272,7 +1308,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

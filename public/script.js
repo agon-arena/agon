@@ -1304,7 +1304,7 @@ function renderUserScoreWidget(data) {
 
   const widget = document.createElement("a");
   // Les 3 scores existent toujours désormais (pire note tant qu'on n'a rien
-  // posté/répondu, cf. USER_SCORE_WORST côté serveur) : toujours 3 valeurs,
+  // posté/répondu, cf. USER_SCORE_EMPTY côté serveur) : toujours 3 valeurs,
   // toujours la variante large du badge.
   widget.className = "agon-user-score-widget agon-user-score-widget-triple";
   widget.href = "/contributions";
@@ -1462,52 +1462,61 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   // Chaque score a son propre onglet (clic sur Orator / Logos / Gnosis dans
   // le menu) plutôt que d'être tous empilés à la suite dans la modale. Les 3
   // scores existent toujours (pire note tant qu'on n'a rien posté/répondu,
-  // cf. USER_SCORE_WORST côté serveur), donc toujours 3 onglets.
-  const votesValueLine = Number.isFinite(s.votesValue)
+  // cf. USER_SCORE_EMPTY côté serveur), donc toujours 3 onglets.
+  const hasVotesScore = Number.isFinite(s.votesValue);
+  const hasNotesScore = Number.isFinite(s.notesValue);
+  const hasGnosisScore = Number.isFinite(s.gnosisCorrect) && Number.isFinite(s.gnosisAnswered);
+  const votesValueLine = hasVotesScore
     ? '<p class="install-modal-text"><strong>' + s.votesValue.toLocaleString("fr-FR") + (s.votesValue > 1 ? ' voix reçues' : ' voix reçue') + '</strong> au total sur toutes tes idées.</p>'
     : '';
-  const notesValueLine = Number.isFinite(s.notesValue)
+  const notesValueLine = hasNotesScore
     ? '<p class="install-modal-text"><strong>Moyenne de ' + s.notesValue.toLocaleString("fr-FR") + '/100</strong> sur tes idées notées par l\'IA.</p>'
     : '';
-  const gnosisValueLine = (Number.isFinite(s.gnosisCorrect) && Number.isFinite(s.gnosisAnswered))
+  const gnosisValueLine = hasGnosisScore
     ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM du jour.</p>'
     : '';
+  const votesExplanation = hasVotesScore
+    ? 'Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.'
+    : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore publié d\'idée.';
+  const notesExplanation = hasNotesScore
+    ? 'Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.'
+    : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car aucune de tes idées n\'a encore été évaluée.';
+  const gnosisExplanation = hasGnosisScore
+    ? 'Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
+    : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu au QCM.';
   const tabs = [
     {
       key: "orator",
       icon: '<i class="fa-solid fa-bolt"></i>',
       label: "Orator",
       content:
-        tierIntro +
-        votesTierCountHint +
+        (hasVotesScore ? tierIntro + votesTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + formatPct(votesScore) + '%</h4>' +
         votesValueLine +
-        '<p class="install-modal-text">Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.</p>'
+        '<p class="install-modal-text">' + votesExplanation + '</p>'
     },
     {
       key: "logos",
       icon: AGON_LOGOS_ICON,
       label: "Logos",
       content:
-        tierIntro +
-        notesTierCountHint +
+        (hasNotesScore ? tierIntro + notesTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         notesValueLine +
-        '<p class="install-modal-text">Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.</p>'
+        '<p class="install-modal-text">' + notesExplanation + '</p>'
     },
     {
       key: "gnosis",
       icon: '<i class="fa-solid fa-brain"></i>',
       label: "Gnosis",
       content:
-        gnosisTierIntro +
-        gnosisTierCountHint +
+        (hasGnosisScore ? gnosisTierIntro + gnosisTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis — Top ' + formatPct(gnosisScore) + '%</h4>' +
         gnosisValueLine +
-        '<p class="install-modal-text">Mesure ta justesse au QCM du jour. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.</p>'
+        '<p class="install-modal-text">' + gnosisExplanation + '</p>'
     }
   ];
 
@@ -1568,33 +1577,73 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 // Compte à rebours de 60 min de bonne santé numérique, sous le badge de
 // score dans le bandeau du haut. Mesure le temps actif cumulé (pas une
 // horloge murale) : en pause dès qu'on quitte l'onglet/l'app, reprend sans
-// repartir de zéro au retour — persisté en sessionStorage pour survivre aux
-// navigations entre pages du site (pas de blocage à zéro une fois écoulé,
-// juste un repère visuel qui passe au rouge dans les 10 dernières minutes).
+// repartir de zéro au retour — persisté par journée dans localStorage pour
+// survivre aux navigations, aux nouveaux onglets et aux fermetures/réouvertures
+// du site (pas de blocage à zéro une fois écoulé, juste un repère visuel qui
+// passe au rouge dans les 10 dernières minutes).
 const AGON_TIME_WIDGET_MINUTES = 60;
 const AGON_TIME_WIDGET_WARNING_S = 10 * 60;
 function renderAgonTimeWidget() {
   const scoreWidget = document.querySelector(".agon-user-score-widget");
   if (!scoreWidget || document.querySelector(".agon-time-widget")) return;
 
-  const elapsedKey = "agon_time_widget_elapsed_ms";
-  let baseElapsedMs = Number(sessionStorage.getItem(elapsedKey)) || 0;
+  const elapsedKey = "agon_time_widget_daily_v2";
+  function getParisDayKey() {
+    try {
+      const parts = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Europe/Paris",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(new Date());
+      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      return values.year + "-" + values.month + "-" + values.day;
+    } catch (e) {
+      const now = new Date();
+      return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    }
+  }
+  let activeDayKey = getParisDayKey();
+  function readStoredElapsed() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(elapsedKey) || "null");
+      const elapsedMs = Number(stored?.elapsedMs);
+      return stored?.dayKey === activeDayKey && Number.isFinite(elapsedMs) && elapsedMs > 0
+        ? elapsedMs
+        : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  let baseElapsedMs = readStoredElapsed();
   let resumedAt = Date.now();
   let running = !document.hidden;
   function currentElapsedMs() {
     return baseElapsedMs + (running ? Date.now() - resumedAt : 0);
   }
   function persistElapsed() {
-    try { sessionStorage.setItem(elapsedKey, String(currentElapsedMs())); } catch (e) {}
+    const elapsedMs = Math.max(currentElapsedMs(), readStoredElapsed());
+    try { localStorage.setItem(elapsedKey, JSON.stringify({ dayKey: activeDayKey, elapsedMs })); } catch (e) {}
+    return elapsedMs;
+  }
+  function resetIfNewDay() {
+    const todayKey = getParisDayKey();
+    if (todayKey === activeDayKey) return;
+    activeDayKey = todayKey;
+    baseElapsedMs = 0;
+    resumedAt = Date.now();
+    try { localStorage.setItem(elapsedKey, JSON.stringify({ dayKey: activeDayKey, elapsedMs: 0 })); } catch (e) {}
   }
   function pauseTimeWidget() {
     if (!running) return;
     baseElapsedMs += Date.now() - resumedAt;
     running = false;
-    persistElapsed();
+    baseElapsedMs = persistElapsed();
   }
   function resumeTimeWidget() {
     if (running) return;
+    resetIfNewDay();
+    baseElapsedMs = Math.max(baseElapsedMs, readStoredElapsed());
     resumedAt = Date.now();
     running = true;
   }
@@ -1683,6 +1732,7 @@ function renderAgonTimeWidget() {
     wasBlinkActive = shouldBlink;
   }
   function tick() {
+    resetIfNewDay();
     const remaining = Math.max(0, AGON_TIME_WIDGET_MINUTES * 60 - Math.floor(currentElapsedMs() / 1000));
     const isExpired = remaining <= 0;
     if (isExpired) {
@@ -5533,24 +5583,14 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.open {
       display: flex;
     }
-    #debate-iframe-modal.tribunes-frame-open {
+    /* Le plein écran (padding/align/justify/height/border-radius) est
+       maintenant le comportement par défaut de #debate-iframe-modal.open,
+       desktop compris (cf. @media min-width:769px plus bas) — seul l'inset
+       pendant le chargement (avant que .open soit posée) reste spécifique à
+       ces pages, pour ne pas laisser dépasser le bandeau du site parent. */
+    #debate-iframe-modal.tribunes-frame-open.loading,
+    #debate-iframe-modal.historical-events-frame-open.loading {
       inset: 0 !important;
-      padding: 0 !important;
-      align-items: stretch !important;
-      justify-content: stretch !important;
-    }
-    #debate-iframe-modal.tribunes-frame-open.loading {
-      inset: 0 !important;
-    }
-    #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-inner {
-      height: 100vh !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-    }
-    @supports (height: 100dvh) {
-      #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-inner {
-        height: 100dvh !important;
-      }
     }
     #debate-iframe-modal.loading {
       inset: var(--debate-iframe-modal-top, 0px) 0 0 0;
@@ -5892,18 +5932,28 @@ function ensureDebateIframeModal() {
       }
     }
     @media (min-width: 769px) {
+      /* Même traitement plein écran qu'en mobile (cf. @media max-width:768px
+         plus haut) — auparavant un "bottom sheet" (padding-top 16px, coins
+         arrondis) laissait un espace visible au-dessus de la page embarquée. */
       #debate-iframe-modal.open {
-        padding: 16px 0 0 0;
-        align-items: flex-end;
-        justify-content: center;
+        padding: 0;
+        align-items: stretch;
+        justify-content: stretch;
       }
       #debate-iframe-modal-inner {
-        height: calc(100vh - 16px);
-        border-radius: 20px 20px 0 0;
+        height: 100vh;
+        border-radius: 0;
       }
       #debate-iframe-modal-close {
         bottom: 80px;
         left: 26px;
+      }
+    }
+    @supports (height: 100dvh) {
+      @media (min-width: 769px) {
+        #debate-iframe-modal-inner {
+          height: 100dvh;
+        }
       }
     }
     #debate-iframe-modal-frame {
@@ -27865,8 +27915,9 @@ function attachScrollFadeHint(scrollEl, overlayParent, fadeColor) {
 // pas de conteneur scrollable dédié : c'est la fenêtre (ou l'iframe) qui scrolle.
 // Se décale automatiquement au-dessus de .home-bottom-nav quand elle est visible
 // (sa présence varie selon la page et la largeur d'écran).
-function attachPageScrollFadeHint(fadeColor) {
+function attachPageScrollFadeHint(fadeColor, options) {
   if (document.querySelector('.page-scroll-fade-hint')) return;
+  options = options || {};
 
   const hint = document.createElement('div');
   hint.className = 'page-scroll-fade-hint is-hidden';
@@ -27878,20 +27929,39 @@ function attachPageScrollFadeHint(fadeColor) {
     window.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
   });
 
+  // Certaines pages (ex. /eclairages, /qcm-du-jour en iframe) réservent un
+  // grand padding-bottom sur <body>, ou une marge basse généreuse sur leur
+  // shell, pour une zone de scroll tampon sans lien avec le contenu réel —
+  // se baser sur doc.scrollHeight ferait donc rester "suite" visible bien
+  // après la fin du contenu. contentEndSelector pointe vers le conteneur du
+  // vrai contenu (ex. '.ph-panel') : on mesure sa position bas réelle plutôt
+  // que de tenter de soustraire ce tampon (fragile, cf. margin collapsing
+  // CSS entre le shell et <body> qui faussait le calcul).
+  function getContentEnd() {
+    const el = options.contentEndSelector ? document.querySelector(options.contentEndSelector) : null;
+    if (el) return window.scrollY + el.getBoundingClientRect().bottom;
+    return document.documentElement.scrollHeight;
+  }
+
   function update() {
     const bottomNav = document.querySelector('.home-bottom-nav');
     const navHeight = (bottomNav && bottomNav.offsetParent) ? bottomNav.getBoundingClientRect().height : 0;
     hint.style.bottom = navHeight + 'px';
 
-    const doc = document.documentElement;
-    const hasOverflow = doc.scrollHeight > window.innerHeight + 2;
-    const atBottom = window.scrollY + window.innerHeight >= doc.scrollHeight - 4;
+    const contentEnd = getContentEnd();
+    const hasOverflow = contentEnd > window.innerHeight + 2;
+    const atBottom = window.scrollY + window.innerHeight >= contentEnd - 4;
     hint.classList.toggle('is-hidden', !hasOverflow || atBottom);
   }
   window.addEventListener('scroll', update, { passive: true });
   window.addEventListener('resize', update, { passive: true });
   requestAnimationFrame(update);
 
+  // attributes+attributeFilter:['hidden'] est nécessaire en plus de childList :
+  // ouvrir/fermer un bloc accordéon (ex. .ecl-block-content, .ph-history-panel)
+  // ne fait que basculer l'attribut "hidden" sur du contenu déjà présent dans
+  // le DOM, ce que childList seul ne détecte pas — sans ça, "suite" restait
+  // affiché/masqué à tort jusqu'au prochain scroll ou resize.
   let mutationFrame = null;
   const observer = new MutationObserver(() => {
     if (mutationFrame) return;
@@ -27900,7 +27970,7 @@ function attachPageScrollFadeHint(fadeColor) {
       update();
     });
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
 }
 
 function showArgumentAiDetail(argId, triggerEl) {
@@ -32556,6 +32626,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname === "/create") {
     initCreate();
     attachPageScrollFadeHint('#f3f4f6');
+  }
+  if (location.pathname === "/contributions") {
+    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
+  }
+  if (location.pathname === "/notifications") {
+    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
   }
 
   if (document.body.classList.contains('is-standalone')) {

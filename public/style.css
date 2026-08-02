@@ -11436,7 +11436,7 @@ body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-re
     object-fit: cover;
     border-radius: 20px;
     margin: 0 auto 0 0;
-    transform: translate(-45px, 16px);
+    transform: translate(-25px, 16px);
   }
 
   body.is-standalone .topbar-app-icon--desktop {
@@ -20781,9 +20781,13 @@ body.page-home-mobile .topbar-social {
     transform: none !important;
     align-self: center !important;
     justify-self: center !important;
+    /* Rattaché au bandeau (et non à la fenêtre) : il suit exactement sa
+       translation et disparaît avec lui au défilement. */
     position: absolute !important;
-    top: 4px !important;
-    right: -51px !important;
+    top: 6px !important;
+    /* Le PNG possède une marge transparente interne : décaler sa boîte rend
+       le dessin visible réellement affleurant au bord droit du bandeau. */
+    right: -27px !important;
     z-index: 2 !important;
   }
 }
@@ -20793,7 +20797,13 @@ body.page-home-mobile .topbar-social {
     width: 104px !important;
     height: 104px !important;
     border-radius: 16px !important;
-    margin: -25px 0 -35px -52px !important;
+    margin: 0 !important;
+    /* Rattaché au bandeau pour ne jamais flotter pendant le défilement. */
+    position: absolute !important;
+    top: -1px !important;
+    /* Compensation équivalente pour la version mobile du PNG. */
+    right: -16px !important;
+    z-index: 2 !important;
   }
 }
 

@@ -43,3 +43,23 @@ test("image d'œuvre : un titre simple peut correspondre sans numéro ni sous-ti
 
   assert.equal(ok, true);
 });
+
+test("image d'œuvre : un titre composé uniquement de mots courts est accepté s'il correspond exactement", () => {
+  const ok = validateArtworkPageMatch(
+    "Le Cri",
+    "Le Cri",
+    "Le Cri est une œuvre expressionniste de l'artiste norvégien Edvard Munch."
+  );
+
+  assert.equal(ok, true);
+});
+
+test("image d'œuvre : un titre court sans correspondance exacte reste refusé", () => {
+  const ok = validateArtworkPageMatch(
+    "Le Cri",
+    "Le Clou",
+    "Le Clou est une autre œuvre sans rapport."
+  );
+
+  assert.equal(ok, false);
+});

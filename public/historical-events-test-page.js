@@ -41,55 +41,19 @@
     return getParisDateKey();
   }
 
-  var monthSelect = document.getElementById("het-date-month");
-  var daySelect = document.getElementById("het-date-day");
   var dateDisplay = document.getElementById("het-date-display");
   var statusEl = document.getElementById("het-status");
   var cardsEl = document.getElementById("het-cards");
 
-  var MONTH_NAMES = [
-    "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre"
-  ];
+  var historyToggle = document.getElementById("het-history-toggle");
+  var historyPanel = document.getElementById("het-history-panel");
+  var historyDateInput = document.getElementById("het-history-date");
+  var historyPrevBtn = document.getElementById("het-history-prev");
+  var historyNextBtn = document.getElementById("het-history-next");
+  var historyTodayBtn = document.getElementById("het-history-today");
 
   function pad2(n) {
     return n < 10 ? "0" + n : String(n);
-  }
-
-  function populateMonthSelect() {
-    MONTH_NAMES.forEach(function (name, index) {
-      var option = document.createElement("option");
-      option.value = pad2(index + 1);
-      option.textContent = name;
-      monthSelect.appendChild(option);
-    });
-  }
-
-  // Reconstruit les options du menu "jour" selon le mois choisi (28/29/30/31
-  // jours) — en conservant le jour déjà sélectionné s'il reste valide dans le
-  // nouveau mois, sinon en le ramenant au dernier jour valide (ex. 31 -> 30).
-  function populateDaySelect(month, preferredDay) {
-    var daysInMonth = DAYS_IN_MONTH[month - 1];
-    var targetDay = Math.min(preferredDay || 1, daysInMonth);
-    while (daySelect.firstChild) daySelect.removeChild(daySelect.firstChild);
-    for (var day = 1; day <= daysInMonth; day++) {
-      var option = document.createElement("option");
-      option.value = pad2(day);
-      option.textContent = String(day);
-      if (day === targetDay) option.selected = true;
-      daySelect.appendChild(option);
-    }
-  }
-
-  function currentDateKeyFromSelects() {
-    return monthSelect.value + "-" + daySelect.value;
-  }
-
-  function setSelectsFromDateKey(dateKey) {
-    var month = Number(dateKey.slice(0, 2));
-    var day = Number(dateKey.slice(3, 5));
-    monthSelect.value = pad2(month);
-    populateDaySelect(month, day);
   }
 
   function isValidDateKey(value) {
@@ -102,7 +66,16 @@
   }
 
   function setStatus(text, isError) {
-    statusEl.textContent = text || "";
+    statusEl.replaceChildren();
+    if (/^Chargement\b/i.test(String(text || ""))) {
+      var hourglass = document.createElement("img");
+      hourglass.src = "/sablier-96.png";
+      hourglass.alt = "";
+      hourglass.className = "het-loading-hourglass";
+      hourglass.setAttribute("aria-hidden", "true");
+      statusEl.appendChild(hourglass);
+    }
+    statusEl.appendChild(document.createTextNode(text || ""));
     statusEl.hidden = !text;
     statusEl.classList.toggle("het-status-error", !!isError);
   }
@@ -376,6 +349,17 @@
     var entry = { toggle: toggle, content: content };
     accordionBlocks.push(entry);
 
+    // Même comportement que views/eclairages.html : ramener le titre de la
+    // rubrique juste sous le bandeau sticky (.topbar), qu'on l'ouvre ou
+    // qu'on la referme — scrollIntoView le collerait au tout bord haut,
+    // partiellement recouvert par le bandeau.
+    function scrollToggleIntoView() {
+      var topbar = document.querySelector(".topbar");
+      var offset = (topbar ? topbar.offsetHeight : 0) + 16;
+      var targetTop = window.pageYOffset + toggle.getBoundingClientRect().top - offset;
+      window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    }
+
     function open() {
       accordionBlocks.forEach(function (other) {
         if (other === entry) return;
@@ -384,11 +368,13 @@
       });
       toggle.setAttribute("aria-expanded", "true");
       content.hidden = false;
+      scrollToggleIntoView();
     }
 
     function collapse() {
       toggle.setAttribute("aria-expanded", "false");
       content.hidden = true;
+      scrollToggleIntoView();
     }
 
     toggle.addEventListener("click", function () {
@@ -431,22 +417,123 @@
       });
   }
 
-  // Changer le mois reconstruit d'abord la liste des jours valides (28-31
-  // selon le mois) avant de recharger — sinon un jour comme "31" resterait
-  // sélectionné en passant sur un mois qui n'en compte pas autant.
-  monthSelect.addEventListener("change", function () {
-    populateDaySelect(Number(monthSelect.value), Number(daySelect.value));
-    loadDate(currentDateKeyFromSelects());
-  });
-  daySelect.addEventListener("change", function () {
-    loadDate(currentDateKeyFromSelects());
-  });
+  // Décale une dateKey ("MM-DD") de N jours — 2024 sert d'année bissextile
+  // arbitraire pour que le 29 février existe le temps du calcul, seul le
+  // résultat MM-DD est conservé.
+  function shiftDateKey(dateKey, deltaDays) {
+    var month = Number(dateKey.slice(0, 2));
+    var day = Number(dateKey.slice(3, 5));
+    var d = new Date(Date.UTC(2024, month - 1, day));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    return pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+  }
+
+  // input[type=date] a besoin d'une année complète : l'année en cours est
+  // utilisée pour l'affichage, sans impact sur le contenu chargé (seul MM-DD
+  // est envoyé à l'API, cf. inputValueToDateKey).
+  function dateKeyToInputValue(dateKey) {
+    return String(new Date().getFullYear()) + "-" + dateKey;
+  }
+
+  function inputValueToDateKey(value) {
+    return value.slice(5);
+  }
+
+  // Jamais de jour "suivant" au-delà d'aujourd'hui : contrairement à
+  // parallele-historique.html (bloqué faute de contenu généré à l'avance),
+  // rien n'empêcherait techniquement de consulter un jour futur ici (almanach
+  // cyclique) — mais uniquement les jours précédents doivent rester
+  // consultables, par choix.
+  function updateHistoryArrowsState(dateKey) {
+    if (historyNextBtn) historyNextBtn.disabled = dateKey >= getParisDateKey();
+  }
+
+  function goToDate(dateKey) {
+    if (historyDateInput) historyDateInput.value = dateKeyToInputValue(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = dateKey === getParisDateKey();
+    updateHistoryArrowsState(dateKey);
+    loadDate(dateKey);
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener("click", function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
+    });
+  }
+  if (historyDateInput) {
+    // max empêche le sélecteur natif de proposer un jour futur ; le contrôle
+    // ci-dessous couvre la saisie manuelle au clavier, qui peut le contourner.
+    historyDateInput.max = dateKeyToInputValue(getParisDateKey());
+    historyDateInput.addEventListener("change", function () {
+      var value = historyDateInput.value;
+      if (!value) return;
+      var dateKey = inputValueToDateKey(value);
+      goToDate(dateKey > getParisDateKey() ? getParisDateKey() : dateKey);
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener("click", function () {
+      goToDate(shiftDateKey(inputValueToDateKey(historyDateInput.value), -1));
+    });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener("click", function () {
+      var target = shiftDateKey(inputValueToDateKey(historyDateInput.value), 1);
+      if (target > getParisDateKey()) return;
+      goToDate(target);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener("click", function () {
+      goToDate(getParisDateKey());
+    });
+  }
 
   // Sélection automatique du bon jour à l'ouverture : date du jour (heure de
   // Paris), sauf ?testDate=MM-DD en développement local (cf. IS_DEV_ENVIRONMENT
   // et resolveInitialDateKey ci-dessus).
-  populateMonthSelect();
   var initialDateKey = resolveInitialDateKey();
-  setSelectsFromDateKey(initialDateKey);
-  loadDate(initialDateKey);
+  goToDate(initialDateKey);
+
+  // Dégradé + "suite ↓" tant que le bas du panneau (.het-panel) dépasse le
+  // viewport — .het-body::after (cf. historical-events-test.css) réserve une
+  // grande zone tampon sous le panneau, donc on mesure la position réelle de
+  // .het-panel plutôt que document.documentElement.scrollHeight (même
+  // principe que attachPageScrollFadeHint dans script.js, dupliqué ici car
+  // cette page ne charge pas script.js).
+  (function attachScrollFadeHint() {
+    var hint = document.createElement("div");
+    hint.className = "het-scroll-fade-hint is-hidden";
+    hint.innerHTML = '<span class="het-scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+    document.body.appendChild(hint);
+    hint.querySelector(".het-scroll-fade-hint-text").addEventListener("click", function (e) {
+      e.stopPropagation();
+      window.scrollBy({ top: window.innerHeight * 0.8, behavior: "smooth" });
+    });
+
+    function update() {
+      var panel = document.querySelector(".het-panel");
+      var contentEnd = panel ? window.scrollY + panel.getBoundingClientRect().bottom : document.documentElement.scrollHeight;
+      var hasOverflow = contentEnd > window.innerHeight + 2;
+      var atBottom = window.scrollY + window.innerHeight >= contentEnd - 4;
+      hint.classList.toggle("is-hidden", !hasOverflow || atBottom);
+    }
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
+    requestAnimationFrame(update);
+
+    // attributes+attributeFilter:['hidden'] est nécessaire en plus de childList :
+    // ouvrir/fermer un bloc accordéon ne fait que basculer l'attribut "hidden"
+    // sur du contenu déjà présent dans le DOM, ce que childList seul ne détecte pas.
+    var mutationFrame = null;
+    new MutationObserver(function () {
+      if (mutationFrame) return;
+      mutationFrame = requestAnimationFrame(function () {
+        mutationFrame = null;
+        update();
+      });
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  })();
 })();

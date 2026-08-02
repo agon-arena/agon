@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260724-menucompact">
+  <link rel="stylesheet" href="/style.min.css?v=20260802-appicon9">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -338,7 +338,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script>
 (function () {
   var body = document.getElementById('pp-body');
@@ -673,11 +673,11 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       init();
-      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.pp-panel' });
     });
   } else {
     init();
-    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff');
+    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.pp-panel' });
   }
 })();
 </script>

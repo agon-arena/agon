@@ -4263,9 +4263,10 @@ const USER_SCORE_CACHE_TTL_MS = 15 * 60 * 1000;
 
 // Score% = part de la population dont la valeur est strictement supérieure
 // à celle de l'utilisateur — ex: 2% signifie que 98% des autres ont moins.
-// Pire percentile possible (cf. bornage 99,9% dans buildPercentileScoreMap) —
-// valeur renvoyée pour un axe où le contributeur n'a encore rien posté/répondu.
-const USER_SCORE_WORST = 99.9;
+// Valeur initiale affichée pour un axe où le contributeur n'a encore rien
+// posté/répondu. Ce 100 % explicite est distinct du pire percentile réellement
+// calculé, qui reste borné à 99,9 % dans buildPercentileScoreMap.
+const USER_SCORE_EMPTY = 100;
 
 function buildPercentileScoreMap(valueByAuthorKey) {
   const entries = [...valueByAuthorKey.entries()];
@@ -4553,13 +4554,12 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
     const gnosisTier = gnosisTierByAuthorKey.get(key) || null;
-    // Rien posté / rien répondu sur un axe : pas de percentile calculable,
-    // donc pire note plutôt que "pas de score" (encourage à contribuer au
-    // lieu de masquer l'onglet).
+    // Rien posté / rien répondu sur un axe : pas encore de percentile
+    // calculable, donc valeur initiale explicite à 100 %.
     res.json({
-      votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : USER_SCORE_WORST,
-      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : USER_SCORE_WORST,
-      gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : USER_SCORE_WORST,
+      votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
+      notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
+      gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
       tierLabel: tier ? getUserContributionTierLabel(tier) : null,
       tier: tier || null,
       tierCount: USER_SCORE_TIERS.length,
@@ -5706,6 +5706,12 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       return res.status(503).json({ error: "Configuration VAPID incomplète." });
     }
 
+    // Le pipeline appelle cet endpoint à la fin de sa vague de publication.
+    // Le push ne doit toutefois annoncer l'ouverture des arènes qu'une fois
+    // les six rubriques Éclairages effectivement publiées. Cette attente
+    // déclenche aussi les générations manquantes, dans leur ordre de priorité.
+    const eclairages = await ensureDailyEclairagesPublished(new Date());
+
     // Les publications se font par vagues (~8h et ~16h heure de Paris, cf.
     // tryGenerateDailyQuiz) : avant 13h on suppose la vague du matin, sinon
     // celle du soir. Seuil au milieu des deux vagues, avec un peu de marge
@@ -5725,10 +5731,10 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       badge: "/icon-192-optimized.png"
     });
 
-    return res.json({ success: true, wave: isMorningWave ? "morning" : "evening", body, ...result });
+    return res.json({ success: true, wave: isMorningWave ? "morning" : "evening", body, eclairages, ...result });
   } catch (error) {
     console.error(error);
-    return sendServerError(res, "Erreur envoi broadcast push.");
+    return sendServerError(res, "Éclairages non publiés : notification push non envoyée.");
   }
 });
 
@@ -9378,12 +9384,12 @@ async function getTrendingOpinionArticleLinksFallback() {
   return ranked;
 }
 
-// Section "Recommandé pour vous" (Autres actus) : 3 paliers, du plus au moins personnalisé.
+// Section "Recommandé pour vous" (Autres actus) : 3 niveaux, du plus au moins personnalisé.
 // 1) Historique de clic du visiteur : top catégories/orientations cliquées, filtré sur le
 //    pool déjà caché de getOpinionArticlesSelection() (aucun nouveau read sur opinion_articles).
-// 2) Aucun historique, ou rien à recommander dedans (niche sans candidat frais) : tendance
-//    globale récente (cf. getTrendingOpinionArticleLinksFallback ci-dessus).
-// 3) Table de clics quasi vide (ex. juste après déploiement) : les plus récents non cliqués.
+// 2) On complète toujours avec la tendance globale récente
+//    (cf. getTrendingOpinionArticleLinksFallback ci-dessus).
+// 3) On finit de remplir avec les plus récents non cliqués.
 app.get("/api/opinion-articles/recommended", async (req, res) => {
   try {
     const visitorKey = String(req.query.visitorKey || "").trim();
@@ -9401,7 +9407,16 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
     if (error) throw new Error(error.message);
 
     const clickedLinks = new Set((clickRows || []).map((r) => r.article_link));
-    let recommended = [];
+    const recommended = [];
+    const recommendedLinks = new Set();
+    const appendUniqueRecommendations = (articles) => {
+      for (const article of articles || []) {
+        const link = String(article?.link || "").trim();
+        if (!link || clickedLinks.has(link) || recommendedLinks.has(link)) continue;
+        recommendedLinks.add(link);
+        recommended.push(article);
+      }
+    };
 
     if (clickRows && clickRows.length) {
       const categoryFreq = new Map();
@@ -9415,23 +9430,18 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
       const topOrientations = new Set(Array.from(orientationFreq.entries())
         .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS).map(([o]) => o));
 
-      recommended = pool
-        .filter((a) => !clickedLinks.has(a.link))
+      appendUniqueRecommendations(pool
         .filter((a) => topCategories.has(a.category) || topOrientations.has(getOpinionOrientationGroup(a.orientation)))
-        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at)));
     }
 
-    if (!recommended.length) {
-      const trendingLinks = await getTrendingOpinionArticleLinksFallback();
-      const byLink = new Map(pool.map((a) => [a.link, a]));
-      recommended = trendingLinks
-        .filter((link) => !clickedLinks.has(link) && byLink.has(link))
-        .map((link) => byLink.get(link));
-    }
+    const trendingLinks = await getTrendingOpinionArticleLinksFallback();
+    const byLink = new Map(pool.map((a) => [a.link, a]));
+    appendUniqueRecommendations(trendingLinks
+      .filter((link) => byLink.has(link))
+      .map((link) => byLink.get(link)));
 
-    if (!recommended.length) {
-      recommended = pool.filter((a) => !clickedLinks.has(a.link));
-    }
+    appendUniqueRecommendations(pool);
 
     const rawLimit = Number.parseInt(String(req.query.limit ?? ""), 10);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
@@ -12090,12 +12100,21 @@ function shiftDateKeyDays(dateKey, deltaDays) {
 // getPenseePhilosophiqueExcludedTopicIds) ne suffit donc pas à éviter de
 // retraiter le même fait plusieurs jours d'affilée. On regarde ici, sur les
 // ECLAIRAGES_LOOKBACK_DAYS derniers jours, quels sujets ont déjà été traités
-// par L'UNE des 3 rubriques (parallèle historique, pensée philosophique,
-// mécanisme sociologique), et on en déduit leur cloud_label/question — les
-// mêmes clés de regroupement que dedupeParalleleHistoriqueTopicsByCloudLabel
-// — pour les exclure des candidats du jour, quel que soit leur id.
+// par L'UNE des 6 rubriques de la page Éclairages, et on en déduit leur
+// cloud_label/question — les mêmes clés de regroupement que
+// dedupeParalleleHistoriqueTopicsByCloudLabel — pour les exclure des
+// candidats du jour, quel que soit leur id. La lecture est volontairement
+// bloquante : mieux vaut reporter une génération que publier un doublon si
+// l'historique Supabase est momentanément indisponible.
 const ECLAIRAGES_LOOKBACK_DAYS = 7;
-const ECLAIRAGES_TABLES = ["parallele_historique", "pensee_philosophique", "mecanisme_sociologique"];
+const ECLAIRAGES_TABLES = [
+  "parallele_historique",
+  "pensee_philosophique",
+  "mecanisme_sociologique",
+  "concept_du_jour",
+  "citation_du_jour",
+  "oeuvre_art_du_jour"
+];
 
 async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
   const startDateKey = shiftDateKeyDays(dateKey, -ECLAIRAGES_LOOKBACK_DAYS);
@@ -12109,7 +12128,7 @@ async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
       .lt("date", dateKey);
     if (error) {
       console.error(`[eclairages] lecture historique récente (${table}) :`, error.message);
-      continue;
+      throw new Error(`Vérification anti-répétition Éclairages impossible (${table}) : ${error.message}`);
     }
     (data || []).forEach((row) => {
       String(row.current_topic_id || "").split(",").map((id) => id.trim()).filter(Boolean).forEach((id) => recentIds.add(id));
@@ -12124,7 +12143,7 @@ async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
     .in("id", [...recentIds]);
   if (debatesError) {
     console.error("[eclairages] lecture des sujets récemment traités :", debatesError.message);
-    return { labelKeys: new Set(), questionKeys: new Set() };
+    throw new Error(`Vérification anti-répétition Éclairages impossible (debates) : ${debatesError.message}`);
   }
 
   const labelKeys = new Set();
@@ -12524,6 +12543,64 @@ const oeuvreArtDuJourService = createOeuvreArtDuJourService({
   model: OEUVRE_ART_DU_JOUR_MODEL,
   debugLogging: !process.env.RENDER
 });
+
+// Condition commune au push quotidien : une annonce « arènes ouvertes » ne
+// peut partir qu'après la publication réelle des six rubriques Éclairages.
+// L'ordre ci-dessous est aussi leur ordre de priorité anti-doublon.
+const DAILY_ECLAIRAGES_PUBLICATION_SERVICES = [
+  ["parallele_historique", paralleleHistoriqueService],
+  ["pensee_philosophique", penseePhilosophiqueService],
+  ["mecanisme_sociologique", mecanismeSociologiqueService],
+  ["concept_du_jour", conceptDuJourService],
+  ["citation_du_jour", citationDuJourService],
+  ["oeuvre_art_du_jour", oeuvreArtDuJourService]
+];
+const DAILY_ECLAIRAGES_PUSH_WAIT_ATTEMPTS = 100;
+const DAILY_ECLAIRAGES_PUSH_WAIT_MS = 3000;
+
+async function ensureDailyEclairagesPublished(date = new Date()) {
+  const dateKey = parisDateKey(date);
+  const published = [];
+
+  for (const [name, service] of DAILY_ECLAIRAGES_PUBLICATION_SERVICES) {
+    let result = await service.generateIfNeeded(date);
+
+    // Un scheduler peut avoir réservé la rubrique quelques secondes avant
+    // l'appel du pipeline. On attend sa fin au lieu d'envoyer le push trop tôt
+    // ou de lancer une deuxième génération concurrente.
+    for (
+      let attempt = 0;
+      result?.status === "generating" && attempt < DAILY_ECLAIRAGES_PUSH_WAIT_ATTEMPTS;
+      attempt++
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, DAILY_ECLAIRAGES_PUSH_WAIT_MS));
+      result = await service.getByDate(dateKey);
+    }
+
+    if (result?.status !== "published") {
+      const reason = String(result?.error || result?.reason || result?.status || "statut inconnu");
+      throw new Error(`${name} non publié (${reason})`);
+    }
+    published.push(name);
+  }
+
+  return { date: dateKey, published };
+}
+
+async function getDailyEclairagesPublicationStatus(date = new Date()) {
+  const dateKey = parisDateKey(date);
+  const results = await Promise.all(
+    DAILY_ECLAIRAGES_PUBLICATION_SERVICES.map(async ([name, service]) => {
+      const result = await service.getByDate(dateKey);
+      return { name, status: result?.status || "not_found" };
+    })
+  );
+  return {
+    date: dateKey,
+    available: results.every((item) => item.status === "published"),
+    sections: results
+  };
+}
 
 // Même garde-fou que ANALYSIS_SCHEDULER_ENABLED : seule l'instance Render génère
 // le QCM (le Mac local reste passif). AGON_DAILY_QUIZ_SCHEDULER=on|off force le
@@ -13290,6 +13367,18 @@ app.post("/api/oeuvre-art-du-jour/generate", requireAdmin, rateLimit("oeuvre-art
   } catch (error) {
     console.error("[oeuvre-art-du-jour] /generate :", error.message);
     res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// État léger utilisé par l'accueil : le bouton Éclairages ne devient
+// cliquable que lorsque les six rubriques du jour sont réellement publiées.
+// Cette route est strictement en lecture et ne déclenche aucune génération.
+app.get("/api/eclairages/status", rateLimit("eclairages-status", 120), async (req, res) => {
+  try {
+    res.json(await getDailyEclairagesPublicationStatus(new Date()));
+  } catch (error) {
+    console.error("[eclairages] /status :", error.message);
+    res.status(500).json({ date: parisDateKey(), available: false, sections: [], error: "Erreur serveur." });
   }
 });
 

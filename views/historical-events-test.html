@@ -9,28 +9,54 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-  <link rel="stylesheet" href="/historical-events-test.css?v=20260728b">
+  <link rel="stylesheet" href="/historical-events-test.css?v=20260802h">
+  <script>
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.self !== window.top) {
+        document.body.classList.add('in-iframe');
+        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+      }
+    });
+  </script>
 </head>
 <body class="het-body">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="home-brand-block">
+        <div class="home-brand-main">
+          <img src="/logo.jpeg" alt="Logo agôn" class="home-logo">
+        </div>
+      </div>
+    </div>
+  </header>
   <main class="het-page">
     <section class="het-panel">
       <h1 class="het-title">Ce jour dans l'Histoire</h1>
       <p class="het-date" id="het-date-display">12 mars</p>
 
-      <div class="het-date-form">
-        <label for="het-date-month">Date à tester</label>
-        <div class="het-date-form-row">
-          <select id="het-date-month" aria-label="Mois"></select>
-          <select id="het-date-day" aria-label="Jour"></select>
+      <div class="het-history">
+        <button type="button" class="het-history-toggle" id="het-history-toggle" aria-expanded="false" aria-controls="het-history-panel">
+          <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+        </button>
+        <div class="het-history-panel" id="het-history-panel" hidden>
+          <button type="button" class="het-history-arrow" id="het-history-prev" aria-label="Jour précédent">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <input type="date" class="het-history-date" id="het-history-date" aria-label="Choisir une date">
+          <button type="button" class="het-history-arrow" id="het-history-next" aria-label="Jour suivant">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+          <button type="button" class="het-history-today" id="het-history-today" hidden>Aujourd'hui</button>
         </div>
       </div>
 
-      <p class="het-status" id="het-status" role="status" aria-live="polite">Chargement…</p>
+      <p class="het-status" id="het-status" role="status" aria-live="polite"><img src="/sablier-96.png" alt="" class="het-loading-hourglass" aria-hidden="true">Chargement…</p>
 
       <div class="het-cards" id="het-cards"></div>
     </section>
   </main>
 
-  <script src="/historical-events-test-page.js?v=20260727g"></script>
+  <script src="/historical-events-test-page.js?v=20260802f"></script>
 </body>
 </html>

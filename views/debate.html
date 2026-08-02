@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260724-menucompact" />
+<link rel="stylesheet" href="/style.min.css?v=20260802-appicon9" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -170,9 +170,14 @@
       transform: none !important;
       align-self: center !important;
       justify-self: center !important;
-      position: absolute !important;
-      top: 4px !important;
-      right: -51px !important;
+      /* Fixe par rapport à la fenêtre plutôt qu'à la colonne de grille du
+         bandeau : un décalage négatif relatif à cette colonne (ancienne
+         approche) sortait carrément de l'écran sur les résolutions autour de
+         1024-1280px, en plus de pouvoir chevaucher le badge score (centré)
+         ou le logo selon la largeur. */
+      position: fixed !important;
+      top: 12px !important;
+      right: 0 !important;
       z-index: 2 !important;
     }
   }
@@ -181,7 +186,14 @@
       width: 104px !important;
       height: 104px !important;
       border-radius: 16px !important;
-      margin: -25px 0 -35px -52px !important;
+      margin: 0 !important;
+      /* Fixe par rapport à l'écran plutôt que des marges négatives dans la
+         grille (ancienne approche) : celle-ci débordait déjà légèrement de
+         l'écran sur mobile, même sans y toucher. */
+      position: fixed !important;
+      top: 8px !important;
+      right: 8px !important;
+      z-index: 2 !important;
     }
     body.is-standalone.page-debate .topbar {
       padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
@@ -1034,7 +1046,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260728-scoreworst" defer></script>
+	<script src="/script.min.js?v=20260802-fullscreen2" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
