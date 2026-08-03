@@ -11936,6 +11936,82 @@ function formatCultureGeneraleItemForPrompt(item) {
   return formatEclairagesItemForPrompt(item);
 }
 
+// Nom court identifiant la rubrique (concept/mécanisme/auteur/œuvre/etc.) de
+// chaque candidat, reporté sur la question générée (cf. sourceName ci-dessous)
+// pour permettre à "Mes acquis" de trier ses cartes par ordre alphabétique
+// sur ce nom plutôt que sur la date de dernière réponse.
+function extractCultureGeneraleItemName(item) {
+  switch (item.type) {
+    case "histoire": return String(item.title || "").trim();
+    case "parallele": return String(item.historical_event_title || "").trim();
+    case "pensee": return String(item.philosophical_concept || "").trim();
+    case "mecanisme": return String(item.sociological_concept || "").trim();
+    case "concept": return String(item.concept_name || "").trim();
+    case "citation": return String(item.quote_author || "").trim();
+    case "oeuvre": return String(item.artwork_title || "").trim();
+    default: return "";
+  }
+}
+
+// Détail "pur" du concept/mécanisme/citation/œuvre — les mêmes champs que la
+// page /eclairages pour cette rubrique, moins tout ce qui relie l'élément à
+// l'actualité du jour (current_topic_title/summary, shared_mechanism,
+// essential_difference, conclusion, news_connection) : la fiche de "Mes
+// acquis" (cf. sourceDetail ci-dessous) doit rester valable même une fois
+// l'actualité d'origine oubliée. { meta: string|null, sections: [{ label:
+// string|null, text: string }] }.
+function extractCultureGeneraleItemDetail(item) {
+  const t = (v) => String(v || "").trim();
+  const metaJoin = (parts) => parts.map(t).filter(Boolean).join(" — ") || null;
+  switch (item.type) {
+    case "histoire": {
+      const sections = [];
+      if (t(item.summary_long)) sections.push({ label: null, text: t(item.summary_long) });
+      if (t(item.why_it_matters)) sections.push({ label: "Pourquoi c'est important", text: t(item.why_it_matters) });
+      return { meta: t(item.year_display || item.year) || null, sections };
+    }
+    case "parallele":
+      return {
+        meta: t(item.historical_event_date) || null,
+        sections: [{ label: null, text: t(item.historical_context) }]
+      };
+    case "pensee":
+      return {
+        meta: metaJoin([item.philosopher_name, item.concept_origin]),
+        sections: [{ label: null, text: t(item.concept_explanation) }]
+      };
+    case "mecanisme":
+      return {
+        meta: metaJoin([item.sociologist_name, item.concept_origin]),
+        sections: [{ label: null, text: t(item.concept_explanation) }]
+      };
+    case "concept":
+      return {
+        meta: metaJoin([item.concept_originator, item.concept_origin]),
+        sections: [{ label: null, text: t(item.concept_explanation) }]
+      };
+    case "citation":
+      return {
+        meta: null,
+        sections: [
+          { label: null, text: `« ${t(item.quote_text)} »` },
+          t(item.quote_origin) ? { label: null, text: t(item.quote_origin) } : null,
+          t(item.author_presentation) ? { label: "L'auteur", text: t(item.author_presentation) } : null
+        ].filter(Boolean)
+      };
+    case "oeuvre":
+      return {
+        meta: metaJoin([item.artist_name, item.artwork_date]),
+        sections: [
+          t(item.artwork_description) ? { label: "L'œuvre", text: t(item.artwork_description) } : null,
+          t(item.artist_presentation) ? { label: "L'artiste", text: t(item.artist_presentation) } : null
+        ].filter(Boolean)
+      };
+    default:
+      return { meta: null, sections: [] };
+  }
+}
+
 function buildCultureGeneraleQuizPrompt(items) {
   const list = items.map(formatCultureGeneraleItemForPrompt).join("\n");
   return [
@@ -11944,8 +12020,8 @@ function buildCultureGeneraleQuizPrompt(items) {
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
     "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
-    "- Pour un élément d'éclairage, les questions peuvent porter sur l'événement/concept/citation/œuvre lui-même, le mécanisme commun avec l'actualité, ou leur différence essentielle — jamais sur un simple détail anecdotique.",
-    "- Quand une question porte sur la différence essentielle ou la limite du rapprochement, reformule fidèlement ce que dit le texte fourni — jamais une reformulation approximative ou une comparaison que le texte ne fait pas explicitement.",
+    "- Pour un élément d'éclairage, les questions portent UNIQUEMENT sur l'événement/concept/citation/œuvre lui-même (son contexte, son origine, son explication) — jamais sur un simple détail anecdotique, et jamais sur l'actualité du jour qui lui fait écho.",
+    "- Interdiction absolue de mentionner l'actualité du jour dans une question ou une option : ni le sujet d'actualité, ni le \"mécanisme commun\", ni la \"différence essentielle\" avec cette actualité ne doivent apparaître — ces champs ne sont qu'un contexte interne pour toi, jamais une matière à question. Le lecteur qui n'a pas suivi l'actualité doit pouvoir répondre sans le savoir.",
     "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
     "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
     "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
@@ -12014,6 +12090,13 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   // acquis" côté qcm-du-jour.html) sans avoir à interroger 6 services
   // différents rétroactivement.
   const sourceTypeById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), c.type]));
+  // Nom du concept/mécanisme/auteur/œuvre de chaque candidat (cf.
+  // extractCultureGeneraleItemName) — reporté de la même façon pour le tri
+  // alphabétique de "Mes acquis".
+  const sourceNameById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), extractCultureGeneraleItemName(c)]));
+  // Détail "pur" (sans le rapprochement avec l'actualité, cf.
+  // extractCultureGeneraleItemDetail) affiché dans la fiche de "Mes acquis".
+  const sourceDetailById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), extractCultureGeneraleItemDetail(c)]));
   const validated = validateNarrativeQuizQuestions(
     parsed?.questions,
     sourceIds,
@@ -12028,7 +12111,9 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   const questions = validated.map((q, index) => ({
     id: `${slotKey}-q${index + 1}`,
     ...q,
-    sourceType: sourceTypeById.get(q.sourceDebateId) || null
+    sourceType: sourceTypeById.get(q.sourceDebateId) || null,
+    sourceName: sourceNameById.get(q.sourceDebateId) || null,
+    sourceDetail: sourceDetailById.get(q.sourceDebateId) || null
   }));
   const { error: insertError } = await supabase.from("daily_quiz").insert({
     quiz_date: todayKey,
@@ -12058,7 +12143,7 @@ function parseCultureGeneraleReviewRef(questionId) {
 // fetchCultureGeneraleReviewInjectionForToday.
 async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const key = String(voterKey || "").trim();
-  if (!key) return { events: [], contentBySourceId: new Map() };
+  if (!key) return { events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map() };
 
   const { data: answerRows, error: answersError } = await fetchAllSupabaseRows(() =>
     supabase.from("daily_quiz_answers")
@@ -12077,7 +12162,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
       if (sourceDebateId) reviewAnswers.push({ quizDate: row.quiz_date, sourceDebateId, optionIndex: row.option_index });
     }
   }
-  if (!originalAnswers.length && !reviewAnswers.length) return { events: [], contentBySourceId: new Map() };
+  if (!originalAnswers.length && !reviewAnswers.length) return { events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map() };
 
   const quizDates = [...new Set(originalAnswers.map((a) => a.quizDate).filter(Boolean))];
   const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
@@ -12088,12 +12173,19 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   // J réapparaît en repasse un jour ultérieur sans jamais avoir sa propre
   // ligne daily_quiz, mais son sourceDebateId a forcément été vu ce jour J
   // (seules les questions déjà répondues sont éligibles à une repasse).
+  // originalQuizDateBySourceId retient ce jour J de première publication —
+  // nécessaire à fetchUserAcquis pour relire, si besoin, le contenu Éclairages
+  // publié ce jour-là (cf. resolveMissingAcquisSourceNames).
   const contentBySourceId = new Map();
+  const originalQuizDateBySourceId = new Map();
   const originalByDateAndId = new Map();
   for (const row of quizRows || []) {
     for (const q of (row.questions || [])) {
       originalByDateAndId.set(`${row.quiz_date}:${q.id}`, q);
-      if (q.sourceDebateId) contentBySourceId.set(q.sourceDebateId, q);
+      if (q.sourceDebateId) {
+        contentBySourceId.set(q.sourceDebateId, q);
+        originalQuizDateBySourceId.set(q.sourceDebateId, row.quiz_date);
+      }
     }
   }
 
@@ -12117,7 +12209,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
     });
   }
   events.sort((x, y) => (x.quizDate < y.quizDate ? -1 : x.quizDate > y.quizDate ? 1 : 0));
-  return { events, contentBySourceId };
+  return { events, contentBySourceId, originalQuizDateBySourceId };
 }
 
 // Rejoue l'historique de chaque sourceDebateId dans l'ordre chronologique
@@ -12168,10 +12260,16 @@ function isCultureGeneraleReviewDueToday(state, todayKey) {
 }
 
 // Questions à réinjecter aujourd'hui dans le QCM Culture Générale de ce
-// visiteur (cf. getDailyQuizQuestions) : toutes celles dont l'intervalle de
-// répétition espacée est atteint, sans plafond — les plus en retard
-// d'abord. Id "cgreview-{sourceDebateId}" — jamais persistées dans
-// daily_quiz, recalculées à chaque appel (pas de cache, cf. getDailyQuizQuestions).
+// visiteur (cf. getDailyQuizQuestions) : celles dont l'intervalle de
+// répétition espacée est atteint, les plus en retard d'abord, plafonnées à
+// DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY — sans ce plafond, plusieurs jours
+// d'absence feraient réapparaître toutes les repasses en retard d'un coup
+// (demande du 03/08/2026). Les questions en retard mais laissées de côté par
+// le plafond restent dues (pas de recalcul de date ici) : elles repasseront
+// au prochain appel tant qu'elles n'auront pas été répondues. Id
+// "cgreview-{sourceDebateId}" — jamais persistées dans daily_quiz,
+// recalculées à chaque appel (pas de cache, cf. getDailyQuizQuestions).
+const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 10;
 async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
   const { events, contentBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
@@ -12184,9 +12282,140 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
     due.push({ sourceDebateId, lastQuizDate: state.lastQuizDate, question });
   }
   due.sort((a, b) => (a.lastQuizDate < b.lastQuizDate ? -1 : a.lastQuizDate > b.lastQuizDate ? 1 : 0));
-  return due.map(({ question, sourceDebateId }) => ({
+  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, sourceDebateId }) => ({
     ...question,
     id: `cgreview-${sourceDebateId}`
+  }));
+}
+
+// Rubrique Éclairages -> service de lecture + clé du tableau de contenu
+// (mêmes services que fetchEclairagesQuizCandidates, mais en lecture seule
+// via getByDate plutôt qu'en génération) — utilisé par
+// resolveMissingAcquisSourceNames pour retrouver l'intitulé (concept,
+// mécanisme, auteur, œuvre...) des acquis générés avant l'ajout du champ
+// sourceName.
+function getCultureGeneraleEclairagesSourceConfig(sourceType) {
+  switch (sourceType) {
+    case "parallele": return { service: paralleleHistoriqueService, contentKey: "parallels" };
+    case "pensee": return { service: penseePhilosophiqueService, contentKey: "pensees" };
+    case "mecanisme": return { service: mecanismeSociologiqueService, contentKey: "mecanismes" };
+    case "concept": return { service: conceptDuJourService, contentKey: "concepts" };
+    case "citation": return { service: citationDuJourService, contentKey: "citations" };
+    case "oeuvre": return { service: oeuvreArtDuJourService, contentKey: "oeuvres" };
+    default: return null;
+  }
+}
+
+const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre"];
+
+// Index (mémoïsé le temps d'un appel) des événements "Ce jour dans l'Histoire"
+// par id — évènements globaux, jamais scopés à une date de génération de QCM.
+function buildHistoricalEventsIndex() {
+  if (!historicalEventsRepository) return new Map();
+  return new Map(historicalEventsRepository.getAll().map((e) => [String(e.id), e]));
+}
+
+// Relit le contenu Éclairages déjà publié un jour donné pour une rubrique
+// précise, indexé par current_topic_id (sourceDebateId) — jamais de
+// génération, uniquement getByDate (lecture seule, cf. chaque service).
+async function fetchEclairagesContentIndexForDate(sourceType, dateKey) {
+  const config = getCultureGeneraleEclairagesSourceConfig(sourceType);
+  if (!config) return new Map();
+  let result;
+  try {
+    result = await config.service.getByDate(dateKey);
+  } catch (error) {
+    console.error(`[daily-quiz:acquis] relecture ${sourceType} du ${dateKey} :`, error.message);
+    return new Map();
+  }
+  const items = result?.status === "published" ? result.content?.[config.contentKey] : null;
+  if (!Array.isArray(items)) return new Map();
+  return new Map(items.map((it) => [String(it.current_topic_id), it]));
+}
+
+// Reporte sur `a` le nom et le détail "purs" (cf. extractCultureGeneraleItemName
+// / extractCultureGeneraleItemDetail) d'un item Éclairages/historique
+// retrouvé, sans jamais écraser un champ déjà résolu.
+function applyResolvedCultureGeneraleSource(a, type, sourceItem) {
+  const tagged = { type, ...sourceItem };
+  if (!a.sourceName) a.sourceName = extractCultureGeneraleItemName(tagged) || null;
+  if (!a.sourceDetail) a.sourceDetail = extractCultureGeneraleItemDetail(tagged);
+}
+
+// "Mes acquis" doit toujours afficher le nom et le détail purs du concept/
+// mécanisme/auteur/œuvre plutôt que la question elle-même (jamais de repli
+// sur le texte de la question) — les acquis générés avant l'ajout de
+// sourceName/sourceDetail/sourceType n'ont pas ces champs en base : on les
+// résout ici rétroactivement en relisant le contenu déjà publié (événement
+// historique par id, contenu Éclairages du jour d'origine via
+// originalQuizDateBySourceId), sans jamais régénérer de contenu. Quand la
+// rubrique elle-même est inconnue (acquis antérieurs à l'ajout de
+// sourceType), on cherche dans les 6 rubriques Éclairages de cette date
+// plutôt que de supposer une rubrique par défaut. Mute directement les
+// objets de `acquis`.
+async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceId) {
+  const missing = acquis.filter((a) => !a.sourceName || !a.sourceDetail);
+  if (!missing.length) return;
+
+  const historicalIndex = buildHistoricalEventsIndex();
+
+  const knownHistoire = [];
+  const knownEclairages = [];
+  const unknownType = [];
+  for (const a of missing) {
+    if (a.sourceType === "histoire") knownHistoire.push(a);
+    else if (getCultureGeneraleEclairagesSourceConfig(a.sourceType)) knownEclairages.push(a);
+    else unknownType.push(a);
+  }
+
+  for (const a of knownHistoire) {
+    const event = historicalIndex.get(String(a.sourceDebateId));
+    if (event) applyResolvedCultureGeneraleSource(a, "histoire", event);
+  }
+
+  const eclairagesGroups = new Map();
+  for (const a of knownEclairages) {
+    const dateKey = originalQuizDateBySourceId.get(a.sourceDebateId);
+    if (!dateKey) continue;
+    const groupKey = `${a.sourceType}:${dateKey}`;
+    if (!eclairagesGroups.has(groupKey)) eclairagesGroups.set(groupKey, { sourceType: a.sourceType, dateKey, items: [] });
+    eclairagesGroups.get(groupKey).items.push(a);
+  }
+  await Promise.all([...eclairagesGroups.values()].map(async (group) => {
+    const byId = await fetchEclairagesContentIndexForDate(group.sourceType, group.dateKey);
+    for (const a of group.items) {
+      const item = byId.get(String(a.sourceDebateId));
+      if (item) applyResolvedCultureGeneraleSource(a, group.sourceType, item);
+    }
+  }));
+
+  if (!unknownType.length) return;
+
+  for (const a of unknownType) {
+    const event = historicalIndex.get(String(a.sourceDebateId));
+    if (event) {
+      a.sourceType = "histoire";
+      applyResolvedCultureGeneraleSource(a, "histoire", event);
+    }
+  }
+  const stillUnknown = unknownType.filter((a) => !a.sourceName);
+  if (!stillUnknown.length) return;
+
+  const dateKeys = [...new Set(stillUnknown.map((a) => originalQuizDateBySourceId.get(a.sourceDebateId)).filter(Boolean))];
+  await Promise.all(dateKeys.map(async (dateKey) => {
+    const combined = new Map();
+    await Promise.all(CULTURE_GENERALE_ECLAIRAGES_TYPES.map(async (sourceType) => {
+      const byId = await fetchEclairagesContentIndexForDate(sourceType, dateKey);
+      for (const [topicId, item] of byId) combined.set(topicId, { sourceType, item });
+    }));
+    for (const a of stillUnknown) {
+      if (a.sourceName || originalQuizDateBySourceId.get(a.sourceDebateId) !== dateKey) continue;
+      const match = combined.get(String(a.sourceDebateId));
+      if (match) {
+        a.sourceType = match.sourceType;
+        applyResolvedCultureGeneraleSource(a, match.sourceType, match.item);
+      }
+    }
   }));
 }
 
@@ -12198,7 +12427,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
 // périmètre (connaissances factuelles/durables plutôt que suivi de
 // l'actualité du jour).
 async function fetchUserAcquis(voterKey) {
-  const { events, contentBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  const { events, contentBySourceId, originalQuizDateBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
   const streaks = computeCultureGeneraleStreaks(events);
 
@@ -12208,9 +12437,14 @@ async function fetchUserAcquis(voterKey) {
     const question = contentBySourceId.get(sourceDebateId);
     if (!question) continue;
     acquis.push({
-      question: question.question,
-      explanation: question.explanation,
-      sourceType: question.sourceType || "histoire",
+      sourceDebateId,
+      // Repli "histoire" volontairement absent ici : resolveMissingAcquisSourceNames
+      // a besoin de savoir que la rubrique est inconnue pour chercher dans les 6
+      // rubriques Éclairages plutôt que de se limiter à tort aux événements
+      // historiques (cf. commentaire de la fonction).
+      sourceType: question.sourceType || null,
+      sourceName: question.sourceName || null,
+      sourceDetail: question.sourceDetail || null,
       streak: state.streak,
       validated: state.validated,
       target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
@@ -12218,9 +12452,14 @@ async function fetchUserAcquis(voterKey) {
     });
   }
 
+  await resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceId);
+  for (const a of acquis) a.sourceType = a.sourceType || "histoire";
+
   // Plus récent en premier — les acquis les plus frais sont les plus
   // probables à intéresser l'utilisateur qui revient consulter sa banque.
-  return acquis.sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0));
+  return acquis
+    .sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0))
+    .map(({ sourceDebateId, ...rest }) => rest);
 }
 
 async function generateDailyQuizIfNeeded(slotKey) {

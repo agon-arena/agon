@@ -58,7 +58,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildParalleleHistoriquePrompt(topics) {
+// recentEvents : précédents historiques déjà utilisés durant les 7 derniers
+// jours sur cette rubrique (cf. lib/eclairages-recent-usage.js) — à ne pas
+// reproposer, même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentEventsForPrompt(recentEvents) {
+  if (!Array.isArray(recentEvents) || !recentEvents.length) return "";
+  const list = [...new Set(recentEvents)].map((event) => `- ${event}`).join("\n");
+  return [
+    "",
+    "=== PRÉCÉDENTS DÉJÀ UTILISÉS RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les précédents historiques suivants ont déjà été utilisés dans cette rubrique au cours des 7 derniers jours. Même si l'un d'eux ferait un excellent écho à un sujet du jour, tu dois choisir un AUTRE précédent — cherche un rapprochement différent plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildParalleleHistoriquePrompt(topics, recentEvents) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildParalleleHistoriquePrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -69,6 +83,7 @@ function buildParalleleHistoriquePrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentEventsForPrompt(recentEvents),
     "",
     "=== ÉTAPE 1 — Choisir les sujets qui s'y prêtent vraiment ===",
     "Pour CHAQUE sujet, mobilise activement et sérieusement tes connaissances historiques réelles avant de conclure quoi que ce soit — beaucoup de sujets qui semblent anecdotiques ont en réalité un précédent solide (ex. crime organisé intimidant des élus locaux → Camorra à Naples dans les années 1980-1990 ; hausse du reste à charge en santé → réformes historiques de l'assurance maladie). Ne t'arrête pas à la première impression : cherche vraiment, sur chaque sujet.",

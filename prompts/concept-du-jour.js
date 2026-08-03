@@ -119,7 +119,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildConceptDuJourPrompt(topics) {
+// recentConcepts : concepts déjà utilisés durant les 7 derniers jours sur
+// cette rubrique (cf. lib/eclairages-recent-usage.js) — à ne pas reproposer,
+// même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentConceptsForPrompt(recentConcepts) {
+  if (!Array.isArray(recentConcepts) || !recentConcepts.length) return "";
+  const list = [...new Set(recentConcepts)].map((concept) => `- ${concept}`).join("\n");
+  return [
+    "",
+    "=== CONCEPTS DÉJÀ UTILISÉS RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les concepts suivants ont déjà été utilisés dans cette rubrique au cours des 7 derniers jours. Même si l'un d'eux ferait un excellent écho à un sujet du jour, tu dois choisir un AUTRE concept — cherche un rapprochement différent plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildConceptDuJourPrompt(topics, recentConcepts) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildConceptDuJourPrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -130,6 +144,7 @@ function buildConceptDuJourPrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentConceptsForPrompt(recentConcepts),
     "",
     "=== Domaines possibles (7), avec des exemples de concepts — LISTE NON EXHAUSTIVE ===",
     formatDomainExamples(),

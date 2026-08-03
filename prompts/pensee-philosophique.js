@@ -59,7 +59,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildPenseePhilosophiquePrompt(topics) {
+// recentConcepts : concepts philosophiques déjà utilisés durant les 7
+// derniers jours sur cette rubrique (cf. lib/eclairages-recent-usage.js) —
+// à ne pas reproposer, même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentConceptsForPrompt(recentConcepts) {
+  if (!Array.isArray(recentConcepts) || !recentConcepts.length) return "";
+  const list = [...new Set(recentConcepts)].map((concept) => `- ${concept}`).join("\n");
+  return [
+    "",
+    "=== CONCEPTS DÉJÀ UTILISÉS RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les concepts suivants ont déjà été utilisés dans cette rubrique au cours des 7 derniers jours. Même si l'un d'eux ferait un excellent écho à un sujet du jour, tu dois choisir un AUTRE concept — cherche un rapprochement différent plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildPenseePhilosophiquePrompt(topics, recentConcepts) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildPenseePhilosophiquePrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -70,6 +84,7 @@ function buildPenseePhilosophiquePrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentConceptsForPrompt(recentConcepts),
     "",
     "=== ÉTAPE 1 — Choisir les sujets qui s'y prêtent vraiment ===",
     "Pour CHAQUE sujet, mobilise activement et sérieusement tes connaissances philosophiques réelles avant de conclure quoi que ce soit — beaucoup de sujets qui semblent purement factuels ou techniques ont en réalité un concept philosophique solide derrière eux (ex. surveillance de masse et vie privée → le panoptique de Bentham/Foucault ; désinformation en ligne → la caverne de Platon ou la post-vérité chez Hannah Arendt ; obéissance dans une hiérarchie → la banalité du mal). Ne t'arrête pas à la première impression : cherche vraiment, sur chaque sujet.",

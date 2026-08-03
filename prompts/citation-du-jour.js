@@ -61,7 +61,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildCitationDuJourPrompt(topics) {
+// recentAuthors : auteurs déjà utilisés durant les 7 derniers jours sur
+// cette rubrique (cf. lib/eclairages-recent-usage.js) — à ne pas reproposer,
+// même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentAuthorsForPrompt(recentAuthors) {
+  if (!Array.isArray(recentAuthors) || !recentAuthors.length) return "";
+  const list = [...new Set(recentAuthors)].map((author) => `- ${author}`).join("\n");
+  return [
+    "",
+    "=== AUTEURS DÉJÀ UTILISÉS RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les auteurs suivants ont déjà été cités dans cette rubrique au cours des 7 derniers jours. Même si l'un d'eux ferait un excellent écho à un sujet du jour, tu dois choisir un AUTRE auteur — cherche une résonance différente plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildCitationDuJourPrompt(topics, recentAuthors) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildCitationDuJourPrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -72,6 +86,7 @@ function buildCitationDuJourPrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentAuthorsForPrompt(recentAuthors),
     "",
     "=== RÈGLE ABSOLUE — Authenticité avant tout, prioritaire sur le lien avec l'actualité ===",
     "Une fausse citation ou une citation mal attribuée est une désinformation directe visant une personne réelle : c'est la pire erreur possible pour cette rubrique, bien pire qu'un jour sans citation publiée, et bien pire qu'un lien un peu lâche avec l'actualité.",

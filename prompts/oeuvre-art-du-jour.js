@@ -61,7 +61,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildOeuvreArtDuJourPrompt(topics) {
+// recentTitles : titres des œuvres déjà utilisées durant les 7 derniers
+// jours sur cette rubrique (cf. lib/eclairages-recent-usage.js) — à ne
+// jamais reproposer, même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentTitlesForPrompt(recentTitles) {
+  if (!Array.isArray(recentTitles) || !recentTitles.length) return "";
+  const list = recentTitles.map((title) => `- ${title}`).join("\n");
+  return [
+    "",
+    "=== ŒUVRES DÉJÀ UTILISÉES RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les œuvres suivantes ont déjà été publiées dans cette rubrique au cours des 7 derniers jours. Même si l'une d'elles ferait un excellent écho à un sujet du jour, tu dois choisir une AUTRE œuvre — cherche une résonance différente plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildOeuvreArtDuJourPrompt(topics, recentTitles) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildOeuvreArtDuJourPrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -72,6 +86,7 @@ function buildOeuvreArtDuJourPrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentTitlesForPrompt(recentTitles),
     "",
     "=== RÈGLE ABSOLUE — Authenticité avant tout, prioritaire sur le lien avec l'actualité ===",
     "Attribuer une œuvre au mauvais artiste, inventer une œuvre qui n'existe pas, ou inventer son titre/sa date exacte est une désinformation directe : c'est la pire erreur possible pour cette rubrique, bien pire qu'un jour sans œuvre publiée, et bien pire qu'un lien un peu lâche avec l'actualité.",

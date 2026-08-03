@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Mes connaissances | agôn</title>
+  <title>Connaissances | agôn</title>
   <link rel="icon" type="image/png" href="/favicon-64.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192-optimized.png">
@@ -321,10 +321,13 @@
       font-size: 13px;
       line-height: 1.4;
     }
-    /* Onglet "Mes acquis" : une carte par question déjà réussie, groupées
-       sous leur rubrique d'origine — même esprit que les cartes Éclairages
-       (fond blanc cassé, titre + explication), sans reprendre leur mise en
-       page riche (images/sources), les acquis n'ayant que question+explication. */
+    /* Onglet "Mes acquis" : une ligne cliquable par notion déjà acquise,
+       groupées sous leur rubrique d'origine (même thèmes que les pages
+       Éclairages et "Ce jour dans l'Histoire") et triées par ordre
+       alphabétique sur le nom du concept/mécanisme/auteur (cf. sourceName,
+       server.js extractCultureGeneraleItemName). Le clic ouvre la fiche
+       (.qcm-fiche-overlay) avec le détail pur du concept/mécanisme/citation/
+       œuvre (sourceDetail), jamais la question du QCM. */
     .qcm-acquis-group + .qcm-acquis-group {
       margin-top: 26px;
     }
@@ -341,37 +344,38 @@
       font-size: 16px;
       color: #516776;
     }
-    .qcm-acquis-card {
-      padding: 14px 16px;
+    .qcm-acquis-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       background: #f9fafb;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
     }
-    .qcm-acquis-card.is-validated {
+    .qcm-acquis-item.is-validated {
       border-color: #bbe6cc;
       background: #f3fbf6;
     }
-    .qcm-acquis-card + .qcm-acquis-card {
-      margin-top: 10px;
+    .qcm-acquis-item + .qcm-acquis-item {
+      margin-top: 8px;
     }
-    .qcm-acquis-card-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .qcm-acquis-question {
-      margin: 0 0 6px;
+    .qcm-acquis-name {
+      flex: 1 1 auto;
+      margin: 0;
       font-size: 15px;
       font-weight: 700;
       color: #111827;
       line-height: 1.35;
     }
-    .qcm-acquis-explanation {
-      margin: 0;
-      font-size: 13.5px;
-      color: #4b5563;
-      line-height: 1.45;
+    .qcm-acquis-item-chevron {
+      flex: 0 0 auto;
+      font-size: 13px;
+      color: #9ca3af;
     }
     /* Progression vers la validation (4 bonnes réponses à intervalles
        croissants — 3j/7j/1mois, cf. server.js DAILY_QUIZ_ACQUIS_VALIDATION_STREAK) : une
@@ -396,6 +400,89 @@
     }
     .qcm-acquis-badge.is-validated i {
       font-size: 11px;
+    }
+    /* Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
+       concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
+       sans reprendre leur mise en page riche (images/sources) ni tout ce qui
+       relie l'élément à l'actualité du jour (déjà exclu côté serveur). */
+    .qcm-fiche-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(17, 24, 39, 0.55);
+    }
+    .qcm-fiche-modal {
+      width: 100%;
+      max-width: 480px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      padding: 20px;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 20px 45px rgba(17, 24, 39, 0.25);
+    }
+    .qcm-fiche-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .qcm-fiche-rubric {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: #516776;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .qcm-fiche-close {
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .qcm-fiche-name {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+    }
+    .qcm-fiche-meta {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #516776;
+    }
+    .qcm-fiche-section-label {
+      margin: 14px 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #243038;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .qcm-fiche-explanation {
+      margin: 0 0 4px;
+      font-size: 14px;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+    .qcm-fiche-explanation:first-of-type {
+      margin-top: 0;
     }
     /* Badge cosmétique au-dessus de la question pour les formats
        vrai_faux/texte_a_trous : rend la variété de formats visible sans
@@ -589,7 +676,7 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">Mes connaissances</span></h1>
+    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text">Connaissances</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text">Teste-toi sur l'actualité du jour, en 10 questions.</p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <div class="qcm-slot-switcher" id="qcm-slot-switcher"></div>
@@ -598,7 +685,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
+<script src="/script.min.js?v=20260803-scorepopupclose2" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1250,21 +1337,45 @@
     renderMessage("Réponds à des questions de QCM Culture Générale pour commencer à remplir ta banque d'acquis.");
   }
 
-  // Une carte par question déjà réussie (question en titre, explication en
-  // contenu — même esprit que les cartes Éclairages), regroupées sous leur
-  // rubrique d'origine dans l'ordre ACQUIS_SOURCE_TYPE_ORDER.
+  // Entrées de la dernière liste rendue (item + meta de sa rubrique),
+  // indexées par data-acquis-index sur chaque ligne — sert à retrouver le
+  // détail au clic sans le remettre dans le DOM (cf. openAcquisFiche).
+  var acquisFicheItems = [];
+
+  // Nom affiché et clé de tri : toujours le nom du concept/mécanisme/auteur/
+  // œuvre (sourceName, cf. server.js extractCultureGeneraleItemName et sa
+  // résolution rétroactive resolveMissingAcquisSourceNames) — jamais la
+  // question elle-même, qui ne doit apparaître que dans la fiche de détail.
+  function acquisDisplayName(item) {
+    return item.sourceName;
+  }
+
+  // Une ligne cliquable par notion déjà acquise, regroupées sous leur
+  // rubrique d'origine dans l'ordre ACQUIS_SOURCE_TYPE_ORDER puis triées par
+  // ordre alphabétique sur le nom du concept/mécanisme/auteur au sein de
+  // chaque groupe. Le clic ouvre la fiche (détail pur du concept/mécanisme/
+  // citation/œuvre, cf. sourceDetail, jamais la question du QCM). Un acquis
+  // dont le nom ou le détail n'a pas pu être résolu (contenu source disparu)
+  // n'est pas affiché plutôt que de retomber sur la question.
   function renderAcquisList(items) {
+    items = items.filter(function (item) {
+      return !!item.sourceName && item.sourceDetail && item.sourceDetail.sections && item.sourceDetail.sections.length;
+    });
     if (!items.length) { renderAcquisEmpty(); return; }
     var bySourceType = {};
     items.forEach(function (item) {
       var key = ACQUIS_SOURCE_TYPE_META[item.sourceType] ? item.sourceType : 'histoire';
       (bySourceType[key] = bySourceType[key] || []).push(item);
     });
+    acquisFicheItems = [];
     var html = '<div class="qcm-acquis-list">';
     ACQUIS_SOURCE_TYPE_ORDER.forEach(function (key) {
       var group = bySourceType[key];
       if (!group || !group.length) return;
       var meta = ACQUIS_SOURCE_TYPE_META[key];
+      group.sort(function (a, b) {
+        return acquisDisplayName(a).localeCompare(acquisDisplayName(b), 'fr', { sensitivity: 'base' });
+      });
       html += '<div class="qcm-acquis-group">';
       html += '<h2 class="qcm-acquis-group-title"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</h2>';
       group.forEach(function (item) {
@@ -1272,15 +1383,61 @@
         var badgeHtml = item.validated
           ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
           : '<span class="qcm-acquis-badge">' + item.streak + ' / ' + target + '</span>';
-        html += '<article class="qcm-acquis-card' + (item.validated ? ' is-validated' : '') + '">';
-        html += '<div class="qcm-acquis-card-head"><p class="qcm-acquis-question">' + escapeHtml(item.question) + '</p>' + badgeHtml + '</div>';
-        html += '<p class="qcm-acquis-explanation">' + escapeHtml(item.explanation) + '</p>';
-        html += '</article>';
+        var ficheIndex = acquisFicheItems.length;
+        acquisFicheItems.push({ item: item, meta: meta });
+        html += '<button type="button" class="qcm-acquis-item' + (item.validated ? ' is-validated' : '') + '" data-acquis-index="' + ficheIndex + '">';
+        html += '<p class="qcm-acquis-name">' + escapeHtml(acquisDisplayName(item)) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
+        html += '</button>';
       });
       html += '</div>';
     });
     html += '</div>';
     body.innerHTML = html;
+    body.querySelectorAll('.qcm-acquis-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openAcquisFiche(acquisFicheItems[Number(btn.getAttribute('data-acquis-index'))]);
+      });
+    });
+  }
+
+  // Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
+  // concept/mécanisme/citation/œuvre (sourceDetail, cf. server.js
+  // extractCultureGeneraleItemDetail) — jamais la question du QCM ni son
+  // rapprochement avec l'actualité du jour, déjà exclus côté serveur.
+  // Fermable par la croix, un clic hors modale ou Échap.
+  function openAcquisFiche(entry) {
+    var item = entry.item;
+    var meta = entry.meta;
+    var detail = item.sourceDetail || { meta: null, sections: [] };
+    var html =
+      '<div class="qcm-fiche-modal">' +
+      '<div class="qcm-fiche-head">' +
+      '<p class="qcm-fiche-rubric"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</p>' +
+      '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+      '</div>' +
+      '<p class="qcm-fiche-name">' + escapeHtml(item.sourceName) + '</p>';
+    if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
+    detail.sections.forEach(function (section) {
+      if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
+      html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
+    });
+    html += '</div>';
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+    }
+    function onKeydown(e) {
+      if (e.key === 'Escape') close();
+    }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) close();
+    });
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
+    document.addEventListener('keydown', onKeydown);
   }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
@@ -1314,7 +1471,7 @@
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
-    titleText.textContent = (slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].label) || 'Mes connaissances';
+    titleText.textContent = 'Connaissances';
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || QCM_SUBTITLE_BY_CATEGORY.actu;
     renderCategorySwitcher();
     renderSlotSwitcher();
@@ -1371,7 +1528,7 @@
         loadSlot(slotToLoad);
       })
       .catch(function () {
-        renderMessage('Impossible de charger Mes connaissances pour le moment.');
+        renderMessage('Impossible de charger Connaissances pour le moment.');
       });
   }
 

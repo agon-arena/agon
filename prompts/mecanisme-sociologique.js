@@ -59,7 +59,21 @@ function formatTopicsForPrompt(topics) {
     .join("\n\n");
 }
 
-function buildMecanismeSociologiquePrompt(topics) {
+// recentConcepts : concepts sociologiques déjà utilisés durant les 7
+// derniers jours sur cette rubrique (cf. lib/eclairages-recent-usage.js) —
+// à ne pas reproposer, même si un sujet du jour s'y prêterait bien à nouveau.
+function formatRecentConceptsForPrompt(recentConcepts) {
+  if (!Array.isArray(recentConcepts) || !recentConcepts.length) return "";
+  const list = [...new Set(recentConcepts)].map((concept) => `- ${concept}`).join("\n");
+  return [
+    "",
+    "=== CONCEPTS DÉJÀ UTILISÉS RÉCEMMENT — NE PAS LES CHOISIR À NOUVEAU ===",
+    "Les concepts suivants ont déjà été utilisés dans cette rubrique au cours des 7 derniers jours. Même si l'un d'eux ferait un excellent écho à un sujet du jour, tu dois choisir un AUTRE concept — cherche un rapprochement différent plutôt que de répéter l'un de ces choix :",
+    list
+  ].join("\n");
+}
+
+function buildMecanismeSociologiquePrompt(topics, recentConcepts) {
   if (!Array.isArray(topics) || !topics.length) {
     throw new Error("buildMecanismeSociologiquePrompt: la liste de sujets ne peut pas être vide.");
   }
@@ -70,6 +84,7 @@ function buildMecanismeSociologiquePrompt(topics) {
     "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
     "",
     formatTopicsForPrompt(topics),
+    formatRecentConceptsForPrompt(recentConcepts),
     "",
     "=== ÉTAPE 1 — Choisir les sujets qui s'y prêtent vraiment ===",
     "Pour CHAQUE sujet, mobilise activement et sérieusement tes connaissances sociologiques réelles avant de conclure quoi que ce soit — beaucoup de sujets qui semblent purement factuels ont en réalité un mécanisme sociologique solide derrière eux (ex. un fait divers qui déclenche une vague d'indignation médiatique → le bouc émissaire chez René Girard ou la panique morale chez Stanley Cohen ; des inégalités scolaires persistantes → la reproduction sociale chez Pierre Bourdieu ; une rumeur qui se propage en ligne → la construction sociale de la déviance). Ne t'arrête pas à la première impression : cherche vraiment, sur chaque sujet.",

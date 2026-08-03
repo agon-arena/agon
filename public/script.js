@@ -1556,6 +1556,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
+      '<button class="install-modal-close" type="button" aria-label="Fermer" id="agon-user-score-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
       '<h3 class="install-modal-title">Tes scores</h3>' +
       bodyHtml +
       '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
@@ -1577,6 +1578,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   overlay.querySelector(".install-modal-android-btn").addEventListener("click", close);
+  overlay.querySelector("#agon-user-score-close-btn").addEventListener("click", close);
   topDoc.body.appendChild(overlay);
   overlay.style.display = "flex";
   topDoc.body.style.overflow = "hidden";

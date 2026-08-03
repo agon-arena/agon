@@ -946,21 +946,19 @@ window.addEventListener("pageshow", function() {
 <script>
 (function () {
   // Le QCM actu a deux créneaux (matin ~9h, soir ~17h) : le bouton "Mes
-  // connaissances" reprend le libellé du créneau le plus récent disponible,
-  // et pointe dessus directement (le soir prime sur le matin une fois
-  // généré, cf. /api/daily-quiz/status côté serveur).
+  // connaissances" pointe directement sur le créneau le plus récent
+  // disponible (le soir prime sur le matin une fois généré, cf.
+  // /api/daily-quiz/status côté serveur), mais garde toujours le libellé fixe
+  // "Mes connaissances" — jamais réécrit en "QCM du matin"/"QCM du soir".
   fetch('/api/daily-quiz/status', { cache: 'no-store' })
     .then(function (res) { return res.json(); })
     .then(function (data) {
       var slot = data && data.defaultSlot;
-      var label = slot && data.slots && data.slots[slot] ? data.slots[slot].label : null;
-      if (!slot || !label) return;
+      if (!slot || !(data.slots && data.slots[slot])) return;
       var url = '/qcm-du-jour?slot=' + encodeURIComponent(slot);
       ["home-qcm-du-jour-btn", "home-topbar-qcm-link"].forEach(function (id) {
         var link = document.getElementById(id);
         if (!link) return;
-        var span = link.querySelector('span');
-        if (span) span.textContent = label;
         link.setAttribute('href', url);
         link.onclick = function (e) {
           e.preventDefault();
@@ -1308,7 +1306,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260803-mesconnaissances1" defer></script>
+<script src="/script.min.js?v=20260803-scorepopupclose2" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
