@@ -5720,6 +5720,8 @@ function ensureDebateIframeModal() {
     }
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh,
+    #debate-iframe-modal.qcm-fiche-open-in-child #debate-iframe-modal-close,
+    #debate-iframe-modal.qcm-fiche-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh,
@@ -5957,6 +5959,9 @@ function ensureDebateIframeModal() {
         pointer-events: auto !important;
         bottom: calc(34px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
         z-index: 10002 !important;
+      }
+      #debate-iframe-modal.open.qcm-frame-open.qcm-fiche-open-in-child #debate-iframe-modal-close {
+        display: none !important;
       }
     }
     @media (min-width: 769px) {
@@ -6228,6 +6233,12 @@ function ensureDebateIframeModal() {
     if (e.data.type === "agon:ai-score-modal-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("ai-score-modal-open-in-child", !!e.data.open);
+      return;
+    }
+
+    if (e.data.type === "agon:qcm-fiche-visibility") {
+      const debateModal = document.getElementById("debate-iframe-modal");
+      if (debateModal) debateModal.classList.toggle("qcm-fiche-open-in-child", !!e.data.open);
       return;
     }
 

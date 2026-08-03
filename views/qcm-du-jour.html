@@ -436,15 +436,15 @@
     .qcm-acquis-badge.is-validated i {
       font-size: 11px;
     }
-    /* Bouton en bas de liste pour replier d'un coup toutes les rubriques
-       ouvertes — masqué tant qu'aucune rubrique n'est dépliée. */
-    .qcm-acquis-collapse-all {
+    /* Bouton en bas de chaque rubrique dépliée pour la replier sans avoir à
+       remonter jusqu'à son en-tête. */
+    .qcm-acquis-group-collapse {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
       width: 100%;
-      margin: 16px 0 0;
+      margin: 8px 0 0;
       padding: 10px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
@@ -1479,36 +1479,27 @@
         html += '<p class="qcm-acquis-name">' + escapeHtml(acquisDisplayName(item)) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
         html += '</button>';
       });
+      html += '<button type="button" class="qcm-acquis-group-collapse"><i class="fa-solid fa-angles-up"></i> Replier</button>';
       html += '</div>';
       html += '</div>';
     });
-    html += '<button type="button" class="qcm-acquis-collapse-all" style="display:none;"><i class="fa-solid fa-angles-up"></i> Replier les rubriques</button>';
     html += '</div>';
     body.innerHTML = html;
-    var collapseAllBtn = body.querySelector('.qcm-acquis-collapse-all');
-    function updateAcquisCollapseAllVisibility() {
-      if (!collapseAllBtn) return;
-      var anyOpen = !!body.querySelector('.qcm-acquis-group.is-open');
-      collapseAllBtn.style.display = anyOpen ? '' : 'none';
-    }
     body.querySelectorAll('.qcm-acquis-group-title').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var group = btn.closest('.qcm-acquis-group');
         var isOpen = group.classList.toggle('is-open');
         btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        updateAcquisCollapseAllVisibility();
       });
     });
-    if (collapseAllBtn) {
-      collapseAllBtn.addEventListener('click', function () {
-        body.querySelectorAll('.qcm-acquis-group.is-open').forEach(function (group) {
-          group.classList.remove('is-open');
-          var titleBtn = group.querySelector('.qcm-acquis-group-title');
-          if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
-        });
-        updateAcquisCollapseAllVisibility();
+    body.querySelectorAll('.qcm-acquis-group-collapse').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var group = btn.closest('.qcm-acquis-group');
+        group.classList.remove('is-open');
+        var titleBtn = group.querySelector('.qcm-acquis-group-title');
+        if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
       });
-    }
+    });
     body.querySelectorAll('.qcm-acquis-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openAcquisFiche(acquisFicheItems[Number(btn.getAttribute('data-acquis-index'))]);
@@ -1552,9 +1543,11 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = html;
     document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
       document.removeEventListener('keydown', onKeydown);
+      try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     }
     function onKeydown(e) {
       if (e.key === 'Escape') close();
