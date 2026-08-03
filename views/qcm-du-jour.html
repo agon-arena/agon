@@ -436,10 +436,31 @@
     .qcm-acquis-badge.is-validated i {
       font-size: 11px;
     }
+    /* Bouton en bas de liste pour replier d'un coup toutes les rubriques
+       ouvertes — masqué tant qu'aucune rubrique n'est dépliée. */
+    .qcm-acquis-collapse-all {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin: 16px 0 0;
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #f9fafb;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      color: #516776;
+      cursor: pointer;
+    }
     /* Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
        concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
-       sans reprendre leur mise en page riche (images/sources) ni tout ce qui
-       relie l'élément à l'actualité du jour (déjà exclu côté serveur). */
+       sans reprendre leur mise en page riche (sources) ni tout ce qui relie
+       l'élément à l'actualité du jour (déjà exclu côté serveur). L'image du
+       concept/mécanisme/auteur/œuvre (sourceDetail.image), quand elle
+       existe, est en revanche reprise telle quelle. */
     .qcm-fiche-overlay {
       position: fixed;
       inset: 0;
@@ -501,6 +522,26 @@
       font-size: 13px;
       font-weight: 600;
       color: #516776;
+    }
+    .qcm-fiche-image {
+      margin: 0 auto 14px;
+      max-width: 280px;
+    }
+    .qcm-fiche-image img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    .qcm-fiche-image figcaption {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+    .qcm-fiche-image figcaption a {
+      color: #9ca3af;
     }
     .qcm-fiche-section-label {
       margin: 14px 0 4px;
@@ -1441,15 +1482,33 @@
       html += '</div>';
       html += '</div>';
     });
+    html += '<button type="button" class="qcm-acquis-collapse-all" style="display:none;"><i class="fa-solid fa-angles-up"></i> Replier les rubriques</button>';
     html += '</div>';
     body.innerHTML = html;
+    var collapseAllBtn = body.querySelector('.qcm-acquis-collapse-all');
+    function updateAcquisCollapseAllVisibility() {
+      if (!collapseAllBtn) return;
+      var anyOpen = !!body.querySelector('.qcm-acquis-group.is-open');
+      collapseAllBtn.style.display = anyOpen ? '' : 'none';
+    }
     body.querySelectorAll('.qcm-acquis-group-title').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var group = btn.closest('.qcm-acquis-group');
         var isOpen = group.classList.toggle('is-open');
         btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        updateAcquisCollapseAllVisibility();
       });
     });
+    if (collapseAllBtn) {
+      collapseAllBtn.addEventListener('click', function () {
+        body.querySelectorAll('.qcm-acquis-group.is-open').forEach(function (group) {
+          group.classList.remove('is-open');
+          var titleBtn = group.querySelector('.qcm-acquis-group-title');
+          if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
+        });
+        updateAcquisCollapseAllVisibility();
+      });
+    }
     body.querySelectorAll('.qcm-acquis-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openAcquisFiche(acquisFicheItems[Number(btn.getAttribute('data-acquis-index'))]);
@@ -1474,6 +1533,16 @@
       '</div>' +
       '<p class="qcm-fiche-name">' + escapeHtml(item.sourceName) + '</p>';
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
+    if (detail.image && detail.image.url) {
+      var img = detail.image;
+      var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : 'Wikipedia'));
+      html += '<figure class="qcm-fiche-image">' +
+        '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(item.sourceName) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
+        (img.pageUrl
+          ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+        '</figure>';
+    }
     detail.sections.forEach(function (section) {
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
       html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';

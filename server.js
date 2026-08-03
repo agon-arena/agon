@@ -11963,13 +11963,29 @@ function extractCultureGeneraleItemName(item) {
   return capitalizeFirstLetter(raw);
 }
 
+// Image associée au concept/mécanisme/auteur/œuvre (mêmes champs que la page
+// /eclairages pour cette rubrique) — null si aucune image n'a été trouvée à
+// la génération. `source` vaut "press" quand l'image vient de l'actualité du
+// jour plutôt que de Wikipedia (seules les rubriques parallele/pensee/
+// mecanisme/concept distinguent les deux, cf. views/eclairages.html).
+function extractCultureGeneraleItemImage(url, credit, pageUrl, source) {
+  const u = String(url || "").trim();
+  if (!u) return null;
+  return {
+    url: u,
+    credit: String(credit || "").trim() || null,
+    pageUrl: String(pageUrl || "").trim() || null,
+    source: String(source || "").trim() || null
+  };
+}
+
 // Détail "pur" du concept/mécanisme/citation/œuvre — les mêmes champs que la
 // page /eclairages pour cette rubrique, moins tout ce qui relie l'élément à
 // l'actualité du jour (current_topic_title/summary, shared_mechanism,
 // essential_difference, conclusion, news_connection) : la fiche de "Mes
 // acquis" (cf. sourceDetail ci-dessous) doit rester valable même une fois
 // l'actualité d'origine oubliée. { meta: string|null, sections: [{ label:
-// string|null, text: string }] }.
+// string|null, text: string }], image: {url,credit,pageUrl,source}|null }.
 function extractCultureGeneraleItemDetail(item) {
   const t = (v) => String(v || "").trim();
   const metaJoin = (parts) => parts.map(t).filter(Boolean).join(" — ") || null;
@@ -11978,27 +11994,31 @@ function extractCultureGeneraleItemDetail(item) {
       const sections = [];
       if (t(item.summary_long)) sections.push({ label: null, text: t(item.summary_long) });
       if (t(item.why_it_matters)) sections.push({ label: "Pourquoi c'est important", text: t(item.why_it_matters) });
-      return { meta: t(item.year_display || item.year) || null, sections };
+      return { meta: t(item.year_display || item.year) || null, sections, image: null };
     }
     case "parallele":
       return {
         meta: t(item.historical_event_date) || null,
-        sections: [{ label: null, text: t(item.historical_context) }]
+        sections: [{ label: null, text: t(item.historical_context) }],
+        image: extractCultureGeneraleItemImage(item.historical_event_image_url, item.historical_event_image_credit, item.historical_event_image_page_url, item.historical_event_image_source)
       };
     case "pensee":
       return {
         meta: metaJoin([item.philosopher_name, item.concept_origin]),
-        sections: [{ label: null, text: t(item.concept_explanation) }]
+        sections: [{ label: null, text: t(item.concept_explanation) }],
+        image: extractCultureGeneraleItemImage(item.philosophical_concept_image_url, item.philosophical_concept_image_credit, item.philosophical_concept_image_page_url, item.philosophical_concept_image_source)
       };
     case "mecanisme":
       return {
         meta: metaJoin([item.sociologist_name, item.concept_origin]),
-        sections: [{ label: null, text: t(item.concept_explanation) }]
+        sections: [{ label: null, text: t(item.concept_explanation) }],
+        image: extractCultureGeneraleItemImage(item.sociological_concept_image_url, item.sociological_concept_image_credit, item.sociological_concept_image_page_url, item.sociological_concept_image_source)
       };
     case "concept":
       return {
         meta: metaJoin([item.concept_originator, item.concept_origin]),
-        sections: [{ label: null, text: t(item.concept_explanation) }]
+        sections: [{ label: null, text: t(item.concept_explanation) }],
+        image: extractCultureGeneraleItemImage(item.concept_image_url, item.concept_image_credit, item.concept_image_page_url, item.concept_image_source)
       };
     case "citation":
       return {
@@ -12007,7 +12027,8 @@ function extractCultureGeneraleItemDetail(item) {
           { label: null, text: `« ${t(item.quote_text)} »` },
           t(item.quote_origin) ? { label: null, text: t(item.quote_origin) } : null,
           t(item.author_presentation) ? { label: "L'auteur", text: t(item.author_presentation) } : null
-        ].filter(Boolean)
+        ].filter(Boolean),
+        image: extractCultureGeneraleItemImage(item.quote_author_image_url, item.quote_author_image_credit, item.quote_author_image_page_url, null)
       };
     case "oeuvre":
       return {
@@ -12015,10 +12036,11 @@ function extractCultureGeneraleItemDetail(item) {
         sections: [
           t(item.artwork_description) ? { label: "L'œuvre", text: t(item.artwork_description) } : null,
           t(item.artist_presentation) ? { label: "L'artiste", text: t(item.artist_presentation) } : null
-        ].filter(Boolean)
+        ].filter(Boolean),
+        image: extractCultureGeneraleItemImage(item.artwork_image_url, item.artwork_image_credit, item.artwork_image_page_url, null)
       };
     default:
-      return { meta: null, sections: [] };
+      return { meta: null, sections: [], image: null };
   }
 }
 
