@@ -11936,21 +11936,31 @@ function formatCultureGeneraleItemForPrompt(item) {
   return formatEclairagesItemForPrompt(item);
 }
 
+// L'IA ne capitalise pas toujours la première lettre des noms de concept
+// (ex. "construction sociale de la déviance") — corrigé systématiquement à
+// l'extraction plutôt que de dépendre de la sortie du modèle.
+function capitalizeFirstLetter(str) {
+  const trimmed = String(str || "").trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1) : trimmed;
+}
+
 // Nom court identifiant la rubrique (concept/mécanisme/auteur/œuvre/etc.) de
 // chaque candidat, reporté sur la question générée (cf. sourceName ci-dessous)
 // pour permettre à "Mes acquis" de trier ses cartes par ordre alphabétique
 // sur ce nom plutôt que sur la date de dernière réponse.
 function extractCultureGeneraleItemName(item) {
+  let raw;
   switch (item.type) {
-    case "histoire": return String(item.title || "").trim();
-    case "parallele": return String(item.historical_event_title || "").trim();
-    case "pensee": return String(item.philosophical_concept || "").trim();
-    case "mecanisme": return String(item.sociological_concept || "").trim();
-    case "concept": return String(item.concept_name || "").trim();
-    case "citation": return String(item.quote_author || "").trim();
-    case "oeuvre": return String(item.artwork_title || "").trim();
-    default: return "";
+    case "histoire": raw = item.title; break;
+    case "parallele": raw = item.historical_event_title; break;
+    case "pensee": raw = item.philosophical_concept; break;
+    case "mecanisme": raw = item.sociological_concept; break;
+    case "concept": raw = item.concept_name; break;
+    case "citation": raw = item.quote_author; break;
+    case "oeuvre": raw = item.artwork_title; break;
+    default: raw = "";
   }
+  return capitalizeFirstLetter(raw);
 }
 
 // Détail "pur" du concept/mécanisme/citation/œuvre — les mêmes champs que la

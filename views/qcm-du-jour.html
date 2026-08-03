@@ -321,28 +321,63 @@
       font-size: 13px;
       line-height: 1.4;
     }
-    /* Onglet "Mes acquis" : une ligne cliquable par notion déjà acquise,
-       groupées sous leur rubrique d'origine (même thèmes que les pages
-       Éclairages et "Ce jour dans l'Histoire") et triées par ordre
-       alphabétique sur le nom du concept/mécanisme/auteur (cf. sourceName,
-       server.js extractCultureGeneraleItemName). Le clic ouvre la fiche
+    /* Onglet "Mes acquis" : chaque rubrique (mêmes thèmes que les pages
+       Éclairages et "Ce jour dans l'Histoire") est un menu repliable — replié
+       par défaut, un clic sur son en-tête déplie la liste des notions
+       acquises, triées par ordre alphabétique (cf. sourceName, server.js
+       extractCultureGeneraleItemName). Le clic sur une notion ouvre la fiche
        (.qcm-fiche-overlay) avec le détail pur du concept/mécanisme/citation/
        œuvre (sourceDetail), jamais la question du QCM. */
     .qcm-acquis-group + .qcm-acquis-group {
-      margin-top: 26px;
+      margin-top: 10px;
     }
     .qcm-acquis-group-title {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 0 0 12px;
+      width: 100%;
+      margin: 0;
+      padding: 14px 4px;
+      border: none;
+      border-bottom: 1px solid #e5e7eb;
+      background: none;
+      font: inherit;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
       color: #243038;
+      text-align: left;
+      cursor: pointer;
     }
-    .qcm-acquis-group-title i {
+    .qcm-acquis-group-title i.qcm-acquis-group-icon {
       font-size: 16px;
       color: #516776;
+    }
+    .qcm-acquis-group-count {
+      flex: 0 0 auto;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #516776;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .qcm-acquis-group-chevron {
+      flex: 0 0 auto;
+      margin-left: auto;
+      font-size: 14px;
+      color: #9ca3af;
+      transition: transform 0.15s ease;
+    }
+    .qcm-acquis-group.is-open .qcm-acquis-group-chevron {
+      transform: rotate(90deg);
+    }
+    .qcm-acquis-group-items {
+      display: none;
+      padding: 14px 0 4px;
+    }
+    .qcm-acquis-group.is-open .qcm-acquis-group-items {
+      display: block;
     }
     .qcm-acquis-item {
       display: flex;
@@ -700,6 +735,14 @@
   var currentSlot = null;
   var currentCategory = null;
   var slotsStatus = null;
+  // Jeton incrémenté à chaque loadSlot/loadAcquis : les callbacks async de
+  // ces fonctions (fetch imbriqués, parfois lents) vérifient qu'ils sont
+  // toujours le dernier appel en date avant de toucher au DOM. Sans ça, un
+  // changement d'onglet pendant qu'une requête est encore en vol (ex. clic
+  // sur "Mes acquis" avant que /results ait répondu pour l'onglet précédent)
+  // laisse la réponse tardive écraser l'écran affiché entre-temps — cf. le
+  // "flash" de l'écran de fin de QCM signalé sur l'onglet Mes acquis.
+  var loadToken = 0;
 
   // Trois onglets de haut niveau : "QCM actu" (matin/soir, actualité du
   // jour), "QCM culture générale" (un seul créneau combiné culture_generale,
@@ -1350,13 +1393,14 @@
     return item.sourceName;
   }
 
-  // Une ligne cliquable par notion déjà acquise, regroupées sous leur
-  // rubrique d'origine dans l'ordre ACQUIS_SOURCE_TYPE_ORDER puis triées par
-  // ordre alphabétique sur le nom du concept/mécanisme/auteur au sein de
-  // chaque groupe. Le clic ouvre la fiche (détail pur du concept/mécanisme/
-  // citation/œuvre, cf. sourceDetail, jamais la question du QCM). Un acquis
-  // dont le nom ou le détail n'a pas pu être résolu (contenu source disparu)
-  // n'est pas affiché plutôt que de retomber sur la question.
+  // Chaque rubrique d'origine (dans l'ordre ACQUIS_SOURCE_TYPE_ORDER) est un
+  // menu repliable, replié par défaut — un clic sur son en-tête déplie la
+  // liste des notions acquises, triées par ordre alphabétique sur le nom du
+  // concept/mécanisme/auteur. Le clic sur une notion ouvre la fiche (détail
+  // pur du concept/mécanisme/citation/œuvre, cf. sourceDetail, jamais la
+  // question du QCM). Un acquis dont le nom ou le détail n'a pas pu être
+  // résolu (contenu source disparu) n'est pas affiché plutôt que de retomber
+  // sur la question.
   function renderAcquisList(items) {
     items = items.filter(function (item) {
       return !!item.sourceName && item.sourceDetail && item.sourceDetail.sections && item.sourceDetail.sections.length;
@@ -1377,7 +1421,12 @@
         return acquisDisplayName(a).localeCompare(acquisDisplayName(b), 'fr', { sensitivity: 'base' });
       });
       html += '<div class="qcm-acquis-group">';
-      html += '<h2 class="qcm-acquis-group-title"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</h2>';
+      html += '<button type="button" class="qcm-acquis-group-title" aria-expanded="false">';
+      html += '<i class="fa-solid ' + meta.icon + ' qcm-acquis-group-icon"></i> ' + escapeHtml(meta.label);
+      html += '<span class="qcm-acquis-group-count">' + group.length + '</span>';
+      html += '<i class="fa-solid fa-chevron-right qcm-acquis-group-chevron"></i>';
+      html += '</button>';
+      html += '<div class="qcm-acquis-group-items">';
       group.forEach(function (item) {
         var target = item.target || 3;
         var badgeHtml = item.validated
@@ -1390,9 +1439,17 @@
         html += '</button>';
       });
       html += '</div>';
+      html += '</div>';
     });
     html += '</div>';
     body.innerHTML = html;
+    body.querySelectorAll('.qcm-acquis-group-title').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var group = btn.closest('.qcm-acquis-group');
+        var isOpen = group.classList.toggle('is-open');
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+    });
     body.querySelectorAll('.qcm-acquis-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openAcquisFiche(acquisFicheItems[Number(btn.getAttribute('data-acquis-index'))]);
@@ -1443,6 +1500,7 @@
   // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
   // banque personnelle de l'utilisateur plutôt que de démarrer un QCM.
   function loadAcquis() {
+    var myToken = ++loadToken;
     currentCategory = 'acquis';
     currentSlot = null;
     titleText.textContent = CATEGORY_LABELS.acquis;
@@ -1458,14 +1516,16 @@
     fetch('/api/daily-quiz/acquis?voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        if (myToken !== loadToken) return;
         renderAcquisList(Array.isArray(data.acquis) ? data.acquis : []);
       })
       .catch(function () {
-        renderMessage('Impossible de charger tes acquis pour le moment.');
+        if (myToken === loadToken) renderMessage('Impossible de charger tes acquis pour le moment.');
       });
   }
 
   function loadSlot(slotKey) {
+    var myToken = ++loadToken;
     currentSlot = slotKey;
     currentCategory = CATEGORY_BY_SLOT[slotKey] || currentCategory;
     currentIndex = 0;
@@ -1480,6 +1540,7 @@
     fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
         if (!questions.length) {
           renderMessage('Ce QCM n’est pas encore prêt, reviens un peu plus tard.');
@@ -1493,6 +1554,7 @@
         fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey), { cache: 'no-store' })
           .then(function (res) { return res.json(); })
           .then(function (data) {
+            if (myToken !== loadToken) return;
             (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
             var firstUnanswered = questions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
             if (firstUnanswered === -1) {
@@ -1502,10 +1564,10 @@
               renderQuestion();
             }
           })
-          .catch(function () { currentIndex = 0; renderQuestion(); });
+          .catch(function () { if (myToken === loadToken) { currentIndex = 0; renderQuestion(); } });
       })
       .catch(function () {
-        renderMessage('Impossible de charger ce QCM pour le moment.');
+        if (myToken === loadToken) renderMessage('Impossible de charger ce QCM pour le moment.');
       });
   }
 
