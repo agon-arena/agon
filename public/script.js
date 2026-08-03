@@ -34149,7 +34149,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const gapAbove = captionDocTop - contentBottomDoc;
   const captionHeight = caption.getBoundingClientRect().height;
   const captionBottomDoc = captionDocTop + captionHeight;
-  // Le bouton "Mes connaissances" est un vrai sibling en flux normal entre la section
+  // Le bouton "Connaissances" est un vrai sibling en flux normal entre la section
   // (dont la légende est sortie du flux, cf. ci-dessus) et #debates-list. Sa
   // position réelle sert de référence : le bandeau "À la une" est ensuite placé
   // sous lui avec exactement le même vide qu'entre la légende et lui — sinon,

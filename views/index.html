@@ -428,7 +428,7 @@
           </a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
             <i class="fa-solid fa-list-check"></i>
-            <span>Mes connaissances</span>
+            <span>Connaissances</span>
           </a>
           <a href="/eclairages" class="home-topbar-menu-item eclairages-link-unavailable" id="home-topbar-eclairages-link" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
@@ -711,7 +711,7 @@ window.addEventListener("pageshow", function() {
   </a>
   <a href="/qcm-du-jour" id="home-qcm-du-jour-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
     <i class="fa-solid fa-circle-question"></i>
-    <span>Mes connaissances</span>
+    <span>Connaissances</span>
   </a>
   <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn eclairages-link-unavailable" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); openDebateIframeModal('/eclairages')">
     <i class="fa-solid fa-lightbulb"></i>
@@ -945,11 +945,11 @@ window.addEventListener("pageshow", function() {
 </script>
 <script>
 (function () {
-  // Le QCM actu a deux créneaux (matin ~9h, soir ~17h) : le bouton "Mes
-  // connaissances" pointe directement sur le créneau le plus récent
+  // Le QCM actu a deux créneaux (matin ~9h, soir ~17h) : le bouton
+  // "Connaissances" pointe directement sur le créneau le plus récent
   // disponible (le soir prime sur le matin une fois généré, cf.
   // /api/daily-quiz/status côté serveur), mais garde toujours le libellé fixe
-  // "Mes connaissances" — jamais réécrit en "QCM du matin"/"QCM du soir".
+  // "Connaissances" — jamais réécrit en "QCM du matin"/"QCM du soir".
   fetch('/api/daily-quiz/status', { cache: 'no-store' })
     .then(function (res) { return res.json(); })
     .then(function (data) {
