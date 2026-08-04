@@ -4803,6 +4803,19 @@ function ensureDebateIframeParentLoadingStyles() {
       right: 0;
       top: var(--debate-iframe-parent-loading-top, 0px);
       bottom: 0;
+      /* Un height explicite (plutôt que de laisser top+bottom déterminer la
+         hauteur) fait déborder l'habillage sous le bas visible de l'écran —
+         "bottom" est alors ignoré pour le calcul de hauteur (règles CSS2.1 sur
+         le positionnement absolu/fixed). Sans ce débordement volontaire, un
+         resize transitoire de la fenêtre visible pendant l'animation (barre
+         d'adresse Safari qui se réduit/rétablit au clic sur "Actualiser")
+         laissait entrevoir furtivement le fond blanc de la page sous
+         l'habillage, le temps que 100vh se remette à jour — même bug de fond
+         que #debate-ai-parent-animation-overlay, corrigé avec la même marge
+         de sécurité (+80px) plutôt que de synchroniser sur visualViewport ici
+         (chargement bref, l'imprécision de 100vh suffit à absorber avec cette
+         marge). */
+      height: calc(100vh - var(--debate-iframe-parent-loading-top, 0px) + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px);
       z-index: 10000;
       display: flex;
       align-items: center;
