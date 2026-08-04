@@ -5600,7 +5600,7 @@ function reloadDebateIframeModalFrame() {
   navigateDebateIframeModalFrame(frame, currentUrl);
 }
 
-function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours") {
+function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours", showOverlay = true) {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
 
@@ -5608,7 +5608,7 @@ function setDebateIframeModalLoadingState(isLoading, message = "Chargement en co
   modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
 
   if (isLoading) {
-    showDebateIframeParentLoadingOverlay(message);
+    if (showOverlay) showDebateIframeParentLoadingOverlay(message);
   } else {
     revealDebateIframeModalFrame();
     hideDebateIframeParentLoadingOverlay();
@@ -6795,7 +6795,14 @@ function openDebateIframeModal(url, options = {}) {
     setDebateIframeNativeParentScrollMode(false);
     lockPageScrollForDebateModal(_debateModalSavedScrollY);
   }
-  setDebateIframeModalLoadingState(true, isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours");
+  // Pas de bandeau "Chargement en cours" pour Connaissances : sa page a son
+  // propre rendu léger et quasi immédiat (cf. qcm-du-jour.html), le bandeau
+  // n'apportait rien qu'un flash de plus.
+  setDebateIframeModalLoadingState(
+    true,
+    isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours",
+    iframeUrlPathname !== "/qcm-du-jour"
+  );
   navigateDebateIframeModalFrame(frame, url);
 
   armDebateIframeParentLoadingFallback(iframeUrlPathname);
