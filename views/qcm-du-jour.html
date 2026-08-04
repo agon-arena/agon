@@ -482,9 +482,17 @@
        position:fixed direct sur <body> à la place (cf. openAcquisFiche), et
        recalé ici en largeur sur la fiche (max-width identique à
        .qcm-fiche-modal) — sinon le dégradé pleine largeur déborde des bords
-       d'une fiche centrée plus étroite que l'écran. */
+       d'une fiche centrée plus étroite que l'écran.
+       "bottom" décalé de env(safe-area-inset-bottom) plutôt que collé à 0 :
+       en PWA standalone sur certains iPhones (X/XS/11/11 Pro), le compositeur
+       WebKit ne peint rien dans les ~44 derniers px du bas de l'écran (limite
+       matérielle déjà documentée, aucune technique CSS ne peint dans cette
+       zone) — un élément à bottom:0 y devient invisible/coupé. Le décaler de
+       la valeur fiable de la zone sûre (déjà utilisée par le dock flottant du
+       site pour la même raison) le sort de cette zone morte. */
     .qcm-fiche-fade-hint {
       position: fixed;
+      bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 6px);
       max-width: 480px;
       margin: 0 auto;
       z-index: 1001;
