@@ -1566,7 +1566,29 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + html + '<div class="qcm-fiche-scroll-spacer" aria-hidden="true"></div></div>';
     document.body.appendChild(overlay);
-    if (typeof attachScrollFadeHint === 'function') attachScrollFadeHint(overlay, overlay, '#ffffff');
+    // Pas attachScrollFadeHint (générique) : il se base sur le bas de TOUTE la
+    // zone de scroll, qui inclut ici .qcm-fiche-scroll-spacer (sombre, sous la
+    // fiche) — le dégradé blanc y jurait sur le fond sombre et restait visible
+    // bien après la fin du vrai contenu. On se base plutôt sur le bas réel de
+    // .qcm-fiche-modal (la carte blanche) par rapport au viewport.
+    var ficheModalEl = overlay.querySelector('.qcm-fiche-modal');
+    if (ficheModalEl) {
+      var ficheFadeHint = document.createElement('div');
+      ficheFadeHint.className = 'scroll-fade-hint is-hidden';
+      ficheFadeHint.style.setProperty('--scroll-fade-color', '#ffffff');
+      ficheFadeHint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+      overlay.appendChild(ficheFadeHint);
+      ficheFadeHint.querySelector('.scroll-fade-hint-text').addEventListener('click', function (e) {
+        e.stopPropagation();
+        overlay.scrollBy({ top: overlay.clientHeight * 0.8, behavior: 'smooth' });
+      });
+      var updateFicheFadeHint = function () {
+        var rect = ficheModalEl.getBoundingClientRect();
+        ficheFadeHint.classList.toggle('is-hidden', rect.bottom <= window.innerHeight + 4);
+      };
+      overlay.addEventListener('scroll', updateFicheFadeHint, { passive: true });
+      requestAnimationFrame(updateFicheFadeHint);
+    }
     try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
