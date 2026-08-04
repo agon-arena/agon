@@ -28125,7 +28125,12 @@ function attachPageScrollFadeHint(fadeColor, options) {
   function update() {
     const bottomNav = document.querySelector('.home-bottom-nav');
     const navHeight = (bottomNav && bottomNav.offsetParent) ? bottomNav.getBoundingClientRect().height : 0;
-    hint.style.bottom = navHeight + 'px';
+    // + safe-area : en PWA standalone sur iPhone à encoche/île dynamique, le
+    // compositeur WebKit ne peint rien dans les derniers ~44px du bas de
+    // l'écran (limite déjà documentée) — un hint à bottom:0 (pas de nav en
+    // dessous, ex. /qcm-du-jour en iframe) y devient invisible. Même
+    // décalage que le dock flottant et le hint de la fiche Mes acquis.
+    hint.style.bottom = `calc(${navHeight}px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)))`;
 
     const contentEnd = getContentEnd();
     const hasOverflow = contentEnd > window.innerHeight + 2;
