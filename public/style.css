@@ -19539,6 +19539,13 @@ body.page-home #debates-list .theme-row-section:first-child {
   /* overflow:hidden met la taille mini flex à 0 : sans flex-shrink:0, la section
      desktop (hauteur figée + cloud rigide) écrase le switch à chaque bascule */
   flex-shrink: 0;
+  /* Fond semi-transparent (rgba ci-dessus) au-dessus du nuage de bulles animé :
+     sans calque GPU dédié, Safari refond ces pixels avec le contenu changeant
+     en dessous à chaque frame de l'animation des bulles, perçu comme un
+     tremblement de ce bouton (confirmé spécifique à Safari, cf. le fix sur
+     .agon-tag-bubble un peu plus bas dans ce fichier). */
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .agon-cloud-mode-segment {
