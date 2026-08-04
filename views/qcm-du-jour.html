@@ -1676,7 +1676,11 @@
           ? requestedSlot
           : slotsStatus.defaultSlot;
         if (!slotToLoad) {
-          renderMessage('Rien n’est encore prêt, reviens un peu plus tard.');
+          // Aucun QCM prêt (matin/soir/culture générale) : "Mes acquis" reste
+          // consultable (isCategoryAvailable le garantit toujours) — on
+          // l'ouvre directement plutôt que de bloquer sur un message sans
+          // issue, cf. demande utilisateur du 04/08/2026.
+          loadAcquis();
           return;
         }
         loadSlot(slotToLoad);
