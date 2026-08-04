@@ -3105,7 +3105,14 @@ function initPageArrivalLoadingOverlay() {
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
   // Bulles Actu/Agôn en dessous le temps que les débats se rechargent.
   const skipForIndexReturn = location.pathname === "/" && window.__agonSkipStartupOnce === true;
-  const shouldShowOverlayImmediately = !skipForIndexReturn && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  // Connaissances (qcm-du-jour) a son propre rendu léger et quasi immédiat :
+  // ce voile "Chargement en cours" (posé par la page embarquée elle-même,
+  // distinct du bandeau du parent déjà supprimé pour cette page) n'apporte
+  // qu'un flash de plus. isIframeDebateLoadingOverlayContext() ne couvre pas
+  // ce chemin (utilisée ailleurs pour du comportement propre à /debate), donc
+  // exclusion séparée plutôt que d'y ajouter ce cas.
+  const skipForQcmDuJour = location.pathname === "/qcm-du-jour" && window.self !== window.top;
+  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForQcmDuJour && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
@@ -6622,7 +6629,7 @@ function handleIndexHistoryPopState() {
   if (currentPathAndSearch && currentPathAndSearch === desiredPathAndSearch) return;
 
   window.__agonIframeCurrentPathname = desiredPathname || window.__agonIframeCurrentPathname;
-  setDebateIframeModalLoadingState(true, "Chargement en cours");
+  setDebateIframeModalLoadingState(true, "Chargement en cours", desiredPathname !== "/qcm-du-jour");
   navigateDebateIframeModalFrame(frame, desiredUrl);
   armDebateIframeParentLoadingFallback(desiredPathname);
 }
