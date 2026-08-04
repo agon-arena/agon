@@ -19561,6 +19561,13 @@ body.page-home #debates-list .theme-row-section:first-child {
   text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+  /* Calque dédié par segment (pas seulement sur .agon-cloud-mode-switch
+     parent) : sur Safari, le tremblement restait visible sur le segment actif
+     ("Bulles Agôn"), dont le fond quasi opaque (.agon-cloud-mode-segment-active)
+     est une couche peinte à part, pas automatiquement isolée par la promotion
+     du seul parent. */
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .agon-cloud-mode-segment:hover {
