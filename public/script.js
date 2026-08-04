@@ -7115,15 +7115,14 @@ function closeDebateIframeModal(options = {}) {
 
   scheduleDebateIframeFrameTeardown(frame, modal);
 
-  if (restoredScrollY !== null) {
-    // Correction fine par ancre après que le DOM a eu le temps de se stabiliser.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        restoreScrollPosition();
-      });
-    });
-    _debateModalSavedScrollY = null;
-  }
+  // Pas de seconde correction différée par rAF ici (retirée) : sur mobile, la
+  // carte-ancre se remesurait différemment 2 frames plus tard (layout pas
+  // encore stabilisé juste après le retrait de position:fixed), donnant une
+  // nouvelle cible légèrement plus basse — perçu comme "la page redescend
+  // toute seule en 2 temps" au retour sur l'accueil, à chaque fois. La
+  // restauration synchrone immédiate ci-dessus suffit dans le cas courant
+  // (pas de nouvelle arène ajoutée pendant que la sous-page était ouverte).
+  _debateModalSavedScrollY = null;
   _debateModalSavedScrollAnchor = null;
 
   // Rafraîchit le feed si une nouvelle arène vient d'être créée dans la modale
