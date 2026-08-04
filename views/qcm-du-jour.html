@@ -272,10 +272,6 @@
     .qcm-final-actions .qcm-next-btn {
       margin: 0;
     }
-    .qcm-final-actions .qcm-btn-secondary {
-      background: #f3f4f6;
-      color: #374151;
-    }
     .qcm-state-message {
       color: #6b7280;
       font-size: 15px;
@@ -1400,26 +1396,15 @@
       '</div>' +
       '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
-      '<button type="button" class="qcm-next-btn visible qcm-btn-secondary" id="qcm-restart-btn">Recommencer</button>' +
-      '<button type="button" class="qcm-next-btn visible" id="qcm-done-btn">Terminé</button>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Revoir</button>' +
       '</div>';
 
     // Les réponses du jour sont verrouillées côté serveur (une seule par
-    // question et par voterKey) : "Recommencer" repart de la question 1 pour
-    // les revoir, sans pouvoir les changer, plutôt qu'un vrai reset.
-    document.getElementById('qcm-restart-btn').onclick = function () {
+    // question et par voterKey) : "Revoir" repart de la question 1 pour les
+    // revoir, sans pouvoir les changer, plutôt qu'un vrai reset.
+    document.getElementById('qcm-review-btn').onclick = function () {
       currentIndex = 0;
       renderQuestion();
-    };
-    // "Terminé" : ferme la modale iframe (même mécanisme que la croix), ou
-    // repart vers l'accueil si la page est ouverte hors iframe (accès direct
-    // à /qcm-du-jour).
-    document.getElementById('qcm-done-btn').onclick = function () {
-      if (window.self !== window.top) {
-        try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
-      } else {
-        location.href = '/';
-      }
     };
   }
 
