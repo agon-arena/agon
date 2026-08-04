@@ -19948,6 +19948,16 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
 
 .agon-tag-bubble {
   animation: agonBubbleBreathe 3.5s ease-in-out infinite;
+  /* Sans promotion en calque GPU dédié, le scale (transform) de chaque bulle
+     force le navigateur à recomposer toute la pile (~12 bulles + halos +
+     badges) au même instant à chaque frame où l'une d'elles franchit un
+     palier d'animation — perçu comme un petit "saut" synchrone de tout le
+     bloc, distinct de la respiration individuelle de chaque bulle (normale).
+     Même diagnostic que le commentaire sur agonBubbleBreatheLight (mobile)
+     plus bas dans ce fichier, ici réglé en gardant l'animation scale telle
+     quelle (desktop a la marge GPU) plutôt qu'en la simplifiant. */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Anti-chauffe : la section cloud hors écran suspend les animations infinies
