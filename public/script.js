@@ -7121,6 +7121,15 @@ function closeDebateIframeModal(options = {}) {
   };
 
   unlockPageScrollForDebateModal();
+  // Recalcule la marge du bandeau de tendances (--agon-home-first-row-mt,
+  // cf. syncAgonHomeTrendsCaptionAnchor) AVANT de restaurer le scroll : sur
+  // mobile standalone, le retrait de position:fixed ci-dessus peut déclencher
+  // un resize qui recalcule cette marge en différé (rAF + 120ms) — donc
+  // APRÈS la restauration de scroll, ce qui décale légèrement le contenu et
+  // se voit comme un petit saut au retour sur l'accueil. En la forçant ici,
+  // avant restoreScrollPosition, le scroll se cale sur la mise en page déjà
+  // stabilisée au lieu d'être suivi d'un ajustement tardif.
+  if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
   // Restauration synchrone immédiate pour éviter le flash du haut de page :
   // le navigateur ne doit pas avoir le temps de peindre scrollY=0 entre le
   // retrait de position:fixed et le scrollTo.
