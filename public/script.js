@@ -34087,6 +34087,7 @@ window.scrollToTheme = scrollToTheme;
 
 let homeBottomNavViewportOffsetRaf = null;
 let homeBottomNavViewportOffsetTimeout = null;
+let homeBottomNavViewportOffsetLastRunAt = 0;
 let agonSafeAreaBottomProbe = null;
 
 function isAgonMobileViewportBottomFillEnabled() {
@@ -34286,6 +34287,7 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
 
   homeBottomNavViewportOffsetRaf = requestAnimationFrame(() => {
     homeBottomNavViewportOffsetRaf = null;
+    homeBottomNavViewportOffsetLastRunAt = Date.now();
     updateHomeBottomNavViewportOffset();
   });
 
@@ -34293,8 +34295,17 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
     clearTimeout(homeBottomNavViewportOffsetTimeout);
   }
 
+  // Filet de secours seulement : si le rAF ci-dessus a déjà tourné il y a peu,
+  // ne pas relancer updateHomeBottomNavViewportOffset une seconde fois — son
+  // ajustement de --agon-home-first-row-mt (syncAgonHomeTrendsCaptionAnchor)
+  // est par delta sur une mesure live, pas parfaitement idempotent d'une
+  // passe à l'autre en pratique. Deux passes rapprochées se traduisaient par
+  // un écart bandeau/boutons qui se réduisait deux fois de suite au retour de
+  // Connaissances/Éclairages/Ce jour dans l'histoire en standalone.
   homeBottomNavViewportOffsetTimeout = window.setTimeout(() => {
     homeBottomNavViewportOffsetTimeout = null;
+    if (Date.now() - homeBottomNavViewportOffsetLastRunAt < 100) return;
+    homeBottomNavViewportOffsetLastRunAt = Date.now();
     updateHomeBottomNavViewportOffset();
   }, 120);
 }
