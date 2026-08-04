@@ -2833,6 +2833,16 @@ function isIframeDebateLoadingOverlayContext() {
   return (path === "/debate" || path === "/create" || path === "/notifications" || path === "/autres-sources") && window.self !== window.top;
 }
 
+// Pages embarquées au rendu léger et quasi immédiat (Connaissances,
+// Éclairages...) : le bandeau/voile "Chargement en cours" n'y apporte qu'un
+// flash de plus plutôt qu'un vrai confort d'attente. Liste partagée par les
+// différents points d'entrée (ouverture, navigation historique, voile posé
+// par la page elle-même) plutôt que répétée à chaque appel.
+const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/qcm-du-jour", "/eclairages"];
+function isIframePageWithoutLoadingOverlay(pathname) {
+  return AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
+}
+
 function isCreateToDebateLoadingTransition() {
   if (location.pathname !== "/debate") return false;
 
@@ -3105,14 +3115,14 @@ function initPageArrivalLoadingOverlay() {
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
   // Bulles Actu/Agôn en dessous le temps que les débats se rechargent.
   const skipForIndexReturn = location.pathname === "/" && window.__agonSkipStartupOnce === true;
-  // Connaissances (qcm-du-jour) a son propre rendu léger et quasi immédiat :
+  // Connaissances/Éclairages ont leur propre rendu léger et quasi immédiat :
   // ce voile "Chargement en cours" (posé par la page embarquée elle-même,
-  // distinct du bandeau du parent déjà supprimé pour cette page) n'apporte
+  // distinct du bandeau du parent déjà supprimé pour ces pages) n'apporte
   // qu'un flash de plus. isIframeDebateLoadingOverlayContext() ne couvre pas
-  // ce chemin (utilisée ailleurs pour du comportement propre à /debate), donc
-  // exclusion séparée plutôt que d'y ajouter ce cas.
-  const skipForQcmDuJour = location.pathname === "/qcm-du-jour" && window.self !== window.top;
-  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForQcmDuJour && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  // ces chemins (utilisée ailleurs pour du comportement propre à /debate),
+  // donc exclusion séparée plutôt que d'y ajouter ce cas.
+  const skipForLightweightIframePage = isIframePageWithoutLoadingOverlay(location.pathname) && window.self !== window.top;
+  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
@@ -6629,7 +6639,7 @@ function handleIndexHistoryPopState() {
   if (currentPathAndSearch && currentPathAndSearch === desiredPathAndSearch) return;
 
   window.__agonIframeCurrentPathname = desiredPathname || window.__agonIframeCurrentPathname;
-  setDebateIframeModalLoadingState(true, "Chargement en cours", desiredPathname !== "/qcm-du-jour");
+  setDebateIframeModalLoadingState(true, "Chargement en cours", !isIframePageWithoutLoadingOverlay(desiredPathname));
   navigateDebateIframeModalFrame(frame, desiredUrl);
   armDebateIframeParentLoadingFallback(desiredPathname);
 }
@@ -6802,13 +6812,13 @@ function openDebateIframeModal(url, options = {}) {
     setDebateIframeNativeParentScrollMode(false);
     lockPageScrollForDebateModal(_debateModalSavedScrollY);
   }
-  // Pas de bandeau "Chargement en cours" pour Connaissances : sa page a son
-  // propre rendu léger et quasi immédiat (cf. qcm-du-jour.html), le bandeau
+  // Pas de bandeau "Chargement en cours" pour Connaissances/Éclairages : ces
+  // pages ont leur propre rendu léger et quasi immédiat, le bandeau
   // n'apportait rien qu'un flash de plus.
   setDebateIframeModalLoadingState(
     true,
     isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours",
-    iframeUrlPathname !== "/qcm-du-jour"
+    !isIframePageWithoutLoadingOverlay(iframeUrlPathname)
   );
   navigateDebateIframeModalFrame(frame, url);
 
