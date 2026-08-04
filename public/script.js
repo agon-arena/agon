@@ -1423,10 +1423,12 @@ function showScoreChangeNotification(changes, openDetail) {
     '<h3 class="install-modal-title">Ton score a évolué</h3>' +
     lines +
     '<button class="install-modal-android-btn" type="button" style="display:flex" id="agon-score-change-detail-btn">Voir le détail</button>' +
+    '<button class="install-modal-secondary-btn" type="button" id="agon-score-change-close-btn-bottom">Fermer</button>' +
     '</div>';
   const close = () => overlay.remove();
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   overlay.querySelector("#agon-score-change-close-btn").addEventListener("click", close);
+  overlay.querySelector("#agon-score-change-close-btn-bottom").addEventListener("click", close);
   overlay.querySelector("#agon-score-change-detail-btn").addEventListener("click", () => {
     close();
     if (typeof openDetail === "function") openDetail();

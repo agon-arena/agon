@@ -11623,6 +11623,32 @@ body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-re
   margin-bottom: 4px;
 }
 
+/* Bouton "Fermer" secondaire en bas des install-modal (ex. notification "Ton
+   score a évolué", à côté de "Voir le détail") : en plus du X en haut à
+   droite (.install-modal-close), demandé pour ne pas obliger à viser le petit
+   bouton du coin. */
+.install-modal-secondary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  background: #f3f6f4;
+  color: #1f2933;
+  border: 1px solid #d7dde2;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.install-modal-secondary-btn:hover {
+  background: #e9efec;
+  border-color: #c6d0d8;
+}
+.install-modal-secondary-btn:active {
+  transform: translateY(1px);
+}
+
 .install-modal-divider {
   height: 1px;
   background: #e5e7eb;

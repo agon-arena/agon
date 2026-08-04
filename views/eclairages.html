@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260802-scorepopupclose1">
+  <link rel="stylesheet" href="/style.min.css?v=20260804-scorepopupclosebtn">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -37,7 +37,10 @@
       min-height: 100vh;
       background-color: #243038;
     }
-    body.page-eclairages.in-iframe {
+    /* html.in-iframe (pas body.in-iframe, ajoutée seulement au DOMContentLoaded
+       — cf. qcm-du-jour.html pour le détail) : évite que le cadre apparaisse
+       d'abord avec la marge "hors iframe" avant de sauter à sa position. */
+    html.in-iframe body.page-eclairages {
       box-sizing: border-box;
       padding-bottom: 380px;
     }
@@ -65,7 +68,7 @@
       width: min(100% - 32px, 900px);
       margin: 112px auto 180px;
     }
-    .page-eclairages.in-iframe .ecl-page-shell {
+    html.in-iframe .page-eclairages .ecl-page-shell {
       margin: 20px auto 0;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
@@ -74,7 +77,7 @@
        le cas jusqu'ici, ce qui annulait silencieusement ce correctif mobile. */
     @media (max-width: 768px) {
       /* Vraie zone scrollable en bas, sans pseudo-bandeau ajouté au DOM. */
-      body.page-eclairages.in-iframe {
+      html.in-iframe body.page-eclairages {
         padding-bottom: clamp(400px, 46vh, 580px);
       }
     }
@@ -219,12 +222,12 @@
        prenait pas, le bouton se retrouvait collé à gauche malgré la règle.
        Un simple bloc + text-align:center est une technique de centrage bien
        plus robuste pour un bouton (élément de niveau inline par défaut). */
-    .ph-history, .pp-history, .ms-history, .cj-history, .cd-history, .oa-history {
+    .ph-history, .pp-history, .ms-history, .cj-history, .cd-history, .oa-history, .ld-history {
       width: 100%;
       text-align: center;
       margin: 0 0 48px;
     }
-    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle, .cj-history-toggle, .cd-history-toggle, .oa-history-toggle {
+    .ph-history-toggle, .pp-history-toggle, .ms-history-toggle, .cj-history-toggle, .cd-history-toggle, .oa-history-toggle, .ld-history-toggle {
       display: block;
       width: fit-content;
       margin: 0 auto;
@@ -237,28 +240,28 @@
       letter-spacing: 0.02em;
       cursor: pointer;
     }
-    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover, .cj-history-toggle:hover, .cd-history-toggle:hover, .oa-history-toggle:hover {
+    .ph-history-toggle:hover, .pp-history-toggle:hover, .ms-history-toggle:hover, .cj-history-toggle:hover, .cd-history-toggle:hover, .oa-history-toggle:hover, .ld-history-toggle:hover {
       color: #243038;
       text-decoration: underline;
     }
-    .ph-history-panel, .pp-history-panel, .ms-history-panel, .cj-history-panel, .cd-history-panel, .oa-history-panel {
+    .ph-history-panel, .pp-history-panel, .ms-history-panel, .cj-history-panel, .cd-history-panel, .oa-history-panel, .ld-history-panel {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       margin-top: 8px;
     }
-    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden], .cj-history-panel[hidden], .cd-history-panel[hidden], .oa-history-panel[hidden] {
+    .ph-history-panel[hidden], .pp-history-panel[hidden], .ms-history-panel[hidden], .cj-history-panel[hidden], .cd-history-panel[hidden], .oa-history-panel[hidden], .ld-history-panel[hidden] {
       display: none;
     }
-    .ph-history-date, .pp-history-date, .ms-history-date, .cj-history-date, .cd-history-date, .oa-history-date {
+    .ph-history-date, .pp-history-date, .ms-history-date, .cj-history-date, .cd-history-date, .oa-history-date, .ld-history-date {
       padding: 6px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 13px;
       color: #374151;
     }
-    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow, .cj-history-arrow, .cd-history-arrow, .oa-history-arrow {
+    .ph-history-arrow, .pp-history-arrow, .ms-history-arrow, .cj-history-arrow, .cd-history-arrow, .oa-history-arrow, .ld-history-arrow {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -272,14 +275,14 @@
       font-size: 12px;
       cursor: pointer;
     }
-    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled), .cj-history-arrow:hover:not(:disabled), .cd-history-arrow:hover:not(:disabled), .oa-history-arrow:hover:not(:disabled) {
+    .ph-history-arrow:hover:not(:disabled), .pp-history-arrow:hover:not(:disabled), .ms-history-arrow:hover:not(:disabled), .cj-history-arrow:hover:not(:disabled), .cd-history-arrow:hover:not(:disabled), .oa-history-arrow:hover:not(:disabled), .ld-history-arrow:hover:not(:disabled) {
       background: #eef3f6;
     }
-    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled, .cj-history-arrow:disabled, .cd-history-arrow:disabled, .oa-history-arrow:disabled {
+    .ph-history-arrow:disabled, .pp-history-arrow:disabled, .ms-history-arrow:disabled, .cj-history-arrow:disabled, .cd-history-arrow:disabled, .oa-history-arrow:disabled, .ld-history-arrow:disabled {
       opacity: 0.35;
       cursor: default;
     }
-    .ph-history-today, .pp-history-today, .ms-history-today, .cj-history-today, .cd-history-today, .oa-history-today {
+    .ph-history-today, .pp-history-today, .ms-history-today, .cj-history-today, .cd-history-today, .oa-history-today, .ld-history-today {
       padding: 6px 12px;
       border: 1px solid #d1d5db;
       border-radius: 999px;
@@ -289,19 +292,19 @@
       font-weight: 700;
       cursor: pointer;
     }
-    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover, .cj-history-today:hover, .cd-history-today:hover, .oa-history-today:hover {
+    .ph-history-today:hover, .pp-history-today:hover, .ms-history-today:hover, .cj-history-today:hover, .cd-history-today:hover, .oa-history-today:hover, .ld-history-today:hover {
       background: #eef3f6;
     }
     /* 1 à 3 parallèles/pensées/mécanismes possibles le même jour (jamais un
        nombre fixe) : le premier n'a pas de marge/séparateur au-dessus, les
        suivants si — pour marquer clairement où commence chaque élément
        indépendant. */
-    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme, .cj-concept + .cj-concept, .cd-citation + .cd-citation, .oa-oeuvre + .oa-oeuvre {
+    .ph-parallel + .ph-parallel, .pp-pensee + .pp-pensee, .ms-mecanisme + .ms-mecanisme, .cj-concept + .cj-concept, .cd-citation + .cd-citation, .oa-oeuvre + .oa-oeuvre, .ld-latin + .ld-latin {
       margin-top: 28px;
       padding-top: 24px;
       border-top: 1px solid #e5e7eb;
     }
-    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count, .cj-concept-count, .cd-citation-count, .oa-oeuvre-count {
+    .ph-parallel-count, .pp-pensee-count, .ms-mecanisme-count, .cj-concept-count, .cd-citation-count, .oa-oeuvre-count, .ld-latin-count {
       margin: 0 0 6px;
       font-size: 11px;
       font-weight: 700;
@@ -310,14 +313,14 @@
       color: #9ca3af;
       text-align: center;
     }
-    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title, .cd-topic-title, .oa-topic-title {
+    .ph-topic-title, .pp-topic-title, .ms-topic-title, .cj-topic-title, .cd-topic-title, .oa-topic-title, .ld-topic-title {
       margin: 0 0 8px;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
       line-height: 1.3;
     }
-    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary, .cd-topic-summary, .oa-topic-summary {
+    .ph-topic-summary, .pp-topic-summary, .ms-topic-summary, .cj-topic-summary, .cd-topic-summary, .oa-topic-summary, .ld-topic-summary {
       margin: 0 0 22px;
       padding-bottom: 20px;
       border-bottom: 1px solid #e5e7eb;
@@ -325,10 +328,10 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .ph-section, .pp-section, .ms-section, .cj-section, .cd-section, .oa-section {
+    .ph-section, .pp-section, .ms-section, .cj-section, .cd-section, .oa-section, .ld-section {
       margin: 0 0 20px;
     }
-    .ph-section h2, .pp-section h2, .ms-section h2, .cj-section h2, .cd-section h2, .oa-section h2 {
+    .ph-section h2, .pp-section h2, .ms-section h2, .cj-section h2, .cd-section h2, .oa-section h2, .ld-section h2 {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -339,11 +342,11 @@
       color: #243038;
       letter-spacing: 0.01em;
     }
-    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i, .cj-section h2 i, .cd-section h2 i, .oa-section h2 i {
+    .ph-section h2 i, .pp-section h2 i, .ms-section h2 i, .cj-section h2 i, .cd-section h2 i, .oa-section h2 i, .ld-section h2 i {
       font-size: 15px;
       color: #f5b642;
     }
-    .ph-section p, .pp-section p, .ms-section p, .cj-section p, .cd-section p, .oa-section p {
+    .ph-section p, .pp-section p, .ms-section p, .cj-section p, .cd-section p, .oa-section p, .ld-section p {
       margin: 0;
       color: #374151;
       font-size: 15px;
@@ -505,6 +508,79 @@
     .cd-author-image figcaption a {
       color: #9ca3af;
     }
+    /* Pas d'image pour cette rubrique (aucune personne réelle ni œuvre
+       représentée, cf. lib/latin-du-jour.js) : juste l'expression latine
+       mise en avant, sur le même modèle visuel que le bloc de citation. */
+    .ld-phrase-block {
+      margin: 0 0 10px;
+      padding: 18px 20px;
+      border-left: 4px solid #f5b642;
+      background: #f9fafb;
+      border-radius: 0 8px 8px 0;
+    }
+    .ld-phrase-block p {
+      margin: 0;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 24px;
+      font-style: italic;
+      line-height: 1.3;
+      color: #111827;
+    }
+    .ld-phrase-block .ld-translation {
+      display: block;
+      margin-top: 8px;
+      font-style: normal;
+      font-size: 14px;
+      font-weight: 700;
+      color: #6b7280;
+    }
+    /* Honnêteté sur la provenance (phrase_origin, cf. lib/latin-du-jour.js) :
+       une expression composée pour l'occasion ne doit jamais donner
+       l'impression d'être une citation ancienne — ce badge le dit
+       explicitement plutôt que de le laisser deviner. */
+    .ld-origin-badge {
+      display: inline-block;
+      margin: 0 0 10px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    /* Décomposition mot par mot (grammar_breakdown) : le cœur pédagogique de
+       la rubrique (cf. lib/latin-du-jour.js) — une liste plutôt qu'un
+       paragraphe, pour que chaque mot reste repérable au premier coup d'œil. */
+    .ld-grammar-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ld-grammar-list li {
+      margin: 0 0 12px;
+      padding-left: 14px;
+      border-left: 2px solid #e5e7eb;
+    }
+    .ld-grammar-list li:last-child {
+      margin-bottom: 0;
+    }
+    .ld-grammar-word {
+      display: block;
+      margin-bottom: 2px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-weight: 700;
+      font-style: italic;
+      font-size: 16px;
+      color: #243038;
+    }
+    .ld-grammar-note {
+      margin: 0;
+      color: #374151;
+      font-size: 14px;
+      line-height: 1.5;
+    }
     /* L'œuvre elle-même est l'image centrale de la rubrique (contrairement
        au portrait secondaire de citation-du-jour) : mise en avant, plus
        grande, juste sous le titre. */
@@ -546,14 +622,14 @@
       font-style: italic;
       text-align: center;
     }
-    .ph-sources, .pp-sources, .ms-sources, .cj-sources, .cd-sources, .oa-sources {
+    .ph-sources, .pp-sources, .ms-sources, .cj-sources, .cd-sources, .oa-sources, .ld-sources {
       margin-top: 24px;
       padding: 14px 16px;
       border-radius: 8px;
       background: #f9fafb;
       border: 1px dashed #d1d5db;
     }
-    .ph-sources-label, .pp-sources-label, .ms-sources-label, .cj-sources-label, .cd-sources-label, .oa-sources-label {
+    .ph-sources-label, .pp-sources-label, .ms-sources-label, .cj-sources-label, .cd-sources-label, .oa-sources-label, .ld-sources-label {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -564,23 +640,23 @@
       text-transform: uppercase;
       color: #b45309;
     }
-    .ph-sources ul, .pp-sources ul, .ms-sources ul, .cj-sources ul, .cd-sources ul {
+    .ph-sources ul, .pp-sources ul, .ms-sources ul, .cj-sources ul, .cd-sources ul, .ld-sources ul {
       margin: 0;
       padding: 0 0 0 18px;
       color: #6b7280;
       font-size: 13px;
       line-height: 1.6;
     }
-    .ph-sources a, .pp-sources a, .ms-sources a, .cj-sources a, .cd-sources a {
+    .ph-sources a, .pp-sources a, .ms-sources a, .cj-sources a, .cd-sources a, .ld-sources a {
       color: #243038;
     }
-    .ph-no-sources, .pp-no-sources, .ms-no-sources, .cj-no-sources, .cd-no-sources, .oa-no-sources {
+    .ph-no-sources, .pp-no-sources, .ms-no-sources, .cj-no-sources, .cd-no-sources, .oa-no-sources, .ld-no-sources {
       margin: 0;
       color: #9ca3af;
       font-size: 13px;
       font-style: italic;
     }
-    .ph-state-message, .pp-state-message, .ms-state-message, .cj-state-message, .cd-state-message, .oa-state-message {
+    .ph-state-message, .pp-state-message, .ms-state-message, .cj-state-message, .cd-state-message, .oa-state-message, .ld-state-message {
       color: #6b7280;
       font-size: 15px;
       line-height: 1.4;
@@ -597,7 +673,7 @@
       animation: eclHourglassSpin 0.9s linear infinite;
     }
     @keyframes eclHourglassSpin { to { transform: rotate(360deg); } }
-    #ph-body, #pp-body, #ms-body, #cj-body, #cd-body {
+    #ph-body, #pp-body, #ms-body, #cj-body, #cd-body, #ld-body {
       padding-top: 24px;
     }
   </style>
@@ -822,9 +898,43 @@
         </button>
       </div>
     </div>
+
+    <div class="ecl-block" hidden>
+      <button type="button" class="ecl-block-toggle" id="ld-block-toggle" aria-expanded="false" aria-controls="ld-block-content">
+        <span class="ecl-block-toggle-title"><i class="fa-solid fa-scroll"></i> Mot latin du jour</span>
+        <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
+      </button>
+      <div class="ecl-block-content" id="ld-block-content" hidden>
+        <p class="ecl-block-subtitle"><span id="ld-title-text">Mot latin du jour</span> — un événement d'actualité éclairé par un mot ou une courte expression en latin.</p>
+
+        <div class="ld-history">
+          <button type="button" class="ld-history-toggle" id="ld-history-toggle" aria-expanded="false" aria-controls="ld-history-panel">
+            <i class="fa-solid fa-calendar-days"></i> Voir un jour précédent
+          </button>
+          <div class="ld-history-panel" id="ld-history-panel" hidden>
+            <button type="button" class="ld-history-arrow" id="ld-history-prev" aria-label="Jour précédent">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <input type="date" class="ld-history-date" id="ld-history-date" aria-label="Choisir une date précédente">
+            <button type="button" class="ld-history-arrow" id="ld-history-next" aria-label="Jour suivant">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button type="button" class="ld-history-today" id="ld-history-today" hidden>Revenir à aujourd'hui</button>
+          </div>
+        </div>
+
+        <div id="ld-body">
+          <p class="ld-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
+        </div>
+
+        <button type="button" class="ecl-block-collapse" id="ld-block-collapse">
+          <i class="fa-solid fa-chevron-up"></i> Masquer
+        </button>
+      </div>
+    </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260804-qcmfichearrow1" defer></script>
+<script src="/script.min.js?v=20260804-scorepopupclosebtn" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -914,7 +1024,7 @@
   // son statut du jour connu (publié -> visible, sinon -> masqué). Une fois
   // les 6 rubriques réglées, on retire le message "Chargement…" et, si
   // aucune n'est disponible, on affiche un message plutôt qu'une page vide.
-  var ECL_TOTAL_BLOCKS = 6;
+  var ECL_TOTAL_BLOCKS = 7;
   var eclSettledCount = 0;
   var eclVisibleCount = 0;
   window.eclNotifyBlockSettled = function (visible) {
@@ -2790,6 +2900,312 @@
       toggleId: 'oa-block-toggle',
       contentId: 'oa-block-content',
       collapseButtonId: 'oa-block-collapse',
+      onFirstOpen: function () {}
+    });
+  }
+
+  renderLoading();
+  loadToday();
+})();
+</script>
+<script>
+// Bloc "Mot latin du jour" — logique identique à views/latin-du-jour.html,
+// juste sans la gestion de la modale (fermeture/Échap/focus), déjà prise en
+// charge par le script partagé plus haut.
+(function () {
+  var body = document.getElementById('ld-body');
+  var titleText = document.getElementById('ld-title-text');
+  var historyToggle = document.getElementById('ld-history-toggle');
+  var historyPanel = document.getElementById('ld-history-panel');
+  var historyDateInput = document.getElementById('ld-history-date');
+  var historyTodayBtn = document.getElementById('ld-history-today');
+  var historyPrevBtn = document.getElementById('ld-history-prev');
+  var historyNextBtn = document.getElementById('ld-history-next');
+  var pollTimer = null;
+  var pollAttempts = 0;
+  var MAX_POLL_ATTEMPTS = 5;
+  var POLL_INTERVAL_MS = 4000;
+  var viewedDateKey = null;
+  var wrapperBlock = body.closest('.ecl-block');
+  var settledNotified = false;
+  function notifySettled(visible) {
+    if (settledNotified) return;
+    settledNotified = true;
+    if (typeof window.eclNotifyBlockSettled === 'function') window.eclNotifyBlockSettled(visible);
+  }
+  function revealBlock() {
+    if (wrapperBlock && wrapperBlock.hidden) {
+      wrapperBlock.hidden = false;
+      if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = String(str == null ? '' : str);
+    return div.innerHTML;
+  }
+
+  function renderLoading() {
+    body.innerHTML = '<p class="ld-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement du mot latin du jour…</p>';
+  }
+
+  function renderGenerating() {
+    body.innerHTML = '<p class="ld-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Le mot latin du jour est en cours de préparation, ça ne devrait plus être long…</p>';
+  }
+
+  function renderInsufficient(reason) {
+    var intro = viewedDateKey
+      ? 'Aucune expression latine pertinente n’a pu être établie pour l’actualité de ce jour-là.'
+      : 'Aucune expression latine pertinente n’a pu être établie pour l’actualité d’aujourd’hui.';
+    body.innerHTML =
+      '<p class="ld-state-message">' + intro + '</p>' +
+      (reason ? '<p class="ld-state-message">' + escapeHtml(reason) + '</p>' : '');
+  }
+
+  function renderNotFound() {
+    body.innerHTML = '<p class="ld-state-message">Aucun mot latin du jour n’a été généré ce jour-là.</p>';
+  }
+
+  function renderError() {
+    body.innerHTML = '<p class="ld-state-message">Impossible de charger le mot latin du jour pour le moment. Réessaie un peu plus tard.</p>';
+  }
+
+  var ORIGIN_BADGE_LABELS = {
+    article: "Reprise du sujet d'actualité",
+    attested: 'Expression latine attestée',
+    composed: "Traduction composée pour l'occasion"
+  };
+
+  function renderOneLatin(latin, index, total) {
+    var sources = Array.isArray(latin.sources) ? latin.sources : [];
+    var hasVerifiedLink = sources.some(function (s) { return !!s.url; });
+    var sourcesLabel = sources.length && !hasVerifiedLink ? 'Références indicatives' : 'Sources';
+    var sourcesHtml = sources.length
+      ? '<ul>' + sources.map(function (s) {
+          var label = [s.title, s.author, s.publisher, s.year].filter(Boolean).join(' — ');
+          var text = escapeHtml(label || s.title || '');
+          return s.url
+            ? '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a></li>'
+            : '<li>' + text + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="ld-no-sources">Aucune source détaillée disponible pour cette expression.</p>';
+
+    var countLabel = total > 1
+      ? '<p class="ld-latin-count">Expression ' + (index + 1) + ' / ' + total + '</p>'
+      : '';
+
+    var grammarItems = Array.isArray(latin.grammar_breakdown) ? latin.grammar_breakdown : [];
+    var grammarHtml = grammarItems.length
+      ? '<div class="ld-section">' +
+        '<h2><i class="fa-solid fa-graduation-cap"></i> Un peu de grammaire</h2>' +
+        '<ul class="ld-grammar-list">' + grammarItems.map(function (g) {
+          return '<li><span class="ld-grammar-word">' + escapeHtml(g.word) + '</span><p class="ld-grammar-note">' + escapeHtml(g.note) + '</p></li>';
+        }).join('') + '</ul>' +
+        '</div>'
+      : '';
+
+    var originLabel = ORIGIN_BADGE_LABELS[latin.phrase_origin] || '';
+
+    return (
+      '<article class="ld-latin">' +
+      countLabel +
+      '<p class="ld-topic-title">' + escapeHtml(latin.current_topic_title || '') + '</p>' +
+      '<p class="ld-topic-summary">' + escapeHtml(latin.current_topic_summary || '') + '</p>' +
+      (originLabel ? '<span class="ld-origin-badge">' + escapeHtml(originLabel) + '</span>' : '') +
+      '<div class="ld-phrase-block">' +
+      '<p>« ' + escapeHtml(latin.latin_phrase) + ' »</p>' +
+      '<span class="ld-translation">' + escapeHtml(latin.literal_translation) + '</span>' +
+      '</div>' +
+      '<div class="ld-section">' +
+      '<h2><i class="fa-solid fa-newspaper"></i> Le lien avec l\'actualité</h2>' +
+      '<p>' + escapeHtml(latin.news_connection) + '</p>' +
+      '</div>' +
+      '<div class="ld-section">' +
+      '<h2><i class="fa-solid fa-book-open"></i> Sens et usage</h2>' +
+      '<p>' + escapeHtml(latin.explanation) + '</p>' +
+      '</div>' +
+      grammarHtml +
+      '<div class="ld-sources">' +
+      '<p class="ld-sources-label"><i class="fa-solid fa-book"></i> ' + escapeHtml(sourcesLabel) + '</p>' +
+      sourcesHtml +
+      '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderPublished(content) {
+    var latins = Array.isArray(content.latins) ? content.latins : [];
+    if (!latins.length) { renderError(); return; }
+    body.innerHTML = latins.map(function (l, i) { return renderOneLatin(l, i, latins.length); }).join('');
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  function handleResult(data) {
+    var status = data && data.status;
+    if (status === 'published' && data.content) {
+      stopPolling();
+      renderPublished(data.content);
+      if (!viewedDateKey) { revealBlock(); notifySettled(true); }
+    } else if (status === 'insufficient') {
+      stopPolling();
+      renderInsufficient(data.reason);
+      if (!viewedDateKey) notifySettled(false);
+    } else if (status === 'not_found') {
+      stopPolling();
+      renderNotFound();
+      if (!viewedDateKey) notifySettled(false);
+    } else if (status === 'generating') {
+      renderGenerating();
+      pollAttempts += 1;
+      if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
+        pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
+      } else {
+        renderError();
+        if (!viewedDateKey) notifySettled(false);
+      }
+    } else {
+      stopPolling();
+      renderError();
+      if (!viewedDateKey) notifySettled(false);
+    }
+  }
+
+  function loadToday() {
+    viewedDateKey = null;
+    if (titleText) titleText.textContent = 'Mot latin du jour';
+    if (historyTodayBtn) historyTodayBtn.hidden = true;
+    updateHistoryArrowsState();
+    fetch('/api/latin-du-jour/today', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        stopPolling();
+        renderError();
+        notifySettled(false);
+      });
+  }
+
+  function loadHistoricalDate(dateKey) {
+    stopPolling();
+    pollAttempts = 0;
+    viewedDateKey = dateKey;
+    if (titleText) titleText.textContent = 'Mot latin du ' + formatFrenchDate(dateKey);
+    if (historyTodayBtn) historyTodayBtn.hidden = false;
+    updateHistoryArrowsState();
+    renderLoading();
+    fetch('/api/latin-du-jour/' + encodeURIComponent(dateKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(handleResult)
+      .catch(function () {
+        renderError();
+      });
+  }
+
+  function formatFrenchDate(dateKey) {
+    var parts = String(dateKey || '').split('-');
+    if (parts.length !== 3) return dateKey;
+    var months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    var month = months[Number(parts[1]) - 1];
+    return month ? (Number(parts[2]) + ' ' + month + ' ' + parts[0]) : dateKey;
+  }
+
+  function getParisDateKey() {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    var get = function (type) { var p = parts.filter(function (x) { return x.type === type; })[0]; return p ? p.value : ''; };
+    return get('year') + '-' + get('month') + '-' + get('day');
+  }
+
+  function shiftDateKey(dateKey, deltaDays) {
+    var parts = String(dateKey || '').split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + deltaDays);
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  }
+
+  function updateHistoryArrowsState() {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var todayKey = getParisDateKey();
+    if (historyNextBtn) historyNextBtn.disabled = refDateKey >= todayKey;
+    if (historyPrevBtn) {
+      var min = historyDateInput && historyDateInput.min;
+      historyPrevBtn.disabled = !!min && refDateKey <= min;
+    }
+  }
+
+  function navigateHistory(deltaDays) {
+    var refDateKey = viewedDateKey || getParisDateKey();
+    var targetDateKey = shiftDateKey(refDateKey, deltaDays);
+    var todayKey = getParisDateKey();
+    if (targetDateKey > todayKey) return;
+    if (historyDateInput && historyDateInput.min && targetDateKey < historyDateInput.min) return;
+    if (targetDateKey === todayKey) {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    } else {
+      if (historyDateInput) historyDateInput.value = targetDateKey;
+      loadHistoricalDate(targetDateKey);
+    }
+  }
+
+  var historyDatesLoaded = false;
+  function ensureHistoryDatesLoaded() {
+    if (historyDatesLoaded) return;
+    historyDatesLoaded = true;
+    fetch('/api/latin-du-jour/dates', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var dates = Array.isArray(data && data.dates) ? data.dates : [];
+        if (!dates.length || !historyDateInput) return;
+        historyDateInput.max = dates[0];
+        historyDateInput.min = dates[dates.length - 1];
+        updateHistoryArrowsState();
+      })
+      .catch(function () {});
+  }
+
+  if (historyToggle && historyPanel) {
+    historyToggle.addEventListener('click', function () {
+      var isHidden = historyPanel.hidden;
+      historyPanel.hidden = !isHidden;
+      historyToggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      if (isHidden) ensureHistoryDatesLoaded();
+    });
+  }
+  if (historyDateInput) {
+    historyDateInput.addEventListener('change', function () {
+      var value = historyDateInput.value;
+      if (value) loadHistoricalDate(value);
+    });
+  }
+  if (historyTodayBtn) {
+    historyTodayBtn.addEventListener('click', function () {
+      if (historyDateInput) historyDateInput.value = '';
+      loadToday();
+    });
+  }
+  if (historyPrevBtn) {
+    historyPrevBtn.addEventListener('click', function () { navigateHistory(-1); });
+  }
+  if (historyNextBtn) {
+    historyNextBtn.addEventListener('click', function () { navigateHistory(1); });
+  }
+
+  // Bloc replié par défaut (accordéon, cf. script partagé plus haut) : le
+  // contenu déplié n'apparaît qu'au premier clic, mais le statut du jour est
+  // chargé dès l'affichage de la page (ci-dessous) — c'est ce qui permet de
+  // savoir si ce bloc doit apparaître du tout (cf. notifySettled/revealBlock).
+  if (typeof window.eclRegisterAccordionBlock === 'function') {
+    window.eclRegisterAccordionBlock({
+      toggleId: 'ld-block-toggle',
+      contentId: 'ld-block-content',
+      collapseButtonId: 'ld-block-collapse',
       onFirstOpen: function () {}
     });
   }

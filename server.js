@@ -27,6 +27,7 @@ const { createMecanismeSociologiqueService } = require("./lib/mecanisme-sociolog
 const { createConceptDuJourService } = require("./lib/concept-du-jour");
 const { createCitationDuJourService } = require("./lib/citation-du-jour");
 const { createOeuvreArtDuJourService } = require("./lib/oeuvre-art-du-jour");
+const { createLatinDuJourService } = require("./lib/latin-du-jour");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -5744,7 +5745,7 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
 
     // Le pipeline appelle cet endpoint à la fin de sa vague de publication.
     // Le push ne doit toutefois annoncer l'ouverture des arènes qu'une fois
-    // les six rubriques Éclairages effectivement publiées. Cette attente
+    // les sept rubriques Éclairages effectivement publiées. Cette attente
     // déclenche aussi les générations manquantes, dans leur ordre de priorité.
     const eclairages = await ensureDailyEclairagesPublished(new Date());
 
@@ -11577,7 +11578,7 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount) {
     "- \"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format.",
     "- \"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus.",
     "- \"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\" ; n'utilise ce format QUE si le sujet offre naturellement plusieurs bonnes réponses distinctes et sans ambiguïté au vu du texte.",
-    "- \"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; n'utilise ce format QUE si le sujet offre un ordre objectif et non discutable au vu du texte.",
+    "- \"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni ; n'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte, sinon préfère un autre format.",
     "",
     "=== Format suggéré, question par question (dans l'ordre) ===",
     "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions :",
@@ -11790,7 +11791,13 @@ function validateDailyQuizQuestions(rawQuestions, candidateIds) {
 // atteindre un nombre de questions correct — plusieurs questions par
 // événement/parallèle sont donc autorisées (bornées), avec une cible de
 // questions plus petite en conséquence.
-const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 6;
+// Plafond à 10 (demande du 04/08/2026) pour pouvoir garantir une question
+// par élément disponible ce jour-là : jusqu'à 7 rubriques Éclairages
+// (parallèle/pensée/mécanisme/concept/citation/œuvre/latin, une chacune max
+// par jour) + jusqu'à 3 événements "Ce jour dans l'Histoire" — cf.
+// buildCultureGeneraleQuotas, qui assigne ce quota avant l'appel IA plutôt
+// que de compter sur elle pour couvrir chaque rubrique d'elle-même.
+const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 10;
 const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
 const DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM = 2;
 
@@ -11806,10 +11813,10 @@ async function fetchCeJourHistoireQuizCandidates() {
   return events.filter((e) => e && e.review_status === "reviewed" && String(e.summary_long || "").trim());
 }
 
-// Pioche dans les 6 rubriques de la page /eclairages (parallèle historique,
+// Pioche dans les 7 rubriques de la page /eclairages (parallèle historique,
 // pensée philosophique, mécanisme sociologique, concept du jour, citation
-// du jour, œuvre d'art du jour) — un seul pool combiné plutôt qu'un par
-// rubrique, pour matcher la page qui les réunit déjà. Réutilise
+// du jour, œuvre d'art du jour, mot latin du jour) — un seul pool combiné
+// plutôt qu'un par rubrique, pour matcher la page qui les réunit déjà. Réutilise
 // generateIfNeeded de chaque service plutôt que de relire les tables
 // directement : idempotent (renvoie le contenu déjà publié s'il existe, ne
 // déclenche une génération que s'il manque), même comportement que
@@ -11820,7 +11827,7 @@ async function fetchCeJourHistoireQuizCandidates() {
 // fois seul (autres appelants éventuels) et combiné avec "Ce jour dans
 // l'Histoire" par fetchCultureGeneraleQuizCandidates ci-dessous.
 async function fetchEclairagesQuizCandidates() {
-  const [parallels, pensees, mecanismes, concepts, citations, oeuvres] = await Promise.all([
+  const [parallels, pensees, mecanismes, concepts, citations, oeuvres, latins] = await Promise.all([
     (async () => {
       try {
         const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
@@ -11880,9 +11887,19 @@ async function fetchEclairagesQuizCandidates() {
         console.error("[daily-quiz:eclairages] lecture œuvre d'art du jour :", error.message);
         return [];
       }
+    })(),
+    (async () => {
+      try {
+        const result = await latinDuJourService.generateIfNeeded(new Date());
+        const items = result?.status === "published" ? result.content?.latins : null;
+        return Array.isArray(items) ? items.map((item) => ({ type: "latin", ...item })) : [];
+      } catch (error) {
+        console.error("[daily-quiz:eclairages] lecture mot latin du jour :", error.message);
+        return [];
+      }
     })()
   ]);
-  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations, ...oeuvres];
+  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations, ...oeuvres, ...latins];
 }
 
 // Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
@@ -11907,6 +11924,13 @@ function formatEclairagesItemForPrompt(item) {
   if (item.type === "oeuvre") {
     return `- id:${item.current_topic_id} | Type : œuvre d'art du jour | Actualité : ${common} | Œuvre : ${String(item.artwork_title || "").trim()} (${String(item.artist_name || "").trim()}, ${String(item.artwork_date || "").trim()})\n  Description de l'œuvre : ${String(item.artwork_description || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Présentation de l'artiste : ${String(item.artist_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
   }
+  if (item.type === "latin") {
+    const grammar = (Array.isArray(item.grammar_breakdown) ? item.grammar_breakdown : [])
+      .map((g) => `${String(g.word || "").trim()} (${String(g.note || "").trim()})`)
+      .join(" ; ");
+    const originLabel = { article: "reprise du sujet d'actualité", attested: "expression latine réellement attestée", composed: "traduction composée pour l'occasion, PAS une expression ancienne" }[item.phrase_origin] || "inconnue";
+    return `- id:${item.current_topic_id} | Type : mot latin du jour | Actualité : ${common} | Expression latine : « ${String(item.latin_phrase || "").trim()} » (${String(item.literal_translation || "").trim()}) | Provenance : ${originLabel}\n  Sens et usage : ${String(item.explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Grammaire : ${grammar.slice(0, 600).replace(/\s+/g, " ")}`;
+  }
   // Citation du jour : présentation simplifiée à l'affichage (pas de
   // shared_mechanism/essential_difference montrés au lecteur), mais choisie
   // en écho à un sujet d'actualité comme les autres — current_topic_id est
@@ -11914,7 +11938,7 @@ function formatEclairagesItemForPrompt(item) {
   return `- id:${item.current_topic_id} | Type : citation du jour | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 300).replace(/\s+/g, " ")}\n  Présentation de l'auteur : ${String(item.author_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
 }
 
-// Combine "Ce jour dans l'Histoire" et les 6 rubriques Éclairages en un
+// Combine "Ce jour dans l'Histoire" et les 7 rubriques Éclairages en un
 // seul pool de candidats pour un unique QCM "Culture Générale" — demandé
 // explicitement pour que ce QCM puisse se générer dès que l'UNE des deux
 // sources a assez de matière (les événements historiques sont disponibles
@@ -11958,6 +11982,7 @@ function extractCultureGeneraleItemName(item) {
     case "concept": raw = item.concept_name; break;
     case "citation": raw = item.quote_author; break;
     case "oeuvre": raw = item.artwork_title; break;
+    case "latin": raw = item.latin_phrase; break;
     default: raw = "";
   }
   return capitalizeFirstLetter(raw);
@@ -12039,18 +12064,78 @@ function extractCultureGeneraleItemDetail(item) {
         ].filter(Boolean),
         image: extractCultureGeneraleItemImage(item.artwork_image_url, item.artwork_image_credit, item.artwork_image_page_url, null)
       };
+    case "latin": {
+      const breakdown = Array.isArray(item.grammar_breakdown) ? item.grammar_breakdown : [];
+      const grammarSections = breakdown.map((entry, i) => ({
+        label: i === 0 ? "Grammaire" : null,
+        text: `${t(entry.word)} — ${t(entry.note)}`
+      }));
+      // Honnêteté sur la provenance (phrase_origin, cf. lib/latin-du-jour.js) :
+      // reportée dans le "meta" de la fiche pour ne jamais laisser croire
+      // qu'une traduction composée pour l'occasion est une citation ancienne.
+      const originLabel = { article: "reprise du sujet d'actualité", attested: "expression latine attestée", composed: "traduction composée pour l'occasion" }[item.phrase_origin] || null;
+      return {
+        meta: metaJoin([item.literal_translation, originLabel]),
+        sections: [
+          { label: null, text: `« ${t(item.latin_phrase)} »` },
+          t(item.explanation) ? { label: "Sens et usage", text: t(item.explanation) } : null,
+          ...grammarSections
+        ].filter(Boolean),
+        image: null
+      };
+    }
     default:
       return { meta: null, sections: [], image: null };
   }
 }
 
-function buildCultureGeneraleQuizPrompt(items) {
+// Garantit une question par élément disponible (chaque rubrique Éclairage
+// publiée ce jour-là + chaque événement "Ce jour dans l'Histoire") au lieu
+// de laisser l'IA choisir librement lesquels couvrir — retour utilisateur du
+// 04/08/2026 : plusieurs rubriques (ex. citation du jour) se retrouvaient
+// sans aucune question alors que l'IA concentrait 2 questions sur les mêmes
+// 3-4 sujets. Même logique que buildFormatAssignments plus haut : une vraie
+// couverture se construit nous-mêmes, pas en espérant que l'IA la choisisse.
+// Les rubriques Éclairages (une par jour maximum chacune) passent en
+// priorité ; "Ce jour dans l'Histoire" (nombre variable, parfois 2-3
+// événements) complète dans la limite du budget restant. Le budget
+// restant après avoir couvert tout le monde une fois sert à donner une 2e
+// question (bornée à DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM) à des
+// éléments tirés au sort, pour ne jamais laisser de budget inutilisé.
+function buildCultureGeneraleQuotas(candidates) {
+  const eclairagesItems = candidates.filter((c) => c.type !== "histoire");
+  const histoireItems = candidates.filter((c) => c.type === "histoire");
+  const histoireBudget = Math.max(DAILY_QUIZ_QUESTION_COUNT_NARRATIVE - eclairagesItems.length, 0);
+  const mandatoryItems = [...eclairagesItems, ...histoireItems.slice(0, histoireBudget)];
+
+  const quotaByItemId = new Map(mandatoryItems.map((c) => [String(c.id || c.current_topic_id), 1]));
+  let leftoverBudget = Math.max(DAILY_QUIZ_QUESTION_COUNT_NARRATIVE - mandatoryItems.length, 0);
+  for (const item of shuffleArray(mandatoryItems)) {
+    if (leftoverBudget <= 0) break;
+    const id = String(item.id || item.current_topic_id);
+    if (quotaByItemId.get(id) >= DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM) continue;
+    quotaByItemId.set(id, quotaByItemId.get(id) + 1);
+    leftoverBudget--;
+  }
+  return { mandatoryItems, quotaByItemId };
+}
+
+function buildCultureGeneraleQuizPrompt(items, quotaByItemId) {
   const list = items.map(formatCultureGeneraleItemForPrompt).join("\n");
+  const quotaLines = items
+    .map((item) => {
+      const id = String(item.id || item.current_topic_id);
+      const quota = quotaByItemId.get(id) || 0;
+      return `id:${id} → ${quota} question${quota > 1 ? "s" : ""}`;
+    })
+    .join("\n");
+  const totalQuota = items.reduce((sum, item) => sum + (quotaByItemId.get(String(item.id || item.current_topic_id)) || 0), 0);
   return [
-    `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur ou une œuvre d'art) — jusqu'à ${DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM} questions par élément (${DAILY_QUIZ_QUESTION_COUNT_NARRATIVE} au total maximum).`,
+    `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur, une œuvre d'art ou un mot latin).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
+    "- Pour un élément \"mot latin du jour\" dont la provenance indiquée est \"traduction composée pour l'occasion\" : ne le présente JAMAIS comme une expression latine ancienne, un proverbe ou une citation historique — les questions ne peuvent porter que sur sa grammaire (cas, déclinaison, conjugaison, sens des mots), jamais sur une prétendue origine ou un prétendu auteur.",
     "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
     "- Pour un élément d'éclairage, les questions portent UNIQUEMENT sur l'événement/concept/citation/œuvre lui-même (son contexte, son origine, son explication) — jamais sur un simple détail anecdotique, et jamais sur l'actualité du jour qui lui fait écho.",
     "- Interdiction absolue de mentionner l'actualité du jour dans une question ou une option : ni le sujet d'actualité, ni le \"mécanisme commun\", ni la \"différence essentielle\" avec cette actualité ne doivent apparaître — ces champs ne sont qu'un contexte interne pour toi, jamais une matière à question. Le lecteur qui n'a pas suivi l'actualité doit pouvoir répondre sans le savoir.",
@@ -12059,7 +12144,12 @@ function buildCultureGeneraleQuizPrompt(items) {
     "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
     "",
-    ...buildQuestionFormatsPromptBlock("sourceId", DAILY_QUIZ_QUESTION_COUNT_NARRATIVE),
+    "=== Nombre de questions par sujet (obligatoire) ===",
+    `Génère EXACTEMENT ce nombre de questions pour chaque sujet ci-dessous (${totalQuota} questions au total) — ne saute AUCUN sujet, chacun doit être couvert :`,
+    quotaLines,
+    "Exception : si un sujet précis ne permet vraiment de poser aucune question sérieuse sans se répéter ou inventer un fait absent du texte, tu peux lui donner 1 question de moins que prévu — mais ne le saute jamais entièrement sans raison sérieuse, et ne dépasse jamais le nombre indiqué pour un sujet.",
+    "",
+    ...buildQuestionFormatsPromptBlock("sourceId", totalQuota),
     "",
     "Éléments disponibles :",
     list
@@ -12067,7 +12157,7 @@ function buildCultureGeneraleQuizPrompt(items) {
 }
 
 const DAILY_QUIZ_NARRATIVE_SLOTS = {
-  culture_generale: { fetchCandidates: fetchCultureGeneraleQuizCandidates, buildPrompt: buildCultureGeneraleQuizPrompt }
+  culture_generale: { fetchCandidates: fetchCultureGeneraleQuizCandidates, buildQuotas: buildCultureGeneraleQuotas, buildPrompt: buildCultureGeneraleQuizPrompt }
 };
 
 // Validation adaptée aux QCM narratifs : contrairement à
@@ -12096,15 +12186,22 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
 
 async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   const apiKey = process.env.OPENAI_API_KEY;
-  const candidates = await config.fetchCandidates();
-  if (!candidates.length) {
+  const allCandidates = await config.fetchCandidates();
+  if (!allCandidates.length) {
     console.warn(`[daily-quiz:${slotKey}] contenu du jour indisponible, génération reportée.`);
     return;
   }
 
+  // buildQuotas assigne un nombre de questions obligatoire par élément avant
+  // l'appel IA (cf. buildCultureGeneraleQuotas) — ne garde que les éléments
+  // retenus (mandatoryItems) dans tout ce qui suit, pour ne jamais valider ou
+  // indexer une question sur un élément volontairement laissé de côté faute
+  // de budget.
+  const { mandatoryItems: candidates, quotaByItemId } = config.buildQuotas(allCandidates);
+
   let parsed;
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: config.buildPrompt(candidates) }], {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: config.buildPrompt(candidates, quotaByItemId) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" }
@@ -12255,12 +12352,25 @@ function computeCultureGeneraleStreaks(events) {
   });
   const result = new Map();
   for (const [sourceDebateId, list] of bySource) {
+    // Un même sourceDebateId peut donner lieu à plusieurs questions le même
+    // jour (deux angles sur le même Éclairage) : on les regroupe en un seul
+    // événement par jour (correct seulement si TOUTES les réponses de ce
+    // jour-là le sont), sinon le streak avance de 2 crans en une seule
+    // journée et saute l'intervalle de 3 jours — plus aucune repasse ne
+    // redevient due avant bien plus longtemps que prévu.
+    const byDate = new Map();
+    for (const e of list) {
+      const previous = byDate.get(e.quizDate);
+      byDate.set(e.quizDate, previous === undefined ? e.correct : previous && e.correct);
+    }
+    const dailyEvents = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+
     let streak = 0;
     let everCorrect = false;
     let lastQuizDate = null;
-    for (const e of list) {
-      lastQuizDate = e.quizDate;
-      if (e.correct) {
+    for (const [quizDate, correct] of dailyEvents) {
+      lastQuizDate = quizDate;
+      if (correct) {
         streak = Math.min(streak + 1, DAILY_QUIZ_ACQUIS_VALIDATION_STREAK);
         everCorrect = true;
       } else {
@@ -12334,11 +12444,12 @@ function getCultureGeneraleEclairagesSourceConfig(sourceType) {
     case "concept": return { service: conceptDuJourService, contentKey: "concepts" };
     case "citation": return { service: citationDuJourService, contentKey: "citations" };
     case "oeuvre": return { service: oeuvreArtDuJourService, contentKey: "oeuvres" };
+    case "latin": return { service: latinDuJourService, contentKey: "latins" };
     default: return null;
   }
 }
 
-const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre"];
+const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre", "latin"];
 
 // Index (mémoïsé le temps d'un appel) des événements "Ce jour dans l'Histoire"
 // par id — évènements globaux, jamais scopés à une date de génération de QCM.
@@ -12382,7 +12493,7 @@ function applyResolvedCultureGeneraleSource(a, type, sourceItem) {
 // historique par id, contenu Éclairages du jour d'origine via
 // originalQuizDateBySourceId), sans jamais régénérer de contenu. Quand la
 // rubrique elle-même est inconnue (acquis antérieurs à l'ajout de
-// sourceType), on cherche dans les 6 rubriques Éclairages de cette date
+// sourceType), on cherche dans les 7 rubriques Éclairages de cette date
 // plutôt que de supposer une rubrique par défaut. Mute directement les
 // objets de `acquis`.
 async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceId) {
@@ -12658,7 +12769,7 @@ function shiftDateKeyDays(dateKey, deltaDays) {
 // getPenseePhilosophiqueExcludedTopicIds) ne suffit donc pas à éviter de
 // retraiter le même fait plusieurs jours d'affilée. On regarde ici, sur les
 // ECLAIRAGES_LOOKBACK_DAYS derniers jours, quels sujets ont déjà été traités
-// par L'UNE des 6 rubriques de la page Éclairages, et on en déduit leur
+// par L'UNE des 7 rubriques de la page Éclairages, et on en déduit leur
 // cloud_label/question — les mêmes clés de regroupement que
 // dedupeParalleleHistoriqueTopicsByCloudLabel — pour les exclure des
 // candidats du jour, quel que soit leur id. La lecture est volontairement
@@ -12715,6 +12826,26 @@ async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
   return { labelKeys, questionKeys };
 }
 
+// Convention éditoriale du bot de veille sur les arènes "open" (constatée
+// empiriquement le 04/08/2026 en inspectant debates.content, pas documentée
+// ailleurs) : le texte se termine toujours par un court paragraphe en latin
+// propre à cet article (ex. "Fulgura in itinere"), suivi d'un paragraphe
+// signature (ex. "P. Ratsky", "J.L Grasso"). Utilisé UNIQUEMENT par
+// latin-du-jour (cf. lib/latin-du-jour.js) pour reprendre la formule
+// réellement associée à l'article plutôt que d'en faire deviner/inventer une
+// par l'IA — la précédente version de la rubrique inventait un pseudo-latin
+// plausible faute de voir cette formule (coupée par le slice(600) plus bas).
+const DEBATE_CONTENT_SIGNATURE_PATTERN = /^[A-Z]\.\s?[A-Z]?\.?\s+[A-ZÀ-Ý][a-zà-ÿ'-]+$/;
+function extractDebateContentLatinMotto(content) {
+  const parts = String(content || "").split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return null;
+  const signature = parts[parts.length - 1];
+  const motto = parts[parts.length - 2];
+  if (!DEBATE_CONTENT_SIGNATURE_PATTERN.test(signature)) return null;
+  if (!motto || motto.length > 80 || /[?？!]$/.test(motto)) return null;
+  return motto;
+}
+
 async function getPublishedTopicsForDate(dateKey) {
   const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
   const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -12754,7 +12885,11 @@ async function getPublishedTopicsForDate(dateKey) {
     // Image déjà publiée avec l'arène du sujet actuel (illustration de
     // l'actu, pas du précédent historique) — repli si Wikipedia ne trouve
     // rien de pertinent pour le précédent, cf. attachHistoricalEventImageToOne.
-    currentTopicImageUrl: row.image_url || null
+    currentTopicImageUrl: row.image_url || null,
+    // Extraite du texte COMPLET (row.content, avant le slice(600) ci-dessus
+    // qui la coupait) — seule latin-du-jour l'utilise, les autres rubriques
+    // ignorent ce champ.
+    latinMotto: extractDebateContentLatinMotto(row.content)
   }));
 }
 
@@ -13102,8 +13237,59 @@ const oeuvreArtDuJourService = createOeuvreArtDuJourService({
   debugLogging: !process.env.RENDER
 });
 
+const LATIN_DU_JOUR_MODEL = process.env.OPENAI_LATIN_DU_JOUR_MODEL || "gpt-4.1-mini";
+
+// Les six autres rubriques Éclairages ont toujours priorité sur le choix
+// du sujet du jour : on attend/déclenche leur génération du jour dans cet
+// ordre (oeuvreArtDuJourService.generateIfNeeded attend déjà lui-même les
+// cinq autres en interne, cf. getOeuvreArtDuJourExcludedTopicIds), puis on
+// renvoie l'union des sujets qu'elles ont couverts pour que le mot latin
+// du jour les exclue.
+async function getLatinDuJourExcludedTopicIds(dateKey) {
+  const excluded = await getOeuvreArtDuJourExcludedTopicIds(dateKey);
+
+  let oeuvreResult;
+  try {
+    oeuvreResult = await oeuvreArtDuJourService.generateIfNeeded(new Date(`${dateKey}T12:00:00Z`));
+  } catch (err) {
+    console.error("[latin-du-jour] attente de l'œuvre d'art du jour :", err.message);
+    oeuvreResult = null;
+  }
+  let attempts = 0;
+  while (oeuvreResult && oeuvreResult.status === "generating" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    oeuvreResult = await oeuvreArtDuJourService.getByDate(dateKey);
+    attempts++;
+  }
+  if (oeuvreResult && oeuvreResult.status === "published" && oeuvreResult.content) {
+    const oeuvres = Array.isArray(oeuvreResult.content.oeuvres) ? oeuvreResult.content.oeuvres : [];
+    oeuvres.forEach((o) => { if (o.current_topic_id) excluded.add(String(o.current_topic_id)); });
+  }
+
+  return excluded;
+}
+
+// Même pool de sujets que les six autres rubriques (getPublishedTopicsForDate,
+// plus haut) : "une actu du jour" désigne la même source de vérité pour les
+// sept rubriques, pas une septième définition de "publié aujourd'hui". Le
+// mot latin du jour choisit son sujet comme les autres, mais sa présentation
+// reste volontairement simple (cf. lib/latin-du-jour.js et
+// prompts/latin-du-jour.js) : pas d'image — contrairement aux autres
+// rubriques, aucune personne réelle ni œuvre n'est représentée ici.
+const latinDuJourService = createLatinDuJourService({
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  logger: console,
+  getCurrentDate: () => new Date(),
+  getPublishedTopicsForDate,
+  getExcludedTopicIds: getLatinDuJourExcludedTopicIds,
+  dateKeyFor: parisDateKey,
+  model: LATIN_DU_JOUR_MODEL,
+  debugLogging: !process.env.RENDER
+});
+
 // Condition commune au push quotidien : une annonce « arènes ouvertes » ne
-// peut partir qu'après la publication réelle des six rubriques Éclairages.
+// peut partir qu'après la publication réelle des sept rubriques Éclairages.
 // L'ordre ci-dessous est aussi leur ordre de priorité anti-doublon.
 const DAILY_ECLAIRAGES_PUBLICATION_SERVICES = [
   ["parallele_historique", paralleleHistoriqueService],
@@ -13111,7 +13297,8 @@ const DAILY_ECLAIRAGES_PUBLICATION_SERVICES = [
   ["mecanisme_sociologique", mecanismeSociologiqueService],
   ["concept_du_jour", conceptDuJourService],
   ["citation_du_jour", citationDuJourService],
-  ["oeuvre_art_du_jour", oeuvreArtDuJourService]
+  ["oeuvre_art_du_jour", oeuvreArtDuJourService],
+  ["latin_du_jour", latinDuJourService]
 ];
 const DAILY_ECLAIRAGES_PUSH_WAIT_ATTEMPTS = 100;
 const DAILY_ECLAIRAGES_PUSH_WAIT_MS = 3000;
@@ -13232,16 +13419,26 @@ const OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED = (() => {
 })();
 const OEUVRE_ART_DU_JOUR_TRIGGER_HOUR = 9;
 
+// Interrupteur indépendant (mêmes règles) pour le mot latin du jour : peut
+// être activé/désactivé sans toucher aux six autres rubriques.
+const LATIN_DU_JOUR_SCHEDULER_ENABLED = (() => {
+  const forced = String(process.env.AGON_LATIN_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  if (forced === "on") return true;
+  if (forced === "off") return false;
+  return Boolean(process.env.RENDER);
+})();
+const LATIN_DU_JOUR_TRIGGER_HOUR = 9;
+
 if (
   DAILY_QUIZ_SCHEDULER_ENABLED || PARALLELE_HISTORIQUE_SCHEDULER_ENABLED ||
   PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED || MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED ||
   CONCEPT_DU_JOUR_SCHEDULER_ENABLED || CITATION_DU_JOUR_SCHEDULER_ENABLED ||
-  OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED
+  OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED || LATIN_DU_JOUR_SCHEDULER_ENABLED
 ) {
   // Un seul setInterval partagé entre QCM, parallèle historique, pensée
   // philosophique, mécanisme sociologique, concept du jour, citation du
-  // jour et œuvre d'art du jour, chacun gardé par son propre interrupteur —
-  // pas de scheduler dupliqué.
+  // jour, œuvre d'art du jour et mot latin du jour, chacun gardé par son
+  // propre interrupteur — pas de scheduler dupliqué.
   const tryRunDailySchedulers = () => {
     const hour = parisHour();
     if (DAILY_QUIZ_SCHEDULER_ENABLED) {
@@ -13273,6 +13470,10 @@ if (
     if (OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED && hour >= OEUVRE_ART_DU_JOUR_TRIGGER_HOUR) {
       oeuvreArtDuJourService.generateIfNeeded(new Date())
         .catch((err) => console.error("[oeuvre-art-du-jour scheduler]", err.message));
+    }
+    if (LATIN_DU_JOUR_SCHEDULER_ENABLED && hour >= LATIN_DU_JOUR_TRIGGER_HOUR) {
+      latinDuJourService.generateIfNeeded(new Date())
+        .catch((err) => console.error("[latin-du-jour scheduler]", err.message));
     }
   };
   tryRunDailySchedulers();
@@ -13996,8 +14197,67 @@ app.post("/api/oeuvre-art-du-jour/generate", requireAdmin, rateLimit("oeuvre-art
   }
 });
 
+// Mot latin du jour — page autonome (cf. views/latin-du-jour.html).
+app.get("/latin-du-jour", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/latin-du-jour.html"));
+});
+
+// Route publique : renvoie le contenu du jour s'il existe déjà, sinon
+// déclenche sa génération (verrou anti-concurrence géré par le module).
+app.get("/api/latin-du-jour/today", rateLimit("latin-du-jour-today", 60), async (req, res) => {
+  try {
+    const result = await latinDuJourService.generateIfNeeded(new Date());
+    res.json(result);
+  } catch (error) {
+    console.error("[latin-du-jour] /today :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Menu "jours précédents" du frontend : liste des dates réellement publiées,
+// les plus récentes d'abord.
+app.get("/api/latin-du-jour/dates", rateLimit("latin-du-jour-dates", 60), async (req, res) => {
+  try {
+    const dates = await latinDuJourService.listPublishedDates();
+    res.json({ dates });
+  } catch (error) {
+    console.error("[latin-du-jour] /dates :", error.message);
+    res.status(500).json({ dates: [], error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Consultation d'une date précise (lecture seule, jamais de génération —
+// cf. getByDate). Placée après /today et /dates pour ne jamais leur faire
+// de l'ombre dans le routage Express.
+app.get("/api/latin-du-jour/:date", rateLimit("latin-du-jour-date", 60), async (req, res) => {
+  const { date } = req.params;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ status: "failed", error: "Date invalide, format attendu AAAA-MM-JJ." });
+    return;
+  }
+  try {
+    const result = await latinDuJourService.getByDate(date);
+    res.json(result);
+  } catch (error) {
+    console.error("[latin-du-jour] /:date :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
+// Déclenchement manuel réservé à l'admin (tests / retry) : force une
+// nouvelle génération même si un contenu existe déjà pour aujourd'hui.
+app.post("/api/latin-du-jour/generate", requireAdmin, rateLimit("latin-du-jour-generate", 10), async (req, res) => {
+  try {
+    const result = await latinDuJourService.generateIfNeeded(new Date(), { force: true });
+    res.json(result);
+  } catch (error) {
+    console.error("[latin-du-jour] /generate :", error.message);
+    res.status(500).json({ status: "failed", error: "Erreur serveur. Réessaie plus tard." });
+  }
+});
+
 // État léger utilisé par l'accueil : le bouton Éclairages ne devient
-// cliquable que lorsque les six rubriques du jour sont réellement publiées.
+// cliquable que lorsque les sept rubriques du jour sont réellement publiées.
 // Cette route est strictement en lecture et ne déclenche aucune génération.
 app.get("/api/eclairages/status", rateLimit("eclairages-status", 120), async (req, res) => {
   try {
