@@ -19565,13 +19565,6 @@ body.page-home #debates-list .theme-row-section:first-child {
   /* overflow:hidden met la taille mini flex à 0 : sans flex-shrink:0, la section
      desktop (hauteur figée + cloud rigide) écrase le switch à chaque bascule */
   flex-shrink: 0;
-  /* Fond semi-transparent (rgba ci-dessus) au-dessus du nuage de bulles animé :
-     sans calque GPU dédié, Safari refond ces pixels avec le contenu changeant
-     en dessous à chaque frame de l'animation des bulles, perçu comme un
-     tremblement de ce bouton (confirmé spécifique à Safari, cf. le fix sur
-     .agon-tag-bubble un peu plus bas dans ce fichier). */
-  will-change: transform;
-  transform: translateZ(0);
 }
 
 .agon-cloud-mode-segment {
@@ -19587,13 +19580,6 @@ body.page-home #debates-list .theme-row-section:first-child {
   text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
-  /* Calque dédié par segment (pas seulement sur .agon-cloud-mode-switch
-     parent) : sur Safari, le tremblement restait visible sur le segment actif
-     ("Bulles Agôn"), dont le fond quasi opaque (.agon-cloud-mode-segment-active)
-     est une couche peinte à part, pas automatiquement isolée par la promotion
-     du seul parent. */
-  will-change: transform;
-  transform: translateZ(0);
 }
 
 .agon-cloud-mode-segment:hover {
