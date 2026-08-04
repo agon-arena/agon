@@ -495,9 +495,15 @@
        zone) — un élément à bottom:0 y devient invisible/coupé. Le décaler de
        la valeur fiable de la zone sûre (déjà utilisée par le dock flottant du
        site pour la même raison) le sort de cette zone morte. */
+    /* bottom = exactement env(safe-area-inset-bottom), sans marge de confort
+       supplémentaire : d'après le diagnostic déjà mené sur ces appareils
+       (memory standalone-bottom-band-abandoned), le dock flottant du site est
+       "déjà au plus bas affichable" à cette valeur précise — descendre
+       davantage retomberait dans la zone que WebKit ne peint jamais en
+       standalone. */
     .qcm-fiche-fade-hint {
       position: fixed;
-      bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 6px);
+      bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
       max-width: 480px;
       margin: 0 auto;
       z-index: 1001;
