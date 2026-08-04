@@ -384,20 +384,16 @@
       align-items: center;
       gap: 10px;
       width: 100%;
-      padding: 12px 14px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: #f9fafb;
+      padding: 12px 4px;
+      border: none;
+      border-bottom: 1px solid #eef1f3;
+      background: none;
       font: inherit;
       text-align: left;
       cursor: pointer;
     }
-    .qcm-acquis-item.is-validated {
-      border-color: #bbe6cc;
-      background: #f3fbf6;
-    }
     .qcm-acquis-item + .qcm-acquis-item {
-      margin-top: 8px;
+      margin-top: 0;
     }
     .qcm-acquis-name {
       flex: 1 1 auto;
@@ -444,16 +440,20 @@
       justify-content: center;
       gap: 6px;
       width: 100%;
-      margin: 8px 0 0;
-      padding: 10px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      background: #f9fafb;
+      margin-top: 16px;
+      padding: 8px 0 0;
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      background: none;
       font: inherit;
-      font-size: 13px;
+      color: #6b7280;
+      font-size: 12px;
       font-weight: 700;
-      color: #516776;
+      letter-spacing: 0.02em;
       cursor: pointer;
+    }
+    .qcm-acquis-group-collapse:hover {
+      color: #243038;
     }
     /* Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
        concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
@@ -465,11 +465,20 @@
       position: fixed;
       inset: 0;
       z-index: 1000;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px;
+      background: rgba(17, 24, 39, 0.55);
+    }
+    /* min-height légèrement supérieur à 100% : garantit un peu de scroll vers
+       le bas même quand la fiche est courte (sinon, sur mobile, un swipe sur
+       une fiche qui tient déjà à l'écran ne produit aucun mouvement et peut
+       sembler figé). */
+    .qcm-fiche-overlay-inner {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
-      background: rgba(17, 24, 39, 0.55);
+      min-height: calc(100% + 40px);
     }
     .qcm-fiche-modal {
       width: 100%;
@@ -1479,7 +1488,7 @@
         html += '<p class="qcm-acquis-name">' + escapeHtml(acquisDisplayName(item)) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
         html += '</button>';
       });
-      html += '<button type="button" class="qcm-acquis-group-collapse"><i class="fa-solid fa-angles-up"></i> Replier</button>';
+      html += '<button type="button" class="qcm-acquis-group-collapse"><i class="fa-solid fa-chevron-up"></i> Replier</button>';
       html += '</div>';
       html += '</div>';
     });
@@ -1541,7 +1550,7 @@
     html += '</div>';
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
-    overlay.innerHTML = html;
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + html + '</div>';
     document.body.appendChild(overlay);
     try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
@@ -1553,7 +1562,7 @@
       if (e.key === 'Escape') close();
     }
     overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) close();
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) close();
     });
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
     document.addEventListener('keydown', onKeydown);
