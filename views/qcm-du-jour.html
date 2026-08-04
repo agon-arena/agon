@@ -340,7 +340,7 @@
       font: inherit;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
-      color: #111827;
+      color: #000000;
       text-align: left;
       cursor: pointer;
     }
@@ -839,7 +839,7 @@
   // de chaque question de culture générale — mêmes icônes/libellés que la
   // page Éclairages et "Ce jour dans l'Histoire", pour que la banque
   // d'acquis se sente comme le même univers.
-  var ACQUIS_SOURCE_TYPE_ORDER = ['histoire', 'parallele', 'pensee', 'mecanisme', 'concept', 'citation', 'oeuvre'];
+  var ACQUIS_SOURCE_TYPE_ORDER = ['histoire', 'parallele', 'pensee', 'mecanisme', 'concept', 'citation', 'oeuvre', 'latin'];
   var ACQUIS_SOURCE_TYPE_META = {
     histoire: { icon: 'fa-clock-rotate-left', label: "Ce jour dans l'Histoire" },
     parallele: { icon: 'fa-landmark', label: 'Parallèle historique' },
@@ -847,7 +847,8 @@
     mecanisme: { icon: 'fa-people-group', label: 'Mécanisme sociologique' },
     concept: { icon: 'fa-shapes', label: 'Concept du jour' },
     citation: { icon: 'fa-quote-left', label: 'Citation du jour' },
-    oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" }
+    oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" },
+    latin: { icon: 'fa-scroll', label: 'Mot latin du jour' }
   };
 
   function availableSlotKeysInCategory(category) {
