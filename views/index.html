@@ -84,7 +84,20 @@
     }
     .agon-startup-loader {
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      right: 0;
+      /* "bottom" négatif : la boîte déborde volontairement sous le bas visible
+         de l'écran, pour qu'un resize transitoire du viewport pendant le
+         rechargement (barre d'adresse Safari qui bouge) ne laisse jamais
+         entrevoir le fond de la page en dessous — même bug de fond que
+         #debate-iframe-parent-loading-overlay (script.js). Compensé par un
+         padding-bottom de la même valeur (box-sizing:border-box) pour que le
+         contenu centré (logo) reste calé sur le vrai viewport, pas sur cette
+         boîte agrandie — sinon le centrage se décale vers le bas. */
+      bottom: calc(-1 * (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px));
+      padding-bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px);
+      box-sizing: border-box;
       z-index: 9999;
       display: flex;
       align-items: center;
