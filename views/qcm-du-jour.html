@@ -1568,6 +1568,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + html + '<div class="qcm-fiche-scroll-spacer" aria-hidden="true"></div></div>';
     document.body.appendChild(overlay);
+    if (typeof attachScrollFadeHint === 'function') attachScrollFadeHint(overlay, overlay, '#ffffff');
     try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
