@@ -471,7 +471,12 @@
       z-index: 1000;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 20px;
+      /* max(20px, safe-area) plutôt qu'un padding fixe : en PWA standalone
+         (encoche/île dynamique), un padding-top de 20px seul ne suffit pas à
+         dégager la zone sûre — la croix de fermeture en haut de la fiche
+         (.qcm-fiche-close) pouvait se retrouver sous le statut/l'encoche,
+         invisible ou impossible à toucher. */
+      padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
       background: rgba(17, 24, 39, 0.55);
     }
     /* .scroll-fade-hint (générique, cf. style.css) est position:absolute —
