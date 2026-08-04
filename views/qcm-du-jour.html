@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260804-bubblejank1">
+  <link rel="stylesheet" href="/style.min.css?v=20260804-bubblejank2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -39,7 +39,15 @@
       min-height: 100vh;
       background-color: #243038;
     }
-    body.page-qcm-du-jour.in-iframe {
+    /* html.in-iframe (pas body.in-iframe) : la classe est posée sur
+       <html> de façon synchrone dès l'exécution de ce script (ligne ~21),
+       avant même que <body> existe — alors que body.in-iframe n'est ajoutée
+       qu'au DOMContentLoaded. Un sélecteur basé sur body.in-iframe faisait
+       donc d'abord peindre le cadre avec les règles "hors iframe" (marge du
+       haut bien plus grande, cf. .qcm-page-shell plus bas), qui ne se
+       corrigeait qu'après coup — un saut visible du cadre vers le haut au
+       chargement (constaté le 04/08/2026). */
+    html.in-iframe body.page-qcm-du-jour {
       box-sizing: border-box;
       padding-bottom: 360px;
     }

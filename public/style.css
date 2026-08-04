@@ -19936,8 +19936,13 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   transform: translateX(-120%) rotate(8deg);
   opacity: 0;
   pointer-events: none;
-  mix-blend-mode: normal;
   animation: agonBubbleFlash 5.8s ease-in-out infinite;
+  /* Même logique que .agon-tag-bubble (breathe) : ce balayage tourne en
+     continu sur chacune des ~12 bulles (transform + opacity) — sans calque
+     GPU dédié, il ajoute sa part à la recomposition groupée qui se voit
+     comme une vibration de toute la zone (bulles ET boutons du switch,
+     rendus dans la même passe de composition). */
+  will-change: transform, opacity;
 }
 
 .agon-tag-bubble > *:not(.agon-tag-bubble-flash) {
