@@ -4847,7 +4847,15 @@ function ensureDebateIframeParentLoadingStyles() {
 	    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
 	      will-change: transform;
 	      -webkit-backface-visibility: hidden;
-	      transform: translateZ(0);
+	      /* Le débordement volontaire de +80px sous le bas visible (cf. le
+	         commentaire sur "height" ci-dessus) déborde uniquement vers le bas,
+	         jamais vers le haut : centrée par align-items:center sur cette boîte
+	         devenue asymétrique, la vignette de chargement se retrouvait donc
+	         décalée de 40px (la moitié du débordement) sous le vrai centre de
+	         l'écran. On recompense ce décalage ici plutôt que de rendre le
+	         débordement symétrique (qui empiéterait de 40px au-dessus de "top",
+	         potentiellement sur la topbar). */
+	      transform: translateY(-40px) translateZ(0);
 	    }
 
 	    @media (max-width: 768px) {
