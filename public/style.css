@@ -19952,13 +19952,13 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   transform: translateX(-120%) rotate(8deg);
   opacity: 0;
   pointer-events: none;
-  animation: agonBubbleFlash 5.8s ease-in-out infinite;
-  /* Même logique que .agon-tag-bubble (breathe) : ce balayage tourne en
-     continu sur chacune des ~12 bulles (transform + opacity) — sans calque
-     GPU dédié, il ajoute sa part à la recomposition groupée qui se voit
-     comme une vibration de toute la zone (bulles ET boutons du switch,
-     rendus dans la même passe de composition). */
-  will-change: transform, opacity;
+  /* Désactivé (04/08/2026) : ce balayage tournait en continu sur chacune des
+     ~12 bulles (transform + opacity) et ajoutait sa part à un tremblement
+     visuel confirmé sur Safari, malgré plusieurs tentatives d'isolation en
+     calques GPU dédiés (will-change) qui n'ont pas suffi — cf. la même
+     réduction déjà appliquée sur mobile un peu plus bas dans ce fichier
+     ("Le scale force le navigateur à recomposer..."), désormais générale. */
+  animation: none;
 }
 
 .agon-tag-bubble > *:not(.agon-tag-bubble-flash) {
@@ -19968,17 +19968,14 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
 
 
 .agon-tag-bubble {
-  animation: agonBubbleBreathe 3.5s ease-in-out infinite;
-  /* Sans promotion en calque GPU dédié, le scale (transform) de chaque bulle
-     force le navigateur à recomposer toute la pile (~12 bulles + halos +
-     badges) au même instant à chaque frame où l'une d'elles franchit un
-     palier d'animation — perçu comme un petit "saut" synchrone de tout le
-     bloc, distinct de la respiration individuelle de chaque bulle (normale).
-     Même diagnostic que le commentaire sur agonBubbleBreatheLight (mobile)
-     plus bas dans ce fichier, ici réglé en gardant l'animation scale telle
-     quelle (desktop a la marge GPU) plutôt qu'en la simplifiant. */
-  will-change: transform;
-  backface-visibility: hidden;
+  /* Opacity plutôt que scale (04/08/2026) : le scale forçait le navigateur à
+     recomposer toute la pile (~12 bulles + halos + badges) à chaque frame —
+     perçu comme un tremblement visuel sur Safari, non résolu malgré
+     plusieurs tentatives d'isolation en calques GPU dédiés (will-change sur
+     les bulles, sur le switch Bulles Actu/Agôn, sur ses segments...).
+     Reprend la version déjà allégée pour mobile (agonBubbleBreatheLight,
+     cf. plus bas), désormais générale plutôt que limitée à un media query. */
+  animation: agonBubbleBreatheLight 3.5s ease-in-out infinite;
 }
 
 /* Anti-chauffe : la section cloud hors écran suspend les animations infinies
@@ -24205,27 +24202,20 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 }
 
-/* ─── Performance mobile : réduction des animations GPU coûteuses ─── */
+/* ─── Performance : réduction des animations GPU coûteuses ─── */
 
-/* Version allégée de agonBubbleBreathe pour mobile : opacity seule (pas de scale).
-   Le scale force le browser à recomposer chaque bulle à chaque frame ; l'opacity
-   est traitée directement par le GPU sans recomposition de layout. */
+/* Version allégée de agonBubbleBreathe : opacity seule (pas de scale). Le
+   scale force le navigateur à recomposer chaque bulle à chaque frame ;
+   l'opacity est traitée directement par le GPU sans recomposition de layout.
+   Utilisée par .agon-tag-bubble pour tous les viewports (cf. plus haut dans
+   ce fichier) — l'animation flash (transform+opacity sur pseudo-élément) est
+   elle aussi désactivée pour tous, au même endroit. */
 @keyframes agonBubbleBreatheLight {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.88; }
 }
 
 @media (max-width: 768px) {
-  /* Remplace l'animation scale (recomposition GPU par bulle) par opacity seule. */
-  .agon-tag-bubble {
-    animation: agonBubbleBreatheLight 3.5s ease-in-out infinite;
-  }
-
-  /* Flash : translateX + rotate coûteux sur 10 pseudos-éléments simultanés */
-  .agon-tag-bubble-flash::after {
-    animation: none;
-  }
-
   /* Trend pulse : opacity sur badges tendance de chaque carte */
   .debate-card-trend-badge,
   .agon-tag-trend {
