@@ -569,6 +569,25 @@
     .qcm-fiche-explanation:first-of-type {
       margin-top: 0;
     }
+    .qcm-fiche-bottom-close {
+      display: block;
+      width: 100%;
+      margin: 18px 0 0;
+      padding: 11px 16px;
+      border: 1px solid #d7dde2;
+      border-radius: 10px;
+      background: #f3f6f4;
+      color: #1f2933;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .qcm-fiche-bottom-close:hover {
+      background: #e9efec;
+      border-color: #c6d0d8;
+    }
     /* Badge cosmétique au-dessus de la question pour les formats
        vrai_faux/texte_a_trous : rend la variété de formats visible sans
        toucher au reste de la mise en page. */
@@ -1547,6 +1566,7 @@
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
       html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
     });
+    html += '<button type="button" class="qcm-fiche-bottom-close">Fermer</button>';
     html += '</div>';
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
@@ -1565,6 +1585,7 @@
       if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) close();
     });
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
+    overlay.querySelector('.qcm-fiche-bottom-close').addEventListener('click', close);
     document.addEventListener('keydown', onKeydown);
   }
 
