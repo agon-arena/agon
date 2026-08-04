@@ -474,6 +474,21 @@
       padding: 20px;
       background: rgba(17, 24, 39, 0.55);
     }
+    /* .scroll-fade-hint (générique, cf. style.css) est position:absolute —
+       correct pour ses autres usages (imbriqué dans un cadre non-scrollable),
+       mais pas ici où le parent scrollable EST l'élément position:fixed
+       (.qcm-fiche-overlay) : sur iOS Safari un enfant absolute d'un tel
+       parent ne reste pas fiablement épinglé pendant le défilement. Posé en
+       position:fixed direct sur <body> à la place (cf. openAcquisFiche), et
+       recalé ici en largeur sur la fiche (max-width identique à
+       .qcm-fiche-modal) — sinon le dégradé pleine largeur déborde des bords
+       d'une fiche centrée plus étroite que l'écran. */
+    .qcm-fiche-fade-hint {
+      position: fixed;
+      max-width: 480px;
+      margin: 0 auto;
+      z-index: 1001;
+    }
     /* Centré sur min-height:100% (pas plus, sinon la fiche est centrée dans
        un cadre plus grand que l'écran et apparaît trop basse). Le débattement
        de scroll vers le bas vient du spacer .qcm-fiche-scroll-spacer placé
@@ -1582,10 +1597,16 @@
     var ficheModalEl = overlay.querySelector('.qcm-fiche-modal');
     if (ficheModalEl) {
       var ficheFadeHint = document.createElement('div');
-      ficheFadeHint.className = 'scroll-fade-hint is-hidden';
+      // qcm-fiche-fade-hint : position:fixed direct sur <body>, pas un enfant
+      // position:absolute de .qcm-fiche-overlay (position:fixed + overflow-y:
+      // auto). Sur iOS Safari, un enfant absolute d'un conteneur fixed qui
+      // scroll ne reste pas fiablement épinglé pendant le défilement — il
+      // "scrolle avec" le contenu et finit ailleurs à l'écran (constaté :
+      // "suite" coincé au milieu du texte au lieu du bas de l'écran).
+      ficheFadeHint.className = 'scroll-fade-hint qcm-fiche-fade-hint is-hidden';
       ficheFadeHint.style.setProperty('--scroll-fade-color', '#ffffff');
       ficheFadeHint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
-      overlay.appendChild(ficheFadeHint);
+      document.body.appendChild(ficheFadeHint);
       ficheFadeHint.querySelector('.scroll-fade-hint-text').addEventListener('click', function (e) {
         e.stopPropagation();
         overlay.scrollBy({ top: overlay.clientHeight * 0.8, behavior: 'smooth' });
@@ -1611,6 +1632,7 @@
     try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
+      if (ficheFadeHint) ficheFadeHint.remove();
       document.removeEventListener('keydown', onKeydown);
       if (typeof updateFicheFadeHint === 'function') window.removeEventListener('resize', updateFicheFadeHint);
       if (ficheFadeResizeObserver) ficheFadeResizeObserver.disconnect();
