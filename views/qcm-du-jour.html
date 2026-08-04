@@ -1595,12 +1595,25 @@
         ficheFadeHint.classList.toggle('is-hidden', rect.bottom <= window.innerHeight + 4);
       };
       overlay.addEventListener('scroll', updateFicheFadeHint, { passive: true });
+      window.addEventListener('resize', updateFicheFadeHint, { passive: true });
       requestAnimationFrame(updateFicheFadeHint);
+      // Un seul rAF au moment de l'ouverture ne suffit pas : l'image de la
+      // fiche (chargée en lazy) ou les polices peuvent encore agrandir la
+      // fiche après ce premier calcul, laissant le dégradé dans le mauvais
+      // état (affiché/masqué à tort) jusqu'au prochain scroll. Un
+      // ResizeObserver sur la fiche elle-même le retient à jour à chaque
+      // changement de sa hauteur réelle.
+      if (typeof ResizeObserver === 'function') {
+        var ficheFadeResizeObserver = new ResizeObserver(updateFicheFadeHint);
+        ficheFadeResizeObserver.observe(ficheModalEl);
+      }
     }
     try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
       document.removeEventListener('keydown', onKeydown);
+      if (typeof updateFicheFadeHint === 'function') window.removeEventListener('resize', updateFicheFadeHint);
+      if (ficheFadeResizeObserver) ficheFadeResizeObserver.disconnect();
       try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     }
     function onKeydown(e) {
