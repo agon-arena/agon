@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260804-bubblejank2">
+  <link rel="stylesheet" href="/style.min.css?v=20260804-bubblejank3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -80,7 +80,7 @@
       width: min(100% - 32px, 900px);
       margin: 112px auto 180px;
     }
-    .page-qcm-du-jour.in-iframe .qcm-page-shell {
+    html.in-iframe .page-qcm-du-jour .qcm-page-shell {
       margin: 20px auto 0;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
@@ -88,7 +88,7 @@
        équivalent serait écrasé par lui, peu importe le media query. */
     @media (max-width: 768px) {
       /* Vraie zone scrollable en bas, sans pseudo-bandeau ajouté au DOM. */
-      body.page-qcm-du-jour.in-iframe {
+      html.in-iframe body.page-qcm-du-jour {
         padding-bottom: clamp(360px, 42vh, 520px);
       }
     }
