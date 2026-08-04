@@ -4847,15 +4847,18 @@ function ensureDebateIframeParentLoadingStyles() {
 	    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
 	      will-change: transform;
 	      -webkit-backface-visibility: hidden;
-	      /* Le débordement volontaire de +80px sous le bas visible (cf. le
-	         commentaire sur "height" ci-dessus) déborde uniquement vers le bas,
-	         jamais vers le haut : centrée par align-items:center sur cette boîte
-	         devenue asymétrique, la vignette de chargement se retrouvait donc
-	         décalée de 40px (la moitié du débordement) sous le vrai centre de
-	         l'écran. On recompense ce décalage ici plutôt que de rendre le
-	         débordement symétrique (qui empiéterait de 40px au-dessus de "top",
-	         potentiellement sur la topbar). */
-	      transform: translateY(-40px) translateZ(0);
+	      /* Le débordement volontaire de +80px + --agon-safe-bottom sous le bas
+	         visible (cf. le commentaire sur "height" ci-dessus) déborde
+	         uniquement vers le bas, jamais vers le haut : centrée par
+	         align-items:center sur cette boîte devenue asymétrique, la vignette
+	         de chargement se retrouvait donc décalée sous le vrai centre de
+	         l'écran, de la moitié de ce débordement. --agon-safe-bottom (posé en
+	         JS, cf. updateHomeBottomNavViewportOffset) vaut 0 en navigateur
+	         mobile classique mais pas en PWA standalone (encoche/barre
+	         d'accueil) — un décalage fixe corrigeait donc le centrage en mobile
+	         mais pas en standalone : recalculé ici via calc() sur la même
+	         variable pour rester exact dans les deux cas. */
+	      transform: translateY(calc(-40px - (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) / 2))) translateZ(0);
 	    }
 
 	    @media (max-width: 768px) {
