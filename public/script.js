@@ -2384,6 +2384,7 @@ const DEBATE_CATEGORY_OPTIONS = [
   "Justice - faits divers",
   "Culture - modes",
   "Philosophie - sciences sociales",
+  "Langues et Lettres",
   "Médias - divertissements",
   "Sports - loisirs",
   "Santé - bien-être",
@@ -34171,7 +34172,15 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const section = document.getElementById('agon-tag-trends-section');
   const nav = document.querySelector('.home-bottom-nav');
   if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) {
-    clear();
+    // Pas de clear() ici (contrairement au early-return ci-dessus) : ce garde
+    // se déclenche aussi transitoirement pendant l'ouverture/fermeture de la
+    // modale débat (nav temporairement masqué/couvert). Effacer la variable
+    // fait retomber la légende sur son ancrage CSS de secours (souvent plus
+    // haut) le temps qu'un recalcul valide la repose — vu comme la légende
+    // qui "saute" au retour sur l'accueil, entraînant avec elle le bandeau
+    // "À la une" (dont la marge dépend de la position de la légende). Garder
+    // la dernière valeur connue le temps que la mesure redevienne possible
+    // évite ce saut.
     return;
   }
   const scrollY = window.scrollY || 0;
