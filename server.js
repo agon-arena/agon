@@ -2616,6 +2616,47 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "political_group"
 ].join(",");
 
+// getDebateById est appelé sur (quasi) chaque vue de débat (route la plus
+// chaude de l'API, ~1300 appels/jour) : ai_analysis et popularity_analysis
+// peuvent peser plusieurs centaines de Ko par ligne (rapport IA en texte
+// brut) et ne sont jamais lus côté client (public/script.js) — seul
+// ai_analysis_status (petit enum) l'est. Colonnes exclues volontairement de
+// ce select ; les rares call-sites qui ont besoin du texte complet
+// (génération/lecture du rapport IA) le relisent via un select() dédié.
+// Cause identifiée le 05/08/2026 (egress Supabase ×2,3 un jour de forte
+// activité) : select("*") faisait transiter ce texte sur chaque requête.
+const DEBATE_DETAIL_SELECT_COLUMNS = [
+  "id",
+  "question",
+  "option_a",
+  "option_b",
+  "type",
+  "content",
+  "category",
+  "source_url",
+  "source_published_at",
+  "image_url",
+  "video_url",
+  "media_extras",
+  "keywords",
+  "cloud_label",
+  "story_id",
+  "episode_nav",
+  "creator_key",
+  "created_at",
+  "bumped_at",
+  "political_group",
+  "political_orientation",
+  "correction_strictness",
+  "long_arguments",
+  "evaluation_axis",
+  "evaluation_axis_hidden",
+  "ai_analysis_status",
+  "ai_analysis_scheduled_at",
+  "ai_analysis_generated_at",
+  "ai_analysis_last_score"
+].join(",");
+
 // PostgREST (Supabase) plafonne chaque réponse à 1000 lignes, silencieusement :
 // au-delà, les lignes excédentaires sont absentes sans erreur (compteurs
 // faussés, listes tronquées). Ces helpers paginent par .range() jusqu'à la
@@ -4120,10 +4161,10 @@ function createOrMergeVoteNotification(payload) {
   });
 }
 
-async function getDebateById(id) {
+async function getDebateById(id, { full = false } = {}) {
   const { data, error } = await supabase
     .from("debates")
-    .select("*")
+    .select(full ? "*" : DEBATE_DETAIL_SELECT_COLUMNS)
     .eq("id", id)
     .maybeSingle();
 
@@ -8589,18 +8630,32 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   const aiCategories = await classifyOpinionArticlesWithAI(validItems);
 
   const rows = validItems
-    .map(item => ({
-      source: String(item.source || "").slice(0, 200),
-      orientation: normalizeOpinionArticleOrientationForSource(item).slice(0, 200) || null,
-      title: String(item.title).slice(0, 500),
-      link: String(item.link).slice(0, 1000),
-      summary: item.summary ? String(item.summary).slice(0, 2000) : null,
-      type: item.type === "youtube" ? "youtube" : "article",
-      category: normalizeOpinionArticleCategory(item.category) ||
-        aiCategories.get(String(item.link || "")) ||
-        getOpinionArticleFallbackCategory(item),
-      published_at: item.date ? new Date(item.date).toISOString() : new Date().toISOString()
-    }));
+    .map(item => {
+      const aiResult = aiCategories.get(String(item.link || ""));
+      const category = normalizeOpinionArticleCategory(item.category) ||
+        aiResult?.category ||
+        getOpinionArticleFallbackCategory(item);
+      // precision/solar_system_id de l'IA n'ont de sens que si `category` est bien celle
+      // qu'elle a évaluée (sinon la galaxie sous-jacente ne correspondrait plus).
+      const aiResultMatchesCategory = aiResult?.category === category;
+      const category_precision = normalizeOpinionArticleCategoryPrecision(
+        category,
+        item.category_precision ?? (aiResultMatchesCategory ? aiResult.precision : null)
+      );
+      const solar_system_id = aiResultMatchesCategory ? (aiResult.solarSystemId || null) : null;
+      return {
+        source: String(item.source || "").slice(0, 200),
+        orientation: normalizeOpinionArticleOrientationForSource(item).slice(0, 200) || null,
+        title: String(item.title).slice(0, 500),
+        link: String(item.link).slice(0, 1000),
+        summary: item.summary ? String(item.summary).slice(0, 2000) : null,
+        type: item.type === "youtube" ? "youtube" : "article",
+        category,
+        category_precision,
+        solar_system_id,
+        published_at: item.date ? new Date(item.date).toISOString() : new Date().toISOString()
+      };
+    });
 
   if (!rows.length) return res.json({ ok: true, inserted: 0 });
 
@@ -8852,6 +8907,26 @@ const OPINION_ARTICLE_CATEGORY_OPTIONS = [
 const OPINION_ARTICLE_CATEGORY_MODEL = process.env.OPENAI_OPINION_CATEGORY_MODEL || "gpt-5-nano";
 const OPINION_ARTICLE_CATEGORY_BATCH_SIZE = Math.max(1, Math.min(60, Number(process.env.OPENAI_OPINION_CATEGORY_BATCH_SIZE || 40)));
 
+// Rubriques volontairement hybrides : `category` reste la valeur officielle,
+// `category_precision` n'indique que la branche dominante parmi ces deux-là.
+const OPINION_ARTICLE_CATEGORY_PRECISIONS = {
+  "Sports - loisirs": ["Sports", "Loisirs"],
+  "Culture - arts": ["Culture", "Arts"],
+  "Philosophie - sciences sociales": ["Philosophie", "Sciences sociales"],
+  "Langues et Lettres": ["Langues", "Lettres"]
+};
+
+// Galaxie = niveau juste en dessous de category/category_precision, jamais stocké
+// (toujours déduit) : pour les 4 rubriques hybrides la galaxie dépend de la
+// précision retenue (ex. "Sports" → "Sport", au singulier par choix éditorial) ;
+// pour toutes les autres rubriques, la galaxie est le libellé de la rubrique lui-même.
+const OPINION_ARTICLE_GALAXY_BY_PRECISION = {
+  "Sports - loisirs": { "Sports": "Sport", "Loisirs": "Loisirs" },
+  "Culture - arts": { "Culture": "Culture", "Arts": "Arts" },
+  "Philosophie - sciences sociales": { "Philosophie": "Philosophie", "Sciences sociales": "Sciences sociales" },
+  "Langues et Lettres": { "Langues": "Langues", "Lettres": "Lettres" }
+};
+
 function normalizeOpinionArticleCategory(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -8924,6 +8999,96 @@ function normalizeOpinionArticleCategory(value) {
   return aliases.get(key) || "";
 }
 
+// Ne renvoie jamais une précision inventée : si `category` n'est pas hybride, ou si
+// `value` ne correspond à aucune des branches autorisées pour cette catégorie, null.
+function normalizeOpinionArticleCategoryPrecision(category, value) {
+  const options = OPINION_ARTICLE_CATEGORY_PRECISIONS[category];
+  if (!options) return null;
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const key = raw.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const match = options.find((option) => option.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase() === key);
+  return match || null;
+}
+
+// Pure, jamais stockée : catégorie invalide, ou hybride sans précision valide → null ;
+// hybride + précision valide → branche correspondante ; catégorie simple → elle-même.
+function getOpinionArticleGalaxy(category, categoryPrecision) {
+  if (!OPINION_ARTICLE_CATEGORY_OPTIONS.includes(category)) return null;
+  const byPrecision = OPINION_ARTICLE_GALAXY_BY_PRECISION[category];
+  if (byPrecision) return byPrecision[categoryPrecision] || null;
+  return category;
+}
+
+// Même style que normalizeCloudLabel (server.js ~1156) : apostrophes/tirets traités
+// comme des séparateurs, pas de gestion singulier/pluriel ni de résolution sémantique.
+function normalizeSolarSystemName(value) {
+  return String(value || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Retrouve un système solaire existant (galaxy, normalized_name) ou le crée. La
+// contrainte UNIQUE (galaxy, normalized_name) protège contre une course entre deux
+// créations simultanées : en cas d'échec d'insertion, on relit la ligne avant
+// d'abandonner, pour ne jamais dupliquer un système déjà créé entre-temps.
+async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
+  const { data: existing, error: selectError } = await supabase
+    .from("solar_systems")
+    .select("id")
+    .eq("galaxy", galaxy)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (selectError) { console.warn("[solar-systems] lecture échouée :", selectError.message); return null; }
+  if (existing) return existing.id;
+  const { data: inserted, error: insertError } = await supabase
+    .from("solar_systems")
+    .insert({ galaxy, name: name.slice(0, 200), normalized_name: normalizedName })
+    .select("id")
+    .single();
+  if (!insertError) return inserted.id;
+  const { data: retryExisting, error: retryError } = await supabase
+    .from("solar_systems")
+    .select("id")
+    .eq("galaxy", galaxy)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (!retryError && retryExisting) return retryExisting.id;
+  console.warn("[solar-systems] création échouée :", insertError.message);
+  return null;
+}
+
+// Valide la proposition de l'IA pour un item déjà classé (category/category_precision
+// connus, galaxy déduite) : un solar_system_id n'est accepté que s'il appartient
+// réellement à cette galaxie (jamais fait confiance à l'IA sur ce point) ; sinon, un
+// new_solar_system est normalisé puis résolu/créé. Jamais les deux à la fois : l'id
+// existant est prioritaire s'il est valide. `cache` évite de recréer deux fois le même
+// nouveau système au sein d'un même lot ; `solarSystemsByGalaxy` est mis à jour pour que
+// les items suivants du même lot réutilisent l'id fraîchement créé.
+async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, cache) {
+  const candidateId = Number(entry?.solar_system_id);
+  if (Number.isInteger(candidateId) && candidateId > 0) {
+    const existingInGalaxy = (solarSystemsByGalaxy.get(galaxy) || []).some((s) => s.id === candidateId);
+    if (existingInGalaxy) return candidateId;
+  }
+  const newName = String(entry?.new_solar_system || "").trim();
+  if (!newName) return null;
+  const normalized = normalizeSolarSystemName(newName);
+  if (!normalized) return null;
+  const cacheKey = galaxy + "::" + normalized;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  const id = await resolveOrCreateSolarSystem(galaxy, newName, normalized);
+  if (id) {
+    cache.set(cacheKey, id);
+    if (!solarSystemsByGalaxy.has(galaxy)) solarSystemsByGalaxy.set(galaxy, []);
+    solarSystemsByGalaxy.get(galaxy).push({ id, galaxy, name: newName });
+  }
+  return id;
+}
+
 // Mots-clés du fallback : match sur frontière de mot (plus de "sélection" →
 // élection, "transport" → sport, "nouveau" → eau). Un `*` final autorise les
 // suffixes ("ecolog*" matche écologie/écologiste) ; sinon mot entier, pluriel
@@ -8973,6 +9138,30 @@ async function classifyOpinionArticlesWithAI(items) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !items.length) return new Map();
 
+  // Chargée une fois par appel (pas par lot) : univers volontairement restreint (une
+  // vingtaine de galaxies, quelques systèmes chacune), donc un select() complet reste léger.
+  const { data: existingSolarSystemRows, error: solarSystemsError } = await supabase
+    .from("solar_systems")
+    .select("id, galaxy, name")
+    .order("id", { ascending: true });
+  if (solarSystemsError) console.warn("[opinion-articles category] lecture solar_systems échouée :", solarSystemsError.message);
+  const solarSystemsByGalaxy = new Map();
+  for (const row of existingSolarSystemRows || []) {
+    if (!solarSystemsByGalaxy.has(row.galaxy)) solarSystemsByGalaxy.set(row.galaxy, []);
+    solarSystemsByGalaxy.get(row.galaxy).push(row);
+  }
+  // Snapshot texte figé au début de l'appel : un système créé au fil d'un lot n'apparaît pas
+  // dans le prompt des lots suivants du même appel, mais solarSystemsByGalaxy (mis à jour au
+  // fil de l'eau par resolveOpinionArticleSolarSystem) empêche quand même toute recréation en
+  // doublon — seule conséquence : l'IA peut reproposer le même nom en "new_solar_system" au
+  // lieu de choisir l'id, ce que le code résout silencieusement vers l'id existant.
+  const solarSystemsPromptBlock = solarSystemsByGalaxy.size
+    ? Array.from(solarSystemsByGalaxy.entries())
+      .map(([galaxy, list]) => `${galaxy} : ` + list.map((s) => `${s.id}:${s.name}`).join(", "))
+      .join("\n")
+    : "(aucun système solaire existant pour l'instant)";
+  const solarSystemCreationCache = new Map();
+
   const results = new Map();
   for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
     const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
@@ -8993,7 +9182,14 @@ async function classifyOpinionArticlesWithAI(items) {
       `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
       "Ne renvoie jamais seulement le premier item.",
       "Recopie le libellé de rubrique EXACTEMENT comme dans la liste, sans le modifier.",
-      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\"},{\"id\":1,\"category\":\"...\"}]} avec un objet par id.",
+      "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
+      "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante du sujet (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
+      "Si le sujet touche les deux branches d'une rubrique hybride, choisis celle qui domine ; si tu n'es pas sûr, mets category_precision à null plutôt que de deviner.",
+      "Une fois category/category_precision choisis, ajoute \"solar_system_id\" et \"new_solar_system\". Le système solaire est un domaine précis et réutilisable À L'INTÉRIEUR de la rubrique (ex. Sport → Football, Sport → Tennis, Sciences sociales → Sociologie, Lettres → Littérature française, Histoire → Révolution française). Ce n'est jamais une actualité ponctuelle (rejette \"Actualité sportive\", \"Transfert de Mbappé au Real Madrid\") ni un doublon de la rubrique elle-même (rejette \"Sports\" comme système solaire de la rubrique Sport).",
+      "Systèmes solaires déjà existants, à réutiliser en priorité (format id:nom, groupés par le mot de galaxie dont ils dépendent) :",
+      solarSystemsPromptBlock,
+      "Si un système existant correspond, mets son id dans \"solar_system_id\" et laisse \"new_solar_system\" à null. Sinon, si vraiment aucun système existant ne convient, laisse \"solar_system_id\" à null et propose un nom court dans \"new_solar_system\". Ne renseigne jamais les deux à la fois. Si category_precision est null pour une rubrique hybride (aucune branche déterminée), laisse solar_system_id et new_solar_system tous les deux à null.",
+      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Football\"}]} avec un objet par id.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
       "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
       "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/série = Culture - arts ; littérature/langue française/orthographe/grammaire = Langues et Lettres ; événement historique/personnage historique/guerre mondiale/antiquité/moyen âge = Histoire ; sport/compétition/Tour de France/courses hippiques = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
@@ -9029,13 +9225,17 @@ async function classifyOpinionArticlesWithAI(items) {
       const content = data?.choices?.[0]?.message?.content;
       const parsed = content ? JSON.parse(content) : null;
       const classified = Array.isArray(parsed?.items) ? parsed.items : [];
-      classified.forEach((entry) => {
+      for (const entry of classified) {
         const localIndex = Number(entry?.id);
         const category = normalizeOpinionArticleCategory(entry?.category);
-        if (Number.isInteger(localIndex) && chunk[localIndex] && category) {
-          results.set(String(chunk[localIndex].link || ""), category);
-        }
-      });
+        if (!Number.isInteger(localIndex) || !chunk[localIndex] || !category) continue;
+        const precision = normalizeOpinionArticleCategoryPrecision(category, entry?.category_precision);
+        const galaxy = getOpinionArticleGalaxy(category, precision);
+        const solarSystemId = galaxy
+          ? await resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, solarSystemCreationCache)
+          : null;
+        results.set(String(chunk[localIndex].link || ""), { category, precision, solarSystemId });
+      }
     } catch (error) {
       console.warn("[opinion-articles category] classification IA ignorée :", error.message);
     }
@@ -9048,9 +9248,27 @@ async function upsertOpinionArticleRows(rows) {
     .from("opinion_articles")
     .upsert(rows, { onConflict: "link", ignoreDuplicates: true });
   if (!error) return null;
-  const message = String(error.message || "");
-  if (!message.toLowerCase().includes("category")) return error;
-  const fallbackRows = rows.map(({ category, ...row }) => row);
+  const message = String(error.message || "").toLowerCase();
+  if (message.includes("solar_system_id")) {
+    const fallbackRows = rows.map(({ solar_system_id, ...row }) => row);
+    const retry = await supabase
+      .from("opinion_articles")
+      .upsert(fallbackRows, { onConflict: "link", ignoreDuplicates: true });
+    if (retry.error) return retry.error;
+    console.warn("[opinion-articles] colonne solar_system_id absente : migration data/migration-solar-systems.sql à appliquer.");
+    return null;
+  }
+  if (message.includes("category_precision")) {
+    const fallbackRows = rows.map(({ category_precision, ...row }) => row);
+    const retry = await supabase
+      .from("opinion_articles")
+      .upsert(fallbackRows, { onConflict: "link", ignoreDuplicates: true });
+    if (retry.error) return retry.error;
+    console.warn("[opinion-articles] colonne category_precision absente : migration data/migration-opinion-articles-category-precision.sql à appliquer.");
+    return null;
+  }
+  if (!message.includes("category")) return error;
+  const fallbackRows = rows.map(({ category, category_precision, solar_system_id, ...row }) => row);
   const retry = await supabase
     .from("opinion_articles")
     .upsert(fallbackRows, { onConflict: "link", ignoreDuplicates: true });
@@ -9328,11 +9546,15 @@ async function getOpinionArticlesSelection() {
   const articles = attachOpinionArticlePreviews(
     dedupeOpinionArticlesByTitle(
       (fullRows || [])
-        .map((article) => ({
-          ...article,
-          orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
-          category: normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article)
-        }))
+        .map((article) => {
+          const category = normalizeOpinionArticleCategory(article.category) || getOpinionArticleFallbackCategory(article);
+          return {
+            ...article,
+            orientation: normalizeOpinionArticleOrientationForSource(article) || article.orientation,
+            category,
+            category_precision: normalizeOpinionArticleCategoryPrecision(category, article.category_precision)
+          };
+        })
         .filter((article) => !isOpinionArticleCoveredByDebates(article, debateTopicTokenSets))
         .filter((article) => !isOpinionArticleWeatherRelated(article))
         .sort((a, b) => new Date(b.published_at) - new Date(a.published_at))
@@ -9588,7 +9810,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
       if (selectedIds.length) {
         const { data: fullRows, error: fullError } = await supabase
           .from("opinion_articles")
-          .select("id, source, orientation, title, link, summary, type, category, published_at")
+          .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, published_at")
           .in("id", selectedIds);
         if (fullError) throw new Error(fullError.message);
         data = fullRows || [];
@@ -9596,7 +9818,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
     } else {
       const { data: latestRows, error } = await supabase
         .from("opinion_articles")
-        .select("id, source, orientation, title, link, summary, type, category, published_at")
+        .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, published_at")
         .order("published_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(error.message);
@@ -9611,12 +9833,15 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
     let aiClassified = 0;
     for (const article of rows) {
       const linkKey = String(article.link || "");
-      const aiCategory = aiCategories.get(linkKey);
-      if (aiCategory) aiClassified += 1;
-      const category = aiCategory || getOpinionArticleFallbackCategory(article);
+      const aiResult = aiCategories.get(linkKey);
+      if (aiResult) aiClassified += 1;
+      const category = aiResult?.category || getOpinionArticleFallbackCategory(article);
+      const aiResultMatchesCategory = aiResult?.category === category;
+      const category_precision = normalizeOpinionArticleCategoryPrecision(category, aiResultMatchesCategory ? aiResult.precision : null);
+      const solar_system_id = aiResultMatchesCategory ? (aiResult.solarSystemId || null) : null;
       const { error: updateError } = await supabase
         .from("opinion_articles")
-        .update({ category })
+        .update({ category, category_precision, solar_system_id })
         .eq("id", article.id);
       if (updateError) throw new Error(updateError.message);
       updated += 1;
@@ -10742,7 +10967,7 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
 async function _fetchDebatePayload(debateId, groupIds = null) {
   const ids = (groupIds && groupIds.length) ? groupIds : [debateId];
 
-  const debate = await getDebateById(debateId);
+  const debate = await getDebateById(debateId, { full: true });
   if (!debate) throw new Error("Débat introuvable.");
 
   const { data: args } = await supabase.from("arguments").select("*").in("debate_id", ids);
