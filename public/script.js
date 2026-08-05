@@ -7042,14 +7042,13 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 
 function closeDebateIframeModal(options = {}) {
   __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
-  // Marque l'instant de fermeture : #agon-tag-trends-section anime min-height
-  // sur 0.25s en redevenant visible (cf. commentaire "La section nuage anime
-  // min-height 0.25s" plus bas dans ce fichier) — syncAgonHomeTrendsCaptionAnchor
-  // s'en sert pour ignorer les calculs faits pendant cette fenêtre de
-  // transition (confirmé par diagnostic : la légende se recalculait 2-3 fois
-  // avec une hauteur de section encore en cours d'animation avant de se
-  // stabiliser, vu comme un saut en cascade).
-  window.__agonDebateModalClosedAt = Date.now();
+  // #agon-tag-trends-section (bulles + bouton "Autres actus") continue de se
+  // repositionner ~900ms après redevenir visible (transition min-height +
+  // recentrage flexbox) — attend une vraie stabilisation avant de calculer
+  // la position de la légende "Les tendances…", au lieu d'un délai fixe
+  // deviné qui capturait 2-3 positions intermédiaires fausses (confirmé par
+  // diagnostic, cf. syncAgonHomeTrendsCaptionAnchor / waitForTrendsSectionStableThenSync).
+  if (typeof waitForTrendsSectionStableThenSync === 'function') waitForTrendsSectionStableThenSync();
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
@@ -21234,16 +21233,7 @@ function syncBubbleFrameTop() {
   const trendsSection = document.getElementById('agon-tag-trends-section');
   if (trendsSection) {
     trendsSection.addEventListener('transitionend', function(e) {
-      if (e.propertyName !== 'min-height') return;
-      debouncedSync();
-      // La légende "Les tendances…" (--agon-home-trends-caption-top,
-      // syncAgonHomeTrendsCaptionAnchor) restait figée à sa position
-      // d'avant pendant toute la transition min-height, puis sautait d'un
-      // coup à la fin (position recalculée en retard sur un délai fixe
-      // deviné plutôt que sur la fin réelle de l'animation). Recalculer ici,
-      // au moment précis où la transition CSS se termine, remplace ce délai
-      // fixe par le bon timing.
-      if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
+      if (e.propertyName === 'min-height') debouncedSync();
     });
   }
 
@@ -34198,6 +34188,51 @@ function __scrollJumpDiagLog(reason, data) {
   } catch (e) {}
 }
 
+// Vrai polling de stabilisation (même patron que waitForIndexEmbedShellsReady
+// pour les embeds X/Instagram) plutôt qu'un délai fixe deviné : au retour de
+// Connaissances/Éclairages/Ce jour dans l'histoire en standalone,
+// .agon-tribunes-btn ("Autres actus", centré en flexbox avec le nuage de
+// bulles dans #agon-tag-trends-section) continue de se repositionner
+// pendant ~900ms (transition min-height de la section + recentrage). Bloque
+// syncAgonHomeTrendsCaptionAnchor (via __agonTrendsCaptionSyncPending) tant
+// que la position de ce bouton n'est pas stable sur 2 passages consécutifs,
+// puis calcule une seule fois — au lieu de plusieurs calculs sur un délai
+// fixe, chacun capturant une position intermédiaire différente.
+async function waitForTrendsSectionStableThenSync(timeoutMs = 2000) {
+  if (window.__agonDebateModalOpen === true) return;
+  const body = document.body;
+  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
+  const section = document.getElementById('agon-tag-trends-section');
+  if (!section) return;
+
+  window.__agonTrendsCaptionSyncPending = true;
+  try {
+    const deadline = Date.now() + timeoutMs;
+    let previousSignature = null;
+    let stablePasses = 0;
+    while (Date.now() < deadline) {
+      if (window.__agonDebateModalOpen === true) return;
+      const tribunesBtn = section.querySelector('.agon-tribunes-btn');
+      const nav = document.querySelector('.home-bottom-nav');
+      const navTop = nav ? Math.round(nav.getBoundingClientRect().top) : null;
+      const tribunesBottom = tribunesBtn ? Math.round(tribunesBtn.getBoundingClientRect().bottom) : null;
+      const sectionHeight = Math.round(section.getBoundingClientRect().height);
+      const signature = `${navTop}|${tribunesBottom}|${sectionHeight}`;
+      if (signature === previousSignature) {
+        stablePasses += 1;
+      } else {
+        previousSignature = signature;
+        stablePasses = 0;
+      }
+      if (stablePasses >= 2) break;
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 90)));
+    }
+  } finally {
+    window.__agonTrendsCaptionSyncPending = false;
+  }
+  if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
+}
+
 function syncAgonHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
   const body = document.body;
@@ -34215,15 +34250,17 @@ function syncAgonHomeTrendsCaptionAnchor() {
     __scrollJumpDiagLog('guard-modal-open', {});
     return;
   }
-  const closedAgo = Date.now() - (window.__agonDebateModalClosedAt || 0);
-  if (closedAgo >= 0 && closedAgo < 300) {
-    // Fenêtre courte seulement : la correction précise se fait maintenant
-    // sur l'événement transitionend de #agon-tag-trends-section (min-height,
-    // cf. initBubbleFrameSync) plutôt que sur un délai fixe deviné — un délai
-    // trop long ici fige au contraire la légende à sa position d'AVANT
-    // pendant toute la transition réelle, ce qui se voit comme "reste au
-    // mauvais endroit puis saute" plutôt que d'éliminer le saut.
-    __scrollJumpDiagLog('guard-closing-transition', { closedAgo });
+  if (window.__agonTrendsCaptionSyncPending === true) {
+    // waitForTrendsSectionStableThenSync (cf. plus bas) est en train
+    // d'attendre que .agon-tribunes-btn ("Autres actus", centré en flexbox
+    // dans la section avec le reste du nuage) arrête de bouger avant de
+    // calculer une seule fois — confirmé par diagnostic : ce bouton continue
+    // de se repositionner ~900ms après la fermeture de la modale pendant que
+    // la section termine sa transition min-height, et calculer à chaque
+    // appel intermédiaire (sur un délai fixe deviné) capturait une position
+    // différente à chaque fois, vu comme la légende qui traverse 2-3 mauvais
+    // emplacements (dont un qui recouvre "Autres actus") avant de se poser.
+    __scrollJumpDiagLog('guard-caption-sync-pending', {});
     return;
   }
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
