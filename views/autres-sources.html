@@ -1713,8 +1713,10 @@ window.addEventListener("pageshow", function() {
         <button type="button" onclick="scrollToTribunesTheme('Sciences - technologie')"><i class="fa-solid fa-flask"></i><span>Sciences - technologie</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Climat - environnement')"><i class="fa-solid fa-leaf"></i><span>Climat - environnement</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Justice - faits divers')"><i class="fa-solid fa-scale-balanced"></i><span>Justice - faits divers</span></button>
-        <button type="button" onclick="scrollToTribunesTheme('Culture - modes')"><i class="fa-solid fa-palette"></i><span>Culture - modes</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Culture - arts')"><i class="fa-solid fa-palette"></i><span>Culture - arts</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Histoire')"><i class="fa-solid fa-landmark"></i><span>Histoire</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Philosophie - sciences sociales')"><i class="fa-solid fa-brain"></i><span>Philosophie<span class="theme-philo-sep"> - </span><span class="theme-philo-br"><br></span>sciences sociales</span></button>
+        <button type="button" onclick="scrollToTribunesTheme('Langues et Lettres')"><i class="fa-solid fa-language"></i><span>Langues et Lettres</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Médias - divertissements')"><i class="fa-solid fa-tv"></i><span>Médias<span class="theme-philo-sep"> - </span><span class="theme-philo-br"><br></span>divertissements</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Sports - loisirs')"><i class="fa-solid fa-futbol"></i><span>Sports - loisirs</span></button>
         <button type="button" onclick="scrollToTribunesTheme('Santé - bien-être')"><i class="fa-solid fa-heart-pulse"></i><span>Santé - bien-être</span></button>
@@ -1778,7 +1780,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260805-captionnoreset" defer></script>
+<script src="/script.min.js?v=20260805-culturearts" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -1838,8 +1840,10 @@ window.addEventListener("pageshow", function() {
     "Sciences - technologie",
     "Climat - environnement",
     "Justice - faits divers",
-    "Culture - modes",
+    "Culture - arts",
+    "Histoire",
     "Philosophie - sciences sociales",
+    "Langues et Lettres",
     "Médias - divertissements",
     "Sports - loisirs",
     "Santé - bien-être",
@@ -1847,9 +1851,16 @@ window.addEventListener("pageshow", function() {
     "Espace jeunes"
   ];
 
+  // Anciens libell\u00e9s renomm\u00e9s depuis : les contenus d\u00e9j\u00e0 class\u00e9s en base sous
+  // l'ancien nom doivent continuer \u00e0 s'afficher sous le nouveau.
+  var LEGACY_CATEGORY_ALIASES = {
+    'Culture - modes': 'Culture - arts'
+  };
+
   function normalizeCategory(value) {
     var raw = String(value || '').trim();
     if (!raw) return '';
+    raw = LEGACY_CATEGORY_ALIASES[raw] || raw;
     var normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     for (var i = 0; i < CATEGORY_OPTIONS.length; i++) {
       var category = CATEGORY_OPTIONS[i];

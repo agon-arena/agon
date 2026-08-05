@@ -1,4 +1,4 @@
-const SW_VERSION = "20260721-stale-page-self-heal-v32";
+const SW_VERSION = "20260804-latin-eclairages-iframe-fix-v33";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
