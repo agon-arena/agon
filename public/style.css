@@ -11239,11 +11239,6 @@ body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   top: var(--agon-home-trends-caption-top, calc(100% + env(safe-area-inset-bottom, 0px) - 44px));
   margin-top: 0;
   margin-bottom: 0;
-  /* Lisse tout recalcul de la position (ex. au retour de Connaissances/
-     Éclairages/Ce jour dans l'histoire) en glissement plutôt qu'en saut —
-     cf. même transition sur .theme-row-section:first-child, dont la marge
-     dépend de la position de cette légende. */
-  transition: top 0.25s ease;
 }
 
 /* Compense la sortie du flux de la légende (4 + ~32 + 26 = 62px) pour que le
@@ -19508,13 +19503,6 @@ body.page-home-mobile .debate-card-agon-badge {
     margin-top: var(--agon-home-first-row-mt, -4px);
     position: relative;
     z-index: 2;
-    /* Lisse tout recalcul de la marge (ex. au retour de Connaissances/
-       Éclairages/Ce jour dans l'histoire, cf. syncAgonHomeTrendsCaptionAnchor)
-       en glissement plutôt qu'en saut brusque — la valeur exacte recalculée
-       peut légèrement différer d'avant/après sans qu'on puisse le garantir
-       à zéro, mais un mouvement fluide de 250ms reste imperceptible alors
-       qu'un saut instantané se voit. */
-    transition: margin-top 0.25s ease;
   }
 }
 
