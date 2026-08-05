@@ -9062,12 +9062,17 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
 }
 
 // Noms jamais acceptés comme système solaire : trop proches de la rubrique/galaxie
-// elle-même pour représenter un domaine précis. Renforcé après un premier test réel
+// elle-même pour représenter un domaine durable. Renforcé après un premier test réel
 // (05/08/2026) où l'IA a recréé "Arts et culture" comme "système solaire" au lieu d'un
-// domaine précis (Chanson française, Cinéma...).
+// domaine précis (Chanson française, Cinéma...), puis un second test (06/08/2026) où
+// des libellés génériques equivalents à la rubrique sont apparus ("Procès et justice"
+// pour Justice - faits divers) — les variantes plausibles du même travers sont ajoutées
+// ici à titre préventif, sans étendre à une liste longue/fragile.
 const OPINION_ARTICLE_GENERIC_SOLAR_SYSTEM_NAMES = new Set([
   "actualite politique", "arts et culture", "culture generale", "actualite internationale",
-  "societe", "faits divers", "sport", "sports"
+  "societe", "faits divers", "sport", "sports",
+  "proces et justice", "actualite judiciaire", "questions de societe",
+  "relations internationales", "education et societe"
 ]);
 
 // Rejette un nom de système solaire identique/quasi identique à la galaxie, à la
@@ -9212,10 +9217,11 @@ async function classifyOpinionArticlesWithAI(items) {
       "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
       "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante du sujet (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
       "Si le sujet touche les deux branches d'une rubrique hybride, choisis celle qui domine ; si tu n'es pas sûr, mets category_precision à null plutôt que de deviner.",
-      "Ajoute aussi \"solar_system_id\" (id d'un système existant) et \"new_solar_system\" (nom d'un nouveau système) : le système solaire est un domaine précis à l'intérieur de la rubrique (ex. Sport→Judo, Sport→Football, Politique→Institutions françaises, Culture→Chanson française, International→Guerre en Ukraine). Jamais un doublon de la rubrique/galaxie ni une actualité ponctuelle : rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\".",
+      "Ajoute aussi \"solar_system_id\" (id existant) et \"new_solar_system\" (nouveau nom) : le système solaire est un thème DURABLE et réutilisable pouvant regrouper plusieurs articles à des dates différentes — une discipline, un domaine, un phénomène, une institution/un secteur, une période ou un conflit durable (ex. Football, Sociologie, Cinéma, Violences sexuelles, Enseignement supérieur, Révolution française, Conflit israélo-palestinien). Jamais l'événement du jour ni un doublon de la rubrique/galaxie : rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\", \"Procès et justice\", \"Relations internationales\", \"Questions de société\".",
+      "Avant de nommer un nouveau système, teste : pourrait-il accueillir au moins 5 articles différents dans le temps ? Sinon, retire mentalement date, lieu, personnes et action immédiate, et ne garde que le thème durable derrière l'événement — ex. \"Gaza plan de paix\"→\"Conflit israélo-palestinien\", \"Procès Jean-Vincent Placé\"→\"Violences sexuelles\", \"Retour de Teddy Riner\"→\"Judo\", \"Transfert au Real Madrid\"→\"Football\", \"Procès et justice\"→\"Justice pénale\".",
       "Systèmes solaires existants (id:nom par galaxie) :",
       solarSystemsPromptBlock,
-      "Choisis un système existant seulement s'il correspond vraiment au sujet (ex. article sur Messi, galaxie Sport, \"Football\" existant → solar_system_id = id de Football). Sinon propose un nouveau nom (ex. article sur Teddy Riner/judo, seul \"Football\" existant en Sport → new_solar_system = \"Judo\", jamais Football).",
+      "Réutilise un système existant dès qu'il correspond, même un peu plus large que le sujet précis de l'article (ex. système \"Conflit israélo-palestinien\" existant + nouvel article sur un plan de paix à Gaza → réutiliser, ne pas créer \"Gaza plan de paix\") ; sinon propose un nouveau thème durable dans new_solar_system.",
       "RÈGLE OBLIGATOIRE : si galaxy n'est pas null, chaque article DOIT avoir solar_system_id OU new_solar_system (jamais aucun des deux, jamais les deux). Seule exception : rubrique hybride sans category_precision déterminée → les deux restent null.",
       "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par id, tous les champs remplis pour chaque article.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
