@@ -34207,12 +34207,13 @@ function syncAgonHomeTrendsCaptionAnchor() {
     return;
   }
   const closedAgo = Date.now() - (window.__agonDebateModalClosedAt || 0);
-  if (closedAgo >= 0 && closedAgo < 350) {
+  if (closedAgo >= 0 && closedAgo < 1000) {
     // #agon-tag-trends-section anime min-height sur 0.25s en redevenant
-    // visible : un calcul fait pendant cette fenêtre lit une hauteur encore
-    // transitoire (confirmé par diagnostic — la légende passait par 2-3
-    // valeurs fausses avant de se stabiliser). Marge de 100ms au-delà des
-    // 250ms d'animation pour laisser le rendu se poser.
+    // visible, mais la mise en page réelle ne se stabilise complètement
+    // qu'environ 850ms après la fermeture en pratique (confirmé par
+    // diagnostic : un premier seuil à 350ms laissait encore passer un calcul
+    // faux ~600ms après fermeture, corrigé ~850ms après par l'appel suivant).
+    // Marge large plutôt que d'ajuster au plus juste.
     __scrollJumpDiagLog('guard-closing-transition', { closedAgo });
     return;
   }
