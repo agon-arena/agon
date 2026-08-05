@@ -7042,6 +7042,14 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 
 function closeDebateIframeModal(options = {}) {
   __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
+  // Marque l'instant de fermeture : #agon-tag-trends-section anime min-height
+  // sur 0.25s en redevenant visible (cf. commentaire "La section nuage anime
+  // min-height 0.25s" plus bas dans ce fichier) — syncAgonHomeTrendsCaptionAnchor
+  // s'en sert pour ignorer les calculs faits pendant cette fenêtre de
+  // transition (confirmé par diagnostic : la légende se recalculait 2-3 fois
+  // avec une hauteur de section encore en cours d'animation avant de se
+  // stabiliser, vu comme un saut en cascade).
+  window.__agonDebateModalClosedAt = Date.now();
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
@@ -34196,6 +34204,16 @@ function syncAgonHomeTrendsCaptionAnchor() {
     // plus rien calculer/écrire tant que la modale est ouverte : rien à
     // corriger, la valeur d'avant reste valable jusqu'à la fermeture.
     __scrollJumpDiagLog('guard-modal-open', {});
+    return;
+  }
+  const closedAgo = Date.now() - (window.__agonDebateModalClosedAt || 0);
+  if (closedAgo >= 0 && closedAgo < 350) {
+    // #agon-tag-trends-section anime min-height sur 0.25s en redevenant
+    // visible : un calcul fait pendant cette fenêtre lit une hauteur encore
+    // transitoire (confirmé par diagnostic — la légende passait par 2-3
+    // valeurs fausses avant de se stabiliser). Marge de 100ms au-delà des
+    // 250ms d'animation pour laisser le rendu se poser.
+    __scrollJumpDiagLog('guard-closing-transition', { closedAgo });
     return;
   }
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
