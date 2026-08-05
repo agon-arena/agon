@@ -9061,14 +9061,37 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
   return null;
 }
 
+// Noms jamais acceptés comme système solaire : trop proches de la rubrique/galaxie
+// elle-même pour représenter un domaine précis. Renforcé après un premier test réel
+// (05/08/2026) où l'IA a recréé "Arts et culture" comme "système solaire" au lieu d'un
+// domaine précis (Chanson française, Cinéma...).
+const OPINION_ARTICLE_GENERIC_SOLAR_SYSTEM_NAMES = new Set([
+  "actualite politique", "arts et culture", "culture generale", "actualite internationale",
+  "societe", "faits divers", "sport", "sports"
+]);
+
+// Rejette un nom de système solaire identique/quasi identique à la galaxie, à la
+// catégorie, à sa précision, ou figurant dans la liste explicite de libellés génériques.
+function isOpinionArticleSolarSystemNameRejected(normalizedName, { galaxy, category, categoryPrecision }) {
+  if (!normalizedName) return true;
+  if (OPINION_ARTICLE_GENERIC_SOLAR_SYSTEM_NAMES.has(normalizedName)) return true;
+  if (galaxy && normalizedName === normalizeSolarSystemName(galaxy)) return true;
+  if (category && normalizedName === normalizeSolarSystemName(category)) return true;
+  if (categoryPrecision && normalizedName === normalizeSolarSystemName(categoryPrecision)) return true;
+  return false;
+}
+
 // Valide la proposition de l'IA pour un item déjà classé (category/category_precision
 // connus, galaxy déduite) : un solar_system_id n'est accepté que s'il appartient
 // réellement à cette galaxie (jamais fait confiance à l'IA sur ce point) ; sinon, un
-// new_solar_system est normalisé puis résolu/créé. Jamais les deux à la fois : l'id
-// existant est prioritaire s'il est valide. `cache` évite de recréer deux fois le même
-// nouveau système au sein d'un même lot ; `solarSystemsByGalaxy` est mis à jour pour que
-// les items suivants du même lot réutilisent l'id fraîchement créé.
-async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, cache) {
+// new_solar_system est normalisé, rejeté s'il est trop générique, puis résolu/créé.
+// Jamais les deux à la fois : l'id existant est prioritaire s'il est valide. `cache`
+// évite de recréer deux fois le même nouveau système au sein d'un même lot ;
+// `solarSystemsByGalaxy` est mis à jour pour que les items suivants du même lot
+// réutilisent l'id fraîchement créé. Retourne `null` si rien d'exploitable n'a été
+// fourni — l'appelant traite alors l'item comme incomplet (jamais de création
+// arbitraire ici pour compenser).
+async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, cache, category, categoryPrecision) {
   const candidateId = Number(entry?.solar_system_id);
   if (Number.isInteger(candidateId) && candidateId > 0) {
     const existingInGalaxy = (solarSystemsByGalaxy.get(galaxy) || []).some((s) => s.id === candidateId);
@@ -9077,7 +9100,7 @@ async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGal
   const newName = String(entry?.new_solar_system || "").trim();
   if (!newName) return null;
   const normalized = normalizeSolarSystemName(newName);
-  if (!normalized) return null;
+  if (isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category, categoryPrecision })) return null;
   const cacheKey = galaxy + "::" + normalized;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
   const id = await resolveOrCreateSolarSystem(galaxy, newName, normalized);
@@ -9161,6 +9184,10 @@ async function classifyOpinionArticlesWithAI(items) {
       .join("\n")
     : "(aucun système solaire existant pour l'instant)";
   const solarSystemCreationCache = new Map();
+  // Articles avec galaxie valide mais sans solar_system_id exploitable après le premier
+  // appel (omission du modèle, id d'une autre galaxie, ou nom rejeté) : traités par un
+  // second appel ciblé, beaucoup plus court, une fois le premier appel terminé.
+  const incompleteForSolarSystem = [];
 
   const results = new Map();
   for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
@@ -9185,11 +9212,15 @@ async function classifyOpinionArticlesWithAI(items) {
       "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
       "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante du sujet (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
       "Si le sujet touche les deux branches d'une rubrique hybride, choisis celle qui domine ; si tu n'es pas sûr, mets category_precision à null plutôt que de deviner.",
-      "Une fois category/category_precision choisis, ajoute \"solar_system_id\" et \"new_solar_system\". Le système solaire est un domaine précis et réutilisable À L'INTÉRIEUR de la rubrique (ex. Sport → Football, Sport → Tennis, Sciences sociales → Sociologie, Lettres → Littérature française, Histoire → Révolution française). Ce n'est jamais une actualité ponctuelle (rejette \"Actualité sportive\", \"Transfert de Mbappé au Real Madrid\") ni un doublon de la rubrique elle-même (rejette \"Sports\" comme système solaire de la rubrique Sport).",
-      "Systèmes solaires déjà existants, à réutiliser en priorité (format id:nom, groupés par le mot de galaxie dont ils dépendent) :",
+      "Une fois category/category_precision choisis, ajoute \"solar_system_id\" et \"new_solar_system\". Le système solaire est un domaine précis et réutilisable À L'INTÉRIEUR de la rubrique (ex. Sport → Football, Sport → Judo, Sciences sociales → Sociologie, Lettres → Littérature française, Histoire → Révolution française, Politique → Institutions françaises, International → Guerre en Ukraine, Justice - faits divers → Criminalité, Santé - bien-être → Sécurité alimentaire, Culture → Chanson française, Culture → Patrimoine culturel, Arts → Cinéma, Arts → Musique).",
+      "Le système solaire doit préciser le domaine traité. Il ne doit jamais être identique ou presque identique à la galaxie ou à la catégorie, ni une actualité ponctuelle. Rejette par exemple : \"Actualité sportive\", \"Transfert de Mbappé au Real Madrid\", \"Actualité politique\", \"Arts et culture\", \"Culture générale\", \"Actualité internationale\", \"Société\", \"Faits divers\", \"Sport\", \"Sports\".",
+      "Systèmes solaires déjà existants (format id:nom, groupés par galaxie) :",
       solarSystemsPromptBlock,
-      "Si un système existant correspond, mets son id dans \"solar_system_id\" et laisse \"new_solar_system\" à null. Sinon, si vraiment aucun système existant ne convient, laisse \"solar_system_id\" à null et propose un nom court dans \"new_solar_system\". Ne renseigne jamais les deux à la fois. Si category_precision est null pour une rubrique hybride (aucune branche déterminée), laisse solar_system_id et new_solar_system tous les deux à null.",
-      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Football\"}]} avec un objet par id.",
+      "Ne sélectionne un système existant que s'il correspond VRAIMENT au sujet principal de l'article — jamais seulement parce qu'il est disponible dans la galaxie. Si aucun système existant ne convient réellement, propose un nom précis dans \"new_solar_system\" plutôt que de forcer un système inadapté.",
+      "Exemple : article sur Teddy Riner (judo), galaxie Sport, seul système existant \"Football\" → \"Football\" ne correspond pas au judo, donc solar_system_id doit rester null et new_solar_system doit valoir \"Judo\".",
+      "Exemple : article sur Lionel Messi, galaxie Sport, système existant \"Football\" → correspond vraiment au sujet, donc solar_system_id doit être l'id de \"Football\" et new_solar_system doit rester null.",
+      "RÈGLE OBLIGATOIRE : si galaxy n'est pas null (c'est-à-dire si la rubrique n'est pas hybride, ou si elle est hybride avec une précision déterminée), chaque article DOIT avoir soit solar_system_id, soit new_solar_system rempli — jamais aucun des deux, jamais les deux à la fois. Aucun article avec une galaxie valide ne doit être laissé sans système solaire. Seule exception : une rubrique hybride dont tu ne détermines pas category_precision — dans ce seul cas, laisse aussi solar_system_id et new_solar_system à null.",
+      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par id, tous les champs remplis pour chaque article.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
       "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
       "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/série = Culture - arts ; littérature/langue française/orthographe/grammaire = Langues et Lettres ; événement historique/personnage historique/guerre mondiale/antiquité/moyen âge = Histoire ; sport/compétition/Tour de France/courses hippiques = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
@@ -9232,15 +9263,107 @@ async function classifyOpinionArticlesWithAI(items) {
         const precision = normalizeOpinionArticleCategoryPrecision(category, entry?.category_precision);
         const galaxy = getOpinionArticleGalaxy(category, precision);
         const solarSystemId = galaxy
-          ? await resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, solarSystemCreationCache)
+          ? await resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, solarSystemCreationCache, category, precision)
           : null;
-        results.set(String(chunk[localIndex].link || ""), { category, precision, solarSystemId });
+        const link = String(chunk[localIndex].link || "");
+        results.set(link, { category, precision, solarSystemId });
+        if (galaxy && !solarSystemId) {
+          incompleteForSolarSystem.push({
+            link,
+            title: chunk[localIndex].title,
+            summary: chunk[localIndex].summary,
+            category,
+            precision,
+            galaxy
+          });
+        }
       }
     } catch (error) {
       console.warn("[opinion-articles category] classification IA ignorée :", error.message);
     }
   }
+
+  if (incompleteForSolarSystem.length) {
+    await completeMissingSolarSystemsWithAI(incompleteForSolarSystem, solarSystemsByGalaxy, solarSystemCreationCache, results);
+  }
+
   return results;
+}
+
+// Second appel, ciblé et court : uniquement pour les articles dont la galaxie est valide
+// mais dont le premier appel n'a fourni aucun solar_system_id exploitable (omission du
+// modèle, id d'une autre galaxie, ou nom rejeté par les garde-fous). Ne s'exécute que sur
+// ce sous-ensemble — jamais sur le lot complet — pour limiter le surcoût. Réutilise
+// resolveOpinionArticleSolarSystem (mêmes garde-fous, même logique find-or-create) : ce
+// second appel ne fait que produire une nouvelle proposition à valider, rien de plus.
+async function completeMissingSolarSystemsWithAI(incompleteEntries, solarSystemsByGalaxy, cache, results) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+  for (let start = 0; start < incompleteEntries.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
+    const chunk = incompleteEntries.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
+    const compactItems = chunk.map((item, index) => ({
+      index,
+      galaxy: item.galaxy,
+      title: String(item.title || "").slice(0, 220),
+      summary: String(item.summary || "").slice(0, 450),
+      existing_solar_systems: (solarSystemsByGalaxy.get(item.galaxy) || []).map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
+    }));
+    const prompt = [
+      "Réponds uniquement en json valide.",
+      "Pour chaque article, indique le système solaire : un domaine précis à l'intérieur de la galaxie donnée (ex. Sport → Judo, Culture → Chanson française, Politique → Institutions françaises), jamais un doublon de la galaxie elle-même (rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\").",
+      "Soit l'id d'un système de existing_solar_systems qui correspond VRAIMENT au sujet, soit un nom court pour un nouveau système si aucun système existant ne convient réellement. Ne choisis jamais un système existant juste parce qu'il est disponible.",
+      "RÈGLE OBLIGATOIRE : chaque article doit avoir soit solar_system_id (nombre), soit new_solar_system (texte court) — jamais les deux, jamais aucun des deux.",
+      `Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les index suivants : ${compactItems.map((i) => i.index).join(", ")}.`,
+      "Format obligatoire : {\"items\":[{\"index\":0,\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par index.",
+      "",
+      JSON.stringify(compactItems)
+    ].join("\n");
+
+    try {
+      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+      const body = {
+        model: OPINION_ARTICLE_CATEGORY_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" }
+      };
+      if (isGpt5) {
+        body.max_completion_tokens = Math.min(6000, 500 + chunk.length * 60);
+        body.reasoning_effort = "low";
+      } else {
+        body.max_tokens = Math.min(3000, 100 + chunk.length * 30);
+        body.temperature = 0;
+      }
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      const content = data?.choices?.[0]?.message?.content;
+      const parsed = content ? JSON.parse(content) : null;
+      const answered = Array.isArray(parsed?.items) ? parsed.items : [];
+      const answeredIndexes = new Set();
+      for (const entry of answered) {
+        const localIndex = Number(entry?.index);
+        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
+        answeredIndexes.add(localIndex);
+        const item = chunk[localIndex];
+        const solarSystemId = await resolveOpinionArticleSolarSystem(item.galaxy, entry, solarSystemsByGalaxy, cache, item.category, item.precision);
+        if (solarSystemId) {
+          const existing = results.get(item.link);
+          if (existing) existing.solarSystemId = solarSystemId;
+        } else {
+          console.warn(`[opinion-articles solar-system] toujours incomplet après le second appel : "${item.title}" (galaxie ${item.galaxy})`);
+        }
+      }
+      chunk.forEach((item, index) => {
+        if (!answeredIndexes.has(index)) console.warn(`[opinion-articles solar-system] pas de réponse au second appel : "${item.title}" (galaxie ${item.galaxy})`);
+      });
+    } catch (error) {
+      console.warn("[opinion-articles solar-system] second appel ignoré :", error.message);
+    }
+  }
 }
 
 async function upsertOpinionArticleRows(rows) {
