@@ -9212,14 +9212,11 @@ async function classifyOpinionArticlesWithAI(items) {
       "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
       "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante du sujet (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
       "Si le sujet touche les deux branches d'une rubrique hybride, choisis celle qui domine ; si tu n'es pas sûr, mets category_precision à null plutôt que de deviner.",
-      "Une fois category/category_precision choisis, ajoute \"solar_system_id\" et \"new_solar_system\". Le système solaire est un domaine précis et réutilisable À L'INTÉRIEUR de la rubrique (ex. Sport → Football, Sport → Judo, Sciences sociales → Sociologie, Lettres → Littérature française, Histoire → Révolution française, Politique → Institutions françaises, International → Guerre en Ukraine, Justice - faits divers → Criminalité, Santé - bien-être → Sécurité alimentaire, Culture → Chanson française, Culture → Patrimoine culturel, Arts → Cinéma, Arts → Musique).",
-      "Le système solaire doit préciser le domaine traité. Il ne doit jamais être identique ou presque identique à la galaxie ou à la catégorie, ni une actualité ponctuelle. Rejette par exemple : \"Actualité sportive\", \"Transfert de Mbappé au Real Madrid\", \"Actualité politique\", \"Arts et culture\", \"Culture générale\", \"Actualité internationale\", \"Société\", \"Faits divers\", \"Sport\", \"Sports\".",
-      "Systèmes solaires déjà existants (format id:nom, groupés par galaxie) :",
+      "Ajoute aussi \"solar_system_id\" (id d'un système existant) et \"new_solar_system\" (nom d'un nouveau système) : le système solaire est un domaine précis à l'intérieur de la rubrique (ex. Sport→Judo, Sport→Football, Politique→Institutions françaises, Culture→Chanson française, International→Guerre en Ukraine). Jamais un doublon de la rubrique/galaxie ni une actualité ponctuelle : rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\".",
+      "Systèmes solaires existants (id:nom par galaxie) :",
       solarSystemsPromptBlock,
-      "Ne sélectionne un système existant que s'il correspond VRAIMENT au sujet principal de l'article — jamais seulement parce qu'il est disponible dans la galaxie. Si aucun système existant ne convient réellement, propose un nom précis dans \"new_solar_system\" plutôt que de forcer un système inadapté.",
-      "Exemple : article sur Teddy Riner (judo), galaxie Sport, seul système existant \"Football\" → \"Football\" ne correspond pas au judo, donc solar_system_id doit rester null et new_solar_system doit valoir \"Judo\".",
-      "Exemple : article sur Lionel Messi, galaxie Sport, système existant \"Football\" → correspond vraiment au sujet, donc solar_system_id doit être l'id de \"Football\" et new_solar_system doit rester null.",
-      "RÈGLE OBLIGATOIRE : si galaxy n'est pas null (c'est-à-dire si la rubrique n'est pas hybride, ou si elle est hybride avec une précision déterminée), chaque article DOIT avoir soit solar_system_id, soit new_solar_system rempli — jamais aucun des deux, jamais les deux à la fois. Aucun article avec une galaxie valide ne doit être laissé sans système solaire. Seule exception : une rubrique hybride dont tu ne détermines pas category_precision — dans ce seul cas, laisse aussi solar_system_id et new_solar_system à null.",
+      "Choisis un système existant seulement s'il correspond vraiment au sujet (ex. article sur Messi, galaxie Sport, \"Football\" existant → solar_system_id = id de Football). Sinon propose un nouveau nom (ex. article sur Teddy Riner/judo, seul \"Football\" existant en Sport → new_solar_system = \"Judo\", jamais Football).",
+      "RÈGLE OBLIGATOIRE : si galaxy n'est pas null, chaque article DOIT avoir solar_system_id OU new_solar_system (jamais aucun des deux, jamais les deux). Seule exception : rubrique hybride sans category_precision déterminée → les deux restent null.",
       "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par id, tous les champs remplis pour chaque article.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
       "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
@@ -9240,7 +9237,13 @@ async function classifyOpinionArticlesWithAI(items) {
         response_format: { type: "json_object" }
       };
       if (isGpt5) {
-        body.max_completion_tokens = Math.min(12000, 1000 + chunk.length * 80);
+        // Budget relevé (était 1000 + 80/item) après une régression observée le 06/08/2026 :
+        // un prompt enrichi (règles système solaire) a fait consommer tout le budget en
+        // raisonnement caché, sans laisser de place pour le JSON de sortie (lot entier vide,
+        // sans erreur HTTP). Le prompt a aussi été raccourci en parallèle (cf. bloc
+        // solar_system_id ci-dessus) — voir le log de diagnostic juste après l'appel pour
+        // surveiller finishReason/contentLength si ça se reproduit.
+        body.max_completion_tokens = Math.min(12000, 1500 + chunk.length * 120);
         body.reasoning_effort = "low";
       } else {
         body.max_tokens = Math.min(6000, 160 + chunk.length * 40);
@@ -9253,9 +9256,24 @@ async function classifyOpinionArticlesWithAI(items) {
       });
       if (!r.ok) throw new Error(`openai http ${r.status}`);
       const data = await r.json();
-      const content = data?.choices?.[0]?.message?.content;
-      const parsed = content ? JSON.parse(content) : null;
+      const choice = data?.choices?.[0];
+      const content = choice?.message?.content || "";
+      const finishReason = choice?.finish_reason || null;
+      const refusal = choice?.message?.refusal || null;
+      let parsed = null;
+      try {
+        parsed = content ? JSON.parse(content) : null;
+      } catch {
+        parsed = null;
+      }
       const classified = Array.isArray(parsed?.items) ? parsed.items : [];
+      // Diagnostic léger (jamais la clé API, le prompt ou le contenu des articles) : permet
+      // de distinguer un lot vide "normal" (rien à classer) d'un échec du modèle (contenu
+      // tronqué, refus, JSON invalide) sans avoir à relire les logs OpenAI directement.
+      console.log(`[opinion-articles classification] status=${r.status} requested=${chunk.length} parsed=${classified.length} contentLength=${content.length} finishReason=${finishReason || "n/a"} refusal=${refusal ? "present" : "none"}`);
+      if (chunk.length && !classified.length) {
+        console.warn(`[opinion-articles classification] lot entier sans résultat exploitable (requested=${chunk.length}, finishReason=${finishReason || "n/a"}, contentLength=${content.length}).`);
+      }
       for (const entry of classified) {
         const localIndex = Number(entry?.id);
         const category = normalizeOpinionArticleCategory(entry?.category);
@@ -9952,16 +9970,35 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
     if (!rows.length) return res.json({ ok: true, updated: 0, model: OPINION_ARTICLE_CATEGORY_MODEL });
 
     const aiCategories = await classifyOpinionArticlesWithAI(rows);
+
+    // Garde-fou : un échec complet de l'IA (0 résultat exploitable pour tout le lot)
+    // ne doit jamais se traduire par un écrasement silencieux via le fallback local —
+    // cf. régression du 06/08/2026 où category/category_precision/solar_system_id
+    // d'articles déjà bien classés avaient été remplacés par le fallback mots-clés.
+    // Cette route ne fait plus jamais confiance au fallback : seuls les articles avec
+    // une classification IA valide sont mis à jour, les autres restent inchangés.
+    if (aiCategories.size === 0) {
+      console.warn(`[opinion-articles classification] echec complet du lot : considered=${rows.length}, aiClassified=0 — aucune mise a jour appliquee.`);
+      return res.status(502).json({
+        ok: false,
+        error: "ai_classification_empty",
+        considered: data.length,
+        updated: 0,
+        aiClassified: 0
+      });
+    }
+
     let updated = 0;
     let aiClassified = 0;
+    let unchanged = 0;
     for (const article of rows) {
       const linkKey = String(article.link || "");
       const aiResult = aiCategories.get(linkKey);
-      if (aiResult) aiClassified += 1;
-      const category = aiResult?.category || getOpinionArticleFallbackCategory(article);
-      const aiResultMatchesCategory = aiResult?.category === category;
-      const category_precision = normalizeOpinionArticleCategoryPrecision(category, aiResultMatchesCategory ? aiResult.precision : null);
-      const solar_system_id = aiResultMatchesCategory ? (aiResult.solarSystemId || null) : null;
+      if (!aiResult) { unchanged += 1; continue; }
+      aiClassified += 1;
+      const category = aiResult.category;
+      const category_precision = normalizeOpinionArticleCategoryPrecision(category, aiResult.precision);
+      const solar_system_id = aiResult.solarSystemId || null;
       const { error: updateError } = await supabase
         .from("opinion_articles")
         .update({ category, category_precision, solar_system_id })
@@ -9975,6 +10012,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
       ok: true,
       updated,
       aiClassified,
+      unchanged,
       considered: data.length,
       force,
       scope,
