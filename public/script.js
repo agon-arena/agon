@@ -21234,7 +21234,16 @@ function syncBubbleFrameTop() {
   const trendsSection = document.getElementById('agon-tag-trends-section');
   if (trendsSection) {
     trendsSection.addEventListener('transitionend', function(e) {
-      if (e.propertyName === 'min-height') debouncedSync();
+      if (e.propertyName !== 'min-height') return;
+      debouncedSync();
+      // La légende "Les tendances…" (--agon-home-trends-caption-top,
+      // syncAgonHomeTrendsCaptionAnchor) restait figée à sa position
+      // d'avant pendant toute la transition min-height, puis sautait d'un
+      // coup à la fin (position recalculée en retard sur un délai fixe
+      // deviné plutôt que sur la fin réelle de l'animation). Recalculer ici,
+      // au moment précis où la transition CSS se termine, remplace ce délai
+      // fixe par le bon timing.
+      if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
     });
   }
 
@@ -34207,13 +34216,13 @@ function syncAgonHomeTrendsCaptionAnchor() {
     return;
   }
   const closedAgo = Date.now() - (window.__agonDebateModalClosedAt || 0);
-  if (closedAgo >= 0 && closedAgo < 1000) {
-    // #agon-tag-trends-section anime min-height sur 0.25s en redevenant
-    // visible, mais la mise en page réelle ne se stabilise complètement
-    // qu'environ 850ms après la fermeture en pratique (confirmé par
-    // diagnostic : un premier seuil à 350ms laissait encore passer un calcul
-    // faux ~600ms après fermeture, corrigé ~850ms après par l'appel suivant).
-    // Marge large plutôt que d'ajuster au plus juste.
+  if (closedAgo >= 0 && closedAgo < 300) {
+    // Fenêtre courte seulement : la correction précise se fait maintenant
+    // sur l'événement transitionend de #agon-tag-trends-section (min-height,
+    // cf. initBubbleFrameSync) plutôt que sur un délai fixe deviné — un délai
+    // trop long ici fige au contraire la légende à sa position d'AVANT
+    // pendant toute la transition réelle, ce qui se voit comme "reste au
+    // mauvais endroit puis saute" plutôt que d'éliminer le saut.
     __scrollJumpDiagLog('guard-closing-transition', { closedAgo });
     return;
   }
