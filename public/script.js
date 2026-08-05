@@ -34162,27 +34162,25 @@ function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOf
 // (fixed → indépendante du scroll) et on pose le décalage en variable CSS.
 function syncAgonHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
-  const clear = () => {
-    root.style.removeProperty('--agon-home-trends-caption-top');
-    root.style.removeProperty('--agon-home-first-row-mt');
-  };
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
-    clear();
+    // Pas de clear() ici non plus (cf. commentaire sur le garde section/nav
+    // plus bas) : mieux vaut garder la dernière position connue, invisible
+    // tant qu'on n'est pas dans ce contexte (le sélecteur CSS qui la
+    // consomme est lui-même scopé à body.is-standalone.page-home-mobile),
+    // que risquer un effacement transitoire pendant une bascule passagère.
     return;
   }
   const section = document.getElementById('agon-tag-trends-section');
   const nav = document.querySelector('.home-bottom-nav');
   if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) {
-    // Pas de clear() ici (contrairement au early-return ci-dessus) : ce garde
-    // se déclenche aussi transitoirement pendant l'ouverture/fermeture de la
-    // modale débat (nav temporairement masqué/couvert). Effacer la variable
-    // fait retomber la légende sur son ancrage CSS de secours (souvent plus
-    // haut) le temps qu'un recalcul valide la repose — vu comme la légende
-    // qui "saute" au retour sur l'accueil, entraînant avec elle le bandeau
-    // "À la une" (dont la marge dépend de la position de la légende). Garder
-    // la dernière valeur connue le temps que la mesure redevienne possible
-    // évite ce saut.
+    // Ce garde se déclenche aussi transitoirement pendant l'ouverture/fermeture
+    // de la modale débat (nav temporairement masqué/couvert) : même raison
+    // que ci-dessus, on garde la dernière valeur connue plutôt que de
+    // l'effacer, sans quoi la légende retombe sur son ancrage CSS de secours
+    // (souvent plus haut) le temps qu'un recalcul valide la repose — vu comme
+    // la légende qui "saute" au retour sur l'accueil, entraînant avec elle le
+    // bandeau "À la une" (dont la marge dépend de la position de la légende).
     return;
   }
   const scrollY = window.scrollY || 0;
@@ -34206,7 +34204,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
     }
   }
   if (!Number.isFinite(offset) || offset < 200) {
-    clear();
+    // Pas de reset ici non plus, même raison que les gardes ci-dessus.
     return;
   }
   root.style.setProperty('--agon-home-trends-caption-top', `${offset}px`);
@@ -34219,7 +34217,6 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const caption = section.querySelector('.agon-tag-trends-caption');
   const firstRow = document.querySelector('#debates-list .theme-row-section');
   if (!caption || !firstRow || contentBottomDoc === null) {
-    root.style.removeProperty('--agon-home-first-row-mt');
     return;
   }
   const captionDocTop = sectionDocTop + offset;
@@ -34246,7 +34243,6 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
   const nextMarginTop = Math.round(currentMarginTop + (bandTargetTop - bandDocTop));
   if (!Number.isFinite(nextMarginTop)) {
-    root.style.removeProperty('--agon-home-first-row-mt');
     return;
   }
   root.style.setProperty('--agon-home-first-row-mt', `${nextMarginTop}px`);
