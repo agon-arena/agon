@@ -14335,6 +14335,37 @@ app.get("/api/admin/diag/logs", requireAdmin, (req, res) => {
   }
 });
 
+/* ---- TEMPORAIRE : diagnostic du saut de --agon-home-first-row-mt au retour
+   de Connaissances/Éclairages/Ce jour dans l'histoire en standalone. À
+   retirer une fois la cause identifiée (cf. conversation du 05/08/2026). ---- */
+const SCROLL_JUMP_DIAG_FILE = path.join(__dirname, "scroll-jump-diag.json");
+app.post("/api/debug/scroll-jump-sample", express.json(), (req, res) => {
+  try {
+    const body = req.body || {};
+    let existing = [];
+    try { existing = JSON.parse(fs.readFileSync(SCROLL_JUMP_DIAG_FILE, "utf8")); } catch (_) {}
+    existing.push({ received_at: new Date().toISOString(), ...body });
+    if (existing.length > 2000) existing = existing.slice(existing.length - 2000);
+    fs.writeFileSync(SCROLL_JUMP_DIAG_FILE, JSON.stringify(existing), "utf8");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.get("/api/debug/scroll-jump-sample", requireAdmin, (req, res) => {
+  try {
+    let data = [];
+    try { data = JSON.parse(fs.readFileSync(SCROLL_JUMP_DIAG_FILE, "utf8")); } catch (_) {}
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.delete("/api/debug/scroll-jump-sample", requireAdmin, (req, res) => {
+  try { fs.unlinkSync(SCROLL_JUMP_DIAG_FILE); } catch (_) {}
+  res.json({ ok: true });
+});
+
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);
   purgeExternalPreviewCacheDir(500);

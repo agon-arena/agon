@@ -34160,10 +34160,36 @@ function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOf
 // (innerHeight < 100dvh) : la légende y atterrissait dans la bande morte du
 // bas, visible SOUS le bandeau. On mesure donc la position réelle du bandeau
 // (fixed → indépendante du scroll) et on pose le décalage en variable CSS.
+// TEMPORAIRE : trace chaque appel de syncAgonHomeTrendsCaptionAnchor vers le
+// serveur (fire-and-forget) pour diagnostiquer le saut de --agon-home-first-row-mt
+// au retour de Connaissances/Éclairages/Ce jour dans l'histoire en standalone.
+// À retirer une fois la cause identifiée (cf. conversation du 05/08/2026).
+function __scrollJumpDiagLog(reason, data) {
+  try {
+    if (!document.body || !document.body.classList.contains('is-standalone')) return;
+    const payload = Object.assign({
+      reason,
+      ts: Date.now(),
+      href: String(location.pathname || '')
+    }, data || {});
+    fetch('/api/debug/scroll-jump-sample', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 function syncAgonHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
+    __scrollJumpDiagLog('guard-not-standalone-mobile', {
+      isStandalone: !!body && body.classList.contains('is-standalone'),
+      isPageHomeMobile: !!body && body.classList.contains('page-home-mobile'),
+      innerWidth: window.innerWidth
+    });
     // Pas de clear() ici non plus (cf. commentaire sur le garde section/nav
     // plus bas) : mieux vaut garder la dernière position connue, invisible
     // tant qu'on n'est pas dans ce contexte (le sélecteur CSS qui la
@@ -34174,6 +34200,12 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const section = document.getElementById('agon-tag-trends-section');
   const nav = document.querySelector('.home-bottom-nav');
   if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) {
+    __scrollJumpDiagLog('guard-section-or-nav', {
+      hasSection: !!section,
+      sectionHidden: !!section && section.hidden,
+      hasNav: !!nav,
+      navVisible: !!nav && isAgonVisibleElement(nav)
+    });
     // Ce garde se déclenche aussi transitoirement pendant l'ouverture/fermeture
     // de la modale débat (nav temporairement masqué/couvert) : même raison
     // que ci-dessus, on garde la dernière valeur connue plutôt que de
@@ -34204,6 +34236,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
     }
   }
   if (!Number.isFinite(offset) || offset < 200) {
+    __scrollJumpDiagLog('guard-offset-invalid', { offset, navTop, sectionDocTop, scrollY });
     // Pas de reset ici non plus, même raison que les gardes ci-dessus.
     return;
   }
@@ -34217,6 +34250,12 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const caption = section.querySelector('.agon-tag-trends-caption');
   const firstRow = document.querySelector('#debates-list .theme-row-section');
   if (!caption || !firstRow || contentBottomDoc === null) {
+    __scrollJumpDiagLog('guard-caption-or-firstrow', {
+      hasCaption: !!caption,
+      hasFirstRow: !!firstRow,
+      contentBottomDoc,
+      offset
+    });
     return;
   }
   const captionDocTop = sectionDocTop + offset;
@@ -34230,8 +34269,9 @@ function syncAgonHomeTrendsCaptionAnchor() {
   // sans en tenir compte du tout, le bandeau se plaquerait sous la légende
   // comme si le bouton n'existait pas et le recouvrirait.
   const qcmBtn = document.getElementById('home-qcm-du-jour-btn');
+  const qcmBtnVisible = !!qcmBtn && isAgonVisibleElement(qcmBtn);
   let bandTargetTop = captionBottomDoc + gapAbove;
-  if (qcmBtn && isAgonVisibleElement(qcmBtn)) {
+  if (qcmBtn && qcmBtnVisible) {
     const qcmRect = qcmBtn.getBoundingClientRect();
     const qcmTopDoc = qcmRect.top + scrollY;
     const qcmBottomDoc = qcmRect.bottom + scrollY;
@@ -34243,8 +34283,21 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
   const nextMarginTop = Math.round(currentMarginTop + (bandTargetTop - bandDocTop));
   if (!Number.isFinite(nextMarginTop)) {
+    __scrollJumpDiagLog('guard-nextmargintop-invalid', { bandTargetTop, bandDocTop, currentMarginTop });
     return;
   }
+  __scrollJumpDiagLog('success', {
+    offset,
+    scrollY,
+    qcmBtnVisible,
+    gapAbove,
+    captionBottomDoc,
+    bandTargetTop,
+    bandDocTop,
+    currentMarginTop,
+    nextMarginTop,
+    modalOpen: window.__agonDebateModalOpen === true
+  });
   root.style.setProperty('--agon-home-first-row-mt', `${nextMarginTop}px`);
 }
 
