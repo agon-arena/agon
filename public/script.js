@@ -34184,6 +34184,20 @@ function __scrollJumpDiagLog(reason, data) {
 function syncAgonHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
   const body = document.body;
+  if (window.__agonDebateModalOpen === true) {
+    // Confirmé par diagnostic (05/08/2026) : cette fonction tournait aussi
+    // PENDANT que la modale débat (Connaissances/Éclairages/Ce jour dans
+    // l'histoire) est ouverte, calculant à partir d'une mise en page
+    // transitoire (#agon-tag-trends-section couverte/suspendue) — la marge
+    // oscillait -12 → -67 → -56 → -67 avant même la fermeture, puis encore
+    // -12 → 23 → 23 → 23 → -12 à la fermeture, pour finalement se stabiliser
+    // exactement là où elle était au départ. Ce grand écart transitoire est
+    // ce qui se voyait comme "les boutons descendent puis remontent". Ne
+    // plus rien calculer/écrire tant que la modale est ouverte : rien à
+    // corriger, la valeur d'avant reste valable jusqu'à la fermeture.
+    __scrollJumpDiagLog('guard-modal-open', {});
+    return;
+  }
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
     __scrollJumpDiagLog('guard-not-standalone-mobile', {
       isStandalone: !!body && body.classList.contains('is-standalone'),
