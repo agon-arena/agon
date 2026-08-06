@@ -24619,3 +24619,167 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: translateY(-12px) !important;
   }
 }
+
+/* =========================================================
+   Mon univers (views/mon-univers.html + public/mon-univers.js)
+   Réutilise .agon-tag-trends-cloud (moteur de bulles existant, inchangé)
+   pour le conteneur #agon-universe-cloud — uniquement des règles propres
+   à cette page ci-dessous, aucune modification des styles Agôn existants.
+   ========================================================= */
+
+/* Header allégé, même principe que .page-qcm-du-jour : seul le logo reste
+   visible (le reste du topbar dépend de script.js, volontairement pas chargé
+   sur cette page). */
+body.page-mon-univers {
+  min-height: 100vh;
+  background-color: #243038;
+}
+body.page-mon-univers .topbar-inner {
+  justify-content: center !important;
+  padding: 2px 0 !important;
+}
+body.page-mon-univers .home-brand-block {
+  flex: 0 0 auto !important;
+  margin-left: 0 !important;
+}
+body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
+  display: none !important;
+}
+
+.universe-page-shell {
+  width: min(100% - 32px, 900px);
+  margin: 112px auto 120px;
+  color: #eef2f6;
+}
+
+.universe-page-shell h1 {
+  font-size: 1.4rem;
+  margin: 0 0 6px;
+}
+
+.universe-subtitle {
+  margin: 0 0 20px;
+  color: #b7c2cc;
+  font-size: 0.92rem;
+}
+
+/* Fil d'Ariane : chaque niveau précédent est un vrai <button>, focus/clavier natifs. */
+.universe-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 18px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.universe-breadcrumb__item {
+  background: none;
+  border: none;
+  color: #9fb3c4;
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.universe-breadcrumb__item:hover,
+.universe-breadcrumb__item:focus-visible {
+  color: #fff;
+  text-decoration: underline;
+}
+.universe-breadcrumb__item:focus-visible {
+  outline: 2px solid #7db3ff;
+  outline-offset: 1px;
+}
+.universe-breadcrumb__item--current {
+  color: #fff;
+  font-weight: 600;
+  cursor: default;
+  padding: 2px 4px;
+}
+.universe-breadcrumb__sep {
+  color: #5b6b78;
+}
+
+/* Bouton retour, priorité mobile (desktop peut déjà cliquer un cran du fil d'Ariane). */
+.universe-back-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #eef2f6;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.universe-back-btn:focus-visible {
+  outline: 2px solid #7db3ff;
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .universe-back-btn.is-visible {
+    display: inline-flex;
+  }
+}
+
+/* Conteneur de bulles : hérite entièrement de .agon-tag-trends-cloud (taille,
+   cadre décoratif, respiration des bulles). Seul le bouton central "À LA UNE",
+   spécifique à l'accueil, est masqué ici — jamais touché ailleurs. */
+#agon-universe-cloud.agon-tag-trends-cloud {
+  margin: 0 auto 24px;
+}
+#agon-universe-cloud .agon-tag-center-btn {
+  display: none;
+}
+
+/* Effet de zoom léger entre deux niveaux (cf. mon-univers.js) : classe posée
+   juste avant de vider/re-render les bulles, retirée une fois le niveau
+   suivant affiché. N'affecte que ce conteneur, jamais .agon-tag-trends-cloud
+   de la page d'accueil. */
+#agon-universe-cloud.universe-cloud--transitioning {
+  opacity: 0;
+  transform: scale(0.94);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+#agon-universe-cloud {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.universe-status {
+  text-align: center;
+  color: #cfd8e0;
+  padding: 40px 16px;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+.universe-status[hidden] {
+  display: none;
+}
+.universe-status__retry {
+  margin-top: 14px;
+  background: #eef2f6;
+  color: #1a2535;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.universe-status__retry:focus-visible {
+  outline: 2px solid #7db3ff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .universe-page-shell {
+    margin-top: 88px;
+  }
+  .universe-breadcrumb {
+    font-size: 0.86rem;
+  }
+}

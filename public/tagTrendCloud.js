@@ -685,7 +685,12 @@ function layoutTagTrendCloud(container) {
   positionTrendBadges(container);
 }
 
-function renderTagTrendCloud(container, trends, onReady) {
+// maxBubbles : optionnel, par défaut MAX_TAG_TREND_BUBBLES (comportement historique
+// inchangé pour tout appelant existant). Permet à un autre appelant (ex. page "Mon
+// univers") d'afficher plus d'éléments sans dupliquer ce moteur — index au-delà de 11
+// perd juste le décalage d'animation par .agon-tag-pos-N (aucune règle CSS au-delà,
+// donc sans effet visuel indésirable), jamais d'erreur.
+function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES) {
   if (!container) return;
 
   if (!Array.isArray(trends) || !trends.length) {
@@ -702,7 +707,7 @@ function renderTagTrendCloud(container, trends, onReady) {
   const isMobile = isMobileTagCloud();
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
-  trends.slice(0, MAX_TAG_TREND_BUBBLES).forEach((trendItem, index) => {
+  trends.slice(0, maxBubbles).forEach((trendItem, index) => {
     const tag = String(trendItem?.tag || "").trim();
     if (!tag) return;
 
@@ -795,8 +800,10 @@ function renderTagTrendCloud(container, trends, onReady) {
     });
   });
 
-  // Relance le layout si la fenêtre est redimensionnée
-  if (!container._cloudResizeObserver) {
+  // Relance le layout si la fenêtre est redimensionnée. Garde ResizeObserver : absent sur
+  // de très vieux navigateurs, jamais laissé planter le rendu initial pour ça (fallback :
+  // simplement pas de recalcul auto au redimensionnement sur ces navigateurs).
+  if (!container._cloudResizeObserver && typeof ResizeObserver !== "undefined") {
     let _resizeTimer = null;
     container._cloudResizeObserver = new ResizeObserver(() => {
       clearTimeout(_resizeTimer);

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script src="/no-zoom.js?v=20260603" defer></script>
+  <title>Mon univers | agôn</title>
+  <link rel="icon" type="image/png" href="/favicon-64.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192-optimized.png">
+  <meta name="theme-color" content="#243038">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agôn">
+  <link rel="stylesheet" href="/style.min.css?v=20260805-monunivers1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+</head>
+<body class="page-mon-univers">
+<header class="topbar">
+  <div class="container topbar-inner topbar-home">
+    <div class="home-brand-block">
+      <div class="home-brand-main">
+        <a href="/"><img src="/logo.jpeg" alt="Logo agôn" class="home-logo"></a>
+      </div>
+    </div>
+  </div>
+</header>
+<main class="universe-page-shell">
+  <h1>Mon univers</h1>
+  <p class="universe-subtitle">Les connaissances acquises en répondant correctement aux QCM d'actualité.</p>
+
+  <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
+  </button>
+
+  <nav id="universe-breadcrumb" class="universe-breadcrumb" aria-label="Fil d'Ariane de l'univers"></nav>
+
+  <div id="agon-universe-cloud" class="agon-tag-trends-cloud"></div>
+
+  <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
+</main>
+<script type="module" src="/mon-univers.js?v=20260805-1"></script>
+</body>
+</html>
