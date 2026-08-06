@@ -2836,12 +2836,13 @@ function isIframeDebateLoadingOverlayContext() {
   return (path === "/debate" || path === "/create" || path === "/notifications" || path === "/autres-sources") && window.self !== window.top;
 }
 
-// Pages embarquées au rendu léger et quasi immédiat (Connaissances,
-// Éclairages...) : le bandeau/voile "Chargement en cours" n'y apporte qu'un
+// Pages embarquées où le bandeau/voile "Chargement en cours" n'apporte qu'un
 // flash de plus plutôt qu'un vrai confort d'attente. Liste partagée par les
 // différents points d'entrée (ouverture, navigation historique, voile posé
-// par la page elle-même) plutôt que répétée à chaque appel.
-const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/qcm-du-jour", "/eclairages"];
+// par la page elle-même) plutôt que répétée à chaque appel. Connaissances
+// (qcm-du-jour) retiré de cette liste : redemandé avec l'écran de
+// chargement, comme Ce jour dans l'Histoire (jamais dans cette liste).
+const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/eclairages"];
 function isIframePageWithoutLoadingOverlay(pathname) {
   return AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
