@@ -2839,10 +2839,11 @@ function isIframeDebateLoadingOverlayContext() {
 // Pages embarquées où le bandeau/voile "Chargement en cours" n'apporte qu'un
 // flash de plus plutôt qu'un vrai confort d'attente. Liste partagée par les
 // différents points d'entrée (ouverture, navigation historique, voile posé
-// par la page elle-même) plutôt que répétée à chaque appel. Connaissances
-// (qcm-du-jour) retiré de cette liste : redemandé avec l'écran de
-// chargement, comme Ce jour dans l'Histoire (jamais dans cette liste).
-const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/eclairages"];
+// par la page elle-même) plutôt que répétée à chaque appel. Vide pour
+// l'instant : Connaissances et Éclairages ont toutes deux redemandé l'écran
+// de chargement du parent (cf. AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY),
+// comme Ce jour dans l'Histoire (jamais dans cette liste).
+const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = [];
 function isIframePageWithoutLoadingOverlay(pathname) {
   return AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
@@ -2854,7 +2855,7 @@ function isIframePageWithoutLoadingOverlay(pathname) {
 // (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
 // suffisant. Distinct de AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
 // supprime les deux) : ici seul le voile de la page elle-même est coupé.
-const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/qcm-du-jour"];
+const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/qcm-du-jour", "/eclairages"];
 function isIframePageUsingParentLoadingOnly(pathname) {
   return AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
 }
