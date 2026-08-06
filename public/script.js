@@ -715,6 +715,13 @@ const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
 const PUSH_SUBSCRIBED_KEY = "pushSubscribed";
 const PUSH_VAPID_PUBLIC_KEY_STORAGE_KEY = "pushVapidPublicKey";
 const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+// Empêche la fenêtre "Ton score a évolué" (showScoreChangeNotification) et
+// l'invite aux notifications push (showPushInvite) de s'afficher coup sur
+// coup (pénible pour l'utilisateur) : chacune enregistre son horodatage,
+// l'autre vérifie qu'aucune des deux n'est apparue dans les 5 dernières
+// minutes avant de s'afficher à son tour.
+const SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY = "agon_score_change_notif_last_shown_at";
+const SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS = 5 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
 let pushSubscriptionSyncPromise = null;
@@ -1396,6 +1403,12 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
 }
 
 function showScoreChangeNotification(changes, openDetail) {
+  // Ne jamais s'afficher coup sur coup avec l'invite aux notifications push
+  // (showPushInvite) — cf. SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS.
+  const pushInviteShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
+  if (pushInviteShownAt && Date.now() - pushInviteShownAt < SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS) return;
+  lsSet(SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY, String(Date.now()));
+
   // Le widget de score s'initialise à la fois sur la page hôte et dans
   // l'iframe /debate (cf. initUserScoreWidget, isDebateIframe) : sans ça,
   // chaque contexte crée sa propre fenêtre dans son propre document quand les
@@ -1898,6 +1911,9 @@ function ensurePushDeniedModal() {
 function shouldShowPushInvite({ ignoreCooldown = false } = {}) {
   if (!isMobilePushInviteSurface()) return false;
   if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
+
+  const scoreChangeShownAt = Number(lsGet(SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY) || 0);
+  if (scoreChangeShownAt && Date.now() - scoreChangeShownAt < SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS) return false;
 
   const lastShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
 
