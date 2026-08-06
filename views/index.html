@@ -435,6 +435,13 @@
             <i class="fa-regular fa-folder-open"></i>
             <span>Scores, classements et contributions</span>
           </a>
+          <!-- Lien normal volontairement (pas openDebateIframeModal comme les autres entrées) :
+               /mon-univers a son propre rendu de bulles et ses transitions, pas adapté à une
+               iframe modale — doit rester rechargeable/ouvrable en nouvel onglet normalement. -->
+          <a href="/mon-univers" class="home-topbar-menu-item" id="home-topbar-universe-link">
+            <i class="fa-solid fa-globe"></i>
+            <span>Mon univers</span>
+          </a>
           <a href="/historical-events-test" class="home-topbar-menu-item" id="home-topbar-historical-events-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/historical-events-test')">
             <i class="fa-solid fa-clock-rotate-left"></i>
             <span>Ce jour dans l'Histoire</span>
@@ -1122,6 +1129,15 @@ window.addEventListener("pageshow", function() {
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
     <span id="notifications-count-bottom" class="notifications-count notifications-count-bottom" style="display:none;"></span>
+  </a>
+  <!-- Lien normal (pas openDebateIframeModal) : page autonome avec son propre rendu, pas
+       adaptée à l'iframe modale des autres entrées du bandeau. Placé en dernier (pas entre
+       Contributions et Alertes) : initIndexFloatingScrollButtonAlignment (script.js) calcule
+       le point d'ancrage des flèches de défilement flottantes comme le milieu du trou entre
+       ces deux items précis — un item inséré entre eux décalerait cette flèche. -->
+  <a href="/mon-univers" class="home-bottom-nav-item" aria-label="Mon univers">
+    <i class="fa-solid fa-globe"></i>
+    <span>Univers</span>
   </a>
 </nav>
 
