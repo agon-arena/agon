@@ -2847,6 +2847,18 @@ function isIframePageWithoutLoadingOverlay(pathname) {
   return AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
 
+// Pages qui gardent le bandeau du PARENT (fond bleu pétrole + sablier +
+// "Chargement en cours", cf. showDebateIframeParentLoadingOverlay) mais dont
+// le voile posé par la page elle-même (page-arrival-loading-overlay, cf.
+// initPageArrivalLoadingOverlay) affiche en plus son propre cadre blanc
+// (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
+// suffisant. Distinct de AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
+// supprime les deux) : ici seul le voile de la page elle-même est coupé.
+const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/qcm-du-jour"];
+function isIframePageUsingParentLoadingOnly(pathname) {
+  return AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
+}
+
 function isCreateToDebateLoadingTransition() {
   if (location.pathname !== "/debate") return false;
 
@@ -3119,14 +3131,18 @@ function initPageArrivalLoadingOverlay() {
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
   // Bulles Actu/Agôn en dessous le temps que les débats se rechargent.
   const skipForIndexReturn = location.pathname === "/" && window.__agonSkipStartupOnce === true;
-  // Connaissances/Éclairages ont leur propre rendu léger et quasi immédiat :
-  // ce voile "Chargement en cours" (posé par la page embarquée elle-même,
-  // distinct du bandeau du parent déjà supprimé pour ces pages) n'apporte
-  // qu'un flash de plus. isIframeDebateLoadingOverlayContext() ne couvre pas
-  // ces chemins (utilisée ailleurs pour du comportement propre à /debate),
-  // donc exclusion séparée plutôt que d'y ajouter ce cas.
+  // Éclairages a son propre rendu léger et quasi immédiat : ce voile
+  // "Chargement en cours" (posé par la page embarquée elle-même, distinct du
+  // bandeau du parent déjà supprimé pour cette page) n'apporte qu'un flash
+  // de plus. isIframeDebateLoadingOverlayContext() ne couvre pas ce chemin
+  // (utilisée ailleurs pour du comportement propre à /debate), donc
+  // exclusion séparée plutôt que d'y ajouter ce cas.
   const skipForLightweightIframePage = isIframePageWithoutLoadingOverlay(location.pathname) && window.self !== window.top;
-  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  // Connaissances garde le bandeau du parent (demandé), mais son propre
+  // voile ajoutait en plus un cadre blanc (.page-arrival-loading-box)
+  // redondant par-dessus — coupé ici sans toucher au bandeau du parent.
+  const skipForParentLoadingOnlyPage = isIframePageUsingParentLoadingOnly(location.pathname) && window.self !== window.top;
+  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
