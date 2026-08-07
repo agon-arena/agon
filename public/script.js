@@ -1314,7 +1314,7 @@ function renderUserScoreWidget(data) {
   // posté/répondu, cf. USER_SCORE_EMPTY côté serveur) : toujours 3 valeurs,
   // toujours la variante large du badge.
   widget.className = "agon-user-score-widget agon-user-score-widget-triple";
-  widget.href = "/contributions";
+  widget.href = "/mon-univers";
   widget.setAttribute("aria-label", "Mes scores");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
@@ -1451,7 +1451,7 @@ function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
 }
 
-function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount) {
+function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, initialTab) {
   // Même raisonnement que showScoreChangeNotification : le badge (et donc ce
   // clic) peut venir de l'iframe /debate, mais le détail doit toujours
   // s'afficher dans le document le plus haut pour rester cohérent avec la
@@ -1556,11 +1556,12 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     }
   ];
 
-  const tabButtons = tabs.map((t, i) =>
-    '<button type="button" class="agon-score-tab' + (i === 0 ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
+  const activeTabKey = tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0].key;
+  const tabButtons = tabs.map((t) =>
+    '<button type="button" class="agon-score-tab' + (t.key === activeTabKey ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
   ).join('');
-  const tabPanels = tabs.map((t, i) =>
-    '<div class="agon-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (i === 0 ? '' : ' hidden') + '>' + t.content + '</div>'
+  const tabPanels = tabs.map((t) =>
+    '<div class="agon-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (t.key === activeTabKey ? '' : ' hidden') + '>' + t.content + '</div>'
   ).join('');
   const bodyHtml = '<div class="agon-score-tabs" role="tablist">' + tabButtons + '</div>' + tabPanels;
 
@@ -1729,9 +1730,7 @@ function renderAgonTimeWidget() {
       .agon-time-widget-warning { border-color: #d64545; color: #d64545; }
       .agon-time-widget-warning i { color: #d64545; }
       .agon-time-widget-expired {
-        white-space: normal;
         text-align: center;
-        max-width: min(220px, calc(100vw - 40px));
       }
       @keyframes agon-time-widget-blink {
         0%, 100% { opacity: 1; }
@@ -5284,6 +5283,7 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("eclairages-frame-open", safePathname === "/eclairages");
   modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
+  modal.classList.toggle("mon-univers-frame-open", safePathname === "/mon-univers");
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
@@ -5810,7 +5810,8 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.citation-du-jour-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.eclairages-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.historical-events-frame-open #debate-iframe-modal-refresh,
-    #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh {
+    #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
@@ -7088,7 +7089,7 @@ function closeDebateIframeModal(options = {}) {
     modal.classList.contains("open") &&
     notificationsReturnContext?.pathname === "/autres-sources" &&
     notificationsReturnContext.returnUrl &&
-    ["/notifications", "/create", "/contributions", "/about", "/contact"].includes(currentIframePathname);
+    ["/notifications", "/create", "/about", "/contact", "/meilleures-idees", "/mon-univers"].includes(currentIframePathname);
   if (shouldReturnToTribunesFromChildPage && frame) {
     // Vraie navigation top-level (comme le lien "retour" à l'intérieur de
     // /notifications) plutôt qu'un rechargement dans l'iframe : sinon Autres
@@ -7274,7 +7275,8 @@ function isValidDebateReturnUrl(returnUrl = "") {
       parsedUrl.pathname.startsWith("/debates/") ||
       parsedUrl.pathname === "/autres-sources" ||
       parsedUrl.pathname === "/notifications" ||
-      parsedUrl.pathname === "/contributions"
+      parsedUrl.pathname === "/mon-univers" ||
+      parsedUrl.pathname === "/meilleures-idees"
     );
   } catch (error) {
     return false;
@@ -21207,7 +21209,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260627-agon-switch-guard");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260807-sunvisual1");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -21966,10 +21968,11 @@ function isSafeInternalModalUrl(modalUrl = "") {
       "/notifications",
       "/create",
       "/autres-sources",
-      "/contributions",
       "/about",
       "/contact",
-      "/qcm-du-jour"
+      "/qcm-du-jour",
+      "/meilleures-idees",
+      "/mon-univers"
     ].includes(parsedUrl.pathname);
   } catch (error) {
     return false;
@@ -32873,7 +32876,10 @@ document.addEventListener("DOMContentLoaded", () => {
     initCreate();
     attachPageScrollFadeHint('#f3f4f6');
   }
-  if (location.pathname === "/contributions") {
+  if (location.pathname === "/mon-univers") {
+    attachPageScrollFadeHint('#f3f4f6');
+  }
+  if (location.pathname === "/meilleures-idees") {
     attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
   }
   if (location.pathname === "/notifications") {
@@ -35071,7 +35077,10 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   });
   const explorer = nav.querySelector("#index-explorer-toggle") || findByText("explorer");
   const open = findByText("ouvrir");
-  const contributions = findByText("contributions");
+  // "Contributions" a été renommé "Univers" (même emplacement dans le DOM :
+  // fusion du contenu de /contributions dans /mon-univers) — seul le libellé
+  // cherché change, le calcul du trou Actualiser|Univers reste identique.
+  const contributions = findByText("univers");
   const alerts = findByText("alertes");
   if (!explorer || !open || !contributions || !alerts) return;
 
@@ -35083,9 +35092,9 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   const isMobileIndexNav = window.matchMedia?.("(max-width: 768px)")?.matches === true;
 
   // Flèches resserrées de part et d'autre du bouton Actualiser (trous
-  // Ouvrir|Actualiser et Actualiser|Contributions). Repli sur les trous
-  // extérieurs (Explorer|Ouvrir et Contributions|Alertes) si la nav de la
-  // page n'a pas d'item Actualiser.
+  // Ouvrir|Actualiser et Actualiser|Univers). Repli sur les trous extérieurs
+  // (Explorer|Ouvrir et Univers|Alertes) si la nav de la page n'a pas d'item
+  // Actualiser.
   const refresh = findByText("actualiser");
   let leftMidpoint;
   let rightMidpoint;

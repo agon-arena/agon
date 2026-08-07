@@ -1,4 +1,4 @@
-const SW_VERSION = "20260804-latin-eclairages-iframe-fix-v33";
+const SW_VERSION = "20260807-solarsystemglow1-cache-bust-v60";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

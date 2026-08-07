@@ -20081,6 +20081,7 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   overflow-wrap: normal;
   word-break: normal;
   overflow: visible;
+  text-align: center;
   text-shadow:
     0 0 6px rgba(255,255,255,0.9),
     0 0 12px rgba(255,255,255,0.7);
@@ -20088,7 +20089,9 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
 
 .agon-tag-word {
   display: block;
+  width: 100%;
   white-space: nowrap;
+  text-align: center;
 }
 
 .agon-tag-bubble .agon-tag-label {
@@ -24727,23 +24730,376 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 }
 
 /* Conteneur de bulles : hérite entièrement de .agon-tag-trends-cloud (taille,
-   cadre décoratif, respiration des bulles). Seul le bouton central "À LA UNE",
-   spécifique à l'accueil, est masqué ici — jamais touché ailleurs. */
+   cadre décoratif, respiration des bulles). Le bouton central "À LA UNE" par défaut,
+   spécifique à l'accueil, reste masqué ici si jamais il apparaissait (ne devrait plus
+   arriver : mon-univers.js passe toujours centerLabel, cf. renderTagTrendCloud) — jamais
+   touché ailleurs. Le centre personnalisé (nom de galaxie/système, cf. .agon-tag-center-btn-custom
+   plus bas) reste lui bien visible.
+   Hauteur réduite (548px → proche de max-width:390px, remontée à 460px le 06/08/2026 pour
+   laisser un peu plus de marge à computeAutoScale/fitLabelInBubble sur les libellés longs) :
+   le cadre décoratif hérité (.agon-tag-trends-cloud::before) est un format portrait sur
+   l'accueil (pensé pour un carrousel avec bandeau au-dessus) — carré ici, sans toucher à la
+   règle partagée .agon-tag-trends-cloud (le carrousel de bulles de l'accueil doit garder son
+   format inchangé). applyCompactBubbleLayout (tagTrendCloud.js) lit déjà la hauteur réelle du
+   conteneur au moment du placement, aucun changement JS nécessaire. */
 #agon-universe-cloud.agon-tag-trends-cloud {
   margin: 0 auto 24px;
+  height: 460px;
 }
-#agon-universe-cloud .agon-tag-center-btn {
+
+/* Liseré noir autour du cadre décoratif EXISTANT (.agon-tag-trends-cloud::before, hérité),
+   pas un nouveau cadre séparé sur le conteneur (essayé le 06/08/2026, retiré : ce n'était pas
+   ce qui était demandé). box-shadow plutôt qu'un vrai border/outline : suit correctement le
+   border-radius du cadre existant dans tous les navigateurs, et s'ajoute par-dessus les deux
+   ombres déjà présentes sur ce ::before (portées : celles-ci doivent être répétées ici, un
+   box-shadow ne s'additionne pas entre deux règles pour le même sélecteur). */
+#agon-universe-cloud.agon-tag-trends-cloud::before {
+  box-shadow:
+    0 0 0 1px #000,
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Poussière d'étoiles derrière les bulles, façon carte astronomique ancienne (référence image
+   fournie le 06/08/2026) : étoiles à dominante or/ambre (quelques-unes plus grandes/claires
+   pour l'effet "scintillant"), plutôt que de simples points blancs uniformes. 44 points à
+   positions en pourcentage, background-repeat:no-repeat (aucune tuile) — deux versions
+   précédentes (tuile 70px puis 420x460px) se répétaient de façon visible (grille, puis coupure
+   nette entre deux copies) ; en pourcentage le motif s'étire pour remplir exactement la zone
+   une seule fois, jamais de répétition possible quelle que soit la taille réelle du cadre. Plus
+   une bande diffuse en diagonale évoquant la voie lactée elle-même. z-index -1, comme le cadre
+   décoratif (::before) : reste toujours derrière les bulles (position:absolute, z-index auto,
+   donc au-dessus de tout ce qui a un z-index négatif dans ce contexte d'empilement isolé, cf.
+   isolation:isolate sur .agon-tag-trends-cloud). ::after (pas ::before, déjà pris par le cadre
+   décoratif hérité) — même inset, même arrondi. */
+#agon-universe-cloud.agon-tag-trends-cloud::after {
+  content: '';
+  position: absolute;
+  inset: var(--bubble-frame-top) 30px 23px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 18px;
+  overflow: hidden;
+  /* Fond sombre dédié au cadre (jamais au reste de la page, qui garde #243038, cf.
+     body.page-mon-univers plus haut) : les étoiles, réglées pour un fond très sombre, étaient
+     invisibles sur le gris-bleu moyen de la page (demande du 06/08/2026 : "juste le fond dans
+     le cadre, pas autour"). background-color (pas juste un dernier calque de background-image)
+     pour ne pas dépendre de l'ordre des calques. #0a1024 jugé trop violet (rouge et vert trop
+     proches l'un de l'autre) — #040b1a : rouge quasi nul, bleu nettement dominant, lecture
+     "bleu nuit" sans dérive violette. */
+  background-color: #040b1a;
+  background-image:
+    linear-gradient(128deg, transparent 8%, rgba(210,222,240,0.18) 32%, rgba(225,233,248,0.28) 50%, rgba(210,222,240,0.18) 68%, transparent 92%),
+    radial-gradient(1.4px 1.4px at 51.7% 62.9%, rgba(255,205,125,0.75), transparent 60%),
+    radial-gradient(0.7px 0.7px at 83.5% 18.4%, rgba(255,205,125,0.60), transparent 60%),
+    radial-gradient(3.1px 3.1px at 30.4% 11.3%, rgba(255,232,195,0.64), transparent 60%),
+    radial-gradient(1.3px 1.3px at 42.7% 67.1%, rgba(255,205,125,0.75), transparent 60%),
+    radial-gradient(1.1px 1.1px at 87.4% 53.9%, rgba(255,205,125,0.75), transparent 60%),
+    radial-gradient(2.9px 2.9px at 71.3% 46.3%, rgba(255,232,195,0.62), transparent 60%),
+    radial-gradient(1.2px 1.2px at 76.6% 2.1%, rgba(255,205,125,0.72), transparent 60%),
+    radial-gradient(0.9px 0.9px at 45.4% 68.7%, rgba(255,205,125,0.87), transparent 60%),
+    radial-gradient(0.7px 0.7px at 70.7% 91.1%, rgba(255,205,125,0.74), transparent 60%),
+    radial-gradient(1.3px 1.3px at 59.0% 42.2%, rgba(255,205,125,0.81), transparent 60%),
+    radial-gradient(0.6px 0.6px at 48.1% 81.9%, rgba(255,205,125,0.43), transparent 60%),
+    radial-gradient(2.7px 2.7px at 88.6% 27.5%, rgba(255,232,195,0.69), transparent 60%),
+    radial-gradient(1.1px 1.1px at 78.2% 16.5%, rgba(255,205,125,0.44), transparent 60%),
+    radial-gradient(1.2px 1.2px at 7.4% 67.3%, rgba(255,205,125,0.47), transparent 60%),
+    radial-gradient(1.1px 1.1px at 28.6% 98.8%, rgba(255,205,125,0.51), transparent 60%),
+    radial-gradient(0.6px 0.6px at 48.4% 21.2%, rgba(255,205,125,0.57), transparent 60%),
+    radial-gradient(1.3px 1.3px at 53.2% 29.4%, rgba(255,205,125,0.80), transparent 60%),
+    radial-gradient(0.7px 0.7px at 92.7% 86.3%, rgba(255,205,125,0.79), transparent 60%),
+    radial-gradient(1.2px 1.2px at 83.8% 51.4%, rgba(255,205,125,0.52), transparent 60%),
+    radial-gradient(1.1px 1.1px at 61.7% 5.7%, rgba(255,205,125,0.64), transparent 60%),
+    radial-gradient(2.8px 2.8px at 1.4% 76.5%, rgba(255,232,195,0.64), transparent 60%),
+    radial-gradient(1.1px 1.1px at 80.1% 28.1%, rgba(255,205,125,0.58), transparent 60%),
+    radial-gradient(0.7px 0.7px at 46.3% 37.0%, rgba(255,205,125,0.84), transparent 60%),
+    radial-gradient(0.7px 0.7px at 26.7% 23.0%, rgba(255,205,125,0.48), transparent 60%),
+    radial-gradient(0.9px 0.9px at 88.7% 37.9%, rgba(255,205,125,0.63), transparent 60%),
+    radial-gradient(1.3px 1.3px at 81.9% 46.5%, rgba(255,205,125,0.60), transparent 60%),
+    radial-gradient(1.3px 1.3px at 12.6% 76.8%, rgba(255,205,125,0.43), transparent 60%),
+    radial-gradient(0.8px 0.8px at 30.8% 69.9%, rgba(255,205,125,0.57), transparent 60%),
+    radial-gradient(1.1px 1.1px at 99.4% 99.0%, rgba(255,205,125,0.68), transparent 60%),
+    radial-gradient(1.3px 1.3px at 99.4% 65.8%, rgba(255,205,125,0.74), transparent 60%),
+    radial-gradient(1.0px 1.0px at 99.3% 15.8%, rgba(255,205,125,0.77), transparent 60%),
+    radial-gradient(1.1px 1.1px at 41.7% 35.8%, rgba(255,205,125,0.49), transparent 60%),
+    radial-gradient(1.3px 1.3px at 21.7% 82.1%, rgba(255,205,125,0.51), transparent 60%),
+    radial-gradient(0.7px 0.7px at 10.5% 75.9%, rgba(255,205,125,0.75), transparent 60%),
+    radial-gradient(1.1px 1.1px at 42.5% 96.4%, rgba(255,205,125,0.52), transparent 60%),
+    radial-gradient(0.9px 0.9px at 56.6% 39.3%, rgba(255,205,125,0.63), transparent 60%),
+    radial-gradient(2.5px 2.5px at 63.0% 60.4%, rgba(255,232,195,0.42), transparent 60%),
+    radial-gradient(3.2px 3.2px at 61.5% 31.8%, rgba(255,232,195,0.43), transparent 60%),
+    radial-gradient(1.2px 1.2px at 48.6% 4.8%, rgba(255,205,125,0.59), transparent 60%),
+    radial-gradient(2.5px 2.5px at 17.5% 21.4%, rgba(255,232,195,0.63), transparent 60%),
+    radial-gradient(1.1px 1.1px at 5.5% 8.5%, rgba(255,205,125,0.46), transparent 60%),
+    radial-gradient(2.1px 2.1px at 84.3% 96.9%, rgba(255,232,195,0.79), transparent 60%),
+    radial-gradient(1.0px 1.0px at 76.8% 80.6%, rgba(255,205,125,0.42), transparent 60%),
+    radial-gradient(1.2px 1.2px at 94.8% 81.7%, rgba(255,205,125,0.47), transparent 60%);
+  background-repeat: no-repeat;
+}
+#agon-universe-cloud .agon-tag-center-btn:not(.agon-tag-center-btn-custom) {
   display: none;
 }
 
-/* Effet de zoom léger entre deux niveaux (cf. mon-univers.js) : classe posée
-   juste avant de vider/re-render les bulles, retirée une fois le niveau
-   suivant affiché. N'affecte que ce conteneur, jamais .agon-tag-trends-cloud
-   de la page d'accueil. */
+/* Centre personnalisé de "Mon univers" : nom de la galaxie ou du système ouvert, les bulles
+   filles gravitent autour (cf. renderTagTrendCloud centerLabel, applyCompactBubbleLayout
+   data-center-radius). Plus grand que le bouton "À LA UNE" (40px) pour accueillir un nom
+   complet ; non cliquable (disabled), curseur neutre pour ne jamais suggérer une action. */
+.agon-tag-center-btn-custom {
+  width: 92px;
+  height: 92px;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  /* Comme .agon-tag-label (bulles normales) : jamais de mot coupé. Un nom
+     de galaxie/système trop long pour tenir dans le cercle déborde
+     visuellement plutôt que d'être tronqué ou scindé en deux lignes —
+     .agon-tag-center-btn-custom reste un obstacle de rayon fixe pour le
+     placement des bulles filles (cf. data-center-radius, applyCompactBubbleLayout),
+     donc l'espace tout autour du cercle est déjà dégagé pour ce débordement. */
+  overflow: visible;
+  padding: 6px;
+  background: #1A1F24;
+  cursor: default;
+  opacity: 1;
+}
+/* Centre "trou noir" (niveau systèmes solaires d'une galaxie, cf. mon-univers.js
+   blackHoleVisual/centerLabelForCurrentLevel) : même principe que .agon-tag-center-btn-sun un
+   peu plus bas — un seul dégradé continu (cœur noir + halo) posé sur ::before, pas deux calques
+   séparés (fond du bouton + halo à part), qui ne se raccordaient jamais parfaitement (anneau
+   visible à leur jonction, confirmé par capture d'écran le 07/08/2026, corrigé d'abord sur le
+   soleil puis ici, même demande). background:transparent nécessaire : sans lui, le fond sombre
+   par défaut de .agon-tag-center-btn-custom (#1A1F24) resterait visible sous le dégradé. */
+.agon-tag-center-btn-blackhole {
+  border: none;
+  background: transparent;
+}
+.agon-tag-center-btn-blackhole::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  border-radius: 50%;
+  background: var(--center-glow-color, radial-gradient(circle, #000 0%, rgba(120,90,220,0.5) 40%, transparent 100%));
+  z-index: -1;
+  pointer-events: none;
+}
+/* Centre "soleil" (niveau étoiles d'un système solaire, cf. mon-univers.js sunVisual) : même
+   principe que .agon-tag-center-btn-blackhole ci-dessus mais halo chaud/blanc au lieu de sombre —
+   demande du 07/08/2026, pendant lumineux du trou noir un niveau au-dessus. */
+.agon-tag-center-btn-sun {
+  /* Plus de liseré (bordure unie héritée de .agon-tag-center-btn), ni fond propre : tout le
+     rendu (cœur + halo) est un seul dégradé continu posé sur ::before ci-dessous (--center-
+     glow-color, cf. sunVisual/mon-univers.js et tagTrendCloud.js) — deux dégradés séparés (fond
+     du bouton + halo) ne se raccordaient jamais parfaitement, un anneau restait visible à leur
+     jonction malgré plusieurs tentatives de fondu de chaque côté (confirmé par 2 captures
+     d'écran le 07/08/2026). background:transparent nécessaire : sans lui, le fond sombre par
+     défaut de .agon-tag-center-btn-custom (#1A1F24) resterait visible sous le dégradé. */
+  border: none;
+  background: transparent;
+}
+/* Halo + cœur du soleil, dégradé UNIQUE (pas deux calques séparés, cf. commentaire ci-dessus) :
+   pseudo-élément plus grand que le cercle du bouton, derrière lui (z-index négatif, cf. stacking
+   context créé par .agon-tag-center-btn z-index:60). --center-glow-color contient ici le
+   dégradé complet (cœur blanc-jaune → teinte de la galaxie → transparent), pas juste une
+   couleur — posé par tagTrendCloud.js via centerLabel.glowColor. */
+.agon-tag-center-btn-sun::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  border-radius: 50%;
+  background: var(--center-glow-color, radial-gradient(circle, #fff 0%, rgba(255,200,110,0.6) 40%, transparent 100%));
+  z-index: -1;
+  pointer-events: none;
+}
+/* Texte en noir (hérite du blanc de .agon-tag-center-btn sinon, illisible sur le cœur
+   blanc-jaune du soleil, cf. sunVisual) — demande du 07/08/2026. */
+.agon-tag-center-btn-sun .agon-tag-center-btn-custom-text {
+  color: #000;
+}
+.agon-tag-center-btn-custom-text {
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  max-width: 100%;
+  /* .agon-tag-center-btn (contrairement à .agon-tag-bubble) ne pose pas
+     text-align:center — sans lui, un nom sur 2 lignes de largeurs différentes
+     (ex. galaxie longue) apparaît collé à gauche au lieu d'être centré. */
+  text-align: center;
+}
+
+/* Bulles galaxie (niveau racine de "Mon univers" uniquement, cf. bubbleExtraClass/
+   bubbleGlowColor posés par mon-univers.js) : halo lumineux qui déborde du cercle (comme le
+   nuage de lumière d'une vraie galaxie sur une photo), cœur plus intense, très légères stries
+   en spirale — le fond radial (couleur/teinte) reste entièrement piloté par le style inline
+   (bubbleBackground, cf. mon-univers.js), cette règle n'ajoute que le halo et la texture.
+   Poussière d'étoiles autour de chaque bulle (demande du 06/08/2026, densifiée une première
+   fois : 12 flocons jugés insuffisants, passés à 26 sur deux anneaux — un serré/fin proche du
+   bord, un plus large/plus visible plus loin) via box-shadow, positions/tailles en calc() sur
+   --agon-tag-bubble-size (déjà posée en inline par tagTrendCloud.js) pour rester proportionnées
+   quelle que soit la taille réelle de la bulle (poids variable par galaxie) — spread très
+   négatif (~-0.487×taille) pour réduire chaque ombre, copie du cercle entier de la bulle, à un
+   petit point de quelques px, offset positionné au-delà du bord (~0.5-1×taille du centre). Box-
+   shadow uniquement, jamais animé (contrairement au souci Safari déjà documenté sur
+   .agon-tag-bubble plus haut, lié spécifiquement à transform:scale + box-shadow recalculés à
+   chaque frame) : statique, donc sans risque de tremblement. */
+.agon-tag-bubble-galaxy {
+  /* Plus de contour uni hérité de .agon-tag-bubble (border: 2px solid #05070a) — demande du
+     07/08/2026, même traitement que .agon-tag-bubble-star/.agon-tag-center-btn-sun : un trait
+     plein autour d'un dégradé qui s'arrête net crée une rupture nette. Le dégradé de
+     remplissage (base, cf. galaxyBubbleVisual/bubbleBackgroundFor fadeEdge, mon-univers.js)
+     s'estompe désormais lui-même en alpha vers le bord — la bulle se fond directement dans son
+     propre halo (box-shadow ci-dessous, jamais affecté par ce retrait de bordure). */
+  border: none;
+  box-shadow:
+    calc(var(--agon-tag-bubble-size) * 0.519) calc(var(--agon-tag-bubble-size) * 0.026) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.35),
+    calc(var(--agon-tag-bubble-size) * 0.443) calc(var(--agon-tag-bubble-size) * 0.345) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.43),
+    calc(var(--agon-tag-bubble-size) * 0.339) calc(var(--agon-tag-bubble-size) * 0.499) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.51),
+    calc(var(--agon-tag-bubble-size) * -0.011) calc(var(--agon-tag-bubble-size) * 0.645) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.59),
+    calc(var(--agon-tag-bubble-size) * -0.170) calc(var(--agon-tag-bubble-size) * 0.499) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.42),
+    calc(var(--agon-tag-bubble-size) * -0.460) calc(var(--agon-tag-bubble-size) * 0.335) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.50),
+    calc(var(--agon-tag-bubble-size) * -0.580) calc(var(--agon-tag-bubble-size) * 0.190) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.58),
+    calc(var(--agon-tag-bubble-size) * -0.624) calc(var(--agon-tag-bubble-size) * -0.190) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.41),
+    calc(var(--agon-tag-bubble-size) * -0.438) calc(var(--agon-tag-bubble-size) * -0.305) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.50),
+    calc(var(--agon-tag-bubble-size) * -0.198) calc(var(--agon-tag-bubble-size) * -0.541) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.58),
+    calc(var(--agon-tag-bubble-size) * -0.023) calc(var(--agon-tag-bubble-size) * -0.617) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.41),
+    calc(var(--agon-tag-bubble-size) * 0.179) calc(var(--agon-tag-bubble-size) * -0.634) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.49),
+    calc(var(--agon-tag-bubble-size) * 0.419) calc(var(--agon-tag-bubble-size) * -0.342) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.57),
+    calc(var(--agon-tag-bubble-size) * 0.543) calc(var(--agon-tag-bubble-size) * -0.212) 1.1px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.40),
+    calc(var(--agon-tag-bubble-size) * 0.663) calc(var(--agon-tag-bubble-size) * 0.280) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.50),
+    calc(var(--agon-tag-bubble-size) * 0.366) calc(var(--agon-tag-bubble-size) * 0.697) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.62),
+    calc(var(--agon-tag-bubble-size) * 0.082) calc(var(--agon-tag-bubble-size) * 0.852) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.75),
+    calc(var(--agon-tag-bubble-size) * -0.514) calc(var(--agon-tag-bubble-size) * 0.767) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.87),
+    calc(var(--agon-tag-bubble-size) * -0.607) calc(var(--agon-tag-bubble-size) * 0.408) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.61),
+    calc(var(--agon-tag-bubble-size) * -0.796) calc(var(--agon-tag-bubble-size) * -0.075) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.73),
+    calc(var(--agon-tag-bubble-size) * -0.768) calc(var(--agon-tag-bubble-size) * -0.402) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.86),
+    calc(var(--agon-tag-bubble-size) * -0.366) calc(var(--agon-tag-bubble-size) * -0.860) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.60),
+    calc(var(--agon-tag-bubble-size) * -0.011) calc(var(--agon-tag-bubble-size) * -0.743) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.72),
+    calc(var(--agon-tag-bubble-size) * 0.505) calc(var(--agon-tag-bubble-size) * -0.634) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.84),
+    calc(var(--agon-tag-bubble-size) * 0.766) calc(var(--agon-tag-bubble-size) * -0.429) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.59),
+    calc(var(--agon-tag-bubble-size) * 0.939) calc(var(--agon-tag-bubble-size) * -0.117) 1.8px calc(var(--agon-tag-bubble-size) * -0.487) rgba(255,222,160,0.71),
+    0 0 26px 6px var(--agon-tag-bubble-glow, rgba(255,255,255,0.35)),
+    0 10px 28px rgba(0,0,0,0.38),
+    inset 0 1px 3px rgba(255,255,255,0.95);
+}
+/* Bras spiralés (demande du 07/08/2026, "donne une forme spiralaire aux bulles galaxies") :
+   reprend ::after — le petit reflet bas-droite hérité de .agon-tag-bubble n'a ici aucune valeur
+   ajoutée (déjà 2 reflets/spirale/cœur en jeu) — pour y superposer 2 bras en spirale
+   logarithmique (SVG, tracé une fois pour toutes les galaxies : la teinte vient déjà du dégradé
+   de fond en dessous, mix-blend-mode:screen laisse cette couleur transparaître au lieu de peindre
+   du blanc plat). z-index:1 : au-dessus du fond (spirale en poussière/cœur/base) mais sous le
+   reflet ::before (z-index:2), pour ne jamais couvrir ce dernier. */
+.agon-tag-bubble-galaxy::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* width/height:100% obligatoires : .agon-tag-bubble::after (hérité) fixe width:20%/height:14%
+     (le petit reflet par défaut) — même spécificité que cette règle, ces deux propriétés ne sont
+     JAMAIS écrasées par inset:0 seul (le navigateur respecte width/height explicites plutôt que
+     d'étirer via les 4 offsets) : sans ce correctif, les bras spiralés se retrouvaient compressés
+     dans un petit coin haut-gauche au lieu de couvrir toute la bulle (confirmé par capture le
+     07/08/2026). */
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Cpath%20d%3D%22M%2056.0%2050.0%20L%2056.3%2051.4%20L%2056.3%2052.9%20L%2056.0%2054.5%20L%2055.3%2056.0%20L%2054.2%2057.5%20L%2052.7%2058.8%20L%2050.8%2059.8%20L%2048.6%2060.4%20L%2046.2%2060.6%20L%2043.7%2060.2%20L%2041.2%2059.2%20L%2038.8%2057.5%20L%2036.6%2055.3%20L%2034.9%2052.5%20L%2033.8%2049.3%20L%2033.3%2045.6%20L%2033.7%2041.7%20L%2035.0%2037.8%20L%2037.2%2034.0%20L%2040.3%2030.5%20L%2044.3%2027.7%20L%2049.1%2025.7%20L%2054.5%2024.6%20L%2060.3%2024.8%20L%2066.3%2026.2%20L%2072.1%2029.1%20L%2077.5%2033.3%20L%2082.1%2038.9%20L%2085.6%2045.7%20L%2087.7%2053.5%20L%2088.2%2062.0%20L%2086.7%2070.9%20L%2083.2%2079.7%20L%2077.6%2088.0%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%2210%22%20stroke-linecap%3D%22round%22%20opacity%3D%220.55%22%2F%3E%3Cpath%20d%3D%22M%2044.0%2050.0%20L%2043.7%2048.6%20L%2043.7%2047.1%20L%2044.0%2045.5%20L%2044.7%2044.0%20L%2045.8%2042.5%20L%2047.3%2041.2%20L%2049.2%2040.2%20L%2051.4%2039.6%20L%2053.8%2039.4%20L%2056.3%2039.8%20L%2058.8%2040.8%20L%2061.2%2042.5%20L%2063.4%2044.7%20L%2065.1%2047.5%20L%2066.2%2050.7%20L%2066.7%2054.4%20L%2066.3%2058.3%20L%2065.0%2062.2%20L%2062.8%2066.0%20L%2059.7%2069.5%20L%2055.7%2072.3%20L%2050.9%2074.3%20L%2045.5%2075.4%20L%2039.7%2075.2%20L%2033.7%2073.8%20L%2027.9%2070.9%20L%2022.5%2066.7%20L%2017.9%2061.1%20L%2014.4%2054.3%20L%2012.3%2046.5%20L%2011.8%2038.0%20L%2013.3%2029.1%20L%2016.8%2020.3%20L%2022.4%2012.0%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%2210%22%20stroke-linecap%3D%22round%22%20opacity%3D%220.55%22%2F%3E%3C%2Fsvg%3E") center / 100% 100% no-repeat;
+  /* Pas de mix-blend-mode ni d'opacity supplémentaire (essayé le 07/08/2026, retiré : bras
+     quasi invisibles, noyés dans la texture radiale existante) — alpha direct (0.55, posé dans
+     le SVG lui-même) par-dessus le fond, même technique que le cœur lumineux (core) juste en
+     dessous, qui lui est déjà bien visible. */
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Bulles système solaire (niveau galaxie, affichées aux côtés de leurs étoiles) : halo plus
+   discret que celui des bulles galaxie (pas de poussière ni de spirale, juste un halo lumineux)
+   pour rester nettement plus lumineuses que les bulles étoile — jamais de halo sur ces
+   dernières (demande du 06/08/2026). */
+.agon-tag-bubble-solarsystem {
+  /* Plus de liseré noir uni hérité de .agon-tag-bubble (border: 2px solid #05070a) — demande du
+     07/08/2026, même traitement que .agon-tag-bubble-star un peu plus bas : le dégradé de
+     remplissage s'estompe déjà en alpha vers le bord (fadeEdge, cf. bubbleBackgroundFor,
+     mon-univers.js), donc plus besoin d'un trait pour fermer visuellement le cercle. C'est
+     maintenant le halo en dégradé (::before ci-dessous) qui distingue un système d'une étoile
+     (jamais de halo sur ces dernières), pas le contour — l'ancien glow en box-shadow (flou uni)
+     est retiré, remplacé par ce même ::before pour rester cohérent avec les centres soleil/trou
+     noir plus haut. */
+  border: none;
+  box-shadow:
+    0 10px 28px rgba(0,0,0,0.38),
+    inset 0 1px 3px rgba(255,255,255,0.95);
+}
+/* Halo en dégradé (radial, pas un simple flou uni) autour de chaque bulle système — même
+   principe que .agon-tag-center-btn-sun/-blackhole::before plus haut, teinté par
+   --agon-tag-bubble-glow (déjà posé par tagTrendCloud.js selon la galaxie). closest-side : le
+   dégradé finit exactement sur le bord de cette boîte agrandie (cf. sunVisual pour le pourquoi
+   du mot-clé), jamais un bord dur à l'intérieur. z-index -1 : derrière la bulle, jamais devant
+   son texte (overlay séparé de toute façon, cf. renderLabelOverlays, jamais affecté par ceci). */
+.agon-tag-bubble-solarsystem::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--agon-tag-bubble-glow, rgba(255,255,255,0.4)) 0%, transparent 100%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Bulles étoile (niveau système solaire, satellites du soleil central) : plus de contour uni
+   hérité de .agon-tag-bubble (border: 2px solid #05070a) — demande du 07/08/2026, même souci
+   que la bulle soleil centrale (cf. .agon-tag-center-btn-sun un peu plus haut) : un trait plein
+   autour d'un dégradé qui s'arrête net juste avant crée une rupture nette. Le dégradé de
+   remplissage lui-même s'estompe déjà en alpha vers le bord (fadeEdge, cf. bubbleBackgroundFor,
+   mon-univers.js) — pas de halo ajouté ici (choix déjà en place, jamais de halo sur les étoiles),
+   juste plus de bord dur : l'étoile se fond directement dans le fond étoilé du cadre. */
+.agon-tag-bubble-star {
+  border: none;
+}
+
+/* Traits reliant le centre personnalisé (galaxie/système) à chaque bulle fille (demande du
+   06/08/2026), posés par drawOrbitLines (tagTrendCloud.js) — jamais pour le bouton "À LA UNE"
+   par défaut de l'accueil. transform-origin:left center : le trait pivote autour de son point
+   de départ (déjà au bord du centre), même principe que .agon-tag-trend-connector existant.
+   z-index -1 : derrière les bulles (z-index auto/0), mais devant le fond étoilé du cadre
+   (#agon-universe-cloud::after, passé à -2 juste en dessous, cf. plus bas) — sinon le fond
+   opaque du cadre aurait pu passer par-dessus selon l'ordre de génération des pseudo-éléments. */
+.agon-tag-orbit-line {
+  height: 2.5px;
+  background: linear-gradient(to right, rgba(255,222,160,0.55), rgba(255,222,160,0.22));
+  transform-origin: left center;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Poussière d'étoiles autour des bulles système (cf. mon-univers.js drawMiniStarsForSystems) :
+   petits points sans nom, purement décoratifs, jamais interactifs. */
+.universe-mini-star {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgba(255,236,190,0.95) 50%, transparent 100%);
+  box-shadow: 0 0 6px 2px rgba(255,236,190,0.75);
+  pointer-events: none;
+  z-index: -1;
+}
+#agon-universe-cloud.agon-tag-trends-cloud::after {
+  z-index: -2;
+}
+
+/* Fondu entre deux niveaux (cf. mon-univers.js) : classe posée juste avant de
+   vider/re-render les bulles, retirée une fois le niveau suivant affiché.
+   Opacity seule (pas de transform:scale) : le calcul de placement des bulles
+   (applyCompactBubbleLayout) et le positionnement des textes (renderLabelOverlays)
+   tournent pendant que cette classe est encore active (retirée seulement dans le
+   callback onReady, après le premier rendu) — un transform:scale sur le conteneur
+   à ce moment-là fausse getBoundingClientRect() (taille/position visuelles réduites
+   par le scale) alors que les positions left/top posées en pixels sur les bulles et
+   les bulles-textes sont elles interprétées dans le repère de mise en page réel, non
+   affecté par le scale. Résultat observé : tout se retrouvait décalé vers un coin dès
+   qu'on changeait de niveau, et le décalage persistait en revenant en arrière (confirmé
+   le 06/08/2026). N'affecte que ce conteneur, jamais .agon-tag-trends-cloud de l'accueil. */
 #agon-universe-cloud.universe-cloud--transitioning {
   opacity: 0;
-  transform: scale(0.94);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition: opacity 0.16s ease;
 }
 #agon-universe-cloud {
   transition: opacity 0.16s ease, transform 0.16s ease;
@@ -24782,4 +25138,117 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   .universe-breadcrumb {
     font-size: 0.86rem;
   }
+}
+
+/* Panneau liste au clic sur une bulle étoile — jamais de nouvelle couche de bulles à ce
+   niveau (une étoile peut regrouper plusieurs articles, ex. "Tour de France 2026"). */
+.universe-star-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: flex-end;
+}
+.universe-star-panel[hidden] {
+  display: none;
+}
+.universe-star-panel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 12, 0.62);
+}
+.universe-star-panel__box {
+  position: relative;
+  width: 100%;
+  max-height: min(72vh, 620px);
+  margin: 0 auto;
+  background: #1c262d;
+  border: 1px solid #3a4a55;
+  border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.4);
+}
+@media (min-width: 640px) {
+  .universe-star-panel {
+    align-items: center;
+    justify-content: center;
+  }
+  .universe-star-panel__box {
+    width: min(520px, 90vw);
+    border-radius: 18px;
+    max-height: min(70vh, 560px);
+  }
+}
+.universe-star-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.universe-star-panel__title {
+  margin: 0;
+  color: #e8e8e8;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.universe-star-panel__close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #3a4a55;
+  background: #243038;
+  color: #e8e8e8;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.universe-star-panel__close:focus-visible {
+  outline: 2px solid #7db3ff;
+  outline-offset: 2px;
+}
+.universe-star-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.universe-star-panel__item {
+  display: block;
+  color: #e8e8e8;
+  background: #243038;
+  border: 1px solid #3a4a55;
+  border-radius: 12px;
+  padding: 11px 13px;
+  text-decoration: none;
+}
+.universe-star-panel__item-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  margin: 0 0 4px;
+}
+.universe-star-panel__item-meta {
+  color: #9aa8b2;
+  font-size: 0.8rem;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+a.universe-star-panel__item:hover,
+a.universe-star-panel__item:focus-visible {
+  background: #2a3843;
+}
+span.universe-star-panel__item {
+  cursor: default;
 }

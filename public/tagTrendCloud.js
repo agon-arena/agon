@@ -74,7 +74,7 @@ function clearTagTrendCloud(container) {
 
 function clearTagTrendCloudVisualItems(container) {
   container.querySelectorAll(
-    ".agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector"
+    ".agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line"
   ).forEach((el) => el.remove());
 }
 
@@ -269,13 +269,28 @@ function applyCompactBubbleLayout(container) {
   const bubbles = [...container.querySelectorAll(".agon-tag-bubble")];
   if (!bubbles.length) return;
 
-  const containerW = Math.round(container.getBoundingClientRect().width) || container.clientWidth || 390;
-  const containerH = Math.round(container.getBoundingClientRect().height) || container.clientHeight || 548;
+  // clientWidth/clientHeight (pas getBoundingClientRect) : le conteneur porte encore
+  // transform:scale(0.94) pendant la transition d'un niveau à l'autre (cf. "Mon univers"
+  // goToLevel, classe universe-cloud--transitioning) au moment où ce tout premier calcul de
+  // placement tourne — getBoundingClientRect() aurait alors renvoyé la taille visuelle réduite
+  // (94%), pas la vraie taille de mise en page dans laquelle les positions left/top des bulles
+  // (en pixels, non affectées par ce transform) sont ensuite interprétées. Résultat : les bulles
+  // se plaçaient comme dans un cadre plus petit qu'il ne l'est vraiment, groupées vers un coin
+  // (confirmé : correct au tout premier chargement, qui ne passe jamais par cette transition,
+  // cassé dès qu'on change de niveau puis persistant en revenant en arrière).
+  const containerW = container.clientWidth || Math.round(container.getBoundingClientRect().width) || 390;
+  const containerH = container.clientHeight || Math.round(container.getBoundingClientRect().height) || 548;
   const centerX = containerW / 2;
   const isMobile = isMobileTagCloud();
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
   const frameTop = parseFloat(frameTopRaw) || 55;
   const frameBottomInset = isMobile ? 78 : 23;
+  // Cadre décoratif (.agon-tag-trends-cloud::before) inséré de 30px à gauche et à droite (cf.
+  // style.css, inset: ... 30px ...) — jusqu'ici seuls le haut/bas (frameTop/frameBottomInset)
+  // étaient pris en compte pour les limites de placement, pas les côtés : une bulle pouvait donc
+  // être posée jusqu'à 24px plus à gauche/droite que ce que le cadre visible autorise, et
+  // dépasser franchement de son bord (confirmé par capture le 06/08/2026).
+  const frameSideInset = 30;
   const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
 
   const centerBtnEl = container.querySelector(".agon-tag-center-btn");
@@ -288,9 +303,21 @@ function applyCompactBubbleLayout(container) {
   const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
 
   const margin = isMobile ? 4 : 6;
-  const btnRadius = 24;
+  // Rayon réservé au centre pour .agon-tag-center-btn (obstacle initial du placement, cf.
+  // `placed` plus bas) : 0 si le bouton n'existe pas du tout (renderTagTrendCloud peut
+  // désormais le sauter entièrement, cf. paramètre centerLabel) — jamais de trou vide
+  // artificiel dans ce cas. data-center-radius, posé par renderTagTrendCloud, permet à un
+  // centre personnalisé (ex. nom de galaxie sur /mon-univers, plus grand que le bouton "À LA
+  // UNE" par défaut) de réserver la bonne place ; 24 reste le défaut historique inchangé pour
+  // tous les appelants existants qui ne posent pas cet attribut.
+  const btnRadius = centerBtnEl ? (parseFloat(centerBtnEl.dataset.centerRadius) || 24) : 0;
   const preferredAngles = [-8, 194, 88, 270, 142, 42, 232, 316, 118, 292, 166, 12];
   const maxAllowedOverlap = 4;
+  // Espace supplémentaire volontaire entre bulles (0 par défaut, comportement historique
+  // inchangé) — posé par renderTagTrendCloud via data-bubble-gap, cf. paramètre bubbleGap.
+  // Utilisé par "Mon univers" au niveau galaxies pour laisser voir le fond étoilé entre les
+  // bulles plutôt que les serrer au maximum (demande du 06/08/2026).
+  const bubbleGap = parseFloat(container.dataset.bubbleGap) || 0;
 
   function measureMaxBubbleOverlap(placedBubbles) {
     let maxOverlap = 0;
@@ -316,50 +343,52 @@ function applyCompactBubbleLayout(container) {
     // Obstacles déjà placés (bouton central inclus)
     const placed = [{ x: centerX, y: centerY, r: btnRadius }];
     const placedBubbles = [];
-    const placementItems = bubbles
-      .map((bubble, index) => ({ bubble, index, size: scaledSizes[index] }))
-      .sort((a, b) => (b.size - a.size) || (a.index - b.index));
+    // index (dans `bubbles`) -> position finale déjà posée, pour que les bulles avec
+    // data-connect-to-index (étoiles, cf. connectToIndex) retrouvent la position réelle de
+    // leur système parent une fois celui-ci placé (cf. starItems plus bas).
+    const placedByIndex = new Map();
 
-    placementItems.forEach(({ bubble, index, size }) => {
-      const r = size / 2;
-      const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
-
-      // Limites strictes : le centre de la bulle doit rester suffisamment loin des bords
-      // pour que la bulle entière reste dans la zone utile du conteneur
-      const minX = r + margin;
-      const maxX = containerW - r - margin;
+    // Cherche une position pour une bulle de rayon r autour d'un point d'origine donné
+    // (le centre pour une bulle "normale", la position déjà posée du système parent pour une
+    // étoile, cf. starItems plus bas) — même algorithme (recherche spirale puis repli au
+    // chevauchement minimal) qu'avant, généralisé pour accepter une origine autre que le centre.
+    function placeBubbleNear(r, prefAngle, originX, originY, originR) {
+      const minX = frameSideInset + r + margin;
+      const maxX = containerW - frameSideInset - r - margin;
       const minY = frameTop + r + margin;
       const maxY = containerH - frameBottomInset - r - margin;
 
       if (minX > maxX || minY > maxY) {
-        // Zone trop petite pour cette bulle : la centrer et passer à la suivante
-        const cx = centerX;
-        const cy = Math.min(Math.max(centerY, minY > maxY ? (minY + maxY) / 2 : minY), maxY > minY ? maxY : centerY);
-        placed.push({ x: cx, y: cy, r });
-        placedBubbles.push({ x: cx, y: cy, r });
-        bubble.style.left = Math.round(cx - r) + "px";
-        bubble.style.top  = Math.round(cy - r) + "px";
-        bubble.style.right = "auto";
-        return;
+        // Zone trop petite pour cette bulle : décale quand même depuis l'origine en respectant
+        // l'obstacle (originR), au lieu de centrer aveuglément dessus (bug confirmé le
+        // 06/08/2026 : une galaxie avec un seul système produisait une bulle trop grande pour
+        // le cadre réduit, recentrée pile sur la bulle centrale — chevauchement direct, ligne
+        // de liaison alors invisible puisque lineLength devenait négatif).
+        const offsetDist = originR + r;
+        let cx = originX + Math.cos(prefAngle) * offsetDist;
+        let cy = originY + Math.sin(prefAngle) * offsetDist;
+        cx = Math.min(Math.max(cx, minX), Math.max(minX, maxX));
+        cy = Math.min(Math.max(cy, minY), Math.max(minY, maxY));
+        return { fx: cx, fy: cy };
       }
 
       let fx = null, fy = null;
       const maxDist = Math.hypot(containerW, containerH);
 
-      // Recherche spirale : distance croissante depuis le centre, angle alterné autour de la direction préférée
-      for (let dist = btnRadius + r; dist <= maxDist && fx === null; dist += 3) {
+      // Recherche spirale : distance croissante depuis l'origine, angle alterné autour de la direction préférée
+      for (let dist = originR + r; dist <= maxDist && fx === null; dist += 3) {
         const steps = Math.max(72, Math.round(2 * Math.PI * dist / 4));
         for (let step = 0; step < steps && fx === null; step++) {
           const dAngle = step % 2 === 0
             ? (step / 2) * (2 * Math.PI / steps)
             : -Math.ceil(step / 2) * (2 * Math.PI / steps);
           const angle = prefAngle + dAngle;
-          const cx = centerX + Math.cos(angle) * dist;
-          const cy = centerY + Math.sin(angle) * dist;
+          const cx = originX + Math.cos(angle) * dist;
+          const cy = originY + Math.sin(angle) * dist;
           if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
           let valid = true;
           for (const p of placed) {
-            if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4) { valid = false; break; }
+            if (Math.hypot(cx - p.x, cy - p.y) < r + p.r - 4 + bubbleGap) { valid = false; break; }
           }
           if (valid) { fx = cx; fy = cy; }
         }
@@ -368,12 +397,12 @@ function applyCompactBubbleLayout(container) {
       if (fx === null) {
         // Fallback : scan coarser, pick position with minimum total overlap
         let bestOverlap = Infinity;
-        for (let dist2 = btnRadius + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
+        for (let dist2 = originR + r; dist2 <= maxDist * 0.8 && bestOverlap > 0; dist2 += 8) {
           const steps2 = Math.max(24, Math.round(2 * Math.PI * dist2 / 10));
           for (let step2 = 0; step2 < steps2; step2++) {
             const angle2 = prefAngle + step2 * (2 * Math.PI / steps2);
-            const cx2 = centerX + Math.cos(angle2) * dist2;
-            const cy2 = centerY + Math.sin(angle2) * dist2;
+            const cx2 = originX + Math.cos(angle2) * dist2;
+            const cy2 = originY + Math.sin(angle2) * dist2;
             if (cx2 < minX || cx2 > maxX || cy2 < minY || cy2 > maxY) continue;
             let totalOverlap = 0;
             for (const p of placed) {
@@ -384,13 +413,55 @@ function applyCompactBubbleLayout(container) {
           }
         }
         if (fx === null) {
-          fx = Math.min(maxX, Math.max(minX, centerX + Math.cos(prefAngle) * (btnRadius + r + 20)));
-          fy = Math.min(maxY, Math.max(minY, centerY + Math.sin(prefAngle) * (btnRadius + r + 20)));
+          fx = Math.min(maxX, Math.max(minX, originX + Math.cos(prefAngle) * (originR + r + 20)));
+          fy = Math.min(maxY, Math.max(minY, originY + Math.sin(prefAngle) * (originR + r + 20)));
         }
       }
 
+      return { fx, fy };
+    }
+
+    const placementItems = bubbles
+      .map((bubble, index) => ({ bubble, index, size: scaledSizes[index] }))
+      .sort((a, b) => (b.size - a.size) || (a.index - b.index));
+
+    // Étoiles (data-connect-to-index posé, cf. connectToIndex) traitées à part, après tout le
+    // reste : elles doivent se regrouper autour de la position déjà finalisée de leur système
+    // parent plutôt que de concourir pour une place autour du centre galaxie comme n'importe
+    // quelle bulle (demande du 06/08/2026 — "l'étoile doit se placer autour du système").
+    const primaryItems = [];
+    const starItems = [];
+    placementItems.forEach((item) => {
+      const connectIdx = Number(item.bubble.dataset.connectToIndex);
+      if (Number.isInteger(connectIdx) && bubbles[connectIdx] && bubbles[connectIdx] !== item.bubble) {
+        starItems.push({ ...item, connectIdx });
+      } else {
+        primaryItems.push(item);
+      }
+    });
+
+    primaryItems.forEach(({ bubble, index, size }) => {
+      const r = size / 2;
+      const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
+      const { fx, fy } = placeBubbleNear(r, prefAngle, centerX, centerY, btnRadius);
       placed.push({ x: fx, y: fy, r });
       placedBubbles.push({ x: fx, y: fy, r });
+      placedByIndex.set(index, { x: fx, y: fy, r });
+      bubble.style.left = Math.round(fx - r) + "px";
+      bubble.style.top  = Math.round(fy - r) + "px";
+      bubble.style.right = "auto";
+    });
+
+    starItems.forEach(({ bubble, index, size, connectIdx }) => {
+      const r = size / 2;
+      const prefAngle = (preferredAngles[index] ?? (index * 137.5)) * Math.PI / 180;
+      // Système parent introuvable (jamais censé arriver, cf. connectToIndex posé uniquement
+      // vers un index de système réel) : repli sur le centre, mêmes obstacles.
+      const parent = placedByIndex.get(connectIdx) || { x: centerX, y: centerY, r: btnRadius };
+      const { fx, fy } = placeBubbleNear(r, prefAngle, parent.x, parent.y, parent.r);
+      placed.push({ x: fx, y: fy, r });
+      placedBubbles.push({ x: fx, y: fy, r });
+      placedByIndex.set(index, { x: fx, y: fy, r });
       bubble.style.left = Math.round(fx - r) + "px";
       bubble.style.top  = Math.round(fy - r) + "px";
       bubble.style.right = "auto";
@@ -408,6 +479,71 @@ function applyCompactBubbleLayout(container) {
     if (nextScale === scale) break;
     scale = nextScale;
   }
+
+  // Traits reliant le centre "soleil" (étoiles autour de leur système, cf.
+  // .agon-tag-center-btn-sun, posé par mon-univers.js) à chaque bulle fille — jamais pour le
+  // bouton "À LA UNE" par défaut, ni pour le centre "trou noir" (systèmes autour de leur galaxie,
+  // demande du 07/08/2026 : le trait ne doit relier que la toute dernière étape, pas l'étape
+  // intermédiaire). Lit les positions déjà finalisées (bubble.style.left/top, posées ci-dessus)
+  // plutôt que de dupliquer le calcul de placement — reste correct même après un recalcul
+  // déclenché par ResizeObserver, qui appelle layoutTagTrendCloud directement sans repasser par
+  // cette fonction wrapper.
+  if (centerBtnEl && centerBtnEl.classList.contains("agon-tag-center-btn-sun")) {
+    drawOrbitLines(container, bubbles, centerX, centerY, btnRadius);
+  } else {
+    container.querySelectorAll(".agon-tag-orbit-line").forEach((el) => el.remove());
+  }
+}
+
+function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
+  container.querySelectorAll(".agon-tag-orbit-line").forEach((el) => el.remove());
+
+  function bubbleGeo(el) {
+    const size = parseFloat(el.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
+    const left = parseFloat(el.style.left);
+    const top = parseFloat(el.style.top);
+    if (!size || Number.isNaN(left) || Number.isNaN(top)) return null;
+    const r = size / 2;
+    return { cx: left + r, cy: top + r, r };
+  }
+
+  bubbles.forEach((bubble) => {
+    const geo = bubbleGeo(bubble);
+    if (!geo) return;
+
+    // Cible du trait : le centre par défaut, ou une AUTRE bulle déjà placée si
+    // data-connect-to-index est posé (cf. connectToIndex, mon-univers.js) — sert à relier une
+    // étoile à son système plutôt qu'à la galaxie centrale. Index invalide/bulle introuvable :
+    // jamais de repli sur le centre par erreur, on abandonne simplement le trait.
+    let targetX = centerX, targetY = centerY, targetR = btnRadius;
+    const connectIdx = Number(bubble.dataset.connectToIndex);
+    if (Number.isInteger(connectIdx)) {
+      const targetBubble = bubbles[connectIdx];
+      if (!targetBubble || targetBubble === bubble) return;
+      const targetGeo = bubbleGeo(targetBubble);
+      if (!targetGeo) return;
+      targetX = targetGeo.cx;
+      targetY = targetGeo.cy;
+      targetR = targetGeo.r;
+    }
+
+    const dist = Math.hypot(geo.cx - targetX, geo.cy - targetY);
+    const lineLength = dist - geo.r - targetR;
+    if (lineLength <= 4) return;
+
+    const angle = Math.atan2(geo.cy - targetY, geo.cx - targetX);
+    const startX = targetX + Math.cos(angle) * targetR;
+    const startY = targetY + Math.sin(angle) * targetR;
+
+    const line = document.createElement("div");
+    line.className = "agon-tag-orbit-line";
+    line.style.position = "absolute";
+    line.style.left = Math.round(startX) + "px";
+    line.style.top = Math.round(startY) + "px";
+    line.style.width = Math.round(lineLength) + "px";
+    line.style.transform = `rotate(${angle}rad)`;
+    container.appendChild(line);
+  });
 }
 
 function positionTrendBadges(container) {
@@ -690,13 +826,26 @@ function layoutTagTrendCloud(container) {
 // univers") d'afficher plus d'éléments sans dupliquer ce moteur — index au-delà de 11
 // perd juste le décalage d'animation par .agon-tag-pos-N (aucune règle CSS au-delà,
 // donc sans effet visuel indésirable), jamais d'erreur.
-function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES) {
+// centerLabel : optionnel, undefined par défaut (comportement historique inchangé — bouton
+// "À LA UNE" cliquable, cf. plus bas). null/false = aucun bouton central du tout (jamais de
+// trou vide réservé dans le placement, cf. applyCompactBubbleLayout) — utilisé par "Mon
+// univers" au niveau racine (galaxies serrées les unes aux autres). Une chaîne non vide =
+// bouton central non cliquable affichant ce texte à la place — utilisé par "Mon univers" une
+// fois une galaxie/un système ouvert (le nom reste au centre, les bulles filles gravitent
+// autour).
+// bubbleGap : optionnel, 0 par défaut (comportement historique inchangé — bulles serrées au
+// maximum autorisé). Espace minimal additionnel (px) exigé entre bulles par
+// applyCompactBubbleLayout — utilisé par "Mon univers" au niveau galaxies pour laisser
+// respirer le fond étoilé entre les bulles plutôt que les coller les unes aux autres.
+function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES, centerLabel = undefined, bubbleGap = 0) {
   if (!container) return;
 
   if (!Array.isArray(trends) || !trends.length) {
     clearTagTrendCloud(container);
     return;
   }
+
+  container.dataset.bubbleGap = String(bubbleGap || 0);
 
   const parentSection = container.closest("section");
   if (parentSection) parentSection.hidden = false;
@@ -729,6 +878,20 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     bubble.dataset.tag = tag;
     bubble.dataset.subjectId = String(trendItem?.subjectId || "").trim();
     bubble.style.setProperty("--agon-tag-bubble-size", basePxSize + "px");
+
+    // Optionnel, jamais utilisé par les appelants existants (nuages de tags de débats) : un
+    // style inline gagne toujours sur la règle CSS de fond par défaut (.agon-tag-bubble),
+    // aucune modification de style.css nécessaire. Sert à "Mon univers" pour colorer chaque
+    // bulle par galaxie (cf. public/mon-univers.js).
+    if (trendItem?.bubbleBackground) bubble.style.background = trendItem.bubbleBackground;
+    // Idem, optionnel : classe supplémentaire (ex. halo façon galaxie sur les bulles racine de
+    // "Mon univers") + couleur de halo transmise en variable CSS, jamais posée par défaut.
+    if (trendItem?.bubbleExtraClass) bubble.classList.add(trendItem.bubbleExtraClass);
+    if (trendItem?.bubbleGlowColor) bubble.style.setProperty("--agon-tag-bubble-glow", trendItem.bubbleGlowColor);
+    // Idem, optionnel : index (dans ce même tableau trends) d'une AUTRE bulle à laquelle
+    // relier cette bulle par un trait, au lieu du centre par défaut (cf. drawOrbitLines) — sert
+    // à "Mon univers" pour relier une étoile à son système plutôt qu'à la galaxie centrale.
+    if (Number.isInteger(trendItem?.connectToIndex)) bubble.dataset.connectToIndex = String(trendItem.connectToIndex);
 
     bubble.type = "button";
 
@@ -763,14 +926,50 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     container.appendChild(bubble);
   });
 
-  const centerBtn = document.createElement("button");
-  centerBtn.type = "button";
-  centerBtn.className = "agon-tag-center-btn";
-  centerBtn.innerHTML = `<span>À LA</span><span>UNE</span>`;
-  centerBtn.addEventListener("click", () => {
-    window.dispatchEvent(new CustomEvent("agon:tag-trends-show-agon"));
-  });
-  container.appendChild(centerBtn);
+  if (centerLabel !== null && centerLabel !== false) {
+    const centerBtn = document.createElement("button");
+    centerBtn.type = "button";
+    centerBtn.className = "agon-tag-center-btn";
+    // Deux formes acceptées pour un centre personnalisé : une chaîne (texte seul, disque neutre
+    // par défaut) ou un objet {label, background} — la bulle centrale prend alors le même
+    // dégradé qu'une vraie bulle de ce niveau (cf. mon-univers.js centerLabelForCurrentLevel),
+    // pour que les bulles filles gravitent visiblement autour d'une "vraie" bulle plutôt qu'un
+    // simple texte dans un disque neutre.
+    const centerText = typeof centerLabel === "string"
+      ? centerLabel.trim()
+      : (centerLabel && typeof centerLabel === "object" ? String(centerLabel.label || "").trim() : "");
+    if (centerText) {
+      centerBtn.classList.add("agon-tag-center-btn-custom");
+      // 58 plutôt que le rayon réel du cercle (46, cf. .agon-tag-center-btn-custom 92px) : ce
+      // rayon sert d'obstacle pour éloigner les bulles filles lors du placement, mais le texte
+      // du centre peut désormais déborder de son cercle sans être coupé (overflow:visible,
+      // cf. style.css) — une marge de sécurité évite qu'une bulle voisine se retrouve placée
+      // pile au bord du cercle puis recouverte par ce débordement de texte.
+      centerBtn.dataset.centerRadius = "58";
+      if (centerLabel && typeof centerLabel === "object" && centerLabel.background) {
+        centerBtn.style.background = centerLabel.background;
+      }
+      // Centres "trou noir"/"soleil" (cf. mon-univers.js blackHoleVisual/sunVisual) : classe
+      // dédiée en plus du dégradé (posé via .background ci-dessus) pour le halo (box-shadow,
+      // style.css .agon-tag-center-btn-blackhole/-sun) ; glowColor teinte ce halo par galaxie.
+      if (centerLabel && typeof centerLabel === "object") {
+        if (centerLabel.blackHole) centerBtn.classList.add("agon-tag-center-btn-blackhole");
+        if (centerLabel.sun) centerBtn.classList.add("agon-tag-center-btn-sun");
+        if (centerLabel.glowColor) centerBtn.style.setProperty("--center-glow-color", centerLabel.glowColor);
+      }
+      const span = document.createElement("span");
+      span.className = "agon-tag-center-btn-custom-text";
+      span.textContent = centerText;
+      centerBtn.appendChild(span);
+      centerBtn.disabled = true;
+    } else {
+      centerBtn.innerHTML = `<span>À LA</span><span>UNE</span>`;
+      centerBtn.addEventListener("click", () => {
+        window.dispatchEvent(new CustomEvent("agon:tag-trends-show-agon"));
+      });
+    }
+    container.appendChild(centerBtn);
+  }
 
   const keepVisibleDuringSwitch = container.classList.contains("agon-cloud-switching");
   if (!keepVisibleDuringSwitch) container.style.visibility = "hidden";

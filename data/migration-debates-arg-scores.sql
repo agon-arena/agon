@@ -1,0 +1,14 @@
+-- À exécuter une fois dans le SQL editor de Supabase.
+--
+-- computeUserScores() (server.js) retélécharge en entier debates.ai_analysis
+-- (texte complet de l'analyse IA, ~32 Ko en moyenne par débat analysé, jusqu'à
+-- 77 Ko) pour TOUS les débats analysés à chaque refresh du cache (TTL 15 min,
+-- déclenché par /api/my-score) — alors que seul le scoring par idée (quelques
+-- octets par argument) est réellement utilisé. Identifié comme cause probable
+-- du pic d'egress Supabase du 05/08/2026 (164 Mo en une journée sans aucune
+-- publication d'article).
+--
+-- Cette colonne stocke uniquement le scoring extrait ({argumentId: {score,
+-- category}}), rempli à la génération de l'analyse (_generateAndSaveAnalysis)
+-- plutôt que reparsé depuis le texte complet à chaque lecture.
+ALTER TABLE debates ADD COLUMN IF NOT EXISTS ai_analysis_arg_scores jsonb;

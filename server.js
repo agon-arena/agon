@@ -4318,8 +4318,16 @@ app.get("/notifications", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
+// Contenu fusionné dans /mon-univers (scores/contributions + univers + meilleures
+// idées, dans cet ordre) — redirection pour les anciens liens/favoris.
 app.get("/contributions", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/contributions.html"));
+  res.redirect(301, "/mon-univers");
+});
+
+// Classement global "Les meilleures idées", extrait de /mon-univers vers sa
+// propre entrée de menu (accessible depuis le bandeau haut).
+app.get("/meilleures-idees", (req, res) => {
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/meilleures-idees.html"));
 });
 
 app.get("/autres-sources", (req, res) => {
@@ -5430,6 +5438,28 @@ app.get("/api/users/app-installed", rateLimit("users", 30), async (req, res) => 
 // logique. opinion_articles.solar_system_id (l'état ACTUEL de l'article) prime toujours sur
 // user_article_acquisitions.solar_system_id (simple photographie au moment de l'acquisition,
 // qui peut être devenue obsolète si l'article a été reclassé depuis).
+// Limite du libellé affiché dans une bulle étoile, plus généreuse que MAX_LABEL_LENGTH (35,
+// cf. lib/cloud-label.js) car c'est le niveau le plus zoomé de l'univers (moins de bulles à
+// l'écran simultanément) : appliquée uniquement à la construction de cette réponse API, jamais
+// en base (opinion_articles.title sert à bien d'autres usages ; eclairage_name reste la
+// photographie complète). Le titre intégral reste toujours accessible en un clic (ouverture de
+// l'article) — rien n'est perdu, seul l'affichage en bulle est raccourci.
+const MAX_STAR_LABEL_LENGTH = 45;
+
+// Mêmes libellés que ACQUIS_SOURCE_TYPE_META (views/qcm-du-jour.html), dupliqués ici à
+// l'identique côté serveur (petite table statique, pas de dépendance possible sur le frontend) :
+// sert de "source" affichée pour une étoile issue de Culture Générale, faute d'URL d'article.
+const CULTURE_GENERALE_SOURCE_TYPE_LABEL = {
+  histoire: "Ce jour dans l'Histoire",
+  parallele: "Parallèle historique",
+  pensee: "Pensée philosophique",
+  mecanisme: "Mécanisme sociologique",
+  concept: "Concept du jour",
+  citation: "Citation du jour",
+  oeuvre: "Œuvre d'art du jour",
+  latin: "Mot latin du jour"
+};
+
 app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.query?.legacyKey);
@@ -5446,7 +5476,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const { data: acquisitions, error: acquisitionsError } = await supabase
       .from("user_article_acquisitions")
-      .select("id, article_id, solar_system_id, acquired_at")
+      .select("id, article_id, solar_system_id, star_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name, eclairage_detail")
       .eq("user_id", user.id);
     if (acquisitionsError) throw new Error(acquisitionsError.message);
     if (!acquisitions || !acquisitions.length) {
@@ -5457,15 +5487,27 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     // Garde-fou : la contrainte UNIQUE(user_id, article_id) empêche normalement les doublons,
     // mais on ne fait jamais confiance aveuglément — un même article_id ne compte qu'une fois.
     const acquisitionByArticleId = new Map();
+    const eclairageAcquisitions = [];
+    const seenEclairageKeys = new Set();
     for (const a of acquisitions) {
-      if (!acquisitionByArticleId.has(a.article_id)) acquisitionByArticleId.set(a.article_id, a);
+      if (a.article_id != null) {
+        if (!acquisitionByArticleId.has(a.article_id)) acquisitionByArticleId.set(a.article_id, a);
+        continue;
+      }
+      if (!a.eclairage_type || !a.eclairage_source_id) continue;
+      const key = `${a.eclairage_type}:${a.eclairage_source_id}`;
+      if (seenEclairageKeys.has(key)) continue;
+      seenEclairageKeys.add(key);
+      eclairageAcquisitions.push(a);
     }
     const articleIds = [...acquisitionByArticleId.keys()];
 
-    const { data: articleRows, error: articlesError } = await supabase
-      .from("opinion_articles")
-      .select("id, title, link, source, category, category_precision, solar_system_id")
-      .in("id", articleIds);
+    const { data: articleRows, error: articlesError } = articleIds.length
+      ? await supabase
+        .from("opinion_articles")
+        .select("id, title, link, source, category, category_precision, solar_system_id, star_id")
+        .in("id", articleIds)
+      : { data: [], error: null };
     if (articlesError) throw new Error(articlesError.message);
 
     const articleById = new Map((articleRows || []).map((a) => [a.id, a]));
@@ -5474,12 +5516,41 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       console.warn(`[intellectual universe] user=${user.id} acquisitions pointant vers un article introuvable=${missingArticleCount}`);
     }
 
-    // opinion_articles.solar_system_id (actuel) prioritaire, sinon celui figé dans l'acquisition.
+    // Tags secondaires (cf. classifyOpinionArticleSecondaryTagsWithAI) : additifs, jamais un
+    // remplacement de la classification principale ci-dessus — un article avec des tags
+    // secondaires apparaît EN PLUS dans ces autres galaxies/systèmes, cf. placement plus bas.
+    let secondaryByArticleId = new Map();
+    if (articleIds.length) {
+      const { data: secondaryRows, error: secondaryError } = await supabase
+        .from("article_secondary_classifications")
+        .select("article_id, solar_system_id")
+        .in("article_id", articleIds);
+      if (secondaryError) throw new Error(secondaryError.message);
+      for (const row of secondaryRows || []) {
+        if (!row.solar_system_id) continue;
+        if (!secondaryByArticleId.has(row.article_id)) secondaryByArticleId.set(row.article_id, []);
+        secondaryByArticleId.get(row.article_id).push(row.solar_system_id);
+      }
+    }
+
+    // opinion_articles.solar_system_id/star_id (actuel) prioritaires, sinon ceux figés dans
+    // l'acquisition. Les éclairages n'ont pas d'équivalent "actuel" (pas de table dédiée
+    // relisible) : leur solar_system_id figé à l'acquisition fait toujours foi, et ils n'ont
+    // jamais de star_id (chacun reste sa propre étoile, cf. plus bas).
     const neededSolarSystemIds = new Set();
+    const neededStarIds = new Set();
     for (const article of articleById.values()) {
       const acquisition = acquisitionByArticleId.get(article.id);
-      const resolvedId = article.solar_system_id || acquisition.solar_system_id || null;
-      if (resolvedId) neededSolarSystemIds.add(resolvedId);
+      const resolvedSolarSystemId = article.solar_system_id || acquisition.solar_system_id || null;
+      if (resolvedSolarSystemId) neededSolarSystemIds.add(resolvedSolarSystemId);
+      const resolvedStarId = article.star_id || acquisition.star_id || null;
+      if (resolvedStarId) neededStarIds.add(resolvedStarId);
+    }
+    for (const a of eclairageAcquisitions) {
+      if (a.solar_system_id) neededSolarSystemIds.add(a.solar_system_id);
+    }
+    for (const ids of secondaryByArticleId.values()) {
+      for (const id of ids) neededSolarSystemIds.add(id);
     }
 
     let solarSystemById = new Map();
@@ -5492,15 +5563,52 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
     }
 
+    let starById = new Map();
+    if (neededStarIds.size) {
+      const { data: starRows, error: starsError } = await supabase
+        .from("stars")
+        .select("id, name")
+        .in("id", [...neededStarIds]);
+      if (starsError) throw new Error(starsError.message);
+      starById = new Map((starRows || []).map((s) => [s.id, s]));
+    }
+
     const galaxyBuckets = new Map();
     const unclassified = [];
+    // starKey/starName : un article avec un vrai star_id résolu rejoint les autres articles du
+    // même tag (ex. "Tour de France 2026" regroupe plusieurs étapes) ; un article ou un
+    // éclairage sans star_id devient sa propre étoile à lui seul (son propre titre) — aucune
+    // régression pendant que la passe IA (classifyOpinionArticleStarsWithAI) rattrape
+    // l'historique existant, cf. tâche dédiée.
+    const pushIntoTree = (solarSystem, starKey, starName, payload) => {
+      if (!solarSystem) {
+        unclassified.push(payload);
+        return;
+      }
+      if (!galaxyBuckets.has(solarSystem.galaxy)) {
+        galaxyBuckets.set(solarSystem.galaxy, { name: solarSystem.galaxy, solarSystems: new Map() });
+      }
+      const galaxyBucket = galaxyBuckets.get(solarSystem.galaxy);
+      if (!galaxyBucket.solarSystems.has(solarSystem.id)) {
+        galaxyBucket.solarSystems.set(solarSystem.id, { id: solarSystem.id, name: solarSystem.name, stars: new Map() });
+      }
+      const solarSystemBucket = galaxyBucket.solarSystems.get(solarSystem.id);
+      if (!solarSystemBucket.stars.has(starKey)) {
+        solarSystemBucket.stars.set(starKey, { key: starKey, name: starName, articles: [] });
+      }
+      solarSystemBucket.stars.get(starKey).articles.push(payload);
+    };
+
     for (const article of articleById.values()) {
       const acquisition = acquisitionByArticleId.get(article.id);
       const resolvedSolarSystemId = article.solar_system_id || acquisition.solar_system_id || null;
       // Système solaire supprimé entre-temps : resolvedSolarSystemId existe mais introuvable
       // dans solarSystemById -> traité comme non classé, jamais recréé ici.
       const solarSystem = resolvedSolarSystemId ? solarSystemById.get(resolvedSolarSystemId) : null;
-
+      const resolvedStarId = article.star_id || acquisition.star_id || null;
+      const star = resolvedStarId ? starById.get(resolvedStarId) : null;
+      const starKey = star ? `star:${star.id}` : `article:${article.id}`;
+      const starName = star ? star.name : (article.title || "Article");
       const articlePayload = {
         id: article.id,
         title: article.title,
@@ -5510,30 +5618,68 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         categoryPrecision: article.category_precision,
         acquiredAt: acquisition.acquired_at
       };
+      pushIntoTree(solarSystem, starKey, starName, articlePayload);
 
-      if (!solarSystem) {
-        unclassified.push(articlePayload);
-        continue;
+      // Tags secondaires : le même article rejoint EN PLUS ses galaxies/systèmes secondaires,
+      // chacun avec sa propre étoile à lui seul (jamais de passe IA d'étoiles dédiée pour ce
+      // cas rare, cf. classifyOpinionArticleSecondaryTagsWithAI) — jamais dans le système déjà
+      // utilisé comme classification principale, pour éviter un doublon dans la même bulle.
+      for (const secondarySolarSystemId of secondaryByArticleId.get(article.id) || []) {
+        if (secondarySolarSystemId === resolvedSolarSystemId) continue;
+        const secondarySolarSystem = solarSystemById.get(secondarySolarSystemId);
+        if (!secondarySolarSystem) continue;
+        pushIntoTree(secondarySolarSystem, `article-secondary:${article.id}:${secondarySolarSystemId}`, article.title || "Article", articlePayload);
       }
-      if (!galaxyBuckets.has(solarSystem.galaxy)) {
-        galaxyBuckets.set(solarSystem.galaxy, { name: solarSystem.galaxy, solarSystems: new Map() });
-      }
-      const galaxyBucket = galaxyBuckets.get(solarSystem.galaxy);
-      if (!galaxyBucket.solarSystems.has(solarSystem.id)) {
-        galaxyBucket.solarSystems.set(solarSystem.id, { id: solarSystem.id, name: solarSystem.name, articles: [] });
-      }
-      galaxyBucket.solarSystems.get(solarSystem.id).articles.push(articlePayload);
     }
 
-    // Tri déterministe : articles par acquiredAt décroissant ; systèmes/galaxies par nombre
-    // d'articles décroissant, égalité départagée par ordre alphabétique.
+    // Étoiles Culture Générale : même arbre galaxie/système que les articles. Le système
+    // solaire est déjà la notion précise elle-même, dédupliquée par IA à l'acquisition (cf.
+    // resolveCultureGeneraleSolarSystemWithAI, ex. "Résilience" reformulé un autre jour
+    // rejoint le même système) : regrouper les occurrences par système plutôt qu'une étoile
+    // par occurrence donne exactement le même effet que "Tour de France 2026" pour les
+    // articles — plusieurs jours différents sur la même notion deviennent une seule étoile,
+    // nommée d'après le système (nom court, cf. resolveCultureGeneraleSolarSystemWithAI)
+    // plutôt que la phrase descriptive complète d'une occurrence. Repli sur une étoile par
+    // occurrence uniquement si le système n'a pas pu être résolu (cas non classé). Jamais
+    // d'URL (aucune page dédiée à rouvrir) — handleItemActivate (mon-univers.js) ignore déjà
+    // silencieusement une url absente.
+    for (const a of eclairageAcquisitions) {
+      const solarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
+      const starKey = solarSystem ? `eclairage-system:${solarSystem.id}` : `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`;
+      const starName = solarSystem ? solarSystem.name : (a.eclairage_name || "Culture générale");
+      pushIntoTree(solarSystem, starKey, starName, {
+        id: `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`,
+        title: a.eclairage_name,
+        url: null,
+        source: CULTURE_GENERALE_SOURCE_TYPE_LABEL[a.eclairage_type] || "Culture générale",
+        category: null,
+        categoryPrecision: null,
+        acquiredAt: a.acquired_at
+      });
+    }
+
+    // Tri déterministe : articles par acquiredAt décroissant ; étoiles/systèmes/galaxies par
+    // nombre d'articles décroissant, égalité départagée par ordre alphabétique.
     const sortArticles = (arts) => arts.slice().sort((a, b) => (a.acquiredAt < b.acquiredAt ? 1 : a.acquiredAt > b.acquiredAt ? -1 : 0));
 
     let totalSolarSystems = 0;
+    let totalArticles = 0;
     const galaxies = [...galaxyBuckets.values()]
       .map((bucket) => {
         const solarSystemsArr = [...bucket.solarSystems.values()]
-          .map((s) => ({ id: s.id, name: s.name, articleCount: s.articles.length, articles: sortArticles(s.articles) }))
+          .map((s) => {
+            const starsArr = [...s.stars.values()]
+              .map((star) => ({
+                id: star.key,
+                name: truncateToBubbleLabel(star.name, MAX_STAR_LABEL_LENGTH),
+                articleCount: star.articles.length,
+                articles: sortArticles(star.articles)
+              }))
+              .sort((a, b) => b.articleCount - a.articleCount || a.name.localeCompare(b.name, "fr"));
+            const articleCount = starsArr.reduce((sum, star) => sum + star.articleCount, 0);
+            totalArticles += articleCount;
+            return { id: s.id, name: s.name, articleCount, stars: starsArr };
+          })
           .sort((a, b) => b.articleCount - a.articleCount || a.name.localeCompare(b.name, "fr"));
         totalSolarSystems += solarSystemsArr.length;
         const articleCount = solarSystemsArr.reduce((sum, s) => sum + s.articleCount, 0);
@@ -5543,7 +5689,9 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const sortedUnclassified = sortArticles(unclassified);
     const totals = {
-      articles: articleById.size,
+      // Compte les étoiles au sens large (articles + éclairages), pas seulement les articles —
+      // nom de champ conservé tel quel (API déjà publiée, non consommé par le frontend actuel).
+      articles: totalArticles + sortedUnclassified.length,
       solarSystems: totalSolarSystems,
       galaxies: galaxies.length,
       unclassifiedArticles: sortedUnclassified.length
@@ -7128,7 +7276,7 @@ app.get("/api/debates", async (req, res) => {
   }
 });
 
-const { generateCloudLabel } = require("./lib/cloud-label");
+const { generateCloudLabel, truncateToBubbleLabel } = require("./lib/cloud-label");
 
 // Génère et enregistre le cloud_label en arrière-plan (jamais bloquant) :
 // en cas d'échec IA, la colonne reste NULL et un fallback s'appliquera côté lecture.
@@ -9168,6 +9316,14 @@ function normalizeSolarSystemName(value) {
 // contrainte UNIQUE (galaxy, normalized_name) protège contre une course entre deux
 // créations simultanées : en cas d'échec d'insertion, on relit la ligne avant
 // d'abandonner, pour ne jamais dupliquer un système déjà créé entre-temps.
+// name est tronqué à la même limite que les bulles de débats (truncateToBubbleLabel,
+// cf. lib/cloud-label.js, MAX_LABEL_LENGTH = 35) : même moteur d'affichage
+// (tagTrendCloud.js) des deux côtés, donc même risque de débordement si le nom est
+// long — que la source soit un new_solar_system proposé par l'IA (jamais borné en
+// longueur dans le prompt) ou un sourceName Éclairages repris tel quel (souvent une
+// phrase complète, ex. "La campagne de désinformation soviétique pendant la Guerre
+// froide"). normalizedName reste calculé sur le nom complet côté appelant : la
+// troncature ne doit affecter que l'affichage, jamais la déduplication.
 async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
   const { data: existing, error: selectError } = await supabase
     .from("solar_systems")
@@ -9179,7 +9335,7 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
   if (existing) return existing.id;
   const { data: inserted, error: insertError } = await supabase
     .from("solar_systems")
-    .insert({ galaxy, name: name.slice(0, 200), normalized_name: normalizedName })
+    .insert({ galaxy, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
     .select("id")
     .single();
   if (!insertError) return inserted.id;
@@ -9249,6 +9405,303 @@ async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGal
     solarSystemsByGalaxy.get(galaxy).push({ id, galaxy, name: newName });
   }
   return id;
+}
+
+// ---- Étoiles : tag précis (événement/occasion) sous un système solaire, capable de
+// regrouper plusieurs articles — cf. GET /api/users/intellectual-universe. Même mécanique
+// de déduplication que les systèmes solaires, un cran plus bas (scopée au système solaire
+// plutôt qu'à la galaxie). Jamais dans le même appel IA que catégorie/système (cf. régression
+// du 06/08/2026 sur un prompt trop long) : passe séparée, cf. classifyOpinionArticleStarsWithAI.
+
+function normalizeStarName(value) {
+  return normalizeSolarSystemName(value);
+}
+
+// Rejette un nom d'étoile vide, identique/quasi identique au système solaire parent (sinon
+// aucun intérêt à ce niveau supplémentaire), ou à la galaxie/catégorie.
+function isOpinionArticleStarNameRejected(normalizedName, { solarSystemName, galaxy, category, categoryPrecision }) {
+  if (!normalizedName) return true;
+  if (solarSystemName && normalizedName === normalizeStarName(solarSystemName)) return true;
+  if (galaxy && normalizedName === normalizeStarName(galaxy)) return true;
+  if (category && normalizedName === normalizeStarName(category)) return true;
+  if (categoryPrecision && normalizedName === normalizeStarName(categoryPrecision)) return true;
+  return false;
+}
+
+// Même mécanique que resolveOrCreateSolarSystem : retrouve une étoile existante
+// (solar_system_id, normalized_name) ou la crée. Nom tronqué à la même limite que les autres
+// bulles (truncateToBubbleLabel, cf. lib/cloud-label.js) — même moteur d'affichage.
+async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
+  const { data: existing, error: selectError } = await supabase
+    .from("stars")
+    .select("id")
+    .eq("solar_system_id", solarSystemId)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (selectError) { console.warn("[stars] lecture échouée :", selectError.message); return null; }
+  if (existing) return existing.id;
+  const { data: inserted, error: insertError } = await supabase
+    .from("stars")
+    .insert({ solar_system_id: solarSystemId, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
+    .select("id")
+    .single();
+  if (!insertError) return inserted.id;
+  const { data: retryExisting, error: retryError } = await supabase
+    .from("stars")
+    .select("id")
+    .eq("solar_system_id", solarSystemId)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (!retryError && retryExisting) return retryExisting.id;
+  console.warn("[stars] création échouée :", insertError.message);
+  return null;
+}
+
+// Passe IA dédiée, appelée uniquement pour des articles qui ont DÉJÀ un solar_system_id
+// valide (fraîchement résolu ou déjà en base) mais pas encore de star_id — jamais mêlée à la
+// classification catégorie/système. items : [{id, title, summary, solarSystemId, solarSystemName,
+// galaxy, category, categoryPrecision}]. Groupe par système solaire pour que le prompt liste les
+// étoiles existantes une seule fois par système plutôt qu'une fois par article.
+async function classifyOpinionArticleStarsWithAI(items) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !items.length) return new Map();
+
+  const existingStarsBySystem = new Map();
+  const solarSystemIds = [...new Set(items.map((it) => it.solarSystemId).filter(Boolean))];
+  if (solarSystemIds.length) {
+    const { data: starRows, error: starsError } = await supabase
+      .from("stars")
+      .select("id, solar_system_id, name")
+      .in("solar_system_id", solarSystemIds);
+    if (starsError) console.warn("[opinion-articles stars] lecture stars échouée :", starsError.message);
+    for (const row of starRows || []) {
+      if (!existingStarsBySystem.has(row.solar_system_id)) existingStarsBySystem.set(row.solar_system_id, []);
+      existingStarsBySystem.get(row.solar_system_id).push(row);
+    }
+  }
+
+  const results = new Map();
+  const cache = new Map();
+  for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
+    const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
+    const compactItems = chunk.map((item, index) => ({
+      index,
+      solar_system: item.solarSystemName,
+      title: String(item.title || "").slice(0, 220),
+      summary: String(item.summary || "").slice(0, 450),
+      existing_stars: (existingStarsBySystem.get(item.solarSystemId) || []).map((s) => `${s.id}:${s.name}`).join(", ") || "(aucune étoile existante dans ce système)"
+    }));
+    const prompt = [
+      "Réponds uniquement en json valide.",
+      "Pour chaque article, indique son \"étoile\" : un événement ou une occasion PRÉCISE à l'intérieur du système solaire donné (ex. système \"Cyclisme\" → étoile \"Tour de France 2026\" ; système \"Justice pénale\" → étoile \"Procès Jean-Vincent Placé\"), capable de regrouper plusieurs articles sur le même événement à des dates différentes (plusieurs étapes d'une course, plusieurs audiences d'un procès).",
+      "Jamais un doublon ou une reformulation du système solaire lui-même — l'étoile doit être plus précise, pas juste un synonyme.",
+      "Soit l'id d'une étoile de existing_stars qui correspond VRAIMENT au même événement, soit un nom court (2 à 6 mots) pour une nouvelle étoile si aucune existante ne convient. Ne choisis jamais une étoile existante juste parce qu'elle est disponible.",
+      "RÈGLE OBLIGATOIRE : chaque article doit avoir soit star_id (nombre), soit new_star (texte court) — jamais les deux, jamais aucun des deux.",
+      `Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les index suivants : ${compactItems.map((i) => i.index).join(", ")}.`,
+      "Format obligatoire : {\"items\":[{\"index\":0,\"star_id\":null,\"new_star\":\"Tour de France 2026\"}]} avec un objet par index.",
+      "",
+      JSON.stringify(compactItems)
+    ].join("\n");
+
+    try {
+      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+      const body = {
+        model: OPINION_ARTICLE_CATEGORY_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" }
+      };
+      if (isGpt5) {
+        body.max_completion_tokens = Math.min(6000, 500 + chunk.length * 60);
+        body.reasoning_effort = "low";
+      } else {
+        body.max_tokens = Math.min(3000, 100 + chunk.length * 30);
+        body.temperature = 0;
+      }
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      const content = data?.choices?.[0]?.message?.content;
+      const parsed = content ? JSON.parse(content) : null;
+      const answered = Array.isArray(parsed?.items) ? parsed.items : [];
+      console.log(`[opinion-articles stars] requested=${chunk.length} answered=${answered.length}`);
+
+      for (const entry of answered) {
+        const localIndex = Number(entry?.index);
+        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
+        const item = chunk[localIndex];
+
+        let starId = null;
+        const candidateId = Number(entry?.star_id);
+        if (Number.isInteger(candidateId) && candidateId > 0) {
+          const existingInSystem = (existingStarsBySystem.get(item.solarSystemId) || []).some((s) => s.id === candidateId);
+          if (existingInSystem) starId = candidateId;
+        }
+        if (!starId) {
+          const newName = String(entry?.new_star || "").trim();
+          if (newName) {
+            const normalized = normalizeStarName(newName);
+            if (!isOpinionArticleStarNameRejected(normalized, {
+              solarSystemName: item.solarSystemName,
+              galaxy: item.galaxy,
+              category: item.category,
+              categoryPrecision: item.categoryPrecision
+            })) {
+              const cacheKey = item.solarSystemId + "::" + normalized;
+              if (cache.has(cacheKey)) {
+                starId = cache.get(cacheKey);
+              } else {
+                starId = await resolveOrCreateStar(item.solarSystemId, newName, normalized);
+                if (starId) {
+                  cache.set(cacheKey, starId);
+                  if (!existingStarsBySystem.has(item.solarSystemId)) existingStarsBySystem.set(item.solarSystemId, []);
+                  existingStarsBySystem.get(item.solarSystemId).push({ id: starId, solar_system_id: item.solarSystemId, name: newName });
+                }
+              }
+            }
+          }
+        }
+        if (starId) results.set(item.id, starId);
+      }
+    } catch (error) {
+      console.warn("[opinion-articles stars] classification IA ignorée :", error.message);
+    }
+  }
+
+  return results;
+}
+
+// ---- Classification secondaire : rattache EN PLUS un article à d'autres galaxies quand
+// c'est vraiment pertinent (ex. un article sur l'interdiction des réseaux sociaux aux mineurs
+// touche réellement Société-éducation, Sciences-technologie, Philosophie ET Sciences
+// sociales), sans jamais toucher la classification principale (category/category_precision/
+// solar_system_id/star_id sur opinion_articles, utilisée partout ailleurs sur le site).
+// Volontairement restrictif : la consigne du prompt demande 0 résultat dans la grande
+// majorité des cas, jamais plus de 3 — un tag secondaire en trop pollue "Mon univers" sans
+// aucun bénéfice, contrairement à un système/étoile en trop qui reste anodin.
+// items : [{id, link, title, summary, category (primaire), categoryPrecision (primaire)}].
+// Retourne un Map<link, Array<{category, categoryPrecision, solarSystemId}>>.
+async function classifyOpinionArticleSecondaryTagsWithAI(items) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !items.length) return new Map();
+
+  const { data: existingSolarSystemRows, error: solarSystemsError } = await supabase
+    .from("solar_systems")
+    .select("id, galaxy, name")
+    .order("id", { ascending: true });
+  if (solarSystemsError) console.warn("[opinion-articles secondary] lecture solar_systems échouée :", solarSystemsError.message);
+  const solarSystemsByGalaxy = new Map();
+  for (const row of existingSolarSystemRows || []) {
+    if (!solarSystemsByGalaxy.has(row.galaxy)) solarSystemsByGalaxy.set(row.galaxy, []);
+    solarSystemsByGalaxy.get(row.galaxy).push(row);
+  }
+  const solarSystemsPromptBlock = solarSystemsByGalaxy.size
+    ? Array.from(solarSystemsByGalaxy.entries())
+      .map(([galaxy, list]) => `${galaxy} : ` + list.map((s) => `${s.id}:${s.name}`).join(", "))
+      .join("\n")
+    : "(aucun système solaire existant pour l'instant)";
+  const solarSystemCreationCache = new Map();
+
+  const results = new Map();
+  for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
+    const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
+    const compactItems = chunk.map((item, index) => ({
+      id: index,
+      primary_category: item.category + (item.categoryPrecision ? ` (${item.categoryPrecision})` : ""),
+      title: String(item.title || "").slice(0, 220),
+      summary: String(item.summary || "").slice(0, 450)
+    }));
+    const itemIds = compactItems.map((item) => item.id).join(", ");
+    const prompt = [
+      "Réponds uniquement en json valide.",
+      "Chaque article a DÉJÀ une rubrique principale (primary_category) — ne la reprends jamais.",
+      "Rubriques Agôn disponibles : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
+      "Pour CHAQUE article, indique s'il touche RÉELLEMENT et SUBSTANTIELLEMENT une ou plusieurs AUTRES rubriques — pas un lien vague ou indirect, mais un vrai second sujet de fond que l'article traite vraiment.",
+      "Exemple d'article touchant plusieurs rubriques à la fois : \"interdiction des réseaux sociaux aux moins de 15 ans\" → Société - éducation (protection des mineurs) ET Sciences - technologie (réseaux sociaux) ET Philosophie - sciences sociales (liberté individuelle, paternalisme, socialisation numérique) — chacune est un vrai axe de lecture de cet article, pas une simple mention.",
+      "DANS LA GRANDE MAJORITÉ DES CAS, il n'y a AUCUNE rubrique secondaire pertinente — renvoie alors un tableau vide. N'en ajoute JAMAIS pour un article ordinaire à un seul sujet clair. Maximum 3 rubriques secondaires par article, et seulement si chacune est vraiment justifiée.",
+      "4 rubriques sont hybrides (deux branches) : \"Sports - loisirs\" (Sports/Loisirs), \"Culture - arts\" (Culture/Arts), \"Philosophie - sciences sociales\" (Philosophie/Sciences sociales), \"Langues et Lettres\" (Langues/Lettres) — pour une rubrique secondaire hybride, précise la branche dans category_precision (sinon null).",
+      "Pour chaque rubrique secondaire retenue, indique aussi son système solaire (thème durable à l'intérieur de cette rubrique, même logique que pour la rubrique principale) : soit l'id d'un système existant qui correspond vraiment, soit un nom court (2-4 mots) pour un nouveau système.",
+      "Systèmes solaires existants (id:nom par galaxie) :",
+      solarSystemsPromptBlock,
+      `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
+      "Format obligatoire : {\"items\":[{\"id\":0,\"secondary\":[]},{\"id\":1,\"secondary\":[{\"category\":\"Sciences - technologie\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":\"Réseaux sociaux\"}]}]} — secondary est un tableau vide dans la grande majorité des cas.",
+      "",
+      JSON.stringify(compactItems)
+    ].join("\n");
+
+    try {
+      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+      const body = {
+        model: OPINION_ARTICLE_CATEGORY_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" }
+      };
+      if (isGpt5) {
+        body.max_completion_tokens = Math.min(8000, 800 + chunk.length * 90);
+        body.reasoning_effort = "low";
+      } else {
+        body.max_tokens = Math.min(4000, 120 + chunk.length * 30);
+        body.temperature = 0;
+      }
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      const content = data?.choices?.[0]?.message?.content || "";
+      const parsed = content ? (() => { try { return JSON.parse(content); } catch { return null; } })() : null;
+      const classified = Array.isArray(parsed?.items) ? parsed.items : [];
+      let secondaryCount = 0;
+
+      for (const entry of classified) {
+        const localIndex = Number(entry?.id);
+        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
+        const item = chunk[localIndex];
+        const secondaryList = Array.isArray(entry?.secondary) ? entry.secondary.slice(0, 3) : [];
+        const resolved = [];
+
+        for (const sec of secondaryList) {
+          const category = normalizeOpinionArticleCategory(sec?.category);
+          // Jamais un doublon de la catégorie principale : ça n'apporte rien et fausserait le
+          // compte de galaxies dans "Mon univers".
+          if (!category || category === item.category) continue;
+          const precision = normalizeOpinionArticleCategoryPrecision(category, sec?.category_precision);
+          let galaxy = getOpinionArticleGalaxy(category, precision);
+          // Repli : pour une rubrique hybride, l'IA choisit parfois un solar_system_id existant
+          // sans fournir category_precision (cas réel observé le 06/08/2026 — elle avait
+          // pourtant correctement identifié le système) — la galaxie réelle du système existant
+          // choisi fait foi dans ce cas, pas besoin de la redériver de category/precision.
+          if (!galaxy) {
+            const candidateId = Number(sec?.solar_system_id);
+            if (Number.isInteger(candidateId) && candidateId > 0) {
+              for (const [galaxyName, list] of solarSystemsByGalaxy) {
+                if (list.some((s) => s.id === candidateId)) { galaxy = galaxyName; break; }
+              }
+            }
+          }
+          if (!galaxy) continue;
+          const solarSystemId = await resolveOpinionArticleSolarSystem(galaxy, sec, solarSystemsByGalaxy, solarSystemCreationCache, category, precision);
+          if (!solarSystemId) continue;
+          resolved.push({ category, categoryPrecision: precision, solarSystemId });
+        }
+
+        if (resolved.length) {
+          secondaryCount += resolved.length;
+          results.set(item.link, resolved);
+        }
+      }
+      console.log(`[opinion-articles secondary] requested=${chunk.length} tagged=${classified.filter((e) => Array.isArray(e?.secondary) && e.secondary.length).length} secondaryTags=${secondaryCount}`);
+    } catch (error) {
+      console.warn("[opinion-articles secondary] classification IA ignorée :", error.message);
+    }
+  }
+
+  return results;
 }
 
 // Mots-clés du fallback : match sur frontière de mot (plus de "sélection" →
@@ -13158,6 +13611,25 @@ function getCultureGeneraleEclairagesSourceConfig(sourceType) {
 
 const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre", "latin"];
 
+// Galaxie de chaque sourceType Culture Générale pour l'univers intellectuel personnel —
+// statique (jamais d'appel IA ici, contrairement aux articles d'actu) : ces rubriques sont
+// éditorialement stables, une table de correspondance fixe suffit. Réutilise exactement les
+// noms de galaxie déjà produits par getOpinionArticleGalaxy (branches hybrides comprises), pour
+// que les mêmes galaxies (ex. "Philosophie") mélangent naturellement articles et éclairages.
+// "concept" et "citation" couvrent en pratique plusieurs domaines (cf. DOMAIN_SLUGS dans
+// prompts/concept-du-jour.js) : approximation assumée plutôt que de faire dépendre l'univers
+// intellectuel d'un champ IA supplémentaire à faire transiter jusqu'ici.
+const CULTURE_GENERALE_SOURCE_TYPE_GALAXY = {
+  histoire: "Histoire",
+  parallele: "Histoire",
+  pensee: "Philosophie",
+  mecanisme: "Sciences sociales",
+  concept: "Philosophie",
+  citation: "Lettres",
+  oeuvre: "Arts",
+  latin: "Langues"
+};
+
 // Index (mémoïsé le temps d'un appel) des événements "Ce jour dans l'Histoire"
 // par id — évènements globaux, jamais scopés à une date de génération de QCM.
 function buildHistoricalEventsIndex() {
@@ -13395,13 +13867,22 @@ async function generateDailyQuizIfNeeded(slotKey) {
     if (uniqueArticleIds.length) {
       const { data: articles, error: articlesError } = await supabase
         .from("opinion_articles")
-        .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id")
+        .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, star_id, secondary_tags_checked_at")
         .in("id", uniqueArticleIds);
       if (articlesError) throw new Error(articlesError.message);
 
       const articlesToClassify = (articles || []).filter((a) => !a.solar_system_id);
       missingSolarSystemCount = articlesToClassify.length;
       console.log(`[daily quiz article sources] questions=${questions.length} uniqueArticles=${uniqueArticleIds.length} missingSolarSystems=${missingSolarSystemCount}`);
+
+      // articleClassification: galaxie/système déjà connus (en base) ou tout juste résolus
+      // ci-dessus — sert de base à la passe étoile plus bas, jamais rechargé depuis la base.
+      const articleClassification = new Map();
+      for (const article of articles || []) {
+        if (article.solar_system_id) {
+          articleClassification.set(article.id, { solarSystemId: article.solar_system_id, category: article.category, categoryPrecision: article.category_precision });
+        }
+      }
 
       if (articlesToClassify.length) {
         const aiCategories = await classifyOpinionArticlesWithAI(articlesToClassify, { includeSolarSystem: true });
@@ -13418,8 +13899,99 @@ async function generateDailyQuizIfNeeded(slotKey) {
             .update({ category, category_precision, solar_system_id })
             .eq("id", article.id);
           if (updateError) console.warn(`[daily quiz article classification] échec écriture article ${article.id} :`, updateError.message);
+          if (solar_system_id) articleClassification.set(article.id, { solarSystemId: solar_system_id, category, categoryPrecision: category_precision });
         }
         console.log(`[daily quiz article classification] requested=${articlesToClassify.length} classified=${classifiedCount}`);
+      }
+
+      // Passe étoile, séparée de la classification catégorie/système ci-dessus (cf.
+      // classifyOpinionArticleStarsWithAI) : uniquement les articles avec un système solaire
+      // connu (juste résolu ou déjà en base depuis un cycle précédent) mais sans star_id.
+      const starIdByArticleId = new Map((articles || []).map((a) => [a.id, a.star_id]));
+      const needStar = [...articleClassification.entries()].filter(([id, info]) => info.solarSystemId && !starIdByArticleId.get(id));
+      if (needStar.length) {
+        const solarSystemIdsNeeded = [...new Set(needStar.map(([, info]) => info.solarSystemId))];
+        const { data: solarSystemRows, error: solarSystemRowsError } = await supabase
+          .from("solar_systems")
+          .select("id, name, galaxy")
+          .in("id", solarSystemIdsNeeded);
+        if (solarSystemRowsError) throw new Error(solarSystemRowsError.message);
+        const solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
+        const articleById = new Map((articles || []).map((a) => [a.id, a]));
+
+        const starItems = needStar.map(([id, info]) => {
+          const article = articleById.get(id);
+          const sys = solarSystemById.get(info.solarSystemId);
+          return {
+            id,
+            title: article?.title,
+            summary: article?.summary,
+            solarSystemId: info.solarSystemId,
+            solarSystemName: sys?.name || "",
+            galaxy: sys?.galaxy || "",
+            category: info.category,
+            categoryPrecision: info.categoryPrecision
+          };
+        });
+        const starResults = await classifyOpinionArticleStarsWithAI(starItems);
+        let starClassifiedCount = 0;
+        for (const item of starItems) {
+          const star_id = starResults.get(item.id);
+          if (!star_id) continue;
+          starClassifiedCount += 1;
+          const { error: starUpdateError } = await supabase
+            .from("opinion_articles")
+            .update({ star_id })
+            .eq("id", item.id);
+          if (starUpdateError) console.warn(`[daily quiz article stars] échec écriture article ${item.id} :`, starUpdateError.message);
+        }
+        console.log(`[daily quiz article stars] requested=${starItems.length} classified=${starClassifiedCount}`);
+      }
+
+      // Passe de classification secondaire (cf. classifyOpinionArticleSecondaryTagsWithAI) :
+      // uniquement les articles déjà classés (catégorie principale connue) et jamais encore
+      // vérifiés pour des rubriques secondaires — secondary_tags_checked_at marque le passage,
+      // même quand 0 tag secondaire n'a été retenu, pour ne jamais re-tester inutilement.
+      const articleByIdForSecondary = new Map((articles || []).map((a) => [a.id, a]));
+      const needSecondary = [...articleClassification.entries()]
+        .filter(([id, info]) => info.category && !articleByIdForSecondary.get(id)?.secondary_tags_checked_at);
+      if (needSecondary.length) {
+        const secondaryItems = needSecondary.map(([id, info]) => {
+          const article = articleByIdForSecondary.get(id);
+          return {
+            id,
+            link: String(article?.link || ""),
+            title: article?.title,
+            summary: article?.summary,
+            category: info.category,
+            categoryPrecision: info.categoryPrecision
+          };
+        });
+        const secondaryResults = await classifyOpinionArticleSecondaryTagsWithAI(secondaryItems);
+        let secondaryRowsInserted = 0;
+        const nowIso = new Date().toISOString();
+        for (const item of secondaryItems) {
+          const tags = secondaryResults.get(item.link) || [];
+          if (tags.length) {
+            const rows = tags.map((tag) => ({
+              article_id: item.id,
+              category: tag.category,
+              category_precision: tag.categoryPrecision,
+              solar_system_id: tag.solarSystemId
+            }));
+            const { error: insertSecondaryError } = await supabase
+              .from("article_secondary_classifications")
+              .upsert(rows, { onConflict: "article_id,solar_system_id", ignoreDuplicates: true });
+            if (insertSecondaryError) console.warn(`[daily quiz article secondary] échec écriture article ${item.id} :`, insertSecondaryError.message);
+            else secondaryRowsInserted += rows.length;
+          }
+          const { error: checkedError } = await supabase
+            .from("opinion_articles")
+            .update({ secondary_tags_checked_at: nowIso })
+            .eq("id", item.id);
+          if (checkedError) console.warn(`[daily quiz article secondary] échec marquage article ${item.id} :`, checkedError.message);
+        }
+        console.log(`[daily quiz article secondary] requested=${secondaryItems.length} tagsInserted=${secondaryRowsInserted}`);
       }
     } else {
       console.log(`[daily quiz article sources] questions=${questions.length} uniqueArticles=0 missingSolarSystems=0`);
@@ -14526,7 +15098,7 @@ async function recordDailyQuizArticleAcquisitions(voterKey, sourceArticleIds) {
   try {
     const { data, error } = await supabase
       .from("opinion_articles")
-      .select("id, solar_system_id")
+      .select("id, solar_system_id, star_id")
       .in("id", articleIds);
     if (error) throw error;
     articles = data || [];
@@ -14539,7 +15111,8 @@ async function recordDailyQuizArticleAcquisitions(voterKey, sourceArticleIds) {
   const rows = articles.map((a) => ({
     user_id: user.id,
     article_id: a.id,
-    solar_system_id: a.solar_system_id || null
+    solar_system_id: a.solar_system_id || null,
+    star_id: a.star_id || null
   }));
 
   try {
@@ -14550,6 +15123,171 @@ async function recordDailyQuizArticleAcquisitions(voterKey, sourceArticleIds) {
     console.log(`[daily quiz acquisitions] user=${user.id} requested=${rows.length} existingOrInserted=${rows.length}`);
   } catch (error) {
     console.warn("[daily quiz acquisitions] failed : écriture acquisitions —", error.message);
+  }
+}
+
+// Résolution du système solaire d'un contenu Culture Générale — même principe que la
+// résolution des étoiles d'articles (classifyOpinionArticleStarsWithAI) : vérifie d'abord si
+// la notion correspond à un système déjà existant dans cette galaxie (ex. "Résilience"
+// reformulé différemment un autre jour), même quand le nom n'est pas identique mot pour mot
+// (resolveOrCreateSolarSystem seul ne fait qu'une comparaison exacte normalisée), avant d'en
+// créer un nouveau. Produit aussi un nom court (tag, 2-4 mots) plutôt que de tronquer
+// aveuglément la phrase descriptive complète de l'Éclairage (sourceName peut être une phrase
+// entière, ex. "La campagne de désinformation soviétique pendant la Guerre froide").
+// Filet si la clé IA est absente ou l'appel échoue : comportement d'origine (exact-match
+// normalisé via resolveOrCreateSolarSystem seul, jamais bloquant pour l'acquisition).
+// extractCultureGeneraleItemDetail renvoie un objet ({meta, sections, image}), jamais une
+// chaîne : String(sourceDetail) produirait "[object Object]" (bug confirmé le 06/08/2026,
+// eclairage_detail enregistré cassé) — aplati ici en texte brut pour le prompt IA ci-dessous
+// ET pour l'enregistrement de eclairage_detail (cf. recordDailyQuizEclairageAcquisition).
+function flattenCultureGeneraleDetail(detail) {
+  if (!detail || typeof detail !== "object" || !Array.isArray(detail.sections)) return "";
+  return detail.sections
+    .map((s) => (s?.label ? `${s.label} : ${s.text || ""}` : String(s?.text || "")))
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" — ");
+}
+
+async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail) {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("solar_systems")
+    .select("id, name")
+    .eq("galaxy", galaxy);
+  if (existingError) console.warn("[culture-generale solar-system] lecture solar_systems échouée :", existingError.message);
+  const existing = existingRows || [];
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
+
+  const compact = {
+    type: sourceType,
+    title: String(sourceName || "").slice(0, 160),
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
+    existing_systems: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
+  };
+  const prompt = [
+    "Réponds uniquement en json valide.",
+    "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
+    "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
+    "Un simple lien thématique, un vocabulaire commun ou un domaine voisin NE SUFFISENT JAMAIS : \"Résilience\" (capacité psychologique/sociologique à surmonter un choc) n'est PAS \"Développement durable\" même si le mot \"résilience\" apparaît parfois dans ce contexte écologique — ce sont deux notions différentes, pas la même reformulée. En cas du moindre doute, ne réutilise jamais : propose un nouveau système plutôt qu'un rattachement hasardeux (un système en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
+    "Sinon, propose dans new_solar_system un nom court (2 à 4 mots, jamais une phrase) qui résume la notion elle-même, jamais l'anecdote ou l'actualité du jour qui l'illustre (ex. \"La campagne de désinformation soviétique pendant la Guerre froide\" → \"Désinformation soviétique\").",
+    "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
+    "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"Résilience\"}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+
+  try {
+    const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+    const body = {
+      model: OPINION_ARTICLE_CATEGORY_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" }
+    };
+    if (isGpt5) {
+      body.max_completion_tokens = 500;
+      body.reasoning_effort = "low";
+    } else {
+      body.max_tokens = 200;
+      body.temperature = 0;
+    }
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = content ? JSON.parse(content) : null;
+
+    const candidateId = Number(parsed?.solar_system_id);
+    if (Number.isInteger(candidateId) && candidateId > 0 && existing.some((s) => s.id === candidateId)) {
+      return candidateId;
+    }
+    const newName = String(parsed?.new_solar_system || "").trim();
+    if (newName) {
+      const normalized = normalizeSolarSystemName(newName);
+      if (!isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category: null, categoryPrecision: null })) {
+        return await resolveOrCreateSolarSystem(galaxy, newName, normalized);
+      }
+    }
+  } catch (error) {
+    console.warn("[culture-generale solar-system] classification IA ignorée :", error.message);
+  }
+  return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
+}
+
+// Même principe que recordDailyQuizArticleAcquisitions, pour une question de QCM Culture
+// Générale (originale "culture_generale-qN" ou repasse "cgreview-...", les deux portent déjà
+// sourceDebateId/sourceType/sourceName sur l'objet question, cf. fetchUserCultureGeneraleAnswerEvents)
+// portant sur un contenu Éclairages plutôt qu'un article. Seuil d'acquisition volontairement
+// aligné sur le QCM actu (une seule bonne réponse suffit) : différent du seuil de validation à
+// DAILY_QUIZ_ACQUIS_VALIDATION_STREAK réponses de "Mes acquis", qui reste une fonctionnalité à
+// part, inchangée. eclairage_name/eclairage_detail sont enregistrés en clair (photographie au
+// moment de l'acquisition) : ces contenus n'ont pas de table dédiée relisible à la demande comme
+// opinion_articles, contrairement aux articles d'actu.
+async function recordDailyQuizEclairageAcquisition(voterKey, question) {
+  const sourceDebateId = question?.sourceDebateId ? String(question.sourceDebateId) : "";
+  const sourceType = String(question?.sourceType || "").trim();
+  const sourceName = String(question?.sourceName || "").trim();
+  const galaxy = CULTURE_GENERALE_SOURCE_TYPE_GALAXY[sourceType] || null;
+  if (!sourceDebateId || !galaxy || !sourceName) return;
+
+  const { legacyKey, error: keyError } = validateLegacyKey(voterKey);
+  if (keyError) {
+    console.warn("[daily quiz eclairage acquisitions] failed : voterKey invalide.");
+    return;
+  }
+
+  let user;
+  try {
+    ({ user } = await resolveLegacyUser(supabase, legacyKey));
+  } catch (error) {
+    console.warn("[daily quiz eclairage acquisitions] failed : résolution utilisateur —", error.message);
+    return;
+  }
+
+  // Déjà acquis (répétition d'une même bonne réponse, ex. repasse déjà validée
+  // précédemment) : jamais de nouvel appel IA pour rien, l'upsert plus bas serait de toute
+  // façon sans effet (ignoreDuplicates).
+  try {
+    const { data: existingAcquisition, error: existingError } = await supabase
+      .from("user_article_acquisitions")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("eclairage_type", sourceType)
+      .eq("eclairage_source_id", sourceDebateId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existingAcquisition) return;
+  } catch (error) {
+    console.warn("[daily quiz eclairage acquisitions] failed : vérification acquisition existante —", error.message);
+    return;
+  }
+
+  const solarSystemId = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail);
+  if (!solarSystemId) return;
+
+  try {
+    const { error } = await supabase
+      .from("user_article_acquisitions")
+      .upsert(
+        {
+          user_id: user.id,
+          eclairage_type: sourceType,
+          eclairage_source_id: sourceDebateId,
+          eclairage_name: sourceName.slice(0, 300),
+          eclairage_detail: flattenCultureGeneraleDetail(question.sourceDetail).slice(0, 2000) || null,
+          solar_system_id: solarSystemId
+        },
+        { onConflict: "user_id,eclairage_type,eclairage_source_id", ignoreDuplicates: true }
+      );
+    if (error) throw error;
+    console.log(`[daily quiz eclairage acquisitions] user=${user.id} sourceType=${sourceType} sourceDebateId=${sourceDebateId}`);
+  } catch (error) {
+    console.warn("[daily quiz eclairage acquisitions] failed : écriture acquisition —", error.message);
   }
 }
 
@@ -14654,6 +15392,9 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     if (correct && question.sourceArticleIds) {
       recordDailyQuizArticleAcquisitions(voterKey, question.sourceArticleIds)
         .catch((error) => console.warn("[daily quiz acquisitions] failed :", error.message));
+    } else if (correct && slot === "culture_generale" && question.sourceDebateId) {
+      recordDailyQuizEclairageAcquisition(voterKey, question)
+        .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
