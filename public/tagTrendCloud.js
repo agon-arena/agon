@@ -1,3 +1,187 @@
+// Satellites "atome" des bulles Agôn/Communauté : nombre de satellites (1 à 10) reflétant
+// l'intensité RELATIVE du nombre d'idées (arguments pour/contre postés) au sein de l'ensemble
+// des bulles actuellement affichées — jamais de seuil absolu (100 idées n'est pas "5
+// satellites" en soi, ça dépend entièrement du min/max du lot du moment). La bulle la moins
+// riche en idées du lot reçoit 1, la plus riche 10, les autres sont interpolées linéairement
+// entre les deux.
+// Basé sur le nombre d'idées (argument_count) plutôt que sur les commentaires au sens strict
+// (réponses postées sous une idée) : cette fonctionnalité de réponse existe mais n'est encore
+// utilisée sur aucune arène en production (comment_count toujours à 0), ce qui aurait rendu
+// les satellites invisibles partout — le nombre d'idées, lui, varie réellement dès aujourd'hui.
+function computeRelativeIdeaOrbitCounts(bubbles) {
+  const counts = (Array.isArray(bubbles) ? bubbles : []).map((entry) => {
+    const raw = typeof entry === "number" ? entry : Number(entry?.ideaCount);
+    return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : 0;
+  });
+  if (!counts.length) return [];
+
+  const positive = counts.filter((v) => v > 0);
+  // Personne n'a d'idée : aucun satellite nulle part, pas de valeur neutre ici (une valeur
+  // neutre suggérerait une activité qui n'existe pas).
+  if (!positive.length) return counts.map(() => 0);
+
+  const min = Math.min(...positive);
+  const max = Math.max(...positive);
+  // Toutes les bulles avec des idées en ont exactement le même nombre : aucune ne domine,
+  // valeur neutre (5) pour toutes plutôt qu'un 1 ou un 10 arbitraire.
+  if (min === max) return counts.map((v) => (v > 0 ? 5 : 0));
+
+  return counts.map((v) => {
+    if (v <= 0) return 0;
+    const ratio = (v - min) / (max - min);
+    return Math.max(1, Math.min(10, Math.round(1 + ratio * 9)));
+  });
+}
+
+// Distances (px, au-delà du bord de la bulle) et diamètres variés plutôt que des valeurs
+// fixes, pour un aspect moins mécanique — combinés à la répartition en angle d'or ci-dessous.
+// Décorrélés entre eux (offset de 2 dans l'index de lecture de AGON_SATELLITE_SIZE_STEPS_PX)
+// pour qu'un satellite "loin" ne soit pas systématiquement aussi le "gros", et vice-versa.
+// Direction posée ici (dataset.angle), mais la distance RÉELLE est décidée plus tard par
+// layoutBubbleSatellites, une fois la géométrie finale (px) de toutes les bulles du nuage
+// connue : c'est elle qui garantit qu'un satellite n'empiète jamais sur une bulle voisine.
+const AGON_SATELLITE_AXIS_EXTEND_PX = [9, 20, 13, 24, 11];
+const AGON_SATELLITE_SIZE_STEPS_PX = [7, 12, 9, 14, 10];
+const AGON_SATELLITE_GOLDEN_ANGLE = 137.508; // angle d'or : répartition non régulière mais stable
+
+// Ajoute les points satellites (+ leur trait de liaison au noyau) à une bulle déjà construite.
+// Positions posées à 0 pour l'instant (repliés sur le centre) — layoutBubbleSatellites les
+// place réellement une fois le nuage entier positionné. seedIndex (index de la bulle dans le
+// nuage) sert uniquement à déphaser la distribution d'une bulle à l'autre — déterministe (pas
+// de Math.random) pour que deux re-renders successifs donnent la même disposition.
+function appendBubbleSatellites(bubble, orbitCount, seedIndex) {
+  const count = Math.max(0, Math.min(10, Math.round(orbitCount) || 0));
+  if (!count) return;
+
+  const wrap = document.createElement("span");
+  wrap.className = "agon-tag-bubble-satellites";
+  wrap.setAttribute("aria-hidden", "true");
+
+  const phase = (seedIndex * 47) % 360;
+  for (let i = 0; i < count; i += 1) {
+    const angleDeg = phase + i * AGON_SATELLITE_GOLDEN_ANGLE;
+    const extendPx = AGON_SATELLITE_AXIS_EXTEND_PX[i % AGON_SATELLITE_AXIS_EXTEND_PX.length];
+    const sizePx = AGON_SATELLITE_SIZE_STEPS_PX[(i + 2) % AGON_SATELLITE_SIZE_STEPS_PX.length];
+
+    const line = document.createElement("span");
+    line.className = "agon-tag-bubble-satellite-line";
+
+    const dot = document.createElement("span");
+    dot.className = "agon-tag-bubble-satellite";
+    dot.dataset.angle = angleDeg.toFixed(2);
+    dot.dataset.axisExtend = String(extendPx);
+    dot.dataset.dotRadius = String(sizePx / 2);
+    dot.style.width = sizePx + "px";
+    dot.style.height = sizePx + "px";
+    dot.style.marginLeft = (-sizePx / 2) + "px";
+    dot.style.marginTop = (-sizePx / 2) + "px";
+    dot.style.animationDelay = `${((i * 0.7) % 4).toFixed(2)}s`;
+    dot.style.animationDuration = `${(7 + (i % 3) * 1.6).toFixed(2)}s`;
+    wrap.append(line, dot);
+  }
+
+  bubble.appendChild(wrap);
+}
+
+// Distance (px) parcourue par un rayon partant de (originX,originY) dans la direction unitaire
+// (dirX,dirY) avant d'entrer dans le disque de centre (circleX,circleY) et de rayon `radius` —
+// Infinity si le rayon ne croise jamais ce disque, 0 si l'origine y est déjà (jamais censé
+// arriver ici : l'algorithme de placement des bulles garde toujours une séparation minimale
+// entre leurs centres, cf. maxAllowedOverlap dans applyCompactBubbleLayout).
+function raySafeDistanceBeforeCircle(originX, originY, dirX, dirY, circleX, circleY, radius) {
+  const lx = circleX - originX;
+  const ly = circleY - originY;
+  const tca = lx * dirX + ly * dirY;
+  const d2 = lx * lx + ly * ly - tca * tca;
+  const r2 = radius * radius;
+  if (d2 > r2) return Infinity;
+  const thc = Math.sqrt(Math.max(0, r2 - d2));
+  const t0 = tca - thc;
+  const t1 = tca + thc;
+  if (t1 < 0) return Infinity;
+  if (t0 < 0) return 0;
+  return t0;
+}
+
+const AGON_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
+
+// Repositionne les satellites de chaque bulle une fois le nuage entièrement placé (bulles +
+// bouton central) : la distance de chaque satellite à son noyau est plafonnée pour ne JAMAIS
+// empiéter sur une bulle voisine ni sur le bouton central — quitte à rester masqué sous sa
+// propre bulle (distance <= son propre rayon) dans les cas de chevauchement serré que
+// l'algorithme de placement autorise déjà entre bulles voisines (maxAllowedOverlap). Appelée
+// depuis applyCompactBubbleLayout, après que toutes les bulles ont leur position/taille finale
+// (bubble.style.left/top + --agon-tag-bubble-size).
+function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
+  function bubbleGeo(el) {
+    const size = parseFloat(el.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
+    const left = parseFloat(el.style.left);
+    const top = parseFloat(el.style.top);
+    if (!size || Number.isNaN(left) || Number.isNaN(top)) return null;
+    const r = size / 2;
+    return { cx: left + r, cy: top + r, r };
+  }
+
+  const bubbleObstacles = bubbles
+    .map((el) => {
+      const geo = bubbleGeo(el);
+      return geo ? { ...geo, el } : null;
+    })
+    .filter(Boolean);
+  const allObstacles = btnRadius > 0
+    ? [...bubbleObstacles, { cx: centerX, cy: centerY, r: btnRadius, el: null }]
+    : bubbleObstacles;
+
+  bubbles.forEach((bubble) => {
+    const wrap = bubble.querySelector(".agon-tag-bubble-satellites");
+    if (!wrap) return;
+    const geo = bubbleGeo(bubble);
+    if (!geo) return;
+
+    const others = allObstacles.filter((o) => o.el !== bubble);
+
+    wrap.querySelectorAll(".agon-tag-bubble-satellite").forEach((dot) => {
+      const angleRad = ((parseFloat(dot.dataset.angle) || 0) * Math.PI) / 180;
+      const dirX = Math.cos(angleRad);
+      const dirY = Math.sin(angleRad);
+      const axisExtend = parseFloat(dot.dataset.axisExtend) || 10;
+      const dotRadius = parseFloat(dot.dataset.dotRadius) || 5.5;
+
+      let maxDist = geo.r + axisExtend;
+      others.forEach((obstacle) => {
+        const limit = raySafeDistanceBeforeCircle(
+          geo.cx, geo.cy, dirX, dirY,
+          obstacle.cx, obstacle.cy,
+          obstacle.r + dotRadius + AGON_SATELLITE_CLEARANCE
+        );
+        maxDist = Math.min(maxDist, limit);
+      });
+      maxDist = Math.max(0, maxDist);
+
+      const localX = geo.r + maxDist * dirX;
+      const localY = geo.r + maxDist * dirY;
+      dot.style.left = localX.toFixed(1) + "px";
+      dot.style.top = localY.toFixed(1) + "px";
+
+      const line = dot.previousElementSibling;
+      if (line && line.classList.contains("agon-tag-bubble-satellite-line")) {
+        // Le trait part du BORD du cercle (pas du centre) : ancré au point où le rayon croise
+        // le cercle de la bulle (distance geo.r), longueur = seulement le segment restant
+        // jusqu'au satellite. Auparavant tracé depuis le centre en comptant sur le fond opaque
+        // de la bulle pour masquer la portion intérieure — visible à travers les effets semi-
+        // transparents de la bulle (reflets, halo), donc remplacé par ce calcul exact.
+        const edgeX = geo.r + geo.r * dirX;
+        const edgeY = geo.r + geo.r * dirY;
+        const visibleLength = Math.max(0, maxDist - geo.r);
+        line.style.left = edgeX.toFixed(1) + "px";
+        line.style.top = edgeY.toFixed(1) + "px";
+        line.style.width = visibleLength.toFixed(1) + "px";
+        line.style.transform = `rotate(${((angleRad * 180) / Math.PI).toFixed(2)}deg)`;
+      }
+    });
+  });
+}
+
 function getBubbleSizeClass(index, trendItem = null) {
   const weight = Number(trendItem?.sizeWeight);
   if (Number.isFinite(weight)) {
@@ -480,6 +664,11 @@ function applyCompactBubbleLayout(container) {
     scale = nextScale;
   }
 
+  // Satellites "atome" des bulles Agôn/Communauté (cf. appendBubbleSatellites) : repositionnés
+  // seulement maintenant, une fois la géométrie finale (px) de toutes les bulles connue —
+  // aucun effet si aucune bulle n'a de satellites (querySelector interne retourne alors null).
+  layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius);
+
   // Traits reliant le centre "soleil" (étoiles autour de leur système, cf.
   // .agon-tag-center-btn-sun, posé par mon-univers.js) à chaque bulle fille — jamais pour le
   // bouton "À LA UNE" par défaut, ni pour le centre "trou noir" (systèmes autour de leur galaxie,
@@ -836,8 +1025,13 @@ function layoutTagTrendCloud(container) {
 // bubbleGap : optionnel, 0 par défaut (comportement historique inchangé — bulles serrées au
 // maximum autorisé). Espace minimal additionnel (px) exigé entre bulles par
 // applyCompactBubbleLayout — utilisé par "Mon univers" au niveau galaxies pour laisser
-// respirer le fond étoilé entre les bulles plutôt que les coller les unes aux autres.
-function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES, centerLabel = undefined, bubbleGap = 0) {
+// respirer le fond étoilé entre les bulles plutôt que les coller les unes aux autres, et par
+// Bulles Agôn/Communauté (cf. toggleAgonCloud, script.js) pour le même effet.
+// sizeScale : optionnel, 1 par défaut (comportement historique inchangé — taille pleine).
+// Multiplie la taille de base de chaque bulle (avant le facteur d'échelle global anti-
+// débordement, computeAutoScale) — utilisé par Bulles Agôn/Communauté pour des bulles plus
+// petites, laissant plus de place aux satellites et au bubbleGap ci-dessus.
+function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES, centerLabel = undefined, bubbleGap = 0, sizeScale = 1) {
   if (!container) return;
 
   if (!Array.isArray(trends) || !trends.length) {
@@ -856,7 +1050,14 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
   const isMobile = isMobileTagCloud();
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
-  trends.slice(0, maxBubbles).forEach((trendItem, index) => {
+  const visibleTrends = trends.slice(0, maxBubbles);
+  // Satellites "atome" (Bulles Agôn/Communauté uniquement) : seuls les trendItems porteurs
+  // d'un ideaCount (posé par toggleAgonCloud côté script.js) en reçoivent — les nuages Actu
+  // et Mon univers, qui ne renseignent jamais ce champ, restent inchangés.
+  const hasIdeaIntensity = visibleTrends.some((t) => Number.isFinite(Number(t?.ideaCount)));
+  const ideaOrbitCounts = hasIdeaIntensity ? computeRelativeIdeaOrbitCounts(visibleTrends) : [];
+
+  visibleTrends.forEach((trendItem, index) => {
     const tag = String(trendItem?.tag || "").trim();
     if (!tag) return;
 
@@ -872,7 +1073,7 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
 
     // Taille de base calculée (sans facteur d'échelle) — stockée en data-attribute
     // pour que applyCompactBubbleLayout puisse la relire et calculer l'échelle globale.
-    const basePxSize = computeBubblePxSize(index, trendItem, isMobile);
+    const basePxSize = Math.round(computeBubblePxSize(index, trendItem, isMobile) * sizeScale);
     bubble.dataset.bubbleBaseSize = basePxSize;
     bubble.dataset.bubbleIndex = String(index);
     bubble.dataset.tag = tag;
@@ -923,6 +1124,7 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
       connectorSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
       bubble.append(connectorSpan, trendSpan);
     }
+    if (hasIdeaIntensity) appendBubbleSatellites(bubble, ideaOrbitCounts[index], index);
     container.appendChild(bubble);
   });
 

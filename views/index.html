@@ -45,7 +45,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260808-stargradientborder1">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-memoireframe1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -664,10 +664,39 @@
 </div>
 
 <section id="agon-tag-trends-section" class="agon-tag-trends-section" hidden>
+  <!-- Embed "Ma mémoire" (demande du 08/08/2026 : bulles directement sur l'accueil, pas une
+       page à part) : réutilise #agon-tag-trends-cloud juste en dessous comme conteneur de
+       bulles (mon-univers.js retombe dessus si #agon-universe-cloud n'existe pas sur la page,
+       cf. mon-univers.js) — jamais un 2e cadre de bulles séparé. Fil d'Ariane et bouton retour
+       enveloppés dans des div [hidden] dédiées (et non un [hidden] posé directement sur eux) :
+       mon-univers.js gère lui-même la classe is-visible du bouton retour, un [hidden] direct
+       entrerait en conflit de spécificité CSS avec cette classe. -->
+  <div id="agon-memoire-embed-before" hidden>
+    <nav id="universe-breadcrumb" class="universe-breadcrumb" aria-label="Fil d'Ariane de l'univers"></nav>
+  </div>
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
+  <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
+  <div id="agon-memoire-embed-after" hidden>
+    <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
+    </button>
+  </div>
+  <div id="universe-star-panel" class="universe-star-panel" hidden>
+    <div id="universe-star-panel-backdrop" class="universe-star-panel__backdrop"></div>
+    <div class="universe-star-panel__box" role="dialog" aria-modal="true" aria-labelledby="universe-star-panel-title">
+      <div class="universe-star-panel__header">
+        <h2 id="universe-star-panel-title" class="universe-star-panel__title"></h2>
+        <button type="button" id="universe-star-panel-close" class="universe-star-panel__close" aria-label="Fermer la liste">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      <ul id="universe-star-panel-list" class="universe-star-panel__list"></ul>
+    </div>
+  </div>
 <div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
   <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulles Actu</button>
   <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
+  <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)">Ma mémoire</button>
 </div>
 <div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
   <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')">Gauche</button>
@@ -1333,7 +1362,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260807-rhetorword1" defer></script>
+<script src="/script.min.js?v=20260809-memoireframe1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

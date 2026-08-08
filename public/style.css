@@ -19580,6 +19580,15 @@ body.page-home #debates-list .theme-row-section:first-child {
   text-transform: uppercase;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+  /* "Ma mémoire" (cf. index.html) est un <a> (vraie navigation vers /mon-univers, pas un
+     toggle du nuage comme les 2 autres segments) plutôt qu'un <button> — display:flex +
+     align-items:center pour un centrage vertical identique aux boutons, text-decoration:none
+     pour ne pas montrer de soulignement de lien (demande du 08/08/2026, "en plus des boutons
+     bulles actu bulles agon, ajoute Ma mémoire"). */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .agon-cloud-mode-segment:hover {
@@ -19699,6 +19708,28 @@ body.page-home #debates-list .theme-row-section:first-child {
   pointer-events: none;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   visibility: visible;
+}
+
+/* Image de fond du cadre des bulles Agôn, accueil uniquement (pas la page Mon
+   univers, qui hérite aussi de .agon-tag-trends-cloud::before mais a son
+   propre fond étoilé via #agon-universe-cloud::after). Le cadre est portrait
+   sur mobile (390x548) et paysage sur desktop (jusqu'à 780px de large, hauteur
+   ~260px) : background-size:cover recadre donc la même image verticalement en
+   mobile et horizontalement en desktop, sans variante séparée par breakpoint.
+   Assombrissement léger pour que les bulles (claires, bordure sombre) restent
+   lisibles par-dessus. */
+.page-home .agon-tag-trends-cloud::before,
+.page-home-mobile .agon-tag-trends-cloud::before {
+  background: linear-gradient(180deg, rgba(8, 12, 16, 0.35), rgba(8, 12, 16, 0.55)), url("/agon-bulles-bg.jpg?v=1") center/cover no-repeat;
+}
+
+/* Mode Bulles Agôn (nuage communautaire, cf. container.classList.add('agon-cloud-mode-agon')
+   dans script.js) : image dédiée différente de celle du mode Bulles Actu ci-dessus. Pas de
+   voile sombre superposé ici (contrairement au fond globe au-dessus) : cette image est déjà
+   quasi noire, un voile en plus la rendait invisible / indiscernable du cadre vide d'avant. */
+.page-home .agon-tag-trends-cloud.agon-cloud-mode-agon::before,
+.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon::before {
+  background: url("/agon-bulles-community-bg.jpg?v=1") center/cover no-repeat;
 }
 
 @media (max-width: 768px) {
@@ -19978,6 +20009,75 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
   z-index: 1;
 }
 
+/* Satellites "atome" des bulles Agôn/Communauté (cf. appendBubbleSatellites,
+   tagTrendCloud.js) : enfant direct de .agon-tag-bubble, donc visé par la règle de
+   spécificité ci-dessus (position:relative forcée) — resurchargée ici en absolute,
+   même égalité de spécificité (2 classes) mais règle plus bas dans le fichier donc
+   prioritaire en cascade, pour sortir du flux flex de la bulle (comme .agon-tag-bubble-flash)
+   sans pousser/rétrécir le libellé texte.
+   Positionnement (left/top en px) posé par layoutBubbleSatellites, tagTrendCloud.js — la
+   distance de chaque point à son noyau y est plafonnée pour ne jamais empiéter sur une bulle
+   voisine ni sur le bouton central, quitte à rester masqué sous sa propre bulle dans les cas de
+   chevauchement serré que le placement du nuage autorise déjà entre bulles voisines. */
+.agon-tag-bubble > .agon-tag-bubble-satellites {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Trait de liaison satellite → noyau : left/top/width/rotation posés par
+   layoutBubbleSatellites (tagTrendCloud.js) — ancré exactement au bord du cercle de la bulle
+   (pas à son centre), s'arrête donc à la surface plutôt que de traverser la bulle en comptant
+   sur son fond opaque pour masquer la portion intérieure. */
+.agon-tag-bubble-satellite-line {
+  position: absolute;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.7);
+  transform-origin: 0 50%;
+}
+
+.agon-tag-bubble-satellite {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #dbe6f7 45%, #9fb9dd 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  opacity: 0.9;
+  animation: agonSatelliteDrift 8s ease-in-out infinite;
+}
+
+@keyframes agonSatelliteDrift {
+  0%, 100% { transform: translate(0, 0); opacity: 0.9; }
+  50%      { transform: translate(1.5px, -1.5px); opacity: 1; }
+}
+
+.agon-tag-bubble:hover .agon-tag-bubble-satellite,
+.agon-tag-bubble:hover .agon-tag-bubble-satellite-line {
+  opacity: 1;
+}
+
+/* Pas d'animation sous 769px, comme les autres animations continues du nuage (cf.
+   agonBubbleBreatheLight plus bas, et l'historique de saccades Safari qui a mené à réduire
+   le flash/box-shadow des bulles elles-mêmes) : jusqu'à 10 satellites par bulle sur ~10
+   bulles, un flottement partout serait le même risque avec bien plus d'éléments animés. Les
+   points restent visibles, seule l'animation est coupée — l'information (leur nombre) reste
+   intacte. */
+@media (max-width: 768px) {
+  .agon-tag-bubble-satellite {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agon-tag-bubble-satellite {
+    animation: none;
+  }
+}
+
 
 .agon-tag-bubble {
   /* Opacity plutôt que scale (04/08/2026) : le scale forçait le navigateur à
@@ -19995,6 +20095,7 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
    par initAgonCloudAnimationPause (script.js). */
 .agon-cloud-anims-paused .agon-tag-bubble,
 .agon-cloud-anims-paused .agon-tag-bubble-flash,
+.agon-cloud-anims-paused .agon-tag-bubble-satellite,
 .agon-cloud-anims-paused .agon-tag-trend {
   animation-play-state: paused;
 }
@@ -24742,7 +24843,15 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    règle partagée .agon-tag-trends-cloud (le carrousel de bulles de l'accueil doit garder son
    format inchangé). applyCompactBubbleLayout (tagTrendCloud.js) lit déjà la hauteur réelle du
    conteneur au moment du placement, aucun changement JS nécessaire. */
-#agon-universe-cloud.agon-tag-trends-cloud {
+/* .agon-memoire-frame (pas seulement #agon-universe-cloud) : demande du 08/08/2026 "le fond de
+   ma mémoire n'est pas le bon" — l'embed "Ma mémoire" sur l'accueil réutilise
+   #agon-tag-trends-cloud (cf. mon-univers.js, setMemoireCloudMode dans script.js), qui ne
+   correspondait à aucun de ces sélecteurs scopés à l'ID de la page autonome. Cette classe est
+   posée sur #agon-universe-cloud (mon-univers.html) ET ajoutée/retirée dynamiquement sur
+   #agon-tag-trends-cloud par setMemoireCloudMode — un seul jeu de règles pour les deux contextes,
+   plutôt que de dupliquer chaque règle avec un 2e sélecteur à faire vivre en parallèle. */
+#agon-universe-cloud.agon-tag-trends-cloud,
+.agon-memoire-frame.agon-tag-trends-cloud {
   margin: 0 auto 24px;
   height: 460px;
 }
@@ -24753,7 +24862,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    border-radius du cadre existant dans tous les navigateurs, et s'ajoute par-dessus les deux
    ombres déjà présentes sur ce ::before (portées : celles-ci doivent être répétées ici, un
    box-shadow ne s'additionne pas entre deux règles pour le même sélecteur). */
-#agon-universe-cloud.agon-tag-trends-cloud::before {
+#agon-universe-cloud.agon-tag-trends-cloud::before,
+.agon-memoire-frame.agon-tag-trends-cloud::before {
   box-shadow:
     0 0 0 1px #000,
     0 8px 32px rgba(0, 0, 0, 0.45),
@@ -24772,7 +24882,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    donc au-dessus de tout ce qui a un z-index négatif dans ce contexte d'empilement isolé, cf.
    isolation:isolate sur .agon-tag-trends-cloud). ::after (pas ::before, déjà pris par le cadre
    décoratif hérité) — même inset, même arrondi. */
-#agon-universe-cloud.agon-tag-trends-cloud::after {
+#agon-universe-cloud.agon-tag-trends-cloud::after,
+.agon-memoire-frame.agon-tag-trends-cloud::after {
   content: '';
   position: absolute;
   inset: var(--bubble-frame-top) 30px 23px;
@@ -24793,7 +24904,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   background-position: center;
   background-repeat: no-repeat;
 }
-#agon-universe-cloud .agon-tag-center-btn:not(.agon-tag-center-btn-custom) {
+#agon-universe-cloud .agon-tag-center-btn:not(.agon-tag-center-btn-custom),
+.agon-memoire-frame .agon-tag-center-btn:not(.agon-tag-center-btn-custom) {
   display: none;
 }
 
@@ -25050,11 +25162,24 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     0 10px 28px rgba(0,0,0,0.38),
     inset 0 1px 3px rgba(255,255,255,0.4);
 }
-/* Reflet (::before, le grand rond en haut, hérité de .agon-tag-bubble) retiré — demande du
-   07/08/2026 : d'abord réduit à 35% d'opacité, encore trop visible ("enlève les reflets dans les
-   bulles étoiles"). Même traitement que .agon-tag-bubble-galaxy::before plus haut. */
+/* Halo lumineux noir autour de l'anneau (demande du 08/08/2026) : réutilise ::before, jusqu'ici
+   désactivé (l'ancien reflet hérité de .agon-tag-bubble, retiré — cf. historique ci-dessous),
+   pour un halo sombre qui déborde derrière la bulle (z-index -1, contrairement à l'anneau lui-
+   même en ::after, devant). Un box-shadow directement sur ::after (l'anneau) aurait pu mal se
+   combiner avec son mask/filter:blur déjà en place — un pseudo-élément séparé est plus sûr.
+   Ancien commentaire (reflet retiré, 07/08/2026, "enlève les reflets dans les bulles étoiles") :
+   d'abord réduit à 35% d'opacité, encore trop visible. Même traitement que
+   .agon-tag-bubble-galaxy::before pour la désactivation d'origine. */
 .agon-tag-bubble-star::before {
-  display: none;
+  content: "";
+  position: absolute;
+  /* -20px (pas -14px) et opacités relevées (0.55/0.25 → 0.85/0.55/0.2) : demande du 08/08/2026
+     "plus prononcé et foncé". */
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle closest-side, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.2) 75%, transparent 100%);
+  z-index: -1;
+  pointer-events: none;
 }
 /* Anneau en dégradé (conic-gradient, plusieurs teintes de noir/gris) à la place de l'ancien
    contour uni — demande du 07/08/2026. Épaisseur (padding) 7px : même largeur que le contour
@@ -25075,6 +25200,19 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
+  /* Flou (pas juste un dégradé de couleur) : demande du 07/08/2026 "les liserets ne doivent pas
+     avoir de contours nets mais flous/dégradés" — le masque XOR ci-dessus découpe un anneau aux
+     deux bords toujours nets (dedans/dehors), même avec un dégradé de couleur à l'intérieur.
+     filter:blur adoucit ces deux bords eux-mêmes, sur le pixel déjà composé (masque + dégradé),
+     donc un vrai halo sombre diffus plutôt qu'un anneau aux arêtes nettes. */
+  filter: blur(6px);
+  /* Halo noir des deux côtés de l'anneau (demande du 08/08/2026 "halo à l'intérieur et à
+     l'extérieur de l'anneau") : box-shadow normal (déborde vers l'extérieur) + inset (déborde
+     vers l'intérieur, côté bulle), posés AVANT le filter:blur ci-dessus donc eux aussi flous une
+     fois le tout composé — pas juste le dégradé de couleur du conic-gradient. */
+  box-shadow:
+    0 0 6px 2px rgba(0,0,0,0.85),
+    inset 0 0 6px 2px rgba(0,0,0,0.85);
   opacity: 1;
   z-index: 1;
   pointer-events: none;
@@ -25104,10 +25242,22 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      système" — trait partagé par tous les niveaux (galaxie→systèmes, système→étoiles), épaissi
      uniformément. */
   height: 4px;
-  background: linear-gradient(to right, rgba(255,222,160,0.55), rgba(255,222,160,0.22));
+  /* Noir foncé (pas ambre/or) : demande du 08/08/2026 "les traits doivent être noirs" puis
+     "mais noirs foncé" — #000 pur, opacité relevée (0.75/0.3 → 0.95/0.55) pour un noir
+     nettement plus dense. Trait partagé par tous les niveaux, changé uniformément. */
+  background: linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.55));
   transform-origin: left center;
   pointer-events: none;
-  z-index: -1;
+  /* z-index positif (pas -1) : demande du 08/08/2026 "je ne vois pas les traits noirs" —
+     l'image de fond du cadre (#agon-universe-cloud::after) est maintenant OPAQUE sur toute sa
+     surface (remplace l'ancien fond étoilé, très majoritairement transparent) et porte elle
+     aussi un z-index négatif (-2) dans le MÊME contexte d'empilement isolé
+     (.agon-tag-trends-cloud, isolation:isolate) — en toute rigueur -1 doit rester au-dessus de
+     -2, mais le trait restait invisible en pratique (confirmé par capture d'écran). Un z-index
+     clairement positif élimine toute ambiguïté : le trait reste sous les bulles (z-index auto,
+     mais peintes après en ordre DOM donc déjà au-dessus de toute façon) tout en étant
+     garanti au-dessus du fond, quelle que soit la subtilité d'empilement en jeu. */
+  z-index: 2;
 }
 
 /* Poussière d'étoiles autour des bulles système (cf. mon-univers.js drawMiniStarsForSystems) :
@@ -25116,7 +25266,9 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   position: absolute;
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, rgba(255,236,190,0.95) 50%, transparent 100%);
-  box-shadow: 0 0 6px 2px rgba(255,236,190,0.75);
+  /* Halo doublé (6px/2px → 12px/4px, demande du 08/08/2026 "beaucoup plus grosses/lumineuses"),
+     même taille de point relevée en JS (mon-univers.js drawMiniStarsForSystems). */
+  box-shadow: 0 0 12px 4px rgba(255,236,190,0.85);
   pointer-events: none;
   z-index: -1;
 }
@@ -25147,7 +25299,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
 }
 
-#agon-universe-cloud.agon-tag-trends-cloud::after {
+#agon-universe-cloud.agon-tag-trends-cloud::after,
+.agon-memoire-frame.agon-tag-trends-cloud::after {
   z-index: -2;
 }
 
@@ -25162,13 +25315,29 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    les bulles-textes sont elles interprétées dans le repère de mise en page réel, non
    affecté par le scale. Résultat observé : tout se retrouvait décalé vers un coin dès
    qu'on changeait de niveau, et le décalage persistait en revenant en arrière (confirmé
-   le 06/08/2026). N'affecte que ce conteneur, jamais .agon-tag-trends-cloud de l'accueil. */
-#agon-universe-cloud.universe-cloud--transitioning {
+   le 06/08/2026). N'affecte que ce conteneur (ou l'embed accueil en mode "Ma mémoire", cf.
+   .agon-memoire-frame plus haut) — jamais .agon-tag-trends-cloud en mode Bulles Actu/Agôn. */
+#agon-universe-cloud.universe-cloud--transitioning,
+.agon-memoire-frame.universe-cloud--transitioning {
   opacity: 0;
   transition: opacity 0.16s ease;
 }
-#agon-universe-cloud {
+#agon-universe-cloud,
+.agon-memoire-frame {
   transition: opacity 0.16s ease, transform 0.16s ease;
+}
+/* Même police que les bulles de la page d'accueil (demande du 08/08/2026) : sans ce correctif,
+   body.page-contributions :where(div,span,p,...) (posée pour la page "Mes contributions" fusionnée
+   dans Ma mémoire, cf. body.className qui cumule plusieurs classes page-* sur cette page) impose
+   Arial à tous les span/div courants — dont les labels de bulles (des <span>) — et bat
+   .agon-tag-label (une simple classe) en spécificité, puisqu'elle combine body + classe. Un
+   sélecteur scopé à l'ID du nuage (#agon-universe-cloud, spécificité supérieure) suffit à
+   regagner la priorité sans !important. Couvre les labels de bulles ET le texte du centre
+   (soleil/trou noir/galaxie ouverte), tous des <span> également concernés. */
+#agon-universe-cloud .agon-tag-label,
+#agon-universe-cloud .agon-tag-label-overlay,
+#agon-universe-cloud .agon-tag-center-btn-custom-text {
+  font-family: Oswald, Impact, "Arial Narrow", sans-serif;
 }
 
 .universe-status {

@@ -5431,6 +5431,67 @@ app.get("/api/users/app-installed", rateLimit("users", 30), async (req, res) => 
   }
 });
 
+// Rubriques de culture générale personnalisées par visiteur (cf.
+// CULTURE_GENERALE_RUBRICS) : NULL = jamais personnalisé, toutes les rubriques
+// s'affichent (comportement par défaut, cf. filtrage dans GET /api/daily-quiz/today).
+// Lecture seule ici, jamais d'upsert (contrairement à resolveLegacyUser) — cette
+// route est appelée à chaque chargement de /qcm-du-jour, un simple select suffit,
+// la ligne users existe déjà pour tout visiteur ayant déjà interagi avec le site.
+app.get("/api/users/culture-generale-rubrics", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("culture_generale_rubrics")
+      .eq("legacy_key", validation.legacyKey)
+      .maybeSingle();
+    if (error) {
+      if (String(error.message || "").toLowerCase().includes("culture_generale_rubrics")) {
+        console.warn("[culture-generale-rubrics] colonne absente : migration data/migration-users-culture-generale-rubrics.sql à appliquer.");
+        return res.json({ rubrics: null });
+      }
+      throw error;
+    }
+    return res.json({ rubrics: data?.culture_generale_rubrics || null });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur consultation des rubriques.");
+  }
+});
+
+app.post("/api/users/culture-generale-rubrics", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const rawRubrics = Array.isArray(req.body?.rubrics) ? req.body.rubrics : [];
+    const knownRubrics = new Set(Object.keys(CULTURE_GENERALE_RUBRICS));
+    // Rejette toute valeur inconnue plutôt que de la stocker silencieusement —
+    // jamais confiance dans une liste envoyée par le client (cf. reste du
+    // projet : validation stricte contre une liste fermée côté serveur).
+    const rubrics = [...new Set(rawRubrics.map((r) => String(r || "").trim()).filter((r) => knownRubrics.has(r)))];
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const { error } = await supabase
+      .from("users")
+      .update({ culture_generale_rubrics: rubrics })
+      .eq("id", user.id);
+    if (error) {
+      if (String(error.message || "").toLowerCase().includes("culture_generale_rubrics")) {
+        console.warn("[culture-generale-rubrics] colonne absente : migration data/migration-users-culture-generale-rubrics.sql à appliquer.");
+        return res.status(503).json({ ok: false, error: "Personnalisation indisponible pour le moment." });
+      }
+      throw error;
+    }
+    return res.json({ ok: true, rubrics });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur enregistrement des rubriques.");
+  }
+});
+
 // Univers intellectuel personnel : galaxie -> systèmes solaires -> contenus Culture Générale
 // acquis (cf. user_article_acquisitions, alimentée par une bonne réponse au QCM Culture
 // Générale — le QCM actu n'alimente plus cet univers, seuls les anciens articles acquis avant
@@ -5448,6 +5509,34 @@ const MAX_STAR_LABEL_LENGTH = 45;
 // sert de "source" affichée pour une étoile issue de Culture Générale.
 const CULTURE_GENERALE_SOURCE_TYPE_LABEL = {
   histoire: "Ce jour dans l'Histoire",
+  parallele: "Parallèle historique",
+  pensee: "Pensée philosophique",
+  mecanisme: "Mécanisme sociologique",
+  concept: "Concept du jour",
+  citation: "Citation du jour",
+  oeuvre: "Œuvre d'art du jour",
+  latin: "Mot latin du jour"
+};
+
+// Rubriques sélectionnables pour personnaliser le QCM Culture Générale (cf.
+// POST/GET /api/users/culture-generale-rubrics et le filtrage dans
+// GET /api/daily-quiz/today) — cases à cocher affichées directement sur les
+// pages /eclairages et /historical-events-test, au plus près de chaque
+// contenu plutôt que dans un réglage séparé. Distinct de
+// CULTURE_GENERALE_SOURCE_TYPE_LABEL ci-dessus : "histoire" y reste une seule
+// valeur (jamais scindée) car ce libellé sert à "Mon univers"/"Mes acquis",
+// qui continuent de regrouper tous les événements sous une seule étoile
+// "Histoire" quelle que soit leur zone géographique — seule la
+// personnalisation du QCM distingue les 3 catégories, calquées sur les 3
+// blocs affichés par /historical-events-test (France/Europe/Monde, cf.
+// CATEGORY_ORDER dans historical-events-test-page.js). "culture_science"
+// (4e valeur de lib/historical-events/constants.js CATEGORIES, jamais
+// affichée comme bloc séparé sur cette page) est repliée sur "world" — cf.
+// cultureGeneraleRubricForQuestion plus bas.
+const CULTURE_GENERALE_RUBRICS = {
+  histoire_france: "Ce jour dans l'Histoire — France",
+  histoire_europe: "Ce jour dans l'Histoire — Europe",
+  histoire_world: "Ce jour dans l'Histoire — Monde",
   parallele: "Parallèle historique",
   pensee: "Pensée philosophique",
   mecanisme: "Mécanisme sociologique",
@@ -9090,6 +9179,28 @@ const OPINION_ARTICLE_CATEGORY_PRECISIONS = {
   "Langues et Lettres": ["Langues", "Lettres"]
 };
 
+// Galaxie = niveau juste en dessous de category/category_precision, jamais stocké
+// (toujours déduit) : pour les 4 rubriques hybrides la galaxie dépend de la
+// précision retenue (ex. "Sports" → "Sport", au singulier par choix éditorial) ;
+// pour toutes les autres rubriques, la galaxie est le libellé de la rubrique lui-même.
+// Réutilisée par la classification culture générale (cf. classifyCultureGeneraleCategoryWithAI) :
+// mêmes 16 rubriques, mêmes galaxies dérivées, pour une seule taxonomie sur tout le site.
+const OPINION_ARTICLE_GALAXY_BY_PRECISION = {
+  "Sports - loisirs": { "Sports": "Sport", "Loisirs": "Loisirs" },
+  "Culture - arts": { "Culture": "Culture", "Arts": "Arts" },
+  "Philosophie - sciences sociales": { "Philosophie": "Philosophie", "Sciences sociales": "Sciences sociales" },
+  "Langues et Lettres": { "Langues": "Langues", "Lettres": "Lettres" }
+};
+
+// Pure, jamais stockée : catégorie invalide, ou hybride sans précision valide → null ;
+// hybride + précision valide → branche correspondante ; catégorie simple → elle-même.
+function getOpinionArticleGalaxy(category, categoryPrecision) {
+  if (!OPINION_ARTICLE_CATEGORY_OPTIONS.includes(category)) return null;
+  const byPrecision = OPINION_ARTICLE_GALAXY_BY_PRECISION[category];
+  if (byPrecision) return byPrecision[categoryPrecision] || null;
+  return category;
+}
+
 function normalizeOpinionArticleCategory(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -11835,6 +11946,18 @@ function isCultureGeneraleQuestionId(id) {
   return s.startsWith("culture_generale-") || s.startsWith("cgreview-");
 }
 
+// Rubrique de personnalisation (cf. CULTURE_GENERALE_RUBRICS) d'une question
+// culture générale déjà générée : les 7 rubriques Éclairages correspondent
+// 1:1 à sourceType, seul "histoire" se scinde en trois via sourceScope
+// (france/europe/world, cf. fetchCultureGeneraleQuizCandidates) — sourceType
+// lui-même reste "histoire" pour Mon univers/Mes acquis, qui ne connaissent
+// pas cette distinction. Retourne null pour une question actu (pas de rubrique).
+function cultureGeneraleRubricForQuestion(q) {
+  if (!q || !q.sourceType) return null;
+  if (q.sourceType !== "histoire") return q.sourceType;
+  return "histoire_" + (q.sourceScope || "world");
+}
+
 // Répétition espacée pour "Mes acquis" (demande du 02/08/2026) : une question
 // de culture générale n'est "validée" (✓ vert côté frontend) qu'après
 // DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à des intervalles
@@ -12229,15 +12352,20 @@ function validateDailyQuizQuestions(rawQuestions, candidateIds) {
 // atteindre un nombre de questions correct — plusieurs questions par
 // événement/parallèle sont donc autorisées (bornées), avec une cible de
 // questions plus petite en conséquence.
-// Plafond à 10 (demande du 04/08/2026) pour pouvoir garantir une question
-// par élément disponible ce jour-là : jusqu'à 7 rubriques Éclairages
-// (parallèle/pensée/mécanisme/concept/citation/œuvre/latin, une chacune max
-// par jour) + jusqu'à 3 événements "Ce jour dans l'Histoire" — cf.
-// buildCultureGeneraleQuotas, qui assigne ce quota avant l'appel IA plutôt
-// que de compter sur elle pour couvrir chaque rubrique d'elle-même.
-const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 10;
+// Cible 3 à 5 questions par rubrique personnalisable (cf.
+// CULTURE_GENERALE_RUBRICS, 9 rubriques : Histoire France/Monde + les 7
+// Éclairages), pour que la personnalisation par rubrique (cf.
+// GET /api/daily-quiz/today, filtrage par préférence) ait vraiment de quoi
+// piocher sur les rubriques choisies plutôt qu'1-2 questions symboliques.
+// DAILY_QUIZ_QUESTION_COUNT_NARRATIVE n'est plus qu'un plafond de sécurité
+// (jamais atteint en pratique, 9 rubriques × 5 max = 45) pour
+// validateNarrativeQuizQuestions — le vrai budget par rubrique est assigné
+// par buildCultureGeneraleQuotas avant l'appel IA, jamais laissé à l'IA.
+const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 45;
 const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
-const DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM = 2;
+const DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC = 4;
+const DAILY_QUIZ_MIN_QUESTIONS_PER_RUBRIC = 3;
+const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 
 // Uniquement les événements "reviewed" (sources/résumés complets et
 // vérifiés, cf. validateEvent) — jamais un "draft" incomplet comme matière
@@ -12387,7 +12515,19 @@ async function fetchCultureGeneraleQuizCandidates() {
     fetchCeJourHistoireQuizCandidates(),
     fetchEclairagesQuizCandidates()
   ]);
-  const taggedHistoricalEvents = historicalEvents.map((e) => ({ type: "histoire", ...e }));
+  // scope (france/europe/world) dérivé de e.category (france/europe/world/
+  // culture_science, cf. lib/historical-events/constants.js) : sert
+  // uniquement au filtrage par rubrique personnalisée (cf.
+  // cultureGeneraleRubricForQuestion) — jamais à sourceType, qui reste
+  // "histoire" pour tous (Mon univers/Mes acquis continuent de tout
+  // regrouper sous une seule étoile "Histoire"). "culture_science" (jamais
+  // affichée comme bloc séparé sur /historical-events-test, cf. CATEGORY_ORDER
+  // dans historical-events-test-page.js) repliée sur "world".
+  const taggedHistoricalEvents = historicalEvents.map((e) => ({
+    ...e,
+    type: "histoire",
+    scope: ["france", "europe"].includes(e.category) ? e.category : "world"
+  }));
   return [...taggedHistoricalEvents, ...eclairagesItems];
 }
 
@@ -12527,6 +12667,15 @@ function extractCultureGeneraleItemDetail(item) {
   }
 }
 
+// Rubrique de personnalisation (cf. CULTURE_GENERALE_RUBRICS) d'un candidat
+// brut, avant génération — pendant équivalent de cultureGeneraleRubricForQuestion,
+// mais sur les champs `type`/`scope` du candidat plutôt que `sourceType`/
+// `sourceScope` de la question générée.
+function cultureGeneraleRubricForCandidate(item) {
+  if (item.type !== "histoire") return item.type;
+  return "histoire_" + (item.scope || "world");
+}
+
 // Garantit une question par élément disponible (chaque rubrique Éclairage
 // publiée ce jour-là + chaque événement "Ce jour dans l'Histoire") au lieu
 // de laisser l'IA choisir librement lesquels couvrir — retour utilisateur du
@@ -12534,26 +12683,40 @@ function extractCultureGeneraleItemDetail(item) {
 // sans aucune question alors que l'IA concentrait 2 questions sur les mêmes
 // 3-4 sujets. Même logique que buildFormatAssignments plus haut : une vraie
 // couverture se construit nous-mêmes, pas en espérant que l'IA la choisisse.
-// Les rubriques Éclairages (une par jour maximum chacune) passent en
-// priorité ; "Ce jour dans l'Histoire" (nombre variable, parfois 2-3
-// événements) complète dans la limite du budget restant. Le budget
-// restant après avoir couvert tout le monde une fois sert à donner une 2e
-// question (bornée à DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM) à des
-// éléments tirés au sort, pour ne jamais laisser de budget inutilisé.
+// Depuis la personnalisation par rubrique (cf. GET /api/daily-quiz/today), le
+// budget restant après cette couverture 1x est distribué PAR RUBRIQUE — visant
+// DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC questions pour chacune, réparties
+// entre ses items disponibles (une rubrique à un seul item, cas de 6 des 7
+// Éclairages, reçoit donc l'essentiel du budget sur cet unique item, plafonné
+// à DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC) — plutôt qu'un budget global tiré au
+// sort toutes rubriques confondues, qui pourrait par chance en avantager une
+// au détriment d'une autre.
 function buildCultureGeneraleQuotas(candidates) {
-  const eclairagesItems = candidates.filter((c) => c.type !== "histoire");
-  const histoireItems = candidates.filter((c) => c.type === "histoire");
-  const histoireBudget = Math.max(DAILY_QUIZ_QUESTION_COUNT_NARRATIVE - eclairagesItems.length, 0);
-  const mandatoryItems = [...eclairagesItems, ...histoireItems.slice(0, histoireBudget)];
-
+  const mandatoryItems = candidates;
   const quotaByItemId = new Map(mandatoryItems.map((c) => [String(c.id || c.current_topic_id), 1]));
-  let leftoverBudget = Math.max(DAILY_QUIZ_QUESTION_COUNT_NARRATIVE - mandatoryItems.length, 0);
-  for (const item of shuffleArray(mandatoryItems)) {
-    if (leftoverBudget <= 0) break;
-    const id = String(item.id || item.current_topic_id);
-    if (quotaByItemId.get(id) >= DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM) continue;
-    quotaByItemId.set(id, quotaByItemId.get(id) + 1);
-    leftoverBudget--;
+
+  const itemsByRubric = new Map();
+  for (const item of mandatoryItems) {
+    const rubric = cultureGeneraleRubricForCandidate(item);
+    if (!itemsByRubric.has(rubric)) itemsByRubric.set(rubric, []);
+    itemsByRubric.get(rubric).push(item);
+  }
+
+  for (const items of itemsByRubric.values()) {
+    const shuffled = shuffleArray(items);
+    let remaining = DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC - shuffled.length;
+    // Tourne sur les items de la rubrique jusqu'à atteindre la cible ou
+    // jusqu'à ce que tous soient au plafond (rubrique à un seul item ne
+    // dépassera jamais DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC) — garde-fou de
+    // boucle borné au nombre d'items × le plafond, jamais infini.
+    for (let round = 0; remaining > 0 && round < shuffled.length * DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC; round++) {
+      const item = shuffled[round % shuffled.length];
+      const id = String(item.id || item.current_topic_id);
+      if (quotaByItemId.get(id) < DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC) {
+        quotaByItemId.set(id, quotaByItemId.get(id) + 1);
+        remaining--;
+      }
+    }
   }
   return { mandatoryItems, quotaByItemId };
 }
@@ -12658,6 +12821,12 @@ async function buildCultureGeneraleQuestionsForToday() {
   // acquis" côté qcm-du-jour.html) sans avoir à interroger 6 services
   // différents rétroactivement.
   const sourceTypeById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), c.type]));
+  // france/monde pour les candidats "histoire" uniquement (cf.
+  // fetchCultureGeneraleQuizCandidates), undefined pour les Éclairages —
+  // reporté sur la question générée pour la personnalisation par rubrique
+  // (cf. cultureGeneraleRubricForQuestion), jamais utilisé par Mon univers/
+  // Mes acquis qui restent scopés sur sourceType seul.
+  const sourceScopeById = new Map(candidates.map((c) => [String(c.id || c.current_topic_id), c.scope]));
   // Nom du concept/mécanisme/auteur/œuvre de chaque candidat (cf.
   // extractCultureGeneraleItemName) — reporté de la même façon pour le tri
   // alphabétique de "Mes acquis".
@@ -12669,7 +12838,7 @@ async function buildCultureGeneraleQuestionsForToday() {
     parsed?.questions,
     sourceIds,
     DAILY_QUIZ_QUESTION_COUNT_NARRATIVE,
-    DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM
+    DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC
   );
   if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
     console.warn(`[daily-quiz:culture-generale] seulement ${validated.length} question(s) valide(s), ignorées pour aujourd'hui.`);
@@ -12685,6 +12854,7 @@ async function buildCultureGeneraleQuestionsForToday() {
     id: `culture_generale-q${index + 1}`,
     ...q,
     sourceType: sourceTypeById.get(q.sourceDebateId) || null,
+    sourceScope: sourceScopeById.get(q.sourceDebateId) || null,
     sourceName: sourceNameById.get(q.sourceDebateId) || null,
     sourceDetail: sourceDetailById.get(q.sourceDebateId) || null
   }));
@@ -13994,6 +14164,60 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey) {
   return baseQuestions;
 }
 
+// Rubriques personnalisées d'un visiteur (cf. CULTURE_GENERALE_RUBRICS,
+// GET/POST /api/users/culture-generale-rubrics) : null si jamais personnalisé,
+// colonne pas encore migrée, ou toute erreur — traité partout comme "aucun
+// filtre" (jamais bloquant pour l'affichage du QCM).
+async function getCultureGeneraleRubricPrefs(legacyKey) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("culture_generale_rubrics")
+      .eq("legacy_key", legacyKey)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.culture_generale_rubrics || null;
+  } catch (error) {
+    if (!String(error.message || "").toLowerCase().includes("culture_generale_rubrics")) {
+      console.warn("[culture-generale-rubrics] lecture préférences échouée :", error.message);
+    }
+    return null;
+  }
+}
+
+// Filtre le sous-ensemble culture générale des questions du QCM du jour selon
+// les rubriques personnalisées du visiteur — jamais appliqué au pseudo-slot
+// "renforcement" (repasses jamais filtrées, décision utilisateur), ni aux
+// questions actu (toujours conservées, cf. isCultureGeneraleQuestionId).
+// Sans préférence enregistrée (ou préférence vide) : aperçu d'1 question par
+// rubrique présente ce jour-là plutôt que tout montrer d'un coup — la
+// personnalisation échange de la largeur contre de la profondeur, elle
+// n'allonge jamais silencieusement la session de qui n'a jamais personnalisé.
+async function applyCultureGeneraleRubricFilter(questions, voterKey) {
+  const cgQuestions = questions.filter((q) => isCultureGeneraleQuestionId(q.id));
+  if (!cgQuestions.length) return questions;
+  const actuQuestions = questions.filter((q) => !isCultureGeneraleQuestionId(q.id));
+
+  const key = String(voterKey || "").trim();
+  const prefs = key ? await getCultureGeneraleRubricPrefs(key) : null;
+
+  if (!prefs || !prefs.length) {
+    const seenRubrics = new Set();
+    const preview = [];
+    for (const q of cgQuestions) {
+      const rubric = cultureGeneraleRubricForQuestion(q);
+      if (rubric && seenRubrics.has(rubric)) continue;
+      if (rubric) seenRubrics.add(rubric);
+      preview.push(q);
+    }
+    return [...actuQuestions, ...preview];
+  }
+
+  const prefSet = new Set(prefs);
+  const filtered = cgQuestions.filter((q) => prefSet.has(cultureGeneraleRubricForQuestion(q)));
+  return [...actuQuestions, ...filtered];
+}
+
 const _dailyQuizStatsCache = new Map();
 const DAILY_QUIZ_STATS_CACHE_TTL_MS = 30 * 1000;
 
@@ -14099,7 +14323,11 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     // ce voterKey (cf. DAILY_QUIZ_REINFORCEMENT_SLOT) ; toujours requis dans
     // ce cas (pas de session anonyme possible, rien à montrer sans historique).
     const voterKey = String(req.query.voterKey || "").trim();
-    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    let questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    // Filtrage par rubrique personnalisée : uniquement pour le QCM du jour
+    // fusionné, jamais pour "renforcement" (repasses jamais filtrées, cf.
+    // applyCultureGeneraleRubricFilter).
+    if (slot === "daily") questions = await applyCultureGeneraleRubricFilter(questions, voterKey);
     res.json({ date: todayKey, slot, label: getDailyQuizSlotLabel(slot), questions: questions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
@@ -14114,7 +14342,8 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, answers: [], error: "Créneau invalide." });
     if (!voterKey) return res.json({ date: todayKey, answers: [] });
 
-    const questionsForSlot = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    let questionsForSlot = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    if (slot === "daily") questionsForSlot = await applyCultureGeneraleRubricFilter(questionsForSlot, voterKey);
     const questionsById = new Map(questionsForSlot.map((q) => [q.id, q]));
     if (!questionsById.size) return res.json({ date: todayKey, answers: [] });
 
@@ -14230,6 +14459,68 @@ function flattenCultureGeneraleDetail(detail) {
     .join(" — ");
 }
 
+// Classe un contenu Culture Générale dans une des 16 OPINION_ARTICLE_CATEGORY_OPTIONS
+// (mêmes rubriques que "Autres actus", cf. classifyOpinionArticlesWithAI ~9757) pour en
+// dériver la galaxie (cf. getOpinionArticleGalaxy) — remplace l'ancien mapping fixe
+// CULTURE_GENERALE_SOURCE_TYPE_GALAXY (sourceType -> 1 des 6 anciennes galaxies) par une
+// vraie classification, un seul item à la fois (pas de lot, contrairement à la
+// classification d'articles : cette fonction tourne à l'acquisition, pas en amont sur un
+// pool). Retourne null (jamais une catégorie inventée) si l'appel échoue.
+async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const compact = {
+    type: sourceType,
+    title: String(sourceName || "").slice(0, 160),
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400)
+  };
+  const prompt = [
+    "Réponds uniquement en json valide.",
+    "Classe ce contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) dans UNE seule rubrique.",
+    "Rubriques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
+    "Recopie le libellé de rubrique EXACTEMENT comme dans la liste, sans le modifier.",
+    "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
+    "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
+    "Choisis la rubrique la plus spécifique d'après le titre et le détail fournis.",
+    "Format obligatoire : {\"category\":\"...\",\"category_precision\":null}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+
+  try {
+    const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+    const body = {
+      model: OPINION_ARTICLE_CATEGORY_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" }
+    };
+    if (isGpt5) {
+      body.max_completion_tokens = 400;
+      body.reasoning_effort = "low";
+    } else {
+      body.max_tokens = 150;
+      body.temperature = 0;
+    }
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = content ? JSON.parse(content) : null;
+    const category = normalizeOpinionArticleCategory(parsed?.category);
+    if (!category) return null;
+    const categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, parsed?.category_precision);
+    return { category, categoryPrecision };
+  } catch (error) {
+    console.warn("[culture-generale category] classification IA ignorée :", error.message);
+    return null;
+  }
+}
+
 async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail) {
   const { data: existingRows, error: existingError } = await supabase
     .from("solar_systems")
@@ -14298,6 +14589,134 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
     console.warn("[culture-generale solar-system] classification IA ignorée :", error.message);
   }
   return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
+}
+
+// ---- Étoiles Culture Générale : tag précis (la notion elle-même, ex. "Résilience")
+// sous un système solaire qui reste une sous-catégorie durable de la galaxie (ex.
+// "Philosophie") — même principe à deux niveaux que l'ancien système articles (système
+// solaire = thème durable, étoile = occasion précise), réintroduit ici pour la culture
+// générale. Même mécanique de déduplication que les systèmes solaires, un cran plus bas
+// (scopée au système solaire plutôt qu'à la galaxie).
+
+function normalizeStarName(value) {
+  return normalizeSolarSystemName(value);
+}
+
+// Rejette un nom d'étoile vide, identique/quasi identique au système solaire parent (sinon
+// aucun intérêt à ce niveau supplémentaire), ou à la galaxie/catégorie.
+function isOpinionArticleStarNameRejected(normalizedName, { solarSystemName, galaxy, category, categoryPrecision }) {
+  if (!normalizedName) return true;
+  if (solarSystemName && normalizedName === normalizeStarName(solarSystemName)) return true;
+  if (galaxy && normalizedName === normalizeStarName(galaxy)) return true;
+  if (category && normalizedName === normalizeStarName(category)) return true;
+  if (categoryPrecision && normalizedName === normalizeStarName(categoryPrecision)) return true;
+  return false;
+}
+
+// Même mécanique que resolveOrCreateSolarSystem : retrouve une étoile existante
+// (solar_system_id, normalized_name) ou la crée. Nom tronqué à la même limite que les
+// autres bulles (truncateToBubbleLabel).
+async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
+  const { data: existing, error: selectError } = await supabase
+    .from("stars")
+    .select("id")
+    .eq("solar_system_id", solarSystemId)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (selectError) { console.warn("[stars] lecture échouée :", selectError.message); return null; }
+  if (existing) return existing.id;
+  const { data: inserted, error: insertError } = await supabase
+    .from("stars")
+    .insert({ solar_system_id: solarSystemId, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
+    .select("id")
+    .single();
+  if (!insertError) return inserted.id;
+  const { data: retryExisting, error: retryError } = await supabase
+    .from("stars")
+    .select("id")
+    .eq("solar_system_id", solarSystemId)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+  if (!retryError && retryExisting) return retryExisting.id;
+  console.warn("[stars] création échouée :", insertError.message);
+  return null;
+}
+
+// Résolution de l'étoile d'un contenu Culture Générale, une fois son système solaire
+// connu (cf. resolveCultureGeneraleSolarSystemWithAI) — même principe que la résolution du
+// système : vérifie d'abord si la notion correspond à une étoile déjà existante dans CE
+// système précis avant d'en créer une nouvelle. Un seul item à la fois (tourne à
+// l'acquisition, pas en lot).
+async function resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemName, sourceType, sourceName, sourceDetail) {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("stars")
+    .select("id, name")
+    .eq("solar_system_id", solarSystemId);
+  if (existingError) console.warn("[culture-generale star] lecture stars échouée :", existingError.message);
+  const existing = existingRows || [];
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return resolveOrCreateStar(solarSystemId, sourceName, normalizeStarName(sourceName));
+
+  const compact = {
+    type: sourceType,
+    title: String(sourceName || "").slice(0, 160),
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
+    solar_system: solarSystemName,
+    existing_stars: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucune étoile existante dans ce système)"
+  };
+  const prompt = [
+    "Réponds uniquement en json valide.",
+    "Un contenu de culture générale doit être rattaché à une \"étoile\" : la notion précise qu'il illustre, à l'intérieur du système solaire donné (un thème plus large et durable).",
+    "Vérifie d'abord si une notion de existing_stars désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans star_id.",
+    "Un simple lien thématique ou un vocabulaire commun NE SUFFIT JAMAIS : en cas du moindre doute, ne réutilise jamais — propose une nouvelle étoile plutôt qu'un rattachement hasardeux (une étoile en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
+    "Sinon, propose dans new_star un nom court (2 à 4 mots, jamais une phrase) qui résume la notion elle-même, jamais l'anecdote ou l'actualité du jour qui l'illustre.",
+    "L'étoile ne doit jamais être un simple doublon ou une reformulation du système solaire lui-même — elle doit être plus précise, pas juste un synonyme.",
+    "RÈGLE OBLIGATOIRE : réponds avec soit \"star_id\" (nombre), soit \"new_star\" (texte court) — jamais les deux, jamais aucun des deux.",
+    "Format obligatoire : {\"star_id\":null,\"new_star\":\"Résilience\"}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+
+  try {
+    const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+    const body = {
+      model: OPINION_ARTICLE_CATEGORY_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" }
+    };
+    if (isGpt5) {
+      body.max_completion_tokens = 500;
+      body.reasoning_effort = "low";
+    } else {
+      body.max_tokens = 200;
+      body.temperature = 0;
+    }
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = content ? JSON.parse(content) : null;
+
+    const candidateId = Number(parsed?.star_id);
+    if (Number.isInteger(candidateId) && candidateId > 0 && existing.some((s) => s.id === candidateId)) {
+      return candidateId;
+    }
+    const newName = String(parsed?.new_star || "").trim();
+    if (newName) {
+      const normalized = normalizeStarName(newName);
+      if (!isOpinionArticleStarNameRejected(normalized, { solarSystemName, category: null, categoryPrecision: null })) {
+        return await resolveOrCreateStar(solarSystemId, newName, normalized);
+      }
+    }
+  } catch (error) {
+    console.warn("[culture-generale star] classification IA ignorée :", error.message);
+  }
+  return resolveOrCreateStar(solarSystemId, sourceName, normalizeStarName(sourceName));
 }
 
 // Enregistre l'acquisition d'un contenu Culture Générale dans l'univers intellectuel

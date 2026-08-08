@@ -56,6 +56,91 @@
     return n < 10 ? "0" + n : String(n);
   }
 
+  // Identité visiteur minimale : cette page ne charge pas script.min.js (page
+  // isolée, cf. en-tête du fichier), donc pas de getKey() disponible — même
+  // clé localStorage ("key") que getKey() côté script.js, pour rester la
+  // même identité partout sur le site.
+  function getVoterKey() {
+    try {
+      var k = localStorage.getItem("key");
+      if (!k) {
+        k = Math.random().toString(36);
+        localStorage.setItem("key", k);
+      }
+      return k;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Personnalisation du QCM Culture Générale (cf. server.js GET/POST
+  // /api/users/culture-generale-rubrics) : une case par bloc France/Europe/
+  // Monde, directement sur cette page plutôt que dans un réglage séparé.
+  // rubricPrefsCache mémorise le tableau complet (rubriques Histoire ET
+  // Éclairages, gérées sur /eclairages) une fois chargé, pour ne refaire un
+  // GET qu'une fois par visite malgré les rendus répétés à chaque changement
+  // de date — mais toujours fusionné avec les rubriques hors de cette page
+  // au moment de sauvegarder (POST remplace le tableau complet, jamais un
+  // patch), pour ne jamais écraser les préférences Éclairages.
+  var rubricPrefsCache = null;
+  var rubricPrefsFetchPromise = null;
+  var rubricSaveToken = 0;
+  function syncRubricToggles() {
+    var checkboxes = document.querySelectorAll(".het-rubric-toggle input[data-rubric]");
+    if (!checkboxes.length) return;
+    var voterKey = getVoterKey();
+    if (!voterKey) return;
+
+    function applyChecked(prefs) {
+      checkboxes.forEach(function (cb) {
+        cb.checked = prefs.indexOf(cb.getAttribute("data-rubric")) !== -1;
+      });
+    }
+
+    if (rubricPrefsCache) {
+      applyChecked(rubricPrefsCache);
+    } else {
+      if (!rubricPrefsFetchPromise) {
+        rubricPrefsFetchPromise = fetch("/api/users/culture-generale-rubrics?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            rubricPrefsCache = Array.isArray(data.rubrics) ? data.rubrics : [];
+            return rubricPrefsCache;
+          })
+          .catch(function () {
+            rubricPrefsCache = [];
+            return rubricPrefsCache;
+          });
+      }
+      rubricPrefsFetchPromise.then(applyChecked);
+    }
+
+    checkboxes.forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        var myToken = ++rubricSaveToken;
+        var owned = [];
+        checkboxes.forEach(function (c) { owned.push(c.getAttribute("data-rubric")); });
+        var otherRubrics = (rubricPrefsCache || []).filter(function (r) { return owned.indexOf(r) === -1; });
+        var selected = otherRubrics.slice();
+        checkboxes.forEach(function (c) { if (c.checked) selected.push(c.getAttribute("data-rubric")); });
+        fetch("/api/users/culture-generale-rubrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ legacyKey: voterKey, rubrics: selected })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (myToken !== rubricSaveToken) return;
+            if (data.ok) rubricPrefsCache = selected;
+            else cb.checked = !cb.checked;
+          })
+          .catch(function () {
+            if (myToken === rubricSaveToken) cb.checked = !cb.checked;
+          });
+      });
+    });
+  }
+
   function isValidDateKey(value) {
     if (!DATE_KEY_PATTERN.test(value)) return false;
     var month = Number(value.slice(0, 2));
@@ -157,6 +242,19 @@
     toggle.appendChild(chevron);
 
     block.appendChild(toggle);
+
+    // Case de personnalisation du QCM Culture Générale (cf. syncRubricToggles) :
+    // visible dès le chargement du bloc, pas besoin de le déplier — un
+    // visiteur qui ne coche rien nulle part garde le comportement par défaut
+    // (aperçu), cf. server.js applyCultureGeneraleRubricFilter.
+    var rubricToggle = document.createElement("label");
+    rubricToggle.className = "het-rubric-toggle";
+    var rubricCheckbox = document.createElement("input");
+    rubricCheckbox.type = "checkbox";
+    rubricCheckbox.setAttribute("data-rubric", "histoire_" + categoryKey);
+    rubricToggle.appendChild(rubricCheckbox);
+    rubricToggle.appendChild(document.createTextNode(" Inclure dans mon QCM Culture Générale"));
+    block.appendChild(rubricToggle);
 
     var content = document.createElement("div");
     content.className = "het-block-content";
@@ -394,6 +492,7 @@
       var event = events ? events[categoryKey] : null;
       if (event) cardsEl.appendChild(buildCategoryBlock(categoryKey, dateKey, event));
     });
+    syncRubricToggles();
   }
 
   function loadDate(dateKey) {

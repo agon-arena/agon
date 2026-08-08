@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="stylesheet" href="/style.min.css?v=20260808-stargradientborder1" />
+<link rel="stylesheet" href="/style.min.css?v=20260809-memoireframe1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -516,14 +516,14 @@
         <button
           type="button"
           class="mobile-back-button"
-          onclick="return handleNotificationsBackNavigation(event, '/')"
+          onclick="window.location.href='/?skipStartup=1'; return false;"
           aria-label="Revenir à la page précédente"
         >
           <i class="fa-solid fa-arrow-left"></i>
         </button>
 
         <div class="debate-nav-row">
-          <a href="/" class="back-link" onclick="return handleNotificationsBackNavigation(event, '/')">← Retour</a>
+          <a href="/" class="back-link" onclick="window.location.href='/?skipStartup=1'; return false;">← Retour</a>
         </div>
       </div>
     </div>
@@ -1137,7 +1137,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260807-rhetorword1" defer></script>
-<script type="module" src="/mon-univers.js?v=20260807-armluminous1"></script>
+<script src="/script.min.js?v=20260809-memoireframe1" defer></script>
+<script type="module" src="/mon-univers.js?v=20260808-embed1"></script>
 </body>
 </html>

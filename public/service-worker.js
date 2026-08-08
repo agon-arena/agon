@@ -1,4 +1,4 @@
-const SW_VERSION = "20260808-stargradientborder1-cache-bust-v81";
+const SW_VERSION = "20260808-memoireembed1-cache-bust-v93";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

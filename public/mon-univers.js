@@ -1,7 +1,7 @@
 // Page "Mon univers" : réutilise le moteur de bulles existant (tagTrendCloud.js), jamais
 // dupliqué. Volontairement léger — pas de chargement de script.js (qui alourdirait la page
 // pour un seul besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260807-orbitlastonly1";
+import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260808-satellites6";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -334,7 +334,11 @@ let navPath = []; // [] = galaxies ; [galaxyName] = systèmes ; [galaxyName, sol
 let currentLevelItems = []; // objets métier dans le même ordre que les bulles actuellement affichées
 const UNCLASSIFIED_KEY = "__unclassified__"; // sentinelle locale, jamais envoyée à l'API ni stockée
 
-const cloudEl = document.getElementById("agon-universe-cloud");
+// Repli sur #agon-tag-trends-cloud (demande du 08/08/2026 : bulles "Ma mémoire" directement
+// sur l'accueil, embarquées dans le même cadre que Bulles Actu/Bulles Agôn plutôt que sur une
+// page à part) — la page /mon-univers autonome a bien son propre #agon-universe-cloud, jamais
+// affecté par ce repli.
+const cloudEl = document.getElementById("agon-universe-cloud") || document.getElementById("agon-tag-trends-cloud");
 const breadcrumbEl = document.getElementById("universe-breadcrumb");
 const statusEl = document.getElementById("universe-status");
 const backBtn = document.getElementById("universe-back-btn");
@@ -611,11 +615,10 @@ function drawMiniStarsForSystems(items) {
       // leurs points strictement alignés les uns sur les autres.
       const angle = (s / count) * Math.PI * 2 + i * 0.7;
       const dist = r + 10 + Math.random() * 16;
-      // Taille/opacité relevées (demande du 07/08/2026 : invisibles à taille normale, noyées
-      // dans la poussière du fond étoilé) — nettement plus grosses et plus opaques que les
-      // flocons de fond (cf. #agon-universe-cloud::after) pour rester repérables comme des
-      // satellites du système plutôt que comme du simple décor de fond.
-      const dotSize = 4.5 + Math.random() * 4;
+      // Taille encore relevée (demande du 08/08/2026, "beaucoup plus grosses/lumineuses") —
+      // déjà montée une première fois le 07/08/2026 (2-4.5px → 4.5-8.5px, invisibles à taille
+      // normale) ; cette 2e passe double encore la plage.
+      const dotSize = 10 + Math.random() * 8;
       let dotX = cx + Math.cos(angle) * dist;
       let dotY = cy + Math.sin(angle) * dist;
 
@@ -653,6 +656,7 @@ function drawMiniStarsForSystems(items) {
 if (typeof ResizeObserver !== "undefined") {
   let miniStarResizeTimer = null;
   new ResizeObserver(() => {
+    if (!isMemoireEmbedActive()) return;
     clearTimeout(miniStarResizeTimer);
     miniStarResizeTimer = setTimeout(() => drawMiniStarsForSystems(currentLevelItems), 180);
   }).observe(cloudEl);
@@ -745,6 +749,7 @@ function drawSparklesForStars(items) {
 if (typeof ResizeObserver !== "undefined") {
   let starDecorResizeTimer = null;
   new ResizeObserver(() => {
+    if (!isMemoireEmbedActive()) return;
     clearTimeout(starDecorResizeTimer);
     starDecorResizeTimer = setTimeout(() => {
       drawMoonsForStars(currentLevelItems);
@@ -890,12 +895,25 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !starPanelEl.hidden) hideStarPanel();
 });
 
+// #agon-memoire-embed-before n'existe QUE sur l'accueil (embed "Ma mémoire", demande du
+// 08/08/2026) : absent sur la page /mon-univers autonome (donc toujours "actif" là-bas). Sur
+// l'accueil, ce même #agon-tag-trends-cloud est PARTAGÉ avec Bulles Actu/Bulles Agôn (cf.
+// cloudEl plus haut, repli sur #agon-tag-trends-cloud) — sans cette vérification, le listener
+// posé une seule fois ci-dessous resterait actif pour toujours après une seule visite en mode
+// "Ma mémoire", et stopPropagation() empêcherait alors les clics sur les vraies bulles Actu/Agôn
+// d'atteindre le listener global de script.js (plus aucune bulle Actu/Agôn cliquable).
+function isMemoireEmbedActive() {
+  const marker = document.getElementById("agon-memoire-embed-before");
+  return !marker || !marker.hidden;
+}
+
 // Clic intercepté au niveau du conteneur (jamais sur document) + stopPropagation : empêche le
 // listener global de public/script.js (.agon-tag-bubble -> handleBubbleTagClick, spécifique aux
 // débats) de voir cet événement. Les bulles créées par renderTagTrendCloud sont de vrais
 // <button> : Entrée et Espace déclenchent déjà nativement ce même "click", aucun code clavier
 // supplémentaire nécessaire.
 cloudEl.addEventListener("click", (event) => {
+  if (!isMemoireEmbedActive()) return;
   const bubble = event.target.closest(".agon-tag-bubble");
   if (!bubble) return;
   event.stopPropagation();

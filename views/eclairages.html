@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260808-stargradientborder1">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-memoireframe1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -177,6 +177,26 @@
     }
     .ecl-block-toggle[aria-expanded="true"] .ecl-block-chevron {
       transform: rotate(180deg);
+    }
+    /* Case à cocher de personnalisation du QCM Culture Générale (cf.
+       server.js GET/POST /api/users/culture-generale-rubrics) : visible dès
+       le chargement du bloc, sans avoir à le déplier — toujours au même
+       endroit que le titre de la rubrique, jamais dans .ecl-block-content
+       (repliée par défaut). */
+    .ecl-rubric-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      margin: 4px 0 0;
+      color: #6b7280;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .ecl-rubric-toggle input {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 auto;
     }
     .ecl-block-content {
       margin-top: 16px;
@@ -700,6 +720,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="parallele"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ph-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ph-title-text">Parallèle historique du jour</span> — un événement d'actualité éclairé par un précédent du passé.</p>
 
@@ -734,6 +755,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-brain"></i> Pensée philosophique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="pensee"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="pp-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="pp-title-text">Pensée philosophique du jour</span> — un événement d'actualité éclairé par une idée philosophique.</p>
 
@@ -768,6 +790,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-people-group"></i> Mécanisme sociologique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="mecanisme"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ms-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ms-title-text">Mécanisme sociologique du jour</span> — un événement d'actualité éclairé par un mécanisme sociologique.</p>
 
@@ -802,6 +825,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-shapes"></i> Concept du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="concept"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="cj-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="cj-title-text">Concept du jour</span> — un événement d'actualité éclairé par un concept de psychologie, sociologie, rhétorique, économie, science politique, philosophie ou sciences.</p>
 
@@ -836,6 +860,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-quote-left"></i> Citation du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="citation"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="cd-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="cd-title-text">Citation du jour</span> — un événement d'actualité éclairé par la citation d'un auteur célèbre.</p>
 
@@ -870,6 +895,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-palette"></i> Œuvre d'art du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="oeuvre"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="oa-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="oa-title-text">Œuvre d'art du jour</span> — un événement d'actualité éclairé par une œuvre d'art.</p>
 
@@ -904,6 +930,7 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-scroll"></i> Mot latin du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
+      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="latin"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ld-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ld-title-text">Mot latin du jour</span> — un événement d'actualité éclairé par un mot ou une courte expression en latin.</p>
 
@@ -934,7 +961,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260807-rhetorword1" defer></script>
+<script src="/script.min.js?v=20260809-memoireframe1" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1054,8 +1081,58 @@
     });
   };
 
+  // Personnalisation du QCM Culture Générale (cf. server.js GET/POST
+  // /api/users/culture-generale-rubrics) : une case par rubrique Éclairages,
+  // directement sur son bloc plutôt que dans un réglage séparé. Sauvegarde
+  // immédiate à chaque case cochée/décochée — `saveToken` ignore une réponse
+  // devenue obsolète si l'utilisateur coche plusieurs cases d'affilée.
+  // POST remplace le tableau complet côté serveur (pas un patch) : on ne
+  // renvoie donc jamais que les seules rubriques Éclairages de cette page —
+  // toujours fusionné avec les rubriques Histoire (gérées sur
+  // /historical-events-test) déjà enregistrées, jamais écrasées d'ici.
+  var rubricSaveToken = 0;
+  function initRubricToggles() {
+    var voterKey = typeof getKey === 'function' ? getKey() : null;
+    var checkboxes = document.querySelectorAll('.ecl-rubric-toggle input[data-rubric]');
+    if (!voterKey || !checkboxes.length) return;
+    var ownedRubrics = [];
+    checkboxes.forEach(function (cb) { ownedRubrics.push(cb.getAttribute('data-rubric')); });
+    var otherRubrics = []; // rubriques hors de cette page (Histoire), reçues au premier GET
+
+    fetch('/api/users/culture-generale-rubrics?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var current = Array.isArray(data.rubrics) ? data.rubrics : [];
+        otherRubrics = current.filter(function (r) { return ownedRubrics.indexOf(r) === -1; });
+        checkboxes.forEach(function (cb) { cb.checked = current.indexOf(cb.getAttribute('data-rubric')) !== -1; });
+      })
+      .catch(function () {});
+
+    checkboxes.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var myToken = ++rubricSaveToken;
+        var selected = otherRubrics.slice();
+        checkboxes.forEach(function (c) { if (c.checked) selected.push(c.getAttribute('data-rubric')); });
+        fetch('/api/users/culture-generale-rubrics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ legacyKey: voterKey, rubrics: selected })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (myToken !== rubricSaveToken) return;
+            if (!data.ok) cb.checked = !cb.checked; // échec : on annule le changement visuel
+          })
+          .catch(function () {
+            if (myToken === rubricSaveToken) cb.checked = !cb.checked;
+          });
+      });
+    });
+  }
+
   function init() {
     if (panel && typeof panel.focus === 'function') panel.focus();
+    initRubricToggles();
   }
 
   if (document.readyState === 'loading') {
