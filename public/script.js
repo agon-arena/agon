@@ -1256,7 +1256,7 @@ function renderUserScoreWidget(data) {
       body.page-debate .agon-user-score-widget-logo-overlay {
         max-width: min(210px, calc(100vw - 120px));
       }
-      /* Avec les 3 scores (Orator + Logos + Gnosis), le texte dépasse le
+      /* Avec les 3 scores (Rhetor + Logos + Gnosis), le texte dépasse le
          plafond ci-dessus et se fait tronquer (ellipsis) — plafond élargi
          uniquement pour ce cas, les badges à 1-2 scores restent inchangés. */
       body.page-home .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
@@ -1322,7 +1322,7 @@ function renderUserScoreWidget(data) {
   });
 
   widget.innerHTML = [
-    '<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Orator)',
+    '<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Rhetor)',
     AGON_LOGOS_ICON + formatPct(notesScore) + '% (Logos)',
     '<i class="fa-solid fa-brain"></i>' + formatPct(gnosisScore) + '% (Gnosis)'
   ].join(' <span style="opacity:.5">-</span> ');
@@ -1384,7 +1384,7 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
 
   const changes = [];
   if (votesScore !== null && previous.votesScore !== votesScore) {
-    changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Orator", value: votesScore });
+    changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Rhetor", value: votesScore });
   }
   if (notesScore !== null && previous.notesScore !== notesScore) {
     changes.push({ icon: AGON_LOGOS_ICON, label: "Logos", value: notesScore });
@@ -1445,7 +1445,7 @@ function showScoreChangeNotification(changes, openDetail) {
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
-// classique (Agôn = joute oratoire) : Orator pour les voix récoltées, Logos
+// classique (Agôn = joute oratoire) : Rhetor pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
 function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
@@ -1469,11 +1469,11 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   const s = stats || {};
   const tierRank = (Number.isFinite(tier) && Number.isFinite(tierCount)) ? (' (' + tier + '/' + tierCount + ')') : '';
 
-  // Orator et Logos partagent le même palier (volume d'idées postées) mais
+  // Rhetor et Logos partagent le même palier (volume d'idées postées) mais
   // pas la même population (tout le monde n'a pas de note IA) : une ligne de
   // comptage par axe, chacune affichée dans l'onglet de son propre axe.
   const votesTierCountHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
-    ? '<p class="install-modal-text install-modal-hint">Palier Orator : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
+    ? '<p class="install-modal-text install-modal-hint">Palier Rhetor : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
     : '';
   const notesTierCountHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
     ? '<p class="install-modal-text install-modal-hint">Palier Logos : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
@@ -1495,7 +1495,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
       '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
     : '';
 
-  // Chaque score a son propre onglet (clic sur Orator / Logos / Gnosis dans
+  // Chaque score a son propre onglet (clic sur Rhetor / Logos / Gnosis dans
   // le menu) plutôt que d'être tous empilés à la suite dans la modale. Les 3
   // scores existent toujours (pire note tant qu'on n'a rien posté/répondu,
   // cf. USER_SCORE_EMPTY côté serveur), donc toujours 3 onglets.
@@ -1522,13 +1522,13 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu au QCM.';
   const tabs = [
     {
-      key: "orator",
+      key: "rhetor",
       icon: '<i class="fa-solid fa-bolt"></i>',
-      label: "Orator",
+      label: "Rhetor",
       content:
         (hasVotesScore ? tierIntro + votesTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Orator — Top ' + formatPct(votesScore) + '%</h4>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Rhetor — Top ' + formatPct(votesScore) + '%</h4>' +
         votesValueLine +
         '<p class="install-modal-text">' + votesExplanation + '</p>'
     },

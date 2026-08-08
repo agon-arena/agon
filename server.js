@@ -4494,7 +4494,7 @@ async function computeUserScores() {
   }
 
   // Tailles de population par axe (pédagogique : affichées dans la modale
-  // avec le score). Chaque axe a sa propre population (Orator = auteurs avec
+  // avec le score). Chaque axe a sa propre population (Rhetor = auteurs avec
   // ≥1 idée postée, Logos = auteurs avec ≥1 idée notée), donc son propre
   // total et sa propre taille de palier — pas les mêmes effectifs.
   const votesTierSizeByTier = new Map();
@@ -5431,24 +5431,21 @@ app.get("/api/users/app-installed", rateLimit("users", 30), async (req, res) => 
   }
 });
 
-// Univers intellectuel personnel : galaxie -> systèmes solaires -> articles acquis (cf.
-// user_article_acquisitions, alimentée par une bonne réponse à un QCM actu). Lecture seule,
-// aucune classification IA ni écriture ici. legacyKey uniquement (jamais un user_id arbitraire
-// en clair dans la route publique) — même identité que le reste du projet, aucune nouvelle
-// logique. opinion_articles.solar_system_id (l'état ACTUEL de l'article) prime toujours sur
-// user_article_acquisitions.solar_system_id (simple photographie au moment de l'acquisition,
-// qui peut être devenue obsolète si l'article a été reclassé depuis).
+// Univers intellectuel personnel : galaxie -> systèmes solaires -> contenus Culture Générale
+// acquis (cf. user_article_acquisitions, alimentée par une bonne réponse au QCM Culture
+// Générale — le QCM actu n'alimente plus cet univers, seuls les anciens articles acquis avant
+// ce changement restent en base, ignorés ici). Lecture seule, aucune classification IA ni
+// écriture ici. legacyKey uniquement (jamais un user_id arbitraire en clair dans la route
+// publique) — même identité que le reste du projet.
 // Limite du libellé affiché dans une bulle étoile, plus généreuse que MAX_LABEL_LENGTH (35,
 // cf. lib/cloud-label.js) car c'est le niveau le plus zoomé de l'univers (moins de bulles à
 // l'écran simultanément) : appliquée uniquement à la construction de cette réponse API, jamais
-// en base (opinion_articles.title sert à bien d'autres usages ; eclairage_name reste la
-// photographie complète). Le titre intégral reste toujours accessible en un clic (ouverture de
-// l'article) — rien n'est perdu, seul l'affichage en bulle est raccourci.
+// en base (eclairage_name reste la photographie complète).
 const MAX_STAR_LABEL_LENGTH = 45;
 
 // Mêmes libellés que ACQUIS_SOURCE_TYPE_META (views/qcm-du-jour.html), dupliqués ici à
 // l'identique côté serveur (petite table statique, pas de dépendance possible sur le frontend) :
-// sert de "source" affichée pour une étoile issue de Culture Générale, faute d'URL d'article.
+// sert de "source" affichée pour une étoile issue de Culture Générale.
 const CULTURE_GENERALE_SOURCE_TYPE_LABEL = {
   histoire: "Ce jour dans l'Histoire",
   parallele: "Parallèle historique",
@@ -5476,81 +5473,28 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const { data: acquisitions, error: acquisitionsError } = await supabase
       .from("user_article_acquisitions")
-      .select("id, article_id, solar_system_id, star_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name, eclairage_detail")
-      .eq("user_id", user.id);
+      .select("id, solar_system_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name")
+      .eq("user_id", user.id)
+      .not("eclairage_type", "is", null);
     if (acquisitionsError) throw new Error(acquisitionsError.message);
     if (!acquisitions || !acquisitions.length) {
       console.log(`[intellectual universe] user=${user.id} articles=0 solarSystems=0 galaxies=0 unclassified=0`);
       return res.json(emptyResponse);
     }
 
-    // Garde-fou : la contrainte UNIQUE(user_id, article_id) empêche normalement les doublons,
-    // mais on ne fait jamais confiance aveuglément — un même article_id ne compte qu'une fois.
-    const acquisitionByArticleId = new Map();
     const eclairageAcquisitions = [];
     const seenEclairageKeys = new Set();
     for (const a of acquisitions) {
-      if (a.article_id != null) {
-        if (!acquisitionByArticleId.has(a.article_id)) acquisitionByArticleId.set(a.article_id, a);
-        continue;
-      }
       if (!a.eclairage_type || !a.eclairage_source_id) continue;
       const key = `${a.eclairage_type}:${a.eclairage_source_id}`;
       if (seenEclairageKeys.has(key)) continue;
       seenEclairageKeys.add(key);
       eclairageAcquisitions.push(a);
     }
-    const articleIds = [...acquisitionByArticleId.keys()];
 
-    const { data: articleRows, error: articlesError } = articleIds.length
-      ? await supabase
-        .from("opinion_articles")
-        .select("id, title, link, source, category, category_precision, solar_system_id, star_id")
-        .in("id", articleIds)
-      : { data: [], error: null };
-    if (articlesError) throw new Error(articlesError.message);
-
-    const articleById = new Map((articleRows || []).map((a) => [a.id, a]));
-    const missingArticleCount = articleIds.length - articleById.size;
-    if (missingArticleCount > 0) {
-      console.warn(`[intellectual universe] user=${user.id} acquisitions pointant vers un article introuvable=${missingArticleCount}`);
-    }
-
-    // Tags secondaires (cf. classifyOpinionArticleSecondaryTagsWithAI) : additifs, jamais un
-    // remplacement de la classification principale ci-dessus — un article avec des tags
-    // secondaires apparaît EN PLUS dans ces autres galaxies/systèmes, cf. placement plus bas.
-    let secondaryByArticleId = new Map();
-    if (articleIds.length) {
-      const { data: secondaryRows, error: secondaryError } = await supabase
-        .from("article_secondary_classifications")
-        .select("article_id, solar_system_id")
-        .in("article_id", articleIds);
-      if (secondaryError) throw new Error(secondaryError.message);
-      for (const row of secondaryRows || []) {
-        if (!row.solar_system_id) continue;
-        if (!secondaryByArticleId.has(row.article_id)) secondaryByArticleId.set(row.article_id, []);
-        secondaryByArticleId.get(row.article_id).push(row.solar_system_id);
-      }
-    }
-
-    // opinion_articles.solar_system_id/star_id (actuel) prioritaires, sinon ceux figés dans
-    // l'acquisition. Les éclairages n'ont pas d'équivalent "actuel" (pas de table dédiée
-    // relisible) : leur solar_system_id figé à l'acquisition fait toujours foi, et ils n'ont
-    // jamais de star_id (chacun reste sa propre étoile, cf. plus bas).
     const neededSolarSystemIds = new Set();
-    const neededStarIds = new Set();
-    for (const article of articleById.values()) {
-      const acquisition = acquisitionByArticleId.get(article.id);
-      const resolvedSolarSystemId = article.solar_system_id || acquisition.solar_system_id || null;
-      if (resolvedSolarSystemId) neededSolarSystemIds.add(resolvedSolarSystemId);
-      const resolvedStarId = article.star_id || acquisition.star_id || null;
-      if (resolvedStarId) neededStarIds.add(resolvedStarId);
-    }
     for (const a of eclairageAcquisitions) {
       if (a.solar_system_id) neededSolarSystemIds.add(a.solar_system_id);
-    }
-    for (const ids of secondaryByArticleId.values()) {
-      for (const id of ids) neededSolarSystemIds.add(id);
     }
 
     let solarSystemById = new Map();
@@ -5563,23 +5507,8 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
     }
 
-    let starById = new Map();
-    if (neededStarIds.size) {
-      const { data: starRows, error: starsError } = await supabase
-        .from("stars")
-        .select("id, name")
-        .in("id", [...neededStarIds]);
-      if (starsError) throw new Error(starsError.message);
-      starById = new Map((starRows || []).map((s) => [s.id, s]));
-    }
-
     const galaxyBuckets = new Map();
     const unclassified = [];
-    // starKey/starName : un article avec un vrai star_id résolu rejoint les autres articles du
-    // même tag (ex. "Tour de France 2026" regroupe plusieurs étapes) ; un article ou un
-    // éclairage sans star_id devient sa propre étoile à lui seul (son propre titre) — aucune
-    // régression pendant que la passe IA (classifyOpinionArticleStarsWithAI) rattrape
-    // l'historique existant, cf. tâche dédiée.
     const pushIntoTree = (solarSystem, starKey, starName, payload) => {
       if (!solarSystem) {
         unclassified.push(payload);
@@ -5599,50 +5528,15 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       solarSystemBucket.stars.get(starKey).articles.push(payload);
     };
 
-    for (const article of articleById.values()) {
-      const acquisition = acquisitionByArticleId.get(article.id);
-      const resolvedSolarSystemId = article.solar_system_id || acquisition.solar_system_id || null;
-      // Système solaire supprimé entre-temps : resolvedSolarSystemId existe mais introuvable
-      // dans solarSystemById -> traité comme non classé, jamais recréé ici.
-      const solarSystem = resolvedSolarSystemId ? solarSystemById.get(resolvedSolarSystemId) : null;
-      const resolvedStarId = article.star_id || acquisition.star_id || null;
-      const star = resolvedStarId ? starById.get(resolvedStarId) : null;
-      const starKey = star ? `star:${star.id}` : `article:${article.id}`;
-      const starName = star ? star.name : (article.title || "Article");
-      const articlePayload = {
-        id: article.id,
-        title: article.title,
-        url: article.link,
-        source: article.source,
-        category: article.category,
-        categoryPrecision: article.category_precision,
-        acquiredAt: acquisition.acquired_at
-      };
-      pushIntoTree(solarSystem, starKey, starName, articlePayload);
-
-      // Tags secondaires : le même article rejoint EN PLUS ses galaxies/systèmes secondaires,
-      // chacun avec sa propre étoile à lui seul (jamais de passe IA d'étoiles dédiée pour ce
-      // cas rare, cf. classifyOpinionArticleSecondaryTagsWithAI) — jamais dans le système déjà
-      // utilisé comme classification principale, pour éviter un doublon dans la même bulle.
-      for (const secondarySolarSystemId of secondaryByArticleId.get(article.id) || []) {
-        if (secondarySolarSystemId === resolvedSolarSystemId) continue;
-        const secondarySolarSystem = solarSystemById.get(secondarySolarSystemId);
-        if (!secondarySolarSystem) continue;
-        pushIntoTree(secondarySolarSystem, `article-secondary:${article.id}:${secondarySolarSystemId}`, article.title || "Article", articlePayload);
-      }
-    }
-
-    // Étoiles Culture Générale : même arbre galaxie/système que les articles. Le système
-    // solaire est déjà la notion précise elle-même, dédupliquée par IA à l'acquisition (cf.
-    // resolveCultureGeneraleSolarSystemWithAI, ex. "Résilience" reformulé un autre jour
-    // rejoint le même système) : regrouper les occurrences par système plutôt qu'une étoile
-    // par occurrence donne exactement le même effet que "Tour de France 2026" pour les
-    // articles — plusieurs jours différents sur la même notion deviennent une seule étoile,
-    // nommée d'après le système (nom court, cf. resolveCultureGeneraleSolarSystemWithAI)
-    // plutôt que la phrase descriptive complète d'une occurrence. Repli sur une étoile par
-    // occurrence uniquement si le système n'a pas pu être résolu (cas non classé). Jamais
-    // d'URL (aucune page dédiée à rouvrir) — handleItemActivate (mon-univers.js) ignore déjà
-    // silencieusement une url absente.
+    // Étoiles Culture Générale : le système solaire est déjà la notion précise elle-même,
+    // dédupliquée par IA à l'acquisition (cf. resolveCultureGeneraleSolarSystemWithAI, ex.
+    // "Résilience" reformulé un autre jour rejoint le même système) : regrouper les occurrences
+    // par système plutôt qu'une étoile par occurrence donne une seule étoile par notion,
+    // plusieurs jours différents confondus, nommée d'après le système (nom court) plutôt que
+    // la phrase descriptive complète d'une occurrence. Repli sur une étoile par occurrence
+    // uniquement si le système n'a pas pu être résolu (cas non classé). Jamais d'URL (aucune
+    // page dédiée à rouvrir) — handleItemActivate (mon-univers.js) ignore déjà silencieusement
+    // une url absente.
     for (const a of eclairageAcquisitions) {
       const solarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
       const starKey = solarSystem ? `eclairage-system:${solarSystem.id}` : `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`;
@@ -5689,8 +5583,9 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const sortedUnclassified = sortArticles(unclassified);
     const totals = {
-      // Compte les étoiles au sens large (articles + éclairages), pas seulement les articles —
-      // nom de champ conservé tel quel (API déjà publiée, non consommé par le frontend actuel).
+      // Compte les étoiles au sens large (contenus Culture Générale), pas seulement des
+      // articles — nom de champ conservé tel quel (API déjà publiée, non consommé par le
+      // frontend actuel).
       articles: totalArticles + sortedUnclassified.length,
       solarSystems: totalSolarSystems,
       galaxies: galaxies.length,
@@ -8908,9 +8803,7 @@ app.post("/api/veille/opinion-articles", rateLimit("veille-opinion-articles", 20
   if (!items.length) return res.json({ ok: true, inserted: 0 });
 
   const validItems = items.filter(item => item && item.title && item.link);
-  // Système solaire non demandé ici : réservé aux articles réellement utilisés dans un QCM
-  // (cf. generateDailyQuizIfNeeded), jamais attribué automatiquement à l'ingestion générale.
-  const aiCategories = await classifyOpinionArticlesWithAI(validItems, { includeSolarSystem: false });
+  const aiCategories = await classifyOpinionArticlesWithAI(validItems);
 
   const rows = validItems
     .map(item => {
@@ -9197,17 +9090,6 @@ const OPINION_ARTICLE_CATEGORY_PRECISIONS = {
   "Langues et Lettres": ["Langues", "Lettres"]
 };
 
-// Galaxie = niveau juste en dessous de category/category_precision, jamais stocké
-// (toujours déduit) : pour les 4 rubriques hybrides la galaxie dépend de la
-// précision retenue (ex. "Sports" → "Sport", au singulier par choix éditorial) ;
-// pour toutes les autres rubriques, la galaxie est le libellé de la rubrique lui-même.
-const OPINION_ARTICLE_GALAXY_BY_PRECISION = {
-  "Sports - loisirs": { "Sports": "Sport", "Loisirs": "Loisirs" },
-  "Culture - arts": { "Culture": "Culture", "Arts": "Arts" },
-  "Philosophie - sciences sociales": { "Philosophie": "Philosophie", "Sciences sociales": "Sciences sociales" },
-  "Langues et Lettres": { "Langues": "Langues", "Lettres": "Lettres" }
-};
-
 function normalizeOpinionArticleCategory(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -9292,15 +9174,6 @@ function normalizeOpinionArticleCategoryPrecision(category, value) {
   return match || null;
 }
 
-// Pure, jamais stockée : catégorie invalide, ou hybride sans précision valide → null ;
-// hybride + précision valide → branche correspondante ; catégorie simple → elle-même.
-function getOpinionArticleGalaxy(category, categoryPrecision) {
-  if (!OPINION_ARTICLE_CATEGORY_OPTIONS.includes(category)) return null;
-  const byPrecision = OPINION_ARTICLE_GALAXY_BY_PRECISION[category];
-  if (byPrecision) return byPrecision[categoryPrecision] || null;
-  return category;
-}
-
 // Même style que normalizeCloudLabel (server.js ~1156) : apostrophes/tirets traités
 // comme des séparateurs, pas de gestion singulier/pluriel ni de résolution sémantique.
 function normalizeSolarSystemName(value) {
@@ -9376,334 +9249,6 @@ function isOpinionArticleSolarSystemNameRejected(normalizedName, { galaxy, categ
   return false;
 }
 
-// Valide la proposition de l'IA pour un item déjà classé (category/category_precision
-// connus, galaxy déduite) : un solar_system_id n'est accepté que s'il appartient
-// réellement à cette galaxie (jamais fait confiance à l'IA sur ce point) ; sinon, un
-// new_solar_system est normalisé, rejeté s'il est trop générique, puis résolu/créé.
-// Jamais les deux à la fois : l'id existant est prioritaire s'il est valide. `cache`
-// évite de recréer deux fois le même nouveau système au sein d'un même lot ;
-// `solarSystemsByGalaxy` est mis à jour pour que les items suivants du même lot
-// réutilisent l'id fraîchement créé. Retourne `null` si rien d'exploitable n'a été
-// fourni — l'appelant traite alors l'item comme incomplet (jamais de création
-// arbitraire ici pour compenser).
-async function resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, cache, category, categoryPrecision) {
-  const candidateId = Number(entry?.solar_system_id);
-  if (Number.isInteger(candidateId) && candidateId > 0) {
-    const existingInGalaxy = (solarSystemsByGalaxy.get(galaxy) || []).some((s) => s.id === candidateId);
-    if (existingInGalaxy) return candidateId;
-  }
-  const newName = String(entry?.new_solar_system || "").trim();
-  if (!newName) return null;
-  const normalized = normalizeSolarSystemName(newName);
-  if (isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category, categoryPrecision })) return null;
-  const cacheKey = galaxy + "::" + normalized;
-  if (cache.has(cacheKey)) return cache.get(cacheKey);
-  const id = await resolveOrCreateSolarSystem(galaxy, newName, normalized);
-  if (id) {
-    cache.set(cacheKey, id);
-    if (!solarSystemsByGalaxy.has(galaxy)) solarSystemsByGalaxy.set(galaxy, []);
-    solarSystemsByGalaxy.get(galaxy).push({ id, galaxy, name: newName });
-  }
-  return id;
-}
-
-// ---- Étoiles : tag précis (événement/occasion) sous un système solaire, capable de
-// regrouper plusieurs articles — cf. GET /api/users/intellectual-universe. Même mécanique
-// de déduplication que les systèmes solaires, un cran plus bas (scopée au système solaire
-// plutôt qu'à la galaxie). Jamais dans le même appel IA que catégorie/système (cf. régression
-// du 06/08/2026 sur un prompt trop long) : passe séparée, cf. classifyOpinionArticleStarsWithAI.
-
-function normalizeStarName(value) {
-  return normalizeSolarSystemName(value);
-}
-
-// Rejette un nom d'étoile vide, identique/quasi identique au système solaire parent (sinon
-// aucun intérêt à ce niveau supplémentaire), ou à la galaxie/catégorie.
-function isOpinionArticleStarNameRejected(normalizedName, { solarSystemName, galaxy, category, categoryPrecision }) {
-  if (!normalizedName) return true;
-  if (solarSystemName && normalizedName === normalizeStarName(solarSystemName)) return true;
-  if (galaxy && normalizedName === normalizeStarName(galaxy)) return true;
-  if (category && normalizedName === normalizeStarName(category)) return true;
-  if (categoryPrecision && normalizedName === normalizeStarName(categoryPrecision)) return true;
-  return false;
-}
-
-// Même mécanique que resolveOrCreateSolarSystem : retrouve une étoile existante
-// (solar_system_id, normalized_name) ou la crée. Nom tronqué à la même limite que les autres
-// bulles (truncateToBubbleLabel, cf. lib/cloud-label.js) — même moteur d'affichage.
-async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
-  const { data: existing, error: selectError } = await supabase
-    .from("stars")
-    .select("id")
-    .eq("solar_system_id", solarSystemId)
-    .eq("normalized_name", normalizedName)
-    .maybeSingle();
-  if (selectError) { console.warn("[stars] lecture échouée :", selectError.message); return null; }
-  if (existing) return existing.id;
-  const { data: inserted, error: insertError } = await supabase
-    .from("stars")
-    .insert({ solar_system_id: solarSystemId, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
-    .select("id")
-    .single();
-  if (!insertError) return inserted.id;
-  const { data: retryExisting, error: retryError } = await supabase
-    .from("stars")
-    .select("id")
-    .eq("solar_system_id", solarSystemId)
-    .eq("normalized_name", normalizedName)
-    .maybeSingle();
-  if (!retryError && retryExisting) return retryExisting.id;
-  console.warn("[stars] création échouée :", insertError.message);
-  return null;
-}
-
-// Passe IA dédiée, appelée uniquement pour des articles qui ont DÉJÀ un solar_system_id
-// valide (fraîchement résolu ou déjà en base) mais pas encore de star_id — jamais mêlée à la
-// classification catégorie/système. items : [{id, title, summary, solarSystemId, solarSystemName,
-// galaxy, category, categoryPrecision}]. Groupe par système solaire pour que le prompt liste les
-// étoiles existantes une seule fois par système plutôt qu'une fois par article.
-async function classifyOpinionArticleStarsWithAI(items) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !items.length) return new Map();
-
-  const existingStarsBySystem = new Map();
-  const solarSystemIds = [...new Set(items.map((it) => it.solarSystemId).filter(Boolean))];
-  if (solarSystemIds.length) {
-    const { data: starRows, error: starsError } = await supabase
-      .from("stars")
-      .select("id, solar_system_id, name")
-      .in("solar_system_id", solarSystemIds);
-    if (starsError) console.warn("[opinion-articles stars] lecture stars échouée :", starsError.message);
-    for (const row of starRows || []) {
-      if (!existingStarsBySystem.has(row.solar_system_id)) existingStarsBySystem.set(row.solar_system_id, []);
-      existingStarsBySystem.get(row.solar_system_id).push(row);
-    }
-  }
-
-  const results = new Map();
-  const cache = new Map();
-  for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
-    const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
-    const compactItems = chunk.map((item, index) => ({
-      index,
-      solar_system: item.solarSystemName,
-      title: String(item.title || "").slice(0, 220),
-      summary: String(item.summary || "").slice(0, 450),
-      existing_stars: (existingStarsBySystem.get(item.solarSystemId) || []).map((s) => `${s.id}:${s.name}`).join(", ") || "(aucune étoile existante dans ce système)"
-    }));
-    const prompt = [
-      "Réponds uniquement en json valide.",
-      "Pour chaque article, indique son \"étoile\" : un événement ou une occasion PRÉCISE à l'intérieur du système solaire donné (ex. système \"Cyclisme\" → étoile \"Tour de France 2026\" ; système \"Justice pénale\" → étoile \"Procès Jean-Vincent Placé\"), capable de regrouper plusieurs articles sur le même événement à des dates différentes (plusieurs étapes d'une course, plusieurs audiences d'un procès).",
-      "Jamais un doublon ou une reformulation du système solaire lui-même — l'étoile doit être plus précise, pas juste un synonyme.",
-      "Soit l'id d'une étoile de existing_stars qui correspond VRAIMENT au même événement, soit un nom court (2 à 6 mots) pour une nouvelle étoile si aucune existante ne convient. Ne choisis jamais une étoile existante juste parce qu'elle est disponible.",
-      "RÈGLE OBLIGATOIRE : chaque article doit avoir soit star_id (nombre), soit new_star (texte court) — jamais les deux, jamais aucun des deux.",
-      `Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les index suivants : ${compactItems.map((i) => i.index).join(", ")}.`,
-      "Format obligatoire : {\"items\":[{\"index\":0,\"star_id\":null,\"new_star\":\"Tour de France 2026\"}]} avec un objet par index.",
-      "",
-      JSON.stringify(compactItems)
-    ].join("\n");
-
-    try {
-      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-      const body = {
-        model: OPINION_ARTICLE_CATEGORY_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      };
-      if (isGpt5) {
-        body.max_completion_tokens = Math.min(6000, 500 + chunk.length * 60);
-        body.reasoning_effort = "low";
-      } else {
-        body.max_tokens = Math.min(3000, 100 + chunk.length * 30);
-        body.temperature = 0;
-      }
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify(body)
-      });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
-      const data = await r.json();
-      const content = data?.choices?.[0]?.message?.content;
-      const parsed = content ? JSON.parse(content) : null;
-      const answered = Array.isArray(parsed?.items) ? parsed.items : [];
-      console.log(`[opinion-articles stars] requested=${chunk.length} answered=${answered.length}`);
-
-      for (const entry of answered) {
-        const localIndex = Number(entry?.index);
-        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
-        const item = chunk[localIndex];
-
-        let starId = null;
-        const candidateId = Number(entry?.star_id);
-        if (Number.isInteger(candidateId) && candidateId > 0) {
-          const existingInSystem = (existingStarsBySystem.get(item.solarSystemId) || []).some((s) => s.id === candidateId);
-          if (existingInSystem) starId = candidateId;
-        }
-        if (!starId) {
-          const newName = String(entry?.new_star || "").trim();
-          if (newName) {
-            const normalized = normalizeStarName(newName);
-            if (!isOpinionArticleStarNameRejected(normalized, {
-              solarSystemName: item.solarSystemName,
-              galaxy: item.galaxy,
-              category: item.category,
-              categoryPrecision: item.categoryPrecision
-            })) {
-              const cacheKey = item.solarSystemId + "::" + normalized;
-              if (cache.has(cacheKey)) {
-                starId = cache.get(cacheKey);
-              } else {
-                starId = await resolveOrCreateStar(item.solarSystemId, newName, normalized);
-                if (starId) {
-                  cache.set(cacheKey, starId);
-                  if (!existingStarsBySystem.has(item.solarSystemId)) existingStarsBySystem.set(item.solarSystemId, []);
-                  existingStarsBySystem.get(item.solarSystemId).push({ id: starId, solar_system_id: item.solarSystemId, name: newName });
-                }
-              }
-            }
-          }
-        }
-        if (starId) results.set(item.id, starId);
-      }
-    } catch (error) {
-      console.warn("[opinion-articles stars] classification IA ignorée :", error.message);
-    }
-  }
-
-  return results;
-}
-
-// ---- Classification secondaire : rattache EN PLUS un article à d'autres galaxies quand
-// c'est vraiment pertinent (ex. un article sur l'interdiction des réseaux sociaux aux mineurs
-// touche réellement Société-éducation, Sciences-technologie, Philosophie ET Sciences
-// sociales), sans jamais toucher la classification principale (category/category_precision/
-// solar_system_id/star_id sur opinion_articles, utilisée partout ailleurs sur le site).
-// Volontairement restrictif : la consigne du prompt demande 0 résultat dans la grande
-// majorité des cas, jamais plus de 3 — un tag secondaire en trop pollue "Mon univers" sans
-// aucun bénéfice, contrairement à un système/étoile en trop qui reste anodin.
-// items : [{id, link, title, summary, category (primaire), categoryPrecision (primaire)}].
-// Retourne un Map<link, Array<{category, categoryPrecision, solarSystemId}>>.
-async function classifyOpinionArticleSecondaryTagsWithAI(items) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || !items.length) return new Map();
-
-  const { data: existingSolarSystemRows, error: solarSystemsError } = await supabase
-    .from("solar_systems")
-    .select("id, galaxy, name")
-    .order("id", { ascending: true });
-  if (solarSystemsError) console.warn("[opinion-articles secondary] lecture solar_systems échouée :", solarSystemsError.message);
-  const solarSystemsByGalaxy = new Map();
-  for (const row of existingSolarSystemRows || []) {
-    if (!solarSystemsByGalaxy.has(row.galaxy)) solarSystemsByGalaxy.set(row.galaxy, []);
-    solarSystemsByGalaxy.get(row.galaxy).push(row);
-  }
-  const solarSystemsPromptBlock = solarSystemsByGalaxy.size
-    ? Array.from(solarSystemsByGalaxy.entries())
-      .map(([galaxy, list]) => `${galaxy} : ` + list.map((s) => `${s.id}:${s.name}`).join(", "))
-      .join("\n")
-    : "(aucun système solaire existant pour l'instant)";
-  const solarSystemCreationCache = new Map();
-
-  const results = new Map();
-  for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
-    const chunk = items.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
-    const compactItems = chunk.map((item, index) => ({
-      id: index,
-      primary_category: item.category + (item.categoryPrecision ? ` (${item.categoryPrecision})` : ""),
-      title: String(item.title || "").slice(0, 220),
-      summary: String(item.summary || "").slice(0, 450)
-    }));
-    const itemIds = compactItems.map((item) => item.id).join(", ");
-    const prompt = [
-      "Réponds uniquement en json valide.",
-      "Chaque article a DÉJÀ une rubrique principale (primary_category) — ne la reprends jamais.",
-      "Rubriques Agôn disponibles : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
-      "Pour CHAQUE article, indique s'il touche RÉELLEMENT et SUBSTANTIELLEMENT une ou plusieurs AUTRES rubriques — pas un lien vague ou indirect, mais un vrai second sujet de fond que l'article traite vraiment.",
-      "Exemple d'article touchant plusieurs rubriques à la fois : \"interdiction des réseaux sociaux aux moins de 15 ans\" → Société - éducation (protection des mineurs) ET Sciences - technologie (réseaux sociaux) ET Philosophie - sciences sociales (liberté individuelle, paternalisme, socialisation numérique) — chacune est un vrai axe de lecture de cet article, pas une simple mention.",
-      "DANS LA GRANDE MAJORITÉ DES CAS, il n'y a AUCUNE rubrique secondaire pertinente — renvoie alors un tableau vide. N'en ajoute JAMAIS pour un article ordinaire à un seul sujet clair. Maximum 3 rubriques secondaires par article, et seulement si chacune est vraiment justifiée.",
-      "4 rubriques sont hybrides (deux branches) : \"Sports - loisirs\" (Sports/Loisirs), \"Culture - arts\" (Culture/Arts), \"Philosophie - sciences sociales\" (Philosophie/Sciences sociales), \"Langues et Lettres\" (Langues/Lettres) — pour une rubrique secondaire hybride, précise la branche dans category_precision (sinon null).",
-      "Pour chaque rubrique secondaire retenue, indique aussi son système solaire (thème durable à l'intérieur de cette rubrique, même logique que pour la rubrique principale) : soit l'id d'un système existant qui correspond vraiment, soit un nom court (2-4 mots) pour un nouveau système.",
-      "Systèmes solaires existants (id:nom par galaxie) :",
-      solarSystemsPromptBlock,
-      `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
-      "Format obligatoire : {\"items\":[{\"id\":0,\"secondary\":[]},{\"id\":1,\"secondary\":[{\"category\":\"Sciences - technologie\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":\"Réseaux sociaux\"}]}]} — secondary est un tableau vide dans la grande majorité des cas.",
-      "",
-      JSON.stringify(compactItems)
-    ].join("\n");
-
-    try {
-      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-      const body = {
-        model: OPINION_ARTICLE_CATEGORY_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      };
-      if (isGpt5) {
-        body.max_completion_tokens = Math.min(8000, 800 + chunk.length * 90);
-        body.reasoning_effort = "low";
-      } else {
-        body.max_tokens = Math.min(4000, 120 + chunk.length * 30);
-        body.temperature = 0;
-      }
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify(body)
-      });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
-      const data = await r.json();
-      const content = data?.choices?.[0]?.message?.content || "";
-      const parsed = content ? (() => { try { return JSON.parse(content); } catch { return null; } })() : null;
-      const classified = Array.isArray(parsed?.items) ? parsed.items : [];
-      let secondaryCount = 0;
-
-      for (const entry of classified) {
-        const localIndex = Number(entry?.id);
-        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
-        const item = chunk[localIndex];
-        const secondaryList = Array.isArray(entry?.secondary) ? entry.secondary.slice(0, 3) : [];
-        const resolved = [];
-
-        for (const sec of secondaryList) {
-          const category = normalizeOpinionArticleCategory(sec?.category);
-          // Jamais un doublon de la catégorie principale : ça n'apporte rien et fausserait le
-          // compte de galaxies dans "Mon univers".
-          if (!category || category === item.category) continue;
-          const precision = normalizeOpinionArticleCategoryPrecision(category, sec?.category_precision);
-          let galaxy = getOpinionArticleGalaxy(category, precision);
-          // Repli : pour une rubrique hybride, l'IA choisit parfois un solar_system_id existant
-          // sans fournir category_precision (cas réel observé le 06/08/2026 — elle avait
-          // pourtant correctement identifié le système) — la galaxie réelle du système existant
-          // choisi fait foi dans ce cas, pas besoin de la redériver de category/precision.
-          if (!galaxy) {
-            const candidateId = Number(sec?.solar_system_id);
-            if (Number.isInteger(candidateId) && candidateId > 0) {
-              for (const [galaxyName, list] of solarSystemsByGalaxy) {
-                if (list.some((s) => s.id === candidateId)) { galaxy = galaxyName; break; }
-              }
-            }
-          }
-          if (!galaxy) continue;
-          const solarSystemId = await resolveOpinionArticleSolarSystem(galaxy, sec, solarSystemsByGalaxy, solarSystemCreationCache, category, precision);
-          if (!solarSystemId) continue;
-          resolved.push({ category, categoryPrecision: precision, solarSystemId });
-        }
-
-        if (resolved.length) {
-          secondaryCount += resolved.length;
-          results.set(item.link, resolved);
-        }
-      }
-      console.log(`[opinion-articles secondary] requested=${chunk.length} tagged=${classified.filter((e) => Array.isArray(e?.secondary) && e.secondary.length).length} secondaryTags=${secondaryCount}`);
-    } catch (error) {
-      console.warn("[opinion-articles secondary] classification IA ignorée :", error.message);
-    }
-  }
-
-  return results;
-}
-
 // Mots-clés du fallback : match sur frontière de mot (plus de "sélection" →
 // élection, "transport" → sport, "nouveau" → eau). Un `*` final autorise les
 // suffixes ("ecolog*" matche écologie/écologiste) ; sinon mot entier, pluriel
@@ -9749,46 +9294,12 @@ function getOpinionArticleFallbackCategory(article) {
   return "Société - éducation";
 }
 
-// includeSolarSystem=false (ingestion générale) : classe seulement category/category_precision,
-// saute entièrement la lecture de solar_systems, le bloc de prompt correspondant, la résolution
-// de galaxie/système et le second appel ciblé — prompt plus court, plus léger, aucun appel
-// Supabase ni OpenAI superflu pour un flux qui n'a plus besoin de système solaire (cf.
-// classification réservée aux articles réellement utilisés dans un QCM).
-async function classifyOpinionArticlesWithAI(items, { includeSolarSystem = true } = {}) {
+// Classe chaque article dans une rubrique Agôn (category/category_precision) — c'est tout :
+// plus de système solaire ici, cf. Mon univers désormais réservé à la Culture Générale
+// (resolveCultureGeneraleSolarSystemWithAI).
+async function classifyOpinionArticlesWithAI(items) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !items.length) return new Map();
-
-  let solarSystemsByGalaxy = new Map();
-  let solarSystemsPromptBlock = "";
-  let solarSystemCreationCache = new Map();
-  // Articles avec galaxie valide mais sans solar_system_id exploitable après le premier
-  // appel (omission du modèle, id d'une autre galaxie, ou nom rejeté) : traités par un
-  // second appel ciblé, beaucoup plus court, une fois le premier appel terminé.
-  const incompleteForSolarSystem = [];
-
-  if (includeSolarSystem) {
-    // Chargée une fois par appel (pas par lot) : univers volontairement restreint (une
-    // vingtaine de galaxies, quelques systèmes chacune), donc un select() complet reste léger.
-    const { data: existingSolarSystemRows, error: solarSystemsError } = await supabase
-      .from("solar_systems")
-      .select("id, galaxy, name")
-      .order("id", { ascending: true });
-    if (solarSystemsError) console.warn("[opinion-articles category] lecture solar_systems échouée :", solarSystemsError.message);
-    for (const row of existingSolarSystemRows || []) {
-      if (!solarSystemsByGalaxy.has(row.galaxy)) solarSystemsByGalaxy.set(row.galaxy, []);
-      solarSystemsByGalaxy.get(row.galaxy).push(row);
-    }
-    // Snapshot texte figé au début de l'appel : un système créé au fil d'un lot n'apparaît pas
-    // dans le prompt des lots suivants du même appel, mais solarSystemsByGalaxy (mis à jour au
-    // fil de l'eau par resolveOpinionArticleSolarSystem) empêche quand même toute recréation en
-    // doublon — seule conséquence : l'IA peut reproposer le même nom en "new_solar_system" au
-    // lieu de choisir l'id, ce que le code résout silencieusement vers l'id existant.
-    solarSystemsPromptBlock = solarSystemsByGalaxy.size
-      ? Array.from(solarSystemsByGalaxy.entries())
-        .map(([galaxy, list]) => `${galaxy} : ` + list.map((s) => `${s.id}:${s.name}`).join(", "))
-        .join("\n")
-      : "(aucun système solaire existant pour l'instant)";
-  }
 
   const results = new Map();
   for (let start = 0; start < items.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
@@ -9814,17 +9325,7 @@ async function classifyOpinionArticlesWithAI(items, { includeSolarSystem = true 
       "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante du sujet (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
       "Pour une rubrique hybride, choisis OBLIGATOIREMENT la branche dominante dans la grande majorité des cas ; n'utilise null que si le titre/résumé ne permettent vraiment pas de distinguer les deux branches — le simple fait qu'un article touche indirectement les deux ne justifie pas null.",
       "Pour \"Culture - arts\" : Arts = artiste/musicien/écrivain-créateur/acteur/réalisateur/œuvre/film/chanson/spectacle/exposition, même pour un décès ou hommage (ex. Marie-Paule Belle, chanteuse → Arts) ; Culture = patrimoine, politiques culturelles, pratiques de lecture/consommation culturelle, protection/destruction de biens culturels, débats culturels collectifs.",
-      ...(includeSolarSystem ? [
-        "Ajoute aussi \"solar_system_id\" (id existant) et \"new_solar_system\" (nouveau nom) : le système solaire est un thème DURABLE et réutilisable pouvant regrouper plusieurs articles à des dates différentes — une discipline, un domaine, un phénomène, une institution/un secteur, une période ou un conflit durable (ex. Football, Sociologie, Cinéma, Violences sexuelles, Enseignement supérieur, Révolution française, Conflit israélo-palestinien). Jamais l'événement du jour ni un doublon de la rubrique/galaxie : rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\", \"Procès et justice\", \"Relations internationales\", \"Questions de société\", \"Éducation et apprentissage\", \"Éducation\", \"Société et éducation\", \"Questions éducatives\" (pour Société - éducation, préfère un thème précis : Enseignement supérieur, École primaire, Formation professionnelle, Précocité intellectuelle, Pédagogie, Décrochage scolaire).",
-        "Avant de nommer un nouveau système, teste : pourrait-il accueillir au moins 5 articles différents dans le temps ? Sinon, retire mentalement date, lieu, personnes et action immédiate, et ne garde que le thème durable derrière l'événement — ex. \"Gaza plan de paix\"→\"Conflit israélo-palestinien\", \"Procès Jean-Vincent Placé\"→\"Violences sexuelles\", \"Retour de Teddy Riner\"→\"Judo\", \"Transfert au Real Madrid\"→\"Football\", \"Procès et justice\"→\"Justice pénale\".",
-        "Systèmes solaires existants (id:nom par galaxie) :",
-        solarSystemsPromptBlock,
-        "Réutilise un système existant dès qu'il correspond, même un peu plus large que le sujet précis de l'article (ex. système \"Conflit israélo-palestinien\" existant + nouvel article sur un plan de paix à Gaza → réutiliser, ne pas créer \"Gaza plan de paix\") ; sinon propose un nouveau thème durable dans new_solar_system.",
-        "RÈGLE OBLIGATOIRE : si galaxy n'est pas null, chaque article DOIT avoir solar_system_id OU new_solar_system (jamais aucun des deux, jamais les deux). Seule exception : rubrique hybride sans category_precision déterminée → les deux restent null.",
-        "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null,\"solar_system_id\":null,\"new_solar_system\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\",\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par id, tous les champs remplis pour chaque article."
-      ] : [
-        "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\"}]} avec un objet par id, tous les champs remplis pour chaque article."
-      ]),
+      "Format obligatoire : {\"items\":[{\"id\":0,\"category\":\"...\",\"category_precision\":null},{\"id\":1,\"category\":\"Sports - loisirs\",\"category_precision\":\"Sports\"}]} avec un objet par id, tous les champs remplis pour chaque article.",
       "Choisis la rubrique la plus spécifique d'après le titre, le résumé, la source et l'URL.",
       "N'utilise Société - éducation que pour société, social, éducation, école, logement, famille, immigration, discriminations ou faits sociaux généraux.",
       "Ne classe pas en Société - éducation si une autre rubrique convient clairement : guerre/diplomatie/pays étrangers = International ; gouvernement/élections/partis = Politique ; argent/entreprises/impôts/travail = Économie - emploi ; canicule/météo/énergie/pollution = Climat - environnement ; procès/police/attentat/crime = Justice - faits divers ; cinéma/musique/série = Culture - arts ; littérature/langue française/orthographe/grammaire = Langues et Lettres ; événement historique/personnage historique/guerre mondiale/antiquité/moyen âge = Histoire ; sport/compétition/Tour de France/courses hippiques = Sports - loisirs ; maladie/hôpital/euthanasie = Santé - bien-être ; IA/internet/numérique = Sciences - technologie.",
@@ -9845,11 +9346,10 @@ async function classifyOpinionArticlesWithAI(items, { includeSolarSystem = true 
       };
       if (isGpt5) {
         // Budget relevé (était 1000 + 80/item) après une régression observée le 06/08/2026 :
-        // un prompt enrichi (règles système solaire) a fait consommer tout le budget en
-        // raisonnement caché, sans laisser de place pour le JSON de sortie (lot entier vide,
-        // sans erreur HTTP). Le prompt a aussi été raccourci en parallèle (cf. bloc
-        // solar_system_id ci-dessus) — voir le log de diagnostic juste après l'appel pour
-        // surveiller finishReason/contentLength si ça se reproduit.
+        // un prompt trop riche avait fait consommer tout le budget en raisonnement caché, sans
+        // laisser de place pour le JSON de sortie (lot entier vide, sans erreur HTTP) — voir le
+        // log de diagnostic juste après l'appel pour surveiller finishReason/contentLength si
+        // ça se reproduit.
         body.max_completion_tokens = Math.min(12000, 1500 + chunk.length * 120);
         body.reasoning_effort = "low";
       } else {
@@ -9886,109 +9386,15 @@ async function classifyOpinionArticlesWithAI(items, { includeSolarSystem = true 
         const category = normalizeOpinionArticleCategory(entry?.category);
         if (!Number.isInteger(localIndex) || !chunk[localIndex] || !category) continue;
         const precision = normalizeOpinionArticleCategoryPrecision(category, entry?.category_precision);
-        const galaxy = includeSolarSystem ? getOpinionArticleGalaxy(category, precision) : null;
-        const solarSystemId = galaxy
-          ? await resolveOpinionArticleSolarSystem(galaxy, entry, solarSystemsByGalaxy, solarSystemCreationCache, category, precision)
-          : null;
         const link = String(chunk[localIndex].link || "");
-        results.set(link, { category, precision, solarSystemId });
-        if (includeSolarSystem && galaxy && !solarSystemId) {
-          incompleteForSolarSystem.push({
-            link,
-            title: chunk[localIndex].title,
-            summary: chunk[localIndex].summary,
-            category,
-            precision,
-            galaxy
-          });
-        }
+        results.set(link, { category, precision });
       }
     } catch (error) {
       console.warn("[opinion-articles category] classification IA ignorée :", error.message);
     }
   }
 
-  if (includeSolarSystem && incompleteForSolarSystem.length) {
-    await completeMissingSolarSystemsWithAI(incompleteForSolarSystem, solarSystemsByGalaxy, solarSystemCreationCache, results);
-  }
-
   return results;
-}
-
-// Second appel, ciblé et court : uniquement pour les articles dont la galaxie est valide
-// mais dont le premier appel n'a fourni aucun solar_system_id exploitable (omission du
-// modèle, id d'une autre galaxie, ou nom rejeté par les garde-fous). Ne s'exécute que sur
-// ce sous-ensemble — jamais sur le lot complet — pour limiter le surcoût. Réutilise
-// resolveOpinionArticleSolarSystem (mêmes garde-fous, même logique find-or-create) : ce
-// second appel ne fait que produire une nouvelle proposition à valider, rien de plus.
-async function completeMissingSolarSystemsWithAI(incompleteEntries, solarSystemsByGalaxy, cache, results) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return;
-  for (let start = 0; start < incompleteEntries.length; start += OPINION_ARTICLE_CATEGORY_BATCH_SIZE) {
-    const chunk = incompleteEntries.slice(start, start + OPINION_ARTICLE_CATEGORY_BATCH_SIZE);
-    const compactItems = chunk.map((item, index) => ({
-      index,
-      galaxy: item.galaxy,
-      title: String(item.title || "").slice(0, 220),
-      summary: String(item.summary || "").slice(0, 450),
-      existing_solar_systems: (solarSystemsByGalaxy.get(item.galaxy) || []).map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
-    }));
-    const prompt = [
-      "Réponds uniquement en json valide.",
-      "Pour chaque article, indique le système solaire : un domaine précis à l'intérieur de la galaxie donnée (ex. Sport → Judo, Culture → Chanson française, Politique → Institutions françaises), jamais un doublon de la galaxie elle-même (rejette \"Sport\", \"Sports\", \"Culture générale\", \"Arts et culture\", \"Actualité politique\", \"Actualité internationale\", \"Société\", \"Faits divers\").",
-      "Soit l'id d'un système de existing_solar_systems qui correspond VRAIMENT au sujet, soit un nom court pour un nouveau système si aucun système existant ne convient réellement. Ne choisis jamais un système existant juste parce qu'il est disponible.",
-      "RÈGLE OBLIGATOIRE : chaque article doit avoir soit solar_system_id (nombre), soit new_solar_system (texte court) — jamais les deux, jamais aucun des deux.",
-      `Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les index suivants : ${compactItems.map((i) => i.index).join(", ")}.`,
-      "Format obligatoire : {\"items\":[{\"index\":0,\"solar_system_id\":null,\"new_solar_system\":\"Judo\"}]} avec un objet par index.",
-      "",
-      JSON.stringify(compactItems)
-    ].join("\n");
-
-    try {
-      const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-      const body = {
-        model: OPINION_ARTICLE_CATEGORY_MODEL,
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      };
-      if (isGpt5) {
-        body.max_completion_tokens = Math.min(6000, 500 + chunk.length * 60);
-        body.reasoning_effort = "low";
-      } else {
-        body.max_tokens = Math.min(3000, 100 + chunk.length * 30);
-        body.temperature = 0;
-      }
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify(body)
-      });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
-      const data = await r.json();
-      const content = data?.choices?.[0]?.message?.content;
-      const parsed = content ? JSON.parse(content) : null;
-      const answered = Array.isArray(parsed?.items) ? parsed.items : [];
-      const answeredIndexes = new Set();
-      for (const entry of answered) {
-        const localIndex = Number(entry?.index);
-        if (!Number.isInteger(localIndex) || !chunk[localIndex]) continue;
-        answeredIndexes.add(localIndex);
-        const item = chunk[localIndex];
-        const solarSystemId = await resolveOpinionArticleSolarSystem(item.galaxy, entry, solarSystemsByGalaxy, cache, item.category, item.precision);
-        if (solarSystemId) {
-          const existing = results.get(item.link);
-          if (existing) existing.solarSystemId = solarSystemId;
-        } else {
-          console.warn(`[opinion-articles solar-system] toujours incomplet après le second appel : "${item.title}" (galaxie ${item.galaxy})`);
-        }
-      }
-      chunk.forEach((item, index) => {
-        if (!answeredIndexes.has(index)) console.warn(`[opinion-articles solar-system] pas de réponse au second appel : "${item.title}" (galaxie ${item.galaxy})`);
-      });
-    } catch (error) {
-      console.warn("[opinion-articles solar-system] second appel ignoré :", error.message);
-    }
-  }
 }
 
 async function upsertOpinionArticleRows(rows) {
@@ -10558,7 +9964,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
       if (selectedIds.length) {
         const { data: fullRows, error: fullError } = await supabase
           .from("opinion_articles")
-          .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, published_at")
+          .select("id, source, orientation, title, link, summary, type, category, category_precision, published_at")
           .in("id", selectedIds);
         if (fullError) throw new Error(fullError.message);
         data = fullRows || [];
@@ -10566,7 +9972,7 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
     } else {
       const { data: latestRows, error } = await supabase
         .from("opinion_articles")
-        .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, published_at")
+        .select("id, source, orientation, title, link, summary, type, category, category_precision, published_at")
         .order("published_at", { ascending: false })
         .limit(limit);
       if (error) throw new Error(error.message);
@@ -10580,10 +9986,10 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
 
     // Garde-fou : un échec complet de l'IA (0 résultat exploitable pour tout le lot)
     // ne doit jamais se traduire par un écrasement silencieux via le fallback local —
-    // cf. régression du 06/08/2026 où category/category_precision/solar_system_id
-    // d'articles déjà bien classés avaient été remplacés par le fallback mots-clés.
-    // Cette route ne fait plus jamais confiance au fallback : seuls les articles avec
-    // une classification IA valide sont mis à jour, les autres restent inchangés.
+    // cf. régression du 06/08/2026 où category/category_precision d'articles déjà bien
+    // classés avaient été remplacés par le fallback mots-clés. Cette route ne fait plus
+    // jamais confiance au fallback : seuls les articles avec une classification IA
+    // valide sont mis à jour, les autres restent inchangés.
     if (aiCategories.size === 0) {
       console.warn(`[opinion-articles classification] echec complet du lot : considered=${rows.length}, aiClassified=0 — aucune mise a jour appliquee.`);
       return res.status(502).json({
@@ -10605,10 +10011,9 @@ app.post("/api/admin/opinion-articles/classify", requireAdmin, rateLimit("admin-
       aiClassified += 1;
       const category = aiResult.category;
       const category_precision = normalizeOpinionArticleCategoryPrecision(category, aiResult.precision);
-      const solar_system_id = aiResult.solarSystemId || null;
       const { error: updateError } = await supabase
         .from("opinion_articles")
-        .update({ category, category_precision, solar_system_id })
+        .update({ category, category_precision })
         .eq("id", article.id);
       if (updateError) throw new Error(updateError.message);
       updated += 1;
@@ -11243,116 +10648,6 @@ app.delete("/api/admin/veille/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// Normalise une URL d'article pour la comparer de façon fiable à opinion_articles.link :
-// hôte en minuscules sans "www.", sans fragment ni query string, sans slash final. Formes
-// YouTube courantes harmonisées (youtu.be et youtube.com/watch?v= renvoient la même clé).
-// Retourne "" si la valeur n'est pas une URL http(s) exploitable.
-function normalizeArticleSourceUrl(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  let url;
-  try {
-    url = new URL(raw);
-  } catch {
-    return "";
-  }
-  if (!/^https?:$/.test(url.protocol)) return "";
-  const host = url.hostname.replace(/^www\./, "").toLowerCase();
-  const pathname = url.pathname.replace(/\/+$/, "");
-  if (host === "youtu.be" && pathname) return `youtube.com/watch?v=${pathname.slice(1)}`;
-  if ((host === "youtube.com" || host === "m.youtube.com")) {
-    const videoId = url.searchParams.get("v");
-    if (videoId) return `youtube.com/watch?v=${videoId}`;
-  }
-  return `${host}${pathname}`;
-}
-
-// Fenêtre de recherche pour la résolution par URL normalisée : les sources d'un débat sont
-// toujours des articles récents, pas la peine de scanner toute la table opinion_articles.
-const ARTICLE_SOURCE_MATCH_WINDOW_DAYS = 14;
-
-// Résout, pour les liens d'un débat en cours de publication, les identifiants opinion_articles
-// correspondants. `links` accepte des chaînes simples ou des objets {url, opinionArticleId}.
-// Un opinionArticleId n'est retenu que s'il existe réellement ET que son URL correspond au
-// lien fourni (jamais de clé étrangère fictive) ; sinon résolution par URL, d'abord exacte
-// puis normalisée. Ne lève jamais d'exception : une erreur Supabase conserve ce qui est déjà
-// résolu, jamais un résultat inventé. Ordre des liens préservé, ids dédupliqués.
-async function resolveArticleSourceIds(links) {
-  const linkArray = Array.isArray(links) ? links : [];
-  const urlByLink = linkArray.map((l) => String((typeof l === "string" ? l : l?.url) || "").trim()).filter(Boolean);
-  if (!urlByLink.length) return [];
-
-  const idByUrl = new Map();
-
-  const explicitCandidates = linkArray
-    .filter((l) => l && typeof l === "object")
-    .map((l) => ({ url: String(l.url || "").trim(), id: Number(l.opinionArticleId) }))
-    .filter((c) => c.url && Number.isInteger(c.id) && c.id > 0);
-  if (explicitCandidates.length) {
-    try {
-      const { data, error } = await supabase
-        .from("opinion_articles")
-        .select("id, link")
-        .in("id", [...new Set(explicitCandidates.map((c) => c.id))]);
-      if (error) throw error;
-      const linkById = new Map((data || []).map((r) => [r.id, r.link]));
-      for (const c of explicitCandidates) {
-        if (linkById.get(c.id) === c.url) idByUrl.set(c.url, c.id);
-      }
-    } catch (error) {
-      console.warn("[veille publish article sources] vérification opinionArticleId échouée :", error.message);
-    }
-  }
-
-  const stillUnresolved = urlByLink.filter((u) => !idByUrl.has(u));
-  if (stillUnresolved.length) {
-    try {
-      const { data, error } = await supabase.from("opinion_articles").select("id, link").in("link", stillUnresolved);
-      if (error) throw error;
-      for (const row of data || []) {
-        if (!idByUrl.has(row.link)) idByUrl.set(row.link, row.id);
-      }
-    } catch (error) {
-      console.warn("[veille publish article sources] résolution exacte échouée :", error.message);
-    }
-  }
-
-  const stillUnresolvedAfterExact = urlByLink.filter((u) => !idByUrl.has(u));
-  if (stillUnresolvedAfterExact.length) {
-    const normalizedTargets = new Map();
-    for (const u of stillUnresolvedAfterExact) {
-      const n = normalizeArticleSourceUrl(u);
-      if (n && !normalizedTargets.has(n)) normalizedTargets.set(n, u);
-    }
-    if (normalizedTargets.size) {
-      try {
-        const cutoff = new Date(Date.now() - ARTICLE_SOURCE_MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-        const { data, error } = await supabase
-          .from("opinion_articles")
-          .select("id, link")
-          .gte("created_at", cutoff)
-          .limit(2000);
-        if (error) throw error;
-        for (const row of data || []) {
-          const n = normalizeArticleSourceUrl(row.link);
-          const originalUrl = n && normalizedTargets.get(n);
-          if (originalUrl && !idByUrl.has(originalUrl)) idByUrl.set(originalUrl, row.id);
-        }
-      } catch (error) {
-        console.warn("[veille publish article sources] résolution normalisée échouée :", error.message);
-      }
-    }
-  }
-
-  const orderedIds = [];
-  const seenIds = new Set();
-  for (const url of urlByLink) {
-    const id = idByUrl.get(url);
-    if (id && !seenIds.has(id)) { seenIds.add(id); orderedIds.push(id); }
-  }
-  return orderedIds;
-}
-
 app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 30), async (req, res) => {
   const { id, question, positionA, positionB, theme, resume, links, linkedDebateId, keywords, forcePublishOnAlignmentWarning, politicalGroup } = req.body || {};
   try {
@@ -11513,11 +10808,6 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       }
     }
 
-    // Résolution des articles source (cf. resolveArticleSourceIds) : ne bloque jamais la
-    // publication, source_article_ids reste [] si rien n'est retrouvé.
-    const resolvedArticleIds = await resolveArticleSourceIds(linksMeta);
-    console.log(`[veille publish article sources] links=${linksMeta.length} resolvedArticles=${resolvedArticleIds.length}`);
-
     const newDebateRow = {
       question: safeQuestion,
       option_a: debateType === "open" ? "" : normalizedPositionA,
@@ -11525,7 +10815,6 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       category: theme || null,
       content: resolvedContent,
       source_url: sourceUrl,
-      source_article_ids: resolvedArticleIds,
       type: debateType,
       creator_key: AGON_ADMIN_CREATOR_KEY,
       created_at: nowIso(),
@@ -11533,13 +10822,6 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       political_group: resolvedPoliticalGroup
     };
     let { data, error } = await supabase.from("debates").insert(newDebateRow).select("id").single();
-    if (error && String(error.message || "").toLowerCase().includes("source_article_ids")) {
-      // Colonne pas encore migrée : ne jamais bloquer la publication pour ça (cf.
-      // data/migration-debates-source-article-ids.sql à appliquer côté Supabase).
-      console.warn("[veille publish] colonne source_article_ids absente, publication sans elle : migration data/migration-debates-source-article-ids.sql à appliquer.");
-      const { source_article_ids, ...fallbackRow } = newDebateRow;
-      ({ data, error } = await supabase.from("debates").insert(fallbackRow).select("id").single());
-    }
     if (error) {
       console.error("[veille publish] insert error", {
         pendingId: id ? Number(id) : null,
@@ -12506,32 +11788,52 @@ const DAILY_QUIZ_NARRATIVE_MODEL = process.env.OPENAI_DAILY_QUIZ_NARRATIVE_MODEL
 // dedupeParalleleHistoriqueTopicsByCloudLabel (cloud_label OU question).
 const DAILY_QUIZ_TOPIC_LOOKBACK_DAYS = 6;
 
-// QCM actu (matin/soir), un par vague de publication (~8h et ~16h heure de
-// Paris) : triggerHour = heure à partir de laquelle le scheduler tente la
-// génération (marge d'1h après la vague correspondante pour que les arènes
-// soient là). culture_generale : les événements "Ce jour dans l'Histoire"
-// sont disponibles dès le début de journée (pas de génération à attendre),
-// déclenché à la même heure que le QCM du matin — les éclairages, eux,
-// dépendent du contenu généré par les 6 services de la page /eclairages et
-// peuvent n'être pris en compte qu'à une tentative ultérieure du scheduler
-// (toutes les 20 min) si l'actu du jour n'est pas encore publiée.
+// QCM du jour : un seul créneau quotidien, mélangeant questions actu et
+// culture générale (cf. generateDailyQuizIfNeeded) — triggerHour = heure à
+// partir de laquelle le scheduler tente la génération (marge après la vague
+// de publication du matin pour que les arènes actu soient là). Les
+// événements "Ce jour dans l'Histoire" sont disponibles dès le début de
+// journée ; les éclairages dépendent du contenu généré par les 6 services de
+// la page /eclairages et peuvent n'être pris en compte qu'à une tentative
+// ultérieure du scheduler (toutes les 20 min) si l'actu du jour n'est pas
+// encore publiée — jamais bloquant pour la partie actu de la session.
 const DAILY_QUIZ_SLOTS = {
-  morning: { label: "QCM du matin", triggerHour: 9 },
-  evening: { label: "QCM du soir", triggerHour: 17 },
-  // Un seul créneau combinant "Ce jour dans l'Histoire" et les éclairages
-  // (cf. fetchCultureGeneraleQuizCandidates) plutôt que deux créneaux
-  // séparés : les événements historiques sont disponibles dès le début de
-  // journée, ce qui permet au QCM de se générer même les jours où l'actu du
-  // jour (et donc les éclairages) n'est pas encore publiée.
-  culture_generale: { label: "QCM Culture Générale", triggerHour: 9 }
+  daily: { label: "QCM du jour", triggerHour: 9 }
 };
 const DAILY_QUIZ_SLOT_KEYS = Object.keys(DAILY_QUIZ_SLOTS);
+
+// Pseudo-slot "Renforcement des connaissances" : jamais généré ni stocké
+// dans `daily_quiz` (cf. generateDailyQuizIfNeeded, qui ignore ce slot),
+// composé exclusivement des repasses de répétition espacée dues aujourd'hui
+// pour le visiteur (cf. fetchCultureGeneraleReviewInjectionForToday) —
+// calculé à la demande, jamais partagé entre visiteurs. Reste dans le même
+// espace de routes que les vrais créneaux (/today, /results, /answer) pour
+// réutiliser toute l'infrastructure existante (grading, stats, idempotence).
+const DAILY_QUIZ_REINFORCEMENT_SLOT = "renforcement";
+const DAILY_QUIZ_REINFORCEMENT_LABEL = "Renforcement des connaissances";
+
+function getDailyQuizSlotLabel(slot) {
+  if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT) return DAILY_QUIZ_REINFORCEMENT_LABEL;
+  return DAILY_QUIZ_SLOTS[slot]?.label || null;
+}
 // Score Gnosis (justesse au QCM) : les repasses de répétition espacée
 // injectées dans Culture Générale ("cgreview-", cf. plus bas) ne sont pas un
 // test de connaissances fraîchement acquises sur l'actualité du jour —
 // exclues explicitement du calcul plus bas et via le message dédié côté
 // frontend (qcm-du-jour.html).
 const DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES = ["cgreview-"];
+
+// Distingue une question culture générale (fraîche "culture_generale-qN" ou
+// repasse "cgreview-...") d'une question actu ("actu-qN") au sein de la
+// session fusionnée (cf. generateDailyQuizIfNeeded) — id toujours préfixé à
+// la génération, jamais réattribué ensuite. Sert à ne faire compter pour
+// "Mon univers" (cf. POST /api/daily-quiz/answer) et pour l'historique "Mes
+// acquis" (cf. fetchUserCultureGeneraleAnswerEvents) que les questions de
+// culture générale, jamais celles d'actu.
+function isCultureGeneraleQuestionId(id) {
+  const s = String(id || "");
+  return s.startsWith("culture_generale-") || s.startsWith("cgreview-");
+}
 
 // Répétition espacée pour "Mes acquis" (demande du 02/08/2026) : une question
 // de culture générale n'est "validée" (✓ vert côté frontend) qu'après
@@ -12550,7 +11852,7 @@ const DAILY_QUIZ_ACQUIS_VALIDATION_STREAK = 4;
 const DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS = [3, 7, 30];
 
 function isValidDailyQuizSlot(slot) {
-  return Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slot);
+  return Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slot) || slot === DAILY_QUIZ_REINFORCEMENT_SLOT;
 }
 
 function parisDateKey(date = new Date()) {
@@ -12611,22 +11913,25 @@ function dailyQuizTopicKeysForDebate(row) {
 }
 
 // Sujets déjà utilisés comme source de QCM dans les `daysBack` jours qui
-// précèdent aujourd'hui (bornes exclusives sur aujourd'hui : le jour même est
-// géré séparément via `excludeIds` dans generateDailyQuizIfNeeded). Ressort
-// les debates correspondants pour recalculer leurs clés de sujet plutôt que
-// de stocker les clés elles-mêmes, qui ne le sont pas dans `daily_quiz`.
+// précèdent aujourd'hui (borne exclusive sur aujourd'hui). Ressort les
+// debates correspondants pour recalculer leurs clés de sujet plutôt que de
+// stocker les clés elles-mêmes, qui ne le sont pas dans `daily_quiz`.
 async function fetchRecentDailyQuizTopicKeys(daysBack) {
   const todayKey = parisDateKey();
   const cutoffKey = parisDateKey(new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000));
-  // Scopé aux créneaux actu (morning/evening) : le créneau narratif
-  // (culture_generale) stocke des ids d'événements/éclairages dans
-  // source_debate_ids, pas des ids d'arènes — les mélanger ferait échouer
-  // le .in("id", …) plus bas contre la colonne debates.id (type entier) dès
-  // qu'un de ces ids non numériques s'y glisserait.
+  // Liste blanche des slots dont source_debate_ids ne contient que des ids
+  // d'arènes (entiers debates.id) : "daily" (créneau fusionné actuel),
+  // "morning"/"evening" (anciennes lignes actu, avant la fusion). Tout autre
+  // slot passé ou disparu (ex. "culture_generale", ou l'ancien "revision"
+  // retiré le 02/08/2026) peut stocker des ids d'événements/éclairages non
+  // numériques dans cette même colonne — les inclure ferait échouer le
+  // .in("id", …) plus bas contre la colonne debates.id (type entier). Liste
+  // blanche plutôt que liste noire : robuste même à un slot mort qu'on ne
+  // connaît pas encore (cf. incident "revision" du 07/08/2026).
   const { data: recentQuizRows, error: quizError } = await supabase
     .from("daily_quiz")
     .select("source_debate_ids")
-    .in("slot", ["morning", "evening"])
+    .in("slot", ["daily", "morning", "evening"])
     .gte("quiz_date", cutoffKey)
     .lt("quiz_date", todayKey);
   if (quizError) throw new Error(quizError.message);
@@ -12651,53 +11956,26 @@ async function fetchRecentDailyQuizTopicKeys(daysBack) {
 // fenêtre glissante, qui remonterait sur l'actualité de la veille et casserait
 // la promesse "actualité du jour". Pas de repli sur une autre journée si le
 // volume est insuffisant : la génération est simplement reportée au cycle
-// suivant. `excludeIds` retire les arènes déjà utilisées par l'autre créneau
-// du jour (le QCM du soir ne doit pas reposer sur les mêmes sujets que celui
-// du matin). `recentTopicKeys` retire en plus les sujets déjà couverts les
-// jours précédents (cf. fetchRecentDailyQuizTopicKeys), pour varier les
-// questions d'un jour à l'autre sur une actu qui reste à la une plusieurs jours.
-async function fetchDailyQuizCandidateDebates(excludeIds = [], recentTopicKeys = new Set()) {
+// suivant. `recentTopicKeys` retire les sujets déjà couverts les jours
+// précédents (cf. fetchRecentDailyQuizTopicKeys), pour varier les questions
+// d'un jour à l'autre sur une actu qui reste à la une plusieurs jours.
+async function fetchDailyQuizCandidateDebates(recentTopicKeys = new Set()) {
   const cutoff = parisStartOfDayIso();
   const { data, error } = await supabase
     .from("debates")
-    .select("id, question, content, category, cloud_label, keywords, source_article_ids")
+    .select("id, question, content, category, cloud_label, keywords")
     .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
     .gte("created_at", cutoff)
     .order("created_at", { ascending: false })
     .limit(80);
   if (error) throw new Error(error.message);
-  const excludeSet = new Set(excludeIds.map(String));
-  let rows = excludeSet.size ? (data || []).filter((row) => !excludeSet.has(String(row.id))) : (data || []);
+  let rows = data || [];
   if (recentTopicKeys.size) {
     rows = rows.filter((row) => !dailyQuizTopicKeysForDebate(row).some((key) => recentTopicKeys.has(key)));
   }
   return dedupeDailyQuizCandidatesByQuestion(rows);
 }
 
-// Une question ne dépend jamais réellement de dizaines d'articles : borne de sécurité
-// contre un JSONB anormalement volumineux si un débat accumulait trop de sources.
-const SOURCE_ARTICLE_IDS_MAX = 20;
-
-// Normalise question.sourceArticleIds / debates.source_article_ids : accepte uniquement un
-// tableau, ne garde que les entiers strictement positifs (les chaînes numériques simples
-// sont converties, cohérent avec le reste du fichier — cf. Number(entry?.solar_system_id)),
-// déduplique en préservant l'ordre, plafonne la taille. Toute valeur invalide (null,
-// undefined, non-tableau) devient [].
-function normalizeSourceArticleIds(value) {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set();
-  const result = [];
-  for (const raw of value) {
-    let id = null;
-    if (typeof raw === "number") id = raw;
-    else if (typeof raw === "string" && /^\d+$/.test(raw.trim())) id = Number(raw.trim());
-    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
-    seen.add(id);
-    result.push(id);
-    if (result.length >= SOURCE_ARTICLE_IDS_MAX) break;
-  }
-  return result;
-}
 
 // Bloc de règles partagé par les 3 builders de prompt QCM, décrivant les 4
 // formats de question possibles. `sourceIdField` vaut "sourceDebateId" (QCM
@@ -13316,10 +12594,6 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId) {
   ].join("\n");
 }
 
-const DAILY_QUIZ_NARRATIVE_SLOTS = {
-  culture_generale: { fetchCandidates: fetchCultureGeneraleQuizCandidates, buildQuotas: buildCultureGeneraleQuotas, buildPrompt: buildCultureGeneraleQuizPrompt }
-};
-
 // Validation adaptée aux QCM narratifs : contrairement à
 // validateDailyQuizQuestions (QCM actu, une seule question par source
 // jamais réutilisée), une même source peut porter plusieurs questions
@@ -13344,12 +12618,17 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   return valid;
 }
 
-async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
+// Construit les questions culture générale du jour (Ce jour dans l'Histoire +
+// Éclairages) pour la session fusionnée (cf. generateDailyQuizIfNeeded) —
+// best-effort : ne bloque jamais la génération de la session, retourne
+// simplement [] si le contenu du jour n'est pas encore disponible (retenté
+// au prochain passage du scheduler).
+async function buildCultureGeneraleQuestionsForToday() {
   const apiKey = process.env.OPENAI_API_KEY;
-  const allCandidates = await config.fetchCandidates();
+  const allCandidates = await fetchCultureGeneraleQuizCandidates();
   if (!allCandidates.length) {
-    console.warn(`[daily-quiz:${slotKey}] contenu du jour indisponible, génération reportée.`);
-    return;
+    console.warn("[daily-quiz:culture-generale] contenu du jour indisponible, génération reportée.");
+    return [];
   }
 
   // buildQuotas assigne un nombre de questions obligatoire par élément avant
@@ -13357,19 +12636,19 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
   // retenus (mandatoryItems) dans tout ce qui suit, pour ne jamais valider ou
   // indexer une question sur un élément volontairement laissé de côté faute
   // de budget.
-  const { mandatoryItems: candidates, quotaByItemId } = config.buildQuotas(allCandidates);
+  const { mandatoryItems: candidates, quotaByItemId } = buildCultureGeneraleQuotas(allCandidates);
 
   let parsed;
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: config.buildPrompt(candidates, quotaByItemId) }], {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt(candidates, quotaByItemId) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" }
     });
     parsed = JSON.parse(content);
   } catch (error) {
-    console.error(`[daily-quiz:${slotKey}] génération IA :`, error.message);
-    return;
+    console.error("[daily-quiz:culture-generale] génération IA :", error.message);
+    return [];
   }
 
   const sourceIds = candidates.map((c) => String(c.id || c.current_topic_id));
@@ -13393,25 +12672,22 @@ async function generateNarrativeDailyQuiz(slotKey, todayKey, config) {
     DAILY_QUIZ_MAX_QUESTIONS_PER_NARRATIVE_ITEM
   );
   if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
-    console.warn(`[daily-quiz:${slotKey}] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
-    return;
+    console.warn(`[daily-quiz:culture-generale] seulement ${validated.length} question(s) valide(s), ignorées pour aujourd'hui.`);
+    return [];
   }
 
-  const questions = validated.map((q, index) => ({
-    id: `${slotKey}-q${index + 1}`,
+  // Préfixe fixe "culture_generale-" (jamais "daily-", même si un seul slot
+  // reste désormais) : c'est ce préfixe qui permet de distinguer une question
+  // culture générale d'une question actu une fois mélangées dans la même
+  // session (cf. isCultureGeneraleQuestionId), et il est déjà celui utilisé
+  // partout ailleurs (fetchUserCultureGeneraleAnswerEvents, repasses "cgreview-", etc.).
+  return validated.map((q, index) => ({
+    id: `culture_generale-q${index + 1}`,
     ...q,
     sourceType: sourceTypeById.get(q.sourceDebateId) || null,
     sourceName: sourceNameById.get(q.sourceDebateId) || null,
     sourceDetail: sourceDetailById.get(q.sourceDebateId) || null
   }));
-  const { error: insertError } = await supabase.from("daily_quiz").insert({
-    quiz_date: todayKey,
-    slot: slotKey,
-    questions,
-    source_debate_ids: questions.map((q) => q.sourceDebateId)
-  });
-  if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
-  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
 }
 
 // Décode l'id d'une repasse de répétition espacée ("cgreview-{sourceDebateId}",
@@ -13453,9 +12729,14 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   }
   if (!originalAnswers.length && !reviewAnswers.length) return { events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map() };
 
+  // Pas de filtre par slot ici : selon la date, la ligne daily_quiz
+  // correspondante peut être une ancienne ligne "culture_generale" (avant la
+  // fusion des QCM) ou une nouvelle ligne "daily" (questions actu+culture
+  // générale mélangées) — le tri se fait ensuite question par question via
+  // isCultureGeneraleQuestionId, jamais via le slot de la ligne.
   const quizDates = [...new Set(originalAnswers.map((a) => a.quizDate).filter(Boolean))];
   const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
-    supabase.from("daily_quiz").select("quiz_date, questions").eq("slot", "culture_generale").in("quiz_date", chunk));
+    supabase.from("daily_quiz").select("quiz_date, questions").in("quiz_date", chunk));
   if (quizRowsError) throw new Error(quizRowsError.message);
 
   // contentBySourceId couvre aussi les repasses : une question posée le jour
@@ -13464,12 +12745,17 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   // (seules les questions déjà répondues sont éligibles à une repasse).
   // originalQuizDateBySourceId retient ce jour J de première publication —
   // nécessaire à fetchUserAcquis pour relire, si besoin, le contenu Éclairages
-  // publié ce jour-là (cf. resolveMissingAcquisSourceNames).
+  // publié ce jour-là (cf. resolveMissingAcquisSourceNames). Ne retient que les
+  // questions culture générale (isCultureGeneraleQuestionId) : depuis la
+  // fusion, une ligne "daily" contient aussi des questions actu dont le
+  // sourceDebateId (id de débat, entier) pourrait sinon entrer en collision
+  // avec un sourceDebateId culture générale (id d'événement/éclairage).
   const contentBySourceId = new Map();
   const originalQuizDateBySourceId = new Map();
   const originalByDateAndId = new Map();
   for (const row of quizRows || []) {
     for (const q of (row.questions || [])) {
+      if (!isCultureGeneraleQuestionId(q.id)) continue;
       originalByDateAndId.set(`${row.quiz_date}:${q.id}`, q);
       if (q.sourceDebateId) {
         contentBySourceId.set(q.sourceDebateId, q);
@@ -13612,13 +12898,10 @@ function getCultureGeneraleEclairagesSourceConfig(sourceType) {
 const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre", "latin"];
 
 // Galaxie de chaque sourceType Culture Générale pour l'univers intellectuel personnel —
-// statique (jamais d'appel IA ici, contrairement aux articles d'actu) : ces rubriques sont
-// éditorialement stables, une table de correspondance fixe suffit. Réutilise exactement les
-// noms de galaxie déjà produits par getOpinionArticleGalaxy (branches hybrides comprises), pour
-// que les mêmes galaxies (ex. "Philosophie") mélangent naturellement articles et éclairages.
-// "concept" et "citation" couvrent en pratique plusieurs domaines (cf. DOMAIN_SLUGS dans
-// prompts/concept-du-jour.js) : approximation assumée plutôt que de faire dépendre l'univers
-// intellectuel d'un champ IA supplémentaire à faire transiter jusqu'ici.
+// statique (jamais d'appel IA ici) : ces rubriques sont éditorialement stables, une table de
+// correspondance fixe suffit. "concept" et "citation" couvrent en pratique plusieurs domaines
+// (cf. DOMAIN_SLUGS dans prompts/concept-du-jour.js) : approximation assumée plutôt que de
+// faire dépendre l'univers intellectuel d'un champ IA supplémentaire à faire transiter jusqu'ici.
 const CULTURE_GENERALE_SOURCE_TYPE_GALAXY = {
   histoire: "Histoire",
   parallele: "Histoire",
@@ -13784,8 +13067,56 @@ async function fetchUserAcquis(voterKey) {
     .map(({ sourceDebateId, ...rest }) => rest);
 }
 
+// Construit les questions actu du jour pour la session fusionnée — seul
+// bloc réellement bloquant de generateDailyQuizIfNeeded (cf. plus bas) :
+// retourne [] si le volume d'arènes du jour est insuffisant, la génération
+// est alors entièrement reportée au prochain passage du scheduler (jamais de
+// session publiée sans son socle actu).
+async function buildActuQuestionsForToday() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const recentTopicKeys = await fetchRecentDailyQuizTopicKeys(DAILY_QUIZ_TOPIC_LOOKBACK_DAYS);
+  const candidates = await fetchDailyQuizCandidateDebates(recentTopicKeys);
+  if (candidates.length < DAILY_QUIZ_MIN_CANDIDATES) {
+    console.warn(`[daily-quiz:actu] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
+    return [];
+  }
+
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildDailyQuizPrompt(candidates) }], {
+      model: DAILY_QUIZ_GENERATION_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error("[daily-quiz:actu] génération IA :", error.message);
+    return [];
+  }
+
+  const validated = validateDailyQuizQuestions(parsed?.questions, candidates.map((c) => c.id));
+  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS) {
+    console.warn(`[daily-quiz:actu] seulement ${validated.length} question(s) valide(s), génération reportée.`);
+    return [];
+  }
+
+  return validated.map((q, index) => ({
+    id: `actu-q${index + 1}`,
+    ...q
+  }));
+}
+
+// QCM du jour fusionné : une seule ligne quotidienne mélangeant questions
+// actu (socle bloquant, cf. buildActuQuestionsForToday) et questions culture
+// générale (best-effort, cf. buildCultureGeneraleQuestionsForToday — jamais
+// bloquant, la session part sans si les éclairages du jour ne sont pas
+// encore publiés). `slotKey` toujours "daily" désormais, gardé en paramètre
+// pour que POST /api/admin/daily-quiz/generate reste inchangé.
 async function generateDailyQuizIfNeeded(slotKey) {
-  if (!isValidDailyQuizSlot(slotKey)) return;
+  // Object.prototype.hasOwnProperty (pas isValidDailyQuizSlot) : le pseudo-slot
+  // "renforcement" est un slot valide pour /today, /results, /answer, mais
+  // rien à générer ni stocker pour lui (cf. DAILY_QUIZ_REINFORCEMENT_SLOT).
+  if (!Object.prototype.hasOwnProperty.call(DAILY_QUIZ_SLOTS, slotKey)) return;
 
   const todayKey = parisDateKey();
   const { data: existing, error: existingError } = await supabase
@@ -13800,214 +13131,24 @@ async function generateDailyQuizIfNeeded(slotKey) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
-  const narrativeConfig = DAILY_QUIZ_NARRATIVE_SLOTS[slotKey];
-  if (narrativeConfig) {
-    await generateNarrativeDailyQuiz(slotKey, todayKey, narrativeConfig);
-    return;
-  }
+  const actuQuestions = await buildActuQuestionsForToday();
+  if (!actuQuestions.length) return;
 
-  // Le QCM du soir ne doit pas reposer sur les mêmes arènes que celui du
-  // matin, déjà généré plus tôt dans la journée.
-  let excludeIds = [];
-  if (slotKey === "evening") {
-    const { data: morningRow } = await supabase
-      .from("daily_quiz")
-      .select("source_debate_ids")
-      .eq("quiz_date", todayKey)
-      .eq("slot", "morning")
-      .maybeSingle();
-    excludeIds = morningRow?.source_debate_ids || [];
-  }
+  const cgQuestions = await buildCultureGeneraleQuestionsForToday();
+  const questions = [...actuQuestions, ...cgQuestions];
 
-  const recentTopicKeys = await fetchRecentDailyQuizTopicKeys(DAILY_QUIZ_TOPIC_LOOKBACK_DAYS);
-  const candidates = await fetchDailyQuizCandidateDebates(excludeIds, recentTopicKeys);
-  if (candidates.length < DAILY_QUIZ_MIN_CANDIDATES) {
-    console.warn(`[daily-quiz:${slotKey}] seulement ${candidates.length} arène(s) candidate(s), génération reportée.`);
-    return;
-  }
-
-  let parsed;
-  try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildDailyQuizPrompt(candidates) }], {
-      model: DAILY_QUIZ_GENERATION_MODEL,
-      temperature: 0.4,
-      responseFormat: { type: "json_object" }
-    });
-    parsed = JSON.parse(content);
-  } catch (error) {
-    console.error(`[daily-quiz:${slotKey}] génération IA :`, error.message);
-    return;
-  }
-
-  const validated = validateDailyQuizQuestions(parsed?.questions, candidates.map((c) => c.id));
-  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS) {
-    console.warn(`[daily-quiz:${slotKey}] seulement ${validated.length} question(s) valide(s), génération abandonnée (retentée au prochain cycle).`);
-    return;
-  }
-
-  // sourceArticleIds n'est jamais demandé au modèle : chaque question hérite simplement de
-  // tous les articles rattachés au débat dont elle est issue (cf. candidate.source_article_ids,
-  // déjà résolus à la publication du débat) — la synthèse dont part la question ne permet pas
-  // d'attribuer un sous-ensemble précis à une question plutôt qu'une autre.
-  const candidatesById = new Map(candidates.map((c) => [String(c.id), c]));
-  const questions = validated.map((q, index) => {
-    const candidate = candidatesById.get(String(q.sourceDebateId));
-    return {
-      id: `${slotKey}-q${index + 1}`,
-      ...q,
-      sourceArticleIds: normalizeSourceArticleIds(candidate?.source_article_ids)
-    };
-  });
-
-  // Classification groupée des articles utilisés par ce QCM et pas encore rattachés à un
-  // système solaire — jamais bloquant pour la publication du QCM (cf. try/catch global).
-  try {
-    const uniqueArticleIds = normalizeSourceArticleIds(questions.flatMap((q) => q.sourceArticleIds));
-    let missingSolarSystemCount = 0;
-    if (uniqueArticleIds.length) {
-      const { data: articles, error: articlesError } = await supabase
-        .from("opinion_articles")
-        .select("id, source, orientation, title, link, summary, type, category, category_precision, solar_system_id, star_id, secondary_tags_checked_at")
-        .in("id", uniqueArticleIds);
-      if (articlesError) throw new Error(articlesError.message);
-
-      const articlesToClassify = (articles || []).filter((a) => !a.solar_system_id);
-      missingSolarSystemCount = articlesToClassify.length;
-      console.log(`[daily quiz article sources] questions=${questions.length} uniqueArticles=${uniqueArticleIds.length} missingSolarSystems=${missingSolarSystemCount}`);
-
-      // articleClassification: galaxie/système déjà connus (en base) ou tout juste résolus
-      // ci-dessus — sert de base à la passe étoile plus bas, jamais rechargé depuis la base.
-      const articleClassification = new Map();
-      for (const article of articles || []) {
-        if (article.solar_system_id) {
-          articleClassification.set(article.id, { solarSystemId: article.solar_system_id, category: article.category, categoryPrecision: article.category_precision });
-        }
-      }
-
-      if (articlesToClassify.length) {
-        const aiCategories = await classifyOpinionArticlesWithAI(articlesToClassify, { includeSolarSystem: true });
-        let classifiedCount = 0;
-        for (const article of articlesToClassify) {
-          const aiResult = aiCategories.get(String(article.link || ""));
-          if (!aiResult) continue;
-          classifiedCount += 1;
-          const category = aiResult.category;
-          const category_precision = normalizeOpinionArticleCategoryPrecision(category, aiResult.precision);
-          const solar_system_id = aiResult.solarSystemId || null;
-          const { error: updateError } = await supabase
-            .from("opinion_articles")
-            .update({ category, category_precision, solar_system_id })
-            .eq("id", article.id);
-          if (updateError) console.warn(`[daily quiz article classification] échec écriture article ${article.id} :`, updateError.message);
-          if (solar_system_id) articleClassification.set(article.id, { solarSystemId: solar_system_id, category, categoryPrecision: category_precision });
-        }
-        console.log(`[daily quiz article classification] requested=${articlesToClassify.length} classified=${classifiedCount}`);
-      }
-
-      // Passe étoile, séparée de la classification catégorie/système ci-dessus (cf.
-      // classifyOpinionArticleStarsWithAI) : uniquement les articles avec un système solaire
-      // connu (juste résolu ou déjà en base depuis un cycle précédent) mais sans star_id.
-      const starIdByArticleId = new Map((articles || []).map((a) => [a.id, a.star_id]));
-      const needStar = [...articleClassification.entries()].filter(([id, info]) => info.solarSystemId && !starIdByArticleId.get(id));
-      if (needStar.length) {
-        const solarSystemIdsNeeded = [...new Set(needStar.map(([, info]) => info.solarSystemId))];
-        const { data: solarSystemRows, error: solarSystemRowsError } = await supabase
-          .from("solar_systems")
-          .select("id, name, galaxy")
-          .in("id", solarSystemIdsNeeded);
-        if (solarSystemRowsError) throw new Error(solarSystemRowsError.message);
-        const solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
-        const articleById = new Map((articles || []).map((a) => [a.id, a]));
-
-        const starItems = needStar.map(([id, info]) => {
-          const article = articleById.get(id);
-          const sys = solarSystemById.get(info.solarSystemId);
-          return {
-            id,
-            title: article?.title,
-            summary: article?.summary,
-            solarSystemId: info.solarSystemId,
-            solarSystemName: sys?.name || "",
-            galaxy: sys?.galaxy || "",
-            category: info.category,
-            categoryPrecision: info.categoryPrecision
-          };
-        });
-        const starResults = await classifyOpinionArticleStarsWithAI(starItems);
-        let starClassifiedCount = 0;
-        for (const item of starItems) {
-          const star_id = starResults.get(item.id);
-          if (!star_id) continue;
-          starClassifiedCount += 1;
-          const { error: starUpdateError } = await supabase
-            .from("opinion_articles")
-            .update({ star_id })
-            .eq("id", item.id);
-          if (starUpdateError) console.warn(`[daily quiz article stars] échec écriture article ${item.id} :`, starUpdateError.message);
-        }
-        console.log(`[daily quiz article stars] requested=${starItems.length} classified=${starClassifiedCount}`);
-      }
-
-      // Passe de classification secondaire (cf. classifyOpinionArticleSecondaryTagsWithAI) :
-      // uniquement les articles déjà classés (catégorie principale connue) et jamais encore
-      // vérifiés pour des rubriques secondaires — secondary_tags_checked_at marque le passage,
-      // même quand 0 tag secondaire n'a été retenu, pour ne jamais re-tester inutilement.
-      const articleByIdForSecondary = new Map((articles || []).map((a) => [a.id, a]));
-      const needSecondary = [...articleClassification.entries()]
-        .filter(([id, info]) => info.category && !articleByIdForSecondary.get(id)?.secondary_tags_checked_at);
-      if (needSecondary.length) {
-        const secondaryItems = needSecondary.map(([id, info]) => {
-          const article = articleByIdForSecondary.get(id);
-          return {
-            id,
-            link: String(article?.link || ""),
-            title: article?.title,
-            summary: article?.summary,
-            category: info.category,
-            categoryPrecision: info.categoryPrecision
-          };
-        });
-        const secondaryResults = await classifyOpinionArticleSecondaryTagsWithAI(secondaryItems);
-        let secondaryRowsInserted = 0;
-        const nowIso = new Date().toISOString();
-        for (const item of secondaryItems) {
-          const tags = secondaryResults.get(item.link) || [];
-          if (tags.length) {
-            const rows = tags.map((tag) => ({
-              article_id: item.id,
-              category: tag.category,
-              category_precision: tag.categoryPrecision,
-              solar_system_id: tag.solarSystemId
-            }));
-            const { error: insertSecondaryError } = await supabase
-              .from("article_secondary_classifications")
-              .upsert(rows, { onConflict: "article_id,solar_system_id", ignoreDuplicates: true });
-            if (insertSecondaryError) console.warn(`[daily quiz article secondary] échec écriture article ${item.id} :`, insertSecondaryError.message);
-            else secondaryRowsInserted += rows.length;
-          }
-          const { error: checkedError } = await supabase
-            .from("opinion_articles")
-            .update({ secondary_tags_checked_at: nowIso })
-            .eq("id", item.id);
-          if (checkedError) console.warn(`[daily quiz article secondary] échec marquage article ${item.id} :`, checkedError.message);
-        }
-        console.log(`[daily quiz article secondary] requested=${secondaryItems.length} tagsInserted=${secondaryRowsInserted}`);
-      }
-    } else {
-      console.log(`[daily quiz article sources] questions=${questions.length} uniqueArticles=0 missingSolarSystems=0`);
-    }
-  } catch (error) {
-    console.warn(`[daily-quiz:${slotKey}] classification des articles sources ignorée :`, error.message);
-  }
-
+  // source_debate_ids réservé aux ids actu (entiers debates.id) : jamais les
+  // sourceDebateId culture générale (ids d'événements/éclairages, pas
+  // toujours numériques) — cf. fetchRecentDailyQuizTopicKeys, qui relit cette
+  // colonne en supposant des ids exploitables contre debates.id.
   const { error: insertError } = await supabase.from("daily_quiz").insert({
     quiz_date: todayKey,
     slot: slotKey,
     questions,
-    source_debate_ids: questions.map((q) => q.sourceDebateId)
+    source_debate_ids: actuQuestions.map((q) => q.sourceDebateId).filter(Boolean)
   });
   if (insertError) { console.error(`[daily-quiz:${slotKey}] insertion :`, insertError.message); return; }
-  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (${questions.length} questions).`);
+  console.log(`[daily-quiz:${slotKey}] QCM du ${todayKey} généré (actu=${actuQuestions.length}, cultureGenerale=${cgQuestions.length}).`);
 }
 
 /* ================================================================= */
@@ -14823,39 +13964,33 @@ const _dailyQuizQuestionsCache = new Map();
 const DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function getDailyQuizQuestions(quizDate, slot, voterKey) {
+  // "Renforcement des connaissances" : jamais de ligne daily_quiz à lire,
+  // uniquement les repasses de répétition espacée dues aujourd'hui pour ce
+  // visiteur (cf. fetchCultureGeneraleReviewInjectionForToday) — pas de
+  // cache ici, ce calcul doit refléter la réponse qu'on vient de soumettre
+  // immédiatement (sinon une question repasse due réapparaîtrait encore
+  // quelques minutes après avoir été répondue), coût modeste borné à
+  // l'historique d'un seul visiteur.
+  if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT) {
+    const key = String(voterKey || "").trim();
+    if (!key) return [];
+    return fetchCultureGeneraleReviewInjectionForToday(key, quizDate);
+  }
+
   const cacheKey = `${quizDate}:${slot}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
-  let baseQuestions;
   if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) {
-    baseQuestions = cached.questions;
-  } else {
-    const { data, error } = await supabase
-      .from("daily_quiz")
-      .select("questions")
-      .eq("quiz_date", quizDate)
-      .eq("slot", slot)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    baseQuestions = data?.questions || [];
-    _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
+    return cached.questions;
   }
-
-  // Culture Générale seulement : questions à repasser en répétition espacée,
-  // propres à ce visiteur (cf. fetchCultureGeneraleReviewInjectionForToday),
-  // ajoutées à la suite des questions IA du jour — jamais persistées dans la
-  // ligne partagée ci-dessus, donc invisibles pour les autres visiteurs. Pas
-  // de cache ici (contrairement à baseQuestions, partagé par tout le monde) :
-  // ce calcul doit refléter la réponse qu'on vient de soumettre immédiatement
-  // (sinon la question repasse due réapparaîtrait encore quelques minutes
-  // après avoir été répondue) — coût modeste, borné à l'historique d'un seul
-  // visiteur.
-  if (slot === "culture_generale") {
-    const key = String(voterKey || "").trim();
-    if (!key) return baseQuestions;
-    const reviewQuestions = await fetchCultureGeneraleReviewInjectionForToday(key, quizDate);
-    return reviewQuestions.length ? baseQuestions.concat(reviewQuestions) : baseQuestions;
-  }
-
+  const { data, error } = await supabase
+    .from("daily_quiz")
+    .select("questions")
+    .eq("quiz_date", quizDate)
+    .eq("slot", slot)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const baseQuestions = data?.questions || [];
+  _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
   return baseQuestions;
 }
 
@@ -14884,10 +14019,8 @@ async function getDailyQuizStats(quizDate, questionId) {
   return result;
 }
 
-// Renseigne le bandeau/bouton d'accueil : quels créneaux sont prêts
-// aujourd'hui, avec leur libellé, plus une recommandation de créneau par
-// défaut (le plus récent disponible — le soir prime sur le matin une fois
-// généré).
+// Renseigne le bandeau/bouton d'accueil : si le QCM du jour (unique créneau
+// "daily") est prêt.
 app.get("/api/daily-quiz/status", async (req, res) => {
   try {
     const todayKey = parisDateKey();
@@ -14902,15 +14035,19 @@ app.get("/api/daily-quiz/status", async (req, res) => {
     for (const slotKey of DAILY_QUIZ_SLOT_KEYS) {
       slots[slotKey] = { available: availableSlots.has(slotKey), label: DAILY_QUIZ_SLOTS[slotKey].label };
     }
-    // Priorité aux créneaux actu (evening > morning), puis n'importe quel
-    // autre créneau disponible (narratif) plutôt que rien — un jour où seul
-    // culture_generale aurait généré ne doit pas laisser la page "pas prêt"
-    // alors qu'il y a bien un QCM à afficher.
-    const defaultSlot = availableSlots.has("evening")
-      ? "evening"
-      : availableSlots.has("morning")
-        ? "morning"
-        : (DAILY_QUIZ_SLOT_KEYS.find((key) => slots[key].available) || null);
+    // "Renforcement" n'a pas de ligne daily_quiz à vérifier (cf.
+    // DAILY_QUIZ_REINFORCEMENT_SLOT) : disponible seulement s'il existe au
+    // moins une repasse due aujourd'hui pour ce visiteur précis — jamais
+    // "disponible" globalement comme les vrais créneaux.
+    const voterKey = String(req.query.voterKey || "").trim();
+    const reinforcementQuestions = voterKey
+      ? await fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey)
+      : [];
+    slots[DAILY_QUIZ_REINFORCEMENT_SLOT] = {
+      available: reinforcementQuestions.length > 0,
+      label: DAILY_QUIZ_REINFORCEMENT_LABEL
+    };
+    const defaultSlot = availableSlots.has("daily") ? "daily" : null;
     res.json({ date: todayKey, slots, defaultSlot });
   } catch (error) {
     res.status(500).json({ date: null, slots: {}, defaultSlot: null, error: error.message });
@@ -14922,9 +14059,13 @@ app.get("/api/daily-quiz/status", async (req, res) => {
 // renvoie surtout pas `pairs` tel quel (le mapping correct) : seulement les
 // deux colonnes séparées, `rights` mélangé — l'appariement se fait par
 // valeur texte côté client, pas par position, donc mélanger `lefts` n'aurait
-// aucun intérêt.
+// aucun intérêt. `origin`/`sourceType` (jamais la bonne réponse) permettent
+// au frontend d'afficher un badge distinguant une question actu d'une
+// question culture générale au sein de la session fusionnée.
 function stripQuestionForClient(q) {
   const type = q.type || "qcm";
+  const origin = isCultureGeneraleQuestionId(q.id) ? "culture_generale" : "actu";
+  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}) };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
     return {
@@ -14932,18 +14073,19 @@ function stripQuestionForClient(q) {
       type,
       question: q.question,
       lefts: pairs.map((p) => p.left),
-      rights: shuffleArray(pairs.map((p) => p.right))
+      rights: shuffleArray(pairs.map((p) => p.right)),
+      ...originFields
     };
   }
   if (type === "ordre") {
     // q.items est stocké dans le bon ordre (c'est la réponse) : le client ne
     // doit jamais le recevoir tel quel, seulement mélangé.
-    return { id: q.id, type, question: q.question, items: shuffleArray(Array.isArray(q.items) ? q.items : []) };
+    return { id: q.id, type, question: q.question, items: shuffleArray(Array.isArray(q.items) ? q.items : []), ...originFields };
   }
   // qcm/vrai_faux/texte_a_trous/intrus/qcm_multi partagent tous "options" —
   // correctIndex/correctIndexes ne sont jamais inclus ici, seulement révélés
   // après réponse (cf. POST /answer et GET /results).
-  return { id: q.id, type, question: q.question, options: q.options };
+  return { id: q.id, type, question: q.question, options: q.options, ...originFields };
 }
 
 app.get("/api/daily-quiz/today", async (req, res) => {
@@ -14952,13 +14094,13 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     const slot = String(req.query.slot || "").trim();
     if (!isValidDailyQuizSlot(slot)) return res.status(400).json({ date: null, questions: [], error: "Créneau invalide." });
 
-    // "culture_generale" seul est personnalisé par visiteur : getDailyQuizQuestions
-    // y ajoute les repasses de répétition espacée dues aujourd'hui si un
-    // voterKey est fourni (cf. fetchCultureGeneraleReviewInjectionForToday) —
-    // "morning"/"evening" restent purement partagés, sans effet du voterKey.
+    // Pour le pseudo-slot "renforcement", getDailyQuizQuestions renvoie
+    // directement les repasses de répétition espacée dues aujourd'hui pour
+    // ce voterKey (cf. DAILY_QUIZ_REINFORCEMENT_SLOT) ; toujours requis dans
+    // ce cas (pas de session anonyme possible, rien à montrer sans historique).
     const voterKey = String(req.query.voterKey || "").trim();
     const questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
-    res.json({ date: todayKey, slot, label: DAILY_QUIZ_SLOTS[slot].label, questions: questions.map(stripQuestionForClient) });
+    res.json({ date: todayKey, slot, label: getDailyQuizSlotLabel(slot), questions: questions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
   }
@@ -15066,68 +14208,7 @@ function isOrderAnswerFullyCorrect(submittedItems, correctItems) {
   return true;
 }
 
-// Après une bonne réponse à une question de QCM actu portant sur des sourceArticleIds :
-// résout l'utilisateur stable (users.id, UUID) et enregistre l'acquisition de chaque article
-// associé dans son univers personnel. Jamais bloquant : appelée sans attendre depuis
-// /api/daily-quiz/answer, après que la réponse HTTP normale a déjà été envoyée. Chaque étage
-// (résolution utilisateur, lecture des articles, écriture) est protégé indépendamment ; un
-// échec journalise un avertissement synthétique et abandonne, sans jamais inventer de
-// user_id ni d'article. `upsert` avec `ignoreDuplicates: true` (même mécanisme que
-// upsertOpinionArticleRows) plutôt qu'un simple insert : la contrainte UNIQUE(user_id,
-// article_id) rend l'opération idempotente sans jamais réécrire acquired_at d'une ligne
-// déjà existante — DO NOTHING sur conflit, pas de select préalable article par article.
-async function recordDailyQuizArticleAcquisitions(voterKey, sourceArticleIds) {
-  const articleIds = normalizeSourceArticleIds(sourceArticleIds);
-  if (!articleIds.length) return;
-
-  const { legacyKey, error: keyError } = validateLegacyKey(voterKey);
-  if (keyError) {
-    console.warn("[daily quiz acquisitions] failed : voterKey invalide.");
-    return;
-  }
-
-  let user;
-  try {
-    ({ user } = await resolveLegacyUser(supabase, legacyKey));
-  } catch (error) {
-    console.warn("[daily quiz acquisitions] failed : résolution utilisateur —", error.message);
-    return;
-  }
-
-  let articles;
-  try {
-    const { data, error } = await supabase
-      .from("opinion_articles")
-      .select("id, solar_system_id, star_id")
-      .in("id", articleIds);
-    if (error) throw error;
-    articles = data || [];
-  } catch (error) {
-    console.warn("[daily quiz acquisitions] failed : lecture articles —", error.message);
-    return;
-  }
-  if (!articles.length) return;
-
-  const rows = articles.map((a) => ({
-    user_id: user.id,
-    article_id: a.id,
-    solar_system_id: a.solar_system_id || null,
-    star_id: a.star_id || null
-  }));
-
-  try {
-    const { error } = await supabase
-      .from("user_article_acquisitions")
-      .upsert(rows, { onConflict: "user_id,article_id", ignoreDuplicates: true });
-    if (error) throw error;
-    console.log(`[daily quiz acquisitions] user=${user.id} requested=${rows.length} existingOrInserted=${rows.length}`);
-  } catch (error) {
-    console.warn("[daily quiz acquisitions] failed : écriture acquisitions —", error.message);
-  }
-}
-
-// Résolution du système solaire d'un contenu Culture Générale — même principe que la
-// résolution des étoiles d'articles (classifyOpinionArticleStarsWithAI) : vérifie d'abord si
+// Résolution du système solaire d'un contenu Culture Générale : vérifie d'abord si
 // la notion correspond à un système déjà existant dans cette galaxie (ex. "Résilience"
 // reformulé différemment un autre jour), même quand le nom n'est pas identique mot pour mot
 // (resolveOrCreateSolarSystem seul ne fait qu'une comparaison exacte normalisée), avant d'en
@@ -15219,15 +14300,14 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
   return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
 }
 
-// Même principe que recordDailyQuizArticleAcquisitions, pour une question de QCM Culture
-// Générale (originale "culture_generale-qN" ou repasse "cgreview-...", les deux portent déjà
-// sourceDebateId/sourceType/sourceName sur l'objet question, cf. fetchUserCultureGeneraleAnswerEvents)
-// portant sur un contenu Éclairages plutôt qu'un article. Seuil d'acquisition volontairement
-// aligné sur le QCM actu (une seule bonne réponse suffit) : différent du seuil de validation à
-// DAILY_QUIZ_ACQUIS_VALIDATION_STREAK réponses de "Mes acquis", qui reste une fonctionnalité à
-// part, inchangée. eclairage_name/eclairage_detail sont enregistrés en clair (photographie au
-// moment de l'acquisition) : ces contenus n'ont pas de table dédiée relisible à la demande comme
-// opinion_articles, contrairement aux articles d'actu.
+// Enregistre l'acquisition d'un contenu Culture Générale dans l'univers intellectuel
+// personnel de l'utilisateur (originale "culture_generale-qN" ou repasse "cgreview-...", les
+// deux portent déjà sourceDebateId/sourceType/sourceName sur l'objet question, cf.
+// fetchUserCultureGeneraleAnswerEvents). Seuil d'acquisition volontairement à une seule bonne
+// réponse : différent du seuil de validation à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK réponses de
+// "Mes acquis", qui reste une fonctionnalité à part, inchangée. eclairage_name/eclairage_detail
+// sont enregistrés en clair (photographie au moment de l'acquisition) : ces contenus n'ont pas
+// de table dédiée relisible à la demande.
 async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   const sourceDebateId = question?.sourceDebateId ? String(question.sourceDebateId) : "";
   const sourceType = String(question?.sourceType || "").trim();
@@ -15386,13 +14466,10 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     });
 
     // Univers intellectuel : conséquence secondaire de la réponse, jamais sur le chemin
-    // critique — la réponse HTTP est déjà partie ; QCM Culture générale (pas de
-    // sourceArticleIds) et anciennes questions ressortent vides de normalizeSourceArticleIds,
-    // donc ignorées sans traitement particulier.
-    if (correct && question.sourceArticleIds) {
-      recordDailyQuizArticleAcquisitions(voterKey, question.sourceArticleIds)
-        .catch((error) => console.warn("[daily quiz acquisitions] failed :", error.message));
-    } else if (correct && slot === "culture_generale" && question.sourceDebateId) {
+    // critique — la réponse HTTP est déjà partie. Réservé au QCM Culture générale (le QCM
+    // actu n'alimente plus Mon univers), reconnu par le préfixe de l'id désormais que les
+    // deux types de questions partagent le même slot "daily".
+    if (correct && isCultureGeneraleQuestionId(question.id) && question.sourceDebateId) {
       recordDailyQuizEclairageAcquisition(voterKey, question)
         .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
     }

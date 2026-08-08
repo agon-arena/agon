@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="stylesheet" href="/style.min.css?v=20260807-galaxyspiral3" />
+<link rel="stylesheet" href="/style.min.css?v=20260808-stargradientborder1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -939,7 +939,7 @@
     svg.onmouseleave = clearActive;
   }
 
-  // Scores Orator (voix reçues) / Logos (notes IA) — même endpoint que le
+  // Scores Rhetor (voix reçues) / Logos (notes IA) — même endpoint que le
   // widget de la topbar, affichés ici en cartes fixes plutôt qu'en popup.
   function renderScores(key) {
     var container = document.getElementById("contributions-scores");
@@ -952,7 +952,7 @@
     container.addEventListener("click", function(event) {
       if (!modalArgs || typeof window.showUserScoreModal !== "function") return;
       var card = event.target.closest(".contributions-score-card");
-      var initialTab = (card && card.getAttribute("data-score-tab")) || "orator";
+      var initialTab = (card && card.getAttribute("data-score-tab")) || "rhetor";
       window.showUserScoreModal(
         modalArgs.votesScore, modalArgs.notesScore, modalArgs.gnosisScore,
         modalArgs.tierLabel, modalArgs.stats, modalArgs.tier, modalArgs.tierCount,
@@ -998,10 +998,10 @@
       container.classList.remove("contributions-scores-empty");
       container.innerHTML =
         scoreCardHtml(
-          '<i class="fa-solid fa-bolt"></i>', 'Orator', votesScore,
+          '<i class="fa-solid fa-bolt"></i>', 'Rhetor', votesScore,
           votesValue !== null ? esc(votesValue.toLocaleString("fr-FR") + (votesValue > 1 ? " voix reçues" : " voix reçue")) : "Voix récoltées sur tes idées",
           "Pas encore évalué : poste une idée pour débloquer ce score.",
-          "orator"
+          "rhetor"
         ) +
         scoreCardHtml(
           AGON_LOGOS_ICON, 'Logos', notesScore,
@@ -1045,7 +1045,7 @@
         container.classList.add("contributions-scores-empty");
         container.innerHTML =
           '<div class="contributions-score-card">' +
-            '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Orator, Logos &amp; Gnosis</p>' +
+            '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Rhetor, Logos &amp; Gnosis</p>' +
             '<p class="contributions-score-card-hint">Impossible de charger tes scores pour l\'instant.</p>' +
           '</div>';
         modalArgs = null;
@@ -1137,7 +1137,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260807-sunvisual1" defer></script>
-<script type="module" src="/mon-univers.js?v=20260807-solarsystemfade1"></script>
+<script src="/script.min.js?v=20260807-rhetorword1" defer></script>
+<script type="module" src="/mon-univers.js?v=20260807-armluminous1"></script>
 </body>
 </html>
