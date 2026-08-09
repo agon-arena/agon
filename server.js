@@ -5457,11 +5457,10 @@ app.get("/api/users/app-installed", rateLimit("users", 30), async (req, res) => 
 // ce changement restent en base, ignorés ici). Lecture seule, aucune classification IA ni
 // écriture ici. legacyKey uniquement (jamais un user_id arbitraire en clair dans la route
 // publique) — même identité que le reste du projet.
-// Limite du libellé affiché dans une bulle étoile, plus généreuse que MAX_LABEL_LENGTH (35,
-// cf. lib/cloud-label.js) car c'est le niveau le plus zoomé de l'univers (moins de bulles à
-// l'écran simultanément) : appliquée uniquement à la construction de cette réponse API, jamais
-// en base (eclairage_name reste la photographie complète).
-const MAX_STAR_LABEL_LENGTH = 45;
+// Les anciens systèmes/étoiles ont pu être enregistrés après une coupe mécanique à 35
+// caractères (ex. « Louis-Philippe devient roi des »). À la lecture, le nom complet de
+// l'acquisition permet de reconnaître précisément cette ancienne coupe et de restaurer le
+// libellé original. Les nouveaux noms ne sont plus tronqués à un nombre de caractères fixe.
 
 // Mêmes libellés que ACQUIS_SOURCE_TYPE_META (views/qcm-du-jour.html), dupliqués ici à
 // l'identique côté serveur (petite table statique, pas de dépendance possible sur le frontend) :
@@ -5554,10 +5553,16 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         galaxyBucket.solarSystems.set(solarSystem.id, { id: solarSystem.id, name: solarSystem.name, stars: new Map() });
       }
       const solarSystemBucket = galaxyBucket.solarSystems.get(solarSystem.id);
+      // Plusieurs acquisitions peuvent pointer vers le même système/étoile. Si la première
+      // ligne parcourue n'avait pas permis la restauration mais qu'une suivante porte le nom
+      // complet correspondant à l'ancienne coupe, conserve cette version complète.
+      if (solarSystem.name.length > solarSystemBucket.name.length) solarSystemBucket.name = solarSystem.name;
       if (!solarSystemBucket.stars.has(starKey)) {
         solarSystemBucket.stars.set(starKey, { key: starKey, name: starName, articles: [] });
       }
-      solarSystemBucket.stars.get(starKey).articles.push(payload);
+      const starBucket = solarSystemBucket.stars.get(starKey);
+      if (starName.length > starBucket.name.length) starBucket.name = starName;
+      starBucket.articles.push(payload);
     };
 
     // Étoiles Culture Générale : la notion précise (ex. "Résilience"), dédupliquée par IA à
@@ -5568,10 +5573,15 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     // antérieure à l'introduction de ce niveau). Jamais d'URL (aucune page dédiée à rouvrir)
     // — handleItemActivate (mon-univers.js) ignore déjà silencieusement une url absente.
     for (const a of eclairageAcquisitions) {
-      const solarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
+      const storedSolarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
       const star = a.star_id ? starById.get(a.star_id) : null;
+      const solarSystem = storedSolarSystem
+        ? { ...storedSolarSystem, name: restoreMechanicallyTruncatedUniverseName(storedSolarSystem.name, a.eclairage_name) }
+        : null;
       const starKey = star ? `star:${star.id}` : `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`;
-      const starName = star ? star.name : (a.eclairage_name || "Culture générale");
+      const starName = star
+        ? restoreMechanicallyTruncatedUniverseName(star.name, a.eclairage_name)
+        : (a.eclairage_name || "Culture générale");
       pushIntoTree(solarSystem, starKey, starName, {
         id: `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`,
         title: a.eclairage_name,
@@ -5596,7 +5606,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
             const starsArr = [...s.stars.values()]
               .map((star) => ({
                 id: star.key,
-                name: truncateToBubbleLabel(star.name, MAX_STAR_LABEL_LENGTH),
+                name: star.name,
                 articleCount: star.articles.length,
                 articles: sortArticles(star.articles)
               }))
@@ -9343,18 +9353,46 @@ function normalizeSolarSystemName(value) {
     .trim();
 }
 
+// Nettoyage non destructif des noms de la hiérarchie de la mémoire. Le moteur des bulles
+// adapte déjà la taille du texte au contenu : on conserve donc toujours un intitulé complet
+// plutôt que de fabriquer un fragment grammatical en le coupant à 35 caractères.
+function cleanUniverseNodeName(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+const UNIVERSE_LABEL_DANGLING_ENDINGS = new Set([
+  "a", "à", "au", "aux", "avec", "de", "des", "du", "en", "et", "la", "le", "les",
+  "ou", "par", "pour", "sans", "sur", "un", "une"
+]);
+
+function isStandaloneUniverseNodeName(value) {
+  const label = cleanUniverseNodeName(value);
+  if (!label) return false;
+  const words = label.split(/\s+/);
+  const lastWord = words[words.length - 1]
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return !!lastWord && !UNIVERSE_LABEL_DANGLING_ENDINGS.has(lastWord);
+}
+
+// Répare à l'affichage les lignes créées avant la suppression de la limite. La restauration
+// n'a lieu que si l'ancien nom correspond exactement au résultat de l'ancienne fonction de
+// troncature appliquée au nom complet : un vrai libellé court choisi par l'IA n'est donc jamais
+// remplacé par erreur.
+function restoreMechanicallyTruncatedUniverseName(storedName, completeName) {
+  const stored = cleanUniverseNodeName(storedName);
+  const complete = cleanUniverseNodeName(completeName);
+  if (!stored || !complete || complete === stored) return stored || complete;
+  return truncateToBubbleLabel(complete) === stored ? complete : stored;
+}
+
 // Retrouve un système solaire existant (galaxy, normalized_name) ou le crée. La
 // contrainte UNIQUE (galaxy, normalized_name) protège contre une course entre deux
 // créations simultanées : en cas d'échec d'insertion, on relit la ligne avant
 // d'abandonner, pour ne jamais dupliquer un système déjà créé entre-temps.
-// name est tronqué à la même limite que les bulles de débats (truncateToBubbleLabel,
-// cf. lib/cloud-label.js, MAX_LABEL_LENGTH = 35) : même moteur d'affichage
-// (tagTrendCloud.js) des deux côtés, donc même risque de débordement si le nom est
-// long — que la source soit un new_solar_system proposé par l'IA (jamais borné en
-// longueur dans le prompt) ou un sourceName Éclairages repris tel quel (souvent une
-// phrase complète, ex. "La campagne de désinformation soviétique pendant la Guerre
-// froide"). normalizedName reste calculé sur le nom complet côté appelant : la
-// troncature ne doit affecter que l'affichage, jamais la déduplication.
+// Le nom est conservé en entier. La consigne IA produit normalement un libellé court, mais
+// en cas de repli sur sourceName il vaut mieux afficher une phrase complète (dont la taille
+// sera adaptée dans la bulle) qu'un fragment grammatical incompréhensible.
 async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
   const { data: existing, error: selectError } = await supabase
     .from("solar_systems")
@@ -9366,7 +9404,7 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
   if (existing) return existing.id;
   const { data: inserted, error: insertError } = await supabase
     .from("solar_systems")
-    .insert({ galaxy, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
+    .insert({ galaxy, name: cleanUniverseNodeName(name), normalized_name: normalizedName })
     .select("id")
     .single();
   if (!insertError) return inserted.id;
@@ -14201,7 +14239,8 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
     "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
     "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
     "Un simple lien thématique, un vocabulaire commun ou un domaine voisin NE SUFFISENT JAMAIS : \"Résilience\" (capacité psychologique/sociologique à surmonter un choc) n'est PAS \"Développement durable\" même si le mot \"résilience\" apparaît parfois dans ce contexte écologique — ce sont deux notions différentes, pas la même reformulée. En cas du moindre doute, ne réutilise jamais : propose un nouveau système plutôt qu'un rattachement hasardeux (un système en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
-    "Sinon, propose dans new_solar_system un nom court (2 à 4 mots, jamais une phrase) qui résume la notion elle-même, jamais l'anecdote ou l'actualité du jour qui l'illustre (ex. \"La campagne de désinformation soviétique pendant la Guerre froide\" → \"Désinformation soviétique\").",
+    "Sinon, propose dans new_solar_system un libellé autonome et complet de 2 à 4 mots, idéalement 35 caractères maximum, jamais une phrase, qui résume la notion elle-même et jamais l'anecdote ou l'actualité du jour qui l'illustre (ex. \"La campagne de désinformation soviétique pendant la Guerre froide\" → \"Désinformation soviétique\").",
+    "Le libellé doit rester compréhensible isolément et ne doit jamais se terminer par un article, une préposition ou un mot de liaison comme de, du, des, le, la, les, à, au, aux, et ou en.",
     "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
     "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"Résilience\"}",
     "",
@@ -14237,7 +14276,7 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
       return candidateId;
     }
     const newName = String(parsed?.new_solar_system || "").trim();
-    if (newName) {
+    if (isStandaloneUniverseNodeName(newName)) {
       const normalized = normalizeSolarSystemName(newName);
       if (!isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category: null, categoryPrecision: null })) {
         return await resolveOrCreateSolarSystem(galaxy, newName, normalized);
@@ -14272,8 +14311,7 @@ function isOpinionArticleStarNameRejected(normalizedName, { solarSystemName, gal
 }
 
 // Même mécanique que resolveOrCreateSolarSystem : retrouve une étoile existante
-// (solar_system_id, normalized_name) ou la crée. Nom tronqué à la même limite que les
-// autres bulles (truncateToBubbleLabel).
+// (solar_system_id, normalized_name) ou la crée, sans coupe mécanique du nom.
 async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
   const { data: existing, error: selectError } = await supabase
     .from("stars")
@@ -14285,7 +14323,7 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
   if (existing) return existing.id;
   const { data: inserted, error: insertError } = await supabase
     .from("stars")
-    .insert({ solar_system_id: solarSystemId, name: truncateToBubbleLabel(name), normalized_name: normalizedName })
+    .insert({ solar_system_id: solarSystemId, name: cleanUniverseNodeName(name), normalized_name: normalizedName })
     .select("id")
     .single();
   if (!insertError) return inserted.id;
@@ -14328,7 +14366,8 @@ async function resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemName, 
     "Un contenu de culture générale doit être rattaché à une \"étoile\" : la notion précise qu'il illustre, à l'intérieur du système solaire donné (un thème plus large et durable).",
     "Vérifie d'abord si une notion de existing_stars désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans star_id.",
     "Un simple lien thématique ou un vocabulaire commun NE SUFFIT JAMAIS : en cas du moindre doute, ne réutilise jamais — propose une nouvelle étoile plutôt qu'un rattachement hasardeux (une étoile en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
-    "Sinon, propose dans new_star un nom court (2 à 4 mots, jamais une phrase) qui résume la notion elle-même, jamais l'anecdote ou l'actualité du jour qui l'illustre.",
+    "Sinon, propose dans new_star un libellé autonome et complet de 2 à 4 mots, idéalement 35 caractères maximum, jamais une phrase, qui résume la notion elle-même et jamais l'anecdote ou l'actualité du jour qui l'illustre.",
+    "Le libellé doit rester compréhensible isolément et ne doit jamais se terminer par un article, une préposition ou un mot de liaison comme de, du, des, le, la, les, à, au, aux, et ou en.",
     "L'étoile ne doit jamais être un simple doublon ou une reformulation du système solaire lui-même — elle doit être plus précise, pas juste un synonyme.",
     "RÈGLE OBLIGATOIRE : réponds avec soit \"star_id\" (nombre), soit \"new_star\" (texte court) — jamais les deux, jamais aucun des deux.",
     "Format obligatoire : {\"star_id\":null,\"new_star\":\"Résilience\"}",
@@ -14365,7 +14404,7 @@ async function resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemName, 
       return candidateId;
     }
     const newName = String(parsed?.new_star || "").trim();
-    if (newName) {
+    if (isStandaloneUniverseNodeName(newName)) {
       const normalized = normalizeStarName(newName);
       if (!isOpinionArticleStarNameRejected(normalized, { solarSystemName, category: null, categoryPrecision: null })) {
         return await resolveOrCreateStar(solarSystemId, newName, normalized);
