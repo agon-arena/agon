@@ -932,8 +932,13 @@ function showStatus(kind) {
     // La classe générique d'overlay permet aussi au changement de mode
     // Actu/Agôn de retirer ce message avec les anciens labels du nuage.
     message.className = "agon-tag-label-overlay universe-empty-overlay";
-    message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:28px;text-align:center;color:rgba(255,255,255,.78);font:400 .98rem/1.55 Arial,Helvetica,sans-serif;letter-spacing:.01em;text-shadow:0 1px 3px rgba(0,0,0,.65);pointer-events:none;opacity:1;visibility:visible;transform:none;";
-    message.innerHTML = "Ton réseau neuronal artificiel de la mémoire est encore vide.<br><br>Commence la mémorisation en cliquant sur « Apprentissage » (bandeau du bas) : ton réseau neuronal commencera sa formation.";
+    message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:clamp(20px,6vw,46px);text-align:center;color:#fff;pointer-events:none;opacity:1;visibility:visible;transform:none;";
+    message.innerHTML = '<div style="width:min(100%,520px);box-sizing:border-box;padding:clamp(22px,5vw,34px);border:1px solid rgba(255,255,255,.18);border-radius:22px;background:linear-gradient(145deg,rgba(18,29,38,.64),rgba(27,42,52,.38));box-shadow:0 18px 48px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);">' +
+      '<div style="width:48px;height:48px;margin:0 auto 15px;border:1px solid rgba(255,255,255,.24);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);box-shadow:0 0 24px rgba(160,198,212,.18);"><i class="fa-solid fa-diagram-project" style="font-size:19px;color:#c9dce5;"></i></div>' +
+      '<p style="margin:0;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:clamp(20px,4.5vw,27px);font-weight:600;line-height:1.2;letter-spacing:.01em;color:#f4f7f8;text-shadow:0 2px 8px rgba(0,0,0,.4);">Ton réseau neuronal artificiel de la mémoire est encore vide.</p>' +
+      '<span style="display:block;width:54px;height:1px;margin:18px auto;background:linear-gradient(90deg,transparent,rgba(201,220,229,.8),transparent);"></span>' +
+      '<p style="margin:0;font:400 clamp(13px,2.8vw,15px)/1.55 Arial,Helvetica,sans-serif;color:rgba(238,244,247,.78);">Commence la mémorisation en cliquant sur <span style="display:inline-block;margin:0 2px;padding:2px 8px;border:1px solid rgba(201,220,229,.28);border-radius:999px;background:rgba(201,220,229,.1);color:#eef5f7;font-weight:700;">Apprentissage</span> (bandeau du bas)&nbsp;: ton réseau neuronal commencera sa formation.</p>' +
+      '</div>';
     cloudEl.appendChild(message);
   } else if (kind === "error") {
     const p = document.createElement("p");
