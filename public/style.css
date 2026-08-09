@@ -19718,6 +19718,16 @@ body.page-home #debates-list .theme-row-section:first-child {
   backface-visibility: hidden;
 }
 
+/* Le switch est bien au-dessus des satellites, mais son fond générique à 8 % les
+   laisse transparaître — surtout en standalone, où sa marge négative le fait davantage
+   chevaucher le nuage. En mode Agôn seulement, on recompose la même teinte vitrée sur
+   une base opaque : les satellites passent réellement dessous sans rester visibles. */
+.agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)),
+    #243038;
+}
+
 #agon-cloud-mode-switch .agon-cloud-mode-segment:not(:last-child)::after {
   content: '';
   position: absolute;
@@ -20010,6 +20020,15 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
   height: 548px;
   min-height: 548px;
   flex: 0 0 auto;
+}
+
+/* Dans le navigateur mobile, le cadre remontait légèrement plus haut que dans
+   l'application standalone. Décale seulement le cloud (cadre + bulles/galaxies/
+   neurones) de 8px vers le bas, sans toucher aux boutons qui suivent ni au desktop. */
+@media (max-width: 768px) {
+  body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone) .agon-tag-trends-cloud {
+    top: 8px;
+  }
 }
 
 /* Mode "Ma mémoire" dans ce contexte (agon-mobile-cloud-viewport, l'appareil réel utilisé sur
