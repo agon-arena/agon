@@ -1033,7 +1033,7 @@
         scoreCardHtml(
           '<i class="fa-solid fa-brain"></i>', 'Gnosis', gnosisScore,
           (gnosisAnswered !== null && gnosisCorrect !== null) ? esc(gnosisCorrect + "/" + gnosisAnswered + " bonnes réponses au QCM") : "Justesse au QCM",
-          "Pas encore évalué : réponds à Connaissances pour débloquer ce score.",
+          "Pas encore évalué : réponds dans Apprentissage pour débloquer ce score.",
           "gnosis"
         );
 
@@ -1159,7 +1159,7 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
+<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260809-memory-split");

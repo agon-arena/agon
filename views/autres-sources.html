@@ -1400,10 +1400,6 @@
             <i class="fa-solid fa-clock-rotate-left"></i>
             <span>Ce jour dans l'Histoire</span>
           </a>
-          <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
-            <i class="fa-solid fa-list-check"></i>
-            <span>Connaissances</span>
-          </a>
           <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
             <span>Éclairages</span>
@@ -1744,7 +1740,7 @@ window.addEventListener("pageshow", function() {
     <span>Actualiser</span>
   </button>
 
-  <a href="/qcm-du-jour" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
     <i class="fa-solid fa-list-check"></i>
     <span>Apprentissage</span>
   </a>
@@ -1788,7 +1784,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
+<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

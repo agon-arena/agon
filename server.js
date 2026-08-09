@@ -14635,8 +14635,16 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
   }
 });
 
-app.get("/qcm-du-jour", (req, res) => {
+app.get("/apprentissage", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
+});
+
+// L'ancienne page Connaissances n'existe plus comme destination autonome.
+// Les anciens liens profonds conservent néanmoins leurs paramètres QCM.
+app.get("/qcm-du-jour", (req, res) => {
+  const queryIndex = req.originalUrl.indexOf("?");
+  const query = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : "";
+  res.redirect(301, `/apprentissage${query}`);
 });
 
 // Univers intellectuel personnel — page autonome (cf. views/mon-univers.html), même modèle

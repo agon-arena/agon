@@ -97,7 +97,7 @@
   // d'openDebateIframeModal disponible ici : on réplique juste le message que cette fonction
   // poste, cf. script.js).
   function goToQcm(slot, quizDate, label) {
-    var url = "/qcm-du-jour?slot=" + encodeURIComponent(slot) + "&date=" + encodeURIComponent(quizDate) + "&label=" + encodeURIComponent(label);
+    var url = "/apprentissage?slot=" + encodeURIComponent(slot) + "&date=" + encodeURIComponent(quizDate) + "&label=" + encodeURIComponent(label);
     if (window.self !== window.top) {
       try {
         window.parent.postMessage({

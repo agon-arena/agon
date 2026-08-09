@@ -1070,7 +1070,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
+<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1281,7 +1281,7 @@
         btn.setAttribute('data-quiz-slot', data.slot);
         btn.setAttribute('data-quiz-date', data.quizDate);
         var label = data.label || notionName;
-        var qcmUrl = '/qcm-du-jour?slot=' + encodeURIComponent(data.slot) + '&date=' + encodeURIComponent(data.quizDate) + '&label=' + encodeURIComponent(label);
+        var qcmUrl = '/apprentissage?slot=' + encodeURIComponent(data.slot) + '&date=' + encodeURIComponent(data.quizDate) + '&label=' + encodeURIComponent(label);
         showMemorizeExplainerModal(label, qcmUrl);
       })
       .catch(function () { setMemorizeButtonLoading(btn, false); });

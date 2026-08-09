@@ -472,10 +472,6 @@
             <i class="fa-solid fa-clock-rotate-left"></i>
             <span>Ce jour dans l'Histoire</span>
           </a>
-          <a href="/qcm-du-jour" class="home-topbar-menu-item" id="home-topbar-qcm-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/qcm-du-jour')">
-            <i class="fa-solid fa-list-check"></i>
-            <span>Connaissances</span>
-          </a>
           <a href="/eclairages" class="home-topbar-menu-item eclairages-link-unavailable" id="home-topbar-eclairages-link" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
             <span>Éclairages</span>
@@ -783,10 +779,6 @@ window.addEventListener("pageshow", function() {
   <a href="/historical-events-test" id="home-historical-events-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/historical-events-test')">
     <i class="fa-solid fa-clock-rotate-left"></i>
     <span>Ce jour dans l'Histoire</span>
-  </a>
-  <a href="/qcm-du-jour" id="home-qcm-du-jour-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
-    <i class="fa-solid fa-circle-question"></i>
-    <span>Connaissances</span>
   </a>
   <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn eclairages-link-unavailable" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); openDebateIframeModal('/eclairages')">
     <i class="fa-solid fa-lightbulb"></i>
@@ -1148,9 +1140,8 @@ window.addEventListener("pageshow", function() {
     <span>Actualiser</span>
   </button>
 
-  <!-- Apprentissage reprend l'intégralité de la page Connaissances. Ma mémoire
-       et les scores/contributions restent accessibles depuis le menu supérieur. -->
-  <a href="/qcm-du-jour" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
+  <!-- Ma mémoire et les scores/contributions restent accessibles depuis le menu supérieur. -->
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
     <i class="fa-solid fa-list-check"></i>
     <span>Apprentissage</span>
   </a>
@@ -1357,7 +1348,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
+<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -2865,7 +2865,7 @@ function isIframePageWithoutLoadingOverlay(pathname) {
 // (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
 // suffisant. Distinct de AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
 // supprime les deux) : ici seul le voile de la page elle-même est coupé.
-const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/qcm-du-jour", "/eclairages"];
+const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/apprentissage", "/eclairages"];
 function isIframePageUsingParentLoadingOnly(pathname) {
   return AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
 }
@@ -5289,7 +5289,7 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
-  modal.classList.toggle("qcm-frame-open", safePathname === "/qcm-du-jour");
+  modal.classList.toggle("qcm-frame-open", safePathname === "/apprentissage");
   modal.classList.toggle("parallele-historique-frame-open", safePathname === "/parallele-historique");
   modal.classList.toggle("pensee-philosophique-frame-open", safePathname === "/pensee-philosophique");
   modal.classList.toggle("mecanisme-sociologique-frame-open", safePathname === "/mecanisme-sociologique");
@@ -22246,7 +22246,7 @@ function isSafeInternalModalUrl(modalUrl = "") {
       "/autres-sources",
       "/about",
       "/contact",
-      "/qcm-du-jour",
+      "/apprentissage",
       "/meilleures-idees",
       "/mon-univers",
       "/contributions"
