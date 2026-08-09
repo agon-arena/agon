@@ -926,7 +926,7 @@ function showStatus(kind) {
     statusEl.textContent = "Chargement de ton univers…";
   } else if (kind === "empty") {
     const p = document.createElement("p");
-    p.innerHTML = "Ton univers est encore vide.<br>Réponds correctement au QCM Culture Générale pour faire apparaître tes premières étoiles.";
+    p.innerHTML = "Ton réseau neuronal artificiel de la mémoire est encore vide.<br>Réponds correctement au QCM Culture Générale pour faire apparaître tes premières étoiles.";
     statusEl.appendChild(p);
   } else if (kind === "error") {
     const p = document.createElement("p");
