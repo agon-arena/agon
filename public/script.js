@@ -18985,6 +18985,43 @@ function getCurrentIndexSearchQuery() {
   return String(currentIndexSearchQuery || "").trim();
 }
 
+// La flèche de retour de "Ma mémoire" est un frère du cloud dans le DOM : elle ne peut donc
+// pas être ancrée au cadre avec un simple bottom/left CSS. Sur mobile, mesure le vrai cadre
+// décoratif (::before) après tous les décalages standalone et place la flèche 12px à
+// l'intérieur de ses bords gauche et inférieur. Les anciennes coordonnées fixes dérivaient
+// dès que cloud.style.marginTop était recalculé.
+function syncMemoireMobileBackButtonPosition() {
+  const wrapper = document.getElementById('agon-memoire-embed-after');
+  const cloud = document.getElementById('agon-tag-trends-cloud');
+  const section = document.getElementById('agon-tag-trends-section');
+  if (!wrapper || !cloud || !section) return;
+
+  if (window.innerWidth > 768) {
+    wrapper.style.left = '';
+    wrapper.style.top = '';
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    if (!document.body.classList.contains('agon-memoire-cloud-mode')) return;
+    const cloudRect = cloud.getBoundingClientRect();
+    const sectionRect = section.getBoundingClientRect();
+    if (!cloudRect.width || !cloudRect.height || !sectionRect.width) return;
+
+    const frameStyle = getComputedStyle(cloud, '::before');
+    const frameLeft = parseFloat(frameStyle.left) || 30;
+    const frameBottom = parseFloat(frameStyle.bottom) || 78;
+    const button = wrapper.querySelector('.universe-back-btn');
+    const buttonSize = button?.offsetHeight || 32;
+    const innerGap = 12;
+
+    wrapper.style.left = Math.round(cloudRect.left - sectionRect.left + frameLeft + innerGap) + 'px';
+    wrapper.style.top = Math.round(cloudRect.bottom - sectionRect.top - frameBottom - buttonSize - innerGap) + 'px';
+  });
+}
+
+window.addEventListener('resize', syncMemoireMobileBackButtonPosition, { passive: true });
+
 function alignStandaloneBubbleFrameToActiveFilter() {
   if (!document.body.classList.contains('is-standalone')) return;
   if (!isAgonMobileCloudViewport()) return;
@@ -19010,6 +19047,7 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     try {
       sessionStorage.setItem('agonCloudMarginTop:' + location.pathname, JSON.stringify({ w: window.innerWidth, m: Math.round(nextMarginTop * 10) / 10 }));
     } catch (e) {}
+    syncMemoireMobileBackButtonPosition();
   });
 }
 
@@ -19579,6 +19617,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
   // toggleAgonCloud/setPoliticalCloudGroup font déjà cet appel après leurs propres changements
   // de hauteur (légende, switch gauche/droite) — celui-ci en était le seul absent.
   syncCloudSectionHeight();
+  syncMemoireMobileBackButtonPosition();
 }
 
 // ── Filtre gauche/droite du nuage Bulles Actu (veille mixte) ──

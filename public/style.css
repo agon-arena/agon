@@ -25018,6 +25018,12 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     margin: 0;
   }
 
+  #agon-memoire-embed-after .universe-back-btn.is-visible {
+    /* Le wrapper est désormais placé sur les limites réelles du cadre par
+       syncMemoireMobileBackButtonPosition : aucun ancien décalage visuel en plus. */
+    transform: none !important;
+  }
+
   /* Le fil d'Ariane sort du flux afin de ne pas pousser le cadre ni le sélecteur. Sur mobile,
      il est placé au-dessus du bord supérieur du cadre (comme sur desktop), avec une petite
      respiration ; seule la flèche de retour reste à l'intérieur du cadre. */
@@ -25654,7 +25660,11 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 /* Sur l'accueil, l'état vide reprend les espacements de la légende Bulles Agôn. Le <p> créé
    dynamiquement est remis à zéro pour que ses marges natives ne s'ajoutent pas à ces valeurs. */
 body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status {
-  padding: 18px 16px 40px;
+  /* Même géométrie que .agon-tag-trends-caption sur desktop : marge de 18px
+     avant la ligne, sans padding supérieur ni demi-interligne supplémentaire. */
+  margin: 18px auto 0;
+  padding: 0 16px 40px;
+  line-height: normal;
 }
 
 body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p {
