@@ -842,14 +842,18 @@ window.addEventListener("pageshow", function() {
     .home-secondary-actions {
       width: min(100% - 32px, 480px);
     }
-    body.is-standalone.page-home-mobile .agon-tag-trends-section:not(:has(#agon-tag-trends-cloud.agon-memoire-frame)) {
-      min-height: 0;
-      justify-content: flex-start;
-      padding-bottom: 16px;
+    body.is-standalone.page-home-mobile .agon-tag-trends-section {
+      min-height: auto;
+      justify-content: normal;
+      padding-bottom: 0;
     }
-    body.is-standalone.page-home-mobile .home-secondary-actions .home-qcm-btn {
-      padding-top: 6px;
-      padding-bottom: 6px;
+    body.is-standalone.page-home-mobile .agon-tag-trends-cloud {
+      top: 14px;
+    }
+    body.is-standalone.page-home-mobile .agon-cloud-mode-switch,
+    body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
+    body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
+      margin-top: -47px !important;
     }
     .home-secondary-actions .home-qcm-btn {
       flex: 1 1 0;
@@ -863,6 +867,11 @@ window.addEventListener("pageshow", function() {
     .home-secondary-actions .home-qcm-btn i,
     .home-secondary-actions .home-qcm-btn span {
       font-size: 12px;
+    }
+  }
+  @media (max-width: 390px) {
+    body.is-standalone.page-home-mobile .agon-tag-trends-section {
+      padding-bottom: 24px;
     }
   }
 
