@@ -85,20 +85,63 @@
   var rubricPrefsCache = null;
   var rubricPrefsFetchPromise = null;
   var rubricSaveToken = 0;
+  function setMemorizeButtonState(btn, active) {
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    var label = btn.querySelector(".het-rubric-memorize-label");
+    if (label) label.textContent = active ? "Mémorisé" : "Mémoriser";
+  }
+
+  // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
+  // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
+  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — juste
+  // indiquer où continuer. Texte construit via createElement/textContent (jamais
+  // innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  function showMemorizeExplainerModal(notionName) {
+    var overlay = document.createElement("div");
+    overlay.className = "het-memorize-explainer-overlay";
+    var modal = document.createElement("div");
+    modal.className = "het-memorize-explainer-modal";
+    var text = document.createElement("p");
+    text.className = "het-memorize-explainer-text";
+    text.appendChild(document.createTextNode("Rends-toi sur la page "));
+    var strong = document.createElement("strong");
+    strong.textContent = "Ma mémoire";
+    text.appendChild(strong);
+    text.appendChild(document.createTextNode(" pour commencer l’apprentissage de la notion « " + notionName + " »."));
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "het-memorize-explainer-close";
+    closeBtn.textContent = "J’ai compris";
+    modal.appendChild(text);
+    modal.appendChild(closeBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeydown);
+    }
+    function onKeydown(e) { if (e.key === "Escape") close(); }
+    document.addEventListener("keydown", onKeydown);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    closeBtn.addEventListener("click", close);
+  }
+
   function syncRubricToggles() {
-    var checkboxes = document.querySelectorAll(".het-rubric-toggle input[data-rubric]");
-    if (!checkboxes.length) return;
+    var buttons = document.querySelectorAll(".het-rubric-memorize-btn[data-rubric]");
+    if (!buttons.length) return;
     var voterKey = getVoterKey();
     if (!voterKey) return;
 
-    function applyChecked(prefs) {
-      checkboxes.forEach(function (cb) {
-        cb.checked = prefs.indexOf(cb.getAttribute("data-rubric")) !== -1;
+    function applyState(prefs) {
+      buttons.forEach(function (btn) {
+        setMemorizeButtonState(btn, prefs.indexOf(btn.getAttribute("data-rubric")) !== -1);
       });
     }
 
     if (rubricPrefsCache) {
-      applyChecked(rubricPrefsCache);
+      applyState(rubricPrefsCache);
     } else {
       if (!rubricPrefsFetchPromise) {
         rubricPrefsFetchPromise = fetch("/api/users/culture-generale-rubrics?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
@@ -112,17 +155,20 @@
             return rubricPrefsCache;
           });
       }
-      rubricPrefsFetchPromise.then(applyChecked);
+      rubricPrefsFetchPromise.then(applyState);
     }
 
-    checkboxes.forEach(function (cb) {
-      cb.addEventListener("change", function () {
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
         var myToken = ++rubricSaveToken;
+        var nextActive = btn.getAttribute("aria-pressed") !== "true";
+        setMemorizeButtonState(btn, nextActive); // optimiste, annulé si l'enregistrement échoue
+        if (nextActive) showMemorizeExplainerModal(btn.getAttribute("data-notion-name") || "cette notion");
         var owned = [];
-        checkboxes.forEach(function (c) { owned.push(c.getAttribute("data-rubric")); });
+        buttons.forEach(function (b) { owned.push(b.getAttribute("data-rubric")); });
         var otherRubrics = (rubricPrefsCache || []).filter(function (r) { return owned.indexOf(r) === -1; });
         var selected = otherRubrics.slice();
-        checkboxes.forEach(function (c) { if (c.checked) selected.push(c.getAttribute("data-rubric")); });
+        buttons.forEach(function (b) { if (b.getAttribute("aria-pressed") === "true") selected.push(b.getAttribute("data-rubric")); });
         fetch("/api/users/culture-generale-rubrics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -132,10 +178,10 @@
           .then(function (data) {
             if (myToken !== rubricSaveToken) return;
             if (data.ok) rubricPrefsCache = selected;
-            else cb.checked = !cb.checked;
+            else setMemorizeButtonState(btn, !nextActive);
           })
           .catch(function () {
-            if (myToken === rubricSaveToken) cb.checked = !cb.checked;
+            if (myToken === rubricSaveToken) setMemorizeButtonState(btn, !nextActive);
           });
       });
     });
@@ -242,19 +288,6 @@
     toggle.appendChild(chevron);
 
     block.appendChild(toggle);
-
-    // Case de personnalisation du QCM Culture Générale (cf. syncRubricToggles) :
-    // visible dès le chargement du bloc, pas besoin de le déplier — un
-    // visiteur qui ne coche rien nulle part garde le comportement par défaut
-    // (aperçu), cf. server.js applyCultureGeneraleRubricFilter.
-    var rubricToggle = document.createElement("label");
-    rubricToggle.className = "het-rubric-toggle";
-    var rubricCheckbox = document.createElement("input");
-    rubricCheckbox.type = "checkbox";
-    rubricCheckbox.setAttribute("data-rubric", "histoire_" + categoryKey);
-    rubricToggle.appendChild(rubricCheckbox);
-    rubricToggle.appendChild(document.createTextNode(" Inclure dans mon QCM Culture Générale"));
-    block.appendChild(rubricToggle);
 
     var content = document.createElement("div");
     content.className = "het-block-content";
@@ -420,6 +453,26 @@
     }
 
     content.appendChild(body);
+
+    // Bouton de personnalisation du QCM Culture Générale (cf. syncRubricToggles) : en
+    // bas du contenu, une fois le texte lu, plutôt que près du titre replié — geste
+    // délibéré après lecture. Un visiteur qui ne clique nulle part garde le
+    // comportement par défaut (aperçu), cf. server.js applyCultureGeneraleRubricFilter.
+    var rubricButton = document.createElement("button");
+    rubricButton.type = "button";
+    rubricButton.className = "het-rubric-memorize-btn";
+    rubricButton.setAttribute("data-rubric", "histoire_" + categoryKey);
+    rubricButton.setAttribute("aria-pressed", "false");
+    rubricButton.setAttribute("data-notion-name", title || "cet événement");
+    var rubricIcon = document.createElement("i");
+    rubricIcon.className = "fa-solid fa-brain";
+    rubricButton.appendChild(rubricIcon);
+    rubricButton.appendChild(document.createTextNode(" "));
+    var rubricLabel = document.createElement("span");
+    rubricLabel.className = "het-rubric-memorize-label";
+    rubricLabel.textContent = "Mémoriser";
+    rubricButton.appendChild(rubricLabel);
+    content.appendChild(rubricButton);
 
     var collapseButton = document.createElement("button");
     collapseButton.type = "button";

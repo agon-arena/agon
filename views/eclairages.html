@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260809-memoirebg2">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-memoireheightfix1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -178,25 +178,89 @@
     .ecl-block-toggle[aria-expanded="true"] .ecl-block-chevron {
       transform: rotate(180deg);
     }
-    /* Case à cocher de personnalisation du QCM Culture Générale (cf.
-       server.js GET/POST /api/users/culture-generale-rubrics) : visible dès
-       le chargement du bloc, sans avoir à le déplier — toujours au même
-       endroit que le titre de la rubrique, jamais dans .ecl-block-content
-       (repliée par défaut). */
-    .ecl-rubric-toggle {
+    /* Bouton de personnalisation du QCM Culture Générale (cf. server.js
+       GET/POST /api/users/culture-generale-rubrics) : en bas du contenu de
+       la rubrique, une fois le texte lu — jamais près du titre replié, pour
+       que ce soit un geste délibéré après lecture plutôt qu'une case cochée
+       à l'aveugle. Coloré une fois actif (cf. .is-active, posé par
+       syncRubricToggles). */
+    .ecl-rubric-memorize-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 7px;
-      margin: 4px 0 0;
-      color: #6b7280;
-      font-size: 12.5px;
+      gap: 9px;
+      width: 100%;
+      max-width: 320px;
+      margin: 20px auto 0;
+      padding: 13px 20px;
+      border: 2px solid #243038;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #243038;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+    .ecl-rubric-memorize-btn:hover {
+      background: #f4f6f8;
+    }
+    .ecl-rubric-memorize-btn:active {
+      transform: scale(0.98);
+    }
+    .ecl-rubric-memorize-btn.is-active {
+      border-color: #f5b642;
+      background: #f5b642;
+      color: #243038;
+    }
+    .ecl-rubric-memorize-btn.is-active:hover {
+      background: #f0aa27;
+    }
+    .ecl-memorize-explainer-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(17, 24, 39, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .ecl-memorize-explainer-modal {
+      width: 100%;
+      max-width: 400px;
+      padding: 24px;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 20px 45px rgba(17, 24, 39, 0.25);
+      text-align: center;
+    }
+    .ecl-memorize-explainer-text {
+      margin: 0 0 20px;
+      color: #243038;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .ecl-memorize-explainer-close {
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 999px;
+      background: #243038;
+      color: #ffffff;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
       cursor: pointer;
     }
-    .ecl-rubric-toggle input {
-      width: 15px;
-      height: 15px;
-      flex: 0 0 auto;
+    .ecl-memorize-explainer-close:hover {
+      background: #16212a;
     }
     .ecl-block-content {
       margin-top: 16px;
@@ -720,7 +784,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-landmark"></i> Parallèle historique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="parallele"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ph-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ph-title-text">Parallèle historique du jour</span> — un événement d'actualité éclairé par un précédent du passé.</p>
 
@@ -744,6 +807,10 @@
           <p class="ph-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="parallele" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="ph-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -755,7 +822,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-brain"></i> Pensée philosophique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="pensee"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="pp-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="pp-title-text">Pensée philosophique du jour</span> — un événement d'actualité éclairé par une idée philosophique.</p>
 
@@ -779,6 +845,10 @@
           <p class="pp-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="pensee" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="pp-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -790,7 +860,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-people-group"></i> Mécanisme sociologique du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="mecanisme"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ms-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ms-title-text">Mécanisme sociologique du jour</span> — un événement d'actualité éclairé par un mécanisme sociologique.</p>
 
@@ -814,6 +883,10 @@
           <p class="ms-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="mecanisme" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="ms-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -825,7 +898,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-shapes"></i> Concept du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="concept"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="cj-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="cj-title-text">Concept du jour</span> — un événement d'actualité éclairé par un concept de psychologie, sociologie, rhétorique, économie, science politique, philosophie ou sciences.</p>
 
@@ -849,6 +921,10 @@
           <p class="cj-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="concept" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="cj-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -860,7 +936,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-quote-left"></i> Citation du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="citation"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="cd-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="cd-title-text">Citation du jour</span> — un événement d'actualité éclairé par la citation d'un auteur célèbre.</p>
 
@@ -884,6 +959,10 @@
           <p class="cd-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="citation" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="cd-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -895,7 +974,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-palette"></i> Œuvre d'art du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="oeuvre"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="oa-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="oa-title-text">Œuvre d'art du jour</span> — un événement d'actualité éclairé par une œuvre d'art.</p>
 
@@ -919,6 +997,10 @@
           <p class="oa-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="oeuvre" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="oa-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -930,7 +1012,6 @@
         <span class="ecl-block-toggle-title"><i class="fa-solid fa-scroll"></i> Mot latin du jour</span>
         <i class="fa-solid fa-chevron-down ecl-block-chevron"></i>
       </button>
-      <label class="ecl-rubric-toggle"><input type="checkbox" data-rubric="latin"> Inclure dans mon QCM Culture Générale</label>
       <div class="ecl-block-content" id="ld-block-content" hidden>
         <p class="ecl-block-subtitle"><span id="ld-title-text">Mot latin du jour</span> — un événement d'actualité éclairé par un mot ou une courte expression en latin.</p>
 
@@ -954,6 +1035,10 @@
           <p class="ld-state-message"><i class="fa-solid fa-hourglass-half fa-spin ecl-state-spinner"></i> Chargement…</p>
         </div>
 
+        <button type="button" class="ecl-rubric-memorize-btn" data-rubric="latin" aria-pressed="false">
+          <i class="fa-solid fa-brain"></i> <span class="ecl-rubric-memorize-label">Mémoriser</span>
+        </button>
+
         <button type="button" class="ecl-block-collapse" id="ld-block-collapse">
           <i class="fa-solid fa-chevron-up"></i> Masquer
         </button>
@@ -961,7 +1046,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260809-reinit1" defer></script>
+<script src="/script.min.js?v=20260809-cleardust1" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1091,12 +1176,54 @@
   // toujours fusionné avec les rubriques Histoire (gérées sur
   // /historical-events-test) déjà enregistrées, jamais écrasées d'ici.
   var rubricSaveToken = 0;
+  function setMemorizeButtonState(btn, active) {
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    var label = btn.querySelector('.ecl-rubric-memorize-label');
+    if (label) label.textContent = active ? 'Mémorisé' : 'Mémoriser';
+  }
+
+  // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
+  // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
+  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — juste
+  // indiquer où continuer. Texte construit via createElement/textContent (jamais
+  // innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  function showMemorizeExplainerModal(notionName) {
+    var overlay = document.createElement('div');
+    overlay.className = 'ecl-memorize-explainer-overlay';
+    var modal = document.createElement('div');
+    modal.className = 'ecl-memorize-explainer-modal';
+    var text = document.createElement('p');
+    text.className = 'ecl-memorize-explainer-text';
+    text.appendChild(document.createTextNode('Rends-toi sur la page '));
+    var strong = document.createElement('strong');
+    strong.textContent = 'Ma mémoire';
+    text.appendChild(strong);
+    text.appendChild(document.createTextNode(' pour commencer l’apprentissage de la notion « ' + notionName + ' ».'));
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'ecl-memorize-explainer-close';
+    closeBtn.textContent = 'J’ai compris';
+    modal.appendChild(text);
+    modal.appendChild(closeBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+    }
+    function onKeydown(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKeydown);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    closeBtn.addEventListener('click', close);
+  }
   function initRubricToggles() {
     var voterKey = typeof getKey === 'function' ? getKey() : null;
-    var checkboxes = document.querySelectorAll('.ecl-rubric-toggle input[data-rubric]');
-    if (!voterKey || !checkboxes.length) return;
+    var buttons = document.querySelectorAll('.ecl-rubric-memorize-btn[data-rubric]');
+    if (!voterKey || !buttons.length) return;
     var ownedRubrics = [];
-    checkboxes.forEach(function (cb) { ownedRubrics.push(cb.getAttribute('data-rubric')); });
+    buttons.forEach(function (btn) { ownedRubrics.push(btn.getAttribute('data-rubric')); });
     var otherRubrics = []; // rubriques hors de cette page (Histoire), reçues au premier GET
 
     fetch('/api/users/culture-generale-rubrics?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
@@ -1104,15 +1231,18 @@
       .then(function (data) {
         var current = Array.isArray(data.rubrics) ? data.rubrics : [];
         otherRubrics = current.filter(function (r) { return ownedRubrics.indexOf(r) === -1; });
-        checkboxes.forEach(function (cb) { cb.checked = current.indexOf(cb.getAttribute('data-rubric')) !== -1; });
+        buttons.forEach(function (btn) { setMemorizeButtonState(btn, current.indexOf(btn.getAttribute('data-rubric')) !== -1); });
       })
       .catch(function () {});
 
-    checkboxes.forEach(function (cb) {
-      cb.addEventListener('change', function () {
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
         var myToken = ++rubricSaveToken;
+        var nextActive = btn.getAttribute('aria-pressed') !== 'true';
+        setMemorizeButtonState(btn, nextActive); // optimiste, annulé si l'enregistrement échoue
+        if (nextActive) showMemorizeExplainerModal(btn.getAttribute('data-notion-name') || 'cette notion');
         var selected = otherRubrics.slice();
-        checkboxes.forEach(function (c) { if (c.checked) selected.push(c.getAttribute('data-rubric')); });
+        buttons.forEach(function (b) { if (b.getAttribute('aria-pressed') === 'true') selected.push(b.getAttribute('data-rubric')); });
         fetch('/api/users/culture-generale-rubrics', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1121,10 +1251,10 @@
           .then(function (res) { return res.json(); })
           .then(function (data) {
             if (myToken !== rubricSaveToken) return;
-            if (!data.ok) cb.checked = !cb.checked; // échec : on annule le changement visuel
+            if (!data.ok) setMemorizeButtonState(btn, !nextActive);
           })
           .catch(function () {
-            if (myToken === rubricSaveToken) cb.checked = !cb.checked;
+            if (myToken === rubricSaveToken) setMemorizeButtonState(btn, !nextActive);
           });
       });
     });
@@ -1278,6 +1408,8 @@
       : (content.current_topic_id ? [content] : []);
     if (!parallels.length) { renderError(); return; }
     body.innerHTML = parallels.map(function (p, i) { return renderOneParallel(p, i, parallels.length); }).join('');
+    var parallelMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="parallele"]');
+    if (parallelMemorizeBtn && parallels[0]) parallelMemorizeBtn.setAttribute('data-notion-name', parallels[0].historical_event_title || '');
   }
 
   function stopPolling() {
@@ -1584,6 +1716,8 @@
     var pensees = Array.isArray(content.pensees) ? content.pensees : [];
     if (!pensees.length) { renderError(); return; }
     body.innerHTML = pensees.map(function (p, i) { return renderOnePensee(p, i, pensees.length); }).join('');
+    var penseeMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="pensee"]');
+    if (penseeMemorizeBtn && pensees[0]) penseeMemorizeBtn.setAttribute('data-notion-name', pensees[0].philosophical_concept || '');
   }
 
   function stopPolling() {
@@ -1890,6 +2024,8 @@
     var mecanismes = Array.isArray(content.mecanismes) ? content.mecanismes : [];
     if (!mecanismes.length) { renderError(); return; }
     body.innerHTML = mecanismes.map(function (m, i) { return renderOneMecanisme(m, i, mecanismes.length); }).join('');
+    var mecanismeMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="mecanisme"]');
+    if (mecanismeMemorizeBtn && mecanismes[0]) mecanismeMemorizeBtn.setAttribute('data-notion-name', mecanismes[0].sociological_concept || '');
   }
 
   function stopPolling() {
@@ -2208,6 +2344,8 @@
     var concepts = Array.isArray(content.concepts) ? content.concepts : [];
     if (!concepts.length) { renderError(); return; }
     body.innerHTML = concepts.map(function (c, i) { return renderOneConcept(c, i, concepts.length); }).join('');
+    var conceptMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="concept"]');
+    if (conceptMemorizeBtn && concepts[0]) conceptMemorizeBtn.setAttribute('data-notion-name', concepts[0].concept_name || '');
   }
 
   function stopPolling() {
@@ -2508,6 +2646,8 @@
     var citations = Array.isArray(content.citations) ? content.citations : [];
     if (!citations.length) { renderError(); return; }
     body.innerHTML = citations.map(function (c, i) { return renderOneCitation(c, i, citations.length); }).join('');
+    var citationMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="citation"]');
+    if (citationMemorizeBtn && citations[0]) citationMemorizeBtn.setAttribute('data-notion-name', citations[0].quote_author || '');
   }
 
   function stopPolling() {
@@ -2809,6 +2949,8 @@
     var oeuvres = Array.isArray(content.oeuvres) ? content.oeuvres : [];
     if (!oeuvres.length) { renderError(); return; }
     body.innerHTML = oeuvres.map(function (o, i) { return renderOneOeuvre(o, i, oeuvres.length); }).join('');
+    var oeuvreMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="oeuvre"]');
+    if (oeuvreMemorizeBtn && oeuvres[0]) oeuvreMemorizeBtn.setAttribute('data-notion-name', oeuvres[0].artwork_title || '');
   }
 
   function stopPolling() {
@@ -3115,6 +3257,8 @@
     var latins = Array.isArray(content.latins) ? content.latins : [];
     if (!latins.length) { renderError(); return; }
     body.innerHTML = latins.map(function (l, i) { return renderOneLatin(l, i, latins.length); }).join('');
+    var latinMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="latin"]');
+    if (latinMemorizeBtn && latins[0]) latinMemorizeBtn.setAttribute('data-notion-name', latins[0].latin_phrase || '');
   }
 
   function stopPolling() {

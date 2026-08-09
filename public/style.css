@@ -19526,6 +19526,19 @@ body.page-home #debates-list .theme-row-section:first-child {
   align-items: center;
 }
 
+/* Fil d'Ariane "Ma mémoire" embarqué sur l'accueil (#agon-memoire-embed-before, premier enfant
+   de .agon-tag-trends-section) : décalé en position:relative (pas margin-top, essayé et retiré —
+   ça poussait aussi le cloud et le switch Bulles Actu/Agôn/Ma mémoire qui suivent dans le même
+   flex column, "cadre trop bas"/boutons cachés, demande du 09/08/2026). position:relative + top
+   déplace uniquement le RENDU du fil d'Ariane, sans réserver d'espace supplémentaire dans le
+   flux : le cloud et le switch gardent exactement la même position que Bulles Actu/Agôn (marge
+   -80px de .agon-tag-trends-section ci-dessus, inchangée). 88px ramène le texte à peu près là où
+   il serait sans cette marge -80px, sous "Trier / Rechercher". */
+#agon-memoire-embed-before {
+  position: relative;
+  top: 70px;
+}
+
 
 .caption-mobile-br { display: none; }
 @media (max-width: 768px) { .caption-mobile-br { display: block; } }
@@ -19604,6 +19617,29 @@ body.page-home #debates-list .theme-row-section:first-child {
   color: #1A1F24;
 }
 
+/* "Ma mémoire" mis en avant (demande du 09/08/2026, "grossir ... et le différencier des 2
+   autres pour le rendre plus important") : police et rembourrage horizontal plus grands que ses
+   2 voisins (jamais le rembourrage vertical, pour ne pas déformer la hauteur commune de la
+   pastille — .agon-cloud-mode-switch stretch ses enfants par défaut) + teinte dorée dédiée, même
+   ton que le reste de "Ma mémoire" (poussière d'étoiles/halos, cf. mon-univers.js) plutôt que le
+   blanc neutre des 2 autres segments, visible même hors sélection. */
+#agon-cloud-mode-memoire-btn {
+  padding-left: 22px;
+  padding-right: 22px;
+  font-size: 14px;
+  color: #ffd98a;
+}
+#agon-cloud-mode-memoire-btn:hover {
+  color: #ffe6b3;
+}
+#agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active {
+  background: linear-gradient(135deg, #ffe6b3, #ffb457);
+  color: #1A1F24;
+}
+#agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active:hover {
+  color: #1A1F24;
+}
+
 /* Sélecteur gauche/général/droite (filtre du nuage Actu) : volontairement plus
    petit que le sélecteur Bulles Actu/Bulles Agôn au-dessus, pour rester secondaire. */
 #agon-political-cloud-switch {
@@ -19665,6 +19701,15 @@ body.page-home #debates-list .theme-row-section:first-child {
 .agon-tribunes-btn:hover {
   background: rgba(255, 255, 255, 0.16);
   color: rgba(255, 255, 255, 0.95);
+}
+/* [hidden] obligatoire ici : .agon-tribunes-btn a un display:flex inconditionnel ci-dessus, qui
+   bat toujours [hidden]{display:none} de la feuille de style du navigateur — une règle auteur
+   (même spécificité ou moins) gagne TOUJOURS sur une règle user-agent, peu importe la
+   spécificité. Sans cette règle, poser .hidden=true en JS (cf. syncAgonCloudModeSwitch,
+   script.js) n'avait donc aucun effet visuel ("je vois toujours le bouton", retour du
+   09/08/2026) alors que l'attribut était bien posé. */
+.agon-tribunes-btn[hidden] {
+  display: none;
 }
 
 /* Mode Bulles Agôn : pas de badge tendance (non pertinent pour le score d'activité) */
@@ -24830,6 +24875,57 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   .universe-back-btn.is-visible {
     display: inline-flex;
   }
+}
+
+/* Flèche retour "Ma mémoire" embarquée sur l'accueil (#agon-memoire-embed-after, scope qui
+   n'existe que dans index.html — jamais sur la page Mon univers autonome, qui garde son bouton
+   "← Retour" pilule d'origine ci-dessus) : petite, discrète, en bas à gauche DANS le cadre de
+   bulles plutôt qu'en flux sous le cadre (demande du 09/08/2026). Remontée par margin-top
+   négatif : #agon-memoire-embed-after suit #agon-tag-trends-cloud (hauteur fixe 460px en mode
+   "Ma mémoire", cf. .agon-memoire-frame) dans le même flex column — négatif de sa propre
+   margin-bottom (24px, cf. .agon-memoire-frame) + l'inset bas du cadre décoratif (23px desktop /
+   78px mobile, cf. .agon-tag-trends-cloud::before) + une petite marge pour rester bien à
+   l'intérieur plutôt que pile sur le bord. align-self:flex-start + margin-left 30px : sort du
+   centrage par défaut de la section (align-items:center) et s'aligne sur l'inset gauche du
+   cadre (30px, même valeur que ::before). */
+#agon-memoire-embed-after {
+  align-self: flex-start;
+  margin: -61px 0 0 30px;
+  z-index: 140;
+}
+
+@media (max-width: 768px) {
+  #agon-memoire-embed-after {
+    margin-top: -116px;
+  }
+}
+
+#agon-memoire-embed-after .universe-back-btn.is-visible {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin-bottom: 0;
+  border-radius: 50%;
+  background: rgba(20, 28, 36, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.8);
+  /* font-size:0 masque le texte "Retour" (nœud texte brut dans le bouton, pas de <span> dédié à
+     cibler) sans toucher au markup partagé avec la page Mon univers — l'icône restaure sa
+     propre taille juste après. */
+  font-size: 0;
+}
+
+#agon-memoire-embed-after .universe-back-btn.is-visible i {
+  font-size: 13px;
+}
+
+#agon-memoire-embed-after .universe-back-btn.is-visible:hover {
+  background: rgba(20, 28, 36, 0.8);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
 }
 
 /* Conteneur de bulles : hérite entièrement de .agon-tag-trends-cloud (taille,

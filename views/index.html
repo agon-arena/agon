@@ -45,7 +45,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260809-memoirebg2">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-memoirebackarrow1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -695,8 +695,8 @@
   </div>
 <div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
   <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Bulles Actu</button>
-  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
   <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)">Ma mémoire</button>
+  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
 </div>
 <div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
   <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')">Gauche</button>
@@ -1362,7 +1362,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260809-hidetribunes1" defer></script>
+<script src="/script.min.js?v=20260809-memoirecaption1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -19122,6 +19122,13 @@ function alignStandaloneBubbleFrameToActiveFilter() {
 function renderIndexActiveFilterTags() {
   const container = document.getElementById("index-active-filters");
   if (!container) return;
+  // En mode "Ma mémoire", setMemoireCloudMode masque ce bloc entier (style.display='none' en
+  // ligne, aucun filtre de liste n'a de sens dans cette navigation) — mais cette fonction est
+  // aussi appelée par d'autres chemins (rafraîchissement de la liste, changement de filtre
+  // thématique, etc.) qui ignorent le mode courant et forçaient display:flex plus bas,
+  // ré-affichant le bandeau (et le tag "Arènes ouvertes par la communauté" hérité d'un passage
+  // précédent en Bulles Agôn) par-dessus "Ma mémoire". On sort avant d'y toucher.
+  if (typeof _memoireCloudMode !== "undefined" && _memoireCloudMode) return;
 
   const tags = [];
   const searchQuery = getCurrentIndexSearchQuery();
@@ -19135,12 +19142,7 @@ function renderIndexActiveFilterTags() {
     `);
   }
 
-  // "community" n'est jamais un choix manuel de l'utilisateur (aucun bouton de filtre dédié,
-  // cf. syncIndexTypeFilterButtons) — posé uniquement par toggleAgonCloud() en entrant en
-  // Bulles Agôn. L'afficher comme un filtre actif retirable serait trompeur (rien à "retirer",
-  // le nuage lui-même définit ce filtre) et gênerait le repositionnement du cadre de bulles
-  // (cf. plus haut, qui s'accroche à ce tag pour se positionner juste en dessous).
-  if (currentTypeFilter && currentTypeFilter !== "all" && currentTypeFilter !== "community") {
+  if (currentTypeFilter && currentTypeFilter !== "all") {
     tags.push(`
       <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('type')" aria-label="Retirer le filtre ${escapeAttribute(getIndexTypeFilterLabel(currentTypeFilter))}">
         <span>${escapeHtml(getIndexTypeFilterLabel(currentTypeFilter))}</span>
@@ -19255,6 +19257,16 @@ let _agonBubbleTensionDebates = [];
 let _agonCloudOriginalCaptionHtml = null;
 let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
+// Jeton partagé avec mon-univers.js (module séparé, pas d'accès aux variables ci-dessus) : posé
+// sur window pour que loadUniverse() (fetch asynchrone) puisse détecter qu'un autre mode a
+// déjà pris le relais entre-temps sur le même conteneur partagé #agon-tag-trends-cloud, et
+// inversement pour que toggleAgonCloud()/setPoliticalCloudGroup() détectent qu'on est reparti
+// sur "Ma mémoire" pendant leur propre fetch. _agonCloudSwitchToken ci-dessus ne suffisait pas
+// seul : setMemoireCloudMode ne le touchait jamais, donc un fetch Actu/Agôn lent (ou coupé par
+// le timeout de sécurité de 6.5s) pouvait résoudre après coup et écraser du contenu "Ma
+// mémoire" déjà affiché — demande du 09/08/2026, "ça mélange ... parfois mais pas tout le
+// temps" (course, pas bug systématique).
+window._agonCloudModeToken = window._agonCloudModeToken || 0;
 let _agonCloudFrameTopLocked = false;
 let _agonCloudSwitchSafetyTimer = null;
 let _agonCloudScrollBlockersAttached = false;
@@ -19295,6 +19307,10 @@ function beginAgonCloudSwitchLoading(container) {
   _agonCloudSwitchLoading = true;
   _attachAgonCloudScrollBlockers();
   const token = ++_agonCloudSwitchToken;
+  // En lockstep avec _agonCloudSwitchToken : mon-univers.js (module séparé) vérifie celui-ci
+  // pour détecter qu'un switch Actu/Agôn a pris le relais pendant son propre fetch encore en
+  // vol — cf. window._agonCloudModeToken, setMemoireCloudMode.
+  window._agonCloudModeToken = (window._agonCloudModeToken || 0) + 1;
   if (_agonCloudSwitchSafetyTimer) clearTimeout(_agonCloudSwitchSafetyTimer);
   try { document.body.dataset.agonCloudSwitchStartedAt = String(Date.now()); } catch (error) {}
   lockAgonCloudFrameTop(container);
@@ -19435,18 +19451,27 @@ function syncAgonCloudModeSwitch() {
   // sens qu'en Bulles Actu, seul mode qui affiche réellement des arènes liées à l'actualité.
   const tribunesBtn = document.querySelector('.agon-tribunes-btn');
   if (tribunesBtn) tribunesBtn.hidden = _memoireCloudMode || _agonCloudMode;
-  // Légende "Les tendances de l'actualité française..." masquée en Ma mémoire uniquement
-  // (demande du 09/08/2026) : n'a aucun sens hors Bulles Actu/Agôn, qui reflètent l'actualité —
-  // pas touchée pour Bulles Agôn, qui réécrit déjà son propre texte dans ce même élément
-  // (cf. toggleAgonCloud, caption.innerHTML).
-  const caption = document.querySelector('.agon-tag-trends-caption');
-  if (caption) caption.hidden = _memoireCloudMode;
+  // Légende toujours visible désormais, quel que soit le mode : Bulles Actu (texte par défaut du
+  // HTML), Bulles Agôn et Ma mémoire réécrivent chacun son propre texte dans ce même élément
+  // (cf. toggleAgonCloud / setMemoireCloudMode, caption.textContent) — plus de raison de la
+  // masquer une fois qu'elle a toujours un contenu pertinent (demande du 09/08/2026, retire le
+  // masquage ajouté plus tôt pour Ma mémoire).
+  // Bandeau "Ce jour dans l'Histoire / Connaissances / Éclairages" masqué en Bulles Agôn / Ma
+  // mémoire (demande du 09/08/2026), même logique que le bouton "Autres actus" ci-dessus : ces
+  // raccourcis n'ont de sens qu'en Bulles Actu. display en ligne (pas l'attribut hidden) :
+  // .home-secondary-actions pose déjà display:flex dans une règle CSS de même spécificité que
+  // le [hidden] par défaut du navigateur, qui perdrait face à elle (même piège déjà rencontré
+  // sur #index-active-filters, cf. setMemoireCloudMode).
+  const secondaryActions = document.querySelector('.home-secondary-actions');
+  if (secondaryActions) secondaryActions.style.display = (_memoireCloudMode || _agonCloudMode) ? 'none' : '';
 }
 
 // Cible explicitement un mode (utilisé par les segments du sélecteur)
 function setAgonCloudMode(enableAgon) {
   if (_memoireCloudMode) {
-    setMemoireCloudMode(false);
+    // skipSync=true : toggleAgonCloud() ci-dessous connaît la vraie cible finale et
+    // synchronisera lui-même le sélecteur une fois celle-ci acquise (cf. setMemoireCloudMode).
+    setMemoireCloudMode(false, true);
     // Le contenu Actu/Agôn a été écrasé pendant le mode "Ma mémoire" (même conteneur
     // #agon-tag-trends-cloud réutilisé, cf. setMemoireCloudMode) : _agonCloudMode ne
     // reflète donc plus ce qui est réellement affiché. On le force à l'opposé de la
@@ -19456,7 +19481,13 @@ function setAgonCloudMode(enableAgon) {
     _agonCloudMode = !Boolean(enableAgon);
   }
   if (Boolean(enableAgon) === _agonCloudMode) return;
-  if (_agonCloudSwitchLoading) return;
+  // Pas de garde sur _agonCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
+  // répond pas") : un précédent switch encore "en chargement" (fetch /api/agon-bubbles lent,
+  // jusqu'à 5-6.5s) bloquait silencieusement tout nouveau clic jusqu'à son propre abandon —
+  // le clic de l'utilisateur ne faisait alors rien du tout. beginAgonCloudSwitchLoading (dans
+  // toggleAgonCloud) reprend la main proprement à tout moment (nouveau jeton, nouveau timer de
+  // sécurité) ; la résolution tardive de l'ancien fetch est de toute façon ignorée grâce au
+  // jeton (_agonCloudSwitchToken / window._agonCloudModeToken) qu'elle ne matche plus.
   toggleAgonCloud();
 }
 
@@ -19470,17 +19501,47 @@ function setAgonCloudMode(enableAgon) {
 let _memoireCloudMode = false;
 let _memoireModuleLoadPromise = null;
 
-function setMemoireCloudMode(enable) {
-  if (Boolean(enable) === _memoireCloudMode) return;
-  if (_agonCloudSwitchLoading) return;
+function setMemoireCloudMode(enable, skipSync = false) {
+  if (Boolean(enable) === _memoireCloudMode) {
+    // Reclique sur l'onglet "Ma mémoire" alors qu'on y est déjà, potentiellement à un niveau
+    // profond (galaxie/système) : ramène à la racine (galaxies), comme un clic sur le premier
+    // crumb du fil d'Ariane — demande du 09/08/2026, "ça devrait me ramener à la première page".
+    if (enable && _memoireCloudMode && _memoireModuleLoadPromise) {
+      _memoireModuleLoadPromise.then((mod) => mod.resetToRoot?.());
+    }
+    return;
+  }
+  // Pas de garde sur _agonCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
+  // répond pas") : un fetch Actu/Agôn encore en chargement (jusqu'à 5-6.5s) bloquait
+  // silencieusement ce clic jusqu'à l'abandon de l'ancien switch. À la place, on invalide tout
+  // de suite l'ancien switch et on nettoie nous-mêmes son état "chargement" (spinner/bloqueurs
+  // de scroll/classes), puisque lui ne le fera plus jamais — son propre callback et son propre
+  // timer de sécurité vérifient tous deux _agonCloudSwitchToken (incrémenté juste après) et ne
+  // feront donc plus rien une fois celui-ci périmé.
+  cleanupStaleAgonCloudSwitchBlockers(true);
+  // Invalide tout fetch Actu/Agôn encore en vol depuis un switch précédent : mêmes jetons que
+  // toggleAgonCloud/setPoliticalCloudGroup (_agonCloudSwitchToken, vérifié par leurs callbacks
+  // async existants) + le pendant exposé sur window pour mon-univers.js (module séparé, sans
+  // accès à _agonCloudSwitchToken) — cf. déclarations plus haut.
+  _agonCloudSwitchToken++;
+  window._agonCloudModeToken++;
   _memoireCloudMode = Boolean(enable);
   const beforeEl = document.getElementById('agon-memoire-embed-before');
   const afterEl = document.getElementById('agon-memoire-embed-after');
   const politicalSwitch = document.getElementById('agon-political-cloud-switch');
+  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
   if (_memoireCloudMode) {
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
     if (politicalSwitch) politicalSwitch.hidden = true;
+    // Même légende que Bulles Actu/Agôn juste au-dessus (même sauvegarde/restauration —
+    // cf. toggleAgonCloud, _agonCloudOriginalCaptionHtml) : plus de raison de la masquer
+    // (syncAgonCloudModeSwitch) une fois qu'elle a un texte propre à ce mode — demande du
+    // 09/08/2026.
+    if (caption) {
+      if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
+      caption.textContent = "Les connaissances acquises grâce à agôn, ancrées ou en cours d'ancrage dans ta mémoire.";
+    }
     // La classe Bulles Agôn (dégradés/couleurs inversées, cf. .agon-cloud-mode-agon
     // .agon-tag-bubble) resterait posée sur ce même conteneur partagé si on arrive ici
     // depuis le mode Agôn — sans ce retrait, les bulles "Ma mémoire" hériteraient de ce
@@ -19499,7 +19560,7 @@ function setMemoireCloudMode(enable) {
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) activeFiltersEl.style.display = 'none';
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-reinit1');
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-resetroot1');
     } else {
       // Retour sur "Ma mémoire" après un premier passage : le module est déjà évalué (import
       // mis en cache), son loadUniverse() de premier chargement ne se relance donc pas tout
@@ -19518,6 +19579,15 @@ function setMemoireCloudMode(enable) {
     const cloudEl = document.getElementById('agon-tag-trends-cloud');
     if (cloudEl) cloudEl.hidden = false;
     cloudEl?.classList.remove('agon-memoire-frame');
+    // Poussière d'étoiles/lunes/scintillements (mon-univers.js drawMiniStarsForSystems/
+    // drawMoonsForStars/drawSparklesForStars) : posés en enfants directs du conteneur PARTAGÉ,
+    // à côté des bulles (pas dedans) — clearTagTrendCloudVisualItems (tagTrendCloud.js,
+    // générique) ne les connaît pas et ne les retire donc jamais. mon-univers.js les nettoie
+    // lui-même à chaque changement de niveau EN INTERNE, mais rien ne le fait quand on quitte
+    // "Ma mémoire" pour Bulles Actu/Agôn : ils restaient superposés aux nouvelles bulles
+    // (demande du 09/08/2026, "les bulles qui se mélangent quand on passe de bulles mémoire à
+    // bulles actus").
+    cloudEl?.querySelectorAll('.universe-mini-star, .universe-star-moon, .universe-star-sparkle').forEach((el) => el.remove());
     // Retire le display:none posé à l'entrée en mode mémoire puis redessine réellement le tag
     // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
     // toggleAgonCloud (Actu/Agôn), le tag affiché doit refléter l'état à jour.
@@ -19525,7 +19595,23 @@ function setMemoireCloudMode(enable) {
     if (activeFiltersEl) activeFiltersEl.style.display = '';
     renderIndexActiveFilterTags();
   }
-  syncAgonCloudModeSwitch();
+  // skipSync : utilisé par setAgonCloudMode quand on sort de "Ma mémoire" pour aller DIRECTEMENT
+  // vers Bulles Agôn — sans ça, cet appel synchronise le sélecteur avec _agonCloudMode encore à
+  // sa valeur d'avant (toggleAgonCloud() ne le passe à true qu'après son fetch asynchrone), ce
+  // qui calcule "aucun mode actif" comme "Bulles Actu" et l'allume brièvement à tort, avant que
+  // le vrai résultat (Bulles Agôn) ne s'affiche une fois le fetch terminé (demande du 09/08/2026,
+  // "bulles actus devient coloré ... avant que le bon bouton, bulles agon, devienne coloré").
+  // toggleAgonCloud() appelle de toute façon syncAgonCloudModeSwitch() lui-même une fois l'état
+  // réel connu, cet appel-ci serait de toute façon immédiatement corrigé — juste visible entre
+  // les deux.
+  if (!skipSync) syncAgonCloudModeSwitch();
+  // Sans cet appel, la hauteur de section calculée par syncCloudSectionHeight (desktop/
+  // standalone) restait celle d'avant l'entrée en "Ma mémoire" — le fil d'Ariane ajoutant de la
+  // hauteur en haut, le switch Bulles Actu/Agôn/Ma mémoire (en bas, sous la ligne de flottaison)
+  // se retrouvait poussé hors de la zone scrollable, donc invisible (retour du 09/08/2026).
+  // toggleAgonCloud/setPoliticalCloudGroup font déjà cet appel après leurs propres changements
+  // de hauteur (légende, switch gauche/droite) — celui-ci en était le seul absent.
+  syncCloudSectionHeight();
 }
 
 // ── Filtre gauche/droite du nuage Bulles Actu (veille mixte) ──
@@ -19673,6 +19759,10 @@ function toggleAgonCloud() {
     if (token !== _agonCloudSwitchToken) return;
 
     if (!trends.length) {
+      // Resynchronise le sélecteur même en échec (fetch vide/expiré) : si on arrivait de "Ma
+      // mémoire" (setAgonCloudMode, skipSync), rien d'autre ne l'aurait fait — sans ça, "Ma
+      // mémoire" restait affiché comme actif alors qu'on n'y est plus.
+      syncAgonCloudModeSwitch();
       finishAgonCloudSwitchLoading(token, container);
       return;
     }

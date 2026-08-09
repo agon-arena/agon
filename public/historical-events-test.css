@@ -323,24 +323,95 @@ html {
   transform: rotate(180deg);
 }
 
-/* Case de personnalisation du QCM Culture Générale (cf. syncRubricToggles
-   dans historical-events-test-page.js) : toujours visible, indépendante du
-   déplié/replié du bloc. */
-.het-rubric-toggle {
+/* Bouton de personnalisation du QCM Culture Générale (cf. syncRubricToggles
+   dans historical-events-test-page.js) : en bas du contenu de chaque bloc,
+   une fois le texte lu. Coloré une fois actif (cf. .is-active). */
+.het-rubric-memorize-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  margin: 4px 0 0;
-  color: #6b7280;
-  font-size: 12.5px;
+  gap: 9px;
+  width: 100%;
+  max-width: 320px;
+  margin: 20px auto 0;
+  padding: 13px 20px;
+  border: 2px solid #243038;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #243038;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.het-rubric-memorize-btn:hover {
+  background: #f4f6f8;
+}
+
+.het-rubric-memorize-btn:active {
+  transform: scale(0.98);
+}
+
+.het-rubric-memorize-btn.is-active {
+  border-color: #f5b642;
+  background: #f5b642;
+  color: #243038;
+}
+
+.het-rubric-memorize-btn.is-active:hover {
+  background: #f0aa27;
+}
+
+.het-memorize-explainer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.het-memorize-explainer-modal {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 20px 45px rgba(17, 24, 39, 0.25);
+  text-align: center;
+}
+
+.het-memorize-explainer-text {
+  margin: 0 0 20px;
+  color: #243038;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.het-memorize-explainer-close {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 999px;
+  background: #243038;
+  color: #ffffff;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.het-rubric-toggle input {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
+.het-memorize-explainer-close:hover {
+  background: #16212a;
 }
 
 .het-block-content {

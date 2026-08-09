@@ -1062,6 +1062,15 @@ function buildDemoUniverseData() {
 
 // ---- Chargement (un seul appel, jamais relancé au changement de niveau) ----
 async function loadUniverse() {
+  // Jeton partagé avec script.js (toggleAgonCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
+  // si l'utilisateur repart sur Bulles Actu/Agôn pendant que ce fetch est encore en vol (réseau
+  // lent), window._agonCloudModeToken aura changé à la résolution ci-dessous — sans cette
+  // vérification, le rendu de "Ma mémoire" arrivait en retard et écrasait les bulles
+  // Actu/Agôn déjà affichées entre-temps sur le conteneur partagé (demande du 09/08/2026,
+  // "ça mélange encore les univers des trois bulles", "ça le fait parfois mais pas tout le
+  // temps" — confirme une course, pas un bug systématique).
+  const modeToken = window._agonCloudModeToken;
+
   breadcrumbEl.innerHTML = "";
   backBtn.classList.remove("is-visible");
   showStatus("loading");
@@ -1070,6 +1079,7 @@ async function loadUniverse() {
   if (isDemo) {
     universeData = buildDemoUniverseData();
     navPath = [];
+    if (modeToken !== window._agonCloudModeToken) return;
     renderLevelNow();
     return;
   }
@@ -1080,9 +1090,12 @@ async function loadUniverse() {
     universeData = await response.json();
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
+    if (modeToken !== window._agonCloudModeToken) return;
     showStatus("error");
     return;
   }
+
+  if (modeToken !== window._agonCloudModeToken) return;
 
   if (isUniverseEmpty(universeData)) {
     showStatus("empty");
@@ -1102,4 +1115,12 @@ loadUniverse();
 // allé sur Bulles Actu/Agôn laissait leurs bulles (avec leurs propres satellites) telles quelles
 // à l'écran au lieu de les remplacer par les bulles galaxies/systèmes/étoiles (demande du
 // 09/08/2026, "ça mélange tout").
-export { loadUniverse as reinitMemoireEmbed };
+// Reclique sur l'onglet "Ma mémoire" (script.js) alors qu'on y est déjà, à un niveau profond
+// (galaxie/système) : ramène à la racine (galaxies), comme un clic sur le premier crumb du fil
+// d'Ariane (cf. renderBreadcrumb, crumbs[0] = {label:"Ma mémoire", path:[]}) — demande du
+// 09/08/2026. Rien si déjà à la racine (évite une transition vide).
+function resetToRoot() {
+  if (navPath.length) goToLevel([]);
+}
+
+export { loadUniverse as reinitMemoireEmbed, resetToRoot };

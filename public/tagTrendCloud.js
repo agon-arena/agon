@@ -190,13 +190,32 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
     });
     dist = Math.max(0, dist);
 
+    const line = dot.previousElementSibling;
+    const isLine = line && line.classList.contains("agon-tag-bubble-satellite-line");
+
+    // La distance minimale pour que le point reste ENTIÈREMENT hors de SA PROPRE bulle est
+    // geo.r + dotRadius (+ marge) — pas geo.r seul (qui ne place que le CENTRE du point sur le
+    // bord, le point restant à moitié dedans). Si le plafonnement par les voisines (ci-dessus)
+    // écrase la distance sous ce seuil, il n'existe aucune position sûre dans cette direction :
+    // le satellite est alors masqué plutôt que dessiné à l'intérieur d'une bulle (jamais de
+    // superposition, quitte à afficher moins de satellites que l'orbitCount cible).
+    const ownEdgeMin = geo.r + dotRadius + AGON_SATELLITE_CLEARANCE;
+    if (dist < ownEdgeMin) {
+      dot.style.display = "none";
+      if (isLine) line.style.display = "none";
+      return;
+    }
+    // Resynchronise (un satellite masqué lors d'un précédent passage, ex. avant resize, peut
+    // désormais avoir de la place).
+    dot.style.display = "";
+    if (isLine) line.style.display = "";
+
     const localX = geo.r + dist * dirX;
     const localY = geo.r + dist * dirY;
     dot.style.left = localX.toFixed(1) + "px";
     dot.style.top = localY.toFixed(1) + "px";
 
-    const line = dot.previousElementSibling;
-    if (line && line.classList.contains("agon-tag-bubble-satellite-line")) {
+    if (isLine) {
       // Le trait part du BORD du cercle (pas du centre) : ancré au point où le rayon croise
       // le cercle de la bulle (distance geo.r), longueur = seulement le segment restant
       // jusqu'au satellite. Auparavant tracé depuis le centre en comptant sur le fond opaque

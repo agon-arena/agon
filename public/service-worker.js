@@ -1,4 +1,4 @@
-const SW_VERSION = "20260809-reinit1-cache-bust-v97";
+const SW_VERSION = "20260809-cleardust1-cache-bust-v101";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
