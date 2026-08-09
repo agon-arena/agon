@@ -41,7 +41,8 @@
           <a href="/" class="home-topbar-menu-item"><i class="fa-solid fa-compass"></i><span>Explorer les arènes</span></a>
           <a href="/create" class="home-topbar-menu-item"><i class="fa-solid fa-plus"></i><span>Ouvrir une arène</span></a>
           <a href="/notifications" class="home-topbar-menu-item"><i class="fa-regular fa-bell"></i><span>Notifications</span></a>
-          <a href="/mon-univers" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers')"><i class="fa-solid fa-globe"></i><span>Mon univers</span></a>
+          <a href="/mon-univers" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers')"><i class="fa-solid fa-globe"></i><span>Ma mémoire</span></a>
+          <a href="/contributions" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/contributions')"><i class="fa-solid fa-chart-line"></i><span>Scores et contributions</span></a>
           <a href="/meilleures-idees" class="home-topbar-menu-item"><i class="fa-solid fa-trophy"></i><span>Meilleures idées</span></a>
           <a href="/historical-events-test" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/historical-events-test')"><i class="fa-solid fa-clock-rotate-left"></i><span>Ce jour dans l'Histoire</span></a>
           <a href="/qcm-du-jour" class="home-topbar-menu-item" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')"><i class="fa-solid fa-list-check"></i><span>Connaissances</span></a>
@@ -83,7 +84,7 @@
   </section>
 </main>
 
-<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
+<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
 <script>
 document.getElementById('contact-form')?.addEventListener('submit', async function(event) {
   event.preventDefault();

@@ -294,7 +294,11 @@
           </a>
           <a href="/mon-univers" class="home-topbar-menu-item" id="home-topbar-universe-link" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers')">
             <i class="fa-solid fa-globe"></i>
-            <span>Mon univers</span>
+            <span>Ma mémoire</span>
+          </a>
+          <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); openDebateIframeModal('/contributions')">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Scores et contributions</span>
           </a>
           <a href="/meilleures-idees" class="home-topbar-menu-item" id="home-topbar-best-ideas-link" onclick="event.preventDefault(); openDebateIframeModal('/meilleures-idees')">
             <i class="fa-solid fa-trophy"></i>
@@ -819,7 +823,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
+<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

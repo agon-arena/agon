@@ -456,11 +456,13 @@
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
           </a>
-          <!-- Regroupe désormais aussi les scores/contributions (ex-page /contributions,
-               fusionnée ici). -->
           <a href="/mon-univers" class="home-topbar-menu-item" id="home-topbar-universe-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/mon-univers')">
             <i class="fa-solid fa-globe"></i>
-            <span>Mon univers</span>
+            <span>Ma mémoire</span>
+          </a>
+          <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Scores et contributions</span>
           </a>
           <a href="/meilleures-idees" class="home-topbar-menu-item" id="home-topbar-best-ideas-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/meilleures-idees')">
             <i class="fa-solid fa-trophy"></i>
@@ -1146,12 +1148,8 @@ window.addEventListener("pageshow", function() {
     <span>Actualiser</span>
   </button>
 
-  <!-- Lien normal (pas openDebateIframeModal) : page autonome avec son propre rendu, pas
-       adaptée à l'iframe modale des autres entrées du bandeau. Regroupe désormais aussi les
-       scores/contributions et les meilleures idées (ex-page /contributions, fusionnée ici) —
-       remplace à l'identique (même emplacement dans le bandeau, juste après Actualiser)
-       l'ancien item "Contributions", dont initIndexFloatingScrollButtonAlignment (script.js)
-       cale toujours les flèches flottantes sur le trou Actualiser|Univers. -->
+  <!-- Accès Apprentissage / Ma mémoire. Les scores et contributions disposent désormais
+       de leur propre page dans le menu hamburger supérieur. -->
   <a href="/mon-univers" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers')">
     <i class="fa-solid fa-globe"></i>
     <span>Apprentissage</span>
@@ -1359,7 +1357,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260809-memory-empty-break" defer></script>
+<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

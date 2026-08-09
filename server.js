@@ -4338,10 +4338,10 @@ app.get("/notifications", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
-// Contenu fusionné dans /mon-univers (scores/contributions + univers + meilleures
-// idées, dans cet ordre) — redirection pour les anciens liens/favoris.
+// Page autonome des scores et contributions. Elle partage le gabarit de Ma mémoire,
+// mais son mode de page masque entièrement l'univers neuronal.
 app.get("/contributions", (req, res) => {
-  res.redirect(301, "/mon-univers");
+  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/mon-univers.html"));
 });
 
 // Classement global "Les meilleures idées", extrait de /mon-univers vers sa

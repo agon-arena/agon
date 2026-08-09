@@ -1386,7 +1386,11 @@
           </a>
           <a href="/mon-univers" class="home-topbar-menu-item" id="home-topbar-universe-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/mon-univers')">
             <i class="fa-solid fa-globe"></i>
-            <span>Mon univers</span>
+            <span>Ma mémoire</span>
+          </a>
+          <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Scores et contributions</span>
           </a>
           <a href="/meilleures-idees" class="home-topbar-menu-item" id="home-topbar-best-ideas-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/meilleures-idees')">
             <i class="fa-solid fa-trophy"></i>
@@ -1784,7 +1788,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
+<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

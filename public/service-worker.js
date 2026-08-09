@@ -1,4 +1,4 @@
-const SW_VERSION = "20260809-ui-fixes-cache-bust-v120";
+const SW_VERSION = "20260809-ui-fixes-cache-bust-v121";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

@@ -137,6 +137,19 @@
     }
     .home-bottom-nav { display: none !important; }
 
+    /* Deux pages autonomes partagent ce gabarit sans mélanger leurs contenus. */
+    body.page-memory-only #scores-contributions-page,
+    body.page-memory-only #notes-evolution-overlay {
+      display: none !important;
+    }
+    body.page-contributions-only #memory-page-main {
+      display: none !important;
+    }
+    body.page-contributions-only #scores-contributions-page {
+      margin-top: 26px;
+      margin-bottom: 110px;
+    }
+
     /* Textes sur fond sombre — même habillage que la page notifications */
     .page-contributions .section-header h3 {
       color: #e8e8e8;
@@ -504,6 +517,13 @@
   </style>
 </head>
 <body class="page-mon-univers page-notifications page-notifications-mobile page-contributions">
+<script>
+  (function() {
+    var contributionsOnly = location.pathname === "/contributions";
+    document.body.classList.add(contributionsOnly ? "page-contributions-only" : "page-memory-only");
+    if (contributionsOnly) document.title = "Scores et contributions | agôn";
+  })();
+</script>
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
 
@@ -531,7 +551,7 @@
   </div>
 </header>
 
-<main class="container home-page">
+<main class="container home-page" id="scores-contributions-page">
   <section class="debates-section">
     <div class="section-header section-header-home">
       <div>
@@ -593,7 +613,7 @@
   </section>
 </main>
 
-<main class="universe-page-shell universe-page-shell--embedded">
+<main class="universe-page-shell universe-page-shell--embedded" id="memory-page-main">
   <h1>Ma mémoire</h1>
   <p class="universe-subtitle">Les connaissances acquises en répondant correctement aux QCM d'actualité.</p>
 
@@ -638,6 +658,7 @@
 
 <script>
 (function() {
+  if (location.pathname !== "/contributions") return;
   // Icône spirale (volute grecque) du score Logos — même SVG que la constante
   // AGON_LOGOS_ICON de script.js.
   const AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
@@ -1114,19 +1135,20 @@
 (function() {
   if (window.self === window.top) return;
   function notifyMonUniversIframeReady() {
+    var isContributions = location.pathname === "/contributions";
     window.__agonPageArrivalReady = true;
     try {
       window.parent.postMessage({
         type: "agon:debate-iframe-ready",
-        pathname: String(location.pathname || "/mon-univers"),
+        pathname: String(location.pathname || (isContributions ? "/contributions" : "/mon-univers")),
         href: String(location.href || "")
       }, "*");
     } catch (error) {}
     try {
       window.parent.postMessage({
         type: "agon:iframe-page-context",
-        page: "mon-univers",
-        pathname: String(location.pathname || "/mon-univers"),
+        page: isContributions ? "contributions" : "mon-univers",
+        pathname: String(location.pathname || (isContributions ? "/contributions" : "/mon-univers")),
         href: String(location.href || "")
       }, "*");
     } catch (error) {}
@@ -1137,7 +1159,11 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
-<script type="module" src="/mon-univers.js?v=20260809-neural-memory-empty-break"></script>
+<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
+<script type="module">
+  if (location.pathname !== "/contributions") {
+    import("/mon-univers.js?v=20260809-memory-split");
+  }
+</script>
 </body>
 </html>

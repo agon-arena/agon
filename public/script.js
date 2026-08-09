@@ -1314,7 +1314,7 @@ function renderUserScoreWidget(data) {
   // posté/répondu, cf. USER_SCORE_EMPTY côté serveur) : toujours 3 valeurs,
   // toujours la variante large du badge.
   widget.className = "agon-user-score-widget agon-user-score-widget-triple";
-  widget.href = "/mon-univers";
+  widget.href = "/contributions";
   widget.setAttribute("aria-label", "Mes scores");
   widget.addEventListener("click", (e) => {
     e.preventDefault();
@@ -5298,7 +5298,7 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("eclairages-frame-open", safePathname === "/eclairages");
   modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
-  modal.classList.toggle("mon-univers-frame-open", safePathname === "/mon-univers");
+  modal.classList.toggle("mon-univers-frame-open", safePathname === "/mon-univers" || safePathname === "/contributions");
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
@@ -7097,7 +7097,7 @@ function closeDebateIframeModal(options = {}) {
     modal.classList.contains("open") &&
     notificationsReturnContext?.pathname === "/autres-sources" &&
     notificationsReturnContext.returnUrl &&
-    ["/notifications", "/create", "/about", "/contact", "/meilleures-idees", "/mon-univers"].includes(currentIframePathname);
+    ["/notifications", "/create", "/about", "/contact", "/meilleures-idees", "/mon-univers", "/contributions"].includes(currentIframePathname);
   if (shouldReturnToTribunesFromChildPage && frame) {
     // Vraie navigation top-level (comme le lien "retour" à l'intérieur de
     // /notifications) plutôt qu'un rechargement dans l'iframe : sinon Autres
@@ -7295,6 +7295,7 @@ function isValidDebateReturnUrl(returnUrl = "") {
       parsedUrl.pathname === "/autres-sources" ||
       parsedUrl.pathname === "/notifications" ||
       parsedUrl.pathname === "/mon-univers" ||
+      parsedUrl.pathname === "/contributions" ||
       parsedUrl.pathname === "/meilleures-idees"
     );
   } catch (error) {
@@ -22247,7 +22248,8 @@ function isSafeInternalModalUrl(modalUrl = "") {
       "/contact",
       "/qcm-du-jour",
       "/meilleures-idees",
-      "/mon-univers"
+      "/mon-univers",
+      "/contributions"
     ].includes(parsedUrl.pathname);
   } catch (error) {
     return false;
@@ -33154,6 +33156,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname === "/mon-univers") {
     attachPageScrollFadeHint('#f3f4f6');
   }
+  if (location.pathname === "/contributions") {
+    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: '#scores-contributions-page' });
+  }
   if (location.pathname === "/meilleures-idees") {
     attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
   }
@@ -35387,10 +35392,9 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   });
   const explorer = nav.querySelector("#index-explorer-toggle") || findByText("explorer");
   const open = findByText("ouvrir");
-  // "Contributions" a été renommé "Univers" (même emplacement dans le DOM :
-  // fusion du contenu de /contributions dans /mon-univers) — seul le libellé
-  // cherché change, le calcul du trou Actualiser|Univers reste identique.
-  const contributions = findByText("univers");
+  // L'ancien emplacement Contributions/Univers porte désormais le libellé
+  // "Apprentissage" ; sa position dans le bandeau reste identique.
+  const contributions = findByText("apprentissage");
   const alerts = findByText("alertes");
   if (!explorer || !open || !contributions || !alerts) return;
 
@@ -35402,8 +35406,8 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   const isMobileIndexNav = window.matchMedia?.("(max-width: 768px)")?.matches === true;
 
   // Flèches resserrées de part et d'autre du bouton Actualiser (trous
-  // Ouvrir|Actualiser et Actualiser|Univers). Repli sur les trous extérieurs
-  // (Explorer|Ouvrir et Univers|Alertes) si la nav de la page n'a pas d'item
+  // Ouvrir|Actualiser et Actualiser|Apprentissage). Repli sur les trous extérieurs
+  // (Explorer|Ouvrir et Apprentissage|Alertes) si la nav de la page n'a pas d'item
   // Actualiser.
   const refresh = findByText("actualiser");
   let leftMidpoint;

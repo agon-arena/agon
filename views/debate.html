@@ -298,7 +298,11 @@ try {
     </a>
     <a href="/mon-univers" class="home-topbar-menu-item" id="home-topbar-universe-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/mon-univers')">
       <i class="fa-solid fa-globe"></i>
-      <span>Mon univers</span>
+      <span>Ma mémoire</span>
+    </a>
+    <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
+      <i class="fa-solid fa-chart-line"></i>
+      <span>Scores et contributions</span>
     </a>
     <a href="/meilleures-idees" class="home-topbar-menu-item" id="home-topbar-best-ideas-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/meilleures-idees')">
       <i class="fa-solid fa-trophy"></i>
@@ -1050,7 +1054,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
+	<script src="/script.min.js?v=20260809-scores-contributions-split" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
