@@ -149,6 +149,11 @@
       background: #243038;
       color: #ffffff;
     }
+    .qcm-slot-btn.qcm-learning-back-btn {
+      border-color: #516776;
+      background: #ffffff;
+      color: #243038;
+    }
     /* Catégorie sans créneau prêt (ex. QCM actu/Culture générale pas encore
        généré) : visible pour montrer la mise en page normale plutôt que de
        la faire disparaître ou de rediriger automatiquement ailleurs, mais
@@ -946,17 +951,22 @@
     categorySwitcher.innerHTML = '';
     CATEGORY_ORDER.forEach(function (category) {
       var available = isCategoryAvailable(category);
+      var isLearningBack = category === 'mesqcm' && currentCategory === 'mesqcm' && !!currentSlot;
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'qcm-slot-btn' + (category === currentCategory ? ' active' : '');
-      btn.textContent = CATEGORY_LABELS[category];
+      btn.className = 'qcm-slot-btn' + (category === currentCategory && !isLearningBack ? ' active' : '') + (isLearningBack ? ' qcm-learning-back-btn' : '');
+      btn.textContent = isLearningBack ? '← Mes apprentissages' : CATEGORY_LABELS[category];
       if (!available) {
         btn.disabled = true;
       } else {
         btn.addEventListener('click', function () {
-          if (category === currentCategory) return;
+          if (category === currentCategory && !isLearningBack) return;
           if (category === 'acquis') { loadAcquis(); return; }
-          if (category === 'mesqcm') { loadMesQcm(); return; }
+          if (category === 'mesqcm') {
+            if (isLearningBack) window.history.replaceState({}, '', window.location.pathname);
+            loadMesQcm();
+            return;
+          }
           loadSlot('renforcement', null, null);
         });
       }
