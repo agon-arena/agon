@@ -25672,10 +25672,11 @@ body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p {
 }
 
 @media (max-width: 768px) {
-  body.page-home-mobile.agon-memoire-cloud-mode #universe-status {
+  body.page-home-mobile.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status {
     /* Même modèle que .agon-tag-trends-caption : les 4px sont une marge entre le
        sélecteur et la ligne, pas un padding ajouté à un line-height de 1.6 qui
-       descendait visuellement le texte. */
+       descendait visuellement le texte. #agon-tag-trends-section est conservé dans
+       le sélecteur pour battre réellement la règle desktop à deux IDs juste au-dessus. */
     margin: 4px auto 0;
     padding: 0 16px 26px;
     line-height: normal;
