@@ -14217,6 +14217,50 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
   }
 }
 
+const CULTURE_GENERALE_INTERNATIONAL_REGIONS = [
+  "Europe",
+  "Maghreb",
+  "Afrique de l’Ouest",
+  "Afrique centrale",
+  "Afrique de l’Est",
+  "Afrique australe",
+  "Moyen-Orient",
+  "Caucase",
+  "Asie centrale",
+  "Asie du Nord / Sibérie",
+  "Asie du Sud",
+  "Asie du Sud-Est",
+  "Asie de l’Est",
+  "Amérique du Nord",
+  "Amérique centrale & Caraïbes",
+  "Amérique du Sud",
+  "Océanie & Pacifique",
+  "Régions polaires"
+];
+
+async function ensureCultureGeneraleInternationalRegions() {
+  for (const name of CULTURE_GENERALE_INTERNATIONAL_REGIONS) {
+    await resolveOrCreateSolarSystem("International", name, normalizeSolarSystemName(name));
+  }
+}
+ensureCultureGeneraleInternationalRegions().catch((error) => {
+  console.error("[culture-generale international] pré-création des régions :", error.message);
+});
+
+function buildInternationalSolarSystemPrompt(compact) {
+  return [
+    "Réponds uniquement en json valide.",
+    "Rattache ce contenu à la région géographique internationale principalement concernée.",
+    "Utilise en priorité l’un des systèmes de existing_systems et renvoie son id dans solar_system_id.",
+    "Exemples : Maroc = Maghreb ; Japon = Asie de l’Est ; Caraïbes = Amérique centrale & Caraïbes.",
+    "Si aucune région existante ne convient réellement, propose une région géographique autonome dans new_solar_system.",
+    "RÈGLE OBLIGATOIRE : réponds avec soit solar_system_id (nombre), soit new_solar_system (texte court) — jamais les deux.",
+    "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"...\"}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+}
+
 async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail) {
   const { data: existingRows, error: existingError } = await supabase
     .from("solar_systems")
@@ -14234,7 +14278,7 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
     detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
     existing_systems: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
   };
-  const prompt = [
+  const prompt = galaxy === "International" ? buildInternationalSolarSystemPrompt(compact) : [
     "Réponds uniquement en json valide.",
     "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
     "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
