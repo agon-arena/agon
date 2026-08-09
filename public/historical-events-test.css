@@ -395,13 +395,14 @@ html {
   line-height: 1.5;
 }
 
-.het-memorize-explainer-close {
+.het-memorize-explainer-qcm {
   width: 100%;
+  margin: 0 0 10px;
   padding: 12px 20px;
   border: none;
   border-radius: 999px;
-  background: #243038;
-  color: #ffffff;
+  background: #f5b642;
+  color: #243038;
   font-family: "Barlow Condensed", Arial, sans-serif;
   font-size: 16px;
   font-weight: 700;
@@ -410,8 +411,27 @@ html {
   cursor: pointer;
 }
 
+.het-memorize-explainer-qcm:hover {
+  background: #f0aa27;
+}
+
+.het-memorize-explainer-close {
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #6b7280;
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .het-memorize-explainer-close:hover {
-  background: #16212a;
+  color: #243038;
 }
 
 .het-block-content {

@@ -7343,6 +7343,14 @@ body.page-debate .topbar::after {
     margin-top: -59px;
   }
 
+  /* Un premier correctif ici (+88px sur le margin-top du switch en mode "Ma mémoire") a été
+     retiré : la vraie cause était que le cadre restait bloqué à 548px au lieu de repasser à
+     460px (cf. body.agon-mobile-cloud-viewport .agon-tag-trends-cloud.agon-memoire-frame plus
+     bas, désormais corrigé à la racine) — une fois cette hauteur réellement appliquée, les
+     margin-top ci-dessus (calibrés à l'origine pour un cadre à 460px) retrouvent d'eux-mêmes le
+     bon écart, sans compensation supplémentaire. La garder aurait doublé le correctif et créé un
+     grand espace vide (confirmé par capture le 09/08/2026, "toujours pas bon"). */
+
   /* Sur mobile, le switch Bulles Actu/Agôn a un margin-bottom de 8px (au lieu de 12px
      en desktop) et #agon-political-cloud-switch garde son margin-top de -8px : écart net
      de 0px entre les deux. Le bouton Tribunes doit suivre le même écart avec le switch
@@ -19537,6 +19545,27 @@ body.page-home #debates-list .theme-row-section:first-child {
 #agon-memoire-embed-before {
   position: relative;
   top: 70px;
+  /* Sans z-index, le décalage vers le bas (top:70px) le fait chevaucher visuellement le cloud
+     juste en dessous (#agon-tag-trends-cloud, z-index:130 dans le même contexte d'empilement) —
+     qui passe alors PAR-DESSUS lui (z-index:auto perd toujours face à une valeur explicite,
+     quel que soit l'ordre DOM) et intercepte les clics sur les boutons du fil d'Ariane, les
+     rendant inertes malgré un gestionnaire de clic pourtant correct (demande du 09/08/2026,
+     "rien n'est cliquable là"). */
+  z-index: 140;
+}
+
+@media (min-width: 769px) {
+  /* Le bloc des bulles est décalé de 10px à gauche sur desktop, contrairement à la barre
+     Trier/Rechercher. Compense ce décalage uniquement pour le bouton Ma mémoire. */
+  #agon-memoire-embed-before {
+    left: 10px;
+  }
+
+  /* En mode Ma mémoire seulement, resserre légèrement l'espace qui précède
+     le bouton Trier/Rechercher. */
+  .debates-section:has(#agon-tag-trends-cloud.agon-memoire-frame) .index-explorer-topbar {
+    margin-top: -12px;
+  }
 }
 
 
@@ -19638,6 +19667,24 @@ body.page-home #debates-list .theme-row-section:first-child {
 }
 #agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active:hover {
   color: #1A1F24;
+}
+
+/* Petits traits verticaux entre les 3 segments (Bulles Actu / Bulles Agôn / Ma mémoire), pour
+   marquer la séparation — même principe que #agon-political-cloud-switch plus bas (Gauche/Tout/
+   Droite), sans exception pour le segment actif (idem, la pastille active le recouvre déjà là
+   où besoin). */
+#agon-cloud-mode-switch .agon-cloud-mode-segment {
+  position: relative;
+}
+#agon-cloud-mode-switch .agon-cloud-mode-segment:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 22%;
+  height: 56%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
 }
 
 /* Sélecteur gauche/général/droite (filtre du nuage Actu) : volontairement plus
@@ -19765,7 +19812,7 @@ body.page-home #debates-list .theme-row-section:first-child {
    lisibles par-dessus. */
 .page-home .agon-tag-trends-cloud::before,
 .page-home-mobile .agon-tag-trends-cloud::before {
-  background: linear-gradient(180deg, rgba(8, 12, 16, 0.35), rgba(8, 12, 16, 0.55)), url("/agon-bulles-bg.jpg?v=1") center/cover no-repeat;
+  background: linear-gradient(180deg, rgba(8, 12, 16, 0.35), rgba(8, 12, 16, 0.55)), url("/agon-bulles-bg.jpg?v=2") center/cover no-repeat;
 }
 
 /* Mode Bulles Agôn (nuage communautaire, cf. container.classList.add('agon-cloud-mode-agon')
@@ -19774,7 +19821,7 @@ body.page-home #debates-list .theme-row-section:first-child {
    quasi noire, un voile en plus la rendait invisible / indiscernable du cadre vide d'avant. */
 .page-home .agon-tag-trends-cloud.agon-cloud-mode-agon::before,
 .page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon::before {
-  background: url("/agon-bulles-community-bg.jpg?v=1") center/cover no-repeat;
+  background: url("/agon-bulles-community-bg.jpg?v=2") center/cover no-repeat;
 }
 
 @media (max-width: 768px) {
@@ -19923,6 +19970,20 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
   flex: 0 0 auto;
 }
 
+/* Mode "Ma mémoire" dans ce contexte (agon-mobile-cloud-viewport, l'appareil réel utilisé sur
+   mobile) : la règle ci-dessus (min-height:548px, spécificité body+2 classes) battait
+   .agon-memoire-frame.agon-tag-trends-cloud (2 classes seulement, cf. plus bas) — le cadre
+   restait donc bloqué à 548px au lieu de repasser à 460px comme prévu, ce qui rendait la
+   compensation +88px du switch (cf. .agon-tag-trends-cloud.agon-memoire-frame ~
+   .agon-cloud-mode-switch un peu plus bas) excessive : gros espace vide au lieu du chevauchement
+   d'origine (demande du 09/08/2026, "le cadre est censé être plus haut" — en fait c'est
+   l'inverse, il fallait le laisser redescendre à 460px). 3 classes ici (body + 2) bat les 2
+   classes de la règle ci-dessus. */
+body.agon-mobile-cloud-viewport .agon-tag-trends-cloud.agon-memoire-frame {
+  height: 448px;
+  min-height: 448px;
+}
+
 body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before {
   inset: var(--bubble-frame-top) 30px 78px;
 }
@@ -19938,8 +19999,11 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
 .agon-tag-bubble {
   position: absolute;
   border-radius: 50%;
+  /* Alpha 1 -> 0.9 sur les 4 arrêts (demande du 09/08/2026, "rend les bulles actu légèrement
+     moins opaque") : laisse un peu transparaître ce qu'il y a derrière plutôt qu'un blanc
+     totalement opaque. */
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(235,242,255,1) 40%, rgba(210,225,248,1) 70%, rgba(185,208,240,1) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(235,242,255,0.9) 40%, rgba(210,225,248,0.9) 70%, rgba(185,208,240,0.9) 100%);
   border: 2px solid #05070a;
   color: #1a2535;
   display: flex;
@@ -19966,14 +20030,14 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
    du nuage général. */
 .agon-cloud-political-right .agon-tag-bubble {
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(200,222,255,1) 40%, rgba(150,190,250,1) 70%, rgba(95,150,235,1) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(200,222,255,0.9) 40%, rgba(150,190,250,0.9) 70%, rgba(95,150,235,0.9) 100%);
 }
 
 /* Nuage "Gauche" : même bulle, légèrement rougie pour la distinguer du
    nuage général. */
 .agon-cloud-political-left .agon-tag-bubble {
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,1) 0%, rgba(255,215,215,1) 40%, rgba(250,175,175,1) 70%, rgba(235,120,120,1) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(255,215,215,0.9) 40%, rgba(250,175,175,0.9) 70%, rgba(235,120,120,0.9) 100%);
 }
 
 .agon-tag-bubble::before {
@@ -24894,9 +24958,21 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   z-index: 140;
 }
 
+/* Sur grand écran, reproduit la référence : le sélecteur arrive sous le cadre, avant le
+   message d'état de Ma mémoire désormais placé après lui dans le DOM. */
+.agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
+  margin-top: 38px;
+}
+
 @media (max-width: 768px) {
   #agon-memoire-embed-after {
     margin-top: -116px;
+  }
+
+  /* En mode "Ma mémoire", garde le sélecteur juste sous le bord visible du cadre :
+     quelques pixels d'écart seulement, sans le grand vide d'une compensation positive. */
+  .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
+    margin-top: -12px !important;
   }
 }
 
@@ -24916,6 +24992,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      cibler) sans toucher au markup partagé avec la page Mon univers — l'icône restaure sa
      propre taille juste après. */
   font-size: 0;
+  transform: translateY(-20px);
 }
 
 #agon-memoire-embed-after .universe-back-btn.is-visible i {
@@ -24952,6 +25029,12 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 .agon-memoire-frame.agon-tag-trends-cloud {
   margin: 0 auto 24px;
   height: 460px;
+}
+
+/* Sur l'accueil, réduit légèrement Ma mémoire par le bas sans déplacer son bord supérieur. */
+#agon-tag-trends-cloud.agon-memoire-frame {
+  height: 448px;
+  min-height: 448px;
 }
 
 /* Liseré noir autour du cadre décoratif EXISTANT (.agon-tag-trends-cloud::before, hérité),
@@ -25004,10 +25087,20 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      secours (image lente à charger / échec réseau) : mieux qu'un blanc éclatant vu le thème
      sombre de la page. */
   background-color: #020610;
-  background-image: url("/universe-bg.jpg?v=1");
+  background-image: url("/universe-bg.jpg?v=2");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+}
+/* Inset bas 23px hérité de sa règle desktop ci-dessus : sur mobile, le cadre décoratif
+   (.agon-tag-trends-cloud::before) passe lui à 78px (cf. @media plus haut) — sans cet
+   équivalent ici, le fond (::after) débordait sous le cadre visible, jusqu'à 55px plus bas que
+   sa bordure arrondie (demande du 09/08/2026, "le fond déborde du cadre"). */
+@media (max-width: 768px) {
+  #agon-universe-cloud.agon-tag-trends-cloud::after,
+  .agon-memoire-frame.agon-tag-trends-cloud::after {
+    inset: var(--bubble-frame-top) 30px 78px;
+  }
 }
 #agon-universe-cloud .agon-tag-center-btn:not(.agon-tag-center-btn-custom),
 .agon-memoire-frame .agon-tag-center-btn:not(.agon-tag-center-btn-custom) {

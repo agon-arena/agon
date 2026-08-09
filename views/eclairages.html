@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260809-memoireheightfix1">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-actuopacity1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -245,13 +245,14 @@
       font-size: 15px;
       line-height: 1.5;
     }
-    .ecl-memorize-explainer-close {
+    .ecl-memorize-explainer-qcm {
       width: 100%;
+      margin: 0 0 10px;
       padding: 12px 20px;
       border: none;
       border-radius: 999px;
-      background: #243038;
-      color: #ffffff;
+      background: #f5b642;
+      color: #243038;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 16px;
       font-weight: 700;
@@ -259,8 +260,25 @@
       text-transform: uppercase;
       cursor: pointer;
     }
+    .ecl-memorize-explainer-qcm:hover {
+      background: #f0aa27;
+    }
+    .ecl-memorize-explainer-close {
+      width: 100%;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 999px;
+      background: none;
+      color: #6b7280;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
     .ecl-memorize-explainer-close:hover {
-      background: #16212a;
+      color: #243038;
     }
     .ecl-block-content {
       margin-top: 16px;
@@ -1046,7 +1064,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260809-cleardust1" defer></script>
+<script src="/script.min.js?v=20260809-memoireclear2" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1185,9 +1203,13 @@
 
   // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
   // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
-  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — juste
-  // indiquer où continuer. Texte construit via createElement/textContent (jamais
-  // innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — "Faire le
+  // QCM" mène donc vers /qcm-du-jour (où la question sur cette notion apparaît désormais,
+  // la rubrique venant d'être cochée), jamais vers Ma mémoire qui n'est qu'un affichage en
+  // lecture seule de ce qui est déjà acquis. Texte construit via createElement/textContent
+  // (jamais innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle
+  // direct. openDebateIframeModal (script.min.js, déjà chargé sur cette page) gère elle-même
+  // le cas iframe (relais vers la modale du parent) vs page autonome.
   function showMemorizeExplainerModal(notionName) {
     var overlay = document.createElement('div');
     overlay.className = 'ecl-memorize-explainer-overlay';
@@ -1195,16 +1217,17 @@
     modal.className = 'ecl-memorize-explainer-modal';
     var text = document.createElement('p');
     text.className = 'ecl-memorize-explainer-text';
-    text.appendChild(document.createTextNode('Rends-toi sur la page '));
-    var strong = document.createElement('strong');
-    strong.textContent = 'Ma mémoire';
-    text.appendChild(strong);
-    text.appendChild(document.createTextNode(' pour commencer l’apprentissage de la notion « ' + notionName + ' ».'));
+    text.appendChild(document.createTextNode('Cette rubrique est ajoutée à ton QCM Culture Générale personnalisé. Réponds correctement aux questions sur « ' + notionName + ' » pour la mémoriser durablement dans Ma mémoire.'));
+    var qcmBtn = document.createElement('button');
+    qcmBtn.type = 'button';
+    qcmBtn.className = 'ecl-memorize-explainer-qcm';
+    qcmBtn.textContent = 'Faire le QCM';
     var closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'ecl-memorize-explainer-close';
     closeBtn.textContent = 'J’ai compris';
     modal.appendChild(text);
+    modal.appendChild(qcmBtn);
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -1217,6 +1240,11 @@
     document.addEventListener('keydown', onKeydown);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     closeBtn.addEventListener('click', close);
+    qcmBtn.addEventListener('click', function () {
+      close();
+      if (typeof openDebateIframeModal === 'function') openDebateIframeModal('/qcm-du-jour');
+      else window.location.href = '/qcm-du-jour';
+    });
   }
   function initRubricToggles() {
     var voterKey = typeof getKey === 'function' ? getKey() : null;

@@ -1,4 +1,4 @@
-const SW_VERSION = "20260809-cleardust1-cache-bust-v101";
+const SW_VERSION = "20260809-memoire-bg-preload1-cache-bust-v114";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

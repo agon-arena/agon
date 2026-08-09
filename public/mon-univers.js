@@ -114,87 +114,19 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
 // dur inclus) alors que tous les autres niveaux avaient déjà été corrigés.
 const UNCLASSIFIED_BUBBLE_BACKGROUND = `radial-gradient(circle closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(235,242,255,1) 40%, rgba(210,225,248,0.85) 70%, rgba(185,208,240,0.35) 88%, rgba(185,208,240,0) 100%)`;
 
-// Bulles galaxie (niveau racine uniquement) : rendu "vraie galaxie" plutôt qu'un simple disque
-// pastel — cœur lumineux superposé, très légères stries en spirale, halo qui déborde du cercle
-// (cf. .agon-tag-bubble-galaxy, style.css). Le dégradé de base (bubbleBackgroundFor) reste
-// identique en dessous pour garder la même teinte que les systèmes/étoiles filles ; ces
-// couches viennent seulement s'ajouter par-dessus (demande du 06/08/2026).
-// Bras spiralés (spirale logarithmique, 2 bras opposés à 180°, ~1.15 tour, rayon 6→47 sur un
-// viewBox 0 0 100 100) — géométrie fixe, réutilisée pour toutes les galaxies ; seule la couleur
-// du trait change (teinte de la galaxie), cf. spiralArmsBackground juste en dessous.
-// Enroulement resserré (1.85 tour contre 1.15, demande du 07/08/2026 "plus enroulés") — même
-// rayon 6→47 qu'avant (donc même distance max au centre : le halo autour reste dans la marge de
-// sécurité déjà calculée pour le cadrage à 72%, cf. spiralArmsBackground plus bas), juste une
-// croissance plus douce (1.4 au lieu de 1.7) pour un enroulement régulier sur ces tours en plus.
-// Aplatissement (squashY ≈0.55) directement injecté dans les coordonnées Y du tracé — demande du
-// 07/08/2026 ("les spirales ne semblent pas ovales", après un premier essai qui aplatissait
-// seulement via background-size CSS non-uniforme sur l'ensemble du SVG, cf. ancien historique) :
-// à cette échelle, la courbe elle-même restait perceptiblement compacte/ronde à l'œil malgré
-// l'ellipse mathématiquement correcte — coder l'aplatissement directement dans le tracé (plutôt
-// que de compter sur un scale CSS après coup) rend la forme ovale sans ambiguïté, quel que soit
-// l'étirement/le flou appliqués ensuite. Mêmes 1.85 tour, rayon 6→47 en X qu'avant.
-// Géométrie circulaire (pas de squash injecté dans les coordonnées) : l'aplatissement se fait
-// via l'étirement CSS non-uniforme du SVG (background-size + preserveAspectRatio="none", cf.
-// spiralArmsBackground plus bas) — un essai précédent injectait le squash directement dans ces
-// coordonnées, mais ça compressait aussi les halos flous (stroke-width/flou NON squashés, eux)
-// les uns contre les autres verticalement, fusionnant les bras en un blob indistinct (retour du
-// 07/08/2026, "on ne voit plus les bras"). L'étirement CSS après coup squash tout uniformément
-// (tracé ET halos), donc les proportions entre les deux restent cohérentes.
-const SPIRAL_ARM_PATHS = [
-  "M 56.0 50.0 L 56.2 51.5 L 56.1 53.0 L 55.5 54.6 L 54.5 56.1 L 53.2 57.4 L 51.5 58.3 L 49.5 58.9 L 47.3 59.0 L 45.1 58.5 L 42.9 57.5 L 41.0 56.0 L 39.3 53.9 L 38.2 51.4 L 37.6 48.6 L 37.8 45.6 L 38.6 42.6 L 40.2 39.7 L 42.5 37.2 L 45.5 35.2 L 49.0 34.0 L 52.8 33.5 L 56.8 34.0 L 60.8 35.4 L 64.4 37.8 L 67.5 41.1 L 69.8 45.2 L 71.2 49.9 L 71.4 54.9 L 70.4 60.1 L 68.2 65.1 L 64.8 69.6 L 60.3 73.3 L 54.8 76.0 L 48.6 77.3 L 42.1 77.2 L 35.5 75.5 L 29.3 72.3 L 23.9 67.5 L 19.5 61.4 L 16.6 54.2 L 15.3 46.3 L 16.0 38.0 L 18.6 29.8 L 23.2 22.2 L 29.7 15.7 L 37.8 10.6 L 47.1 7.5 L 57.2 6.6 L 67.5 8.0 L 77.6 12.0",
-  "M 44.0 50.0 L 43.8 48.5 L 43.9 47.0 L 44.5 45.4 L 45.5 43.9 L 46.8 42.6 L 48.5 41.7 L 50.5 41.1 L 52.7 41.0 L 54.9 41.5 L 57.1 42.5 L 59.0 44.0 L 60.7 46.1 L 61.8 48.6 L 62.4 51.4 L 62.2 54.4 L 61.4 57.4 L 59.8 60.3 L 57.5 62.8 L 54.5 64.8 L 51.0 66.0 L 47.2 66.5 L 43.2 66.0 L 39.2 64.6 L 35.6 62.2 L 32.5 58.9 L 30.2 54.8 L 28.8 50.1 L 28.6 45.1 L 29.6 39.9 L 31.8 34.9 L 35.2 30.4 L 39.7 26.7 L 45.2 24.0 L 51.4 22.7 L 57.9 22.8 L 64.5 24.5 L 70.7 27.7 L 76.1 32.5 L 80.5 38.6 L 83.4 45.8 L 84.7 53.7 L 84.0 62.0 L 81.4 70.2 L 76.8 77.8 L 70.3 84.3 L 62.2 89.4 L 52.9 92.5 L 42.8 93.4 L 32.5 92.0 L 22.4 88.0"
-];
-
-// Rallonge la queue de chaque bras (demande du 07/08/2026 : "allonger et affiner la queue du
-// bras") — plutôt que de recalculer toute la spirale (formule d'origine inconnue, uniquement les
-// coordonnées figées ci-dessus), on prolonge localement à partir des 3 derniers points : vitesse
-// + accélération (différences finies), l'accélération amortie à chaque pas (×0.3) pour que la
-// courbure se détende vite. Testé avec un amortissement plus faible et un facteur d'étirement en
-// plus (×1.05/pas) : le rayon max explosait (+112% avec 6 points, vérifié numériquement) — au
-// bout de la queue, le tracé progresse presque tangentiellement au cercle, donc même une
-// direction "figée" continue de s'éloigner du centre à mesure qu'elle avance en ligne droite.
-// Seulement 2 points ajoutés, aucun étirement de vitesse : le rayon max ne grandit plus que
-// d'environ 18% (mesuré), compensé par une réduction proportionnelle du background-size plus bas
-// pour ne jamais dépasser la marge de sécurité déjà établie (évite de retomber dans le bug de
-// coupe nette déjà corrigé). Calculé une seule fois au chargement (géométrie fixe, seule la
-// teinte varie par galaxie).
-function extendSpiralTail(points, extraCount) {
-  const extended = points.map((p) => [...p]);
-  const n = extended.length;
-  let v = [extended[n - 1][0] - extended[n - 2][0], extended[n - 1][1] - extended[n - 2][1]];
-  let a = [
-    v[0] - (extended[n - 2][0] - extended[n - 3][0]),
-    v[1] - (extended[n - 2][1] - extended[n - 3][1])
-  ];
-  let cur = extended[n - 1];
-  for (let i = 0; i < extraCount; i += 1) {
-    a = [a[0] * 0.3, a[1] * 0.3];
-    v = [v[0] + a[0], v[1] + a[1]];
-    cur = [cur[0] + v[0], cur[1] + v[1]];
-    extended.push(cur);
-  }
-  return extended;
-}
-
-function parseSpiralPoints(d) {
-  const nums = d.match(/-?\d+(?:\.\d+)?/g).map(Number);
-  const points = [];
-  for (let i = 0; i < nums.length; i += 2) points.push([nums[i], nums[i + 1]]);
-  return points;
-}
+// Bulles galaxie (niveau racine uniquement) : rendu "nœud de neurone" très lumineux plutôt qu'un
+// simple disque pastel — cœur très brillant + fines lignes rayonnantes façon synapses/dendrites,
+// halo qui déborde du cercle (cf. .agon-tag-bubble-galaxy, style.css). Remplace l'ancien visuel
+// "galaxie spiralée" (demande du 09/08/2026, "supprimer le visuel galaxie et le remplacer par un
+// visuel de nœud de neurone très brillant"). Le dégradé de base (bubbleBackgroundFor) reste
+// identique en dessous pour garder la même teinte que les systèmes/étoiles filles ; ces couches
+// viennent seulement s'ajouter par-dessus.
 
 function pointsToPathD(points) {
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
 }
 
-// 2 points de plus (~+18% de rayon max, mesuré) : modeste, pour rester dans la marge de sécurité
-// déjà établie (background-size réduit en conséquence juste en dessous, spiralArmsBackground)
-// plutôt que de risquer de retomber dans le bug de coupe nette déjà corrigé (cf. commentaires sur
-// bubbleBackgroundFor plus haut).
-const SPIRAL_ARM_TAIL_EXTRA = 2;
-const SPIRAL_ARM_POINTS = SPIRAL_ARM_PATHS.map((d) => extendSpiralTail(parseSpiralPoints(d), SPIRAL_ARM_TAIL_EXTRA));
-
-// Découpe chaque bras (déjà rallongé) en paliers de largeur décroissante (base épaisse près du
+// Découpe chaque ligne en paliers de largeur décroissante (base épaisse près du
 // centre → pointe fine en bout de queue, demande du 07/08/2026 "que l'extrémité devienne plus
 // fin") — un <path> SVG a une seule stroke-width fixe sur toute sa longueur, impossible de la
 // faire varier autrement qu'en dessinant plusieurs segments avec des largeurs différentes.
@@ -215,116 +147,91 @@ function buildTaperedPathSegments(points, baseWidth, tipFactor, segmentCount, at
   return out;
 }
 
-function spiralArmsBackground(hue) {
-  // 24% (pas 55%) : demande du 07/08/2026, couleurs moins criardes/plus pastel, cohérent avec le
-  // même abaissement de saturation sur bubbleBackgroundFor (s) juste au-dessus.
-  const stroke = `hsl(${hue}, 16%, 80%)`;
-  // Halo autour de chaque bras (demande du 07/08/2026) : un flou SVG (feGaussianBlur) plutôt
-  // qu'un simple trait large à faible alpha — un trait large seul aurait juste épaissi le bras
-  // (bord encore net), alors qu'un flou dégrade réellement l'alpha vers l'extérieur, comme un
-  // vrai halo lumineux. Trois paliers, TOUS flous (large/très faible, moyen/modérée, serré/plus
-  // opaque) — le dernier palier (le "trait net" d'origine, sans filtre) a été retiré : même flou,
-  // même sans halo autour, il gardait un bord net à lui seul, ce qui donnait l'impression qu'il
-  // n'y avait pas de dégradé du tout ("les bras sont trop nettes, les contours ne devraient pas
-  // être visibles", retour du 07/08/2026). Ici même le palier le plus serré reste flou (stdDeviation
-  // 1.3, léger) : aucune arête nette nulle part sur le bras, juste une bande qui rayonne. Dessinés
-  // D'ABORD (donc EN DESSOUS, cf. ordre de peinture SVG), du plus large/faible au plus serré/
-  // opaque. x/y/width/height élargis sur chaque <filter> : la région de flou par défaut
-  // (-10%/-10%/120%/120% du bbox du trait) aurait coupé le flou en biseau sur les bords.
-  // Chaque bras dessiné en 5 segments de largeur décroissante (tipFactor 0.3 : la pointe finit à
-  // 30% de la largeur de base) plutôt qu'un seul <path> à largeur fixe — cf.
-  // buildTaperedPathSegments juste au-dessus pour le pourquoi.
-  // Halos ravivés (opacité relevée) : demande du 07/08/2026 "rajoute un aspect lumineux dans la
-  // spirale, afin que les spirales soient moins visibles" — l'objectif n'est plus une ligne nette
-  // qui ressort (essai précédent), mais l'inverse : un flou global plus lumineux qui adoucit le
-  // tracé jusqu'à ce qu'il se lise comme une lueur diffuse plutôt qu'un trait dessiné.
-  const outerGlowPaths = SPIRAL_ARM_POINTS
-    .map((points) => buildTaperedPathSegments(points, 24, 0.3, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.34" filter="url(#armGlowOuter)"`))
+// Points d'une "synapse" (ligne rayonnant depuis le centre) : angle fixe (réparti en angle d'or,
+// même principe que les satellites Agôn, cf. tagTrendCloud.js AGON_SATELLITE_GOLDEN_ANGLE — non
+// réutilisé directement, module séparé, mais même logique) et longueur variée selon l'angle lui-
+// même (déterministe, jamais Math.random, pour un rendu stable d'un re-render à l'autre) — pas de
+// coordonnées à la main comme l'ancienne spirale, chaque nœud calcule sa propre géométrie. Léger
+// arc (composante perpendiculaire en sin(t·π)) plutôt qu'une ligne parfaitement droite, pour une
+// allure de dendrite qui ondule légèrement plutôt qu'un trait au cordeau.
+const NEURON_LINE_COUNT = 7;
+const NEURON_GOLDEN_ANGLE = 137.508;
+
+function buildNeuronLinePoints(seed) {
+  const phase = (seed * 53) % 360;
+  const sets = [];
+  for (let i = 0; i < NEURON_LINE_COUNT; i += 1) {
+    const angleDeg = phase + i * NEURON_GOLDEN_ANGLE;
+    const angleRad = (angleDeg * Math.PI) / 180;
+    const length = 30 + Math.abs(Math.sin(angleRad * 2.3)) * 16;
+    const steps = 6;
+    const line = [];
+    for (let s = 0; s <= steps; s += 1) {
+      const t = s / steps;
+      const bend = Math.sin(t * Math.PI) * 3.5;
+      const dist = 5 + t * length;
+      const x = 50 + Math.cos(angleRad) * dist + Math.cos(angleRad + Math.PI / 2) * bend;
+      const y = 50 + Math.sin(angleRad) * dist + Math.sin(angleRad + Math.PI / 2) * bend;
+      line.push([x, y]);
+    }
+    sets.push(line);
+  }
+  return sets;
+}
+
+// Nœud de neurone : synapses rayonnantes (même moteur de rendu que l'ancienne spirale — segments
+// effilés + triple flou SVG, cf. buildTaperedPathSegments juste au-dessus — pour la même qualité
+// de lueur diffuse plutôt qu'un trait net) émanant d'un cœur très lumineux (cf. galaxyBubbleVisual
+// juste en dessous, qui superpose ce cœur par-dessus).
+function neuronLinesBackground(hue) {
+  const linePointSets = buildNeuronLinePoints(hue);
+  const stroke = `hsl(${hue}, 20%, 85%)`;
+  // Opacités légèrement réduites (demande du 09/08/2026, "les nœuds doivent être légèrement moins
+  // brillants") : 0.4/0.6/0.85 → 0.3/0.47/0.68.
+  const outerGlowPaths = linePointSets
+    .map((points) => buildTaperedPathSegments(points, 20, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.3" filter="url(#neuronGlowOuter)"`))
     .join("");
-  const innerGlowPaths = SPIRAL_ARM_POINTS
-    .map((points) => buildTaperedPathSegments(points, 16, 0.3, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.5" filter="url(#armGlowInner)"`))
+  const innerGlowPaths = linePointSets
+    .map((points) => buildTaperedPathSegments(points, 12, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.47" filter="url(#neuronGlowInner)"`))
     .join("");
-  // Cœur reblanchi mais désormais lui aussi flou (stdDeviation du filtre relevée juste plus bas,
-  // 1.3 → 2.6) et moins opaque (0.92 → 0.6) — le précédent réglage (quasi net, quasi opaque)
-  // faisait ressortir une ligne nette "colonne vertébrale" pour répondre à un souci de visibilité
-  // ("les galaxies n'apparaissent plus"), mais cette même netteté est maintenant jugée trop
-  // graphique/tracée ("moins visibles" en tant que trait) — le compromis : rester assez clair
-  // pour ne pas redisparaître dans le fond, mais assez flou pour fusionner avec son propre halo
-  // en une lueur, pas une ligne.
-  const coreStroke = `hsl(${hue}, 10%, 94%)`;
-  const corePaths = SPIRAL_ARM_POINTS
-    .map((points) => buildTaperedPathSegments(points, 10, 0.3, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.6" filter="url(#armGlowCore)"`))
+  const coreStroke = `hsl(${hue}, 10%, 97%)`;
+  const corePaths = linePointSets
+    .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.68" filter="url(#neuronGlowCore)"`))
     .join("");
-  // preserveAspectRatio="none" (essentiel) : sans lui, un <svg> utilisé en background-image
-  // GARDE son ratio 1:1 par défaut (xMidYMid meet) même si background-size demande un ratio
-  // différent — le SVG est juste réduit pour tenir dans la plus petite dimension, centré, JAMAIS
-  // étiré, ce qui explique pourquoi le squash CSS précédent n'avait visuellement aucun effet
-  // ("rien n'a changé" — retour du 07/08/2026, confirmé par test isolé). Avec ce mot-clé, le SVG
-  // est bien étiré pour remplir exactement le rectangle donné par background-size.
+  // preserveAspectRatio="none" : cf. commentaire équivalent conservé sur bubbleBackgroundFor plus
+  // haut — sans lui, le SVG garde son ratio 1:1 par défaut au lieu de remplir le rectangle donné
+  // par background-size.
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>`
-    + `<filter id="armGlowOuter" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="6.0"/></filter>`
-    + `<filter id="armGlowInner" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.4"/></filter>`
-    + `<filter id="armGlowCore" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.6"/></filter>`
+    + `<filter id="neuronGlowOuter" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="5.5"/></filter>`
+    + `<filter id="neuronGlowInner" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.8"/></filter>`
+    + `<filter id="neuronGlowCore" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.4"/></filter>`
     + `</defs>${outerGlowPaths}${innerGlowPaths}${corePaths}</svg>`;
-  // 68% (pas 90%) : le point le plus excentré des tracés est à ~47 unités du centre (50,50) sur
-  // les 50 que compte le cercle inscrit dans la boîte 100×100 — le halo autour des bras (glow
-  // outer : stroke-width 22 + flou stdDeviation 4.5, donc un rayon visuel ajouté d'environ
-  // 11+13 ≈ 24 unités au-delà du tracé) dépasse largement ce cercle avant même d'avoir fini de
-  // s'estomper. Le bord du HALO (pas juste du trait) se retrouvait alors tranché net par le
-  // border-radius:50% de la bulle — "sur les bras extérieurs, les contours restent nettes",
-  // retour du 07/08/2026 : 90% suffisait pour le trait seul (ancien souci, déjà réglé) mais pas
-  // pour ce halo bien plus large ajouté depuis. 68% ramène tout (trait + les 3 paliers de flou)
-  // confortablement à l'intérieur du cercle, flou compris.
-  // 72% en largeur (contre 68%, demande du 07/08/2026 "agrandit les bras spiralés") mais 54% en
-  // hauteur (pas 72% des deux côtés) : aplatit légèrement le disque en ellipse, pour une allure
-  // de galaxie vue de biais plutôt qu'un cercle parfait vu de face ("rends-les légèrement plus
-  // ovales", même demande) — même rayon max (47) que le calcul de marge de sécurité du halo,
-  // toujours respecté puisque l'aplatissement ne fait que RÉDUIRE l'étendue verticale.
-  // 40% en hauteur (contre 54%) : ovale plus marqué (demande du 07/08/2026 "les galaxies doivent
-  // avoir une forme plus ovale") — même ratio (~0.55 contre ~0.75) que le halo (::before,
-  // style.css) et le cœur (galaxyBubbleVisual) pour rester alignés.
-  // 30% en hauteur (contre 40%) : ovale encore plus marqué, spécifiquement sur la courbe des bras
-  // elle-même — demande du 07/08/2026 "les spirales aussi doivent être plus ovales" (le halo
-  // autour l'était déjà, mais la courbe visible des bras restait proportionnellement moins
-  // aplatie, trop petite dans le halo pour que l'effet se voie autant).
-  // Échelle UNIFORME (70% 70%, pas un scale X/Y différent) : l'aplatissement est désormais dans
-  // le tracé lui-même (SPIRAL_ARM_PATHS, squashY intégré) — un scale non-uniforme en plus ici
-  // écraserait une deuxième fois, dans le mauvais sens visuel (retour à un rendu presque rond,
-  // confirmé par capture le 07/08/2026). Marge de sécurité X (rayon max 47 + halo) inchangée ;
-  // marge Y bien plus large qu'avant puisque le tracé est déjà resserré en hauteur.
-  // 72% en largeur, 40% en hauteur (ratio ~0.55, même proportion que le halo ::before,
-  // style.css) : maintenant réellement appliqué grâce à preserveAspectRatio="none" ci-dessus.
-  // 61% / 34% (pas 72% / 40%) : la queue rallongée (SPIRAL_ARM_TAIL_EXTRA, extendSpiralTail
-  // ci-dessus) pousse le rayon max d'environ 47 à 55 unités (+18%, mesuré) — sans compenser,
-  // cette pointe plus longue aurait dépassé la marge de sécurité et se serait fait trancher net
-  // par le cercle de la bulle. Réduit ici dans la même proportion (×0.848) pour que le rayon
-  // visuel final reste identique à avant l'allongement, malgré la queue plus longue en interne.
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 61% 34% no-repeat`;
+  // 45% (pas 74%, demande du 09/08/2026 "le nœud de neurone doit être plus petit") : la géométrie
+  // interne (angles/longueurs des synapses) reste inchangée, seule la taille d'affichage du SVG
+  // dans la bulle est réduite — reste bien à l'intérieur du cercle (marge de sécurité déjà large
+  // à 74%, donc à plus forte raison ici).
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 45% 45% no-repeat`;
 }
 
 function galaxyBubbleVisual(galaxyName) {
   const hue = hueForGalaxy(galaxyName);
-  // "Enlève les bulles, uniquement des spirales galactiques" (demande du 07/08/2026, 2e passe :
-  // un premier essai gardait un halo diffus qui remplissait tout le cercle et se lisait encore
-  // comme une "bulle") : plus aucun disque, même diffus — seuls les bras spiralés (teintés par
-  // galaxie, posés ici plutôt qu'en ::after CSS statique pour pouvoir varier leur couleur) et un
-  // petit cœur lumineux serré près du centre. Rien d'autre ne remplit le cercle : le fond étoilé
-  // du cadre reste visible partout entre les bras, comme sur une vraie photo de galaxie.
-  const arms = spiralArmsBackground(hue);
-  // ellipse (pas circle) : demande du 07/08/2026 "rends-les légèrement plus ovales pour
-  // l'apparence d'une galaxie" — un vrai disque galactique n'est vu que rarement pile de face,
-  // l'aplatir légèrement évoque une galaxie vue de biais, plus reconnaissable qu'un cercle
-  // parfait. Mêmes proportions que le squash appliqué à spiralArmsBackground/le halo (::before,
-  // style.css) pour que cœur/bras/halo restent alignés visuellement.
-  // 24% (pas 55%) : couleurs moins criardes/plus pastel (demande du 07/08/2026), même
-  // abaissement que spiralArmsBackground/bubbleBackgroundFor juste au-dessus.
-  const core = `radial-gradient(ellipse 30% 13% at 50% 50%, rgba(255,255,255,0.95) 0%, hsl(${hue} 16% 85%) 14%, transparent 30%)`;
+  const lines = neuronLinesBackground(hue);
+  // Cœur TRÈS lumineux (demande du 09/08/2026, "nœud de neurone très brillant") : quasi blanc pur,
+  // contrairement au petit cœur discret de l'ancien visuel galaxie — évoque le corps cellulaire du
+  // neurone d'où rayonnent les synapses. Taille réduite (42% → 24%, demande du 09/08/2026 "le
+  // nœud de neurone doit être plus petit") : les pourcentages des arrêts de couleur (26/50/68/84%)
+  // restent relatifs au rayon de CE dégradé, donc la même courbe de luminosité, juste ramassée sur
+  // une zone plus petite. ellipse (pas circle) : les pourcentages de rayon ne sont valides en CSS
+  // que sur ellipse, valeurs quasi égales pour rester circulaire.
+  // Alphas légèrement réduits (demande du 09/08/2026, "légèrement moins brillants") : 1/0.92 →
+  // 0.85/0.78.
+  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.78) 26%, hsl(${hue} 22% 90%) 50%, hsla(${hue}, 20%, 85%, 0.3) 68%, transparent 84%)`;
   return {
-    background: `${core}, ${arms}`,
-    // Alpha relevé (0.55 → 0.7, demande du 07/08/2026 "dégradé très fort autour des spirales") :
-    // alimente le halo ::before (style.css .agon-tag-bubble-galaxy::before, --agon-tag-bubble-glow).
-    // Saturation abaissée (55% → 26%) même jour, demande séparée "couleurs plus pastel".
-    glowColor: `hsla(${hue}, 18%, 72%, 0.7)`
+    background: `${core}, ${lines}`,
+    // Halo ::before (style.css .agon-tag-bubble-galaxy::before, --agon-tag-bubble-glow) : alpha
+    // ramené 0.85 → 0.72, un peu moins brillant qu'avant tout en restant plus lumineux que
+    // l'ancien visuel galaxie (0.7).
+    glowColor: `hsla(${hue}, 25%, 85%, 0.72)`
   };
 }
 
@@ -801,10 +708,12 @@ function renderLevelNow() {
         console.warn("[mon-univers] décorations interrompues :", error.message);
       }
       cloudEl.classList.remove("universe-cloud--transitioning");
+      if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
     }, items.length, centerLabel, bubbleGap);
   } catch (error) {
     console.warn("[mon-univers] rendu du nuage interrompu :", error.message);
     cloudEl.classList.remove("universe-cloud--transitioning");
+    if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
   }
 }
 
@@ -976,11 +885,23 @@ function showStatus(kind) {
     return;
   }
 
-  cloudEl.hidden = true;
+  // "loading"/"empty" gardent le cadre visible (fond/bordure décorative, cf.
+  // .agon-memoire-frame.agon-tag-trends-cloud::before/::after) dès le clic sur "Ma mémoire",
+  // plutôt que d'attendre la fin du chargement (fetch + import du module) pour l'afficher —
+  // demande du 09/08/2026, "le cadre et le fond ne sont plus là directement, ils arrivent
+  // furtivement après. Je veux qu'ils soient là directement". Seul "error" masque encore le
+  // cloud (rien à montrer dans le cadre dans ce cas, le message d'erreur suffit).
+  cloudEl.hidden = kind === "error";
   statusEl.hidden = false;
   statusEl.innerHTML = "";
 
   if (kind === "loading") {
+    // Sur l'accueil, le sablier dans le cadre remplace ce texte pour reproduire exactement
+    // le chargement Bulles Actu/Agôn. La page /mon-univers autonome garde son texte habituel.
+    if (document.getElementById("agon-memoire-embed-before")) {
+      statusEl.hidden = true;
+      return;
+    }
     statusEl.textContent = "Chargement de ton univers…";
   } else if (kind === "empty") {
     const p = document.createElement("p");
@@ -995,6 +916,10 @@ function showStatus(kind) {
     retry.textContent = "Réessayer";
     retry.addEventListener("click", loadUniverse);
     statusEl.append(p, retry);
+  }
+
+  if (kind === "empty" || kind === "error") {
+    if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
   }
 }
 

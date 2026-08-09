@@ -92,11 +92,32 @@
     if (label) label.textContent = active ? "Mémorisé" : "Mémoriser";
   }
 
+  // Navigue vers /qcm-du-jour (jamais Ma mémoire, lecture seule) — relais vers la modale
+  // du parent en iframe (cette page ne charge pas script.min.js, pas d'openDebateIframeModal
+  // disponible ici : on réplique juste le message que cette fonction poste, cf. script.js).
+  function goToQcm() {
+    var url = "/qcm-du-jour";
+    if (window.self !== window.top) {
+      try {
+        window.parent.postMessage({
+          type: "agon:open-page-in-parent-modal",
+          url: url,
+          returnUrl: location.pathname + location.search + location.hash
+        }, "*");
+      } catch (e) {}
+    } else {
+      window.location.href = url;
+    }
+  }
+
   // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
   // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
-  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — juste
-  // indiquer où continuer. Texte construit via createElement/textContent (jamais
-  // innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — "Faire le
+  // QCM" mène donc vers /qcm-du-jour (où la question sur cette notion apparaît désormais,
+  // la rubrique venant d'être cochée), jamais vers Ma mémoire qui n'est qu'un affichage en
+  // lecture seule de ce qui est déjà acquis. Texte construit via createElement/textContent
+  // (jamais innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle
+  // direct.
   function showMemorizeExplainerModal(notionName) {
     var overlay = document.createElement("div");
     overlay.className = "het-memorize-explainer-overlay";
@@ -104,16 +125,17 @@
     modal.className = "het-memorize-explainer-modal";
     var text = document.createElement("p");
     text.className = "het-memorize-explainer-text";
-    text.appendChild(document.createTextNode("Rends-toi sur la page "));
-    var strong = document.createElement("strong");
-    strong.textContent = "Ma mémoire";
-    text.appendChild(strong);
-    text.appendChild(document.createTextNode(" pour commencer l’apprentissage de la notion « " + notionName + " »."));
+    text.appendChild(document.createTextNode("Cette rubrique est ajoutée à ton QCM Culture Générale personnalisé. Réponds correctement aux questions sur « " + notionName + " » pour la mémoriser durablement dans Ma mémoire."));
+    var qcmBtn = document.createElement("button");
+    qcmBtn.type = "button";
+    qcmBtn.className = "het-memorize-explainer-qcm";
+    qcmBtn.textContent = "Faire le QCM";
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "het-memorize-explainer-close";
     closeBtn.textContent = "J’ai compris";
     modal.appendChild(text);
+    modal.appendChild(qcmBtn);
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
@@ -126,6 +148,10 @@
     document.addEventListener("keydown", onKeydown);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
     closeBtn.addEventListener("click", close);
+    qcmBtn.addEventListener("click", function () {
+      close();
+      goToQcm();
+    });
   }
 
   function syncRubricToggles() {

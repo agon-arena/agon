@@ -41,11 +41,15 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Le fond Ma mémoire doit être déjà décodé au premier clic : sans préchargement,
+       la classe du mode est bien appliquée immédiatement mais l'image peut apparaître
+       après le sablier lors d'une première visite ou après purge du cache. -->
+  <link rel="preload" as="image" href="/universe-bg.jpg?v=2" fetchpriority="high">
   <!-- style.min.css et Google Fonts restent bloquants sur l'accueil : sinon
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260809-memoirebackarrow1">
+  <link rel="stylesheet" href="/style.min.css?v=20260809-memoire-back-arrow3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -675,7 +679,6 @@
     <nav id="universe-breadcrumb" class="universe-breadcrumb" aria-label="Fil d'Ariane de l'univers"></nav>
   </div>
   <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
-  <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
   <div id="agon-memoire-embed-after" hidden>
     <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
@@ -698,6 +701,7 @@
   <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)">Ma mémoire</button>
   <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Bulles Agôn</button>
 </div>
+<div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
 <div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
   <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')">Gauche</button>
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
@@ -1362,7 +1366,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260809-memoirecaption1" defer></script>
+<script src="/script.min.js?v=20260809-memoire-loading1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

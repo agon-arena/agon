@@ -4910,10 +4910,25 @@ function ensureDebateIframeParentLoadingStyles() {
 	    }
 
 	    @media (max-width: 768px) {
-	      #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-enter-debate {
+	      /* Auparavant restreint à .debate-iframe-parent-loading-enter-debate (entrée dans une
+	         arène) : le débordement volontaire de +80px ci-dessus (cf. son commentaire) plus la
+	         compensation -40px sur .debate-iframe-parent-loading-box ne suffisaient pas à
+	         recentrer correctement en mobile pour les AUTRES messages ("Chargement en cours",
+	         utilisé par Connaissances/Éclairages/Ce jour dans l'Histoire, cf.
+	         openDebateIframeModal) — le sablier apparaissait trop bas (demande du 09/08/2026).
+	         Plutôt que de corriger le calcul de compensation (déjà agrandi une fois sans régler
+	         le cas mobile), on applique ici la même mise en page simple top/bottom sans
+	         débordement à TOUT le voile en mobile, pas seulement à l'entrée en arène — ce
+	         débordement n'a de sens que pour l'anti-flash Safari pendant l'usage prolongé d'une
+	         arène, pas pour l'ouverture brève d'une page d'information. */
+	      #debate-iframe-parent-loading-overlay {
 	        top: 0 !important;
 	        bottom: 0 !important;
+	        height: auto !important;
 	        transition: opacity 0.18s ease;
+	      }
+	      #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
+	        transform: none !important;
 	      }
 	    }
 
@@ -19411,6 +19426,31 @@ async function fetchAgonBubbleTrends() {
   }
 }
 
+// Retour Agôn -> Actu : le cache global peut être momentanément vide si un rafraîchissement
+// de l'index s'est produit pendant une bascule. Dans ce cas, recharge le nuage Actu avant de
+// quitter visuellement Agôn, afin de ne jamais valider une transition vers un cadre vide.
+async function resolveActuBubbleTrends() {
+  const cached = Array.isArray(window.AGON_TAG_TRENDS)
+    ? window.AGON_TAG_TRENDS.filter((item) => String(item?.tag || '').trim())
+    : [];
+  if (cached.length) return cached;
+
+  try {
+    const result = await Promise.race([
+      fetchJSON(API + "/cloud-bubbles"),
+      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+    ]);
+    const fresh = Array.isArray(result?.bubbles)
+      ? result.bubbles.filter((item) => String(item?.tag || '').trim())
+      : [];
+    if (fresh.length) window.AGON_TAG_TRENDS = fresh;
+    return fresh;
+  } catch (error) {
+    console.warn('Rechargement des Bulles Actu interrompu :', error);
+    return [];
+  }
+}
+
 // Résout les débats du top 10 des Bulles Agôn dans l'ordre du nuage : ceux déjà
 // dans debatesCache sont réutilisés tels quels, les autres (arènes anciennes hors
 // des débats récents de l'index) sont récupérés via GET /api/debates?ids=…, avec
@@ -19552,6 +19592,18 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // .agon-memoire-frame) — demande du 08/08/2026 "le fond de ma mémoire n'est pas le bon" :
     // sans cette classe, le conteneur partagé gardait le fond par défaut de l'accueil.
     cloudContainer?.classList.add('agon-memoire-frame');
+    // Bulles Actu/Agôn encore affichées (textes/badges de tendance, satellites) : le fond
+    // devient celui de "Ma mémoire" à l'instant ci-dessus, mais mon-univers.js (import
+    // dynamique, ou fetch réseau si pas encore en cache) ne les remplace par les bulles
+    // galaxies qu'un peu plus tard — sans ce nettoyage immédiat, elles restaient visibles par-
+    // dessus le nouveau fond en attendant (même bug que la direction inverse, déjà corrigée :
+    // demande du 09/08/2026, "il s'agit des textes des bulles communautés avec un mélange des
+    // visuels bulles actu et communauté").
+    cloudContainer?.querySelectorAll('.agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line').forEach((el) => el.remove());
+    // Même comportement de chargement que Bulles Actu/Agôn : le fond Ma mémoire est déjà
+    // visible grâce à .agon-memoire-frame, puis le sablier tourne dans ce cadre jusqu'au
+    // callback de rendu des neurones déclenché par mon-univers.js.
+    showBubbleCloudLoadingSpinner({ switchMode: true });
     // Tag de filtre "Arènes ouvertes par agôn/la communauté" (cf. renderIndexActiveFilterTags,
     // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
     // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
@@ -19560,13 +19612,18 @@ function setMemoireCloudMode(enable, skipSync = false) {
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) activeFiltersEl.style.display = 'none';
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-resetroot1');
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-memoire-loading1').catch((error) => {
+        console.warn('[Agôn] Module Ma mémoire indisponible :', error);
+        if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
+        _memoireModuleLoadPromise = null;
+        return null;
+      });
     } else {
       // Retour sur "Ma mémoire" après un premier passage : le module est déjà évalué (import
       // mis en cache), son loadUniverse() de premier chargement ne se relance donc pas tout
       // seul — sans cet appel explicite, les bulles Actu/Agôn affichées entre-temps restaient
       // à l'écran par-dessus le nouveau fond (demande du 09/08/2026, "ça mélange tout").
-      _memoireModuleLoadPromise.then((mod) => mod.reinitMemoireEmbed?.());
+      _memoireModuleLoadPromise.then((mod) => mod?.reinitMemoireEmbed?.());
     }
   } else {
     if (beforeEl) beforeEl.hidden = true;
@@ -19588,6 +19645,15 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // (demande du 09/08/2026, "les bulles qui se mélangent quand on passe de bulles mémoire à
     // bulles actus").
     cloudEl?.querySelectorAll('.universe-mini-star, .universe-star-moon, .universe-star-sparkle').forEach((el) => el.remove());
+    // Bulles galaxies/systèmes/étoiles de "Ma mémoire" elles-mêmes : le fond redevient Actu/Agôn
+    // à l'instant (retrait de .agon-memoire-frame juste au-dessus), mais Bulles Agôn ne remplace
+    // ces bulles qu'après son fetch réseau (fetchAgonBubbleTrends, pas instantané) — sans ce
+    // nettoyage immédiat, les bulles "Ma mémoire" restaient visibles par-dessus le nouveau fond
+    // pendant tout le chargement (demande du 09/08/2026, "le fond des bulles actu avec les
+    // galaxies de ma mémoire, le temps du chargement"). Bulles Actu, dont le rendu est
+    // synchrone (window.AGON_TAG_TRENDS déjà en mémoire), n'a pas ce délai mais ce nettoyage ne
+    // lui nuit pas non plus.
+    cloudEl?.querySelectorAll('.agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line').forEach((el) => el.remove());
     // Retire le display:none posé à l'entrée en mode mémoire puis redessine réellement le tag
     // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
     // toggleAgonCloud (Actu/Agôn), le tag affiché doit refléter l'état à jour.
@@ -19710,7 +19776,17 @@ function toggleAgonCloud() {
 
   if (_agonCloudMode) {
     const token = beginAgonCloudSwitchLoading(container);
-    afterAgonCloudSpinnerPaint(() => {
+    afterAgonCloudSpinnerPaint(async () => {
+      // Ne retire pas encore les bulles Agôn : si le cache Actu a été vidé par un
+      // rafraîchissement concurrent, on tente d'abord de le restaurer. En cas d'échec,
+      // le mode Agôn reste intact au lieu d'aboutir à un cadre vide.
+      const trends = await resolveActuBubbleTrends();
+      if (token !== _agonCloudSwitchToken) return;
+      if (!trends.length) {
+        finishAgonCloudSwitchLoading(token, container);
+        return;
+      }
+
       _agonCloudMode = false;
       _agonBubbleTensionDebates = [];
       container.classList.remove('agon-cloud-mode-agon');
@@ -19726,17 +19802,6 @@ function toggleAgonCloud() {
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
       syncCloudSectionHeight();
-      const trends = window.AGON_TAG_TRENDS || [];
-      if (!trends.length) {
-        window._tagTrendCloudModule.renderTagTrendCloud(container, trends);
-        if (currentTypeFilter !== "agon") {
-          setTypeFilter("agon");
-        } else {
-          applyIndexFilters();
-        }
-        finishAgonCloudSwitchLoading(token, container);
-        return;
-      }
       window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
         // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par agôn"
         // retiré temporairement par le mode Bulles Agôn.
@@ -19753,12 +19818,20 @@ function toggleAgonCloud() {
   }
 
   const token = beginAgonCloudSwitchLoading(container);
+  // Fond "Bulles Agôn" (.agon-cloud-mode-agon::before, cf. style.css) posé tout de suite, avant
+  // même le fetch : sinon, en venant de "Ma mémoire" (fond retiré à l'instant par
+  // setMemoireCloudMode), le cadre retombait sur le fond par défaut "Bulles Actu" pendant tout
+  // le chargement — visible derrière le sablier (demande du 09/08/2026, "je vois le fond bulles
+  // actu derrière le sablier"). Retiré ci-dessous si le fetch échoue/est vide, puisqu'on reste
+  // alors en réalité en Bulles Actu.
+  container.classList.add('agon-cloud-mode-agon');
 
   afterAgonCloudSpinnerPaint(async () => {
     const trends = await fetchAgonBubbleTrends();
     if (token !== _agonCloudSwitchToken) return;
 
     if (!trends.length) {
+      container.classList.remove('agon-cloud-mode-agon');
       // Resynchronise le sélecteur même en échec (fetch vide/expiré) : si on arrivait de "Ma
       // mémoire" (setAgonCloudMode, skipSync), rien d'autre ne l'aurait fait — sans ça, "Ma
       // mémoire" restait affiché comme actif alors qu'on n'y est plus.
@@ -19821,10 +19894,11 @@ function toggleAgonCloud() {
     // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
     syncCloudSectionHeight();
-    // Bulles plus petites (0.6) et espacées (bubbleGap 14, cf. renderTagTrendCloud/
-    // applyCompactBubbleLayout dans tagTrendCloud.js) qu'en mode Bulles Actu (bulles serrées
-    // au contact par défaut) : laisse la place aux satellites "atome" sans qu'ils se
-    // retrouvent systématiquement plafonnés par une bulle voisine.
+    // Bulles plus petites (0.85, agrandies depuis 0.6 le 09/08/2026) et espacées
+    // (bubbleGap 14, cf. renderTagTrendCloud/applyCompactBubbleLayout dans tagTrendCloud.js)
+    // qu'en mode Bulles Actu (bulles serrées au contact par défaut) : laisse la place aux
+    // satellites "atome" sans qu'ils se retrouvent systématiquement plafonnés par une bulle
+    // voisine.
     // bubbleGap 14 (pas plus) : un gap trop généreux (essayé 34px) rend le placement de 10
     // bulles infaisable sur le petit cadre mobile — applyCompactBubbleLayout n'a que 8
     // tentatives pour réduire l'échelle et retombe sinon sur son repli qui ignore bubbleGap et
@@ -19835,7 +19909,7 @@ function toggleAgonCloud() {
     // éprouvée par "Mon univers" (mon-univers.js) pour un nombre similaire de bulles.
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
       finishAgonCloudSwitchLoading(token, container);
-    }, undefined, undefined, 14, 0.6);
+    }, undefined, undefined, 14, 0.85);
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
 }
@@ -21523,6 +21597,11 @@ function hideBubbleCloudLoadingSpinner() {
   // désormais définitive — recale l'ancrage (standalone mobile).
   window.__agonSyncMobileBottomNavViewport?.();
 }
+
+// Le module dynamique mon-univers.js retire le sablier seulement une fois les neurones
+// réellement placés (ou lorsqu'un état vide/erreur est prêt). L'exposition reste volontairement
+// limitée au retrait : l'entrée en mode et la création du sablier appartiennent à script.js.
+window.__agonHideBubbleCloudLoadingSpinner = hideBubbleCloudLoadingSpinner;
 
 function updateIndexTagTrends(items) {
   const trendsSection = document.querySelector("#agon-tag-trends-section");
