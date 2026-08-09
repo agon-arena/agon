@@ -1148,10 +1148,10 @@ window.addEventListener("pageshow", function() {
     <span>Actualiser</span>
   </button>
 
-  <!-- Accès Apprentissage / Ma mémoire. Les scores et contributions disposent désormais
-       de leur propre page dans le menu hamburger supérieur. -->
-  <a href="/mon-univers" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers')">
-    <i class="fa-solid fa-globe"></i>
+  <!-- Apprentissage reprend l'intégralité de la page Connaissances. Ma mémoire
+       et les scores/contributions restent accessibles depuis le menu supérieur. -->
+  <a href="/qcm-du-jour" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/qcm-du-jour')">
+    <i class="fa-solid fa-list-check"></i>
     <span>Apprentissage</span>
   </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
