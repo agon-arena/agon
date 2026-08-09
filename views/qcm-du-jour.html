@@ -987,6 +987,17 @@
     body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(text) + '</p>';
   }
 
+  function setParentIframeCloseVisible(visible) {
+    if (window.self === window.top) return;
+    try {
+      var closeButton = window.parent.document.getElementById('debate-iframe-modal-close');
+      if (!closeButton) return;
+      closeButton.style.display = visible ? 'flex' : 'none';
+      closeButton.setAttribute('aria-hidden', visible ? 'false' : 'true');
+      closeButton.tabIndex = visible ? 0 : -1;
+    } catch (e) {}
+  }
+
   function pct(count, total) {
     if (!total) return 0;
     return Math.round((count / total) * 100);
@@ -1693,6 +1704,7 @@
   // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
   // banque personnelle de l'utilisateur plutôt que de démarrer un QCM.
   function loadAcquis() {
+    setParentIframeCloseVisible(true);
     var myToken = ++loadToken;
     currentCategory = 'acquis';
     currentSlot = null;
@@ -1720,6 +1732,7 @@
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
   function loadMesQcm() {
+    setParentIframeCloseVisible(true);
     var myToken = ++loadToken;
     currentCategory = 'mesqcm';
     currentSlot = null;
@@ -1781,6 +1794,7 @@
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
   function loadSlot(slotKey, quizDate, label) {
+    setParentIframeCloseVisible(false);
     var myToken = ++loadToken;
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;
