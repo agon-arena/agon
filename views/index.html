@@ -169,7 +169,7 @@
       visibility: hidden !important;
     }
     /* Porte de sortie si l'intro s'éternise (classe posée par le garde-fou
-       inline à ~6,5s) : bouton Recharger sur l'écran de démarrage lui-même —
+       inline à 12s sur mobile) : bouton Recharger sur l'écran de démarrage lui-même —
        à l'intérieur du loader, donc au-dessus de tout, et son onclick inline
        (location.reload) ne dépend d'aucun fichier externe. Invisible sur un
        lancement normal (l'intro se termine bien avant). Symbole en texte brut :
@@ -360,22 +360,26 @@
   var line = loader.querySelector('.agon-startup-line-1');
   if (!line) return;
   window.__agonStartupInlineStarted = true;
+  var isMobileStartup = document.body.classList.contains('agon-mobile-cloud-viewport') ||
+    window.matchMedia('(max-width: 768px)').matches;
+  var retryDelay = isMobileStartup ? 12000 : 6500;
+  var automaticReleaseDelay = isMobileStartup ? 18000 : 12000;
   // Garde-fou autonome, sans aucune dépendance à script.min.js : la fin de
   // l'intro (retrait du loader + de la classe agon-startup-active qui masque
   // la barre basse) repose entièrement sur ce fichier externe. S'il ne
   // s'exécute jamais — hoquet réseau au lancement, cf. blocage PWA du
   // 18/07/2026 vers 18h29, app coincée sur l'animation — plus rien n'est
-  // cliquable, pour toujours. Au bout de 12s on libère l'écran d'ici même ;
+  // cliquable, pour toujours. Sur mobile, au bout de 18s on libère l'écran d'ici même ;
   // en fonctionnement normal, le failsafe de 10s de script.min.js est déjà
   // passé et tout ceci est un no-op.
-  // Étape 1 (~6,5s) : intro anormalement longue → révèle le bouton Recharger
-  // du loader (porte de sortie manuelle, cf. .agon-startup-retry-btn).
+  // Étape 1 (12s sur mobile) : un lancement simplement un peu lent a ainsi le
+  // temps d'aboutir avant que le bouton Recharger ne signale un vrai blocage.
   setTimeout(function () {
     if (loader.parentNode && !loader.classList.contains('is-hiding')) {
       document.documentElement.classList.add('agon-startup-stuck');
     }
-  }, 6500);
-  // Étape 2 (12s) : libération automatique complète.
+  }, retryDelay);
+  // Étape 2 (18s sur mobile) : libération automatique complète.
   setTimeout(function () {
     if (loader.parentNode && !loader.classList.contains('is-hiding')) {
       loader.classList.add('is-hiding');
@@ -383,7 +387,7 @@
     }
     document.documentElement.classList.remove('agon-startup-active');
     document.documentElement.classList.remove('agon-startup-stuck');
-  }, 12000);
+  }, automaticReleaseDelay);
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
@@ -1366,7 +1370,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260809-memoire-loading1" defer></script>
+<script src="/script.min.js?v=20260809-caption-return1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -7087,13 +7087,6 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 
 function closeDebateIframeModal(options = {}) {
   __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
-  // #agon-tag-trends-section (bulles + bouton "Autres actus") continue de se
-  // repositionner ~900ms après redevenir visible (transition min-height +
-  // recentrage flexbox) — attend une vraie stabilisation avant de calculer
-  // la position de la légende "Les tendances…", au lieu d'un délai fixe
-  // deviné qui capturait 2-3 positions intermédiaires fausses (confirmé par
-  // diagnostic, cf. syncAgonHomeTrendsCaptionAnchor / waitForTrendsSectionStableThenSync).
-  if (typeof waitForTrendsSectionStableThenSync === 'function') waitForTrendsSectionStableThenSync();
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
@@ -7159,6 +7152,17 @@ function closeDebateIframeModal(options = {}) {
   syncIndexUrlWithOpenIframeModal("");
   window.__agonDebateModalOpen = false;
   window.__agonDebateModalOpenedFromNotifications = false;
+
+  // Lance maintenant (et non à l'entrée de closeDebateIframeModal) la garde de
+  // stabilisation de la légende mobile. Avant, __agonDebateModalOpen valait encore
+  // true : waitForTrendsSectionStableThenSync quittait donc immédiatement sans poser
+  // __agonTrendsCaptionSyncPending. Les événements viewport de la fermeture pouvaient
+  // alors recalculer "Les tendances…" sur une géométrie intermédiaire, d'où son saut
+  // vers le haut puis vers le bas. L'appel async pose la garde synchroniquement avant
+  // le premier await, donc avant le déverrouillage du scroll effectué plus bas.
+  if (typeof waitForTrendsSectionStableThenSync === 'function') {
+    waitForTrendsSectionStableThenSync().catch(() => {});
+  }
   setDebateIframeNativeParentScrollMode(false);
   document.body.classList.remove("index-background-suspended");
   // Reprise des embeds différée : déclenchée par scheduleDebateIframeFrameTeardown
@@ -16610,156 +16614,31 @@ async function loadNotifications() {
   const badge = document.getElementById("notifications-count");
   const compactBadge = document.getElementById("notifications-count-compact");
   const bottomBadge = document.getElementById("notifications-count-bottom");
-  const list = document.getElementById("notifications-list");
 
   if (!badge && !compactBadge && !bottomBadge) return;
   if (notificationsLoadInFlight) return notificationsLoadInFlight;
 
   notificationsLoadInFlight = (async () => {
     try {
-      const notifications = await fetchJSON(API + "/notifications?userKey=" + encodeURIComponent(getKey()));
-const previousCount = Number(localStorage.getItem("notif_count") || 0);
-const unreadCount = notifications.filter((n) => Number(n.is_read) === 0 && !isNotifLocallyRead(n.id)).length;
+      const payload = await fetchJSON(API + "/notifications/unread-count?userKey=" + encodeURIComponent(getKey()));
+      const unreadCount = Math.max(0, Number(payload?.count) || 0);
+      const previousCount = getStoredUnreadNotificationCount();
 
-if (unreadCount > previousCount) {
-  const bell = document.getElementById("notifications-bell-bottom")
-    || document.getElementById("notifications-bell");
+      if (unreadCount > previousCount) {
+        const bell = document.getElementById("notifications-bell-bottom")
+          || document.getElementById("notifications-bell");
+        if (bell) {
+          bell.classList.add("notif-shake");
+          setTimeout(() => bell.classList.remove("notif-shake"), 700);
+        }
+      }
 
-  if (bell) {
-    bell.classList.add("notif-shake");
-
-    setTimeout(() => {
-      bell.classList.remove("notif-shake");
-    }, 700);
-  }
-}
-
-setStoredUnreadNotificationCount(unreadCount);
-_saveNotifPageCache(notifications);
-
-   if (!notifications.length) {
-  if (list) {
-    list.innerHTML = `<div class="empty-state">Aucune notification.</div>`;
-  }
-  return;
-}
-
-if (list) {
-  list.innerHTML = notifications.map((notification) => {
-let link = "#";
-let icon = "🔔";
-let title = notification.message || "Nouvelle notification";
-let subtitle = "Ouvrir";
-
-if (notification.type === "analysis_ready" && notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}&openAiScore=1`;
-} else if (notification.type === "replacement_accepted" && notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
-} else if (notification.comment_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=comment-${notification.comment_id}`;
-} else if (notification.argument_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
-} else if (notification.debate_id) {
-  link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
-}
-
-    if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") {
-      icon = "👍";
-      title = "Votre idée a reçu une voix";
-      subtitle = "Ouvrir l'idée";
+      setStoredUnreadNotificationCount(unreadCount);
+    } catch (error) {
+      // Le badge conserve sa dernière valeur connue en cas de coupure réseau.
+    } finally {
+      notificationsLoadInFlight = null;
     }
-
-    if (notification.type === "comment_on_argument") {
-      icon = "💬";
-      title = "Quelqu'un a commenté votre idée";
-      subtitle = "Ouvrir le commentaire";
-    }
-
-    if (notification.type === "argument_in_my_debate") {
-      icon = "🧠";
-      title = "Une nouvelle idée a été postée dans votre arène";
-      subtitle = "Ouvrir l'arène";
-    }
-
-  if (notification.type === "like_on_comment") {
-  icon = "👍";
-  title = "Votre commentaire a reçu un pouce vers le haut";
-  subtitle = "Ouvrir le commentaire";
-}
-
-if (notification.type === "dislike_on_comment") {
-  icon = "👎";
-  title = "Votre commentaire a reçu un pouce vers le bas";
-  subtitle = "Ouvrir le commentaire";
-}
-if (notification.type === "replacement_accepted") {
-  icon = "🏆";
-  title = "Ta proposition de remplacement a été acceptée";
-  subtitle = "Ouvrir l'idée remplacée";
-}
-if (notification.type === "reply_to_comment") {
-  icon = "↩️";
-  title = "Quelqu'un a répondu à votre commentaire";
-  subtitle = "Ouvrir la réponse";
-}
-if (notification.type === "majority_gained") {
-  icon = "💪";
-  title = "Votre camp vient de prendre la majorité";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "majority_lost") {
-  icon = "😬";
-  title = "Votre camp vient de perdre la majorité";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "top5_idea_votes") {
-  icon = "🔥";
-  title = "Votre idée entre dans un top 5 des plus soutenues";
-  subtitle = "Ouvrir l'idée";
-}
-if (notification.type === "top5_idea_ai_score") {
-  icon = "🏆";
-  title = "Votre idée entre dans un top 5 des mieux notées par l'IA";
-  subtitle = "Voir ta note IA";
-}
-if (notification.type === "analysis_scheduled") {
-  icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">';
-  title = "L'arbitrage IA démarre dans 24h";
-  subtitle = "Ouvrir le débat";
-}
-if (notification.type === "analysis_ready") {
-  icon = "⚖️";
-  title = "L'arbitrage IA est disponible";
-  subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse";
-}
-
-title = getNotificationDisplayTitle(notification, title);
-  return `
- <a
-  class="notification-item ${(Number(notification.is_read) === 0 && !isNotifLocallyRead(notification.id)) ? "notification-item-unread" : "notification-item-read-local"}"
-  href="${link}"
-  data-notif-id="${notification.id}"
-  onclick="handleNotificationClick(event, '${notification.id}', '${link}', this)"
->
-        <div class="notification-top">
-          <span class="notification-icon">${icon}</span>
-          <div class="notification-texts">
-            <div class="notification-title">${escapeHtml(title)}</div>
-            <div class="notification-subtitle">${escapeHtml(subtitle)}</div>
-          </div>
-        </div>
-        <div class="notification-date">${escapeHtml(formatDebateDate(notification.created_at))}</div>
-      </a>
-    `;
-  }).join("");
-}
-} catch (error) {
-  if (list) {
-    list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
-  }
-} finally {
-  notificationsLoadInFlight = null;
-}
   })();
 
   return notificationsLoadInFlight;
@@ -19542,7 +19421,9 @@ let _memoireCloudMode = false;
 let _memoireModuleLoadPromise = null;
 
 function setMemoireCloudMode(enable, skipSync = false) {
-  if (Boolean(enable) === _memoireCloudMode) {
+  const enableMemoire = Boolean(enable);
+  if (enableMemoire === _memoireCloudMode) {
+    document.body.classList.toggle('agon-memoire-cloud-mode', enableMemoire);
     // Reclique sur l'onglet "Ma mémoire" alors qu'on y est déjà, potentiellement à un niveau
     // profond (galaxie/système) : ramène à la racine (galaxies), comme un clic sur le premier
     // crumb du fil d'Ariane — demande du 09/08/2026, "ça devrait me ramener à la première page".
@@ -19565,7 +19446,8 @@ function setMemoireCloudMode(enable, skipSync = false) {
   // accès à _agonCloudSwitchToken) — cf. déclarations plus haut.
   _agonCloudSwitchToken++;
   window._agonCloudModeToken++;
-  _memoireCloudMode = Boolean(enable);
+  _memoireCloudMode = enableMemoire;
+  document.body.classList.toggle('agon-memoire-cloud-mode', _memoireCloudMode);
   const beforeEl = document.getElementById('agon-memoire-embed-before');
   const afterEl = document.getElementById('agon-memoire-embed-after');
   const politicalSwitch = document.getElementById('agon-political-cloud-switch');
@@ -19612,7 +19494,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) activeFiltersEl.style.display = 'none';
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-memoire-loading1').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-star-connectors1').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -21493,7 +21375,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260808-satellites6");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-star-connectors1");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -33196,7 +33078,7 @@ if (location.pathname === "/debate") {
     setInterval(() => {
       if (!shouldRunBackgroundRefresh()) return;
       loadNotifications();
-    }, 60000);
+    }, 2 * 60 * 1000);
   }
 
   if (hasReportsBadgeTarget()) {
@@ -33218,6 +33100,7 @@ if (location.pathname === "/debate") {
 
 const NOTIF_PAGE_CACHE_KEY = 'agon_notif_page_cache';
 const NOTIF_PAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const NOTIF_PAGE_SIZE = 50;
 
 function _saveNotifPageCache(data) {
   try { lsSet(NOTIF_PAGE_CACHE_KEY, JSON.stringify({ ts: Date.now(), key: getKey(), data })); } catch {}
@@ -33286,10 +33169,12 @@ function _buildNotifPageItemHtml(notification) {
       `;
 }
 
-function _applyNotifPageList(notifications, list) {
+function _applyNotifPageList(notifications, list, { append = false } = {}) {
   if (!list) return;
-  if (!notifications.length) { list.innerHTML = `<div class="empty-state">Aucune notification.</div>`; return; }
-  list.innerHTML = notifications.map(_buildNotifPageItemHtml).join("");
+  if (!notifications.length && !append) { list.innerHTML = `<div class="empty-state">Aucune notification.</div>`; return; }
+  const html = notifications.map(_buildNotifPageItemHtml).join("");
+  if (append) list.insertAdjacentHTML("beforeend", html);
+  else list.innerHTML = html;
 
   // Prefetch immédiat des 3 premiers liens débat (les plus susceptibles d'être cliqués)
   const topLinks = list.querySelectorAll('a.notification-item[href*="/debate"]');
@@ -33310,6 +33195,56 @@ function _applyNotifPageList(notifications, list) {
 }
 
 let notificationsPageLoadInFlight = null;
+let notificationsPageOffset = 0;
+let notificationsPageHasMore = true;
+
+function _syncNotificationsLoadMoreButton() {
+  const button = document.getElementById("notifications-load-more-btn");
+  if (!button) return;
+  button.hidden = !notificationsPageHasMore;
+  button.disabled = Boolean(notificationsPageLoadInFlight);
+}
+
+async function loadMoreNotificationsPage() {
+  if (notificationsPageLoadInFlight || !notificationsPageHasMore) return notificationsPageLoadInFlight;
+  return _loadNotificationsPageChunk(notificationsPageOffset, true);
+}
+
+async function _loadNotificationsPageChunk(offset = 0, append = false) {
+  const list = document.getElementById("notifications-page-list");
+  if (!list) return;
+
+  notificationsPageLoadInFlight = (async () => {
+    _syncNotificationsLoadMoreButton();
+    try {
+      const notifications = await fetchJSON(
+        API + "/notifications?userKey=" + encodeURIComponent(getKey())
+          + "&limit=" + NOTIF_PAGE_SIZE
+          + "&offset=" + Math.max(0, Number(offset) || 0)
+      );
+      const safeNotifications = Array.isArray(notifications) ? notifications : [];
+
+      if (!append) {
+        const unreadPayload = await fetchJSON(
+          API + "/notifications/unread-count?userKey=" + encodeURIComponent(getKey())
+        ).catch(() => null);
+        if (unreadPayload) setStoredUnreadNotificationCount(Math.max(0, Number(unreadPayload.count) || 0));
+        _saveNotifPageCache(safeNotifications);
+      }
+
+      _applyNotifPageList(safeNotifications, list, { append });
+      notificationsPageOffset = Math.max(0, Number(offset) || 0) + safeNotifications.length;
+      notificationsPageHasMore = safeNotifications.length === NOTIF_PAGE_SIZE;
+      return safeNotifications;
+    } finally {
+      notificationsPageLoadInFlight = null;
+      _syncNotificationsLoadMoreButton();
+    }
+  })();
+
+  return notificationsPageLoadInFlight;
+}
+
 async function loadNotificationsPage() {
   const list = document.getElementById("notifications-page-list");
 
@@ -33318,6 +33253,9 @@ async function loadNotificationsPage() {
   const cached = _getNotifPageCache();
   if (cached && list) {
     _applyNotifPageList(cached, list);
+    notificationsPageOffset = cached.length;
+    notificationsPageHasMore = cached.length === NOTIF_PAGE_SIZE;
+    _syncNotificationsLoadMoreButton();
     markPageArrivalLoadingOverlayReady();
     readySignaled = true;
   }
@@ -33336,35 +33274,14 @@ async function loadNotificationsPage() {
 
   if (notificationsPageLoadInFlight) return notificationsPageLoadInFlight;
 
-  notificationsPageLoadInFlight = (async () => {
-    try {
-      const notifications = await fetchJSON(
-        API + "/notifications?userKey=" + encodeURIComponent(getKey())
-      );
-
-      const unread = notifications.filter(n => !n.is_read && !isNotifLocallyRead(n.id)).length;
-      const previous = getStoredUnreadNotificationCount();
-      if (unread > previous) {
-        const bell = document.querySelector(".notifications-button");
-        if (bell) { bell.classList.add("bell-ring"); setTimeout(() => bell.classList.remove("bell-ring"), 2000); }
-      }
-      setStoredUnreadNotificationCount(unread);
-
-      _saveNotifPageCache(notifications);
-      _applyNotifPageList(notifications, list);
-
-      if (!readySignaled) { markPageArrivalLoadingOverlayReady(); readySignaled = true; }
-    } catch (error) {
-      if (!readySignaled) {
-        list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
-        markPageArrivalLoadingOverlayReady();
-      }
-    } finally {
-      notificationsPageLoadInFlight = null;
+  try {
+    return await _loadNotificationsPageChunk(0, false);
+  } catch (error) {
+    if (!readySignaled) {
+      list.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+      markPageArrivalLoadingOverlayReady();
     }
-  })();
-
-  return notificationsPageLoadInFlight;
+  }
 }
 
 
@@ -35576,12 +35493,12 @@ window.addEventListener('pageshow', (event) => {
     // Synchroniser avec le background refresh qui peut avoir mis à jour debatesCache
     var currentNewest = getNewestCreatedAt(debatesCache);
     if (currentNewest && currentNewest > latestSeenAt) latestSeenAt = currentNewest;
-    fetch('/api/debates?sort=recent&limit=10&_=' + Date.now(), { cache: 'no-store' })
+    fetch('/api/debates-latest-meta', { cache: 'no-store' })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(data) {
-        if (!Array.isArray(data)) return;
+        var recent = Array.isArray(data && data.recent) ? data.recent : [];
         var ref = latestSeenAt;
-        var newer = data.filter(function(d) { return d.created_at && d.created_at > ref; });
+        var newer = recent.filter(function(d) { return d.created_at && d.created_at > ref; });
         if (newer.length > 0) showBanner(newer.length);
       })
       .catch(function() {});
@@ -35725,6 +35642,7 @@ try {
     handleIdeaShareAction,
     jumpToStartOfCarousel,
     loadMoreArguments,
+    loadMoreNotificationsPage,
     loadMoreComments,
     loadMoreOtherDebates,
     loadMoreSimilarDebates,

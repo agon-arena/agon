@@ -5668,6 +5668,16 @@ body.page-debate .topbar::after {
   opacity:1;
   transform:translateY(-1px);
 }
+.notifications-load-more-wrap{
+  display:flex;
+  justify-content:center;
+  margin:16px 0 4px;
+}
+
+#notifications-load-more-btn{
+  border-radius:999px;
+  padding:8px 18px;
+}
 .comment-stance-amelioration{
   background:#f3f4f6 !important;
   color:#b8860b !important;
@@ -11249,10 +11259,29 @@ body.is-standalone.page-home-mobile .agon-tag-trends-caption {
   margin-bottom: 0;
 }
 
+/* En Bulles Agôn mobile, la légende courte doit rester visible juste sous le
+   sélecteur des trois modes. Elle revient donc dans le flux, y compris en PWA
+   standalone où la légende Actu reste volontairement ancrée plus bas. Les 4px
+   ajoutés aux 8px du bas du switch conservent une respiration de 12px. */
+.page-home-mobile .agon-tag-trends-section:has(#agon-tag-trends-cloud.agon-cloud-mode-agon) .agon-tag-trends-caption {
+  position: relative;
+  inset: auto;
+  margin: 4px auto 26px;
+}
+
 /* Compense la sortie du flux de la légende (4 + ~32 + 26 = 62px) pour que le
    contenu centré (nuage, switches) ne bouge pas : 70px + 62px. */
 body.is-standalone.page-home-mobile .agon-tag-trends-section {
   padding-bottom: 132px;
+}
+
+/* En PWA mobile, la section des bulles est normalement centrée verticalement. Le cadre
+   Ma mémoire est 100px plus court que les nuages Actu/Agôn : ce centrage le repoussait donc
+   vers le bas et créait un grand vide sous Trier/Rechercher. Dans ce mode seulement, on
+   l'ancre au début de la zone disponible ; le cadre, ses galaxies/neurones et le sélecteur
+   restent ainsi groupés et retrouvent le même départ visuel que les deux autres modes. */
+body.is-standalone.page-home-mobile.agon-memoire-cloud-mode .agon-tag-trends-section {
+  justify-content: flex-start;
 }
 
 body.is-standalone #agon-political-cloud-switch {
@@ -19676,6 +19705,19 @@ body.page-home #debates-list .theme-row-section:first-child {
 #agon-cloud-mode-switch .agon-cloud-mode-segment {
   position: relative;
 }
+
+/* Les satellites des bulles Agôn peuvent déborder du cadre jusqu'au sélecteur.
+   Les bulles animées étant parfois promues dans un calque de composition distinct par
+   Safari, le simple z-index commun du switch ne suffit pas toujours : on verrouille le
+   sélecteur principal dans son propre calque, au-dessus de tout le contenu du nuage.
+   translateZ(0) ne change ni sa position ni sa taille. */
+#agon-cloud-mode-switch {
+  z-index: 500;
+  isolation: isolate;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden;
+}
+
 #agon-cloud-mode-switch .agon-cloud-mode-segment:not(:last-child)::after {
   content: '';
   position: absolute;
@@ -19794,7 +19836,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   position: absolute;
   inset: var(--bubble-frame-top) 30px 23px;
   background: none;
-  border: 6px solid rgba(20, 28, 36, 0.72);
+  border: 6px solid #000;
   border-radius: 18px;
   z-index: -1;
   pointer-events: none;
@@ -19999,11 +20041,10 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
 .agon-tag-bubble {
   position: absolute;
   border-radius: 50%;
-  /* Alpha 1 -> 0.9 sur les 4 arrêts (demande du 09/08/2026, "rend les bulles actu légèrement
-     moins opaque") : laisse un peu transparaître ce qu'il y a derrière plutôt qu'un blanc
-     totalement opaque. */
+  /* Fond translucide : laisse davantage apparaître le réseau situé derrière les Bulles Actu,
+     sans réduire l'opacité du texte, des bordures ou des indicateurs. */
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(235,242,255,0.9) 40%, rgba(210,225,248,0.9) 70%, rgba(185,208,240,0.9) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.82) 0%, rgba(235,242,255,0.82) 40%, rgba(210,225,248,0.82) 70%, rgba(185,208,240,0.82) 100%);
   border: 2px solid #05070a;
   color: #1a2535;
   display: flex;
@@ -20030,14 +20071,14 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
    du nuage général. */
 .agon-cloud-political-right .agon-tag-bubble {
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(200,222,255,0.9) 40%, rgba(150,190,250,0.9) 70%, rgba(95,150,235,0.9) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.82) 0%, rgba(200,222,255,0.82) 40%, rgba(150,190,250,0.82) 70%, rgba(95,150,235,0.82) 100%);
 }
 
 /* Nuage "Gauche" : même bulle, légèrement rougie pour la distinguer du
    nuage général. */
 .agon-cloud-political-left .agon-tag-bubble {
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.9) 0%, rgba(255,215,215,0.9) 40%, rgba(250,175,175,0.9) 70%, rgba(235,120,120,0.9) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(255,255,255,0.82) 0%, rgba(255,215,215,0.82) 40%, rgba(250,175,175,0.82) 70%, rgba(235,120,120,0.82) 100%);
 }
 
 .agon-tag-bubble::before {
@@ -20582,7 +20623,7 @@ body.is-standalone.agon-mobile-cloud-viewport .agon-cloud-mode-switch {
    miroir (fond blanc, texte sombre) pour rester distinguable. */
 .agon-cloud-mode-agon .agon-tag-bubble {
   background:
-    radial-gradient(ellipse at 38% 32%, rgba(42,51,61,1) 0%, rgba(28,36,44,1) 40%, rgba(16,22,28,1) 70%, rgba(5,7,10,1) 100%);
+    radial-gradient(ellipse at 38% 32%, rgba(42,51,61,0.86) 0%, rgba(28,36,44,0.86) 40%, rgba(16,22,28,0.86) 70%, rgba(5,7,10,0.86) 100%);
   border-color: #eef3fb;
   color: #eef3fb;
   box-shadow:
@@ -25440,9 +25481,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      système" — trait partagé par tous les niveaux (galaxie→systèmes, système→étoiles), épaissi
      uniformément. */
   height: 4px;
-  /* Noir foncé (pas ambre/or) : demande du 08/08/2026 "les traits doivent être noirs" puis
-     "mais noirs foncé" — #000 pur, opacité relevée (0.75/0.3 → 0.95/0.55) pour un noir
-     nettement plus dense. Trait partagé par tous les niveaux, changé uniformément. */
+  /* Noir foncé par défaut. Au niveau étoile → système solaire, tagTrendCloud.js pose un
+     background inline calculé par mon-univers.js pour reprendre la teinte exacte de l'étoile. */
   background: linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.55));
   transform-origin: left center;
   pointer-events: none;

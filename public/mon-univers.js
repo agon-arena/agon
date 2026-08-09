@@ -1,7 +1,7 @@
 // Page "Mon univers" : réutilise le moteur de bulles existant (tagTrendCloud.js), jamais
 // dupliqué. Volontairement léger — pas de chargement de script.js (qui alourdirait la page
 // pour un seul besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260808-satellites6";
+import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260809-star-connectors1";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -113,6 +113,13 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
 // je veux contours dégradés"), ces deux types étaient restés sur le rendu par défaut (contour
 // dur inclus) alors que tous les autres niveaux avaient déjà été corrigés.
 const UNCLASSIFIED_BUBBLE_BACKGROUND = `radial-gradient(circle closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(235,242,255,1) 40%, rgba(210,225,248,0.85) 70%, rgba(185,208,240,0.35) 88%, rgba(185,208,240,0) 100%)`;
+
+// Liaison étoile → système solaire : reprend la teinte dont l'étoile hérite déjà.
+// Le dégradé reste lumineux près du soleil et s'adoucit à l'approche de l'étoile.
+function starConnectorBackgroundFor(galaxyName) {
+  const hue = hueForGalaxy(galaxyName);
+  return `linear-gradient(to right, hsla(${hue}, 12%, 76%, 0.95), hsla(${hue}, 12%, 54%, 0.78))`;
+}
 
 // Bulles galaxie (niveau racine uniquement) : rendu "nœud de neurone" très lumineux plutôt qu'un
 // simple disque pastel — cœur très brillant + fines lignes rayonnantes façon synapses/dendrites,
@@ -419,7 +426,10 @@ function buildTrendsForItems(items) {
       bubbleBackground = UNCLASSIFIED_BUBBLE_BACKGROUND;
       bubbleExtraClass = "agon-tag-bubble-unclassified";
     }
-    return { tag: item.label, sizeWeight: weights[i], subjectId: "", bubbleBackground, bubbleGlowColor, bubbleExtraClass };
+    const orbitLineBackground = item.universeType === "star" && currentGalaxyName
+      ? starConnectorBackgroundFor(currentGalaxyName)
+      : undefined;
+    return { tag: item.label, sizeWeight: weights[i], subjectId: "", bubbleBackground, bubbleGlowColor, bubbleExtraClass, orbitLineBackground };
   });
 }
 

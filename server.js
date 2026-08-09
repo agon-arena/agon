@@ -2594,6 +2594,9 @@ const EXTERNAL_PREVIEW_NO_IMAGE_RETRY_MS = 30 * 60 * 1000;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEBATES_API_CACHE_MAX = 50;
+let latestDebatesMetaCache = null;
+let latestDebatesMetaInFlight = null;
+const LATEST_DEBATES_META_CACHE_TTL_MS = 60 * 1000;
 const DEBATES_LIST_SELECT_COLUMNS = [
   "id",
   "question",
@@ -2728,6 +2731,7 @@ function setCachedDebatesApiResponse(key, value, ttlMs = DEBATES_API_CACHE_TTL_M
 
 function clearDebatesApiResponseCache() {
   debatesApiResponseCache.clear();
+  latestDebatesMetaCache = null;
 }
 
 function getDebateDetailCacheKey(debateId) {
@@ -2790,12 +2794,14 @@ function invalidateSharedDebateCaches(debateId = null, { clearList = true } = {}
   }
 }
 
-function getNotificationsApiCacheKey(userKey) {
-  return String(userKey || "").trim();
+function getNotificationsApiCacheKey(userKey, limit = 50, offset = 0) {
+  const normalizedUserKey = String(userKey || "").trim();
+  if (!normalizedUserKey) return "";
+  return `${normalizedUserKey}::${Math.max(1, Number(limit) || 50)}::${Math.max(0, Number(offset) || 0)}`;
 }
 
-function getCachedNotificationsApiResponse(userKey) {
-  const key = getNotificationsApiCacheKey(userKey);
+function getCachedNotificationsApiResponse(userKey, limit = 50, offset = 0) {
+  const key = getNotificationsApiCacheKey(userKey, limit, offset);
   if (!key) return null;
 
   const entry = notificationsApiResponseCache.get(key);
@@ -2808,16 +2814,18 @@ function getCachedNotificationsApiResponse(userKey) {
   return entry.value;
 }
 
-function setCachedNotificationsApiResponse(userKey, value) {
-  const key = getNotificationsApiCacheKey(userKey);
+function setCachedNotificationsApiResponse(userKey, limit, offset, value) {
+  const key = getNotificationsApiCacheKey(userKey, limit, offset);
   if (!key) return;
   _cacheSet(notificationsApiResponseCache, key, { value, expiresAt: Date.now() + NOTIFICATIONS_API_CACHE_TTL_MS }, NOTIFICATIONS_API_CACHE_MAX);
 }
 
 function clearNotificationsApiResponseCache(userKey = null) {
   if (userKey) {
-    const key = getNotificationsApiCacheKey(userKey);
-    if (key) notificationsApiResponseCache.delete(key);
+    const prefix = `${String(userKey || "").trim()}::`;
+    for (const key of notificationsApiResponseCache.keys()) {
+      if (key.startsWith(prefix)) notificationsApiResponseCache.delete(key);
+    }
   } else {
     notificationsApiResponseCache.clear();
   }
@@ -6390,15 +6398,52 @@ app.delete("/api/admin/reports", requireAdmin, async (req, res) => {
    NOTIFICATIONS
 ========================= */
 
+const NOTIFICATIONS_DEFAULT_PAGE_SIZE = 50;
+const NOTIFICATIONS_MAX_PAGE_SIZE = 100;
+
+app.get("/api/notifications/unread-count", rateLimit("notifications", 180), async (req, res) => {
+  try {
+    const userKey = String(req.query.userKey || "").trim();
+    if (!userKey) {
+      return res.status(400).json({ error: "Clé utilisateur manquante." });
+    }
+
+    // HEAD + count évite de transférer les messages complets uniquement pour
+    // actualiser la pastille de la cloche.
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_key", userKey)
+      .eq("is_read", 0);
+
+    if (error) {
+      console.error(error);
+      return sendServerError(res, "Erreur lecture notifications.");
+    }
+
+    res.set("Cache-Control", "private, max-age=30");
+    return res.json({ count: Math.max(0, Number(count) || 0) });
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur lecture notifications.");
+  }
+});
+
 app.get("/api/notifications", rateLimit("notifications", 180), async (req, res) => {
   try {
-    const userKey = req.query.userKey;
+    const userKey = String(req.query.userKey || "").trim();
+    const requestedLimit = Number.parseInt(String(req.query.limit || ""), 10);
+    const requestedOffset = Number.parseInt(String(req.query.offset || ""), 10);
+    const safeLimit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(1, requestedLimit), NOTIFICATIONS_MAX_PAGE_SIZE)
+      : NOTIFICATIONS_DEFAULT_PAGE_SIZE;
+    const safeOffset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
 
     if (!userKey) {
       return res.status(400).json({ error: "Clé utilisateur manquante." });
     }
 
-    const cachedResponse = getCachedNotificationsApiResponse(userKey);
+    const cachedResponse = getCachedNotificationsApiResponse(userKey, safeLimit, safeOffset);
     if (cachedResponse) {
       return res.json(cachedResponse);
     }
@@ -6409,7 +6454,8 @@ app.get("/api/notifications", rateLimit("notifications", 180), async (req, res) 
       .eq("user_key", userKey)
       .order("is_read", { ascending: true })
       .order("created_at", { ascending: false })
-      .order("id", { ascending: false });
+      .order("id", { ascending: false })
+      .range(safeOffset, safeOffset + safeLimit - 1);
 
     if (error) {
       console.error(error);
@@ -6417,7 +6463,7 @@ app.get("/api/notifications", rateLimit("notifications", 180), async (req, res) 
     }
 
     const payload = data || [];
-    setCachedNotificationsApiResponse(userKey, payload);
+    setCachedNotificationsApiResponse(userKey, safeLimit, safeOffset, payload);
     res.json(payload);
   } catch (error) {
     console.error(error);
@@ -6807,6 +6853,44 @@ app.post("/api/admin/argument/:id/set-votes", requireAdmin, async (req, res) => 
    DEBATES
 ========================= */
 
+app.get("/api/debates-latest-meta", async (_req, res) => {
+  try {
+    if (latestDebatesMetaCache && latestDebatesMetaCache.expiresAt > Date.now()) {
+      return res.json(latestDebatesMetaCache.value);
+    }
+
+    if (!latestDebatesMetaInFlight) {
+      latestDebatesMetaInFlight = (async () => {
+        const { data, error } = await supabase
+          .from("debates")
+          .select("id,created_at")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(10);
+        if (error) throw error;
+
+        const recent = data || [];
+        const value = {
+          latestCreatedAt: recent[0]?.created_at || null,
+          recent
+        };
+        latestDebatesMetaCache = {
+          value,
+          expiresAt: Date.now() + LATEST_DEBATES_META_CACHE_TTL_MS
+        };
+        return value;
+      })().finally(() => {
+        latestDebatesMetaInFlight = null;
+      });
+    }
+
+    return res.json(await latestDebatesMetaInFlight);
+  } catch (error) {
+    console.error(error);
+    return sendServerError(res, "Erreur lecture publications récentes.");
+  }
+});
+
 app.get("/api/debates", async (req, res) => {
   try {
     const clientKey = getRequestClientKey(req);
@@ -6825,6 +6909,11 @@ app.get("/api/debates", async (req, res) => {
       : "popular";
     const effectiveSortMode = !hasPaginationLimit && sortMode === "popular" ? "recent" : sortMode;
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
+    const databaseSearchQuery = searchQuery
+      .replace(/[%_,()."'\\]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
     const categoryQuery = String(req.query.category || "").trim();
     const rawPoliticalGroupQuery = String(req.query.politicalGroup || "").trim();
     const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right" || rawPoliticalGroupQuery === "mixed") ? rawPoliticalGroupQuery : "";
@@ -6841,14 +6930,17 @@ app.get("/api/debates", async (req, res) => {
       sort: effectiveSortMode,
       search: searchQuery
     });
-    // req.query._ est un simple cache-buster côté navigateur (Date.now()) :
-    // il ne doit pas invalider le cache serveur. Seuls fresh=1 ou un header
-    // Cache-Control: no-store explicite forcent un bypass réel.
-    const bypassCache = idsQuery.length > 0 || categoryQuery || politicalGroupQuery || req.query.fresh === "1" || req.headers["cache-control"] === "no-store";
+    // Cache-Control: no-store ne concerne que le cache HTTP du navigateur : il
+    // ne doit pas forcer une nouvelle lecture Supabase. Le bypass de données
+    // reste volontaire et explicite via fresh=1.
+    const bypassCache = idsQuery.length > 0 || categoryQuery || politicalGroupQuery || req.query.fresh === "1";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
       return res.json(cachedResponse.map((d) => sanitizeDebateForClient(d, clientKey)));
+    }
+    if (searchQuery && !databaseSearchQuery) {
+      return res.json([]);
     }
 
     const canPageInDatabase = !searchQuery && (categoryQuery || effectiveSortMode === "recent" || effectiveSortMode === "old");
@@ -6859,6 +6951,20 @@ app.get("/api/debates", async (req, res) => {
       }
       if (categoryQuery) {
         q = q.eq("category", categoryQuery);
+      }
+      if (searchQuery) {
+        // Le filtre est exécuté par PostgreSQL afin de ne plus transférer toute
+        // la table avant de rechercher côté Node. Les caractères réservés du
+        // langage de filtres PostgREST sont remplacés par des espaces.
+        if (databaseSearchQuery) {
+          const pattern = `%${databaseSearchQuery}%`;
+          q = q.or([
+            `question.ilike.${pattern}`,
+            `category.ilike.${pattern}`,
+            `option_a.ilike.${pattern}`,
+            `option_b.ilike.${pattern}`
+          ].join(","));
+        }
       }
       // Pagination par catégorie des 3 nuages (carousels du front) : sans ce filtre,
       // le "load more" d'une rubrique thématique réinjecte des arènes d'un autre
@@ -6885,12 +6991,6 @@ app.get("/api/debates", async (req, res) => {
     }
 
     let debateRows = debates || [];
-    if (searchQuery) {
-      debateRows = debateRows.filter((d) => {
-        const text = [d.question, d.category, d.option_a, d.option_b].join(" ").toLowerCase();
-        return text.includes(searchQuery);
-      });
-    }
     if (!debateRows.length) {
       return res.json([]);
     }
@@ -7170,7 +7270,7 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const cacheTtlMs = (effectiveSortMode === "recent" || effectiveSortMode === "old")
-      ? 10 * 1000
+      ? 2 * 60 * 1000
       : DEBATES_API_CACHE_TTL_MS;
     if (!bypassCache) {
       setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
@@ -10286,7 +10386,8 @@ function getAgonBubbleLabel(debate) {
 }
 
 let agonBubbleTrendsCache = null;
-const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 30 * 1000;
+let agonBubbleTrendsInFlight = null;
+const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 5 * 60 * 1000;
 // Supabase peut rester bloqué plusieurs dizaines de secondes avant de répondre
 // (ou de tomber en erreur) en cas de panne réseau côté infra — sans timeout
 // explicite, ces requêtes traîneraient la requête HTTP entrante avec elles.
@@ -10469,9 +10570,21 @@ async function computeAgonBubbleTrends() {
   return bubbles;
 }
 
+async function getAgonBubbleTrends() {
+  if (agonBubbleTrendsCache && Date.now() < agonBubbleTrendsCache.expiresAt) {
+    return agonBubbleTrendsCache.value;
+  }
+  if (!agonBubbleTrendsInFlight) {
+    agonBubbleTrendsInFlight = computeAgonBubbleTrends().finally(() => {
+      agonBubbleTrendsInFlight = null;
+    });
+  }
+  return agonBubbleTrendsInFlight;
+}
+
 app.get("/api/agon-bubbles", async (req, res) => {
   try {
-    const bubbles = await computeAgonBubbleTrends();
+    const bubbles = await getAgonBubbleTrends();
     res.json({ bubbles });
   } catch (error) {
     console.error(error);

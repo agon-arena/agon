@@ -783,6 +783,8 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     line.style.top = Math.round(startY) + "px";
     line.style.width = Math.round(lineLength) + "px";
     line.style.transform = `rotate(${angle}rad)`;
+    const customBackground = bubble.style.getPropertyValue("--agon-orbit-line-background").trim();
+    if (customBackground) line.style.background = customBackground;
     container.appendChild(line);
   });
 }
@@ -1141,6 +1143,11 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     // "Mon univers") + couleur de halo transmise en variable CSS, jamais posée par défaut.
     if (trendItem?.bubbleExtraClass) bubble.classList.add(trendItem.bubbleExtraClass);
     if (trendItem?.bubbleGlowColor) bubble.style.setProperty("--agon-tag-bubble-glow", trendItem.bubbleGlowColor);
+    // Couleur optionnelle du trait reliant cette bulle au centre. Ma mémoire l'utilise
+    // pour donner à chaque liaison étoile → système la même teinte que l'étoile.
+    if (trendItem?.orbitLineBackground) {
+      bubble.style.setProperty("--agon-orbit-line-background", trendItem.orbitLineBackground);
+    }
     // Idem, optionnel : index (dans ce même tableau trends) d'une AUTRE bulle à laquelle
     // relier cette bulle par un trait, au lieu du centre par défaut (cf. drawOrbitLines) — sert
     // à "Mon univers" pour relier une étoile à son système plutôt qu'à la galaxie centrale.
