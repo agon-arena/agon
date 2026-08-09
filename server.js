@@ -12464,6 +12464,12 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId) {
 // Validation adaptée aux QCM narratifs : une même source peut porter
 // plusieurs questions (maxPerSource), utile sur un QCM de notion où une
 // seule source alimente tout le lot de questions.
+// L'IA recopie parfois le token "id:xxx" du prompt tel quel dans sourceId
+// (avec le préfixe "id:", cf. formatCultureGeneraleItemForPrompt) au lieu de
+// n'en garder que la valeur — observé en pratique (constaté le 09/08/2026,
+// génération de "notion:histoire:..." entièrement rejetée, 0/4 questions
+// valides à cause de ce seul artefact) : préfixe retiré avant comparaison
+// plutôt que de rejeter la question.
 function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, maxPerSource) {
   if (!Array.isArray(rawQuestions)) return [];
   const validIds = new Set(validSourceIds.map(String));
@@ -12472,7 +12478,7 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   for (const item of rawQuestions) {
     const core = validateQuestionItemCore(item);
     if (!core) continue;
-    const sourceId = String(item?.sourceId ?? "").trim();
+    const sourceId = String(item?.sourceId ?? "").trim().replace(/^id:/i, "").trim();
     if (!sourceId || !validIds.has(sourceId)) continue;
     const usedCount = countPerSource.get(sourceId) || 0;
     if (usedCount >= maxPerSource) continue;
@@ -12540,10 +12546,10 @@ function parseCultureGeneraleReviewRef(questionId) {
 }
 
 // Historique complet des réponses de ce visiteur aux questions de culture
-// générale — premières fois (culture_generale-qN) et repasses de répétition
-// espacée (cgreview-{sourceDebateId}) confondues, jamais le QCM Révision
-// (resté un entraînement libre, hors suivi) ni le QCM actu (hors périmètre).
-// Renvoie les événements triés chronologiquement (un par réponse, groupables
+// générale — premières fois (culture_generale-qN historique, notion:... QCM
+// de notion) et repasses de répétition espacée (cgreview-{sourceDebateId})
+// confondues, jamais le QCM Révision (resté un entraînement libre, hors
+// suivi). Renvoie les événements triés chronologiquement (un par réponse, groupables
 // par sourceDebateId côté appelant) ainsi qu'un index du contenu par
 // sourceDebateId — les deux structures dont ont besoin fetchUserAcquis et
 // fetchCultureGeneraleReviewInjectionForToday.
@@ -12561,7 +12567,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const reviewAnswers = [];
   for (const row of answerRows || []) {
     const qid = String(row.question_id || "");
-    if (qid.startsWith("culture_generale-")) {
+    if (qid.startsWith("culture_generale-") || qid.startsWith("notion:")) {
       originalAnswers.push({ quizDate: row.quiz_date, questionId: qid, optionIndex: row.option_index });
     } else if (qid.startsWith("cgreview-")) {
       const sourceDebateId = parseCultureGeneraleReviewRef(qid);

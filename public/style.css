@@ -25651,8 +25651,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   line-height: 1.6;
 }
 
-/* Sur l'accueil, l'état vide reprend exactement les marges de la légende Bulles Agôn :
-   18px au-dessus / 40px en dessous sur desktop, puis 4px / 26px sur mobile. Le <p> créé
+/* Sur l'accueil, l'état vide reprend les espacements de la légende Bulles Agôn. Le <p> créé
    dynamiquement est remis à zéro pour que ses marges natives ne s'ajoutent pas à ces valeurs. */
 body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status {
   padding: 18px 16px 40px;
@@ -25664,7 +25663,12 @@ body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p {
 
 @media (max-width: 768px) {
   body.page-home-mobile.agon-memoire-cloud-mode #universe-status {
-    padding: 4px 16px 26px;
+    /* Même modèle que .agon-tag-trends-caption : les 4px sont une marge entre le
+       sélecteur et la ligne, pas un padding ajouté à un line-height de 1.6 qui
+       descendait visuellement le texte. */
+    margin: 4px auto 0;
+    padding: 0 16px 26px;
+    line-height: normal;
   }
 
   body.page-home-mobile.agon-memoire-cloud-mode

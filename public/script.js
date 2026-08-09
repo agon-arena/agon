@@ -19143,6 +19143,9 @@ function _restoreMainTagCloud() {
 // ── Bulles Agôn : bascule entre le nuage actualité et le top 10 des arènes actives ──
 
 let _agonCloudMode = false;
+// Destination la plus récemment demandée. Sert aussi avant que le module de rendu paresseux
+// soit prêt : seul le dernier clic est rejoué quand son import se termine.
+let _agonCloudRequestedMode = false;
 // Débats du top 10 des Bulles Agôn, dans l'ordre du nuage : placés en tête du
 // bandeau "Arènes sous tension" en mode Agôn pour que chaque bulle ait toujours
 // sa carte dans le carrousel, même une vieille arène redevenue active qui n'est
@@ -19387,19 +19390,15 @@ function syncAgonCloudModeSwitch() {
 
 // Cible explicitement un mode (utilisé par les segments du sélecteur)
 function setAgonCloudMode(enableAgon) {
+  const targetAgonMode = Boolean(enableAgon);
+  _agonCloudRequestedMode = targetAgonMode;
+  const wasMemoireMode = _memoireCloudMode;
   if (_memoireCloudMode) {
-    // skipSync=true : toggleAgonCloud() ci-dessous connaît la vraie cible finale et
+    // skipSync=true : toggleAgonCloud() ci-dessous reçoit la vraie cible finale et
     // synchronisera lui-même le sélecteur une fois celle-ci acquise (cf. setMemoireCloudMode).
     setMemoireCloudMode(false, true);
-    // Le contenu Actu/Agôn a été écrasé pendant le mode "Ma mémoire" (même conteneur
-    // #agon-tag-trends-cloud réutilisé, cf. setMemoireCloudMode) : _agonCloudMode ne
-    // reflète donc plus ce qui est réellement affiché. On le force à l'opposé de la
-    // cible pour que toggleAgonCloud() (un vrai bascule, pas un "set") le rebascule
-    // et redessine le nuage dans tous les cas, même si la cible correspondait déjà à
-    // _agonCloudMode avant l'entrée en mode mémoire.
-    _agonCloudMode = !Boolean(enableAgon);
   }
-  if (Boolean(enableAgon) === _agonCloudMode) return;
+  if (targetAgonMode === _agonCloudMode && !_agonCloudSwitchLoading && !wasMemoireMode) return;
   // Pas de garde sur _agonCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
   // répond pas") : un précédent switch encore "en chargement" (fetch /api/agon-bubbles lent,
   // jusqu'à 5-6.5s) bloquait silencieusement tout nouveau clic jusqu'à son propre abandon —
@@ -19407,7 +19406,11 @@ function setAgonCloudMode(enableAgon) {
   // toggleAgonCloud) reprend la main proprement à tout moment (nouveau jeton, nouveau timer de
   // sécurité) ; la résolution tardive de l'ancien fetch est de toute façon ignorée grâce au
   // jeton (_agonCloudSwitchToken / window._agonCloudModeToken) qu'elle ne matche plus.
-  toggleAgonCloud();
+  // La cible est transmise explicitement : pendant un retour Agôn -> Actu encore en vol,
+  // _agonCloudMode vaut toujours true. Un nouveau clic sur "Bulles Agôn" ne doit donc pas
+  // être interprété comme une nouvelle bascule vers Actu ni être ignoré à cause de cet état
+  // ancien ; le nouveau jeton invalide la transition précédente et impose bien Agôn.
+  toggleAgonCloud(targetAgonMode);
 }
 
 // ── Mode "Ma mémoire" embarqué sur l'accueil (demande du 08/08/2026 : "je veux voir
@@ -19667,12 +19670,25 @@ function setPoliticalCloudGroup(group) {
   });
 }
 
-function toggleAgonCloud() {
+function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
   const container = document.querySelector('#agon-tag-trends-cloud');
   const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
-  if (!container || !window._tagTrendCloudModule) return;
+  if (!container) return;
+  if (!window._tagTrendCloudModule) {
+    // Un clic peut arriver pendant l'import initial de tagTrendCloud.js. Auparavant il était
+    // simplement perdu et l'utilisateur restait sur Bulles Actu. Rejoue la dernière cible une
+    // fois le module prêt, sauf si un clic plus récent ou Ma mémoire a pris le relais.
+    Promise.resolve(indexTagTrendCloudModulePromise).then((cloudModule) => {
+      window._tagTrendCloudModule = cloudModule;
+      if (_memoireCloudMode || _agonCloudRequestedMode !== Boolean(targetAgonMode)) return;
+      toggleAgonCloud(Boolean(targetAgonMode));
+    }).catch((error) => {
+      console.warn('[Agôn] Module de rendu des bulles indisponible :', error);
+    });
+    return;
+  }
 
-  if (_agonCloudMode) {
+  if (!targetAgonMode) {
     const token = beginAgonCloudSwitchLoading(container);
     afterAgonCloudSpinnerPaint(async () => {
       // Ne retire pas encore les bulles Agôn : si le cache Actu a été vidé par un
@@ -21526,6 +21542,10 @@ window.__agonHideBubbleCloudLoadingSpinner = hideBubbleCloudLoadingSpinner;
 function updateIndexTagTrends(items) {
   const trendsSection = document.querySelector("#agon-tag-trends-section");
   const cloudContainer = document.querySelector("#agon-tag-trends-cloud");
+  // Capture l'époque du mode au lancement de cette initialisation Actu. Le chargement des
+  // modules puis /api/cloud-bubbles est asynchrone : si l'utilisateur choisit Bulles Agôn ou
+  // Ma mémoire entre-temps, cette ancienne tâche ne doit plus toucher au conteneur partagé.
+  const requestedCloudModeToken = window._agonCloudModeToken || 0;
 
   if (!Array.isArray(items) || !items.length) {
     if ((_agonCloudMode || _agonCloudSwitchLoading) && cloudContainer?.querySelector(".agon-tag-bubble")) {
@@ -21550,12 +21570,21 @@ function updateIndexTagTrends(items) {
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
       window._tagTrendsModule = module;
+      window._tagTrendCloudModule = cloudModule;
 
       let tagTrends = [];
       try {
         const res = await fetchJSON(API + "/cloud-bubbles");
         tagTrends = Array.isArray(res?.bubbles) ? res.bubbles : [];
       } catch {}
+
+      // Le cache Actu peut être conservé pour le prochain retour vers ce mode, mais aucun
+      // rendu/masquage Actu n'est autorisé après qu'une transition plus récente a commencé.
+      if (tagTrends.length) window.AGON_TAG_TRENDS = tagTrends;
+      if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
+          _agonCloudMode || _memoireCloudMode || _agonCloudSwitchLoading) {
+        return;
+      }
 
       if (!tagTrends.length) {
         window.AGON_TAG_TRENDS = [];
@@ -21565,8 +21594,6 @@ function updateIndexTagTrends(items) {
         return;
       }
 
-      window.AGON_TAG_TRENDS = tagTrends;
-      window._tagTrendCloudModule = cloudModule;
       syncIndexBubbleTrendBadges();
       if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => setTimeout(hideBubbleCloudLoadingSpinner, 150));
