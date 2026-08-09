@@ -769,12 +769,23 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     }
 
     const dist = Math.hypot(geo.cx - targetX, geo.cy - targetY);
+    // Une couleur personnalisée n'est actuellement posée que pour les traits
+    // système solaire → étoile (mon-univers.js). Ces traits doivent franchir
+    // l'anneau sombre de l'étoile (7px + flou) au lieu de s'arrêter au rayon
+    // mathématique exact de la bulle. 14px les fait arriver juste dans la partie
+    // colorée, sans traverser le texte central de l'étoile. Le même recouvrement
+    // est appliqué au départ, vers le soleil central.
+    const customBackground = bubble.style.getPropertyValue("--agon-orbit-line-background").trim();
+    const starRingOverlap = customBackground ? 14 : 0;
+    const solarOverlap = customBackground ? 14 : 0;
     const lineLength = dist - geo.r - targetR;
     if (lineLength <= 4) return;
 
     const angle = Math.atan2(geo.cy - targetY, geo.cx - targetX);
-    const startX = targetX + Math.cos(angle) * targetR;
-    const startY = targetY + Math.sin(angle) * targetR;
+    const cosAngle = Math.cos(angle);
+    const sinAngle = Math.sin(angle);
+    const startX = targetX + cosAngle * targetR;
+    const startY = targetY + sinAngle * targetR;
 
     const line = document.createElement("div");
     line.className = "agon-tag-orbit-line";
@@ -783,9 +794,31 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     line.style.top = Math.round(startY) + "px";
     line.style.width = Math.round(lineLength) + "px";
     line.style.transform = `rotate(${angle}rad)`;
-    const customBackground = bubble.style.getPropertyValue("--agon-orbit-line-background").trim();
     if (customBackground) line.style.background = customBackground;
     container.appendChild(line);
+
+    // Seules les deux petites portions qui franchissent les bords doivent passer
+    // devant les anneaux. Le long segment central conserve son z-index bas : il ne
+    // pourra donc pas recouvrir une autre bulle ou son libellé sur son trajet.
+    if (customBackground) {
+      const appendOverlap = (distanceFromTarget, width, fadeDirection) => {
+        if (width <= 0) return;
+        const overlap = document.createElement("div");
+        overlap.className = `agon-tag-orbit-line agon-tag-orbit-line-star-overlap agon-tag-orbit-line-star-overlap-${fadeDirection}`;
+        overlap.style.position = "absolute";
+        overlap.style.left = Math.round(targetX + cosAngle * distanceFromTarget) + "px";
+        overlap.style.top = Math.round(targetY + sinAngle * distanceFromTarget) + "px";
+        overlap.style.width = Math.round(width) + "px";
+        overlap.style.transform = `rotate(${angle}rad)`;
+        overlap.style.background = customBackground;
+        container.appendChild(overlap);
+      };
+
+      // Côté soleil : transparent au point le plus intérieur, net à la surface.
+      appendOverlap(Math.max(0, targetR - solarOverlap), Math.min(solarOverlap, targetR), "in");
+      // Côté étoile : net à la surface, transparent en entrant dans l'étoile.
+      appendOverlap(dist - geo.r, starRingOverlap, "out");
+    }
   });
 }
 

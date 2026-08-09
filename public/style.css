@@ -11263,7 +11263,8 @@ body.is-standalone.page-home-mobile .agon-tag-trends-caption {
    sélecteur des trois modes. Elle revient donc dans le flux, y compris en PWA
    standalone où la légende Actu reste volontairement ancrée plus bas. Les 4px
    ajoutés aux 8px du bas du switch conservent une respiration de 12px. */
-.page-home-mobile .agon-tag-trends-section:has(#agon-tag-trends-cloud.agon-cloud-mode-agon) .agon-tag-trends-caption {
+.page-home-mobile .agon-tag-trends-section:has(#agon-tag-trends-cloud.agon-cloud-mode-agon) .agon-tag-trends-caption,
+.page-home-mobile .agon-tag-trends-section:has(#agon-tag-trends-cloud.agon-memoire-frame) .agon-tag-trends-caption {
   position: relative;
   inset: auto;
   margin: 4px auto 26px;
@@ -11273,15 +11274,6 @@ body.is-standalone.page-home-mobile .agon-tag-trends-caption {
    contenu centré (nuage, switches) ne bouge pas : 70px + 62px. */
 body.is-standalone.page-home-mobile .agon-tag-trends-section {
   padding-bottom: 132px;
-}
-
-/* En PWA mobile, la section des bulles est normalement centrée verticalement. Le cadre
-   Ma mémoire est 100px plus court que les nuages Actu/Agôn : ce centrage le repoussait donc
-   vers le bas et créait un grand vide sous Trier/Rechercher. Dans ce mode seulement, on
-   l'ancre au début de la zone disponible ; le cadre, ses galaxies/neurones et le sélecteur
-   restent ainsi groupés et retrouvent le même départ visuel que les deux autres modes. */
-body.is-standalone.page-home-mobile.agon-memoire-cloud-mode .agon-tag-trends-section {
-  justify-content: flex-start;
 }
 
 body.is-standalone #agon-political-cloud-switch {
@@ -20024,25 +20016,11 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
 
 /* Dans le navigateur mobile, le cadre remontait légèrement plus haut que dans
    l'application standalone. Décale seulement le cloud (cadre + bulles/galaxies/
-   neurones) de 8px vers le bas, sans toucher aux boutons qui suivent ni au desktop. */
+   neurones) de 14px vers le bas, sans toucher aux boutons qui suivent ni au desktop. */
 @media (max-width: 768px) {
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone) .agon-tag-trends-cloud {
-    top: 8px;
+    top: 14px;
   }
-}
-
-/* Mode "Ma mémoire" dans ce contexte (agon-mobile-cloud-viewport, l'appareil réel utilisé sur
-   mobile) : la règle ci-dessus (min-height:548px, spécificité body+2 classes) battait
-   .agon-memoire-frame.agon-tag-trends-cloud (2 classes seulement, cf. plus bas) — le cadre
-   restait donc bloqué à 548px au lieu de repasser à 460px comme prévu, ce qui rendait la
-   compensation +88px du switch (cf. .agon-tag-trends-cloud.agon-memoire-frame ~
-   .agon-cloud-mode-switch un peu plus bas) excessive : gros espace vide au lieu du chevauchement
-   d'origine (demande du 09/08/2026, "le cadre est censé être plus haut" — en fait c'est
-   l'inverse, il fallait le laisser redescendre à 460px). 3 classes ici (body + 2) bat les 2
-   classes de la règle ci-dessus. */
-body.agon-mobile-cloud-viewport .agon-tag-trends-cloud.agon-memoire-frame {
-  height: 448px;
-  min-height: 448px;
 }
 
 body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before {
@@ -25026,13 +25004,36 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 
 @media (max-width: 768px) {
   #agon-memoire-embed-after {
-    margin-top: -116px;
+    position: absolute;
+    left: 30px;
+    top: 437px;
+    margin: 0;
   }
 
-  /* En mode "Ma mémoire", garde le sélecteur juste sous le bord visible du cadre :
-     quelques pixels d'écart seulement, sans le grand vide d'une compensation positive. */
+  /* Le fil d'Ariane et la flèche restent visuellement dans le cadre mais sortent du flux :
+     ils ne peuvent ainsi plus pousser le cadre ou le sélecteur par rapport à Actu/Agôn. */
+  body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
+    position: absolute;
+    left: 30px;
+    right: 30px;
+    top: 70px;
+  }
+
+  /* Mêmes marges de sélecteur que les autres modes mobiles. */
   .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
-    margin-top: -12px !important;
+    margin-top: -47px !important;
+  }
+  body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
+    margin-top: -59px !important;
+  }
+
+  /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
+     et la flèche, positionnés en absolu, suivent exactement le même décalage. */
+  body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
+    top: 84px;
+  }
+  body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
+    top: 451px;
   }
 }
 
@@ -25095,6 +25096,17 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 #agon-tag-trends-cloud.agon-memoire-frame {
   height: 448px;
   min-height: 448px;
+}
+
+/* Sur l'accueil mobile, Ma mémoire reprend exactement le gabarit des cadres Actu/Agôn.
+   Cette règle est placée après la hauteur desktop spécifique ci-dessus afin de ne changer
+   ni la page Mon univers autonome ni l'affichage desktop. */
+@media (max-width: 768px) {
+  body.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
+    height: 548px;
+    min-height: 548px;
+    margin: 0 auto;
+  }
 }
 
 /* Liseré noir autour du cadre décoratif EXISTANT (.agon-tag-trends-cloud::before, hérité),
@@ -25515,6 +25527,23 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      mais peintes après en ordre DOM donc déjà au-dessus de toute façon) tout en étant
      garanti au-dessus du fond, quelle que soit la subtilité d'empilement en jeu. */
   z-index: 2;
+}
+
+/* Seules les deux extrémités du connecteur étoile → système solaire se
+   prolongent de 14px et passent au-dessus des anneaux. Son long segment central
+   garde le z-index historique : il ne peut pas recouvrir une autre bulle ou son texte. */
+.agon-tag-orbit-line-star-overlap {
+  z-index: 61;
+}
+
+.agon-tag-orbit-line-star-overlap-in {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 100%);
+}
+
+.agon-tag-orbit-line-star-overlap-out {
+  -webkit-mask-image: linear-gradient(to right, #000 0%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, transparent 100%);
 }
 
 /* Poussière d'étoiles autour des bulles système (cf. mon-univers.js drawMiniStarsForSystems) :

@@ -19489,12 +19489,21 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // Tag de filtre "Arènes ouvertes par agôn/la communauté" (cf. renderIndexActiveFilterTags,
     // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
     // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
-    // display:none en inline pour battre le display:flex que renderIndexActiveFilterTags pose
-    // lui-même en inline (un [hidden] seul aurait perdu face à ce style déjà posé).
+    // Sur mobile, conserve sa hauteur mais masque son contenu : display:none retirait environ
+    // 32px du flux et remontait le cadre Ma mémoire par rapport aux cadres Actu/Agôn. Sur
+    // desktop, où cet alignement mobile ne s'applique pas, il peut rester retiré du flux.
     const activeFiltersEl = document.getElementById('index-active-filters');
-    if (activeFiltersEl) activeFiltersEl.style.display = 'none';
+    if (activeFiltersEl) {
+      if (isAgonMobileCloudViewport()) {
+        activeFiltersEl.style.display = '';
+        activeFiltersEl.style.visibility = 'hidden';
+        activeFiltersEl.style.pointerEvents = 'none';
+      } else {
+        activeFiltersEl.style.display = 'none';
+      }
+    }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-star-connectors1').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-star-connectors3').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -19540,7 +19549,11 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
     // toggleAgonCloud (Actu/Agôn), le tag affiché doit refléter l'état à jour.
     const activeFiltersEl = document.getElementById('index-active-filters');
-    if (activeFiltersEl) activeFiltersEl.style.display = '';
+    if (activeFiltersEl) {
+      activeFiltersEl.style.display = '';
+      activeFiltersEl.style.visibility = '';
+      activeFiltersEl.style.pointerEvents = '';
+    }
     renderIndexActiveFilterTags();
   }
   // skipSync : utilisé par setAgonCloudMode quand on sort de "Ma mémoire" pour aller DIRECTEMENT
@@ -21375,7 +21388,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-star-connectors1");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-star-connectors3");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
