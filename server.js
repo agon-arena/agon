@@ -2593,7 +2593,10 @@ const EXTERNAL_PREVIEW_CACHE_MAX = 300;
 const EXTERNAL_PREVIEW_NO_IMAGE_RETRY_MS = 30 * 60 * 1000;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
-const DEBATES_API_CACHE_MAX = 50;
+// La page d'accueil possède une entrée par catégorie et par orientation politique. Cinquante
+// entrées ne suffisaient plus : les pages récentes évinçaient en boucle les catégories, qui
+// repartaient alors sur quatre lectures Supabase (debates + arguments + comments + votes).
+const DEBATES_API_CACHE_MAX = 160;
 let latestDebatesMetaCache = null;
 let latestDebatesMetaInFlight = null;
 const LATEST_DEBATES_META_CACHE_TTL_MS = 60 * 1000;
@@ -2702,7 +2705,14 @@ const NOTIFICATIONS_API_CACHE_TTL_MS = 120 * 1000;
 const NOTIFICATIONS_API_CACHE_MAX = 200;
 const NOTIFICATIONS_API_SELECT_COLUMNS = "id,type,message,debate_id,argument_id,comment_id,is_read,created_at";
 
-function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular", search = "" } = {}) {
+function getDebatesApiCacheKey({
+  limit = null,
+  offset = 0,
+  sort = "popular",
+  search = "",
+  category = "",
+  politicalGroup = ""
+} = {}) {
   const normalizedSort = ["popular", "recent", "old", "ideas"].includes(String(sort || ""))
     ? String(sort)
     : "popular";
@@ -2711,7 +2721,9 @@ function getDebatesApiCacheKey({ limit = null, offset = 0, sort = "popular", sea
     limit: Number.isFinite(limit) && limit > 0 ? limit : null,
     offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
     sort: normalizedSort,
-    search: String(search || "").trim().toLowerCase()
+    search: String(search || "").trim().toLowerCase(),
+    category: String(category || "").trim().toLowerCase(),
+    politicalGroup: String(politicalGroup || "").trim().toLowerCase()
   });
 }
 
@@ -6928,12 +6940,17 @@ app.get("/api/debates", async (req, res) => {
       limit: safeLimit,
       offset: safeOffset,
       sort: effectiveSortMode,
-      search: searchQuery
+      search: searchQuery,
+      category: categoryQuery,
+      politicalGroup: politicalGroupQuery
     });
     // Cache-Control: no-store ne concerne que le cache HTTP du navigateur : il
     // ne doit pas forcer une nouvelle lecture Supabase. Le bypass de données
     // reste volontaire et explicite via fresh=1.
-    const bypassCache = idsQuery.length > 0 || categoryQuery || politicalGroupQuery || req.query.fresh === "1";
+    // Catégorie/orientation font désormais partie de la clé : elles peuvent être mises en cache
+    // sans risque de mélanger deux carrousels. Avant ce correctif, chaque reconstruction de
+    // l'accueil contournait le cache pour toutes les catégories et relisait quatre tables.
+    const bypassCache = idsQuery.length > 0 || req.query.fresh === "1";
     const cachedResponse = bypassCache ? null : getCachedDebatesApiResponse(cacheKey);
 
     if (cachedResponse) {
@@ -8474,16 +8491,24 @@ const OPINION_ARTICLE_CLICKS_RETENTION_DAYS = 45;
 const RETENTION_DELETE_BATCH_SIZE = 500;
 const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
 
-async function pruneOldRows(table, retentionDays) {
+// excludeLikeColumn/excludeLikePattern : un QCM de notion doit survivre tant
+// qu'il reste dans la liste "Mes QCM" de quelqu'un (cf. user_notion_quizzes),
+// indépendamment de son âge — jamais purgé comme le reste, contrairement au
+// QCM actu d'avant (éphémère par nature). daily_quiz.slot et
+// daily_quiz_answers.question_id sont tous deux préfixés "notion:..." pour
+// ces lignes (cf. buildNotionQuestions), d'où l'exclusion par LIKE sur la
+// colonne concernée plutôt qu'une jointure.
+async function pruneOldRows(table, retentionDays, excludeLikeColumn = null, excludeLikePattern = null) {
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
   let totalDeleted = 0;
 
   for (let batch = 0; batch < RETENTION_DELETE_MAX_BATCHES_PER_RUN; batch++) {
-    const { data: staleRows, error: selectError } = await supabase
+    let query = supabase
       .from(table)
       .select("id")
-      .lt("created_at", cutoff)
-      .limit(RETENTION_DELETE_BATCH_SIZE);
+      .lt("created_at", cutoff);
+    if (excludeLikeColumn) query = query.not(excludeLikeColumn, "like", excludeLikePattern);
+    const { data: staleRows, error: selectError } = await query.limit(RETENTION_DELETE_BATCH_SIZE);
 
     if (selectError) {
       console.error(`[retention] ${table} lecture :`, selectError.message);
@@ -8512,8 +8537,8 @@ async function runDataRetentionCleanup() {
   await pruneOldRows("page_visits", PAGE_VISITS_RETENTION_DAYS);
   await pruneOldRows("notification_events", NOTIFICATION_EVENTS_RETENTION_DAYS);
   await pruneOldRows("opinion_articles", OPINION_ARTICLES_RETENTION_DAYS);
-  await pruneOldRows("daily_quiz", DAILY_QUIZ_RETENTION_DAYS);
-  await pruneOldRows("daily_quiz_answers", DAILY_QUIZ_RETENTION_DAYS);
+  await pruneOldRows("daily_quiz", DAILY_QUIZ_RETENTION_DAYS, "slot", "notion:%");
+  await pruneOldRows("daily_quiz_answers", DAILY_QUIZ_RETENTION_DAYS, "question_id", "notion:%");
   await pruneOldRows("opinion_article_clicks", OPINION_ARTICLE_CLICKS_RETENTION_DAYS);
 }
 
@@ -12228,108 +12253,6 @@ const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
 const DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC = 4;
 const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 
-// Uniquement les événements "reviewed" (sources/résumés complets et
-// vérifiés, cf. validateEvent) — jamais un "draft" incomplet comme matière
-// première d'un QCM.
-async function fetchCeJourHistoireQuizCandidates() {
-  if (!historicalEventsRepository) return [];
-  const todayKey = parisDateKey();
-  const month = Number(todayKey.slice(5, 7));
-  const day = Number(todayKey.slice(8, 10));
-  const events = historicalEventsRepository.getByMonthDay(month, day);
-  return events.filter((e) => e && e.review_status === "reviewed" && String(e.summary_long || "").trim());
-}
-
-// Pioche dans les 7 rubriques de la page /eclairages (parallèle historique,
-// pensée philosophique, mécanisme sociologique, concept du jour, citation
-// du jour, œuvre d'art du jour, mot latin du jour) — un seul pool combiné
-// plutôt qu'un par rubrique, pour matcher la page qui les réunit déjà. Réutilise
-// generateIfNeeded de chaque service plutôt que de relire les tables
-// directement : idempotent (renvoie le contenu déjà publié s'il existe, ne
-// déclenche une génération que s'il manque), même comportement que
-// /api/<rubrique>/today. Chaque service est interrogé indépendamment (une
-// rubrique en échec n'empêche pas les autres de contribuer), puis les
-// éléments sont taggés par `type` pour un formatage adapté à leurs champs
-// propres dans le prompt (cf. formatEclairagesItemForPrompt). Sert à
-// retrouver côté serveur l'item exact visé par un clic "Mémoriser" (cf.
-// buildNotionQuestions), sans jamais faire confiance au contenu de l'item
-// soumis par le client.
-async function fetchEclairagesQuizCandidates() {
-  const [parallels, pensees, mecanismes, concepts, citations, oeuvres, latins] = await Promise.all([
-    (async () => {
-      try {
-        const result = await paralleleHistoriqueService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.parallels : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "parallele", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture parallèle historique :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await penseePhilosophiqueService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.pensees : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "pensee", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture pensée philosophique :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await mecanismeSociologiqueService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.mecanismes : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "mecanisme", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture mécanisme sociologique :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await conceptDuJourService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.concepts : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "concept", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture concept du jour :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await citationDuJourService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.citations : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "citation", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture citation du jour :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await oeuvreArtDuJourService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.oeuvres : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "oeuvre", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture œuvre d'art du jour :", error.message);
-        return [];
-      }
-    })(),
-    (async () => {
-      try {
-        const result = await latinDuJourService.generateIfNeeded(new Date());
-        const items = result?.status === "published" ? result.content?.latins : null;
-        return Array.isArray(items) ? items.map((item) => ({ type: "latin", ...item })) : [];
-      } catch (error) {
-        console.error("[daily-quiz:eclairages] lecture mot latin du jour :", error.message);
-        return [];
-      }
-    })()
-  ]);
-  return [...parallels, ...pensees, ...mecanismes, ...concepts, ...citations, ...oeuvres, ...latins];
-}
-
 // Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
 // mais champs "concept" propres à chaque rubrique — formatage par type plutôt
 // qu'un seul gabarit générique.
@@ -12560,6 +12483,54 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   return valid;
 }
 
+// QCM d'une seule notion (un événement "Ce jour dans l'Histoire" ou un item
+// Éclairages), généré à la demande au clic sur "Mémoriser" (cf.
+// POST /api/users/notion-quizzes) — jamais par lot ni planifié. `rawItem` est
+// l'objet brut déjà en mémoire côté client au moment du clic (mêmes champs
+// que ceux consommés par extractCultureGeneraleItemName/Detail et
+// formatCultureGeneraleItemForPrompt) ; `sourceId` est son identifiant
+// stable (current_topic_id pour un Éclairage, id pour un événement
+// historique), repris tel quel comme sourceDebateId des questions générées.
+async function buildNotionQuestions(sourceType, sourceId, rawItem) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+  const id = String(sourceId || "").trim();
+  if (!id) return [];
+  const item = { ...rawItem, type: sourceType, id, current_topic_id: id };
+
+  const quotaByItemId = new Map([[id, DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC]]);
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
+    return [];
+  }
+
+  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC, DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC);
+  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+    console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s).`);
+    return [];
+  }
+
+  const sourceName = extractCultureGeneraleItemName(item);
+  const sourceDetail = extractCultureGeneraleItemDetail(item);
+  const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
+  return validated.map((q, index) => ({
+    id: `notion:${sourceType}:${id}-q${index + 1}`,
+    ...q,
+    sourceType,
+    sourceScope,
+    sourceName,
+    sourceDetail
+  }));
+}
+
 // Décode l'id d'une repasse de répétition espacée ("cgreview-{sourceDebateId}",
 // cf. fetchCultureGeneraleReviewInjectionForToday) pour retrouver le
 // sourceDebateId d'origine.
@@ -12747,8 +12718,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
 }
 
 // Rubrique Éclairages -> service de lecture + clé du tableau de contenu
-// (mêmes services que fetchEclairagesQuizCandidates, mais en lecture seule
-// via getByDate plutôt qu'en génération) — utilisé par
+// (lecture seule via getByDate, jamais de génération) — utilisé par
 // resolveMissingAcquisSourceNames pour retrouver l'intitulé (concept,
 // mécanisme, auteur, œuvre...) des acquis générés avant l'ajout du champ
 // sourceName.
@@ -13917,6 +13887,165 @@ app.get("/api/daily-quiz/acquis", async (req, res) => {
     res.json({ acquis });
   } catch (error) {
     res.status(500).json({ acquis: [], error: error.message });
+  }
+});
+
+const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", ...CULTURE_GENERALE_ECLAIRAGES_TYPES]);
+
+// Clic sur "Mémoriser" (Éclairages ou Ce jour dans l'Histoire) : crée un QCM
+// indépendant et nommé sur cette seule notion, ou rejoint celui déjà généré
+// par un autre visiteur (contenu partagé, cf. buildNotionQuestions) — jamais
+// un deuxième appel IA pour la même notion le même jour. `item` est l'objet
+// brut de la notion, déjà en mémoire côté client au moment du clic.
+app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const sourceType = String(req.body?.sourceType || "").trim();
+    const sourceDebateId = String(req.body?.sourceDebateId || "").trim();
+    const item = req.body?.item;
+    const quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
+      ? String(req.body.quizDate).trim()
+      : parisDateKey();
+    if (!NOTION_QUIZ_SOURCE_TYPES.has(sourceType) || !sourceDebateId || sourceDebateId.length > 200 || !item || typeof item !== "object") {
+      return res.status(400).json({ ok: false, error: "Requête invalide." });
+    }
+    const slot = `notion:${sourceType}:${sourceDebateId}`;
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    let questions;
+    const { data: existingQuiz, error: existingQuizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (existingQuizError) throw new Error(existingQuizError.message);
+
+    if (existingQuiz) {
+      questions = existingQuiz.questions || [];
+    } else {
+      questions = await buildNotionQuestions(sourceType, sourceDebateId, item);
+      if (!questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
+
+      const { error: insertError } = await supabase.from("daily_quiz").insert({
+        quiz_date: quizDate,
+        slot,
+        questions,
+        source_debate_ids: []
+      });
+      if (insertError) {
+        // Course avec un autre visiteur ayant cliqué "Mémoriser" sur la même
+        // notion entre-temps : on relit sa génération plutôt que la nôtre.
+        if (insertError.code === "23505") {
+          const { data: raceRow, error: raceError } = await supabase
+            .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+          if (raceError) throw new Error(raceError.message);
+          questions = raceRow?.questions || questions;
+        } else {
+          throw new Error(insertError.message);
+        }
+      }
+    }
+
+    const { error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .upsert(
+        { user_id: user.id, quiz_date: quizDate, slot },
+        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+      );
+    if (linkError) throw new Error(linkError.message);
+
+    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+  } catch (error) {
+    console.error("[notion-quizzes] création :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Déclic sur "Mémoriser" : retire uniquement la ligne de la liste
+// personnelle, jamais le QCM partagé (daily_quiz) — recliquer plus tard sur
+// la même notion le même jour ne régénère donc rien.
+app.post("/api/users/notion-quizzes/remove", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+    const quizDate = String(req.body?.quizDate || "").trim();
+    const slot = String(req.body?.slot || "").trim();
+    if (!quizDate || !slot) return res.status(400).json({ ok: false, error: "Requête invalide." });
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const { error } = await supabase
+      .from("user_notion_quizzes")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot);
+    if (error) throw new Error(error.message);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[notion-quizzes] suppression :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Liste "Mes QCM" (onglet par défaut de /qcm-du-jour) : les notions que ce
+// visiteur a choisi de mémoriser, les plus récentes en premier. Lecture
+// seule, jamais d'upsert (même esprit que les autres routes GET /api/users/*).
+app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const { data: userRow, error: userError } = await supabase
+      .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
+    if (userError) throw new Error(userError.message);
+    if (!userRow) return res.json({ quizzes: [] });
+
+    const { data: links, error: linksError } = await supabase
+      .from("user_notion_quizzes")
+      .select("quiz_date, slot, added_at")
+      .eq("user_id", userRow.id)
+      .order("added_at", { ascending: false });
+    if (linksError) throw new Error(linksError.message);
+    if (!links || !links.length) return res.json({ quizzes: [] });
+
+    const quizDates = [...new Set(links.map((l) => l.quiz_date))];
+    const slots = [...new Set(links.map((l) => l.slot))];
+    const { data: quizRows, error: quizRowsError } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, slot, questions")
+      .in("quiz_date", quizDates)
+      .in("slot", slots);
+    if (quizRowsError) throw new Error(quizRowsError.message);
+    const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
+
+    const { data: answerRows, error: answersError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
+      supabase.from("daily_quiz_answers").select("quiz_date, question_id").eq("voter_key", validation.legacyKey).in("quiz_date", chunk));
+    if (answersError) throw new Error(answersError.message);
+    const answeredKeys = new Set((answerRows || []).map((a) => `${a.quiz_date}:${a.question_id}`));
+
+    const quizzes = [];
+    for (const link of links) {
+      const questions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
+      if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
+      const answeredCount = questions.filter((q) => answeredKeys.has(`${link.quiz_date}:${q.id}`)).length;
+      quizzes.push({
+        slot: link.slot,
+        quizDate: link.quiz_date,
+        label: questions[0]?.sourceName || null,
+        sourceType: questions[0]?.sourceType || null,
+        questionCount: questions.length,
+        answeredCount,
+        answered: answeredCount === questions.length
+      });
+    }
+    res.json({ quizzes });
+  } catch (error) {
+    console.error("[notion-quizzes] liste :", error.message);
+    res.status(500).json({ quizzes: [], error: error.message });
   }
 });
 

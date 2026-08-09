@@ -21315,8 +21315,20 @@ function initCarouselLazyLoad() {
     let rafPending = false;
     let apiFetching = false;
 
+    // Ne jamais précharger les 10-15 catégories hors écran au simple rendu/re-rendu de
+    // l'accueil. C'était la source des rafales observées dans les logs Supabase : chaque
+    // sentinelle courte déclenchait immédiatement /api/debates?category=..., puis le serveur
+    // lisait debates + arguments + comments + votes. L'IntersectionObserver réveille le même
+    // code juste avant que la rangée n'entre à l'écran, sans différence perceptible.
+    function isRowNearViewport() {
+      const rect = row.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      return rect.bottom >= -200 && rect.top <= viewportHeight + 200;
+    }
+
     function loadBatchIfNeeded() {
       rafPending = false;
+      if (!isRowNearViewport()) return;
       const pending = _carouselPendingBatches.get(key);
 
       if (pending && pending.length) {
@@ -21385,7 +21397,17 @@ function initCarouselLazyLoad() {
     }
 
     row.addEventListener('scroll', onScroll, { passive: true });
-    // Vérification immédiate si le carrousel est déjà court (< 5 cartes visibles)
+    if (typeof IntersectionObserver === 'function') {
+      const visibilityObserver = new IntersectionObserver(function(entries) {
+        if (!entries.some(function(entry) { return entry.isIntersecting; })) return;
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(loadBatchIfNeeded);
+      }, { rootMargin: '200px 0px' });
+      visibilityObserver.observe(row);
+    }
+    // Vérification immédiate uniquement pour les carrousels déjà visibles ; la garde placée
+    // dans loadBatchIfNeeded laisse les rangées hors écran au repos jusqu'à l'observer.
     requestAnimationFrame(loadBatchIfNeeded);
   });
 }
