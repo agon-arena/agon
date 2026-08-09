@@ -889,6 +889,8 @@ backBtn.addEventListener("click", () => {
 
 // ---- États de page ----
 function showStatus(kind) {
+  cloudEl.querySelector(".universe-empty-overlay")?.remove();
+
   // Sur l'accueil uniquement, la légende sous le sélecteur répète inutilement le rôle du
   // message d'état lorsque l'univers est vide. On la masque dans cet état précis, puis on la
   // réaffiche dès qu'un niveau peut être rendu (ou si le chargement échoue). La page autonome
@@ -925,9 +927,14 @@ function showStatus(kind) {
     }
     statusEl.textContent = "Chargement de ton univers…";
   } else if (kind === "empty") {
-    const p = document.createElement("p");
-    p.innerHTML = "Ton réseau neuronal artificiel de la mémoire est encore vide.<br><br>Réponds correctement au QCM Culture Générale pour faire apparaître tes premières étoiles.";
-    statusEl.appendChild(p);
+    statusEl.hidden = true;
+    const message = document.createElement("div");
+    // La classe générique d'overlay permet aussi au changement de mode
+    // Actu/Agôn de retirer ce message avec les anciens labels du nuage.
+    message.className = "agon-tag-label-overlay universe-empty-overlay";
+    message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:28px;text-align:center;color:rgba(255,255,255,.78);font:400 .98rem/1.55 Arial,Helvetica,sans-serif;letter-spacing:.01em;text-shadow:0 1px 3px rgba(0,0,0,.65);pointer-events:none;opacity:1;visibility:visible;transform:none;";
+    message.innerHTML = "Ton réseau neuronal artificiel de la mémoire est encore vide.<br><br>Commence la mémorisation en cliquant sur « Apprentissage » (bandeau du bas) : ton réseau neuronal commencera sa formation.";
+    cloudEl.appendChild(message);
   } else if (kind === "error") {
     const p = document.createElement("p");
     p.textContent = "Impossible de charger ton univers pour le moment.";
