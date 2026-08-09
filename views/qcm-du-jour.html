@@ -410,6 +410,13 @@
     .qcm-acquis-item + .qcm-acquis-item {
       margin-top: 0;
     }
+    /* Icône de rubrique sur chaque ligne de "Mes QCM" (liste plate, sans les
+       en-têtes de groupe repliables qui portent cette couleur ailleurs). */
+    .qcm-acquis-item > i.fa-solid:first-child {
+      flex: 0 0 auto;
+      font-size: 16px;
+      color: #516776;
+    }
     .qcm-acquis-name {
       flex: 1 1 auto;
       margin: 0;
@@ -873,6 +880,7 @@
   var answeredByQuestionId = {};
   var currentIndex = 0;
   var currentSlot = null;
+  var currentQuizDate = null;
   var currentCategory = null;
   var slotsStatus = null;
   // Jeton incrémenté à chaque loadSlot/loadAcquis : les callbacks async de
@@ -884,26 +892,22 @@
   // "flash" de l'écran de fin de QCM signalé sur l'onglet Mes acquis.
   var loadToken = 0;
 
-  // Trois onglets de haut niveau : "QCM du jour" (un seul créneau "daily",
-  // mélangeant questions actu et culture générale — cf. server.js
-  // generateDailyQuizIfNeeded), "Renforcement des connaissances" (pseudo-slot
-  // "renforcement", cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT : uniquement
-  // les repasses de répétition espacée dues aujourd'hui, propres à chaque
-  // visiteur, plus injectées dans le QCM du jour) et "Mes acquis" (lecture
-  // seule de la banque personnelle de culture générale, pas un QCM à
-  // répondre).
-  var CATEGORY_BY_SLOT = {
-    daily: 'quiz',
-    renforcement: 'renforcement'
-  };
-  // "acquis" n'est pas un créneau (aucune entrée dans DAILY_QUIZ_SLOTS côté
-  // serveur, pas de quiz à répondre) : un onglet à part, toujours visible
-  // (cf. isCategoryAvailable), qui affiche la banque de questions déjà
-  // réussies plutôt que de charger un QCM — voir loadAcquis ci-dessous.
-  var CATEGORY_ORDER = ['quiz', 'renforcement', 'acquis'];
-  var CATEGORY_LABELS = { quiz: 'QCM du jour', renforcement: 'Renforcement', acquis: 'Mes acquis' };
+  // Trois onglets de haut niveau : "Mes QCM" (les notions choisies au clic
+  // sur "Mémoriser" dans Éclairages/Ce jour dans l'Histoire — chacune un QCM
+  // indépendant et nommé, cf. server.js buildNotionQuestions, slot
+  // "notion:{sourceType}:{sourceId}"), "Renforcement des connaissances"
+  // (pseudo-slot "renforcement", cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT :
+  // uniquement les repasses de répétition espacée dues aujourd'hui) et "Mes
+  // acquis" (lecture seule de la banque personnelle de culture générale, pas
+  // un QCM à répondre).
+  // "acquis"/"mesqcm" ne sont pas des créneaux vérifiés côté serveur : deux
+  // onglets toujours visibles (cf. isCategoryAvailable), qui listent leur
+  // propre contenu plutôt que de charger un QCM directement — voir
+  // loadAcquis/loadMesQcm ci-dessous.
+  var CATEGORY_ORDER = ['mesqcm', 'renforcement', 'acquis'];
+  var CATEGORY_LABELS = { mesqcm: 'Mes QCM', renforcement: 'Renforcement', acquis: 'Mes acquis' };
   var QCM_SUBTITLE_BY_CATEGORY = {
-    quiz: "Teste-toi sur l'actualité du jour et la culture générale, en une vingtaine de questions. Les questions de culture générale (repérables à leur badge) alimentent aussi Mon univers.",
+    mesqcm: "Les QCM que tu as choisi de mémoriser sur Éclairages et Ce jour dans l'Histoire — chacun alimente Ma mémoire une fois réussi.",
     renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis.",
     acquis: "Les questions de culture générale auxquelles tu as déjà bien répondu, avec leur explication. 4 bonnes réponses à intervalles croissants (3 jours, 7 jours, 1 mois) pour les valider définitivement."
   };
@@ -922,16 +926,15 @@
     oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" },
     latin: { icon: 'fa-scroll', label: 'Mot latin du jour' }
   };
-  // "acquis" n'a pas de créneau à vérifier : toujours affiché, son propre
-  // état vide gère le cas "rien encore" (cf. renderAcquisEmpty). "quiz" ne
-  // dépend que de l'unique créneau "daily". "renforcement" dépend du
-  // pseudo-slot du même nom, personnalisé par visiteur (cf. server.js
-  // DAILY_QUIZ_REINFORCEMENT_SLOT) — disponible seulement s'il y a au moins
-  // une repasse due aujourd'hui pour ce visiteur.
+  // "acquis"/"mesqcm" n'ont pas de créneau à vérifier : toujours affichés,
+  // leur propre état vide gère le cas "rien encore" (cf. renderAcquisEmpty/
+  // renderMesQcmEmpty). "renforcement" dépend du pseudo-slot du même nom,
+  // personnalisé par visiteur (cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT) —
+  // disponible seulement s'il y a au moins une repasse due aujourd'hui pour
+  // ce visiteur.
   function isCategoryAvailable(category) {
-    if (category === 'acquis') return true;
-    var slotKey = category === 'renforcement' ? 'renforcement' : 'daily';
-    return !!(slotsStatus.slots[slotKey] && slotsStatus.slots[slotKey].available);
+    if (category === 'acquis' || category === 'mesqcm') return true;
+    return !!(slotsStatus.slots.renforcement && slotsStatus.slots.renforcement.available);
   }
 
   // Toujours les 3 boutons, même quand un créneau n'a pas
@@ -953,7 +956,8 @@
         btn.addEventListener('click', function () {
           if (category === currentCategory) return;
           if (category === 'acquis') { loadAcquis(); return; }
-          loadSlot(category === 'renforcement' ? 'renforcement' : 'daily');
+          if (category === 'mesqcm') { loadMesQcm(); return; }
+          loadSlot('renforcement', null, null);
         });
       }
       categorySwitcher.appendChild(btn);
@@ -1104,7 +1108,7 @@
     fetch('/api/daily-quiz/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, slot: currentSlot })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, slot: currentSlot, quizDate: currentQuizDate })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -1190,7 +1194,7 @@
     fetch('/api/daily-quiz/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, associationAnswer: pairsGuess })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, associationAnswer: pairsGuess })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -1299,7 +1303,7 @@
     fetch('/api/daily-quiz/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, optionIndexes: optionIndexes })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, optionIndexes: optionIndexes })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -1415,7 +1419,7 @@
     fetch('/api/daily-quiz/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, orderedItems: orderedItems })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, orderedItems: orderedItems })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -1702,27 +1706,94 @@
       });
   }
 
-  function loadSlot(slotKey) {
+  // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
+  // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
+  // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
+  function loadMesQcm() {
+    var myToken = ++loadToken;
+    currentCategory = 'mesqcm';
+    currentSlot = null;
+    currentQuizDate = null;
+    titleText.textContent = CATEGORY_LABELS.mesqcm;
+    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.mesqcm;
+    renderCategorySwitcher();
+
+    if (!voterKey) {
+      renderMesQcmEmpty();
+      return;
+    }
+    renderMessage('Chargement de tes QCM…');
+    fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (myToken !== loadToken) return;
+        renderMesQcmList(Array.isArray(data.quizzes) ? data.quizzes : []);
+      })
+      .catch(function () {
+        if (myToken === loadToken) renderMessage('Impossible de charger tes QCM pour le moment.');
+      });
+  }
+
+  function renderMesQcmEmpty() {
+    renderMessage("Tu n'as encore mémorisé aucune notion — va sur Éclairages ou Ce jour dans l'Histoire pour commencer.");
+  }
+
+  // Liste plate, triée du plus récent au plus ancien (déjà fait côté
+  // serveur) — pas de regroupement par rubrique comme "Mes acquis" : chaque
+  // ligne est un QCM nommé et indépendant, pas une notion parmi d'autres
+  // dans la même rubrique.
+  function renderMesQcmList(quizzes) {
+    if (!quizzes.length) { renderMesQcmEmpty(); return; }
+    var html = '<div class="qcm-acquis-list">';
+    quizzes.forEach(function (q, index) {
+      var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+      var badgeHtml = q.answered
+        ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Terminé</span>'
+        : '<span class="qcm-acquis-badge">' + q.answeredCount + ' / ' + q.questionCount + '</span>';
+      html += '<button type="button" class="qcm-acquis-item" data-mesqcm-index="' + index + '">';
+      html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i>';
+      html += '<p class="qcm-acquis-name">' + escapeHtml(q.label || meta.label) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
+      html += '</button>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
+        loadSlot(q.slot, q.quizDate, q.label);
+      });
+    });
+  }
+
+  // `quizDate` : un QCM de notion vit sous sa date de création, jamais
+  // forcément aujourd'hui (cf. server.js resolveDailyQuizRequestDate) — null
+  // pour "renforcement", toujours calculé sur aujourd'hui côté serveur.
+  // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
+  // la place de "Connaissances" générique.
+  function loadSlot(slotKey, quizDate, label) {
     var myToken = ++loadToken;
     currentSlot = slotKey;
-    currentCategory = CATEGORY_BY_SLOT[slotKey] || currentCategory;
+    currentQuizDate = quizDate || null;
+    currentCategory = slotKey === 'renforcement' ? 'renforcement' : 'mesqcm';
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
-    titleText.textContent = 'Connaissances';
-    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || QCM_SUBTITLE_BY_CATEGORY.quiz;
+    titleText.textContent = label || 'Connaissances';
+    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || '';
     renderCategorySwitcher();
     renderMessage('Chargement du QCM…');
 
-    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
+    var dateParam = currentQuizDate ? '&date=' + encodeURIComponent(currentQuizDate) : '';
+    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + dateParam + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
+        if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {
           renderMessage(currentCategory === 'renforcement'
             ? 'Aucune repasse due aujourd’hui — reviens plus tard.'
-            : 'Ce QCM n’est pas encore prêt, reviens un peu plus tard.');
+            : 'Ce QCM est introuvable.');
           return;
         }
         if (!voterKey) {
@@ -1730,7 +1801,7 @@
           renderQuestion();
           return;
         }
-        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey), { cache: 'no-store' })
+        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey) + dateParam, { cache: 'no-store' })
           .then(function (res) { return res.json(); })
           .then(function (data) {
             if (myToken !== loadToken) return;
@@ -1756,19 +1827,23 @@
     fetch('/api/daily-quiz/status' + (voterKey ? '?voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (statusData) {
-        slotsStatus = statusData && statusData.slots ? statusData : { slots: {}, defaultSlot: null };
-        if (!slotsStatus.defaultSlot) {
-          // QCM du jour pas encore prêt : "Mes acquis" reste consultable
-          // (isCategoryAvailable le garantit toujours) — on l'ouvre
-          // directement plutôt que de bloquer sur un message sans issue, cf.
-          // demande utilisateur du 04/08/2026.
-          loadAcquis();
+        slotsStatus = statusData && statusData.slots ? statusData : { slots: {} };
+        // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
+        // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
+        // notion précis plutôt que la liste "Mes QCM". Sans ce paramètre
+        // (accès normal via le bouton "Connaissances"), "Mes QCM" reste
+        // l'onglet ouvert par défaut — rien d'automatique au-delà.
+        var params = new URLSearchParams(window.location.search);
+        var requestedSlot = params.get('slot');
+        if (requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+          loadSlot(requestedSlot, params.get('date'), params.get('label'));
           return;
         }
-        loadSlot(slotsStatus.defaultSlot);
+        loadMesQcm();
       })
       .catch(function () {
-        renderMessage('Impossible de charger Connaissances pour le moment.');
+        slotsStatus = { slots: {} };
+        loadMesQcm();
       });
   }
 

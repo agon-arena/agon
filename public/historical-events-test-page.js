@@ -73,18 +73,13 @@
     }
   }
 
-  // Personnalisation du QCM Culture Générale (cf. server.js GET/POST
-  // /api/users/culture-generale-rubrics) : une case par bloc France/Europe/
-  // Monde, directement sur cette page plutôt que dans un réglage séparé.
-  // rubricPrefsCache mémorise le tableau complet (rubriques Histoire ET
-  // Éclairages, gérées sur /eclairages) une fois chargé, pour ne refaire un
-  // GET qu'une fois par visite malgré les rendus répétés à chaque changement
-  // de date — mais toujours fusionné avec les rubriques hors de cette page
-  // au moment de sauvegarder (POST remplace le tableau complet, jamais un
-  // patch), pour ne jamais écraser les préférences Éclairages.
-  var rubricPrefsCache = null;
-  var rubricPrefsFetchPromise = null;
-  var rubricSaveToken = 0;
+  // Clic sur "Mémoriser" (cf. server.js POST /api/users/notion-quizzes) :
+  // crée un QCM indépendant et nommé sur cet événement précis (ou rejoint
+  // celui déjà généré par un autre visiteur), qui apparaît dans "Mes QCM" sur
+  // /qcm-du-jour. sourceType est toujours "histoire" (jamais scindé par
+  // France/Europe/Monde ici — cette distinction ne servait qu'à l'ancien
+  // filtrage par rubrique, cf. server.js sourceScope) : l'id de l'événement
+  // (event.id) suffit à lui seul à distinguer chaque QCM de notion.
   function setMemorizeButtonState(btn, active) {
     btn.classList.toggle("is-active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
@@ -92,11 +87,17 @@
     if (label) label.textContent = active ? "Mémorisé" : "Mémoriser";
   }
 
-  // Navigue vers /qcm-du-jour (jamais Ma mémoire, lecture seule) — relais vers la modale
-  // du parent en iframe (cette page ne charge pas script.min.js, pas d'openDebateIframeModal
-  // disponible ici : on réplique juste le message que cette fonction poste, cf. script.js).
-  function goToQcm() {
-    var url = "/qcm-du-jour";
+  function setMemorizeButtonLoading(btn, loading) {
+    btn.disabled = loading;
+    btn.classList.toggle("is-loading", loading);
+  }
+
+  // Navigue vers le QCM précis qui vient d'être créé (jamais Ma mémoire, lecture seule) —
+  // relais vers la modale du parent en iframe (cette page ne charge pas script.min.js, pas
+  // d'openDebateIframeModal disponible ici : on réplique juste le message que cette fonction
+  // poste, cf. script.js).
+  function goToQcm(slot, quizDate, label) {
+    var url = "/qcm-du-jour?slot=" + encodeURIComponent(slot) + "&date=" + encodeURIComponent(quizDate) + "&label=" + encodeURIComponent(label);
     if (window.self !== window.top) {
       try {
         window.parent.postMessage({
@@ -110,22 +111,21 @@
     }
   }
 
-  // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
-  // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
-  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — "Faire le
-  // QCM" mène donc vers /qcm-du-jour (où la question sur cette notion apparaît désormais,
-  // la rubrique venant d'être cochée), jamais vers Ma mémoire qui n'est qu'un affichage en
-  // lecture seule de ce qui est déjà acquis. Texte construit via createElement/textContent
-  // (jamais innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle
-  // direct.
-  function showMemorizeExplainerModal(notionName) {
+  // Popup affichée une fois le QCM généré (jamais à la désactivation) : le
+  // clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne réponse
+  // au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) —
+  // "Faire le QCM" mène donc directement vers ce QCM précis, jamais vers Ma
+  // mémoire qui n'est qu'un affichage en lecture seule de ce qui est déjà
+  // acquis. Texte construit via createElement/textContent (jamais innerHTML) :
+  // notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  function showMemorizeExplainerModal(notionName, slot, quizDate) {
     var overlay = document.createElement("div");
     overlay.className = "het-memorize-explainer-overlay";
     var modal = document.createElement("div");
     modal.className = "het-memorize-explainer-modal";
     var text = document.createElement("p");
     text.className = "het-memorize-explainer-text";
-    text.appendChild(document.createTextNode("Cette rubrique est ajoutée à ton QCM Culture Générale personnalisé. Réponds correctement aux questions sur « " + notionName + " » pour la mémoriser durablement dans Ma mémoire."));
+    text.appendChild(document.createTextNode("Le QCM « " + notionName + " » a été créé — réponds-y pour le mémoriser durablement dans Ma mémoire."));
     var qcmBtn = document.createElement("button");
     qcmBtn.type = "button";
     qcmBtn.className = "het-memorize-explainer-qcm";
@@ -150,65 +150,84 @@
     closeBtn.addEventListener("click", close);
     qcmBtn.addEventListener("click", function () {
       close();
-      goToQcm();
+      goToQcm(slot, quizDate, notionName);
     });
   }
 
-  function syncRubricToggles() {
-    var buttons = document.querySelectorAll(".het-rubric-memorize-btn[data-rubric]");
+  function memorizeEvent(btn, event, voterKey) {
+    var notionName = event.title || "cet événement";
+    var sourceDebateId = event && event.id;
+    if (!sourceDebateId) return;
+
+    setMemorizeButtonLoading(btn, true);
+    fetch("/api/users/notion-quizzes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ legacyKey: voterKey, sourceType: "histoire", sourceDebateId: String(sourceDebateId), item: event })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        setMemorizeButtonLoading(btn, false);
+        if (!data.ok) return;
+        setMemorizeButtonState(btn, true);
+        btn.setAttribute("data-quiz-slot", data.slot);
+        btn.setAttribute("data-quiz-date", data.quizDate);
+        showMemorizeExplainerModal(data.label || notionName, data.slot, data.quizDate);
+      })
+      .catch(function () { setMemorizeButtonLoading(btn, false); });
+  }
+
+  // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —
+  // jamais le QCM partagé (cf. server.js POST /api/users/notion-quizzes/remove) :
+  // recliquer plus tard rejoint le même QCM sans régénérer.
+  function unmemorizeEvent(btn, voterKey) {
+    var slot = btn.getAttribute("data-quiz-slot");
+    var quizDate = btn.getAttribute("data-quiz-date");
+    if (!slot || !quizDate) { setMemorizeButtonState(btn, false); return; }
+    setMemorizeButtonState(btn, false); // optimiste, annulé si le retrait échoue
+    fetch("/api/users/notion-quizzes/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { if (!data.ok) setMemorizeButtonState(btn, true); })
+      .catch(function () { setMemorizeButtonState(btn, true); });
+  }
+
+  // Après rendu des blocs du jour (cf. renderEvents) : marque comme déjà
+  // mémorisé tout bouton dont l'événement fait partie de la liste "Mes QCM"
+  // de ce visiteur (cf. server.js GET /api/users/notion-quizzes), en
+  // comparant sur l'id de l'événement (data-source-id) plutôt que sur le
+  // texte affiché.
+  function syncMemorizeButtons() {
+    var buttons = document.querySelectorAll(".het-rubric-memorize-btn[data-source-id]");
     if (!buttons.length) return;
     var voterKey = getVoterKey();
     if (!voterKey) return;
 
-    function applyState(prefs) {
-      buttons.forEach(function (btn) {
-        setMemorizeButtonState(btn, prefs.indexOf(btn.getAttribute("data-rubric")) !== -1);
-      });
-    }
-
-    if (rubricPrefsCache) {
-      applyState(rubricPrefsCache);
-    } else {
-      if (!rubricPrefsFetchPromise) {
-        rubricPrefsFetchPromise = fetch("/api/users/culture-generale-rubrics?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            rubricPrefsCache = Array.isArray(data.rubrics) ? data.rubrics : [];
-            return rubricPrefsCache;
-          })
-          .catch(function () {
-            rubricPrefsCache = [];
-            return rubricPrefsCache;
-          });
-      }
-      rubricPrefsFetchPromise.then(applyState);
-    }
+    fetch("/api/users/notion-quizzes?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        buttons.forEach(function (btn) {
+          var suffix = ":" + btn.getAttribute("data-source-id");
+          var match = quizzes.filter(function (q) { return q.slot.indexOf("notion:histoire:") === 0 && q.slot.slice(-suffix.length) === suffix; })[0];
+          if (!match) return;
+          setMemorizeButtonState(btn, true);
+          btn.setAttribute("data-quiz-slot", match.slot);
+          btn.setAttribute("data-quiz-date", match.quizDate);
+        });
+      })
+      .catch(function () {});
 
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var myToken = ++rubricSaveToken;
+        var voterKey2 = getVoterKey();
+        if (!voterKey2) return;
         var nextActive = btn.getAttribute("aria-pressed") !== "true";
-        setMemorizeButtonState(btn, nextActive); // optimiste, annulé si l'enregistrement échoue
-        if (nextActive) showMemorizeExplainerModal(btn.getAttribute("data-notion-name") || "cette notion");
-        var owned = [];
-        buttons.forEach(function (b) { owned.push(b.getAttribute("data-rubric")); });
-        var otherRubrics = (rubricPrefsCache || []).filter(function (r) { return owned.indexOf(r) === -1; });
-        var selected = otherRubrics.slice();
-        buttons.forEach(function (b) { if (b.getAttribute("aria-pressed") === "true") selected.push(b.getAttribute("data-rubric")); });
-        fetch("/api/users/culture-generale-rubrics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ legacyKey: voterKey, rubrics: selected })
-        })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (myToken !== rubricSaveToken) return;
-            if (data.ok) rubricPrefsCache = selected;
-            else setMemorizeButtonState(btn, !nextActive);
-          })
-          .catch(function () {
-            if (myToken === rubricSaveToken) setMemorizeButtonState(btn, !nextActive);
-          });
+        if (nextActive) memorizeEvent(btn, JSON.parse(btn.getAttribute("data-item")), voterKey2);
+        else unmemorizeEvent(btn, voterKey2);
       });
     });
   }
@@ -480,14 +499,17 @@
 
     content.appendChild(body);
 
-    // Bouton de personnalisation du QCM Culture Générale (cf. syncRubricToggles) : en
-    // bas du contenu, une fois le texte lu, plutôt que près du titre replié — geste
-    // délibéré après lecture. Un visiteur qui ne clique nulle part garde le
-    // comportement par défaut (aperçu), cf. server.js applyCultureGeneraleRubricFilter.
+    // Bouton "Mémoriser" (cf. syncMemorizeButtons/memorizeEvent) : en bas du
+    // contenu, une fois le texte lu, plutôt que près du titre replié — geste
+    // délibéré après lecture. data-item porte l'objet brut de l'événement
+    // (sourceType toujours "histoire" à l'envoi, jamais scindé par zone
+    // géographique ici, cf. commentaire de memorizeEvent).
     var rubricButton = document.createElement("button");
     rubricButton.type = "button";
     rubricButton.className = "het-rubric-memorize-btn";
-    rubricButton.setAttribute("data-rubric", "histoire_" + categoryKey);
+    rubricButton.setAttribute("data-rubric", "histoire");
+    rubricButton.setAttribute("data-source-id", event && event.id != null ? String(event.id) : "");
+    rubricButton.setAttribute("data-item", JSON.stringify(event));
     rubricButton.setAttribute("aria-pressed", "false");
     rubricButton.setAttribute("data-notion-name", title || "cet événement");
     var rubricIcon = document.createElement("i");
@@ -571,7 +593,7 @@
       var event = events ? events[categoryKey] : null;
       if (event) cardsEl.appendChild(buildCategoryBlock(categoryKey, dateKey, event));
     });
-    syncRubricToggles();
+    syncMemorizeButtons();
   }
 
   function loadDate(dateKey) {

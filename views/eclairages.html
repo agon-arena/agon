@@ -178,12 +178,11 @@
     .ecl-block-toggle[aria-expanded="true"] .ecl-block-chevron {
       transform: rotate(180deg);
     }
-    /* Bouton de personnalisation du QCM Culture Générale (cf. server.js
-       GET/POST /api/users/culture-generale-rubrics) : en bas du contenu de
-       la rubrique, une fois le texte lu — jamais près du titre replié, pour
-       que ce soit un geste délibéré après lecture plutôt qu'une case cochée
-       à l'aveugle. Coloré une fois actif (cf. .is-active, posé par
-       syncRubricToggles). */
+    /* Bouton "Mémoriser" (cf. server.js POST /api/users/notion-quizzes) : en
+       bas du contenu de la rubrique, une fois le texte lu — jamais près du
+       titre replié, pour que ce soit un geste délibéré après lecture plutôt
+       qu'une case cochée à l'aveugle. Coloré une fois actif (cf. .is-active,
+       posé par initMemorizeButtons). */
     .ecl-rubric-memorize-btn {
       display: flex;
       align-items: center;
@@ -218,6 +217,13 @@
     }
     .ecl-rubric-memorize-btn.is-active:hover {
       background: #f0aa27;
+    }
+    /* Génération IA du QCM en direct au clic (jamais instantanée, contrairement
+       à l'ancienne case à cocher) : le bouton se grise le temps de la requête,
+       jamais de double-clic possible pendant la génération. */
+    .ecl-rubric-memorize-btn.is-loading {
+      opacity: 0.6;
+      cursor: wait;
     }
     .ecl-memorize-explainer-overlay {
       position: fixed;
@@ -1184,16 +1190,14 @@
     });
   };
 
-  // Personnalisation du QCM Culture Générale (cf. server.js GET/POST
-  // /api/users/culture-generale-rubrics) : une case par rubrique Éclairages,
-  // directement sur son bloc plutôt que dans un réglage séparé. Sauvegarde
-  // immédiate à chaque case cochée/décochée — `saveToken` ignore une réponse
-  // devenue obsolète si l'utilisateur coche plusieurs cases d'affilée.
-  // POST remplace le tableau complet côté serveur (pas un patch) : on ne
-  // renvoie donc jamais que les seules rubriques Éclairages de cette page —
-  // toujours fusionné avec les rubriques Histoire (gérées sur
-  // /historical-events-test) déjà enregistrées, jamais écrasées d'ici.
-  var rubricSaveToken = 0;
+  // Clic sur "Mémoriser" (cf. server.js POST /api/users/notion-quizzes) :
+  // crée un QCM indépendant et nommé sur cette seule notion (ou rejoint celui
+  // déjà généré par un autre visiteur), qui apparaît dans "Mes QCM" sur
+  // /qcm-du-jour. `data-item` (JSON de l'objet brut de la notion, posé par
+  // chaque rubrique au rendu, cf. plus bas) et `data-rubric` (déjà présent
+  // dans le HTML statique) portent tout ce dont ce bloc partagé a besoin —
+  // chaque rubrique reste une IIFE indépendante (cf. escapeHtml dupliqué
+  // partout ailleurs dans ce fichier), aucune variable JS partagée entre elles.
   function setMemorizeButtonState(btn, active) {
     btn.classList.toggle('is-active', active);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -1201,23 +1205,30 @@
     if (label) label.textContent = active ? 'Mémorisé' : 'Mémoriser';
   }
 
-  // Popup explicative affichée à l'activation d'un bouton "Mémoriser" (jamais à la
-  // désactivation) : le clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne
-  // réponse au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) — "Faire le
-  // QCM" mène donc vers /qcm-du-jour (où la question sur cette notion apparaît désormais,
-  // la rubrique venant d'être cochée), jamais vers Ma mémoire qui n'est qu'un affichage en
-  // lecture seule de ce qui est déjà acquis. Texte construit via createElement/textContent
-  // (jamais innerHTML) : notionName vient du contenu chargé depuis l'API, pas sous contrôle
-  // direct. openDebateIframeModal (script.min.js, déjà chargé sur cette page) gère elle-même
-  // le cas iframe (relais vers la modale du parent) vs page autonome.
-  function showMemorizeExplainerModal(notionName) {
+  function setMemorizeButtonLoading(btn, loading) {
+    btn.disabled = loading;
+    btn.classList.toggle('is-loading', loading);
+  }
+
+  // Popup affichée une fois le QCM généré (jamais à la désactivation) : le
+  // clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne réponse
+  // au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) —
+  // "Faire le QCM" mène donc directement vers ce QCM précis (qcmUrl, avec son
+  // slot/date/label), jamais vers Ma mémoire qui n'est qu'un affichage en
+  // lecture seule de ce qui est déjà acquis. Texte construit via
+  // createElement/textContent (jamais innerHTML) : notionName vient du
+  // contenu chargé depuis l'API, pas sous contrôle direct.
+  // openDebateIframeModal (script.min.js, déjà chargé sur cette page) gère
+  // elle-même le cas iframe (relais vers la modale du parent) vs page
+  // autonome.
+  function showMemorizeExplainerModal(notionName, qcmUrl) {
     var overlay = document.createElement('div');
     overlay.className = 'ecl-memorize-explainer-overlay';
     var modal = document.createElement('div');
     modal.className = 'ecl-memorize-explainer-modal';
     var text = document.createElement('p');
     text.className = 'ecl-memorize-explainer-text';
-    text.appendChild(document.createTextNode('Cette rubrique est ajoutée à ton QCM Culture Générale personnalisé. Réponds correctement aux questions sur « ' + notionName + ' » pour la mémoriser durablement dans Ma mémoire.'));
+    text.appendChild(document.createTextNode('Le QCM « ' + notionName + ' » a été créé — réponds-y pour le mémoriser durablement dans Ma mémoire.'));
     var qcmBtn = document.createElement('button');
     qcmBtn.type = 'button';
     qcmBtn.className = 'ecl-memorize-explainer-qcm';
@@ -1242,55 +1253,90 @@
     closeBtn.addEventListener('click', close);
     qcmBtn.addEventListener('click', function () {
       close();
-      if (typeof openDebateIframeModal === 'function') openDebateIframeModal('/qcm-du-jour');
-      else window.location.href = '/qcm-du-jour';
+      if (typeof openDebateIframeModal === 'function') openDebateIframeModal(qcmUrl);
+      else window.location.href = qcmUrl;
     });
   }
-  function initRubricToggles() {
+
+  function memorizeNotion(btn, voterKey) {
+    var notionName = btn.getAttribute('data-notion-name') || 'cette notion';
+    var rubric = btn.getAttribute('data-rubric');
+    var rawItem = btn.getAttribute('data-item');
+    var item;
+    try { item = rawItem ? JSON.parse(rawItem) : null; } catch (e) { item = null; }
+    var sourceDebateId = item && item.current_topic_id;
+    if (!item || !sourceDebateId) return;
+
+    setMemorizeButtonLoading(btn, true);
+    fetch('/api/users/notion-quizzes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        setMemorizeButtonLoading(btn, false);
+        if (!data.ok) return;
+        setMemorizeButtonState(btn, true);
+        btn.setAttribute('data-quiz-slot', data.slot);
+        btn.setAttribute('data-quiz-date', data.quizDate);
+        var label = data.label || notionName;
+        var qcmUrl = '/qcm-du-jour?slot=' + encodeURIComponent(data.slot) + '&date=' + encodeURIComponent(data.quizDate) + '&label=' + encodeURIComponent(label);
+        showMemorizeExplainerModal(label, qcmUrl);
+      })
+      .catch(function () { setMemorizeButtonLoading(btn, false); });
+  }
+
+  // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —
+  // jamais le QCM partagé (cf. server.js POST /api/users/notion-quizzes/remove) :
+  // recliquer plus tard rejoint le même QCM sans régénérer.
+  function unmemorizeNotion(btn, voterKey) {
+    var slot = btn.getAttribute('data-quiz-slot');
+    var quizDate = btn.getAttribute('data-quiz-date');
+    if (!slot || !quizDate) { setMemorizeButtonState(btn, false); return; }
+    setMemorizeButtonState(btn, false); // optimiste, annulé si le retrait échoue
+    fetch('/api/users/notion-quizzes/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) { if (!data.ok) setMemorizeButtonState(btn, true); })
+      .catch(function () { setMemorizeButtonState(btn, true); });
+  }
+
+  function initMemorizeButtons() {
     var voterKey = typeof getKey === 'function' ? getKey() : null;
     var buttons = document.querySelectorAll('.ecl-rubric-memorize-btn[data-rubric]');
     if (!voterKey || !buttons.length) return;
-    var ownedRubrics = [];
-    buttons.forEach(function (btn) { ownedRubrics.push(btn.getAttribute('data-rubric')); });
-    var otherRubrics = []; // rubriques hors de cette page (Histoire), reçues au premier GET
 
-    fetch('/api/users/culture-generale-rubrics?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+    fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        var current = Array.isArray(data.rubrics) ? data.rubrics : [];
-        otherRubrics = current.filter(function (r) { return ownedRubrics.indexOf(r) === -1; });
-        buttons.forEach(function (btn) { setMemorizeButtonState(btn, current.indexOf(btn.getAttribute('data-rubric')) !== -1); });
+        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        buttons.forEach(function (btn) {
+          var prefix = 'notion:' + btn.getAttribute('data-rubric') + ':';
+          var match = quizzes.filter(function (q) { return q.slot.indexOf(prefix) === 0; })[0];
+          if (!match) return;
+          setMemorizeButtonState(btn, true);
+          btn.setAttribute('data-quiz-slot', match.slot);
+          btn.setAttribute('data-quiz-date', match.quizDate);
+        });
       })
       .catch(function () {});
 
     buttons.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var myToken = ++rubricSaveToken;
         var nextActive = btn.getAttribute('aria-pressed') !== 'true';
-        setMemorizeButtonState(btn, nextActive); // optimiste, annulé si l'enregistrement échoue
-        if (nextActive) showMemorizeExplainerModal(btn.getAttribute('data-notion-name') || 'cette notion');
-        var selected = otherRubrics.slice();
-        buttons.forEach(function (b) { if (b.getAttribute('aria-pressed') === 'true') selected.push(b.getAttribute('data-rubric')); });
-        fetch('/api/users/culture-generale-rubrics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ legacyKey: voterKey, rubrics: selected })
-        })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (myToken !== rubricSaveToken) return;
-            if (!data.ok) setMemorizeButtonState(btn, !nextActive);
-          })
-          .catch(function () {
-            if (myToken === rubricSaveToken) setMemorizeButtonState(btn, !nextActive);
-          });
+        if (nextActive) memorizeNotion(btn, voterKey);
+        else unmemorizeNotion(btn, voterKey);
       });
     });
   }
 
   function init() {
     if (panel && typeof panel.focus === 'function') panel.focus();
-    initRubricToggles();
+    initMemorizeButtons();
   }
 
   if (document.readyState === 'loading') {
@@ -1437,7 +1483,10 @@
     if (!parallels.length) { renderError(); return; }
     body.innerHTML = parallels.map(function (p, i) { return renderOneParallel(p, i, parallels.length); }).join('');
     var parallelMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="parallele"]');
-    if (parallelMemorizeBtn && parallels[0]) parallelMemorizeBtn.setAttribute('data-notion-name', parallels[0].historical_event_title || '');
+    if (parallelMemorizeBtn && parallels[0]) {
+      parallelMemorizeBtn.setAttribute('data-notion-name', parallels[0].historical_event_title || '');
+      parallelMemorizeBtn.setAttribute('data-item', JSON.stringify(parallels[0]));
+    }
   }
 
   function stopPolling() {
@@ -1745,7 +1794,10 @@
     if (!pensees.length) { renderError(); return; }
     body.innerHTML = pensees.map(function (p, i) { return renderOnePensee(p, i, pensees.length); }).join('');
     var penseeMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="pensee"]');
-    if (penseeMemorizeBtn && pensees[0]) penseeMemorizeBtn.setAttribute('data-notion-name', pensees[0].philosophical_concept || '');
+    if (penseeMemorizeBtn && pensees[0]) {
+      penseeMemorizeBtn.setAttribute('data-notion-name', pensees[0].philosophical_concept || '');
+      penseeMemorizeBtn.setAttribute('data-item', JSON.stringify(pensees[0]));
+    }
   }
 
   function stopPolling() {
@@ -2053,7 +2105,10 @@
     if (!mecanismes.length) { renderError(); return; }
     body.innerHTML = mecanismes.map(function (m, i) { return renderOneMecanisme(m, i, mecanismes.length); }).join('');
     var mecanismeMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="mecanisme"]');
-    if (mecanismeMemorizeBtn && mecanismes[0]) mecanismeMemorizeBtn.setAttribute('data-notion-name', mecanismes[0].sociological_concept || '');
+    if (mecanismeMemorizeBtn && mecanismes[0]) {
+      mecanismeMemorizeBtn.setAttribute('data-notion-name', mecanismes[0].sociological_concept || '');
+      mecanismeMemorizeBtn.setAttribute('data-item', JSON.stringify(mecanismes[0]));
+    }
   }
 
   function stopPolling() {
@@ -2373,7 +2428,10 @@
     if (!concepts.length) { renderError(); return; }
     body.innerHTML = concepts.map(function (c, i) { return renderOneConcept(c, i, concepts.length); }).join('');
     var conceptMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="concept"]');
-    if (conceptMemorizeBtn && concepts[0]) conceptMemorizeBtn.setAttribute('data-notion-name', concepts[0].concept_name || '');
+    if (conceptMemorizeBtn && concepts[0]) {
+      conceptMemorizeBtn.setAttribute('data-notion-name', concepts[0].concept_name || '');
+      conceptMemorizeBtn.setAttribute('data-item', JSON.stringify(concepts[0]));
+    }
   }
 
   function stopPolling() {
@@ -2675,7 +2733,10 @@
     if (!citations.length) { renderError(); return; }
     body.innerHTML = citations.map(function (c, i) { return renderOneCitation(c, i, citations.length); }).join('');
     var citationMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="citation"]');
-    if (citationMemorizeBtn && citations[0]) citationMemorizeBtn.setAttribute('data-notion-name', citations[0].quote_author || '');
+    if (citationMemorizeBtn && citations[0]) {
+      citationMemorizeBtn.setAttribute('data-notion-name', citations[0].quote_author || '');
+      citationMemorizeBtn.setAttribute('data-item', JSON.stringify(citations[0]));
+    }
   }
 
   function stopPolling() {
@@ -2978,7 +3039,10 @@
     if (!oeuvres.length) { renderError(); return; }
     body.innerHTML = oeuvres.map(function (o, i) { return renderOneOeuvre(o, i, oeuvres.length); }).join('');
     var oeuvreMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="oeuvre"]');
-    if (oeuvreMemorizeBtn && oeuvres[0]) oeuvreMemorizeBtn.setAttribute('data-notion-name', oeuvres[0].artwork_title || '');
+    if (oeuvreMemorizeBtn && oeuvres[0]) {
+      oeuvreMemorizeBtn.setAttribute('data-notion-name', oeuvres[0].artwork_title || '');
+      oeuvreMemorizeBtn.setAttribute('data-item', JSON.stringify(oeuvres[0]));
+    }
   }
 
   function stopPolling() {
@@ -3286,7 +3350,10 @@
     if (!latins.length) { renderError(); return; }
     body.innerHTML = latins.map(function (l, i) { return renderOneLatin(l, i, latins.length); }).join('');
     var latinMemorizeBtn = document.querySelector('.ecl-rubric-memorize-btn[data-rubric="latin"]');
-    if (latinMemorizeBtn && latins[0]) latinMemorizeBtn.setAttribute('data-notion-name', latins[0].latin_phrase || '');
+    if (latinMemorizeBtn && latins[0]) {
+      latinMemorizeBtn.setAttribute('data-notion-name', latins[0].latin_phrase || '');
+      latinMemorizeBtn.setAttribute('data-item', JSON.stringify(latins[0]));
+    }
   }
 
   function stopPolling() {

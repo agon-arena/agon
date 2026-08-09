@@ -86,6 +86,23 @@
     body {
       background: #243038;
     }
+    /* Filet de fond indépendant du loader : WebKit peut tronquer par intermittence
+       une couche position:fixed dans les derniers pixels du viewport standalone
+       pendant un refresh. Ce calque absolu, volontairement plus haut que le grand
+       viewport, reste derrière le loader mais devant toute l'interface (notamment
+       son bandeau blanc inférieur) et prolonge donc le même fond jusqu'en bas. */
+    html.agon-startup-active body::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      min-height: calc(100vh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 120px);
+      min-height: calc(100lvh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 120px);
+      z-index: 9998;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 50vh, #243038 0%, #101820 55%, #05070a 100%);
+    }
     .agon-startup-loader {
       position: fixed;
       top: 0;
@@ -999,34 +1016,6 @@ window.addEventListener("pageshow", function() {
   statusTimer = setInterval(refreshEclairagesAvailability, 60 * 1000);
 })();
 </script>
-<script>
-(function () {
-  // Le QCM actu a deux créneaux (matin ~9h, soir ~17h) : le bouton
-  // "Connaissances" pointe directement sur le créneau le plus récent
-  // disponible (le soir prime sur le matin une fois généré, cf.
-  // /api/daily-quiz/status côté serveur), mais garde toujours le libellé fixe
-  // "Connaissances" — jamais réécrit en "QCM du matin"/"QCM du soir".
-  fetch('/api/daily-quiz/status', { cache: 'no-store' })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      var slot = data && data.defaultSlot;
-      if (!slot || !(data.slots && data.slots[slot])) return;
-      var url = '/qcm-du-jour?slot=' + encodeURIComponent(slot);
-      ["home-qcm-du-jour-btn", "home-topbar-qcm-link"].forEach(function (id) {
-        var link = document.getElementById(id);
-        if (!link) return;
-        link.setAttribute('href', url);
-        link.onclick = function (e) {
-          e.preventDefault();
-          if (id === 'home-topbar-qcm-link' && typeof closeHomeTopbarMenu === 'function') closeHomeTopbarMenu();
-          openDebateIframeModal(url);
-        };
-      });
-    })
-    .catch(function () {});
-})();
-</script>
-
 <section id="debates-list" class="debates-list"></section>
 
   </section>

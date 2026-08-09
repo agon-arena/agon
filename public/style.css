@@ -11276,6 +11276,14 @@ body.is-standalone.page-home-mobile .agon-tag-trends-section {
   padding-bottom: 132px;
 }
 
+/* En mode "Ma mémoire", la légende (ou l'état vide) reste dans le flux : elle
+   n'a pas besoin de la compensation standalone réservée à la légende Actu
+   sortie du flux. Retrouve ainsi l'écart du mobile navigateur avant le bandeau
+   thématique situé sous la section. */
+body.is-standalone.page-home-mobile.agon-memoire-cloud-mode .agon-tag-trends-section {
+  padding-bottom: 0;
+}
+
 body.is-standalone #agon-political-cloud-switch {
   margin-bottom: 4px;
 }
@@ -25018,6 +25026,12 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     left: 30px;
     right: 30px;
     top: 20px;
+  }
+
+  /* En standalone, le fil d'Ariane reste entièrement au-dessus du cadre
+     "Ma mémoire". Cette surcharge mobile ne modifie pas son placement desktop. */
+  body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
+    top: -6px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */

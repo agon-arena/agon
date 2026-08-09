@@ -323,9 +323,9 @@ html {
   transform: rotate(180deg);
 }
 
-/* Bouton de personnalisation du QCM Culture Générale (cf. syncRubricToggles
-   dans historical-events-test-page.js) : en bas du contenu de chaque bloc,
-   une fois le texte lu. Coloré une fois actif (cf. .is-active). */
+/* Bouton "Mémoriser" (cf. memorizeEvent dans historical-events-test-page.js) :
+   en bas du contenu de chaque bloc, une fois le texte lu. Coloré une fois
+   actif (cf. .is-active). */
 .het-rubric-memorize-btn {
   display: flex;
   align-items: center;
@@ -364,6 +364,14 @@ html {
 
 .het-rubric-memorize-btn.is-active:hover {
   background: #f0aa27;
+}
+
+/* Génération IA du QCM en direct au clic (jamais instantanée, contrairement
+   à l'ancienne case à cocher) : le bouton se grise le temps de la requête,
+   jamais de double-clic possible pendant la génération. */
+.het-rubric-memorize-btn.is-loading {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .het-memorize-explainer-overlay {
