@@ -19335,16 +19335,40 @@ function afterAgonCloudSpinnerPaint(callback) {
 // 5s : fetchJSON n'a pas de timeout propre, donc si la requête reste bloquée,
 // on n'attend jamais indéfiniment (sans quoi le sablier de la bascule Bulles
 // Actu/Agôn tournerait à l'infini).
+function buildFallbackAgonBubbleTrends() {
+  const communityDebates = (Array.isArray(debatesCache) ? debatesCache : [])
+    .filter((debate) => !isAgonGeneratedDebate(debate))
+    .map((debate) => ({
+      debate,
+      score: Math.max(0,
+        Number(debate?.tension_score) ||
+        (Number(debate?.argument_count) || 0) + (Number(debate?.comment_count) || 0) * 0.5
+      )
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+  const maxScore = communityDebates.reduce((max, item) => Math.max(max, item.score), 0);
+  return communityDebates.map(({ debate, score }) => ({
+    tag: String(debate?.question || debate?.title || "Arène de la communauté").trim(),
+    subjectId: String(debate?.id || "").trim(),
+    count: score,
+    sizeWeight: maxScore > 0 ? score / maxScore : 0,
+    trend: Number(debate?.trend) || 0
+  })).filter((item) => item.tag && item.subjectId);
+}
+
 async function fetchAgonBubbleTrends() {
   try {
     const result = await Promise.race([
       fetchJSON(API + "/agon-bubbles"),
       new Promise((resolve) => setTimeout(() => resolve(null), 5000))
     ]);
-    return Array.isArray(result?.bubbles) ? result.bubbles : [];
+    const remoteTrends = Array.isArray(result?.bubbles) ? result.bubbles : [];
+    return remoteTrends.length ? remoteTrends : buildFallbackAgonBubbleTrends();
   } catch (error) {
     console.warn('Chargement des Bulles Agôn interrompu :', error);
-    return [];
+    return buildFallbackAgonBubbleTrends();
   }
 }
 
@@ -19549,7 +19573,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-neural-memory-empty-break').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-neural-memory-empty-break2').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
