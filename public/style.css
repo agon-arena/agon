@@ -19602,7 +19602,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   align-self: center;
   text-align: center;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 13px;
+  font-size: 0.98rem;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.02em;
@@ -25010,19 +25010,22 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     margin: 0;
   }
 
-  /* Le fil d'Ariane et la flèche restent visuellement dans le cadre mais sortent du flux :
-     ils ne peuvent ainsi plus pousser le cadre ou le sélecteur par rapport à Actu/Agôn. */
+  /* Le fil d'Ariane sort du flux afin de ne pas pousser le cadre ni le sélecteur. Sur mobile,
+     il est placé au-dessus du bord supérieur du cadre (comme sur desktop), avec une petite
+     respiration ; seule la flèche de retour reste à l'intérieur du cadre. */
   body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
     position: absolute;
     left: 30px;
     right: 30px;
-    top: 70px;
+    top: 20px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
+  .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
   .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
     margin-top: -47px !important;
   }
+  body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
   body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
     margin-top: -59px !important;
   }
@@ -25030,7 +25033,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
      et la flèche, positionnés en absolu, suivent exactement le même décalage. */
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 84px;
+    top: 34px;
   }
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
     top: 451px;
@@ -25634,17 +25637,20 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   line-height: 1.6;
 }
 
-/* Accueil mobile, mode Ma mémoire : le sélecteur de modes possède déjà ses 8px de marge
-   basse. On retire donc le padding supérieur de 40px et la marge native du <p> de l'état
-   vide, ainsi que les 4px supplémentaires de la légende lorsque l'univers est alimenté.
-   Les deux textes commencent ainsi au même niveau, juste sous le sélecteur. */
+/* Sur l'accueil, l'état vide reprend exactement les marges de la légende Bulles Agôn :
+   18px au-dessus / 40px en dessous sur desktop, puis 4px / 26px sur mobile. Le <p> créé
+   dynamiquement est remis à zéro pour que ses marges natives ne s'ajoutent pas à ces valeurs. */
+body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status {
+  padding: 18px 16px 40px;
+}
+
+body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p {
+  margin: 0;
+}
+
 @media (max-width: 768px) {
   body.page-home-mobile.agon-memoire-cloud-mode #universe-status {
-    padding-top: 0;
-  }
-
-  body.page-home-mobile.agon-memoire-cloud-mode #universe-status > p {
-    margin-top: 0;
+    padding: 4px 16px 26px;
   }
 
   body.page-home-mobile.agon-memoire-cloud-mode
