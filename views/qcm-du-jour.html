@@ -992,7 +992,10 @@
     try {
       var closeButton = window.parent.document.getElementById('debate-iframe-modal-close');
       if (!closeButton) return;
-      closeButton.style.display = visible ? 'flex' : 'none';
+      closeButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
+      closeButton.style.setProperty('opacity', visible ? '1' : '0', 'important');
+      closeButton.style.setProperty('visibility', visible ? 'visible' : 'hidden', 'important');
+      closeButton.style.setProperty('pointer-events', visible ? 'auto' : 'none', 'important');
       closeButton.setAttribute('aria-hidden', visible ? 'false' : 'true');
       closeButton.tabIndex = visible ? 0 : -1;
     } catch (e) {}
