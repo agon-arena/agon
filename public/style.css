@@ -7371,7 +7371,7 @@ body.page-debate .topbar::after {
 
   .page-home-mobile .agon-tag-trends-caption {
     transform: none;
-    font-size: 11px;
+    font-size: 0.98rem;
     position: relative;
     z-index: 30;
     margin-left: auto;
@@ -25632,6 +25632,26 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   padding: 40px 16px;
   font-size: 0.98rem;
   line-height: 1.6;
+}
+
+/* Accueil mobile, mode Ma mémoire : le sélecteur de modes possède déjà ses 8px de marge
+   basse. On retire donc le padding supérieur de 40px et la marge native du <p> de l'état
+   vide, ainsi que les 4px supplémentaires de la légende lorsque l'univers est alimenté.
+   Les deux textes commencent ainsi au même niveau, juste sous le sélecteur. */
+@media (max-width: 768px) {
+  body.page-home-mobile.agon-memoire-cloud-mode #universe-status {
+    padding-top: 0;
+  }
+
+  body.page-home-mobile.agon-memoire-cloud-mode #universe-status > p {
+    margin-top: 0;
+  }
+
+  body.page-home-mobile.agon-memoire-cloud-mode
+    .agon-tag-trends-section:has(#agon-tag-trends-cloud.agon-memoire-frame)
+    .agon-tag-trends-caption {
+    margin-top: 0;
+  }
 }
 .universe-status[hidden] {
   display: none;

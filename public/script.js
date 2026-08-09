@@ -19452,6 +19452,9 @@ function setMemoireCloudMode(enable, skipSync = false) {
   const afterEl = document.getElementById('agon-memoire-embed-after');
   const politicalSwitch = document.getElementById('agon-political-cloud-switch');
   const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  // showStatus("empty") masque cette légende en mode mémoire vide. Tout changement de mode
+  // repart d'un état visible afin que les textes Actu/Agôn ne restent jamais masqués.
+  if (caption) caption.hidden = false;
   if (_memoireCloudMode) {
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
@@ -19503,7 +19506,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-star-connectors3').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-memory-empty-caption').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -21388,7 +21391,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-star-connectors3");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-memory-empty-caption");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');

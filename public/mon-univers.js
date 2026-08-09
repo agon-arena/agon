@@ -1,7 +1,7 @@
 // Page "Mon univers" : réutilise le moteur de bulles existant (tagTrendCloud.js), jamais
 // dupliqué. Volontairement léger — pas de chargement de script.js (qui alourdirait la page
 // pour un seul besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260809-star-connectors3";
+import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260809-memory-empty-caption";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -889,6 +889,17 @@ backBtn.addEventListener("click", () => {
 
 // ---- États de page ----
 function showStatus(kind) {
+  // Sur l'accueil uniquement, la légende sous le sélecteur répète inutilement le rôle du
+  // message d'état lorsque l'univers est vide. On la masque dans cet état précis, puis on la
+  // réaffiche dès qu'un niveau peut être rendu (ou si le chargement échoue). La page autonome
+  // /mon-univers n'a pas ce marqueur ni cette légende partagée.
+  const embeddedMarker = document.getElementById("agon-memoire-embed-before");
+  const embeddedCaption = embeddedMarker
+    ? document.querySelector("#agon-tag-trends-section .agon-tag-trends-caption")
+    : null;
+  if (embeddedCaption && kind === "empty") embeddedCaption.hidden = true;
+  if (embeddedCaption && (kind === "none" || kind === "error")) embeddedCaption.hidden = false;
+
   if (kind === "none") {
     statusEl.hidden = true;
     cloudEl.hidden = false;
