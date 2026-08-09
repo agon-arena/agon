@@ -1907,9 +1907,9 @@ function ensurePushDeniedModal() {
   return modal;
 }
 
-function shouldShowPushInvite({ ignoreCooldown = false } = {}) {
+function shouldShowPushInvite({ ignoreCooldown = false, ignoreDismissed = false } = {}) {
   if (!isMobilePushInviteSurface()) return false;
-  if (lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
+  if (!ignoreDismissed && lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
 
   const scoreChangeShownAt = Number(lsGet(SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY) || 0);
   if (scoreChangeShownAt && Date.now() - scoreChangeShownAt < SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS) return false;
@@ -2179,7 +2179,7 @@ function openInstallModalFallback() {
 }
 
 function showPushInvite(reason = "action", options = {}) {
-  if (pushInviteToastEl || !shouldShowPushInvite(options)) return;
+  if (pushInviteToastEl || !shouldShowPushInvite(options)) return false;
 
   ensurePushInviteStyles();
   lsSet(PUSH_INVITE_LAST_SHOWN_KEY, String(Date.now()));
@@ -2268,6 +2268,7 @@ function showPushInvite(reason = "action", options = {}) {
 
   document.body.appendChild(overlay);
   pushInviteToastEl = overlay;
+  return true;
 }
 
 function showPushInviteAfterAction(reason = "action") {
@@ -35283,8 +35284,26 @@ function initPushMenuItem() {
 async function handlePushMenuClick() {
   closeHomeTopbarMenu();
 
-  if (!isStandaloneMode() && (!browserHasNotificationSurface() || !browserCanUsePushNotifications())) {
-    showPushInvite("menu");
+  const standalone = isStandaloneMode();
+  if (!browserCanUsePushNotifications()) {
+    if (!standalone) {
+      const inviteShown = showPushInvite("menu", { ignoreCooldown: true, ignoreDismissed: true });
+      if (!inviteShown) {
+        showReplacementSuccessMessage(
+          "Notifications indisponibles",
+          "Installe Agôn sur l’écran d’accueil depuis un navigateur compatible pour activer les alertes.",
+          null,
+          "🔔"
+        );
+      }
+    } else {
+      showReplacementSuccessMessage(
+        "Notifications indisponibles",
+        "Cette version du système ou du navigateur ne permet pas encore d’activer les alertes push.",
+        null,
+        "🔔"
+      );
+    }
     return;
   }
 
@@ -35323,6 +35342,9 @@ async function handlePushMenuClick() {
     showReplacementSuccessMessage("Notifications activées", "Tu recevras désormais les alertes en temps réel.", null, "🔔");
   } else if (Notification.permission === "granted") {
     showReplacementSuccessMessage("Erreur", "Les alertes n'ont pas pu être réactivées. Réessaie dans quelques instants.", null, "⚠️");
+  } else {
+    const modal = ensurePushDeniedModal();
+    if (modal) modal.style.display = "flex";
   }
 }
 
