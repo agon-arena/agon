@@ -456,6 +456,10 @@
             <i class="fa-regular fa-bell"></i>
             <span>Notifications</span>
           </a>
+          <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
+            <i id="push-menu-icon" class="fa-regular fa-bell"></i>
+            <span id="push-menu-label">Activer les alertes</span>
+          </button>
           <a href="/apprentissage" class="home-topbar-menu-item" id="home-topbar-learning-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/apprentissage')">
             <i class="fa-solid fa-list-check"></i>
             <span>Apprentissage</span>
@@ -479,10 +483,6 @@
           <button type="button" class="home-topbar-menu-item" onclick="closeHomeTopbarMenu(); openInstallModal();">
             <i class="fa-solid fa-mobile-screen"></i>
             <span>Télécharger l'application</span>
-          </button>
-          <button type="button" class="home-topbar-menu-item" id="push-menu-item" onclick="handlePushMenuClick()" style="display:none;">
-            <i id="push-menu-icon" class="fa-regular fa-bell"></i>
-            <span id="push-menu-label">Activer les alertes</span>
           </button>
           <a href="/about" class="home-topbar-menu-item" id="home-topbar-about-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/about')">
             <i class="fa-regular fa-circle-question"></i>
