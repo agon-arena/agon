@@ -1094,3 +1094,12 @@ async function loadUniverse() {
 }
 
 loadUniverse();
+
+// Ré-exécuté par script.js (setMemoireCloudMode) à chaque retour sur "Ma mémoire" après le
+// tout premier passage : l'import dynamique n'évalue ce module qu'une seule fois (mis en cache
+// via _memoireModuleLoadPromise), donc le loadUniverse() ci-dessus, en haut de fichier, ne
+// s'exécute lui aussi qu'une seule fois — sans cet export, repasser sur "Ma mémoire" après être
+// allé sur Bulles Actu/Agôn laissait leurs bulles (avec leurs propres satellites) telles quelles
+// à l'écran au lieu de les remplacer par les bulles galaxies/systèmes/étoiles (demande du
+// 09/08/2026, "ça mélange tout").
+export { loadUniverse as reinitMemoireEmbed };

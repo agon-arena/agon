@@ -19135,7 +19135,12 @@ function renderIndexActiveFilterTags() {
     `);
   }
 
-  if (currentTypeFilter && currentTypeFilter !== "all") {
+  // "community" n'est jamais un choix manuel de l'utilisateur (aucun bouton de filtre dédié,
+  // cf. syncIndexTypeFilterButtons) — posé uniquement par toggleAgonCloud() en entrant en
+  // Bulles Agôn. L'afficher comme un filtre actif retirable serait trompeur (rien à "retirer",
+  // le nuage lui-même définit ce filtre) et gênerait le repositionnement du cadre de bulles
+  // (cf. plus haut, qui s'accroche à ce tag pour se positionner juste en dessous).
+  if (currentTypeFilter && currentTypeFilter !== "all" && currentTypeFilter !== "community") {
     tags.push(`
       <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('type')" aria-label="Retirer le filtre ${escapeAttribute(getIndexTypeFilterLabel(currentTypeFilter))}">
         <span>${escapeHtml(getIndexTypeFilterLabel(currentTypeFilter))}</span>
@@ -19426,6 +19431,16 @@ function syncAgonCloudModeSwitch() {
   document.getElementById('agon-cloud-mode-actu')?.classList.toggle('agon-cloud-mode-segment-active', !_memoireCloudMode && !_agonCloudMode);
   document.getElementById('agon-cloud-mode-agon-btn')?.classList.toggle('agon-cloud-mode-segment-active', !_memoireCloudMode && _agonCloudMode);
   document.getElementById('agon-cloud-mode-memoire-btn')?.classList.toggle('agon-cloud-mode-segment-active', _memoireCloudMode);
+  // Bouton "Autres actus" masqué en Bulles Agôn / Ma mémoire (demande du 09/08/2026) : n'a de
+  // sens qu'en Bulles Actu, seul mode qui affiche réellement des arènes liées à l'actualité.
+  const tribunesBtn = document.querySelector('.agon-tribunes-btn');
+  if (tribunesBtn) tribunesBtn.hidden = _memoireCloudMode || _agonCloudMode;
+  // Légende "Les tendances de l'actualité française..." masquée en Ma mémoire uniquement
+  // (demande du 09/08/2026) : n'a aucun sens hors Bulles Actu/Agôn, qui reflètent l'actualité —
+  // pas touchée pour Bulles Agôn, qui réécrit déjà son propre texte dans ce même élément
+  // (cf. toggleAgonCloud, caption.innerHTML).
+  const caption = document.querySelector('.agon-tag-trends-caption');
+  if (caption) caption.hidden = _memoireCloudMode;
 }
 
 // Cible explicitement un mode (utilisé par les segments du sélecteur)
@@ -19476,8 +19491,21 @@ function setMemoireCloudMode(enable) {
     // .agon-memoire-frame) — demande du 08/08/2026 "le fond de ma mémoire n'est pas le bon" :
     // sans cette classe, le conteneur partagé gardait le fond par défaut de l'accueil.
     cloudContainer?.classList.add('agon-memoire-frame');
+    // Tag de filtre "Arènes ouvertes par agôn/la communauté" (cf. renderIndexActiveFilterTags,
+    // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
+    // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
+    // display:none en inline pour battre le display:flex que renderIndexActiveFilterTags pose
+    // lui-même en inline (un [hidden] seul aurait perdu face à ce style déjà posé).
+    const activeFiltersEl = document.getElementById('index-active-filters');
+    if (activeFiltersEl) activeFiltersEl.style.display = 'none';
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260808-embed1');
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260809-reinit1');
+    } else {
+      // Retour sur "Ma mémoire" après un premier passage : le module est déjà évalué (import
+      // mis en cache), son loadUniverse() de premier chargement ne se relance donc pas tout
+      // seul — sans cet appel explicite, les bulles Actu/Agôn affichées entre-temps restaient
+      // à l'écran par-dessus le nouveau fond (demande du 09/08/2026, "ça mélange tout").
+      _memoireModuleLoadPromise.then((mod) => mod.reinitMemoireEmbed?.());
     }
   } else {
     if (beforeEl) beforeEl.hidden = true;
@@ -19490,6 +19518,12 @@ function setMemoireCloudMode(enable) {
     const cloudEl = document.getElementById('agon-tag-trends-cloud');
     if (cloudEl) cloudEl.hidden = false;
     cloudEl?.classList.remove('agon-memoire-frame');
+    // Retire le display:none posé à l'entrée en mode mémoire puis redessine réellement le tag
+    // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
+    // toggleAgonCloud (Actu/Agôn), le tag affiché doit refléter l'état à jour.
+    const activeFiltersEl = document.getElementById('index-active-filters');
+    if (activeFiltersEl) activeFiltersEl.style.display = '';
+    renderIndexActiveFilterTags();
   }
   syncAgonCloudModeSwitch();
 }
@@ -19697,13 +19731,21 @@ function toggleAgonCloud() {
     // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
     syncCloudSectionHeight();
-    // Bulles plus petites (0.75) et espacées (bubbleGap 34, cf. renderTagTrendCloud/
+    // Bulles plus petites (0.6) et espacées (bubbleGap 14, cf. renderTagTrendCloud/
     // applyCompactBubbleLayout dans tagTrendCloud.js) qu'en mode Bulles Actu (bulles serrées
     // au contact par défaut) : laisse la place aux satellites "atome" sans qu'ils se
     // retrouvent systématiquement plafonnés par une bulle voisine.
+    // bubbleGap 14 (pas plus) : un gap trop généreux (essayé 34px) rend le placement de 10
+    // bulles infaisable sur le petit cadre mobile — applyCompactBubbleLayout n'a que 8
+    // tentatives pour réduire l'échelle et retombe sinon sur son repli qui ignore bubbleGap et
+    // ne garantit qu'un chevauchement brut <= 4px entre bulles (pas la marge demandée), ce qui
+    // pouvait suffire à faire apparaître un satellite sur une bulle voisine malgré le
+    // plafonnement de layoutBubbleSatellites (correct vis-à-vis des bulles telles que
+    // placées, mais impuissant si les bulles elles-mêmes se chevauchent trop). 14 = valeur déjà
+    // éprouvée par "Mon univers" (mon-univers.js) pour un nombre similaire de bulles.
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
       finishAgonCloudSwitchLoading(token, container);
-    }, undefined, undefined, 34, 0.75);
+    }, undefined, undefined, 14, 0.6);
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
 }

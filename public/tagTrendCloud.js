@@ -42,6 +42,9 @@ function computeRelativeIdeaOrbitCounts(bubbles) {
 // connue : c'est elle qui garantit qu'un satellite n'empiète jamais sur une bulle voisine.
 const AGON_SATELLITE_AXIS_EXTEND_PX = [9, 20, 13, 24, 11];
 const AGON_SATELLITE_SIZE_STEPS_PX = [7, 12, 9, 14, 10];
+// Opacité de base variée elle aussi (décorrélée via un 3e offset, +4) : certains satellites
+// plus estompés, d'autres plus francs, plutôt qu'une opacité unique pour tous.
+const AGON_SATELLITE_OPACITY_STEPS = [0.55, 0.95, 0.7, 0.85, 0.6];
 const AGON_SATELLITE_GOLDEN_ANGLE = 137.508; // angle d'or : répartition non régulière mais stable
 
 // Ajoute les points satellites (+ leur trait de liaison au noyau) à une bulle déjà construite.
@@ -62,6 +65,7 @@ function appendBubbleSatellites(bubble, orbitCount, seedIndex) {
     const angleDeg = phase + i * AGON_SATELLITE_GOLDEN_ANGLE;
     const extendPx = AGON_SATELLITE_AXIS_EXTEND_PX[i % AGON_SATELLITE_AXIS_EXTEND_PX.length];
     const sizePx = AGON_SATELLITE_SIZE_STEPS_PX[(i + 2) % AGON_SATELLITE_SIZE_STEPS_PX.length];
+    const opacity = AGON_SATELLITE_OPACITY_STEPS[(i + 4) % AGON_SATELLITE_OPACITY_STEPS.length];
 
     const line = document.createElement("span");
     line.className = "agon-tag-bubble-satellite-line";
@@ -75,6 +79,7 @@ function appendBubbleSatellites(bubble, orbitCount, seedIndex) {
     dot.style.height = sizePx + "px";
     dot.style.marginLeft = (-sizePx / 2) + "px";
     dot.style.marginTop = (-sizePx / 2) + "px";
+    dot.style.setProperty("--agon-satellite-opacity", String(opacity));
     dot.style.animationDelay = `${((i * 0.7) % 4).toFixed(2)}s`;
     dot.style.animationDuration = `${(7 + (i % 3) * 1.6).toFixed(2)}s`;
     wrap.append(line, dot);
@@ -107,11 +112,17 @@ const AGON_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
 
 // Repositionne les satellites de chaque bulle une fois le nuage entièrement placé (bulles +
 // bouton central) : la distance de chaque satellite à son noyau est plafonnée pour ne JAMAIS
-// empiéter sur une bulle voisine ni sur le bouton central — quitte à rester masqué sous sa
-// propre bulle (distance <= son propre rayon) dans les cas de chevauchement serré que
-// l'algorithme de placement autorise déjà entre bulles voisines (maxAllowedOverlap). Appelée
-// depuis applyCompactBubbleLayout, après que toutes les bulles ont leur position/taille finale
-// (bubble.style.left/top + --agon-tag-bubble-size).
+// empiéter sur une bulle voisine, sur le bouton central, NI sur un autre satellite (de la même
+// bulle ou d'une bulle voisine) — quitte à rester masqué sous sa propre bulle (distance <= son
+// propre rayon) dans les cas de chevauchement serré que l'algorithme de placement autorise déjà
+// entre bulles voisines (maxAllowedOverlap). Appelée depuis applyCompactBubbleLayout, après que
+// toutes les bulles ont leur position/taille finale (bubble.style.left/top + --agon-tag-bubble-size).
+//
+// Deux passes : la 1ère calcule la distance max de chaque satellite vis-à-vis des bulles/bouton
+// central uniquement (indépendant de l'ordre). La 2e reparcourt tous les satellites du nuage
+// dans un ordre fixe (bulle par bulle, satellite par satellite) et plafonne en plus chacun vis-
+// à-vis des satellites DÉJÀ placés avant lui dans cet ordre — jamais de conflit possible avec un
+// satellite déjà finalisé, donc aucun chevauchement satellite-satellite au final.
 function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
   function bubbleGeo(el) {
     const size = parseFloat(el.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
@@ -132,6 +143,9 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
     ? [...bubbleObstacles, { cx: centerX, cy: centerY, r: btnRadius, el: null }]
     : bubbleObstacles;
 
+  // Passe 1 : collecte tous les satellites du nuage avec leur distance max vis-à-vis des
+  // bulles/bouton central uniquement (pas encore des autres satellites).
+  const items = [];
   bubbles.forEach((bubble) => {
     const wrap = bubble.querySelector(".agon-tag-bubble-satellites");
     if (!wrap) return;
@@ -156,29 +170,48 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
         );
         maxDist = Math.min(maxDist, limit);
       });
-      maxDist = Math.max(0, maxDist);
 
-      const localX = geo.r + maxDist * dirX;
-      const localY = geo.r + maxDist * dirY;
-      dot.style.left = localX.toFixed(1) + "px";
-      dot.style.top = localY.toFixed(1) + "px";
-
-      const line = dot.previousElementSibling;
-      if (line && line.classList.contains("agon-tag-bubble-satellite-line")) {
-        // Le trait part du BORD du cercle (pas du centre) : ancré au point où le rayon croise
-        // le cercle de la bulle (distance geo.r), longueur = seulement le segment restant
-        // jusqu'au satellite. Auparavant tracé depuis le centre en comptant sur le fond opaque
-        // de la bulle pour masquer la portion intérieure — visible à travers les effets semi-
-        // transparents de la bulle (reflets, halo), donc remplacé par ce calcul exact.
-        const edgeX = geo.r + geo.r * dirX;
-        const edgeY = geo.r + geo.r * dirY;
-        const visibleLength = Math.max(0, maxDist - geo.r);
-        line.style.left = edgeX.toFixed(1) + "px";
-        line.style.top = edgeY.toFixed(1) + "px";
-        line.style.width = visibleLength.toFixed(1) + "px";
-        line.style.transform = `rotate(${((angleRad * 180) / Math.PI).toFixed(2)}deg)`;
-      }
+      items.push({ dot, geo, dirX, dirY, angleRad, dotRadius, maxDist: Math.max(0, maxDist) });
     });
+  });
+
+  // Passe 2 : plafonne en plus chaque satellite vis-à-vis des satellites déjà placés (dans
+  // l'ordre ci-dessus), puis pose sa position et son trait définitifs.
+  const placedDots = [];
+  items.forEach(({ dot, geo, dirX, dirY, angleRad, dotRadius, maxDist }) => {
+    let dist = maxDist;
+    placedDots.forEach((placed) => {
+      const limit = raySafeDistanceBeforeCircle(
+        geo.cx, geo.cy, dirX, dirY,
+        placed.cx, placed.cy,
+        placed.r + dotRadius + AGON_SATELLITE_CLEARANCE
+      );
+      dist = Math.min(dist, limit);
+    });
+    dist = Math.max(0, dist);
+
+    const localX = geo.r + dist * dirX;
+    const localY = geo.r + dist * dirY;
+    dot.style.left = localX.toFixed(1) + "px";
+    dot.style.top = localY.toFixed(1) + "px";
+
+    const line = dot.previousElementSibling;
+    if (line && line.classList.contains("agon-tag-bubble-satellite-line")) {
+      // Le trait part du BORD du cercle (pas du centre) : ancré au point où le rayon croise
+      // le cercle de la bulle (distance geo.r), longueur = seulement le segment restant
+      // jusqu'au satellite. Auparavant tracé depuis le centre en comptant sur le fond opaque
+      // de la bulle pour masquer la portion intérieure — visible à travers les effets semi-
+      // transparents de la bulle (reflets, halo), donc remplacé par ce calcul exact.
+      const edgeX = geo.r + geo.r * dirX;
+      const edgeY = geo.r + geo.r * dirY;
+      const visibleLength = Math.max(0, dist - geo.r);
+      line.style.left = edgeX.toFixed(1) + "px";
+      line.style.top = edgeY.toFixed(1) + "px";
+      line.style.width = visibleLength.toFixed(1) + "px";
+      line.style.transform = `rotate(${((angleRad * 180) / Math.PI).toFixed(2)}deg)`;
+    }
+
+    placedDots.push({ cx: geo.cx + dist * dirX, cy: geo.cy + dist * dirY, r: dotRadius });
   });
 }
 

@@ -5562,7 +5562,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const { data: acquisitions, error: acquisitionsError } = await supabase
       .from("user_article_acquisitions")
-      .select("id, solar_system_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name")
+      .select("id, solar_system_id, star_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name")
       .eq("user_id", user.id)
       .not("eclairage_type", "is", null);
     if (acquisitionsError) throw new Error(acquisitionsError.message);
@@ -5582,8 +5582,10 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     }
 
     const neededSolarSystemIds = new Set();
+    const neededStarIds = new Set();
     for (const a of eclairageAcquisitions) {
       if (a.solar_system_id) neededSolarSystemIds.add(a.solar_system_id);
+      if (a.star_id) neededStarIds.add(a.star_id);
     }
 
     let solarSystemById = new Map();
@@ -5594,6 +5596,16 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         .in("id", [...neededSolarSystemIds]);
       if (solarSystemsError) throw new Error(solarSystemsError.message);
       solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
+    }
+
+    let starById = new Map();
+    if (neededStarIds.size) {
+      const { data: starRows, error: starsError } = await supabase
+        .from("stars")
+        .select("id, name")
+        .in("id", [...neededStarIds]);
+      if (starsError) throw new Error(starsError.message);
+      starById = new Map((starRows || []).map((s) => [s.id, s]));
     }
 
     const galaxyBuckets = new Map();
@@ -5617,19 +5629,18 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       solarSystemBucket.stars.get(starKey).articles.push(payload);
     };
 
-    // Étoiles Culture Générale : le système solaire est déjà la notion précise elle-même,
-    // dédupliquée par IA à l'acquisition (cf. resolveCultureGeneraleSolarSystemWithAI, ex.
-    // "Résilience" reformulé un autre jour rejoint le même système) : regrouper les occurrences
-    // par système plutôt qu'une étoile par occurrence donne une seule étoile par notion,
-    // plusieurs jours différents confondus, nommée d'après le système (nom court) plutôt que
-    // la phrase descriptive complète d'une occurrence. Repli sur une étoile par occurrence
-    // uniquement si le système n'a pas pu être résolu (cas non classé). Jamais d'URL (aucune
-    // page dédiée à rouvrir) — handleItemActivate (mon-univers.js) ignore déjà silencieusement
-    // une url absente.
+    // Étoiles Culture Générale : la notion précise (ex. "Résilience"), dédupliquée par IA à
+    // l'acquisition (cf. resolveCultureGeneraleStarWithAI) à l'intérieur d'un système solaire
+    // qui reste une sous-catégorie durable de la galaxie (ex. "Philosophie") — même hiérarchie
+    // à deux niveaux que l'ancien système articles. Repli sur une étoile par occurrence
+    // uniquement si l'étoile n'a pas pu être résolue (cas non classé, ou acquisition
+    // antérieure à l'introduction de ce niveau). Jamais d'URL (aucune page dédiée à rouvrir)
+    // — handleItemActivate (mon-univers.js) ignore déjà silencieusement une url absente.
     for (const a of eclairageAcquisitions) {
       const solarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
-      const starKey = solarSystem ? `eclairage-system:${solarSystem.id}` : `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`;
-      const starName = solarSystem ? solarSystem.name : (a.eclairage_name || "Culture générale");
+      const star = a.star_id ? starById.get(a.star_id) : null;
+      const starKey = star ? `star:${star.id}` : `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`;
+      const starName = star ? star.name : (a.eclairage_name || "Culture générale");
       pushIntoTree(solarSystem, starKey, starName, {
         id: `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`,
         title: a.eclairage_name,
@@ -13067,22 +13078,6 @@ function getCultureGeneraleEclairagesSourceConfig(sourceType) {
 
 const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "concept", "citation", "oeuvre", "latin"];
 
-// Galaxie de chaque sourceType Culture Générale pour l'univers intellectuel personnel —
-// statique (jamais d'appel IA ici) : ces rubriques sont éditorialement stables, une table de
-// correspondance fixe suffit. "concept" et "citation" couvrent en pratique plusieurs domaines
-// (cf. DOMAIN_SLUGS dans prompts/concept-du-jour.js) : approximation assumée plutôt que de
-// faire dépendre l'univers intellectuel d'un champ IA supplémentaire à faire transiter jusqu'ici.
-const CULTURE_GENERALE_SOURCE_TYPE_GALAXY = {
-  histoire: "Histoire",
-  parallele: "Histoire",
-  pensee: "Philosophie",
-  mecanisme: "Sciences sociales",
-  concept: "Philosophie",
-  citation: "Lettres",
-  oeuvre: "Arts",
-  latin: "Langues"
-};
-
 // Index (mémoïsé le temps d'un appel) des événements "Ce jour dans l'Histoire"
 // par id — évènements globaux, jamais scopés à une date de génération de QCM.
 function buildHistoricalEventsIndex() {
@@ -14731,8 +14726,7 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   const sourceDebateId = question?.sourceDebateId ? String(question.sourceDebateId) : "";
   const sourceType = String(question?.sourceType || "").trim();
   const sourceName = String(question?.sourceName || "").trim();
-  const galaxy = CULTURE_GENERALE_SOURCE_TYPE_GALAXY[sourceType] || null;
-  if (!sourceDebateId || !galaxy || !sourceName) return;
+  if (!sourceDebateId || !sourceType || !sourceName) return;
 
   const { legacyKey, error: keyError } = validateLegacyKey(voterKey);
   if (keyError) {
@@ -14766,8 +14760,49 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
     return;
   }
 
-  const solarSystemId = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail);
-  if (!solarSystemId) return;
+  // Contenu partagé par tous les visiteurs le même jour : si un autre visiteur a déjà
+  // classé ce même (eclairage_type, eclairage_source_id) — système ET étoile déjà
+  // résolus — on réutilise directement, aucun appel IA. Seule la toute première bonne
+  // réponse de la journée sur un sujet donné déclenche une classification.
+  let solarSystemId = null;
+  let starId = null;
+  try {
+    const { data: reusable, error: reusableError } = await supabase
+      .from("user_article_acquisitions")
+      .select("solar_system_id, star_id")
+      .eq("eclairage_type", sourceType)
+      .eq("eclairage_source_id", sourceDebateId)
+      .not("solar_system_id", "is", null)
+      .not("star_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (reusableError) throw reusableError;
+    if (reusable) {
+      solarSystemId = reusable.solar_system_id;
+      starId = reusable.star_id;
+    }
+  } catch (error) {
+    console.warn("[daily quiz eclairage acquisitions] failed : recherche classification réutilisable —", error.message);
+  }
+
+  if (!solarSystemId || !starId) {
+    const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, question.sourceDetail);
+    const galaxy = classification ? getOpinionArticleGalaxy(classification.category, classification.categoryPrecision) : null;
+    if (!galaxy) return;
+
+    solarSystemId = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail);
+    if (!solarSystemId) return;
+
+    const { data: solarSystemRow, error: solarSystemRowError } = await supabase
+      .from("solar_systems")
+      .select("name")
+      .eq("id", solarSystemId)
+      .maybeSingle();
+    if (solarSystemRowError) console.warn("[daily quiz eclairage acquisitions] failed : lecture système solaire —", solarSystemRowError.message);
+
+    starId = await resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemRow?.name || sourceName, sourceType, sourceName, question.sourceDetail);
+    if (!starId) return;
+  }
 
   try {
     const { error } = await supabase
@@ -14779,7 +14814,8 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
           eclairage_source_id: sourceDebateId,
           eclairage_name: sourceName.slice(0, 300),
           eclairage_detail: flattenCultureGeneraleDetail(question.sourceDetail).slice(0, 2000) || null,
-          solar_system_id: solarSystemId
+          solar_system_id: solarSystemId,
+          star_id: starId
         },
         { onConflict: "user_id,eclairage_type,eclairage_source_id", ignoreDuplicates: true }
       );
