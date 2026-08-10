@@ -765,6 +765,18 @@ const starPanelBackdropEl = document.getElementById("universe-star-panel-backdro
 const starPanelBoxEl = starPanelEl?.querySelector(".universe-star-panel__box");
 let starPanelScrollHintEl = null;
 let starPanelResizeObserver = null;
+let starKnowledgeRequestToken = 0;
+
+const STAR_KNOWLEDGE_SOURCE_META = {
+  histoire: { icon: "fa-clock-rotate-left", label: "Ce jour dans l'Histoire" },
+  parallele: { icon: "fa-landmark", label: "Parallèle historique" },
+  pensee: { icon: "fa-brain", label: "Pensée philosophique" },
+  mecanisme: { icon: "fa-people-group", label: "Mécanisme sociologique" },
+  concept: { icon: "fa-shapes", label: "Concept du jour" },
+  citation: { icon: "fa-quote-left", label: "Citation du jour" },
+  oeuvre: { icon: "fa-palette", label: "Œuvre d'art du jour" },
+  latin: { icon: "fa-scroll", label: "Mot latin du jour" }
+};
 
 // Sur l'accueil, le panneau est déclaré dans #agon-tag-trends-section, qui crée son
 // propre contexte d'empilement (z-index:1). Le dock blanc peut alors passer devant
@@ -817,12 +829,14 @@ function formatAcquiredAt(iso) {
 }
 
 function showStarPanel(star) {
+  starKnowledgeRequestToken += 1;
   starPanelTitleEl.textContent = star.name || "Étoile";
   starPanelListEl.innerHTML = "";
   starPanelListEl.scrollTop = 0;
 
   (star.articles || []).forEach((article) => {
-    const hasFiche = Array.isArray(article.sourceDetail?.sections) && article.sourceDetail.sections.length > 0;
+    const hasFiche = (article.quizSlot && article.quizDate) ||
+      (Array.isArray(article.sourceDetail?.sections) && article.sourceDetail.sections.length > 0);
     const hasUrl = article.url && /^https?:\/\//i.test(String(article.url));
     const el = document.createElement(hasFiche ? "button" : (hasUrl ? "a" : "span"));
     el.className = "universe-star-panel__item";
@@ -868,9 +882,51 @@ function appendKnowledgeSheetText(parent, className, text) {
   parent.appendChild(el);
 }
 
-function showKnowledgeSheet(article, star) {
-  const detail = article.sourceDetail || {};
-  starPanelTitleEl.textContent = article.title || "Fiche connaissance";
+function appendKnowledgeCorrectedQuestion(parent, question, index) {
+  const item = document.createElement("div");
+  item.className = "qcm-fiche-corrige-item";
+
+  appendKnowledgeSheetText(item, "qcm-fiche-corrige-num", `Question ${index + 1}`);
+  appendKnowledgeSheetText(item, "qcm-fiche-corrige-question", question.question);
+
+  const type = question.type || "qcm";
+  const ordered = type === "ordre";
+  const list = document.createElement(ordered ? "ol" : "ul");
+  list.className = `qcm-fiche-corrige-list${ordered ? " qcm-fiche-corrige-ordered" : ""}`;
+
+  if (type === "association") {
+    (question.pairs || []).forEach((pair) => {
+      const li = document.createElement("li");
+      li.className = "is-correct";
+      li.textContent = `${pair.left || ""} → ${pair.right || ""}`;
+      list.appendChild(li);
+    });
+  } else if (ordered) {
+    (question.items || []).forEach((value) => {
+      const li = document.createElement("li");
+      li.className = "is-correct";
+      li.textContent = value;
+      list.appendChild(li);
+    });
+  } else {
+    const correctIndexes = type === "qcm_multi"
+      ? new Set(question.correctIndexes || [])
+      : new Set([Number(question.correctIndex)]);
+    (question.options || []).forEach((value, optionIndex) => {
+      const li = document.createElement("li");
+      if (correctIndexes.has(optionIndex)) li.className = "is-correct";
+      li.textContent = value;
+      list.appendChild(li);
+    });
+  }
+  if (list.children.length) item.appendChild(list);
+  appendKnowledgeSheetText(item, "qcm-fiche-corrige-explanation", question.explanation);
+  parent.appendChild(item);
+}
+
+function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
+  const detail = fullFiche?.sourceDetail || article.sourceDetail || {};
+  starPanelTitleEl.textContent = fullFiche?.label || article.title || "Fiche connaissance";
   starPanelListEl.innerHTML = "";
 
   const sheet = document.createElement("li");
@@ -883,12 +939,34 @@ function showKnowledgeSheet(article, star) {
   back.addEventListener("click", () => showStarPanel(star));
   sheet.appendChild(back);
 
-  appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-source", article.source);
-  appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-meta", detail.meta);
+  const sourceMeta = STAR_KNOWLEDGE_SOURCE_META[fullFiche?.sourceType || article.sourceType] || {
+    icon: "fa-book-open",
+    label: article.source || "Culture générale"
+  };
+  const rubric = document.createElement("p");
+  rubric.className = "qcm-fiche-rubric";
+  rubric.innerHTML = `<i class="fa-solid ${sourceMeta.icon}" aria-hidden="true"></i>`;
+  rubric.appendChild(document.createTextNode(` ${sourceMeta.label}`));
+  sheet.appendChild(rubric);
+
+  const themes = Array.isArray(fullFiche?.themes) ? fullFiche.themes.filter(Boolean) : [];
+  if (themes.length) {
+    const themeList = document.createElement("div");
+    themeList.className = "qcm-mesqcm-themes";
+    themes.forEach((theme) => {
+      const tag = document.createElement("span");
+      tag.className = "qcm-mesqcm-theme-tag";
+      tag.textContent = theme;
+      themeList.appendChild(tag);
+    });
+    sheet.appendChild(themeList);
+  }
+
+  appendKnowledgeSheetText(sheet, "qcm-fiche-meta", detail.meta);
 
   if (detail.image?.url) {
     const figure = document.createElement("figure");
-    figure.className = "universe-star-panel__knowledge-image";
+    figure.className = "qcm-fiche-image";
     const image = document.createElement("img");
     image.src = detail.image.url;
     image.alt = article.title || "Illustration de la connaissance";
@@ -899,25 +977,76 @@ function showKnowledgeSheet(article, star) {
       refreshStarPanelScrollHint();
     }, { once: true });
     figure.appendChild(image);
-    if (detail.image.credit) {
-      const caption = document.createElement("figcaption");
-      caption.textContent = detail.image.credit;
-      figure.appendChild(caption);
+    const caption = document.createElement("figcaption");
+    const captionText = `Image : ${detail.image.credit || (detail.image.source === "press" ? "source de l'actualité" : "Wikipedia")}`;
+    if (detail.image.pageUrl) {
+      const link = document.createElement("a");
+      link.href = detail.image.pageUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = captionText;
+      caption.appendChild(link);
+    } else {
+      caption.textContent = captionText;
     }
+    figure.appendChild(caption);
     sheet.appendChild(figure);
   }
 
   (detail.sections || []).forEach((section) => {
-    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-section-title", section.label);
-    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-text", section.text);
+    if (section.label) {
+      const heading = document.createElement("h3");
+      heading.className = "qcm-fiche-section-label";
+      heading.textContent = section.label;
+      sheet.appendChild(heading);
+    }
+    appendKnowledgeSheetText(sheet, "qcm-fiche-explanation", section.text);
   });
+
+  if (loading) {
+    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-loading", "Chargement de l’image et du QCM…");
+  } else if (Array.isArray(fullFiche?.questions) && fullFiche.questions.length) {
+    const questionsTitle = document.createElement("h3");
+    questionsTitle.className = "qcm-fiche-section-label";
+    questionsTitle.textContent = "Questions et réponses";
+    sheet.appendChild(questionsTitle);
+    fullFiche.questions.forEach((question, index) => appendKnowledgeCorrectedQuestion(sheet, question, index));
+  }
+
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "qcm-fiche-bottom-close";
+  close.textContent = "Fermer";
+  close.addEventListener("click", hideStarPanel);
+  sheet.appendChild(close);
 
   starPanelListEl.appendChild(sheet);
   starPanelListEl.scrollTop = 0;
   refreshStarPanelScrollHint();
 }
 
+async function showKnowledgeSheet(article, star) {
+  const requestToken = ++starKnowledgeRequestToken;
+  const hasFullFiche = article.quizSlot && article.quizDate;
+  renderKnowledgeSheet(article, star, null, hasFullFiche);
+  if (!hasFullFiche) return;
+
+  try {
+    const params = new URLSearchParams({ slot: article.quizSlot, date: article.quizDate });
+    const response = await fetch(`/api/users/notion-quizzes/fiche?${params.toString()}`, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
+    if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
+    renderKnowledgeSheet(article, star, data, false);
+  } catch (error) {
+    if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
+    console.warn("[mon-univers] fiche QCM complète indisponible :", error.message);
+    renderKnowledgeSheet(article, star, null, false);
+  }
+}
+
 function hideStarPanel() {
+  starKnowledgeRequestToken += 1;
   starPanelEl.hidden = true;
   starPanelScrollHintEl?.classList.add("is-hidden");
   document.body.classList.remove("universe-star-panel-open");
@@ -1177,7 +1306,7 @@ async function loadUniverse() {
   }
 
   try {
-    const response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`);
+    const response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`, { cache: "no-store" });
     if (!response.ok) throw new Error("http " + response.status);
     universeData = await response.json();
   } catch (error) {

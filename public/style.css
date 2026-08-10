@@ -25926,7 +25926,7 @@ span.universe-star-panel__item {
 .universe-star-panel__knowledge-sheet {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   color: #1f2933;
   background: #ffffff;
   border: none;
@@ -25947,6 +25947,7 @@ span.universe-star-panel__item {
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
+  margin-bottom: 12px;
 }
 .universe-star-panel__knowledge-back:hover,
 .universe-star-panel__knowledge-back:focus-visible {
@@ -25998,6 +25999,155 @@ span.universe-star-panel__item {
   padding: 6px 9px;
   color: #9ca3af;
   font-size: 0.72rem;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-rubric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: #516776;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.universe-star-panel__knowledge-sheet .qcm-mesqcm-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 10px;
+}
+.universe-star-panel__knowledge-sheet .qcm-mesqcm-theme-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef3f6;
+  color: #516776;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-meta {
+  margin: 0 0 12px;
+  color: #516776;
+  font-size: 13px;
+  font-weight: 600;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-image {
+  margin: 0 auto 14px;
+  width: min(280px, 100%);
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-image figcaption {
+  margin-top: 4px;
+  color: #9ca3af;
+  font-size: 11px;
+  text-align: right;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-image figcaption a {
+  color: #9ca3af;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-section-label {
+  margin: 14px 0 4px;
+  color: #243038;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-explanation {
+  margin: 0 0 4px;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-item {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f3;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-num {
+  margin: 0 0 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-question {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list li {
+  margin-bottom: 5px;
+  padding: 7px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #4b5563;
+  font-size: 14px;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list.qcm-fiche-corrige-ordered {
+  padding-left: 20px;
+  list-style: decimal;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list.qcm-fiche-corrige-ordered li {
+  margin-bottom: 2px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list li.is-correct {
+  border-color: #1f9d55;
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 600;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-corrige-explanation {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-bottom-close {
+  display: block;
+  width: 100%;
+  margin: 18px 0 0;
+  padding: 11px 16px;
+  border: 1px solid #d7dde2;
+  border-radius: 10px;
+  background: #f3f6f4;
+  color: #1f2933;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-bottom-close:hover,
+.universe-star-panel__knowledge-sheet .qcm-fiche-bottom-close:focus-visible {
+  background: #e9efec;
+  border-color: #c6d0d8;
+}
+.universe-star-panel__knowledge-loading {
+  margin: 14px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 body.universe-star-panel-open {
   overflow: hidden;

@@ -5610,6 +5610,8 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         source: CULTURE_GENERALE_SOURCE_TYPE_LABEL[a.eclairage_type] || "Culture générale",
         sourceType: a.eclairage_type,
         sourceDebateId: a.eclairage_source_id,
+        quizSlot: fiche?.notionQuizDate ? `notion:${a.eclairage_type}:${a.eclairage_source_id}` : null,
+        quizDate: fiche?.notionQuizDate || null,
         sourceDetail,
         category: null,
         categoryPrecision: null,
@@ -12953,6 +12955,12 @@ async function fetchUserAcquis(voterKey, options = {}) {
       sourceType: question.sourceType || null,
       sourceName: question.sourceName || null,
       sourceDetail: question.sourceDetail || null,
+      // Date de la ligne daily_quiz qui porte le QCM complet de cette notion.
+      // Seulement pour les QCM créés depuis Mes apprentissages : les anciens
+      // QCM Culture Générale n'ont pas de fiche notion dédiée à recharger.
+      notionQuizDate: String(question.id || "").startsWith("notion:")
+        ? (originalQuizDateBySourceId.get(sourceDebateId) || null)
+        : null,
       streak: state.streak,
       validated: state.validated,
       target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
