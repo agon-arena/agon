@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260809-actuopacity1" />
+<link rel="stylesheet" href="/style.min.css?v=20260810-debate-notions-title-size" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -302,7 +302,7 @@ try {
     </button>
     <a href="/apprentissage" class="home-topbar-menu-item" id="home-topbar-learning-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/apprentissage')">
       <i class="fa-solid fa-list-check"></i>
-      <span>Apprentissage</span>
+      <span>Apprentissages</span>
     </a>
     <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
       <i class="fa-solid fa-chart-line"></i>
@@ -571,6 +571,12 @@ try {
 
 <div id="debate-context-wrap" class="debate-context-wrap" style="display:none;">
   <div id="debate-context-text" class="debate-context-text"></div>
+
+  <section id="debate-notions-section" class="debate-notions-section" hidden>
+    <div class="debate-notions-title"><i class="fa-solid fa-brain"></i> Clique pour mémoriser • Approfondir</div>
+    <div id="debate-notions-list" class="debate-notions-list"></div>
+  </section>
+
   <div id="debate-episode-nav" class="debate-episode-nav" style="display:none;"></div>
 </div>
 
@@ -1000,9 +1006,9 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     <span>Actualiser</span>
   </button>
 
-  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
     <i class="fa-solid fa-list-check"></i>
-    <span>Apprentissage</span>
+    <span>Apprentissages</span>
   </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
@@ -1050,7 +1056,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
+	<script src="/script.min.js?v=20260810-debate-notions-popup" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

@@ -4984,6 +4984,127 @@ body.page-debate #score-b {
   margin-top:8px;
 }
 
+/* "Notions à retenir" en fin d'arène (cf. GET /api/debates/:id/notions,
+   sourceType "debat-notion") — un titre unique ("Mémoriser • Approfondir",
+   icône cerveau) porte le sens de l'action ; en dessous, chaque notion n'est
+   plus qu'une puce avec son nom, cliquable en un seul geste (ouvre
+   Apprentissage + mémorise) — demande du 10/08/2026. */
+.debate-notions-section{
+  margin-top:24px;
+}
+
+.debate-notions-section[hidden]{
+  display:none;
+}
+
+.debate-notions-title{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  color:#6b7280;
+}
+.debate-notions-title i{
+  color:#f5b642;
+}
+
+.debate-notions-list{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:8px;
+  margin-top:8px;
+}
+
+.debate-notion-action-btn{
+  padding:6px 14px;
+  border:1px solid #e5e7eb;
+  border-radius:999px;
+  background:#f9fafb;
+  color:#243038;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.debate-notion-action-btn:hover{
+  background:#f0f2f4;
+}
+.debate-notion-action-btn.is-active{
+  border-color:#f5b642;
+  background:#fdf3dd;
+  color:#8a6116;
+}
+
+/* Popup de confirmation "Mémoriser" — identique à celle d'Éclairages/Ce jour
+   dans l'Histoire (cf. views/eclairages.html), dupliquée ici plutôt que
+   partagée : Éclairages n'est pas servi par style.min.css. */
+.ecl-memorize-explainer-overlay{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  background:rgba(17, 24, 39, 0.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  overflow-y:auto;
+}
+.ecl-memorize-explainer-modal{
+  width:100%;
+  max-width:400px;
+  padding:24px;
+  border-radius:12px;
+  background:#ffffff;
+  box-shadow:0 20px 45px rgba(17, 24, 39, 0.25);
+  text-align:center;
+}
+.ecl-memorize-explainer-text{
+  margin:0 0 20px;
+  color:#243038;
+  font-size:15px;
+  line-height:1.5;
+}
+.ecl-memorize-explainer-qcm{
+  width:100%;
+  margin:0 0 10px;
+  padding:12px 20px;
+  border:none;
+  border-radius:999px;
+  background:#f5b642;
+  color:#243038;
+  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-size:16px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.ecl-memorize-explainer-qcm:hover{
+  background:#f0aa27;
+}
+.ecl-memorize-explainer-close{
+  width:100%;
+  padding:12px 20px;
+  border:none;
+  border-radius:999px;
+  background:none;
+  color:#6b7280;
+  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.ecl-memorize-explainer-close:hover{
+  color:#243038;
+}
+
 /* Vue liste */
 
 .debate-view-switch {

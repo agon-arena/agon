@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260809-actuopacity1">
+  <link rel="stylesheet" href="/style.min.css?v=20260810-debate-notions-compact">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -162,6 +162,62 @@
       background: #f3f4f6;
       color: #9ca3af;
       cursor: not-allowed;
+    }
+    .qcm-custom-search {
+      display: none;
+      gap: 8px;
+      margin: 0 0 20px;
+    }
+    .qcm-custom-search.visible {
+      display: flex;
+    }
+    .qcm-custom-search-input {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #1f2937;
+      font-size: 14px;
+    }
+    .qcm-custom-search-input:focus {
+      outline: none;
+      border-color: #516776;
+      background: #ffffff;
+    }
+    .qcm-custom-search-btn {
+      flex-shrink: 0;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 999px;
+      background: #243038;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .qcm-custom-search-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .qcm-custom-search-status {
+      margin: -8px 0 20px;
+      font-size: 13px;
+      color: #6b7280;
+      text-align: center;
+    }
+    .qcm-custom-search-status.is-error {
+      color: #d64545;
+    }
+    @media (max-width: 480px) {
+      .qcm-custom-search {
+        flex-direction: column;
+      }
+      .qcm-custom-search-btn {
+        width: 100%;
+      }
     }
     .qcm-progress {
       margin: 0 0 16px;
@@ -448,16 +504,15 @@
     .qcm-mesqcm-theme-action {
       flex: 0 0 auto;
       margin-left: auto;
+      min-width: 62px;
       color: #6b7280;
       font-family: Arial, sans-serif;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
+      text-align: right;
     }
     .qcm-mesqcm-theme-action-open {
-      display: none;
-    }
-    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-action-closed {
       display: none;
     }
     .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-action-open {
@@ -649,6 +704,30 @@
     .qcm-mesqcm-fiche-btn:hover {
       background: #eef3f6;
       border-color: #516776;
+    }
+    /* Retrait d'un apprentissage (cf. server.js POST
+       /api/users/notion-quizzes/remove) — ne supprime que la ligne
+       personnelle du visiteur, jamais le QCM partagé. Confirmation native
+       (window.confirm) avant l'appel, même convention que les autres
+       suppressions du site (cf. deleteDebate, deleteReport). */
+    .qcm-mesqcm-delete-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #6b7280;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-delete-btn:hover {
+      background: #fef2f2;
+      border-color: #dc2626;
+      color: #dc2626;
     }
     /* Pastilles de thématiques (cf. renderThemeTags, server.js
        classifyCultureGeneraleThemesWithAI) — sous le nom dans le tableau
@@ -1121,16 +1200,28 @@
     <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text"></span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
+    <form class="qcm-custom-search" id="qcm-custom-search" hidden>
+      <input type="text" id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150"
+        placeholder="Tape un sujet à mémoriser (ex. la photosynthèse, la Révolution française…)">
+      <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Générer
+      </button>
+    </form>
+    <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
     <div id="qcm-body"></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260809-apprentissage-page" defer></script>
+<script src="/script.min.js?v=20260810-standalone-loading-overlay" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
   var titleText = document.getElementById('qcm-title-text');
   var subtitleText = document.getElementById('qcm-subtitle-text');
   var categorySwitcher = document.getElementById('qcm-category-switcher');
+  var customSearchForm = document.getElementById('qcm-custom-search');
+  var customSearchInput = document.getElementById('qcm-custom-search-input');
+  var customSearchBtn = document.getElementById('qcm-custom-search-btn');
+  var customSearchStatus = document.getElementById('qcm-custom-search-status');
   var voterKey = null;
   var questions = [];
   var answeredByQuestionId = {};
@@ -1192,7 +1283,8 @@
     concept: { icon: 'fa-shapes', label: 'Concept du jour' },
     citation: { icon: 'fa-quote-left', label: 'Citation du jour' },
     oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" },
-    latin: { icon: 'fa-scroll', label: 'Mot latin du jour' }
+    latin: { icon: 'fa-scroll', label: 'Mot latin du jour' },
+    custom: { icon: 'fa-magnifying-glass', label: 'Sujet recherché' }
   };
   // "mesqcm" n'a pas de créneau à vérifier : toujours affiché, son propre
   // état vide gère le cas "rien encore" (cf. renderMesQcmEmpty).
@@ -1208,7 +1300,18 @@
   // encore de contenu prêt : grisés (disabled) plutôt que masqués ou
   // remplacés par une redirection automatique, pour que la mise en page
   // reste la même qu'une fois prêt.
+  // Barre de recherche libre : visible uniquement sur la liste "Mes
+  // apprentissages" (jamais pendant un QCM en cours ni sur "Renforcement"),
+  // appelé depuis renderCategorySwitcher qui tourne exactement quand
+  // currentCategory/currentSlot changent.
+  function updateCustomSearchVisibility() {
+    var visible = currentCategory === 'mesqcm' && !currentSlot;
+    customSearchForm.classList.toggle('visible', visible);
+    if (!visible) customSearchStatus.hidden = true;
+  }
+
   function renderCategorySwitcher() {
+    updateCustomSearchVisibility();
     categorySwitcher.className = 'qcm-slot-switcher visible';
     categorySwitcher.innerHTML = '';
     CATEGORY_ORDER.forEach(function (category) {
@@ -1910,6 +2013,57 @@
     document.addEventListener('keydown', onKeydown);
   }
 
+  function setCustomSearchStatus(text, isError) {
+    customSearchStatus.hidden = !text;
+    customSearchStatus.textContent = text || '';
+    customSearchStatus.classList.toggle('is-error', !!isError);
+  }
+
+  // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
+  // /api/users/notion-quizzes/custom) : contrairement au clic "Mémoriser"
+  // sur Éclairages/Ce jour dans l'Histoire (optimiste, instantané), la fiche
+  // n'existe pas encore ici — on attend la vraie réponse (génération IA,
+  // quelques secondes) avant d'ouvrir le QCM tout juste créé via loadSlot.
+  function submitCustomTopic(e) {
+    e.preventDefault();
+    var topic = (customSearchInput.value || '').trim();
+    if (topic.length < 3) {
+      setCustomSearchStatus('Décris le sujet en au moins 3 caractères.', true);
+      return;
+    }
+    if (!voterKey) {
+      setCustomSearchStatus('Identifiant introuvable, recharge la page et réessaie.', true);
+      return;
+    }
+    customSearchBtn.disabled = true;
+    customSearchInput.disabled = true;
+    setCustomSearchStatus('Génération de la fiche en cours (quelques secondes)…', false);
+
+    fetch('/api/users/notion-quizzes/custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, topic: topic })
+    })
+      .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+      .then(function (result) {
+        customSearchBtn.disabled = false;
+        customSearchInput.disabled = false;
+        if (!result.data.ok) {
+          setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
+          return;
+        }
+        customSearchInput.value = '';
+        setCustomSearchStatus('', false);
+        loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+      })
+      .catch(function () {
+        customSearchBtn.disabled = false;
+        customSearchInput.disabled = false;
+        setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+      });
+  }
+  customSearchForm.addEventListener('submit', submitCustomTopic);
+
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
@@ -1940,7 +2094,7 @@
   }
 
   function renderMesQcmEmpty() {
-    renderMessage("Tu n'as encore mémorisé aucune notion — va sur Éclairages ou Ce jour dans l'Histoire pour commencer.");
+    renderMessage("Tu n'as encore mémorisé aucune notion — tape un sujet ci-dessus, ou clique sur « Mémoriser » n'importe où sur le site pour commencer.");
   }
 
   // Petites pastilles de thématiques (cf. server.js
@@ -1964,14 +2118,14 @@
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Répétitions</th><th>Fiche</th></tr></thead><tbody>';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th>Fiche</th><th></th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-      var target = q.target || 4;
+      var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
       var badgeHtml = q.validated
         ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
-        : '<span class="qcm-acquis-badge">' + (q.streak || 0) + ' / ' + target + '</span>';
+        : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
       var stateHtml = q.realized
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
         : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
@@ -1982,6 +2136,7 @@
       html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
       html += '<td><button type="button" class="qcm-mesqcm-fiche-btn" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Fiche</button></td>';
+      html += '<td><button type="button" class="qcm-mesqcm-delete-btn" data-mesqcm-delete-index="' + index + '" aria-label="Supprimer cet apprentissage" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -2158,7 +2313,7 @@
       html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
       html += '<span>' + escapeHtml(theme) + '</span>';
       html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
-      html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-closed">Afficher</span><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
+      html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
       html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
       html += '</button>';
       html += '<div class="qcm-mesqcm-theme-panel">';
@@ -2186,6 +2341,44 @@
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-fiche-index'))];
         openMesQcmFiche(q);
       });
+    });
+    body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-delete-index'))];
+        removeMesQcmItem(q, quizzes, btn);
+      });
+    });
+  }
+
+  // Retire un apprentissage de la liste personnelle (jamais le QCM partagé,
+  // cf. server.js POST /api/users/notion-quizzes/remove) — même modale de
+  // confirmation que les autres suppressions définitives du site
+  // (showDeleteConfirmModal, cf. deleteComment/deleteArgument/deleteDebate
+  // dans script.min.js, déjà chargé sur cette page), ré-affiche la liste
+  // sans l'item une fois le retrait confirmé côté serveur (jamais
+  // optimiste : suppression définitive, contrairement au clic "Mémoriser"
+  // ailleurs sur le site).
+  function removeMesQcmItem(q, quizzes, btn) {
+    if (!q || !voterKey) return;
+    showDeleteConfirmModal({
+      title: 'Supprimer cet apprentissage ?',
+      text: 'Cette suppression est définitive.',
+      onConfirm: function () {
+        btn.disabled = true;
+        fetch('/api/users/notion-quizzes/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ legacyKey: voterKey, slot: q.slot, quizDate: q.quizDate })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (!data.ok) { btn.disabled = false; return; }
+            var index = quizzes.indexOf(q);
+            if (index !== -1) quizzes.splice(index, 1);
+            renderMesQcmList(quizzes);
+          })
+          .catch(function () { btn.disabled = false; });
+      }
     });
   }
 

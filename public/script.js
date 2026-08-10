@@ -2980,7 +2980,18 @@ function applyPageArrivalLoadingVisuals() {
   const isNotificationToDebate = isAiScorePopupOverlayContext();
   const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
 
-  overlay.classList.toggle("page-arrival-loading-overlay-iframe-debate", isIframeDebateContext);
+  // /apprentissage et /eclairages retirent leur propre voile au profit du
+  // bandeau sombre du parent (cf. isIframePageUsingParentLoadingOnly), mais
+  // ce bandeau n'existe que dans le flux modal iframe — ouverts en page
+  // autonome (lien direct, nouvel onglet, Ctrl/Cmd-clic depuis le menu…),
+  // il n'y a aucun bandeau parent pour prendre le relais et ce voile
+  // retombait sur la petite carte blanche générique plutôt que le plein
+  // fond sombre + sablier attendu partout ailleurs (demande du 10/08/2026,
+  // "comme pour les autres pages" — repéré sur desktop où ce clic
+  // Ctrl/Cmd/nouvel onglet est courant, jamais sur tactile mobile).
+  const isStandaloneParentLoadingOnlyPage = isIframePageUsingParentLoadingOnly(location.pathname) && window.self === window.top;
+
+  overlay.classList.toggle("page-arrival-loading-overlay-iframe-debate", isIframeDebateContext || isStandaloneParentLoadingOnlyPage);
   overlay.classList.toggle("page-arrival-loading-overlay-return-to-debate", isCreateReturnTransition);
   overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate || isNotificationToDebate);
   overlay.classList.toggle("page-arrival-loading-overlay-notification-to-debate", isNotificationToDebate);
@@ -19027,6 +19038,14 @@ window.addEventListener('resize', syncMemoireMobileBackButtonPosition, { passive
 function alignStandaloneBubbleFrameToActiveFilter() {
   if (!document.body.classList.contains('is-standalone')) return;
   if (!isAgonMobileCloudViewport()) return;
+  // En mode "Ma mémoire", le tag de filtre actif reste dans le DOM (juste masqué en
+  // visibility, cf. setMemoireCloudMode) : sans cette garde, les appels déclenchés par le
+  // ResizeObserver du cadre (initBubbleFrameSync, ce même cadre changeant de hauteur en
+  // entrant/sortant de "Ma mémoire") recalculaient un alignement pensé pour Bulles Actu/Agôn
+  // et réappliquaient un margin-top parasite au cadre "Ma mémoire", écrasant le reset fait à
+  // l'entrée du mode — le fil d'Ariane (positionné indépendamment) se retrouvait enfoncé loin
+  // sous le bord haut du cadre au lieu d'y rester collé (demande du 10/08/2026).
+  if (typeof _memoireCloudMode !== "undefined" && _memoireCloudMode) return;
 
   requestAnimationFrame(() => {
     const cloud = document.getElementById('agon-tag-trends-cloud');
@@ -19545,6 +19564,14 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // .agon-memoire-frame) — demande du 08/08/2026 "le fond de ma mémoire n'est pas le bon" :
     // sans cette classe, le conteneur partagé gardait le fond par défaut de l'accueil.
     cloudContainer?.classList.add('agon-memoire-frame');
+    // Efface le margin-top inline posé par alignStandaloneBubbleFrameToActiveFilter (calculé
+    // en mode Actu/Agôn pour aligner le cadre sous le tag de filtre actif, potentiellement
+    // reposé dès le pré-rendu par le script inline d'index.html) : sans ce reset, ce décalage
+    // négatif restait appliqué au cadre "Ma mémoire" alors que le tag de filtre y est masqué,
+    // remontant tout le cadre sans bouger le fil d'Ariane (positionné indépendamment sur la
+    // section) — celui-ci se retrouvait enfoncé loin sous son bord haut au lieu d'y rester
+    // collé (demande du 10/08/2026, "le fil d'ariane des bulles ma mémoire n'est pas bien placé").
+    if (cloudContainer) cloudContainer.style.marginTop = '';
     // Bulles Actu/Agôn encore affichées (textes/badges de tendance, satellites) : le fond
     // devient celui de "Ma mémoire" à l'instant ci-dessus, mais mon-univers.js (import
     // dynamique, ou fetch réseau si pas encore en cache) ne les remplace par les bulles
@@ -19557,6 +19584,15 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // visible grâce à .agon-memoire-frame, puis le sablier tourne dans ce cadre jusqu'au
     // callback de rendu des neurones déclenché par mon-univers.js.
     showBubbleCloudLoadingSpinner({ switchMode: true });
+    // Le filtre "Arènes ouvertes par agôn/la communauté" ne devait déjà plus s'appliquer
+    // pendant "Ma mémoire" (cf. commentaire ci-dessous), mais seul son TAG était masqué —
+    // currentTypeFilter restait actif en coulisses : si "Communauté" (ou "Agôn"/"Débats"/
+    // "Questions") était sélectionné juste avant de basculer sur "Ma mémoire", le carrousel
+    // d'arènes sous les bulles restait silencieusement filtré, sans aucun indice visible
+    // (demande du 10/08/2026, "il doit y avoir tous les articles et aussi les arènes des
+    // utilisateurs, tout mélangé"). setTypeFilter("all") remet réellement le filtre à zéro
+    // (et rafraîchit la liste), pas seulement son affichage.
+    if (currentTypeFilter !== 'all') setTypeFilter('all');
     // Tag de filtre "Arènes ouvertes par agôn/la communauté" (cf. renderIndexActiveFilterTags,
     // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
     // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
@@ -25252,6 +25288,152 @@ function renderSimilarDebatesLoadingState(container) {
   `;
 }
 
+/* ===================================================================== */
+/*   "Notions à retenir" en fin d'arène (cf. server.js GET/POST autour   */
+/*   de topic_notions / NOTION_QUIZ_SOURCE_TYPES "debat-notion") — un nom */
+/*   en clair par ligne, un seul bouton "Approfondir • Mémoriser" qui     */
+/*   fusionne les deux actions en un geste (ouvre Apprentissage ET        */
+/*   mémorise), jamais de popup intermédiaire ni de bouton séparé pour    */
+/*   décocher (demande du 10/08/2026 : discret, peu de place).            */
+/* ===================================================================== */
+
+let currentDebateNotionsQuizDate = null;
+
+// Popup optimiste, identique à celle d'Éclairages/Ce jour dans l'Histoire
+// (cf. views/eclairages.html showMemorizeExplainerModal) — affichée dès le
+// clic, sans attendre la génération IA du QCM en arrière-plan.
+function showDebateNotionMemorizeExplainer(notionName) {
+  const overlay = document.createElement("div");
+  overlay.className = "ecl-memorize-explainer-overlay";
+  const modal = document.createElement("div");
+  modal.className = "ecl-memorize-explainer-modal";
+  const text = document.createElement("p");
+  text.className = "ecl-memorize-explainer-text";
+  text.appendChild(document.createTextNode(`« ${notionName} » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas).`));
+  const qcmBtn = document.createElement("button");
+  qcmBtn.type = "button";
+  qcmBtn.className = "ecl-memorize-explainer-qcm";
+  qcmBtn.textContent = "Apprentissage";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "ecl-memorize-explainer-close";
+  closeBtn.textContent = "J’ai compris";
+  modal.appendChild(text);
+  modal.appendChild(qcmBtn);
+  modal.appendChild(closeBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  }
+  function onKeydown(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", onKeydown);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  closeBtn.addEventListener("click", close);
+  qcmBtn.addEventListener("click", () => {
+    close();
+    if (typeof openDebateIframeModal === "function") openDebateIframeModal("/apprentissage");
+    else window.location.href = "/apprentissage";
+  });
+}
+
+function activateDebateNotion(btn, voterKey, debateId, quizDate) {
+  const notionName = btn.getAttribute("data-notion-name") || "cette notion";
+  if (btn.getAttribute("data-memorized") === "true") {
+    showDebateNotionMemorizeExplainer(notionName);
+    return;
+  }
+  if (!voterKey) return;
+  const slug = btn.getAttribute("data-notion-slug");
+  const explanation = btn.getAttribute("data-notion-explanation") || "";
+  const debateQuestion = btn.getAttribute("data-debate-question") || "";
+  if (!slug) return;
+
+  btn.setAttribute("data-memorized", "true");
+  btn.classList.add("is-active");
+  showDebateNotionMemorizeExplainer(notionName);
+
+  fetchJSON(`${API}/users/notion-quizzes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      legacyKey: voterKey,
+      sourceType: "debat-notion",
+      sourceDebateId: `${debateId}-${slug}`,
+      quizDate,
+      item: {
+        current_topic_id: `${debateId}-${slug}`,
+        current_topic_title: debateQuestion,
+        notion_name: notionName,
+        notion_explanation: explanation
+      }
+    })
+  }).catch(() => {
+    btn.setAttribute("data-memorized", "false");
+    btn.classList.remove("is-active");
+  });
+}
+
+function renderDebateNotions(debateId, debateQuestion, notions) {
+  const section = document.getElementById("debate-notions-section");
+  const container = document.getElementById("debate-notions-list");
+  if (!section || !container) return;
+  if (!Array.isArray(notions) || !notions.length) {
+    section.hidden = true;
+    container.innerHTML = "";
+    return;
+  }
+
+  container.innerHTML = notions.map((notion) => `
+    <button
+      type="button"
+      class="debate-notion-action-btn"
+      data-notion-slug="${escapeHtml(notion.slug)}"
+      data-notion-name="${escapeHtml(notion.name)}"
+      data-notion-explanation="${escapeHtml(notion.explanation)}"
+      data-debate-question="${escapeHtml(debateQuestion || "")}"
+      data-memorized="false"
+    >${escapeHtml(notion.name)}</button>
+  `).join("");
+  section.hidden = false;
+
+  const voterKey = typeof getKey === "function" ? getKey() : null;
+  const buttons = container.querySelectorAll(".debate-notion-action-btn");
+  if (voterKey) {
+    fetchJSON(`${API}/users/notion-quizzes?legacyKey=${encodeURIComponent(voterKey)}`, { cache: "no-store" })
+      .then((data) => {
+        const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        buttons.forEach((btn) => {
+          const slot = `notion:debat-notion:${debateId}-${btn.getAttribute("data-notion-slug")}`;
+          if (!quizzes.some((q) => q.slot === slot)) return;
+          btn.setAttribute("data-memorized", "true");
+          btn.classList.add("is-active");
+        });
+      })
+      .catch(() => {});
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => activateDebateNotion(btn, voterKey, debateId, currentDebateNotionsQuizDate));
+  });
+}
+
+function loadDebateNotions(debateId, debateQuestion, createdAtIso, attempt = 0) {
+  currentDebateNotionsQuizDate = (String(createdAtIso || "").match(/^\d{4}-\d{2}-\d{2}/) || [null])[0];
+  fetchJSON(`${API}/debates/${debateId}/notions`)
+    .then((data) => {
+      if (!currentDebateCache || String(currentDebateCache.id) !== String(debateId)) return;
+      if (data.status === "generating" && attempt < 3) {
+        window.setTimeout(() => loadDebateNotions(debateId, debateQuestion, createdAtIso, attempt + 1), 4000);
+        return;
+      }
+      renderDebateNotions(debateId, debateQuestion, data.notions);
+    })
+    .catch(() => {});
+}
+
 function renderBottomSimilarDebates(currentDebate, debates) {
   const container = document.getElementById("similar-debates-bottom");
   if (!container) return;
@@ -29035,6 +29217,8 @@ if (Array.isArray(similarDebatesCache)) {
       .catch(() => {});
   });
 }
+
+loadDebateNotions(data.debate.id, data.debate.question, data.debate.created_at);
 
 refreshAdminUI();
 
@@ -33174,6 +33358,14 @@ document.addEventListener("DOMContentLoaded", () => {
     showBubbleCloudLoadingSpinner();
     initIndex();
     window.addEventListener("popstate", handleIndexHistoryPopState);
+    // Arrivée sur l'accueil : "Ma mémoire" par défaut plutôt que "Actualités" (demande du
+    // 10/08/2026). initIndex() vient de lancer le chargement Actu (updateIndexTagTrends) en
+    // tâche de fond ; setMemoireCloudMode bascule aussitôt l'affichage, et le guard déjà
+    // présent dans updateIndexTagTrends (_memoireCloudMode) empêche cette tâche Actu de
+    // rendre ses bulles par-dessus une fois sa réponse réseau arrivée.
+    if (document.getElementById('agon-cloud-mode-memoire-btn')) {
+      setMemoireCloudMode(true);
+    }
   }
   if (location.pathname === "/create") {
     initCreate();

@@ -49,7 +49,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260810-memory-full-fiche">
+  <link rel="stylesheet" href="/style.min.css?v=20260810-debate-notions-compact">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -481,7 +481,7 @@
           </button>
           <a href="/apprentissage" class="home-topbar-menu-item" id="home-topbar-learning-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/apprentissage')">
             <i class="fa-solid fa-list-check"></i>
-            <span>Apprentissage</span>
+            <span>Apprentissages</span>
           </a>
           <a href="/contributions" class="home-topbar-menu-item" id="home-topbar-contributions-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/contributions')">
             <i class="fa-solid fa-chart-line"></i>
@@ -737,7 +737,7 @@
 <div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
   <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Actualités</button>
   <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)">Ma mémoire</button>
-  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Sujets libres</button>
+  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Communauté</button>
 </div>
 <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
 <div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
@@ -1188,9 +1188,9 @@ window.addEventListener("pageshow", function() {
   </button>
 
   <!-- Ma mémoire et les scores/contributions restent accessibles depuis le menu supérieur. -->
-  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissage" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
     <i class="fa-solid fa-list-check"></i>
-    <span>Apprentissage</span>
+    <span>Apprentissages</span>
   </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
@@ -1395,7 +1395,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260810-memory-full-fiche" defer></script>
+<script src="/script.min.js?v=20260810-memoire-filter-reset" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

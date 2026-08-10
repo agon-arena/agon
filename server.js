@@ -12445,6 +12445,12 @@ function formatEclairagesItemForPrompt(item) {
   if (item.type === "oeuvre") {
     return `- id:${item.current_topic_id} | Type : œuvre d'art du jour | Actualité : ${common} | Œuvre : ${String(item.artwork_title || "").trim()} (${String(item.artist_name || "").trim()}, ${String(item.artwork_date || "").trim()})\n  Description de l'œuvre : ${String(item.artwork_description || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Présentation de l'artiste : ${String(item.artist_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
   }
+  // Notion extraite d'une arène de débat (cf. extractDebateTopicNotions) :
+  // pas de "shared_mechanism"/"essential_difference" (pas de parallèle avec
+  // une actualité tierce, la notion vient déjà du débat lui-même).
+  if (item.type === "debat-notion") {
+    return `- id:${item.current_topic_id} | Type : notion de débat | Débat : ${common} | Notion : ${String(item.notion_name || "").trim()}\n  Explication : ${String(item.notion_explanation || "").trim().slice(0, 600).replace(/\s+/g, " ")}`;
+  }
   if (item.type === "latin") {
     const grammar = (Array.isArray(item.grammar_breakdown) ? item.grammar_breakdown : [])
       .map((g) => `${String(g.word || "").trim()} (${String(g.note || "").trim()})`)
@@ -12489,6 +12495,7 @@ function extractCultureGeneraleItemName(item) {
     case "citation": raw = item.quote_author; break;
     case "oeuvre": raw = item.artwork_title; break;
     case "latin": raw = item.latin_phrase; break;
+    case "debat-notion": raw = item.notion_name; break;
     default: raw = "";
   }
   return capitalizeFirstLetter(raw);
@@ -12590,6 +12597,8 @@ function extractCultureGeneraleItemDetail(item) {
         image: null
       };
     }
+    case "debat-notion":
+      return { meta: t(item.current_topic_title) || null, sections: [{ label: null, text: t(item.notion_explanation) }], image: null };
     default:
       return { meta: null, sections: [], image: null };
   }
@@ -12714,13 +12723,257 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
     sourceScope,
     sourceName,
     sourceDetail,
-    sourceThemes
+    sourceThemes,
+    // Sans ce champ, POST /api/daily-quiz/answer n'appelle jamais
+    // recordDailyQuizEclairageAcquisition pour ce QCM (elle exige
+    // sourceDebateId, cf. son early-return) : une bonne réponse restait sans
+    // effet sur "Ma mémoire" malgré isCultureGeneraleQuestionId qui reconnaît
+    // pourtant déjà le préfixe "notion:" (demande du 10/08/2026).
+    sourceDebateId: id
   }));
 }
 
-// Décode l'id d'une repasse de répétition espacée ("cgreview-{sourceDebateId}",
-// cf. fetchCultureGeneraleReviewInjectionForToday) pour retrouver le
-// sourceDebateId d'origine.
+// ── QCM d'un sujet libre (barre de recherche "Mes apprentissages") ─────────
+// Clé de slot dérivée du texte tapé plutôt que d'un id fourni par le client
+// (aucun id stable n'existe pour un sujet libre) : deux visiteurs tapant le
+// même sujet à la casse/aux accents/à la ponctuation près rejoignent ainsi le
+// même QCM déjà généré au lieu d'en régénérer un (même principe de partage
+// que buildNotionQuestions, cf. POST /api/users/notion-quizzes/custom).
+function normalizeCustomTopicKey(topic) {
+  const normalized = String(topic || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return crypto.createHash("sha1").update(normalized).digest("hex").slice(0, 16);
+}
+
+// Réutilise le même bloc de règles de formats de question que les autres QCM
+// narratifs (cf. buildQuestionFormatsPromptBlock), moins sa dernière ligne
+// ("Réponds en JSON strict {"questions":[...]}") : ici la question et la
+// fiche sont demandées dans un même objet JSON plus large, avec son propre
+// gabarit de réponse écrit à la fin de ce prompt.
+function buildCustomTopicPrompt(topic, id) {
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC).slice(0, -1);
+  return [
+    `Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet, tapé librement dans une barre de recherche : "${topic}".`,
+    "",
+    "Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").",
+    "Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}",
+    "",
+    "Étape 2 : si le sujet est valide, rédige :",
+    "1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention).",
+    "2. Un quiz permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.",
+    "",
+    "Champs de la fiche :",
+    "- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de l'utilisateur est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.",
+    "- \"meta\" : une ligne courte de repères (dates, lieu, auteur...) si pertinent, sinon null.",
+    "- \"sections\" : 1 à 3 blocs {\"label\": string ou null, \"text\": string} couvrant l'essentiel à retenir sur ce sujet.",
+    "",
+    ...formatBlock,
+    "",
+    `Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`,
+    "",
+    "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces deux formes exactement :",
+    "- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}",
+    "- Sujet accepté : {\"valid\":true,\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}"
+  ].join("\n");
+}
+
+// Générée à la demande au clic sur "Générer" de la barre de recherche libre
+// (cf. POST /api/users/notion-quizzes/custom) — contrairement à
+// buildNotionQuestions, la fiche (sourceDetail) n'existe pas encore en base :
+// un seul appel IA produit à la fois la fiche et son quiz, pour garantir que
+// les questions restent fondées sur les mêmes faits que la fiche affichée
+// (jamais deux appels séparés qui pourraient diverger sur le contenu).
+async function buildCustomTopicQuiz(topic, id) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { error: "failed" };
+
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCustomTopicPrompt(topic, id) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[notion-quizzes:custom:${id}] génération IA :`, error.message);
+    return { error: "failed" };
+  }
+
+  if (!parsed || parsed.valid === false) {
+    const reason = String(parsed?.reason || "").trim().slice(0, 300);
+    return { error: "rejected", reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
+  }
+
+  const sourceName = capitalizeFirstLetter(String(parsed.sourceName || topic).trim()).slice(0, 120);
+  const sections = Array.isArray(parsed.sections)
+    ? parsed.sections
+        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: String(s?.text || "").trim().slice(0, 1200) }))
+        .filter((s) => s.text)
+        .slice(0, 3)
+    : [];
+  if (!sourceName || !sections.length) return { error: "failed" };
+  const sourceDetail = { meta: parsed.meta ? String(parsed.meta).trim().slice(0, 200) : null, sections, image: null };
+
+  const validated = validateNarrativeQuizQuestions(parsed.questions, [id], DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC, DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC);
+  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+    console.warn(`[notion-quizzes:custom:${id}] seulement ${validated.length} question(s) valide(s).`);
+    return { error: "failed" };
+  }
+
+  const questions = validated.map((q, index) => ({
+    id: `notion:custom:${id}-q${index + 1}`,
+    ...q,
+    sourceType: "custom",
+    sourceScope: null,
+    sourceName,
+    sourceDetail,
+    sourceThemes: [],
+    // Même raison que buildNotionQuestions : requis par
+    // recordDailyQuizEclairageAcquisition pour qu'une bonne réponse alimente
+    // "Ma mémoire" (demande du 10/08/2026).
+    sourceDebateId: id
+  }));
+  return { questions };
+}
+
+/* ================================================================= */
+/*   Notions à retenir en fin d'arène — extraites une seule fois par   */
+/*   débat (cache sur debates.topic_notions*), affichées avant toute   */
+/*   génération de QCM. Le QCM propre à chaque notion n'est généré     */
+/*   qu'au clic "Mémoriser" (cf. NOTION_QUIZ_SOURCE_TYPES + branches   */
+/*   "debat-notion" de formatEclairagesItemForPrompt/extract*).        */
+/* ================================================================= */
+
+const DEBATE_TOPIC_NOTIONS_MODEL = process.env.OPENAI_DEBATE_NOTIONS_MODEL || "gpt-4.1-mini";
+// Au-delà de ce délai, une extraction restée en "generating" est considérée
+// comme un appel mort (crash serveur, timeout réseau) plutôt que toujours en
+// cours — reprise possible par la requête suivante.
+const DEBATE_TOPIC_NOTIONS_STALE_MS = 3 * 60 * 1000;
+const DEBATE_TOPIC_NOTIONS_MIN = 2;
+const DEBATE_TOPIC_NOTIONS_MAX = 3;
+
+function buildDebateTopicNotionsPrompt(question, content) {
+  return [
+    "Tu identifies les notions, mots-clés ou concepts clés à connaître pour bien comprendre le débat d'actualité ci-dessous — termes techniques, juridiques, économiques, institutionnels, scientifiques ou politiques qui méritent d'être expliqués et mémorisés par un lecteur qui découvre le sujet.",
+    "Règles strictes :",
+    "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
+    `- Choisis entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches.`,
+    "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
+    "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce débat précis.",
+    "- Français neutre, sans jugement de valeur, sans reprendre le camp \"pour\" ou \"contre\" du débat.",
+    "- Si le texte fourni est trop pauvre pour en tirer au moins 3 notions sérieuses, réponds avec une liste vide plutôt que d'inventer.",
+    "",
+    `Question du débat : ${String(question || "").trim().slice(0, 300)}`,
+    `Contexte : ${String(content || "").trim().slice(0, 1800)}`,
+    "",
+    "Réponds strictement en JSON, sans aucun texte autour : {\"notions\": [{\"name\": \"...\", \"explanation\": \"...\"}]}."
+  ].join("\n");
+}
+
+// Slug stable dérivé du nom (pour sourceDebateId/slot du QCM de notion,
+// jamais recalculé côté client) — pas de dépendance à un id fourni par l'IA.
+function slugifyDebateNotionName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+// Best-effort, jamais bloquant pour l'affichage de l'arène : une erreur ou
+// une réponse vide renvoie simplement [] (cf. appelant GET /api/debates/:id/notions),
+// jamais une exception qui casserait la page.
+async function extractDebateTopicNotions(question, content) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+  try {
+    const raw = await _callOpenAI(apiKey, [{ role: "user", content: buildDebateTopicNotionsPrompt(question, content) }], {
+      model: DEBATE_TOPIC_NOTIONS_MODEL,
+      temperature: 0.3,
+      responseFormat: { type: "json_object" }
+    });
+    const parsed = JSON.parse(raw);
+    const seen = new Set();
+    const notions = [];
+    for (const entry of Array.isArray(parsed?.notions) ? parsed.notions : []) {
+      const name = capitalizeFirstLetter(String(entry?.name || "").trim()).slice(0, 60);
+      const explanation = String(entry?.explanation || "").trim().slice(0, 500);
+      const slug = slugifyDebateNotionName(name);
+      if (!name || !explanation || !slug || seen.has(slug)) continue;
+      seen.add(slug);
+      notions.push({ slug, name, explanation });
+      if (notions.length >= DEBATE_TOPIC_NOTIONS_MAX) break;
+    }
+    return notions.length >= DEBATE_TOPIC_NOTIONS_MIN ? notions : [];
+  } catch (error) {
+    console.error("[debate-notions] extraction IA :", error.message);
+    return [];
+  }
+}
+
+// Lecture publique des notions d'une arène — génère et met en cache
+// (debates.topic_notions*) au premier appel, sert le cache ensuite. Pas de
+// verrou atomique : au pire deux visiteurs arrivant au même instant sur une
+// arène flambant neuve déclenchent chacun un appel IA (cf. mise à jour
+// "generating" ci-dessous qui limite la fenêtre de course), risque jugé
+// négligeable au regard de la fréquence réelle de ce cas — même choix que
+// _generateAndSaveAnalysis pour l'analyse IA d'arène.
+app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async (req, res) => {
+  const canonicalId = resolveSharedDebateId(req.params.id) || String(req.params.id);
+  try {
+    const { data: debate, error } = await supabase
+      .from("debates")
+      .select("id, question, content, topic_notions, topic_notions_status, topic_notions_generated_at")
+      .eq("id", canonicalId)
+      .single();
+    if (error || !debate) return res.status(404).json({ ok: false, error: "Débat introuvable." });
+
+    if (debate.topic_notions_status === "ready" && Array.isArray(debate.topic_notions)) {
+      return res.json({ ok: true, status: "ready", notions: debate.topic_notions });
+    }
+
+    // "failed" (contenu jugé trop pauvre, ou erreur IA transitoire) : pas de
+    // nouvel appel IA à chaque visite, seulement après le même délai de
+    // grâce que "generating" — évite de payer un appel OpenAI par visiteur
+    // sur une arène dont le contenu ne permettra de toute façon jamais
+    // d'extraire 3 notions sérieuses.
+    const isStale = !debate.topic_notions_generated_at
+      || (Date.now() - new Date(debate.topic_notions_generated_at).getTime()) > DEBATE_TOPIC_NOTIONS_STALE_MS;
+    if ((debate.topic_notions_status === "generating" || debate.topic_notions_status === "failed") && !isStale) {
+      return res.json({ ok: true, status: debate.topic_notions_status, notions: [] });
+    }
+
+    await supabase.from("debates").update({
+      topic_notions_status: "generating",
+      topic_notions_generated_at: new Date().toISOString()
+    }).eq("id", canonicalId);
+
+    const notions = await extractDebateTopicNotions(debate.question, debate.content);
+    await supabase.from("debates").update({
+      topic_notions: notions,
+      topic_notions_status: notions.length ? "ready" : "failed",
+      topic_notions_generated_at: new Date().toISOString()
+    }).eq("id", canonicalId);
+
+    return res.json({ ok: true, status: notions.length ? "ready" : "failed", notions });
+  } catch (err) {
+    console.error("[debate-notions] erreur :", err.message);
+    return res.status(502).json({ ok: false, error: "Erreur lors de la génération." });
+  }
+});
+
+// Décode l'id d'une repasse de répétition espacée ("cgreview-{questionId}"
+// depuis le 10/08/2026, auparavant "cgreview-{sourceDebateId}" — cf.
+// fetchCultureGeneraleReviewInjectionForToday) pour retrouver la référence
+// d'origine (générique : peu importe pour ce parseur ce que la référence
+// désigne réellement).
 function parseCultureGeneraleReviewRef(questionId) {
   const m = /^cgreview-(.+)$/.exec(String(questionId || ""));
   return m ? m[1] : null;
@@ -12728,15 +12981,18 @@ function parseCultureGeneraleReviewRef(questionId) {
 
 // Historique complet des réponses de ce visiteur aux questions de culture
 // générale — premières fois (culture_generale-qN historique, notion:... QCM
-// de notion) et repasses de répétition espacée (cgreview-{sourceDebateId})
+// de notion) et repasses de répétition espacée (cgreview-{questionId})
 // confondues, jamais le QCM Révision (resté un entraînement libre, hors
-// suivi). Renvoie les événements triés chronologiquement (un par réponse, groupables
-// par sourceDebateId côté appelant) ainsi qu'un index du contenu par
-// sourceDebateId — les deux structures dont ont besoin fetchUserAcquis et
-// fetchCultureGeneraleReviewInjectionForToday.
+// suivi). Renvoie les événements triés chronologiquement (un par réponse,
+// groupables par sourceDebateId ou par questionId côté appelant selon le
+// besoin — notion entière pour fetchUserAcquis/"Ma mémoire", question par
+// question pour "Mes apprentissages"/fetchCultureGeneraleReviewInjectionForToday,
+// cf. computeCultureGeneraleStreaks vs computeQuestionStreaks) ainsi que des
+// index du contenu par sourceDebateId et par questionId.
 async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const key = String(voterKey || "").trim();
-  if (!key) return { events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map() };
+  const empty = () => ({ events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map(), contentByQuestionId: new Map() });
+  if (!key) return empty();
 
   const { data: answerRows, error: answersError } = await fetchAllSupabaseRows(() =>
     supabase.from("daily_quiz_answers")
@@ -12751,11 +13007,19 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
     if (qid.startsWith("culture_generale-") || qid.startsWith("notion:")) {
       originalAnswers.push({ quizDate: row.quiz_date, questionId: qid, optionIndex: row.option_index });
     } else if (qid.startsWith("cgreview-")) {
-      const sourceDebateId = parseCultureGeneraleReviewRef(qid);
-      if (sourceDebateId) reviewAnswers.push({ quizDate: row.quiz_date, sourceDebateId, optionIndex: row.option_index });
+      // Le ref porté par "cgreview-{ref}" est un questionId depuis le
+      // 10/08/2026 (avant : un sourceDebateId, une seule repasse par notion
+      // — cf. fetchCultureGeneraleReviewInjectionForToday) ; les anciennes
+      // lignes cgreview-{sourceDebateId} encore en base ne matcheront
+      // simplement plus aucun contentByQuestionId ci-dessous et seront
+      // ignorées, sans casser le calcul (juste un peu d'historique de repasse
+      // perdu sur les tout premiers acquis, sans impact sur les nouvelles
+      // notions).
+      const ref = parseCultureGeneraleReviewRef(qid);
+      if (ref) reviewAnswers.push({ quizDate: row.quiz_date, ref, optionIndex: row.option_index });
     }
   }
-  if (!originalAnswers.length && !reviewAnswers.length) return { events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map() };
+  if (!originalAnswers.length && !reviewAnswers.length) return empty();
 
   // Pas de filtre par slot ici : selon la date, la ligne daily_quiz
   // correspondante peut être une ancienne ligne "culture_generale" (avant la
@@ -12767,24 +13031,26 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
     supabase.from("daily_quiz").select("quiz_date, questions").in("quiz_date", chunk));
   if (quizRowsError) throw new Error(quizRowsError.message);
 
-  // contentBySourceId couvre aussi les repasses : une question posée le jour
-  // J réapparaît en repasse un jour ultérieur sans jamais avoir sa propre
-  // ligne daily_quiz, mais son sourceDebateId a forcément été vu ce jour J
-  // (seules les questions déjà répondues sont éligibles à une repasse).
-  // originalQuizDateBySourceId retient ce jour J de première publication —
-  // nécessaire à fetchUserAcquis pour relire, si besoin, le contenu Éclairages
-  // publié ce jour-là (cf. resolveMissingAcquisSourceNames). Ne retient que les
-  // questions culture générale (isCultureGeneraleQuestionId) : depuis la
-  // fusion, une ligne "daily" contient aussi des questions actu dont le
-  // sourceDebateId (id de débat, entier) pourrait sinon entrer en collision
-  // avec un sourceDebateId culture générale (id d'événement/éclairage).
+  // contentBySourceId/contentByQuestionId couvrent aussi les repasses : une
+  // question posée le jour J réapparaît en repasse un jour ultérieur sans
+  // jamais avoir sa propre ligne daily_quiz, mais elle a forcément été vue ce
+  // jour J (seules les questions déjà répondues sont éligibles à une
+  // repasse). originalQuizDateBySourceId retient ce jour J de première
+  // publication — nécessaire à fetchUserAcquis pour relire, si besoin, le
+  // contenu Éclairages publié ce jour-là (cf. resolveMissingAcquisSourceNames).
+  // Ne retient que les questions culture générale (isCultureGeneraleQuestionId) :
+  // depuis la fusion, une ligne "daily" contient aussi des questions actu
+  // dont le sourceDebateId (id de débat, entier) pourrait sinon entrer en
+  // collision avec un sourceDebateId culture générale (id d'événement/éclairage).
   const contentBySourceId = new Map();
+  const contentByQuestionId = new Map();
   const originalQuizDateBySourceId = new Map();
   const originalByDateAndId = new Map();
   for (const row of quizRows || []) {
     for (const q of (row.questions || [])) {
       if (!isCultureGeneraleQuestionId(q.id)) continue;
       originalByDateAndId.set(`${row.quiz_date}:${q.id}`, q);
+      contentByQuestionId.set(q.id, q);
       if (q.sourceDebateId) {
         contentBySourceId.set(q.sourceDebateId, q);
         originalQuizDateBySourceId.set(q.sourceDebateId, row.quiz_date);
@@ -12798,40 +13064,50 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
     if (!question || !question.sourceDebateId) continue;
     events.push({
       sourceDebateId: question.sourceDebateId,
+      questionId: question.id,
       quizDate: a.quizDate,
       correct: Number(a.optionIndex) === Number(question.correctIndex)
     });
   }
   for (const a of reviewAnswers) {
-    const question = contentBySourceId.get(a.sourceDebateId);
-    if (!question) continue; // contenu hors fenêtre de rétention (DAILY_QUIZ_RETENTION_DAYS) : ignoré
+    const question = contentByQuestionId.get(a.ref);
+    if (!question) continue; // contenu hors fenêtre de rétention (DAILY_QUIZ_RETENTION_DAYS), ou ancien ref sourceDebateId d'avant le 10/08/2026 : ignoré
     events.push({
-      sourceDebateId: a.sourceDebateId,
+      sourceDebateId: question.sourceDebateId,
+      questionId: a.ref,
       quizDate: a.quizDate,
       correct: Number(a.optionIndex) === Number(question.correctIndex)
     });
   }
   events.sort((x, y) => (x.quizDate < y.quizDate ? -1 : x.quizDate > y.quizDate ? 1 : 0));
-  return { events, contentBySourceId, originalQuizDateBySourceId };
+  return { events, contentBySourceId, originalQuizDateBySourceId, contentByQuestionId };
 }
 
-// Rejoue l'historique de chaque sourceDebateId dans l'ordre chronologique
-// pour en déduire son état actuel : streak (0 à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK),
-// date de la dernière réponse et si la question est déjà validée.
-function computeCultureGeneraleStreaks(events) {
-  const bySource = new Map();
+// Rejoue l'historique d'une clé de regroupement (sourceDebateId pour "Ma
+// mémoire"/"Mes acquis", questionId pour la progression indépendante par
+// question de "Mes apprentissages", cf. computeCultureGeneraleStreaks et
+// computeQuestionStreaks ci-dessous) dans l'ordre chronologique pour en
+// déduire son état actuel : streak (0 à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK),
+// date de la dernière réponse et si elle est déjà validée.
+function computeStreaksGroupedBy(events, keyField) {
+  const byKey = new Map();
   events.forEach((e) => {
-    if (!bySource.has(e.sourceDebateId)) bySource.set(e.sourceDebateId, []);
-    bySource.get(e.sourceDebateId).push(e);
+    const key = e[keyField];
+    if (key == null) return;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(e);
   });
   const result = new Map();
-  for (const [sourceDebateId, list] of bySource) {
-    // Un même sourceDebateId peut donner lieu à plusieurs questions le même
-    // jour (deux angles sur le même Éclairage) : on les regroupe en un seul
-    // événement par jour (correct seulement si TOUTES les réponses de ce
-    // jour-là le sont), sinon le streak avance de 2 crans en une seule
-    // journée et saute l'intervalle de 3 jours — plus aucune repasse ne
-    // redevient due avant bien plus longtemps que prévu.
+  for (const [key, list] of byKey) {
+    // Une même clé peut donner lieu à plusieurs événements le même jour
+    // (ex. sourceDebateId partagé par plusieurs questions d'une même notion,
+    // cf. computeCultureGeneraleStreaks) : on les regroupe en un seul
+    // événement par jour (correct seulement si TOUS les événements de ce
+    // jour-là le sont), sinon le streak avance de plusieurs crans en une
+    // seule journée et saute l'intervalle de 3 jours — plus aucune repasse ne
+    // redevient due avant bien plus longtemps que prévu. Sans effet sur
+    // computeQuestionStreaks (questionId), où l'unicité (quiz_date, voter_key,
+    // question_id) en base garantit déjà au plus un événement par jour.
     const byDate = new Map();
     for (const e of list) {
       const previous = byDate.get(e.quizDate);
@@ -12851,7 +13127,7 @@ function computeCultureGeneraleStreaks(events) {
         streak = 0;
       }
     }
-    result.set(sourceDebateId, {
+    result.set(key, {
       streak,
       everCorrect,
       lastQuizDate,
@@ -12859,6 +13135,22 @@ function computeCultureGeneraleStreaks(events) {
     });
   }
   return result;
+}
+
+// Progression par notion (toutes ses questions confondues) — "Ma mémoire" et
+// "Mes acquis" (fetchUserAcquis), inchangé.
+function computeCultureGeneraleStreaks(events) {
+  return computeStreaksGroupedBy(events, "sourceDebateId");
+}
+
+// Progression indépendante par question — "Mes apprentissages" (% d'ancrage,
+// moyenne des streaks de chaque question d'une notion, demande du
+// 10/08/2026 : chaque question a son propre calendrier de repasses, une
+// notion ne se valide donc plus d'un bloc) et l'injection des repasses dues
+// (cf. fetchCultureGeneraleReviewInjectionForToday, qui réinjecte désormais
+// chaque question due individuellement plutôt qu'une seule par notion).
+function computeQuestionStreaks(events) {
+  return computeStreaksGroupedBy(events, "questionId");
 }
 
 // Toute question déjà répondue au moins une fois (ratée ou réussie) entre
@@ -12876,31 +13168,35 @@ function isCultureGeneraleReviewDueToday(state, todayKey) {
 }
 
 // Questions à réinjecter aujourd'hui dans le QCM Culture Générale de ce
-// visiteur (cf. getDailyQuizQuestions) : celles dont l'intervalle de
+// visiteur (cf. getDailyQuizQuestions) : chaque QUESTION (pas chaque notion,
+// depuis le 10/08/2026 — cf. computeQuestionStreaks) dont l'intervalle de
 // répétition espacée est atteint, les plus en retard d'abord, plafonnées à
 // DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY — sans ce plafond, plusieurs jours
 // d'absence feraient réapparaître toutes les repasses en retard d'un coup
 // (demande du 03/08/2026). Les questions en retard mais laissées de côté par
 // le plafond restent dues (pas de recalcul de date ici) : elles repasseront
-// au prochain appel tant qu'elles n'auront pas été répondues. Id
-// "cgreview-{sourceDebateId}" — jamais persistées dans daily_quiz,
-// recalculées à chaque appel (pas de cache, cf. getDailyQuizQuestions).
+// au prochain appel tant qu'elles n'auront pas été répondues. Une même
+// notion peut donc apparaître plusieurs fois le même jour si plusieurs de
+// ses questions sont dues en même temps (chacune avec son propre calendrier,
+// désynchronisé au fil du temps). Id "cgreview-{questionId}" — jamais
+// persistées dans daily_quiz, recalculées à chaque appel (pas de cache, cf.
+// getDailyQuizQuestions).
 const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 10;
 async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
-  const { events, contentBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  const { events, contentByQuestionId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
-  const streaks = computeCultureGeneraleStreaks(events);
+  const streaks = computeQuestionStreaks(events);
   const due = [];
-  for (const [sourceDebateId, state] of streaks) {
+  for (const [questionId, state] of streaks) {
     if (!isCultureGeneraleReviewDueToday(state, todayKey)) continue;
-    const question = contentBySourceId.get(sourceDebateId);
+    const question = contentByQuestionId.get(questionId);
     if (!question) continue;
-    due.push({ sourceDebateId, lastQuizDate: state.lastQuizDate, question });
+    due.push({ questionId, lastQuizDate: state.lastQuizDate, question });
   }
   due.sort((a, b) => (a.lastQuizDate < b.lastQuizDate ? -1 : a.lastQuizDate > b.lastQuizDate ? 1 : 0));
-  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, sourceDebateId }) => ({
+  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, questionId }) => ({
     ...question,
-    id: `cgreview-${sourceDebateId}`
+    id: `cgreview-${questionId}`
   }));
 }
 
@@ -14067,7 +14363,7 @@ app.get("/api/daily-quiz/results", async (req, res) => {
   }
 });
 
-const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", ...CULTURE_GENERALE_ECLAIRAGES_TYPES]);
+const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", "debat-notion", ...CULTURE_GENERALE_ECLAIRAGES_TYPES]);
 
 // Clic sur "Mémoriser" (Éclairages ou Ce jour dans l'Histoire) : crée un QCM
 // indépendant et nommé sur cette seule notion, ou rejoint celui déjà généré
@@ -14142,6 +14438,86 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
   }
 });
 
+// Barre de recherche libre de "Mes apprentissages" (/apprentissage) : génère
+// à la demande une fiche + un QCM sur un sujet tapé librement par le
+// visiteur, plutôt qu'une notion déjà préparée par Éclairages/Ce jour dans
+// l'Histoire (cf. buildCustomTopicQuiz). Même principe de contenu partagé
+// que POST /api/users/notion-quizzes : le slot dérive d'une clé normalisée
+// du sujet (normalizeCustomTopicKey) puisqu'aucun id stable n'existe côté
+// client pour un sujet libre.
+app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const topic = String(req.body?.topic || "").trim().replace(/\s+/g, " ");
+    if (topic.length < 3 || topic.length > 150) {
+      return res.status(400).json({ ok: false, error: "Sujet invalide (3 à 150 caractères)." });
+    }
+    const quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
+      ? String(req.body.quizDate).trim()
+      : parisDateKey();
+
+    const id = normalizeCustomTopicKey(topic);
+    const slot = `notion:custom:${id}`;
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    let questions;
+    const { data: existingQuiz, error: existingQuizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (existingQuizError) throw new Error(existingQuizError.message);
+
+    if (existingQuiz) {
+      questions = existingQuiz.questions || [];
+    } else {
+      const result = await buildCustomTopicQuiz(topic, id);
+      if (result.error) {
+        const status = result.error === "rejected" ? 422 : 502;
+        return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
+      }
+      questions = result.questions;
+
+      const { error: insertError } = await supabase.from("daily_quiz").insert({
+        quiz_date: quizDate,
+        slot,
+        questions,
+        source_debate_ids: []
+      });
+      if (insertError) {
+        // Course avec un autre visiteur ayant tapé le même sujet entre-temps
+        // (cf. POST /api/users/notion-quizzes, même règle) : on relit sa
+        // génération plutôt que la nôtre.
+        if (insertError.code === "23505") {
+          const { data: raceRow, error: raceError } = await supabase
+            .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+          if (raceError) throw new Error(raceError.message);
+          questions = raceRow?.questions || questions;
+        } else {
+          throw new Error(insertError.message);
+        }
+      }
+    }
+
+    const { error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .upsert(
+        { user_id: user.id, quiz_date: quizDate, slot },
+        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+      );
+    if (linkError) throw new Error(linkError.message);
+
+    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+  } catch (error) {
+    console.error("[notion-quizzes] création (recherche libre) :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Déclic sur "Mémoriser" : retire uniquement la ligne de la liste
 // personnelle, jamais le QCM partagé (daily_quiz) — recliquer plus tard sur
 // la même notion le même jour ne régénère donc rien.
@@ -14199,21 +14575,32 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (quizRowsError) throw new Error(quizRowsError.message);
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
 
-    // Progression vers la mémorisation durable : le même streak de
-    // répétition espacée que "Mes acquis" (cf. computeCultureGeneraleStreaks),
-    // pas un simple "répondu aujourd'hui" — répondre une seule fois ne
-    // valide jamais une notion, il faut DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
-    // bonnes réponses à des intervalles croissants (cf. "1/4" affiché côté
-    // qcm-du-jour.html, demande du 09/08/2026).
+    // Progression vers la mémorisation durable : depuis le 10/08/2026, chaque
+    // QUESTION d'une notion a son propre streak de répétition espacée
+    // indépendant (cf. computeQuestionStreaks — répondre une seule fois ne
+    // valide jamais une question, il faut DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
+    // bonnes réponses à des intervalles croissants), et le "% d'ancrage"
+    // affiché pour la notion est la moyenne de ces streaks sur toutes ses
+    // questions (une question jamais répondue compte pour 0 dans la moyenne)
+    // — plus fin qu'un streak unique par notion (ancien "n/4", cf. commit du
+    // 09/08/2026), qui exigeait que toutes les questions répondues un même
+    // jour soient correctes pour que ce jour compte.
     const { events } = await fetchUserCultureGeneraleAnswerEvents(validation.legacyKey);
-    const streaks = computeCultureGeneraleStreaks(events);
+    const questionStreaks = computeQuestionStreaks(events);
 
     const quizzes = [];
     for (const link of links) {
       const questions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
       if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
-      const sourceDebateId = questions[0]?.sourceDebateId || null;
-      const state = sourceDebateId ? streaks.get(sourceDebateId) : null;
+      let streakSum = 0;
+      let answeredCount = 0;
+      for (const q of questions) {
+        const state = questionStreaks.get(q.id);
+        if (!state) continue;
+        streakSum += state.streak;
+        answeredCount += 1;
+      }
+      const progressPct = Math.round((streakSum / (questions.length * DAILY_QUIZ_ACQUIS_VALIDATION_STREAK)) * 100);
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
@@ -14221,10 +14608,9 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         sourceType: questions[0]?.sourceType || null,
         themes: questions[0]?.sourceThemes || [],
         questionCount: questions.length,
-        realized: !!state,
-        streak: state ? state.streak : 0,
-        target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
-        validated: state ? state.validated : false
+        realized: answeredCount > 0,
+        progressPct,
+        validated: progressPct >= 100
       });
     }
     res.json({ quizzes });
