@@ -210,6 +210,18 @@
   <style>
     body { background-color: #243038; }
 
+    /* Réserve le gabarit mobile définitif avant le premier rendu. Sans ce
+       verrou précoce, le conteneur flex peut brièvement comprimer le cadre
+       Bulles Actu avant que la classe agon-mobile-cloud-viewport soit prise
+       en compte, puis le faire grandir jusqu'à 548px. */
+    @media (max-width: 768px) {
+      body.page-home-mobile #agon-tag-trends-cloud {
+        height: 548px;
+        min-height: 548px;
+        flex: 0 0 548px;
+      }
+    }
+
     /* Bandeau bas : blanc avec icônes noires */
     .home-bottom-nav {
       background:
