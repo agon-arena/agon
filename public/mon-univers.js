@@ -893,14 +893,15 @@ function showStatus(kind) {
 
   // Sur l'accueil uniquement, la légende sous le sélecteur répète inutilement le rôle du
   // message d'état lorsque l'univers est vide. On la masque dans cet état précis, puis on la
-  // réaffiche dès qu'un niveau peut être rendu (ou si le chargement échoue). La page autonome
+  // réaffiche uniquement dès qu'un niveau contenant des éléments peut être rendu. La page autonome
   // /mon-univers n'a pas ce marqueur ni cette légende partagée.
   const embeddedMarker = document.getElementById("agon-memoire-embed-before");
   const embeddedCaption = embeddedMarker
     ? document.querySelector("#agon-tag-trends-section .agon-tag-trends-caption")
     : null;
   if (embeddedCaption && kind === "empty") embeddedCaption.hidden = true;
-  if (embeddedCaption && (kind === "none" || kind === "error")) embeddedCaption.hidden = false;
+  if (embeddedCaption && kind === "none") embeddedCaption.hidden = false;
+  if (embeddedCaption && (kind === "loading" || kind === "empty" || kind === "error")) embeddedCaption.hidden = true;
 
   if (kind === "none") {
     statusEl.hidden = true;

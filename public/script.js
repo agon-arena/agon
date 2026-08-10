@@ -19519,9 +19519,10 @@ function setMemoireCloudMode(enable, skipSync = false) {
   const afterEl = document.getElementById('agon-memoire-embed-after');
   const politicalSwitch = document.getElementById('agon-political-cloud-switch');
   const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
-  // showStatus("empty") masque cette légende en mode mémoire vide. Tout changement de mode
-  // repart d'un état visible afin que les textes Actu/Agôn ne restent jamais masqués.
-  if (caption) caption.hidden = false;
+  // En entrant dans Ma mémoire, le contenu n'est pas encore connu : garde la légende masquée
+  // jusqu'à ce que mon-univers.js confirme qu'au moins un niveau contient des éléments.
+  // Les modes Actu/Agôn, eux, repartent immédiatement avec leur légende visible.
+  if (caption) caption.hidden = _memoireCloudMode;
   if (_memoireCloudMode) {
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
