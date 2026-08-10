@@ -206,6 +206,11 @@
     .qcm-option-btn:disabled {
       cursor: default;
     }
+    .qcm-option-btn.is-selected:not(:disabled) {
+      border-color: #516776;
+      background: #eef3f6;
+      box-shadow: 0 0 0 2px rgba(81, 103, 118, 0.2);
+    }
     .qcm-option-fill {
       position: absolute;
       inset: 0;
@@ -284,6 +289,10 @@
     }
     .qcm-next-btn.visible {
       display: block;
+    }
+    .qcm-next-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
     .qcm-final-actions {
       display: flex;
@@ -509,6 +518,29 @@
       padding: 10px;
       border-bottom: 1px solid #eef1f3;
       vertical-align: middle;
+    }
+    .qcm-mesqcm-table th {
+      padding: 8px 10px;
+      border-bottom: 1px solid #d1d5db;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .qcm-mesqcm-state {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .qcm-mesqcm-state.is-realized {
+      background: #dcfce7;
+      color: #166534;
     }
     .qcm-mesqcm-name-btn {
       display: flex;
@@ -1230,11 +1262,14 @@
     html += renderOriginBadge(question) + renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
     html += '<div class="qcm-options" id="qcm-options"></div>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-choice-submit-btn" disabled>Valider ma réponse</button>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
 
     var optionsEl = document.getElementById('qcm-options');
+    var selectedOptionIndex = null;
+    var submitBtn = document.getElementById('qcm-choice-submit-btn');
     question.options.forEach(function (optionText, index) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -1245,9 +1280,21 @@
         '<span class="qcm-option-label">' + escapeHtml(optionText) + '</span>' +
         '<span class="qcm-option-pct"></span>' +
         '</span>';
-      btn.addEventListener('click', function () { submitChoiceAnswer(question, index); });
+      btn.addEventListener('click', function () {
+        selectedOptionIndex = index;
+        optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (optionBtn) {
+          optionBtn.classList.remove('is-selected');
+        });
+        btn.classList.add('is-selected');
+        submitBtn.disabled = false;
+      });
       optionsEl.appendChild(btn);
     });
+
+    submitBtn.onclick = function () {
+      if (selectedOptionIndex === null) return;
+      submitChoiceAnswer(question, selectedOptionIndex);
+    };
 
     if (answer) applyChoiceAnswerState(question, answer);
   }
@@ -1256,6 +1303,8 @@
     var optionsEl = document.getElementById('qcm-options');
     var buttons = optionsEl.querySelectorAll('.qcm-option-btn');
     var total = answer.totalAnswers || 0;
+    var submitBtn = document.getElementById('qcm-choice-submit-btn');
+    if (submitBtn) submitBtn.className = 'qcm-next-btn';
     buttons.forEach(function (btn, index) {
       btn.disabled = true;
       btn.classList.add('answered');
@@ -1277,6 +1326,8 @@
 
   function submitChoiceAnswer(question, optionIndex) {
     var optionsEl = document.getElementById('qcm-options');
+    var submitBtn = document.getElementById('qcm-choice-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
     optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = true; });
 
     fetch('/api/daily-quiz/answer', {
@@ -1292,6 +1343,7 @@
       })
       .catch(function () {
         optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = false; });
+        if (submitBtn) submitBtn.disabled = false;
       });
   }
 
@@ -1953,7 +2005,8 @@
   // (data-mesqcm-index), pour que le câblage des clics reste unique même
   // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
   function renderMesQcmTableHtml(list, allQuizzes) {
-    var html = '<div class="qcm-mesqcm-table-wrap"><table class="qcm-mesqcm-table"><tbody>';
+    var html = '<div class="qcm-mesqcm-table-wrap"><table class="qcm-mesqcm-table">';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Répétitions</th><th>Fiche</th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -1961,10 +2014,14 @@
       var badgeHtml = q.validated
         ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
         : '<span class="qcm-acquis-badge">' + (q.streak || 0) + ' / ' + target + '</span>';
+      var stateHtml = q.realized
+        ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
+        : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
       html += '<tr>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
       html += '</button></td>';
+      html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
       html += '<td><button type="button" class="qcm-mesqcm-fiche-btn" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Fiche</button></td>';
       html += '</tr>';

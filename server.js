@@ -14099,6 +14099,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         sourceType: questions[0]?.sourceType || null,
         themes: questions[0]?.sourceThemes || [],
         questionCount: questions.length,
+        realized: !!state,
         streak: state ? state.streak : 0,
         target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
         validated: state ? state.validated : false
