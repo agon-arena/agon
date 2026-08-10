@@ -415,13 +415,6 @@
     .qcm-acquis-item + .qcm-acquis-item {
       margin-top: 0;
     }
-    /* Icône de rubrique sur chaque ligne de "Mes QCM" (liste plate, sans les
-       en-têtes de groupe repliables qui portent cette couleur ailleurs). */
-    .qcm-acquis-item > i.fa-solid:first-child {
-      flex: 0 0 auto;
-      font-size: 16px;
-      color: #516776;
-    }
     .qcm-acquis-name {
       flex: 1 1 auto;
       margin: 0;
@@ -480,6 +473,163 @@
     }
     .qcm-acquis-group-collapse:hover {
       color: #243038;
+    }
+    /* Onglet "Mes QCM" : regroupé par thématique (cf. renderMesQcmList),
+       une vraie rubrique titrée par thématique plutôt qu'un simple tableau
+       plat — une connaissance à plusieurs thématiques apparaît sous
+       chacune. */
+    .qcm-mesqcm-group + .qcm-mesqcm-group {
+      margin-top: 22px;
+    }
+    .qcm-mesqcm-group-title {
+      margin: 0 0 6px;
+      padding: 0 4px 8px;
+      border-bottom: 2px solid #e5e7eb;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+    }
+    /* Tableau à l'intérieur de chaque rubrique — nom (ouvre/poursuit le
+       QCM), progression "n / 4" vers la mémorisation durable, accès à la
+       fiche de révision. overflow-x:auto sur le conteneur, jamais sur le
+       panneau entier, pour rester utilisable sur mobile sans casser la mise
+       en page du reste de la page. */
+    .qcm-mesqcm-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .qcm-mesqcm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+    }
+    .qcm-mesqcm-table td {
+      padding: 10px;
+      border-bottom: 1px solid #eef1f3;
+      vertical-align: middle;
+    }
+    .qcm-mesqcm-name-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0;
+      border: none;
+      background: none;
+      font: inherit;
+      color: #111827;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-name-btn:hover {
+      color: #243038;
+      text-decoration: underline;
+    }
+    .qcm-mesqcm-name-btn i {
+      flex: 0 0 auto;
+      color: #516776;
+    }
+    .qcm-mesqcm-fiche-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #243038;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-fiche-btn:hover {
+      background: #eef3f6;
+      border-color: #516776;
+    }
+    /* Pastilles de thématiques (cf. renderThemeTags, server.js
+       classifyCultureGeneraleThemesWithAI) — sous le nom dans le tableau
+       "Mes QCM", sous le nom dans la fiche (cf. buildFicheModalHtml). */
+    .qcm-mesqcm-themes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 4px 0 0 24px;
+    }
+    .qcm-fiche-name + .qcm-mesqcm-themes {
+      margin: 0 0 10px;
+    }
+    .qcm-mesqcm-theme-tag {
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #516776;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    /* Corrigé des questions dans la fiche "Mes QCM" (cf.
+       renderFicheQuestionCorrige) — lecture seule, jamais interactif : la
+       bonne réponse est directement mise en évidence, contrairement au vrai
+       QCM où elle n'est révélée qu'après réponse. */
+    .qcm-fiche-corrige-item {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #eef1f3;
+    }
+    .qcm-fiche-corrige-num {
+      margin: 0 0 4px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #9ca3af;
+    }
+    .qcm-fiche-corrige-question {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+      line-height: 1.35;
+    }
+    .qcm-fiche-corrige-list {
+      margin: 0 0 8px;
+      padding: 0;
+      list-style: none;
+    }
+    .qcm-fiche-corrige-list li {
+      padding: 7px 10px;
+      margin-bottom: 5px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #4b5563;
+      font-size: 14px;
+    }
+    .qcm-fiche-corrige-list.qcm-fiche-corrige-ordered {
+      list-style: decimal;
+      padding-left: 20px;
+    }
+    .qcm-fiche-corrige-list.qcm-fiche-corrige-ordered li {
+      padding: 2px 0;
+      margin-bottom: 2px;
+      border: none;
+      background: none;
+    }
+    .qcm-fiche-corrige-list li.is-correct {
+      border-color: #1f9d55;
+      background: #f0fdf4;
+      color: #166534;
+      font-weight: 600;
+    }
+    .qcm-fiche-corrige-explanation {
+      margin: 0;
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.4;
     }
     /* Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
        concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
@@ -1607,42 +1757,53 @@
     });
   }
 
-  // Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
-  // concept/mécanisme/citation/œuvre (sourceDetail, cf. server.js
-  // extractCultureGeneraleItemDetail) — jamais la question du QCM ni son
-  // rapprochement avec l'actualité du jour, déjà exclus côté serveur.
-  // Fermable par la croix, un clic hors modale ou Échap.
-  function openAcquisFiche(entry) {
-    var item = entry.item;
-    var meta = entry.meta;
-    var detail = item.sourceDetail || { meta: null, sections: [] };
+  // Construit le HTML intérieur d'une fiche (.qcm-fiche-modal) : nom + détail
+  // pur du concept/mécanisme/citation/œuvre/événement (sourceDetail, cf.
+  // server.js extractCultureGeneraleItemDetail) — jamais la question du QCM
+  // ni son rapprochement avec l'actualité du jour, déjà exclus côté serveur.
+  // `extraHtml` est inséré après les sections du détail, avant le bouton de
+  // fermeture — utilisé par la fiche "Mes QCM" pour y ajouter le corrigé des
+  // questions (cf. openMesQcmFiche), vide pour la fiche "Mes acquis".
+  // `themes` (optionnel) : pastilles de thématiques juste sous le nom, cf.
+  // renderThemeTags — une connaissance peut en couvrir plusieurs.
+  function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes) {
     var html =
       '<div class="qcm-fiche-modal">' +
       '<div class="qcm-fiche-head">' +
-      '<p class="qcm-fiche-rubric"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</p>' +
+      '<p class="qcm-fiche-rubric"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>' +
       '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
       '</div>' +
-      '<p class="qcm-fiche-name">' + escapeHtml(item.sourceName) + '</p>';
+      '<p class="qcm-fiche-name">' + escapeHtml(name) + '</p>' +
+      renderThemeTags(themes);
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
     if (detail.image && detail.image.url) {
       var img = detail.image;
       var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : 'Wikipedia'));
       html += '<figure class="qcm-fiche-image">' +
-        '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(item.sourceName) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
+        '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(name) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
         (img.pageUrl
           ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
           : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
         '</figure>';
     }
-    detail.sections.forEach(function (section) {
+    (detail.sections || []).forEach(function (section) {
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
       html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
     });
+    if (extraHtml) html += extraHtml;
     html += '<button type="button" class="qcm-fiche-bottom-close">Fermer</button>';
     html += '</div>';
+    return html;
+  }
+
+  // Ouvre une fiche à partir de son HTML intérieur déjà construit (cf.
+  // buildFicheModalHtml) : overlay, dégradé "suite ↓", fermeture (croix, clic
+  // hors modale, Échap, bouton du bas) — partagé par "Mes acquis" et "Mes
+  // QCM".
+  function openFicheOverlay(modalHtml) {
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
-    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + html + '<div class="qcm-fiche-scroll-spacer" aria-hidden="true"></div></div>';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '<div class="qcm-fiche-scroll-spacer" aria-hidden="true"></div></div>';
     document.body.appendChild(overlay);
     // Pas attachScrollFadeHint (générique) : il se base sur le bas de TOUTE la
     // zone de scroll, qui inclut ici .qcm-fiche-scroll-spacer (sombre, sous la
@@ -1650,8 +1811,9 @@
     // bien après la fin du vrai contenu. On se base plutôt sur le bas réel de
     // .qcm-fiche-modal (la carte blanche) par rapport au viewport.
     var ficheModalEl = overlay.querySelector('.qcm-fiche-modal');
+    var ficheFadeHint, updateFicheFadeHint, ficheFadeResizeObserver;
     if (ficheModalEl) {
-      var ficheFadeHint = document.createElement('div');
+      ficheFadeHint = document.createElement('div');
       // qcm-fiche-fade-hint : position:fixed direct sur <body>, pas un enfant
       // position:absolute de .qcm-fiche-overlay (position:fixed + overflow-y:
       // auto). Sur iOS Safari, un enfant absolute d'un conteneur fixed qui
@@ -1666,7 +1828,7 @@
         e.stopPropagation();
         overlay.scrollBy({ top: overlay.clientHeight * 0.8, behavior: 'smooth' });
       });
-      var updateFicheFadeHint = function () {
+      updateFicheFadeHint = function () {
         var rect = ficheModalEl.getBoundingClientRect();
         ficheFadeHint.classList.toggle('is-hidden', rect.bottom <= window.innerHeight + 4);
       };
@@ -1680,7 +1842,7 @@
       // ResizeObserver sur la fiche elle-même le retient à jour à chaque
       // changement de sa hauteur réelle.
       if (typeof ResizeObserver === 'function') {
-        var ficheFadeResizeObserver = new ResizeObserver(updateFicheFadeHint);
+        ficheFadeResizeObserver = new ResizeObserver(updateFicheFadeHint);
         ficheFadeResizeObserver.observe(ficheModalEl);
       }
     }
@@ -1702,6 +1864,15 @@
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
     overlay.querySelector('.qcm-fiche-bottom-close').addEventListener('click', close);
     document.addEventListener('keydown', onKeydown);
+  }
+
+  // Fiche ouverte au clic sur une ligne d'acquis. Fermable par la croix, un
+  // clic hors modale ou Échap (cf. openFicheOverlay).
+  function openAcquisFiche(entry) {
+    var item = entry.item;
+    var meta = entry.meta;
+    var detail = item.sourceDetail || { meta: null, sections: [] };
+    openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, item.sourceName, detail, ''));
   }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
@@ -1764,31 +1935,159 @@
     renderMessage("Tu n'as encore mémorisé aucune notion — va sur Éclairages ou Ce jour dans l'Histoire pour commencer.");
   }
 
-  // Liste plate, triée du plus récent au plus ancien (déjà fait côté
-  // serveur) — pas de regroupement par rubrique comme "Mes acquis" : chaque
-  // ligne est un QCM nommé et indépendant, pas une notion parmi d'autres
-  // dans la même rubrique.
+  // Petites pastilles de thématiques (cf. server.js
+  // classifyCultureGeneraleThemesWithAI) — une connaissance peut couvrir
+  // plusieurs des 16 thématiques déjà utilisées ailleurs sur le site
+  // (Autres actus, Ma mémoire), jamais une seule comme la galaxie de Ma
+  // mémoire. Tableau vide (classification pas encore faite ou échouée) :
+  // rien affiché plutôt qu'un espace vide visible.
+  function renderThemeTags(themes) {
+    if (!Array.isArray(themes) || !themes.length) return '';
+    return '<div class="qcm-mesqcm-themes">' +
+      themes.map(function (t) { return '<span class="qcm-mesqcm-theme-tag">' + escapeHtml(t) + '</span>'; }).join('') +
+      '</div>';
+  }
+
+  // Un tableau (nom + progression + fiche) pour une liste de QCM déjà
+  // filtrée — `allQuizzes` sert uniquement à retrouver l'index d'origine
+  // (data-mesqcm-index), pour que le câblage des clics reste unique même
+  // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
+  function renderMesQcmTableHtml(list, allQuizzes) {
+    var html = '<div class="qcm-mesqcm-table-wrap"><table class="qcm-mesqcm-table"><tbody>';
+    list.forEach(function (q) {
+      var index = allQuizzes.indexOf(q);
+      var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+      var target = q.target || 4;
+      var badgeHtml = q.validated
+        ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
+        : '<span class="qcm-acquis-badge">' + (q.streak || 0) + ' / ' + target + '</span>';
+      html += '<tr>';
+      html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
+      html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
+      html += '</button></td>';
+      html += '<td>' + badgeHtml + '</td>';
+      html += '<td><button type="button" class="qcm-mesqcm-fiche-btn" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Fiche</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // Regroupé par thématique (cf. server.js classifyCultureGeneraleThemesWithAI)
+  // avec de vraies rubriques titrées, plutôt qu'un simple tableau plat — une
+  // connaissance couvrant plusieurs thématiques apparaît sous chacune d'elles
+  // (demande du 09/08/2026). "Autres" regroupe les QCM sans thématique
+  // résolue (classification pas encore faite ou échouée), toujours en
+  // dernier. Rubriques triées par ordre alphabétique. À l'intérieur d'une
+  // rubrique : le nom (ouvre/poursuit le QCM, cf. loadSlot), la progression
+  // vers la mémorisation durable ("n / 4", même logique que "Mes acquis",
+  // cf. computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
+  // (détail de la notion + corrigé complet des questions, cf.
+  // openMesQcmFiche).
   function renderMesQcmList(quizzes) {
     if (!quizzes.length) { renderMesQcmEmpty(); return; }
-    var html = '<div class="qcm-acquis-list">';
-    quizzes.forEach(function (q, index) {
-      var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-      var badgeHtml = q.answered
-        ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Terminé</span>'
-        : '<span class="qcm-acquis-badge">' + q.answeredCount + ' / ' + q.questionCount + '</span>';
-      html += '<button type="button" class="qcm-acquis-item" data-mesqcm-index="' + index + '">';
-      html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i>';
-      html += '<p class="qcm-acquis-name">' + escapeHtml(q.label || meta.label) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
-      html += '</button>';
+
+    var byTheme = {};
+    var untagged = [];
+    quizzes.forEach(function (q) {
+      var themes = Array.isArray(q.themes) ? q.themes.filter(Boolean) : [];
+      if (!themes.length) { untagged.push(q); return; }
+      themes.forEach(function (t) { (byTheme[t] = byTheme[t] || []).push(q); });
+    });
+    var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
+    if (untagged.length) { byTheme['Autres'] = untagged; themeNames.push('Autres'); }
+
+    var html = '<div class="qcm-mesqcm-groups">';
+    themeNames.forEach(function (theme) {
+      html += '<section class="qcm-mesqcm-group">';
+      html += '<h2 class="qcm-mesqcm-group-title">' + escapeHtml(theme) + '</h2>';
+      html += renderMesQcmTableHtml(byTheme[theme], quizzes);
+      html += '</section>';
     });
     html += '</div>';
     body.innerHTML = html;
+
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
         loadSlot(q.slot, q.quizDate, q.label);
       });
     });
+    body.querySelectorAll('[data-mesqcm-fiche-index]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-fiche-index'))];
+        openMesQcmFiche(q);
+      });
+    });
+  }
+
+  // Corrigé d'une question dans la fiche "Mes QCM" — jamais interactif
+  // (lecture seule, contrairement au vrai QCM) : la bonne réponse est
+  // directement mise en évidence (cf. .is-correct), avec son explication.
+  function renderFicheQuestionCorrige(q, index) {
+    var type = q.type || 'qcm';
+    var html = '<div class="qcm-fiche-corrige-item">';
+    html += '<p class="qcm-fiche-corrige-num">Question ' + (index + 1) + '</p>';
+    var questionText = type === 'texte_a_trous'
+      ? escapeHtml(q.question).split(FILL_BLANK_MARKER).join('<span class="qcm-blank">' + FILL_BLANK_MARKER + '</span>')
+      : escapeHtml(q.question);
+    html += '<p class="qcm-fiche-corrige-question">' + questionText + '</p>';
+
+    if (type === 'association') {
+      html += '<ul class="qcm-fiche-corrige-list">';
+      (q.pairs || []).forEach(function (p) {
+        html += '<li class="is-correct">' + escapeHtml(p.left) + ' → ' + escapeHtml(p.right) + '</li>';
+      });
+      html += '</ul>';
+    } else if (type === 'ordre') {
+      html += '<ol class="qcm-fiche-corrige-list qcm-fiche-corrige-ordered">';
+      (q.items || []).forEach(function (it) {
+        html += '<li class="is-correct">' + escapeHtml(it) + '</li>';
+      });
+      html += '</ol>';
+    } else if (type === 'qcm_multi') {
+      var correctSet = {};
+      (q.correctIndexes || []).forEach(function (i) { correctSet[i] = true; });
+      html += '<ul class="qcm-fiche-corrige-list">';
+      (q.options || []).forEach(function (opt, i) {
+        html += '<li' + (correctSet[i] ? ' class="is-correct"' : '') + '>' + escapeHtml(opt) + '</li>';
+      });
+      html += '</ul>';
+    } else {
+      html += '<ul class="qcm-fiche-corrige-list">';
+      (q.options || []).forEach(function (opt, i) {
+        html += '<li' + (i === q.correctIndex ? ' class="is-correct"' : '') + '>' + escapeHtml(opt) + '</li>';
+      });
+      html += '</ul>';
+    }
+
+    if (q.explanation) html += '<p class="qcm-fiche-corrige-explanation">' + escapeHtml(q.explanation) + '</p>';
+    html += '</div>';
+    return html;
+  }
+
+  // Fiche d'un QCM de notion (cf. server.js GET /api/users/notion-quizzes/fiche) :
+  // même détail pur que "Mes acquis" (nom, image, explication de la notion),
+  // suivi du corrigé complet de ses questions — jamais filtré par ce que ce
+  // visiteur précis a déjà répondu, la fiche sert de support de révision.
+  var mesQcmFicheToken = 0;
+  function openMesQcmFiche(quiz) {
+    var myToken = ++mesQcmFicheToken;
+    fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (myToken !== mesQcmFicheToken) return;
+        if (data.error) throw new Error(data.error);
+        var meta = ACQUIS_SOURCE_TYPE_META[data.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+        var detail = data.sourceDetail || { meta: null, sections: [] };
+        var corrigeHtml = '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
+        (data.questions || []).forEach(function (q, i) { corrigeHtml += renderFicheQuestionCorrige(q, i); });
+        openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, data.label || quiz.label || meta.label, detail, corrigeHtml, data.themes));
+      })
+      .catch(function () {
+        if (myToken !== mesQcmFicheToken) return;
+        openFicheOverlay(buildFicheModalHtml('fa-circle-exclamation', 'Fiche', quiz.label || 'Cette notion', { meta: null, sections: [{ label: null, text: 'Impossible de charger la fiche pour le moment.' }] }, ''));
+      });
   }
 
   // `quizDate` : un QCM de notion vit sous sa date de création, jamais

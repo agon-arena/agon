@@ -25691,10 +25691,19 @@ body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status {
   margin: 18px auto 0;
   padding: 0 16px 40px;
   line-height: normal;
+  /* Même couleur que .agon-tag-trends-caption (légende affichée à la place de
+     ce message une fois l'univers non vide) — demande du 09/08/2026. */
+  color: rgba(255, 255, 255, 0.55);
 }
 
 body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p {
   margin: 0;
+}
+
+/* Petite marge avant le premier bandeau thématique de la liste de débats
+   (#debates-list, juste après ce panneau) — demande du 09/08/2026. */
+body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p.universe-status-empty-message {
+  margin-bottom: 20px;
 }
 
 @media (max-width: 768px) {

@@ -12542,15 +12542,28 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
   if (!id) return [];
   const item = { ...rawItem, type: sourceType, id, current_topic_id: id };
 
+  const sourceName = extractCultureGeneraleItemName(item);
+  const sourceDetail = extractCultureGeneraleItemDetail(item);
+  const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
+
   const quotaByItemId = new Map([[id, DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC]]);
   let parsed;
+  let sourceThemes = [];
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.4,
-      responseFormat: { type: "json_object" }
-    });
+    // Thématiques (cf. classifyCultureGeneraleThemesWithAI) menées en
+    // parallèle de la génération des questions — indépendantes l'une de
+    // l'autre, jamais bloquantes l'une pour l'autre (la classification
+    // échoue en silence, renvoie [] au pire).
+    const [content, themes] = await Promise.all([
+      _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" }
+      }),
+      classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail)
+    ]);
     parsed = JSON.parse(content);
+    sourceThemes = themes;
   } catch (error) {
     console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
     return [];
@@ -12562,16 +12575,14 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
     return [];
   }
 
-  const sourceName = extractCultureGeneraleItemName(item);
-  const sourceDetail = extractCultureGeneraleItemDetail(item);
-  const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
   return validated.map((q, index) => ({
     id: `notion:${sourceType}:${id}-q${index + 1}`,
     ...q,
     sourceType,
     sourceScope,
     sourceName,
-    sourceDetail
+    sourceDetail,
+    sourceThemes
   }));
 }
 
@@ -14066,30 +14077,80 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (quizRowsError) throw new Error(quizRowsError.message);
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
 
-    const { data: answerRows, error: answersError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
-      supabase.from("daily_quiz_answers").select("quiz_date, question_id").eq("voter_key", validation.legacyKey).in("quiz_date", chunk));
-    if (answersError) throw new Error(answersError.message);
-    const answeredKeys = new Set((answerRows || []).map((a) => `${a.quiz_date}:${a.question_id}`));
+    // Progression vers la mémorisation durable : le même streak de
+    // répétition espacée que "Mes acquis" (cf. computeCultureGeneraleStreaks),
+    // pas un simple "répondu aujourd'hui" — répondre une seule fois ne
+    // valide jamais une notion, il faut DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
+    // bonnes réponses à des intervalles croissants (cf. "1/4" affiché côté
+    // qcm-du-jour.html, demande du 09/08/2026).
+    const { events } = await fetchUserCultureGeneraleAnswerEvents(validation.legacyKey);
+    const streaks = computeCultureGeneraleStreaks(events);
 
     const quizzes = [];
     for (const link of links) {
       const questions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
       if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
-      const answeredCount = questions.filter((q) => answeredKeys.has(`${link.quiz_date}:${q.id}`)).length;
+      const sourceDebateId = questions[0]?.sourceDebateId || null;
+      const state = sourceDebateId ? streaks.get(sourceDebateId) : null;
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
         label: questions[0]?.sourceName || null,
         sourceType: questions[0]?.sourceType || null,
+        themes: questions[0]?.sourceThemes || [],
         questionCount: questions.length,
-        answeredCount,
-        answered: answeredCount === questions.length
+        streak: state ? state.streak : 0,
+        target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
+        validated: state ? state.validated : false
       });
     }
     res.json({ quizzes });
   } catch (error) {
     console.error("[notion-quizzes] liste :", error.message);
     res.status(500).json({ quizzes: [], error: error.message });
+  }
+});
+
+// Fiche d'une notion mémorisée (cf. "Mes QCM", qcm-du-jour.html) : le détail
+// pur du concept/événement (sourceDetail, même contenu que "Mes acquis") suivi
+// du corrigé complet des questions du QCM — jamais filtré par ce que ce
+// visiteur précis a déjà répondu (demande du 09/08/2026 : la fiche sert de
+// support de révision, pas de suivi de progression). Contenu partagé entre
+// tous les visiteurs (lecture directe de daily_quiz, comme getDailyQuizQuestions)
+// : pas de legacyKey nécessaire ici.
+app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, res) => {
+  try {
+    const slot = String(req.query.slot || "").trim();
+    const quizDate = String(req.query.date || "").trim();
+    if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+      return res.status(400).json({ error: "Requête invalide." });
+    }
+    const { data, error } = await supabase
+      .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+    if (error) throw new Error(error.message);
+    const questions = data?.questions || [];
+    if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
+
+    const first = questions[0];
+    res.json({
+      slot,
+      quizDate,
+      label: first.sourceName || null,
+      sourceType: first.sourceType || null,
+      themes: first.sourceThemes || [],
+      sourceDetail: first.sourceDetail || null,
+      questions: questions.map((q) => {
+        const type = q.type || "qcm";
+        const base = { id: q.id, type, question: q.question, explanation: q.explanation || "" };
+        if (type === "association") return { ...base, pairs: q.pairs || [] };
+        if (type === "qcm_multi") return { ...base, options: q.options || [], correctIndexes: q.correctIndexes || [] };
+        if (type === "ordre") return { ...base, items: q.items || [] };
+        return { ...base, options: q.options || [], correctIndex: q.correctIndex };
+      })
+    });
+  } catch (error) {
+    console.error("[notion-quizzes] fiche :", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -14208,7 +14269,10 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
     const content = data?.choices?.[0]?.message?.content;
     const parsed = content ? JSON.parse(content) : null;
     const category = normalizeOpinionArticleCategory(parsed?.category);
-    if (!category) return null;
+    if (!category) {
+      console.warn("[culture-generale category] catégorie IA non reconnue :", parsed?.category);
+      return null;
+    }
     const categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, parsed?.category_precision);
     return { category, categoryPrecision };
   } catch (error) {
@@ -14217,44 +14281,236 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
   }
 }
 
-const CULTURE_GENERALE_INTERNATIONAL_REGIONS = [
-  "Europe",
-  "Maghreb",
-  "Afrique de l’Ouest",
-  "Afrique centrale",
-  "Afrique de l’Est",
-  "Afrique australe",
-  "Moyen-Orient",
-  "Caucase",
-  "Asie centrale",
-  "Asie du Nord / Sibérie",
-  "Asie du Sud",
-  "Asie du Sud-Est",
-  "Asie de l’Est",
-  "Amérique du Nord",
-  "Amérique centrale & Caraïbes",
-  "Amérique du Sud",
-  "Océanie & Pacifique",
-  "Régions polaires"
-];
+// Classe un contenu Culture Générale dans une à trois des 16
+// OPINION_ARTICLE_CATEGORY_OPTIONS (mêmes rubriques que
+// classifyCultureGeneraleCategoryWithAI ci-dessus) — sert de "thématiques"
+// affichées sur "Mes QCM" (cf. buildNotionQuestions), jamais la même chose
+// que la galaxie de Ma mémoire (classifyCultureGeneraleCategoryWithAI, UNE
+// seule rubrique, dérive une hiérarchie distincte système/étoile) : une
+// connaissance peut couvrir plusieurs thématiques à la fois (ex. un
+// événement historique peut être à la fois "Histoire" et "Politique"),
+// demande du 09/08/2026. Retourne toujours un tableau, jamais null (vide en
+// cas d'échec) — jamais bloquant pour la génération du QCM lui-même.
+async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
 
-async function ensureCultureGeneraleInternationalRegions() {
-  for (const name of CULTURE_GENERALE_INTERNATIONAL_REGIONS) {
-    await resolveOrCreateSolarSystem("International", name, normalizeSolarSystemName(name));
+  const compact = {
+    type: sourceType,
+    title: String(sourceName || "").slice(0, 160),
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400)
+  };
+  const prompt = [
+    "Réponds uniquement en json valide.",
+    "Indique les thématiques concernées par ce contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) parmi la liste ci-dessous — UNE à TROIS thématiques, jamais plus, seulement celles vraiment pertinentes.",
+    "Thématiques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
+    "Recopie chaque libellé EXACTEMENT comme dans la liste, sans le modifier.",
+    "Format obligatoire : {\"themes\":[\"...\",\"...\"]}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+
+  try {
+    const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
+    const body = {
+      model: OPINION_ARTICLE_CATEGORY_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" }
+    };
+    if (isGpt5) {
+      body.max_completion_tokens = 400;
+      body.reasoning_effort = "low";
+    } else {
+      body.max_tokens = 150;
+      body.temperature = 0;
+    }
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    const parsed = content ? JSON.parse(content) : null;
+    const rawThemes = Array.isArray(parsed?.themes) ? parsed.themes : [];
+    return [...new Set(rawThemes.map((t) => normalizeOpinionArticleCategory(t)).filter(Boolean))].slice(0, 3);
+  } catch (error) {
+    console.warn("[culture-generale themes] classification IA ignorée :", error.message);
+    return [];
   }
 }
-ensureCultureGeneraleInternationalRegions().catch((error) => {
-  console.error("[culture-generale international] pré-création des régions :", error.message);
-});
 
-function buildInternationalSolarSystemPrompt(compact) {
+// Systèmes solaires "de départ" pour certaines galaxies : des sous-domaines
+// larges et durables (périodes pour "Histoire", disciplines pour
+// "Philosophie"/"Sciences sociales"), préférés par l'IA quand l'un d'eux
+// convient — elle reste libre d'en créer un nouveau si aucun ne convient
+// vraiment (ex. un concept transversal ne rentrant dans aucune discipline
+// listée) : jamais un mauvais rattachement juste pour rester dans une liste
+// fermée (demande du 09/08/2026). Pré-créés une fois au démarrage (cf. plus
+// bas) pour apparaître dès la première classification dans existing_systems,
+// avec ce libellé exact — sans ça, l'IA les réinventerait à chaque fois avec
+// une formulation potentiellement différente d'un appel à l'autre.
+const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
+  "International": [
+    "Europe",
+    "Maghreb",
+    "Afrique de l’Ouest",
+    "Afrique centrale",
+    "Afrique de l’Est",
+    "Afrique australe",
+    "Moyen-Orient",
+    "Caucase",
+    "Asie centrale",
+    "Asie du Nord / Sibérie",
+    "Asie du Sud",
+    "Asie du Sud-Est",
+    "Asie de l’Est",
+    "Amérique du Nord",
+    "Amérique centrale & Caraïbes",
+    "Amérique du Sud",
+    "Océanie & Pacifique",
+    "Régions polaires"
+  ],
+  "Histoire": [
+    "Préhistoire",
+    "Antiquité",
+    "Moyen Âge",
+    "Temps modernes",
+    "Révolution française & Empire",
+    "XIXe siècle",
+    "XXe siècle — 1900-1945",
+    "XXe siècle — 1946-2001"
+  ],
+  "Philosophie": [
+    "Éthique & morale",
+    "Philosophie politique",
+    "Épistémologie & philosophie des sciences",
+    "Logique & argumentation",
+    "Philosophie de l'esprit",
+    "Métaphysique"
+  ],
+  "Sciences sociales": [
+    "Sociologie",
+    "Psychologie sociale",
+    "Anthropologie"
+  ],
+  "Société - éducation": [
+    "École & enseignement",
+    "Enseignement supérieur",
+    "Famille & enfance",
+    "Démographie",
+    "Immigration & intégration",
+    "Logement",
+    "Religions & laïcité",
+    "Discriminations & inclusion",
+    "Genre & égalité",
+    "Précarité & exclusion sociale"
+  ],
+  "Sciences - technologie": [
+    "Mathématiques",
+    "Physique",
+    "Chimie",
+    "Biologie & génétique",
+    "Sciences de la Terre",
+    "Astronomie & espace",
+    "Informatique & intelligence artificielle",
+    "Ingénierie & robotique",
+    "Énergie & nucléaire"
+  ],
+  "Justice - faits divers": [
+    "Criminalité organisée & trafics",
+    "Violences sexuelles",
+    "Violences conjugales & intrafamiliales",
+    "Homicides & violences criminelles",
+    "Délinquance & atteintes aux biens",
+    "Escroqueries & cybercriminalité",
+    "Police & enquêtes",
+    "Justice & droit",
+    "Prisons & système pénitentiaire",
+    "Accidents, disparitions & drames"
+  ],
+  "Économie - emploi": [
+    "Croissance & conjoncture",
+    "Inflation & pouvoir d'achat",
+    "Emploi & chômage",
+    "Travail & salaires",
+    "Entreprises & secteurs d'activité",
+    "Banques & monnaie",
+    "Finance & marchés",
+    "Finances publiques & fiscalité",
+    "Commerce international & mondialisation",
+    "Immobilier & logement"
+  ]
+};
+
+// Description du critère de correspondance "large" par galaxie (cf.
+// CULTURE_GENERALE_SEED_SOLAR_SYSTEMS ci-dessus) — utilisé par
+// buildDomainSolarSystemPrompt. Une galaxie absente de cette liste garde le
+// critère strict habituel ("exactement la même notion").
+const CULTURE_GENERALE_DOMAIN_GALAXIES = {
+  "International": {
+    unitLabel: "la région géographique internationale principalement concernée",
+    matchExample: "ex. un contenu sur le Maroc correspond à \"Maghreb\", un contenu sur le Japon correspond à \"Asie de l’Est\", un contenu sur les Caraïbes correspond à \"Amérique centrale & Caraïbes\"",
+    newExample: "le nom d’une région géographique internationale autonome et complète (2 à 4 mots, jamais une phrase)"
+  },
+  "Histoire": {
+    unitLabel: "la période ou l'époque historique à laquelle il appartient",
+    matchExample: "ex. un événement de 1850 correspond à \"XIXe siècle\", un philosophe grec antique correspond à \"Antiquité\"",
+    newExample: "un libellé de période autonome et complet de 2 à 4 mots, jamais une phrase"
+  },
+  "Philosophie": {
+    unitLabel: "la discipline ou le sous-domaine philosophique dont il relève",
+    matchExample: "ex. un contenu sur le bien et le mal correspond à \"Éthique & morale\", un contenu sur la connaissance scientifique correspond à \"Épistémologie & philosophie des sciences\"",
+    newExample: "le nom de cette discipline ou de ce sous-domaine philosophique (2 à 4 mots, jamais une phrase)"
+  },
+  "Sciences sociales": {
+    unitLabel: "la discipline des sciences sociales dont il relève",
+    matchExample: "ex. un contenu sur les structures et institutions sociales correspond à \"Sociologie\", un contenu sur les comportements de groupe correspond à \"Psychologie sociale\"",
+    newExample: "le nom de cette discipline des sciences sociales (2 à 4 mots, jamais une phrase)"
+  },
+  "Société - éducation": {
+    unitLabel: "le sous-domaine de société ou d'éducation dont il relève",
+    matchExample: "ex. un contenu sur le système scolaire correspond à \"École & enseignement\", un contenu sur les flux migratoires correspond à \"Immigration & intégration\"",
+    newExample: "le nom de ce sous-domaine de société ou d'éducation (2 à 4 mots, jamais une phrase)"
+  },
+  "Sciences - technologie": {
+    unitLabel: "la discipline scientifique ou technologique dont il relève",
+    matchExample: "ex. un contenu sur les équations correspond à \"Mathématiques\", un contenu sur les modèles de langage correspond à \"Informatique & intelligence artificielle\"",
+    newExample: "le nom de cette discipline scientifique ou technologique (2 à 4 mots, jamais une phrase)"
+  },
+  "Justice - faits divers": {
+    unitLabel: "le sous-domaine judiciaire ou de faits divers dont il relève",
+    matchExample: "ex. un contenu sur un cambriolage correspond à \"Délinquance & atteintes aux biens\", un contenu sur une enquête policière correspond à \"Police & enquêtes\"",
+    newExample: "le nom de ce sous-domaine judiciaire ou de faits divers (2 à 4 mots, jamais une phrase)"
+  },
+  "Économie - emploi": {
+    unitLabel: "le sous-domaine économique dont il relève",
+    matchExample: "ex. un contenu sur les prix et le budget des ménages correspond à \"Inflation & pouvoir d'achat\", un contenu sur le marché du travail correspond à \"Emploi & chômage\"",
+    newExample: "le nom de ce sous-domaine économique (2 à 4 mots, jamais une phrase)"
+  }
+};
+
+async function ensureCultureGeneraleSeedSolarSystems() {
+  for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
+    for (const name of names) {
+      await resolveOrCreateSolarSystem(galaxy, name, normalizeSolarSystemName(name));
+    }
+  }
+}
+ensureCultureGeneraleSeedSolarSystems().catch((err) => console.error("[culture-generale solar-system] pré-création systèmes de départ :", err.message));
+
+// Prompt "large" (galaxies de CULTURE_GENERALE_DOMAIN_GALAXIES) : le critère
+// de correspondance porte sur l'appartenance à un domaine large (période,
+// discipline...), jamais sur "exactement la même notion" comme pour les
+// autres galaxies.
+function buildDomainSolarSystemPrompt(compact, domainConfig) {
   return [
     "Réponds uniquement en json valide.",
-    "Rattache ce contenu à la région géographique internationale principalement concernée.",
-    "Utilise en priorité l’un des systèmes de existing_systems et renvoie son id dans solar_system_id.",
-    "Exemples : Maroc = Maghreb ; Japon = Asie de l’Est ; Caraïbes = Amérique centrale & Caraïbes.",
-    "Si aucune région existante ne convient réellement, propose une région géographique autonome dans new_solar_system.",
-    "RÈGLE OBLIGATOIRE : réponds avec soit solar_system_id (nombre), soit new_solar_system (texte court) — jamais les deux.",
+    `Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un "système" : ici, ${domainConfig.unitLabel}.`,
+    `Vérifie d'abord si un système de existing_systems correspond à ce contenu (${domainConfig.matchExample}) — dans ce cas renvoie son id dans solar_system_id. Il ne s'agit pas de retrouver EXACTEMENT la même notion mais le bon système : une correspondance de domaine suffit.`,
+    `Sinon (aucun système existant ne correspond vraiment), propose dans new_solar_system ${domainConfig.newExample}.`,
+    "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
     "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"...\"}",
     "",
     JSON.stringify(compact)
@@ -14278,7 +14534,8 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
     detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
     existing_systems: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
   };
-  const prompt = galaxy === "International" ? buildInternationalSolarSystemPrompt(compact) : [
+  const domainConfig = CULTURE_GENERALE_DOMAIN_GALAXIES[galaxy];
+  const prompt = domainConfig ? buildDomainSolarSystemPrompt(compact, domainConfig) : [
     "Réponds uniquement en json valide.",
     "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
     "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
@@ -14387,7 +14644,7 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
 // système : vérifie d'abord si la notion correspond à une étoile déjà existante dans CE
 // système précis avant d'en créer une nouvelle. Un seul item à la fois (tourne à
 // l'acquisition, pas en lot).
-async function resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemName, sourceType, sourceName, sourceDetail) {
+async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSystemName, sourceType, sourceName, sourceDetail) {
   const { data: existingRows, error: existingError } = await supabase
     .from("stars")
     .select("id, name")
@@ -14405,7 +14662,30 @@ async function resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemName, 
     solar_system: solarSystemName,
     existing_stars: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucune étoile existante dans ce système)"
   };
-  const prompt = [
+  // Galaxie "Histoire" : contrairement aux autres galaxies (où l'étoile doit
+  // être la notion précise elle-même, ex. "Résilience"), l'étoile doit ici
+  // rester large — un événement/une guerre/un régime politique reconnaissable
+  // — pour que plusieurs sujets distincts sur la même période puissent
+  // partager la même étoile, plutôt qu'une étoile différente par notion
+  // (constaté en pratique : "Louis-Philippe devient roi des Français" comme
+  // étoile, trop précis pour être jamais réutilisé) — demande du 09/08/2026,
+  // exemples fournis : "Monarchie de Juillet", "Seconde Guerre mondiale".
+  const isHistoire = galaxy === "Histoire";
+  const prompt = isHistoire ? [
+    "Réponds uniquement en json valide.",
+    "Un contenu de culture générale (événement historique ou éclairage qui s'y rattache) doit être rattaché à une \"étoile\" : JAMAIS le fait précis ou l'angle exact de ce contenu, mais le grand événement/la guerre/le régime politique/le mouvement historique dans lequel il s'inscrit — un nom qu'on trouverait comme titre de chapitre dans un manuel d'histoire, jamais la phrase-résumé d'un épisode particulier de ce chapitre.",
+    "Règle de test décisive : imagine dix autres contenus tirés de la même guerre/du même régime (des batailles, des dates, des personnages, des traités différents) — l'étoile que tu choisis doit être EXACTEMENT LA MÊME pour ces dix contenus. Si ton étoile ne conviendrait qu'à ce contenu précis et à aucun autre, elle est trop précise : remonte d'un cran.",
+    "Exemples corrects : \"Monarchie de Juillet\" (pour un contenu sur l'avènement de Louis-Philippe EN 1830), \"Seconde Guerre mondiale\" (pour un contenu sur le bombardement de Nagasaki, la bataille de Stalingrad, le débarquement de Normandie ou l'attaque de Pearl Harbor — tous partagent la MÊME étoile), \"Révolution russe\", \"Guerre froide\", \"Renaissance italienne\".",
+    "Exemples INCORRECTS à ne jamais produire, bien trop précis : \"Louis-Philippe devient roi\", \"Bombardement de Nagasaki\", \"Bombardement nucléaire de Nagasaki\", \"Bataille de Stalingrad\" (c'est un épisode DE la Seconde Guerre mondiale, pas une étoile à part entière), \"Débarquement de Normandie\" (même raison).",
+    "Vérifie d'abord si un événement de existing_stars correspond à celui dont il est question ici — dans ce cas renvoie son id dans star_id.",
+    "Sinon, propose dans new_star le nom de ce grand événement/cette guerre/ce régime historique (2 à 4 mots, jamais une phrase, jamais le détail précis du contenu).",
+    "Le libellé doit rester compréhensible isolément et ne doit jamais se terminer par un article, une préposition ou un mot de liaison comme de, du, des, le, la, les, à, au, aux, et ou en.",
+    "L'étoile ne doit jamais être un simple doublon ou une reformulation du système solaire (la période) lui-même — elle doit être plus précise qu'une période, mais toujours plus large qu'un fait isolé.",
+    "RÈGLE OBLIGATOIRE : réponds avec soit \"star_id\" (nombre), soit \"new_star\" (texte court) — jamais les deux, jamais aucun des deux.",
+    "Format obligatoire : {\"star_id\":null,\"new_star\":\"Monarchie de Juillet\"}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n") : [
     "Réponds uniquement en json valide.",
     "Un contenu de culture générale doit être rattaché à une \"étoile\" : la notion précise qu'il illustre, à l'intérieur du système solaire donné (un thème plus large et durable).",
     "Vérifie d'abord si une notion de existing_stars désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans star_id.",
@@ -14534,10 +14814,20 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   if (!solarSystemId || !starId) {
     const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, question.sourceDetail);
     const galaxy = classification ? getOpinionArticleGalaxy(classification.category, classification.categoryPrecision) : null;
-    if (!galaxy) return;
+    // Best-effort, jamais bloquant — mais toujours tracé : un échec de
+    // classification silencieux (catégorie IA non reconnue, appel réseau
+    // en échec) est indiscernable d'un succès sans ce log (constaté en
+    // pratique le 09/08/2026, plusieurs tentatives sans aucune trace).
+    if (!galaxy) {
+      console.warn(`[daily quiz eclairage acquisitions] classification abandonnée : sourceType=${sourceType} sourceDebateId=${sourceDebateId} category=${classification?.category ?? "null"}`);
+      return;
+    }
 
     solarSystemId = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail);
-    if (!solarSystemId) return;
+    if (!solarSystemId) {
+      console.warn(`[daily quiz eclairage acquisitions] système solaire non résolu : galaxy=${galaxy} sourceDebateId=${sourceDebateId}`);
+      return;
+    }
 
     const { data: solarSystemRow, error: solarSystemRowError } = await supabase
       .from("solar_systems")
@@ -14546,8 +14836,11 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
       .maybeSingle();
     if (solarSystemRowError) console.warn("[daily quiz eclairage acquisitions] failed : lecture système solaire —", solarSystemRowError.message);
 
-    starId = await resolveCultureGeneraleStarWithAI(solarSystemId, solarSystemRow?.name || sourceName, sourceType, sourceName, question.sourceDetail);
-    if (!starId) return;
+    starId = await resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSystemRow?.name || sourceName, sourceType, sourceName, question.sourceDetail);
+    if (!starId) {
+      console.warn(`[daily quiz eclairage acquisitions] étoile non résolue : galaxy=${galaxy} solarSystemId=${solarSystemId} sourceDebateId=${sourceDebateId}`);
+      return;
+    }
   }
 
   try {
