@@ -499,7 +499,8 @@
       font-weight: 700;
       color: #111827;
     }
-    .qcm-mesqcm-group--pending .qcm-mesqcm-group-title {
+    .qcm-mesqcm-group--pending > .qcm-mesqcm-group-title,
+    .qcm-mesqcm-group--all > .qcm-mesqcm-group-title {
       color: #7c4a12;
       border-bottom-color: #f1cf98;
     }
@@ -2148,12 +2149,15 @@
       html += renderMesQcmTableHtml(pendingQuizzes, quizzes);
       html += '</section>';
     }
+    html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
+    html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
     themeNames.forEach(function (theme) {
       html += '<section class="qcm-mesqcm-group">';
       html += '<h2 class="qcm-mesqcm-group-title">' + escapeHtml(theme) + '</h2>';
       html += renderMesQcmTableHtml(byTheme[theme].slice().sort(compareMesQcmByStateThenName), quizzes);
       html += '</section>';
     });
+    html += '</section>';
     html += '</div>';
     body.innerHTML = html;
     initMesQcmTableScrollHints();
