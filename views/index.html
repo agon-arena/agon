@@ -880,6 +880,11 @@ window.addEventListener("pageshow", function() {
       padding-bottom: 24px;
     }
   }
+  @media (max-width: 768px) {
+    body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
+      margin-top: 0 !important;
+    }
+  }
 
   /* Segment du bandeau : plat et transparent au repos (le fond vitré vient du
      conteneur), un simple surlignage clair au survol — même transition que
