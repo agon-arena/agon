@@ -25855,12 +25855,22 @@ body.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status > p.unive
 .universe-star-panel__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 2px 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.universe-star-panel__scroll-hint {
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  height: 48px;
+  border-radius: 0 0 9px 9px;
 }
 .universe-star-panel__item {
   display: block;

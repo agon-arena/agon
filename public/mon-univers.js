@@ -762,6 +762,9 @@ const starPanelTitleEl = document.getElementById("universe-star-panel-title");
 const starPanelListEl = document.getElementById("universe-star-panel-list");
 const starPanelCloseBtn = document.getElementById("universe-star-panel-close");
 const starPanelBackdropEl = document.getElementById("universe-star-panel-backdrop");
+const starPanelBoxEl = starPanelEl?.querySelector(".universe-star-panel__box");
+let starPanelScrollHintEl = null;
+let starPanelResizeObserver = null;
 
 // Sur l'accueil, le panneau est déclaré dans #agon-tag-trends-section, qui crée son
 // propre contexte d'empilement (z-index:1). Le dock blanc peut alors passer devant
@@ -769,6 +772,42 @@ const starPanelBackdropEl = document.getElementById("universe-star-panel-backdro
 // écran, comme les fiches blanches de "Mes acquis".
 if (starPanelEl && starPanelEl.parentElement !== document.body) {
   document.body.appendChild(starPanelEl);
+}
+
+function updateStarPanelScrollHint() {
+  if (!starPanelScrollHintEl || !starPanelListEl || starPanelEl.hidden) {
+    starPanelScrollHintEl?.classList.add("is-hidden");
+    return;
+  }
+  const hasOverflow = starPanelListEl.scrollHeight > starPanelListEl.clientHeight + 2;
+  const atBottom = starPanelListEl.scrollTop + starPanelListEl.clientHeight >= starPanelListEl.scrollHeight - 4;
+  starPanelScrollHintEl.classList.toggle("is-hidden", !hasOverflow || atBottom);
+}
+
+function refreshStarPanelScrollHint() {
+  requestAnimationFrame(() => requestAnimationFrame(updateStarPanelScrollHint));
+}
+
+// Même repère que les autres fiches blanches : le titre reste fixe, seule la liste
+// défile, et le dégradé « suite ↓ » n'apparaît que lorsqu'il reste du contenu dessous.
+if (starPanelBoxEl && starPanelListEl) {
+  starPanelScrollHintEl = document.createElement("div");
+  starPanelScrollHintEl.className = "scroll-fade-hint universe-star-panel__scroll-hint is-hidden";
+  starPanelScrollHintEl.style.setProperty("--scroll-fade-color", "#ffffff");
+  starPanelScrollHintEl.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+  starPanelBoxEl.appendChild(starPanelScrollHintEl);
+
+  starPanelScrollHintEl.querySelector(".scroll-fade-hint-text")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    starPanelListEl.scrollBy({ top: starPanelListEl.clientHeight * 0.8, behavior: "smooth" });
+  });
+  starPanelListEl.addEventListener("scroll", updateStarPanelScrollHint, { passive: true });
+  window.addEventListener("resize", refreshStarPanelScrollHint, { passive: true });
+  if (typeof ResizeObserver === "function") {
+    starPanelResizeObserver = new ResizeObserver(refreshStarPanelScrollHint);
+    starPanelResizeObserver.observe(starPanelBoxEl);
+    starPanelResizeObserver.observe(starPanelListEl);
+  }
 }
 
 function formatAcquiredAt(iso) {
@@ -780,6 +819,7 @@ function formatAcquiredAt(iso) {
 function showStarPanel(star) {
   starPanelTitleEl.textContent = star.name || "Étoile";
   starPanelListEl.innerHTML = "";
+  starPanelListEl.scrollTop = 0;
 
   (star.articles || []).forEach((article) => {
     const hasFiche = Array.isArray(article.sourceDetail?.sections) && article.sourceDetail.sections.length > 0;
@@ -816,6 +856,7 @@ function showStarPanel(star) {
 
   document.body.classList.add("universe-star-panel-open");
   starPanelEl.hidden = false;
+  refreshStarPanelScrollHint();
 }
 
 function appendKnowledgeSheetText(parent, className, text) {
@@ -852,7 +893,11 @@ function showKnowledgeSheet(article, star) {
     image.src = detail.image.url;
     image.alt = article.title || "Illustration de la connaissance";
     image.loading = "lazy";
-    image.addEventListener("error", () => figure.remove(), { once: true });
+    image.addEventListener("load", refreshStarPanelScrollHint, { once: true });
+    image.addEventListener("error", () => {
+      figure.remove();
+      refreshStarPanelScrollHint();
+    }, { once: true });
     figure.appendChild(image);
     if (detail.image.credit) {
       const caption = document.createElement("figcaption");
@@ -869,10 +914,12 @@ function showKnowledgeSheet(article, star) {
 
   starPanelListEl.appendChild(sheet);
   starPanelListEl.scrollTop = 0;
+  refreshStarPanelScrollHint();
 }
 
 function hideStarPanel() {
   starPanelEl.hidden = true;
+  starPanelScrollHintEl?.classList.add("is-hidden");
   document.body.classList.remove("universe-star-panel-open");
 }
 
