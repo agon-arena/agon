@@ -499,6 +499,10 @@
       font-weight: 700;
       color: #111827;
     }
+    .qcm-mesqcm-group--pending .qcm-mesqcm-group-title {
+      color: #7c4a12;
+      border-bottom-color: #f1cf98;
+    }
     /* Tableau à l'intérieur de chaque rubrique — nom (ouvre/poursuit le
        QCM), progression "n / 4" vers la mémorisation durable, accès à la
        fiche de révision. overflow-x:auto sur le conteneur, jamais sur le
@@ -2153,7 +2157,9 @@
   // connaissance couvrant plusieurs thématiques apparaît sous chacune d'elles
   // (demande du 09/08/2026). "Autres" regroupe les QCM sans thématique
   // résolue (classification pas encore faite ou échouée), toujours en
-  // dernier. Rubriques triées par ordre alphabétique. À l'intérieur d'une
+  // dernier. Une rubrique prioritaire "En attente de réalisation" regroupe
+  // tout en haut, une seule fois, les QCM non réalisés. Les rubriques
+  // thématiques restent ensuite triées par ordre alphabétique. À l'intérieur d'une
   // rubrique : le nom (ouvre/poursuit le QCM, cf. loadSlot), la progression
   // vers la mémorisation durable ("n / 4", même logique que "Mes acquis",
   // cf. computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
@@ -2172,7 +2178,17 @@
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
     if (untagged.length) { byTheme['Autres'] = untagged; themeNames.push('Autres'); }
 
+    var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; })
+      .slice()
+      .sort(compareMesQcmByStateThenName);
+
     var html = '<div class="qcm-mesqcm-groups">';
+    if (pendingQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
+      html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
+      html += renderMesQcmTableHtml(pendingQuizzes, quizzes);
+      html += '</section>';
+    }
     themeNames.forEach(function (theme) {
       html += '<section class="qcm-mesqcm-group">';
       html += '<h2 class="qcm-mesqcm-group-title">' + escapeHtml(theme) + '</h2>';
