@@ -22,7 +22,6 @@
     document.addEventListener('DOMContentLoaded', function(){
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
-        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
       }
     });
   </script>
@@ -349,98 +348,11 @@
       font-size: 13px;
       line-height: 1.4;
     }
-    /* Onglet "Mes acquis" : chaque rubrique (mêmes thèmes que les pages
-       Éclairages et "Ce jour dans l'Histoire") est un menu repliable — replié
-       par défaut, un clic sur son en-tête déplie la liste des notions
-       acquises, triées par ordre alphabétique (cf. sourceName, server.js
-       extractCultureGeneraleItemName). Le clic sur une notion ouvre la fiche
-       (.qcm-fiche-overlay) avec le détail pur du concept/mécanisme/citation/
-       œuvre (sourceDetail), jamais la question du QCM. */
-    .qcm-acquis-group + .qcm-acquis-group {
-      margin-top: 10px;
-    }
-    .qcm-acquis-group-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      margin: 0;
-      padding: 14px 4px;
-      border: none;
-      border-bottom: 1px solid #e5e7eb;
-      background: none;
-      font: inherit;
-      font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 20px;
-      font-weight: 700;
-      color: #000000;
-      text-align: left;
-      cursor: pointer;
-    }
-    .qcm-acquis-group-title i.qcm-acquis-group-icon {
-      font-size: 16px;
-      color: #516776;
-    }
-    .qcm-acquis-group-count {
-      flex: 0 0 auto;
-      padding: 1px 8px;
-      border-radius: 999px;
-      background: #eef3f6;
-      color: #516776;
-      font-family: Arial, sans-serif;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .qcm-acquis-group-chevron {
-      flex: 0 0 auto;
-      margin-left: auto;
-      font-size: 14px;
-      color: #9ca3af;
-      transition: transform 0.15s ease;
-    }
-    .qcm-acquis-group.is-open .qcm-acquis-group-chevron {
-      transform: rotate(90deg);
-    }
-    .qcm-acquis-group-items {
-      display: none;
-      padding: 14px 0 4px;
-    }
-    .qcm-acquis-group.is-open .qcm-acquis-group-items {
-      display: block;
-    }
-    .qcm-acquis-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      padding: 12px 4px;
-      border: none;
-      border-bottom: 1px solid #eef1f3;
-      background: none;
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-    }
-    .qcm-acquis-item + .qcm-acquis-item {
-      margin-top: 0;
-    }
-    .qcm-acquis-name {
-      flex: 1 1 auto;
-      margin: 0;
-      font-size: 15px;
-      font-weight: 400;
-      color: #6b7280;
-      line-height: 1.35;
-    }
-    .qcm-acquis-item-chevron {
-      flex: 0 0 auto;
-      font-size: 13px;
-      color: #9ca3af;
-    }
-    /* Progression vers la validation (4 bonnes réponses à intervalles
-       croissants — 3j/7j/1mois, cf. server.js DAILY_QUIZ_ACQUIS_VALIDATION_STREAK) : une
-       pastille "n / 3" tant que ce n'est pas acquis, un badge vert une fois
-       validé. */
+    /* Progression vers la mémorisation durable (4 bonnes réponses à
+       intervalles croissants — 3j/7j/1mois, cf. server.js
+       DAILY_QUIZ_ACQUIS_VALIDATION_STREAK), affichée sur "Mes apprentissages"
+       (cf. renderMesQcmList) : une pastille "n / 4" tant que ce n'est pas
+       acquis, un badge vert une fois validé. */
     .qcm-acquis-badge {
       flex: 0 0 auto;
       padding: 2px 9px;
@@ -460,28 +372,6 @@
     }
     .qcm-acquis-badge.is-validated i {
       font-size: 11px;
-    }
-    /* Bouton en bas de chaque rubrique dépliée pour la replier sans avoir à
-       remonter jusqu'à son en-tête. */
-    .qcm-acquis-group-collapse {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      width: 100%;
-      margin-top: 16px;
-      padding: 8px 0 0;
-      border: none;
-      background: none;
-      font: inherit;
-      color: #6b7280;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      cursor: pointer;
-    }
-    .qcm-acquis-group-collapse:hover {
-      color: #243038;
     }
     /* Onglet "Mes QCM" : regroupé par thématique (cf. renderMesQcmList),
        une vraie rubrique titrée par thématique plutôt qu'un simple tableau
@@ -842,7 +732,7 @@
       color: #6b7280;
       line-height: 1.4;
     }
-    /* Fiche ouverte au clic sur une ligne d'acquis : nom + détail pur du
+    /* Fiche ouverte depuis "Mes apprentissages" : nom + détail pur du
        concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
        sans reprendre leur mise en page riche (sources) ni tout ce qui relie
        l'élément à l'actualité du jour (déjà exclu côté serveur). L'image du
@@ -867,7 +757,7 @@
        mais pas ici où le parent scrollable EST l'élément position:fixed
        (.qcm-fiche-overlay) : sur iOS Safari un enfant absolute d'un tel
        parent ne reste pas fiablement épinglé pendant le défilement. Posé en
-       position:fixed direct sur <body> à la place (cf. openAcquisFiche), et
+       position:fixed direct sur <body> à la place (cf. openMesQcmFiche), et
        recalé ici en largeur sur la fiche (max-width identique à
        .qcm-fiche-modal) — sinon le dégradé pleine largeur déborde des bords
        d'une fiche centrée plus étroite que l'écran.
@@ -1249,39 +1139,51 @@
   var currentQuizDate = null;
   var currentCategory = null;
   var slotsStatus = null;
-  // Jeton incrémenté à chaque loadSlot/loadAcquis : les callbacks async de
+  // Jeton incrémenté à chaque loadSlot/loadMesQcm : les callbacks async de
   // ces fonctions (fetch imbriqués, parfois lents) vérifient qu'ils sont
   // toujours le dernier appel en date avant de toucher au DOM. Sans ça, un
   // changement d'onglet pendant qu'une requête est encore en vol (ex. clic
-  // sur "Mes acquis" avant que /results ait répondu pour l'onglet précédent)
-  // laisse la réponse tardive écraser l'écran affiché entre-temps — cf. le
-  // "flash" de l'écran de fin de QCM signalé sur l'onglet Mes acquis.
+  // sur un autre onglet avant que /results ait répondu pour l'onglet
+  // précédent) laisse la réponse tardive écraser l'écran affiché entre-temps
+  // — cf. le "flash" de l'écran de fin de QCM historiquement signalé.
   var loadToken = 0;
 
-  // Trois onglets de haut niveau : "Mes QCM" (les notions choisies au clic
-  // sur "Mémoriser" dans Éclairages/Ce jour dans l'Histoire — chacune un QCM
-  // indépendant et nommé, cf. server.js buildNotionQuestions, slot
-  // "notion:{sourceType}:{sourceId}"), "Renforcement des connaissances"
-  // (pseudo-slot "renforcement", cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT :
-  // uniquement les repasses de répétition espacée dues aujourd'hui) et "Mes
-  // acquis" (lecture seule de la banque personnelle de culture générale, pas
-  // un QCM à répondre).
-  // "acquis"/"mesqcm" ne sont pas des créneaux vérifiés côté serveur : deux
-  // onglets toujours visibles (cf. isCategoryAvailable), qui listent leur
-  // propre contenu plutôt que de charger un QCM directement — voir
-  // loadAcquis/loadMesQcm ci-dessous.
-  var CATEGORY_ORDER = ['mesqcm', 'renforcement', 'acquis'];
-  var CATEGORY_LABELS = { mesqcm: 'Mes apprentissages', renforcement: 'Renforcement', acquis: 'Mes acquis' };
+  // Signale au parent (bandeau bleu + sablier "Chargement en cours",
+  // cf. showDebateIframeParentLoadingOverlay dans script.js) que du contenu
+  // réel est affiché — jamais au DOMContentLoaded, sans quoi le bandeau
+  // disparaît avant la fin des fetch (Mes QCM / QCM demandé) et laisse
+  // apparaître un flash vide le temps que ce script inline prenne le relais.
+  var iframeReadySignaled = false;
+  function signalIframeReady() {
+    if (iframeReadySignaled || window.self === window.top) return;
+    iframeReadySignaled = true;
+    try {
+      window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
+    } catch (e) {}
+  }
+
+  // Deux onglets de haut niveau : "Mes apprentissages" (les notions choisies
+  // au clic sur "Mémoriser" dans Éclairages/Ce jour dans l'Histoire —
+  // chacune un QCM indépendant et nommé, cf. server.js buildNotionQuestions,
+  // slot "notion:{sourceType}:{sourceId}" ; regroupe aussi la banque de
+  // notions déjà bien répondues, ex-onglet "Mes acquis" retiré le
+  // 10/08/2026 car redondant avec cette liste) et "Renforcement des
+  // connaissances" (pseudo-slot "renforcement", cf. server.js
+  // DAILY_QUIZ_REINFORCEMENT_SLOT : uniquement les repasses de répétition
+  // espacée dues aujourd'hui).
+  // "mesqcm" n'a pas de créneau à vérifier côté serveur : toujours visible
+  // (cf. isCategoryAvailable), liste son propre contenu plutôt que de
+  // charger un QCM directement — voir loadMesQcm ci-dessous.
+  var CATEGORY_ORDER = ['mesqcm', 'renforcement'];
+  var CATEGORY_LABELS = { mesqcm: 'Mes apprentissages', renforcement: 'Renforcement' };
   var QCM_SUBTITLE_BY_CATEGORY = {
     mesqcm: "Les QCM que tu as choisi de mémoriser sur Éclairages et Ce jour dans l'Histoire — chacun alimente Ma mémoire une fois réussi.",
-    renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis.",
-    acquis: "Les questions de culture générale auxquelles tu as déjà bien répondu, avec leur explication. 4 bonnes réponses à intervalles croissants (3 jours, 7 jours, 1 mois) pour les valider définitivement."
+    renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis."
   };
   // Rubrique d'origine (sourceType, cf. server.js buildCultureGeneraleQuestionsForToday)
   // de chaque question de culture générale — mêmes icônes/libellés que la
-  // page Éclairages et "Ce jour dans l'Histoire", pour que la banque
-  // d'acquis se sente comme le même univers.
-  var ACQUIS_SOURCE_TYPE_ORDER = ['histoire', 'parallele', 'pensee', 'mecanisme', 'concept', 'citation', 'oeuvre', 'latin'];
+  // page Éclairages et "Ce jour dans l'Histoire", réutilisées par "Mes
+  // apprentissages" (cf. renderMesQcmList et consorts).
   var ACQUIS_SOURCE_TYPE_META = {
     histoire: { icon: 'fa-clock-rotate-left', label: "Ce jour dans l'Histoire" },
     parallele: { icon: 'fa-landmark', label: 'Parallèle historique' },
@@ -1292,14 +1194,13 @@
     oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" },
     latin: { icon: 'fa-scroll', label: 'Mot latin du jour' }
   };
-  // "acquis"/"mesqcm" n'ont pas de créneau à vérifier : toujours affichés,
-  // leur propre état vide gère le cas "rien encore" (cf. renderAcquisEmpty/
-  // renderMesQcmEmpty). "renforcement" dépend du pseudo-slot du même nom,
-  // personnalisé par visiteur (cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT) —
-  // disponible seulement s'il y a au moins une repasse due aujourd'hui pour
-  // ce visiteur.
+  // "mesqcm" n'a pas de créneau à vérifier : toujours affiché, son propre
+  // état vide gère le cas "rien encore" (cf. renderMesQcmEmpty).
+  // "renforcement" dépend du pseudo-slot du même nom, personnalisé par
+  // visiteur (cf. server.js DAILY_QUIZ_REINFORCEMENT_SLOT) — disponible
+  // seulement s'il y a au moins une repasse due aujourd'hui pour ce visiteur.
   function isCategoryAvailable(category) {
-    if (category === 'acquis' || category === 'mesqcm') return true;
+    if (category === 'mesqcm') return true;
     return !!(slotsStatus.slots.renforcement && slotsStatus.slots.renforcement.available);
   }
 
@@ -1322,7 +1223,6 @@
       } else {
         btn.addEventListener('click', function () {
           if (category === currentCategory && !isLearningBack) return;
-          if (category === 'acquis') { loadAcquis(); return; }
           if (category === 'mesqcm') {
             if (isLearningBack) window.history.replaceState({}, '', window.location.pathname);
             loadMesQcm();
@@ -1342,10 +1242,12 @@
   }
 
   function renderMessage(text) {
-    var loadingHtml = /^Chargement\b/i.test(String(text || ''))
+    var isLoading = /^Chargement\b/i.test(String(text || ''));
+    var loadingHtml = isLoading
       ? '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">'
       : '';
     body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(text) + '</p>';
+    if (!isLoading) signalIframeReady();
   }
 
   function setParentIframeCloseVisible(visible) {
@@ -1388,8 +1290,8 @@
   // Badge d'origine (actu / culture générale) affiché au-dessus de chaque
   // question, une fois les deux mélangées dans la même session (cf.
   // question.origin/sourceType renvoyés par server.js stripQuestionForClient) :
-  // réutilise les icônes déjà définies pour "Mes acquis" (ACQUIS_SOURCE_TYPE_META)
-  // pour la culture générale, un badge générique pour l'actu.
+  // réutilise les icônes de rubrique (ACQUIS_SOURCE_TYPE_META) pour la
+  // culture générale, un badge générique pour l'actu.
   function renderOriginBadge(question) {
     if (question.origin === 'culture_generale') {
       var meta = ACQUIS_SOURCE_TYPE_META[question.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -1404,6 +1306,7 @@
   // autres formats (dont "intrus", identique à "qcm" question ×
   // 4 options) partagent le même rendu à options (renderChoiceQuestion).
   function renderQuestion() {
+    signalIframeReady();
     var question = questions[currentIndex];
     var answer = answeredByQuestionId[question.id];
     var type = question.type || 'qcm';
@@ -1865,6 +1768,7 @@
   }
 
   function renderFinalScore() {
+    signalIframeReady();
     var total = questions.length;
     var correct = 0;
     questions.forEach(function (q) {
@@ -1898,103 +1802,13 @@
     };
   }
 
-  function renderAcquisEmpty() {
-    renderMessage("Réponds à des questions de QCM Culture Générale pour commencer à remplir ta banque d'acquis.");
-  }
-
-  // Entrées de la dernière liste rendue (item + meta de sa rubrique),
-  // indexées par data-acquis-index sur chaque ligne — sert à retrouver le
-  // détail au clic sans le remettre dans le DOM (cf. openAcquisFiche).
-  var acquisFicheItems = [];
-
-  // Nom affiché et clé de tri : toujours le nom du concept/mécanisme/auteur/
-  // œuvre (sourceName, cf. server.js extractCultureGeneraleItemName et sa
-  // résolution rétroactive resolveMissingAcquisSourceNames) — jamais la
-  // question elle-même, qui ne doit apparaître que dans la fiche de détail.
-  function acquisDisplayName(item) {
-    return item.sourceName;
-  }
-
-  // Chaque rubrique d'origine (dans l'ordre ACQUIS_SOURCE_TYPE_ORDER) est un
-  // menu repliable, replié par défaut — un clic sur son en-tête déplie la
-  // liste des notions acquises, triées par ordre alphabétique sur le nom du
-  // concept/mécanisme/auteur. Le clic sur une notion ouvre la fiche (détail
-  // pur du concept/mécanisme/citation/œuvre, cf. sourceDetail, jamais la
-  // question du QCM). Un acquis dont le nom ou le détail n'a pas pu être
-  // résolu (contenu source disparu) n'est pas affiché plutôt que de retomber
-  // sur la question.
-  function renderAcquisList(items) {
-    items = items.filter(function (item) {
-      return !!item.sourceName && item.sourceDetail && item.sourceDetail.sections && item.sourceDetail.sections.length;
-    });
-    if (!items.length) { renderAcquisEmpty(); return; }
-    var bySourceType = {};
-    items.forEach(function (item) {
-      var key = ACQUIS_SOURCE_TYPE_META[item.sourceType] ? item.sourceType : 'histoire';
-      (bySourceType[key] = bySourceType[key] || []).push(item);
-    });
-    acquisFicheItems = [];
-    var html = '<div class="qcm-acquis-list">';
-    ACQUIS_SOURCE_TYPE_ORDER.forEach(function (key) {
-      var group = bySourceType[key];
-      if (!group || !group.length) return;
-      var meta = ACQUIS_SOURCE_TYPE_META[key];
-      group.sort(function (a, b) {
-        return acquisDisplayName(a).localeCompare(acquisDisplayName(b), 'fr', { sensitivity: 'base' });
-      });
-      html += '<div class="qcm-acquis-group">';
-      html += '<button type="button" class="qcm-acquis-group-title" aria-expanded="false">';
-      html += '<i class="fa-solid ' + meta.icon + ' qcm-acquis-group-icon"></i> ' + escapeHtml(meta.label);
-      html += '<span class="qcm-acquis-group-count">' + group.length + '</span>';
-      html += '<i class="fa-solid fa-chevron-right qcm-acquis-group-chevron"></i>';
-      html += '</button>';
-      html += '<div class="qcm-acquis-group-items">';
-      group.forEach(function (item) {
-        var target = item.target || 3;
-        var badgeHtml = item.validated
-          ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
-          : '<span class="qcm-acquis-badge">' + item.streak + ' / ' + target + '</span>';
-        var ficheIndex = acquisFicheItems.length;
-        acquisFicheItems.push({ item: item, meta: meta });
-        html += '<button type="button" class="qcm-acquis-item' + (item.validated ? ' is-validated' : '') + '" data-acquis-index="' + ficheIndex + '">';
-        html += '<p class="qcm-acquis-name">' + escapeHtml(acquisDisplayName(item)) + '</p>' + badgeHtml + '<i class="fa-solid fa-chevron-right qcm-acquis-item-chevron"></i>';
-        html += '</button>';
-      });
-      html += '<button type="button" class="qcm-acquis-group-collapse"><i class="fa-solid fa-chevron-up"></i> Replier</button>';
-      html += '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
-    body.innerHTML = html;
-    body.querySelectorAll('.qcm-acquis-group-title').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var group = btn.closest('.qcm-acquis-group');
-        var isOpen = group.classList.toggle('is-open');
-        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      });
-    });
-    body.querySelectorAll('.qcm-acquis-group-collapse').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var group = btn.closest('.qcm-acquis-group');
-        group.classList.remove('is-open');
-        var titleBtn = group.querySelector('.qcm-acquis-group-title');
-        if (titleBtn) titleBtn.setAttribute('aria-expanded', 'false');
-      });
-    });
-    body.querySelectorAll('.qcm-acquis-item').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        openAcquisFiche(acquisFicheItems[Number(btn.getAttribute('data-acquis-index'))]);
-      });
-    });
-  }
-
   // Construit le HTML intérieur d'une fiche (.qcm-fiche-modal) : nom + détail
   // pur du concept/mécanisme/citation/œuvre/événement (sourceDetail, cf.
   // server.js extractCultureGeneraleItemDetail) — jamais la question du QCM
   // ni son rapprochement avec l'actualité du jour, déjà exclus côté serveur.
   // `extraHtml` est inséré après les sections du détail, avant le bouton de
-  // fermeture — utilisé par la fiche "Mes QCM" pour y ajouter le corrigé des
-  // questions (cf. openMesQcmFiche), vide pour la fiche "Mes acquis".
+  // fermeture — utilisé par la fiche "Mes apprentissages" pour y ajouter le
+  // corrigé des questions (cf. openMesQcmFiche).
   // `themes` (optionnel) : pastilles de thématiques juste sous le nom, cf.
   // renderThemeTags — une connaissance peut en couvrir plusieurs.
   function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes) {
@@ -2029,8 +1843,7 @@
 
   // Ouvre une fiche à partir de son HTML intérieur déjà construit (cf.
   // buildFicheModalHtml) : overlay, dégradé "suite ↓", fermeture (croix, clic
-  // hors modale, Échap, bouton du bas) — partagé par "Mes acquis" et "Mes
-  // QCM".
+  // hors modale, Échap, bouton du bas).
   function openFicheOverlay(modalHtml) {
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
@@ -2095,42 +1908,6 @@
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
     overlay.querySelector('.qcm-fiche-bottom-close').addEventListener('click', close);
     document.addEventListener('keydown', onKeydown);
-  }
-
-  // Fiche ouverte au clic sur une ligne d'acquis. Fermable par la croix, un
-  // clic hors modale ou Échap (cf. openFicheOverlay).
-  function openAcquisFiche(entry) {
-    var item = entry.item;
-    var meta = entry.meta;
-    var detail = item.sourceDetail || { meta: null, sections: [] };
-    openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, item.sourceName, detail, ''));
-  }
-
-  // Pas un créneau à charger (cf. isCategoryAvailable) : lit directement la
-  // banque personnelle de l'utilisateur plutôt que de démarrer un QCM.
-  function loadAcquis() {
-    setParentIframeCloseVisible(true);
-    var myToken = ++loadToken;
-    currentCategory = 'acquis';
-    currentSlot = null;
-    titleText.textContent = CATEGORY_LABELS.acquis;
-    if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.acquis;
-    renderCategorySwitcher();
-
-    if (!voterKey) {
-      renderAcquisEmpty();
-      return;
-    }
-    renderMessage('Chargement de tes acquis…');
-    fetch('/api/daily-quiz/acquis?voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (myToken !== loadToken) return;
-        renderAcquisList(Array.isArray(data.acquis) ? data.acquis : []);
-      })
-      .catch(function () {
-        if (myToken === loadToken) renderMessage('Impossible de charger tes acquis pour le moment.');
-      });
   }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
@@ -2345,8 +2122,8 @@
   // thématiques restent ensuite triées par ordre alphabétique, fermées par
   // défaut et paginées par groupes de dix. À l'intérieur d'une rubrique : le
   // nom (ouvre/poursuit le QCM, cf. loadSlot), la progression
-  // vers la mémorisation durable ("n / 4", même logique que "Mes acquis",
-  // cf. computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
+  // vers la mémorisation durable ("n / 4", répétition espacée, cf.
+  // computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
   // (détail de la notion + corrigé complet des questions, cf.
   // openMesQcmFiche).
   function renderMesQcmList(quizzes) {
@@ -2393,6 +2170,7 @@
     html += '</section>';
     html += '</div>';
     body.innerHTML = html;
+    signalIframeReady();
     initMesQcmPagination();
     initMesQcmTableScrollHints();
     initMesQcmThemeMenus();
@@ -2457,9 +2235,9 @@
   }
 
   // Fiche d'un QCM de notion (cf. server.js GET /api/users/notion-quizzes/fiche) :
-  // même détail pur que "Mes acquis" (nom, image, explication de la notion),
-  // suivi du corrigé complet de ses questions — jamais filtré par ce que ce
-  // visiteur précis a déjà répondu, la fiche sert de support de révision.
+  // détail pur de la notion (nom, image, explication), suivi du corrigé
+  // complet de ses questions — jamais filtré par ce que ce visiteur précis
+  // a déjà répondu, la fiche sert de support de révision.
   var mesQcmFicheToken = 0;
   function openMesQcmFiche(quiz) {
     var myToken = ++mesQcmFicheToken;

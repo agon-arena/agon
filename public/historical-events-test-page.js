@@ -87,17 +87,12 @@
     if (label) label.textContent = active ? "Mémorisé" : "Mémoriser";
   }
 
-  function setMemorizeButtonLoading(btn, loading) {
-    btn.disabled = loading;
-    btn.classList.toggle("is-loading", loading);
-  }
-
-  // Navigue vers le QCM précis qui vient d'être créé (jamais Ma mémoire, lecture seule) —
-  // relais vers la modale du parent en iframe (cette page ne charge pas script.min.js, pas
-  // d'openDebateIframeModal disponible ici : on réplique juste le message que cette fonction
-  // poste, cf. script.js).
-  function goToQcm(slot, quizDate, label) {
-    var url = "/apprentissage?slot=" + encodeURIComponent(slot) + "&date=" + encodeURIComponent(quizDate) + "&label=" + encodeURIComponent(label);
+  // Navigue vers Apprentissage (jamais Ma mémoire, lecture seule) — relais
+  // vers la modale du parent en iframe (cette page ne charge pas
+  // script.min.js, pas d'openDebateIframeModal disponible ici : on réplique
+  // juste le message que cette fonction poste, cf. script.js).
+  function goToApprentissage() {
+    var url = "/apprentissage";
     if (window.self !== window.top) {
       try {
         window.parent.postMessage({
@@ -111,25 +106,26 @@
     }
   }
 
-  // Popup affichée une fois le QCM généré (jamais à la désactivation) : le
-  // clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne réponse
-  // au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) —
-  // "Faire le QCM" mène donc directement vers ce QCM précis, jamais vers Ma
-  // mémoire qui n'est qu'un affichage en lecture seule de ce qui est déjà
-  // acquis. Texte construit via createElement/textContent (jamais innerHTML) :
-  // notionName vient du contenu chargé depuis l'API, pas sous contrôle direct.
-  function showMemorizeExplainerModal(notionName, slot, quizDate) {
+  // Popup affichée tout de suite au clic (jamais à la désactivation), sans
+  // attendre la génération IA du QCM (plusieurs secondes) — elle se termine
+  // en arrière-plan, le QCM apparaît dans "Mes QCM" une fois prêt (demande
+  // du 10/08/2026 : le clic doit répondre vite, pas rester bloqué sur un
+  // état de chargement). Mène donc vers Apprentissage en général, jamais
+  // vers ce QCM précis dont le slot n'est pas encore connu à ce stade. Texte
+  // construit via createElement/textContent (jamais innerHTML) : notionName
+  // vient du contenu chargé depuis l'API, pas sous contrôle direct.
+  function showMemorizeExplainerModal(notionName) {
     var overlay = document.createElement("div");
     overlay.className = "het-memorize-explainer-overlay";
     var modal = document.createElement("div");
     modal.className = "het-memorize-explainer-modal";
     var text = document.createElement("p");
     text.className = "het-memorize-explainer-text";
-    text.appendChild(document.createTextNode("Le QCM « " + notionName + " » a été créé — réponds-y pour le mémoriser durablement dans Ma mémoire."));
+    text.appendChild(document.createTextNode("« " + notionName + " » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas)."));
     var qcmBtn = document.createElement("button");
     qcmBtn.type = "button";
     qcmBtn.className = "het-memorize-explainer-qcm";
-    qcmBtn.textContent = "Faire le QCM";
+    qcmBtn.textContent = "Apprentissage";
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "het-memorize-explainer-close";
@@ -150,7 +146,7 @@
     closeBtn.addEventListener("click", close);
     qcmBtn.addEventListener("click", function () {
       close();
-      goToQcm(slot, quizDate, notionName);
+      goToApprentissage();
     });
   }
 
@@ -159,7 +155,12 @@
     var sourceDebateId = event && event.id;
     if (!sourceDebateId) return;
 
-    setMemorizeButtonLoading(btn, true);
+    // Optimiste : le bouton passe actif et le message s'affiche
+    // immédiatement, annulé seulement si la requête échoue (cf. catch/then
+    // plus bas) — jamais d'attente visible pendant la génération IA.
+    setMemorizeButtonState(btn, true);
+    showMemorizeExplainerModal(notionName);
+
     fetch("/api/users/notion-quizzes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -167,14 +168,11 @@
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        setMemorizeButtonLoading(btn, false);
-        if (!data.ok) return;
-        setMemorizeButtonState(btn, true);
+        if (!data.ok) { setMemorizeButtonState(btn, false); return; }
         btn.setAttribute("data-quiz-slot", data.slot);
         btn.setAttribute("data-quiz-date", data.quizDate);
-        showMemorizeExplainerModal(data.label || notionName, data.slot, data.quizDate);
       })
-      .catch(function () { setMemorizeButtonLoading(btn, false); });
+      .catch(function () { setMemorizeButtonState(btn, false); });
   }
 
   // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —

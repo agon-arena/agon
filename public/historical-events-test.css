@@ -366,14 +366,6 @@ html {
   background: #f0aa27;
 }
 
-/* Génération IA du QCM en direct au clic (jamais instantanée, contrairement
-   à l'ancienne case à cocher) : le bouton se grise le temps de la requête,
-   jamais de double-clic possible pendant la génération. */
-.het-rubric-memorize-btn.is-loading {
-  opacity: 0.6;
-  cursor: wait;
-}
-
 .het-memorize-explainer-overlay {
   position: fixed;
   inset: 0;

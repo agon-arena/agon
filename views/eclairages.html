@@ -218,13 +218,6 @@
     .ecl-rubric-memorize-btn.is-active:hover {
       background: #f0aa27;
     }
-    /* Génération IA du QCM en direct au clic (jamais instantanée, contrairement
-       à l'ancienne case à cocher) : le bouton se grise le temps de la requête,
-       jamais de double-clic possible pendant la génération. */
-    .ecl-rubric-memorize-btn.is-loading {
-      opacity: 0.6;
-      cursor: wait;
-    }
     .ecl-memorize-explainer-overlay {
       position: fixed;
       inset: 0;
@@ -1205,34 +1198,29 @@
     if (label) label.textContent = active ? 'Mémorisé' : 'Mémoriser';
   }
 
-  function setMemorizeButtonLoading(btn, loading) {
-    btn.disabled = loading;
-    btn.classList.toggle('is-loading', loading);
-  }
-
-  // Popup affichée une fois le QCM généré (jamais à la désactivation) : le
-  // clic n'ajoute rien tout de suite à "Ma mémoire" (seule une bonne réponse
-  // au QCM le fait, cf. server.js recordDailyQuizEclairageAcquisition) —
-  // "Faire le QCM" mène donc directement vers ce QCM précis (qcmUrl, avec son
-  // slot/date/label), jamais vers Ma mémoire qui n'est qu'un affichage en
-  // lecture seule de ce qui est déjà acquis. Texte construit via
-  // createElement/textContent (jamais innerHTML) : notionName vient du
-  // contenu chargé depuis l'API, pas sous contrôle direct.
+  // Popup affichée tout de suite au clic (jamais à la désactivation), sans
+  // attendre la génération IA du QCM (plusieurs secondes) — elle se termine
+  // en arrière-plan, le QCM apparaît dans "Mes QCM" une fois prêt (demande
+  // du 10/08/2026 : le clic doit répondre vite, pas rester bloqué sur un
+  // état de chargement). Mène donc vers Apprentissage en général, jamais
+  // vers ce QCM précis dont le slot n'est pas encore connu à ce stade. Texte
+  // construit via createElement/textContent (jamais innerHTML) : notionName
+  // vient du contenu chargé depuis l'API, pas sous contrôle direct.
   // openDebateIframeModal (script.min.js, déjà chargé sur cette page) gère
   // elle-même le cas iframe (relais vers la modale du parent) vs page
   // autonome.
-  function showMemorizeExplainerModal(notionName, qcmUrl) {
+  function showMemorizeExplainerModal(notionName) {
     var overlay = document.createElement('div');
     overlay.className = 'ecl-memorize-explainer-overlay';
     var modal = document.createElement('div');
     modal.className = 'ecl-memorize-explainer-modal';
     var text = document.createElement('p');
     text.className = 'ecl-memorize-explainer-text';
-    text.appendChild(document.createTextNode('Le QCM « ' + notionName + ' » a été créé — réponds-y pour le mémoriser durablement dans Ma mémoire.'));
+    text.appendChild(document.createTextNode('« ' + notionName + ' » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas).'));
     var qcmBtn = document.createElement('button');
     qcmBtn.type = 'button';
     qcmBtn.className = 'ecl-memorize-explainer-qcm';
-    qcmBtn.textContent = 'Faire le QCM';
+    qcmBtn.textContent = 'Apprentissage';
     var closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'ecl-memorize-explainer-close';
@@ -1253,8 +1241,8 @@
     closeBtn.addEventListener('click', close);
     qcmBtn.addEventListener('click', function () {
       close();
-      if (typeof openDebateIframeModal === 'function') openDebateIframeModal(qcmUrl);
-      else window.location.href = qcmUrl;
+      if (typeof openDebateIframeModal === 'function') openDebateIframeModal('/apprentissage');
+      else window.location.href = '/apprentissage';
     });
   }
 
@@ -1267,7 +1255,12 @@
     var sourceDebateId = item && item.current_topic_id;
     if (!item || !sourceDebateId) return;
 
-    setMemorizeButtonLoading(btn, true);
+    // Optimiste : le bouton passe actif et le message s'affiche
+    // immédiatement, annulé seulement si la requête échoue (cf. catch/then
+    // plus bas) — jamais d'attente visible pendant la génération IA.
+    setMemorizeButtonState(btn, true);
+    showMemorizeExplainerModal(notionName);
+
     fetch('/api/users/notion-quizzes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1275,16 +1268,11 @@
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        setMemorizeButtonLoading(btn, false);
-        if (!data.ok) return;
-        setMemorizeButtonState(btn, true);
+        if (!data.ok) { setMemorizeButtonState(btn, false); return; }
         btn.setAttribute('data-quiz-slot', data.slot);
         btn.setAttribute('data-quiz-date', data.quizDate);
-        var label = data.label || notionName;
-        var qcmUrl = '/apprentissage?slot=' + encodeURIComponent(data.slot) + '&date=' + encodeURIComponent(data.quizDate) + '&label=' + encodeURIComponent(label);
-        showMemorizeExplainerModal(label, qcmUrl);
       })
-      .catch(function () { setMemorizeButtonLoading(btn, false); });
+      .catch(function () { setMemorizeButtonState(btn, false); });
   }
 
   // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —

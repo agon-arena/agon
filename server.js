@@ -12929,13 +12929,12 @@ async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceI
   }));
 }
 
-// "Mes acquis" (cf. GET /api/daily-quiz/acquis, qcm-du-jour.html) : banque
-// personnelle des questions de culture générale déjà répondues correctement
-// au moins une fois, avec leur progression vers la validation complète
-// (DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à intervalles
-// croissants, cf. computeCultureGeneraleStreaks) — jamais le QCM actu, hors
-// périmètre (connaissances factuelles/durables plutôt que suivi de
-// l'actualité du jour).
+// Banque personnelle des questions de culture générale déjà répondues
+// correctement au moins une fois, avec leur progression vers la validation
+// complète (DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à intervalles
+// croissants, cf. computeCultureGeneraleStreaks) — utilisée par "Ma mémoire"
+// (fiche affichée au clic sur une étoile, cf. /api/users/intellectual-universe)
+// et par le badge de progression de "Mes apprentissages".
 async function fetchUserAcquis(voterKey, options = {}) {
   const { events, contentBySourceId, originalQuizDateBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
@@ -13962,22 +13961,6 @@ app.get("/api/daily-quiz/results", async (req, res) => {
   }
 });
 
-// "Mes acquis" : banque personnelle des questions de culture générale déjà
-// répondues correctement par ce visiteur (cf. fetchUserAcquis), groupées
-// côté client par rubrique d'origine — même esprit que les pages Éclairages
-// et "Ce jour dans l'Histoire", mais reconstitué à partir de son propre
-// parcours de QCM plutôt que du contenu du jour.
-app.get("/api/daily-quiz/acquis", async (req, res) => {
-  try {
-    const voterKey = String(req.query.voterKey || "").trim();
-    if (!voterKey) return res.json({ acquis: [] });
-    const acquis = await fetchUserAcquis(voterKey);
-    res.json({ acquis });
-  } catch (error) {
-    res.status(500).json({ acquis: [], error: error.message });
-  }
-});
-
 const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", ...CULTURE_GENERALE_ECLAIRAGES_TYPES]);
 
 // Clic sur "Mémoriser" (Éclairages ou Ce jour dans l'Histoire) : crée un QCM
@@ -14590,8 +14573,17 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
       response_format: { type: "json_object" }
     };
     if (isGpt5) {
-      body.max_completion_tokens = 500;
-      body.reasoning_effort = "low";
+      // "medium" (pas "low") pour les galaxies à domaines fixes : c'est là que
+      // l'IA doit vraiment comparer le contenu à existing_systems plutôt que
+      // recopier le titre de la notion — un raisonnement plus poussé réduit
+      // (sans l'annuler) le risque de rattachement raté, cf. filet de
+      // sécurité déterministe plus bas (limite de mots) pour le reste. Budget
+      // de tokens relevé en conséquence (1200, pas 500) : "medium" consomme
+      // largement plus de tokens de raisonnement caché avant la réponse
+      // finale — à 500, le modèle épuisait ce budget en pleine réflexion et
+      // renvoyait un contenu vide (constaté en pratique le 10/08/2026).
+      body.max_completion_tokens = domainConfig ? 1200 : 500;
+      body.reasoning_effort = domainConfig ? "medium" : "low";
     } else {
       body.max_tokens = 200;
       body.temperature = 0;
@@ -14601,9 +14593,19 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
       body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => "");
+      throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
+    }
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      // Réponse vide (arrive parfois avec reasoning_effort "medium" quand le
+      // modèle épuise son budget de tokens en plein raisonnement, cf.
+      // max_completion_tokens ci-dessus) — jamais silencieux, sinon
+      // indiscernable d'un succès.
+      console.warn(`[culture-generale solar-system] réponse IA vide : galaxy=${galaxy} finish_reason=${data?.choices?.[0]?.finish_reason}`);
+    }
     const parsed = content ? JSON.parse(content) : null;
 
     const candidateId = Number(parsed?.solar_system_id);
@@ -14611,15 +14613,31 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
       return candidateId;
     }
     const newName = String(parsed?.new_solar_system || "").trim();
-    if (isStandaloneUniverseNodeName(newName)) {
+    // Filet de sécurité pour les galaxies à domaines fixes (cf.
+    // CULTURE_GENERALE_DOMAIN_GALAXIES) : le prompt demande "2 à 4 mots,
+    // jamais une phrase", mais rien n'empêchait l'IA de recopier le titre
+    // complet de la notion à la place (constaté en pratique le 10/08/2026 —
+    // "La monarchie française s'effondre aux Tuileries" comme système au
+    // lieu de réutiliser "Révolution française & Empire"). Un libellé trop
+    // long est rejeté ici plutôt que créé tel quel.
+    const wordCount = newName ? newName.split(/\s+/).filter(Boolean).length : 0;
+    const maxWords = domainConfig ? 5 : Infinity;
+    if (isStandaloneUniverseNodeName(newName) && wordCount <= maxWords) {
       const normalized = normalizeSolarSystemName(newName);
       if (!isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category: null, categoryPrecision: null })) {
         return await resolveOrCreateSolarSystem(galaxy, newName, normalized);
       }
+    } else if (domainConfig && newName) {
+      console.warn(`[culture-generale solar-system] libellé rejeté (trop long pour une galaxie à domaines fixes) : galaxy=${galaxy} newName="${newName}"`);
     }
   } catch (error) {
     console.warn("[culture-generale solar-system] classification IA ignorée :", error.message);
   }
+  // Jamais de repli sur sourceName pour une galaxie à domaines fixes : ce
+  // serait recréer exactement le même problème (le titre complet de la
+  // notion comme "système") — mieux vaut ne pas classer cette fois (best-
+  // effort, cf. appelant) que créer un système à côté de la liste fixe.
+  if (domainConfig) return null;
   return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
 }
 
@@ -14696,27 +14714,31 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
     solar_system: solarSystemName,
     existing_stars: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucune étoile existante dans ce système)"
   };
-  // Galaxie "Histoire" : contrairement aux autres galaxies (où l'étoile doit
-  // être la notion précise elle-même, ex. "Résilience"), l'étoile doit ici
-  // rester large — un événement/une guerre/un régime politique reconnaissable
-  // — pour que plusieurs sujets distincts sur la même période puissent
+  // Galaxies à domaines fixes (cf. CULTURE_GENERALE_DOMAIN_GALAXIES) :
+  // contrairement aux autres galaxies (où l'étoile doit être la notion
+  // précise elle-même, ex. "Résilience"), l'étoile doit ici rester large —
+  // une vraie sous-catégorie du système solaire, jamais le fait précis de ce
+  // contenu — pour que plusieurs sujets distincts du même système puissent
   // partager la même étoile, plutôt qu'une étoile différente par notion
   // (constaté en pratique : "Louis-Philippe devient roi des Français" comme
-  // étoile, trop précis pour être jamais réutilisé) — demande du 09/08/2026,
-  // exemples fournis : "Monarchie de Juillet", "Seconde Guerre mondiale".
-  const isHistoire = galaxy === "Histoire";
-  const prompt = isHistoire ? [
+  // étoile, trop précis pour être jamais réutilisé — demande du 09/08/2026).
+  // Doit aussi rester DISTINCTE du système solaire lui-même, sans reprendre
+  // ses mots (constaté en pratique : étoile "Révolution française" sous le
+  // système "Révolution française & Empire", simple redite du système au
+  // lieu d'une vraie sous-catégorie comme "Terreur" ou "Directoire" —
+  // demande du 10/08/2026) : filet de sécurité déterministe plus bas en
+  // complément (sous-ensemble de mots du système solaire).
+  const domainConfig = CULTURE_GENERALE_DOMAIN_GALAXIES[galaxy];
+  const prompt = domainConfig ? [
     "Réponds uniquement en json valide.",
-    "Un contenu de culture générale (événement historique ou éclairage qui s'y rattache) doit être rattaché à une \"étoile\" : JAMAIS le fait précis ou l'angle exact de ce contenu, mais le grand événement/la guerre/le régime politique/le mouvement historique dans lequel il s'inscrit — un nom qu'on trouverait comme titre de chapitre dans un manuel d'histoire, jamais la phrase-résumé d'un épisode particulier de ce chapitre.",
-    "Règle de test décisive : imagine dix autres contenus tirés de la même guerre/du même régime (des batailles, des dates, des personnages, des traités différents) — l'étoile que tu choisis doit être EXACTEMENT LA MÊME pour ces dix contenus. Si ton étoile ne conviendrait qu'à ce contenu précis et à aucun autre, elle est trop précise : remonte d'un cran.",
-    "Exemples corrects : \"Monarchie de Juillet\" (pour un contenu sur l'avènement de Louis-Philippe EN 1830), \"Seconde Guerre mondiale\" (pour un contenu sur le bombardement de Nagasaki, la bataille de Stalingrad, le débarquement de Normandie ou l'attaque de Pearl Harbor — tous partagent la MÊME étoile), \"Révolution russe\", \"Guerre froide\", \"Renaissance italienne\".",
-    "Exemples INCORRECTS à ne jamais produire, bien trop précis : \"Louis-Philippe devient roi\", \"Bombardement de Nagasaki\", \"Bombardement nucléaire de Nagasaki\", \"Bataille de Stalingrad\" (c'est un épisode DE la Seconde Guerre mondiale, pas une étoile à part entière), \"Débarquement de Normandie\" (même raison).",
-    "Vérifie d'abord si un événement de existing_stars correspond à celui dont il est question ici — dans ce cas renvoie son id dans star_id.",
-    "Sinon, propose dans new_star le nom de ce grand événement/cette guerre/ce régime historique (2 à 4 mots, jamais une phrase, jamais le détail précis du contenu).",
+    `Un contenu de culture générale doit être rattaché à une "étoile" : une sous-catégorie du système solaire donné (${JSON.stringify(solarSystemName)}) — plus précise que ce système, mais encore assez large pour regrouper plusieurs contenus différents. JAMAIS le fait précis ou l'angle exact de ce contenu en particulier.`,
+    "Règle de test décisive : imagine dix autres contenus différents rattachés au même système solaire — l'étoile que tu choisis doit être EXACTEMENT LA MÊME pour plusieurs d'entre eux. Si ton étoile ne conviendrait qu'à ce contenu précis et à aucun autre, elle est trop précise : remonte d'un cran.",
+    "INTERDICTION ABSOLUE : l'étoile ne doit JAMAIS reprendre les mots du système solaire lui-même, même reformulés — ce serait une simple redite, pas une sous-catégorie. Exemple : pour le système \"Révolution française & Empire\", l'étoile \"Révolution française\" est INTERDITE (redite du système) ; une vraie sous-catégorie serait \"Terreur\", \"Directoire\", \"Consulat\" ou \"Premier Empire\". Pour le système \"Éthique & morale\", l'étoile \"Éthique\" est interdite ; une vraie sous-catégorie serait \"Utilitarisme\" ou \"Impératif catégorique\".",
+    "Vérifie d'abord si un thème de existing_stars correspond à ce contenu — dans ce cas renvoie son id dans star_id.",
+    "Sinon, propose dans new_star le nom de cette sous-catégorie (2 à 4 mots, jamais une phrase, jamais le détail précis du contenu, jamais un mot du système solaire).",
     "Le libellé doit rester compréhensible isolément et ne doit jamais se terminer par un article, une préposition ou un mot de liaison comme de, du, des, le, la, les, à, au, aux, et ou en.",
-    "L'étoile ne doit jamais être un simple doublon ou une reformulation du système solaire (la période) lui-même — elle doit être plus précise qu'une période, mais toujours plus large qu'un fait isolé.",
     "RÈGLE OBLIGATOIRE : réponds avec soit \"star_id\" (nombre), soit \"new_star\" (texte court) — jamais les deux, jamais aucun des deux.",
-    "Format obligatoire : {\"star_id\":null,\"new_star\":\"Monarchie de Juillet\"}",
+    "Format obligatoire : {\"star_id\":null,\"new_star\":\"Directoire\"}",
     "",
     JSON.stringify(compact)
   ].join("\n") : [
@@ -14741,8 +14763,13 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
       response_format: { type: "json_object" }
     };
     if (isGpt5) {
-      body.max_completion_tokens = 500;
-      body.reasoning_effort = "low";
+      // Mêmes raisons que resolveCultureGeneraleSolarSystemWithAI : "medium"
+      // pour les galaxies à domaines fixes (l'IA doit vraiment comparer au
+      // système solaire donné, pas recopier le contenu), budget de tokens
+      // relevé en conséquence (1200, pas 500) pour laisser la place au
+      // raisonnement caché avant la réponse finale.
+      body.max_completion_tokens = domainConfig ? 1200 : 500;
+      body.reasoning_effort = domainConfig ? "medium" : "low";
     } else {
       body.max_tokens = 200;
       body.temperature = 0;
@@ -14752,7 +14779,10 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
       body: JSON.stringify(body)
     });
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => "");
+      throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
+    }
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content;
     const parsed = content ? JSON.parse(content) : null;
@@ -14762,7 +14792,19 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
       return candidateId;
     }
     const newName = String(parsed?.new_star || "").trim();
-    if (isStandaloneUniverseNodeName(newName)) {
+    // Filet de sécurité pour les galaxies à domaines fixes : rejette une
+    // étoile dont les mots sont entièrement contenus dans ceux du système
+    // solaire (simple redite plutôt qu'une vraie sous-catégorie, constaté en
+    // pratique le 10/08/2026 — étoile "Révolution française" sous le
+    // système "Révolution française & Empire").
+    const rejectAsSolarSystemRestatement = domainConfig && newName && (() => {
+      const starWords = normalizeStarName(newName).split(" ").filter(Boolean);
+      const systemWords = new Set(normalizeSolarSystemName(solarSystemName).split(" ").filter(Boolean));
+      return starWords.length > 0 && starWords.every((w) => systemWords.has(w));
+    })();
+    if (rejectAsSolarSystemRestatement) {
+      console.warn(`[culture-generale star] libellé rejeté (redite du système solaire) : solarSystem="${solarSystemName}" newName="${newName}"`);
+    } else if (isStandaloneUniverseNodeName(newName)) {
       const normalized = normalizeStarName(newName);
       if (!isOpinionArticleStarNameRejected(normalized, { solarSystemName, category: null, categoryPrecision: null })) {
         return await resolveOrCreateStar(solarSystemId, newName, normalized);
@@ -14771,6 +14813,11 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
   } catch (error) {
     console.warn("[culture-generale star] classification IA ignorée :", error.message);
   }
+  // Jamais de repli sur sourceName pour une galaxie à domaines fixes : ce
+  // serait recréer le même risque de sur-précision qu'ailleurs — mieux vaut
+  // ne pas classer cette fois (best-effort, cf. appelant) qu'une étoile
+  // à côté de la logique de sous-catégorie attendue.
+  if (domainConfig) return null;
   return resolveOrCreateStar(solarSystemId, sourceName, normalizeStarName(sourceName));
 }
 
