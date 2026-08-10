@@ -514,7 +514,7 @@
       overscroll-behavior-x: contain;
       scrollbar-width: thin;
     }
-    /* Le dégradé et la pilule rendent immédiatement visibles les colonnes
+    /* Le dégradé et le discret repère vertical « suite » rendent visibles les colonnes
        situées hors écran. Ils disparaissent dès que le tableau est arrivé à
        son extrémité droite, puis réapparaissent si l'utilisateur revient. */
     .qcm-mesqcm-table-scroll-hint {
@@ -523,13 +523,13 @@
       top: 0;
       right: 0;
       bottom: 0;
-      width: 92px;
+      width: 48px;
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      padding-right: 7px;
+      padding-right: 3px;
       box-sizing: border-box;
-      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9) 44%, #ffffff 72%);
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.88) 52%, #ffffff 82%);
       pointer-events: none;
       opacity: 0;
       visibility: hidden;
@@ -542,23 +542,31 @@
     .qcm-mesqcm-table-scroll-btn {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      min-height: 30px;
-      padding: 6px 9px;
-      border: 1px solid rgba(255,255,255,0.4);
-      border-radius: 999px;
-      background: #243038;
-      color: #ffffff;
-      box-shadow: 0 3px 10px rgba(15,23,42,0.22);
+      gap: 3px;
+      padding: 7px 4px;
+      border: none;
+      background: transparent;
+      color: #6b7280;
       font: inherit;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       white-space: nowrap;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
       cursor: pointer;
       pointer-events: auto;
     }
-    .qcm-mesqcm-table-scroll-btn i {
-      font-size: 10px;
+    .qcm-mesqcm-table-scroll-btn:hover,
+    .qcm-mesqcm-table-scroll-btn:focus-visible {
+      color: #243038;
+      outline: none;
+    }
+    .qcm-mesqcm-table-scroll-arrow {
+      font-size: 15px;
+      line-height: 1;
+      letter-spacing: 0;
     }
     .qcm-mesqcm-table-shell.has-left-overflow::before {
       content: '';
@@ -2092,8 +2100,8 @@
       html += '</tr>';
     });
     html += '</tbody></table></div>';
-    html += '<div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true">';
-    html += '<button type="button" class="qcm-mesqcm-table-scroll-btn" tabindex="-1">Glisser <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>';
+    html += '<div class="qcm-mesqcm-table-scroll-hint">';
+    html += '<button type="button" class="qcm-mesqcm-table-scroll-btn" tabindex="-1" aria-label="Voir les colonnes suivantes"><span>suite</span><span class="qcm-mesqcm-table-scroll-arrow" aria-hidden="true">›</span></button>';
     html += '</div></div>';
     return html;
   }
