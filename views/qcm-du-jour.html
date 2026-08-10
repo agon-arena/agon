@@ -2126,6 +2126,20 @@
     });
   }
 
+  // Dans chaque rubrique : les apprentissages encore à réaliser restent en
+  // tête, puis chaque groupe d'état est classé alphabétiquement en français.
+  function compareMesQcmByStateThenName(a, b) {
+    var aRealized = !!a.realized;
+    var bRealized = !!b.realized;
+    if (aRealized !== bRealized) return aRealized ? 1 : -1;
+    var aMeta = ACQUIS_SOURCE_TYPE_META[a.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+    var bMeta = ACQUIS_SOURCE_TYPE_META[b.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+    return String(a.label || aMeta.label || '').localeCompare(String(b.label || bMeta.label || ''), 'fr', {
+      sensitivity: 'base',
+      numeric: true
+    });
+  }
+
   // Regroupé par thématique (cf. server.js classifyCultureGeneraleThemesWithAI)
   // avec de vraies rubriques titrées, plutôt qu'un simple tableau plat — une
   // connaissance couvrant plusieurs thématiques apparaît sous chacune d'elles
@@ -2154,7 +2168,7 @@
     themeNames.forEach(function (theme) {
       html += '<section class="qcm-mesqcm-group">';
       html += '<h2 class="qcm-mesqcm-group-title">' + escapeHtml(theme) + '</h2>';
-      html += renderMesQcmTableHtml(byTheme[theme], quizzes);
+      html += renderMesQcmTableHtml(byTheme[theme].slice().sort(compareMesQcmByStateThenName), quizzes);
       html += '</section>';
     });
     html += '</div>';
