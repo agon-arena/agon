@@ -25051,19 +25051,43 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   }
 
   /* Le fil d'Ariane sort du flux afin de ne pas pousser le cadre ni le sélecteur. Sur mobile,
-     il est placé au-dessus du bord supérieur du cadre (comme sur desktop), avec une petite
-     respiration ; seule la flèche de retour reste à l'intérieur du cadre. */
+     il reste sous le bouton Trier / Rechercher et tient sur une seule ligne, y compris aux
+     niveaux profonds où galaxie et système solaire sont affichés ensemble. */
   body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
     position: absolute;
     left: 30px;
     right: 30px;
-    top: 20px;
+    top: 44px;
   }
 
-  /* En standalone, le fil d'Ariane reste entièrement au-dessus du cadre
-     "Ma mémoire". Cette surcharge mobile ne modifie pas son placement desktop. */
+  body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before .universe-breadcrumb {
+    flex-wrap: nowrap;
+    gap: 2px;
+    margin-bottom: 0;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: clamp(10px, 2.8vw, 12px);
+    line-height: 1.2;
+  }
+
+  body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before .universe-breadcrumb__item {
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before .universe-breadcrumb__sep {
+    flex: 0 0 auto;
+  }
+
+  /* Même position dans l'application installée : l'ancien top négatif faisait
+     remonter le fil d'Ariane jusque sur le bouton Trier / Rechercher. */
   body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: -6px;
+    top: 44px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
@@ -25079,7 +25103,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
      et la flèche, positionnés en absolu, suivent exactement le même décalage. */
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 34px;
+    top: 44px;
   }
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
     top: 451px;
