@@ -5492,7 +5492,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     const { data: acquisitions, error: acquisitionsError } = await supabase
       .from("user_article_acquisitions")
-      .select("id, solar_system_id, star_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name")
+      .select("id, solar_system_id, star_id, acquired_at, eclairage_type, eclairage_source_id, eclairage_name, eclairage_detail")
       .eq("user_id", user.id)
       .not("eclairage_type", "is", null);
     if (acquisitionsError) throw new Error(acquisitionsError.message);
@@ -5509,6 +5509,22 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       if (seenEclairageKeys.has(key)) continue;
       seenEclairageKeys.add(key);
       eclairageAcquisitions.push(a);
+    }
+
+    // La fenêtre ouverte depuis une étoile doit mener à la même fiche détaillée
+    // que "Mes acquis". Réutilise donc sa résolution (y compris pour les anciens
+    // acquis), indexée par la clé stable type + source. Le texte aplati conservé
+    // dans user_article_acquisitions reste le repli si la source historique n'est
+    // plus relisible : la mémoire ne perd jamais complètement sa fiche.
+    let acquisFicheByKey = new Map();
+    try {
+      const acquisWithSourceIds = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+      acquisFicheByKey = new Map(acquisWithSourceIds.map((item) => [
+        `${item.sourceType}:${item.sourceDebateId}`,
+        item
+      ]));
+    } catch (error) {
+      console.warn("[intellectual universe] fiches acquis indisponibles :", error.message);
     }
 
     const neededSolarSystemIds = new Set();
@@ -5573,6 +5589,11 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     // antérieure à l'introduction de ce niveau). Jamais d'URL (aucune page dédiée à rouvrir)
     // — handleItemActivate (mon-univers.js) ignore déjà silencieusement une url absente.
     for (const a of eclairageAcquisitions) {
+      const fiche = acquisFicheByKey.get(`${a.eclairage_type}:${a.eclairage_source_id}`);
+      const storedDetail = String(a.eclairage_detail || "").trim();
+      const sourceDetail = fiche?.sourceDetail?.sections?.length
+        ? fiche.sourceDetail
+        : (storedDetail ? { meta: null, sections: [{ label: null, text: storedDetail }], image: null } : null);
       const storedSolarSystem = a.solar_system_id ? solarSystemById.get(a.solar_system_id) : null;
       const star = a.star_id ? starById.get(a.star_id) : null;
       const solarSystem = storedSolarSystem
@@ -5584,9 +5605,12 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         : (a.eclairage_name || "Culture générale");
       pushIntoTree(solarSystem, starKey, starName, {
         id: `eclairage:${a.eclairage_type}:${a.eclairage_source_id}`,
-        title: a.eclairage_name,
+        title: fiche?.sourceName || a.eclairage_name,
         url: null,
         source: CULTURE_GENERALE_SOURCE_TYPE_LABEL[a.eclairage_type] || "Culture générale",
+        sourceType: a.eclairage_type,
+        sourceDebateId: a.eclairage_source_id,
+        sourceDetail,
         category: null,
         categoryPrecision: null,
         acquiredAt: a.acquired_at
@@ -12910,7 +12934,7 @@ async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceI
 // croissants, cf. computeCultureGeneraleStreaks) — jamais le QCM actu, hors
 // périmètre (connaissances factuelles/durables plutôt que suivi de
 // l'actualité du jour).
-async function fetchUserAcquis(voterKey) {
+async function fetchUserAcquis(voterKey, options = {}) {
   const { events, contentBySourceId, originalQuizDateBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
   const streaks = computeCultureGeneraleStreaks(events);
@@ -12941,9 +12965,10 @@ async function fetchUserAcquis(voterKey) {
 
   // Plus récent en premier — les acquis les plus frais sont les plus
   // probables à intéresser l'utilisateur qui revient consulter sa banque.
-  return acquis
-    .sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0))
-    .map(({ sourceDebateId, ...rest }) => rest);
+  const sorted = acquis
+    .sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0));
+  if (options.includeSourceDebateId) return sorted;
+  return sorted.map(({ sourceDebateId, ...rest }) => rest);
 }
 
 /* ================================================================= */

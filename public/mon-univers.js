@@ -774,10 +774,15 @@ function showStarPanel(star) {
   starPanelListEl.innerHTML = "";
 
   (star.articles || []).forEach((article) => {
+    const hasFiche = Array.isArray(article.sourceDetail?.sections) && article.sourceDetail.sections.length > 0;
     const hasUrl = article.url && /^https?:\/\//i.test(String(article.url));
-    const el = document.createElement(hasUrl ? "a" : "span");
+    const el = document.createElement(hasFiche ? "button" : (hasUrl ? "a" : "span"));
     el.className = "universe-star-panel__item";
-    if (hasUrl) {
+    if (hasFiche) {
+      el.type = "button";
+      el.setAttribute("aria-label", `Ouvrir la fiche connaissance ${article.title || ""}`.trim());
+      el.addEventListener("click", () => showKnowledgeSheet(article, star));
+    } else if (hasUrl) {
       el.href = article.url;
       el.target = "_blank";
       el.rel = "noopener noreferrer";
@@ -802,6 +807,59 @@ function showStarPanel(star) {
   });
 
   starPanelEl.hidden = false;
+}
+
+function appendKnowledgeSheetText(parent, className, text) {
+  const value = String(text || "").trim();
+  if (!value) return;
+  const el = document.createElement("p");
+  el.className = className;
+  el.textContent = value;
+  parent.appendChild(el);
+}
+
+function showKnowledgeSheet(article, star) {
+  const detail = article.sourceDetail || {};
+  starPanelTitleEl.textContent = article.title || "Fiche connaissance";
+  starPanelListEl.innerHTML = "";
+
+  const sheet = document.createElement("li");
+  sheet.className = "universe-star-panel__knowledge-sheet";
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "universe-star-panel__knowledge-back";
+  back.innerHTML = '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour aux connaissances</span>';
+  back.addEventListener("click", () => showStarPanel(star));
+  sheet.appendChild(back);
+
+  appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-source", article.source);
+  appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-meta", detail.meta);
+
+  if (detail.image?.url) {
+    const figure = document.createElement("figure");
+    figure.className = "universe-star-panel__knowledge-image";
+    const image = document.createElement("img");
+    image.src = detail.image.url;
+    image.alt = article.title || "Illustration de la connaissance";
+    image.loading = "lazy";
+    image.addEventListener("error", () => figure.remove(), { once: true });
+    figure.appendChild(image);
+    if (detail.image.credit) {
+      const caption = document.createElement("figcaption");
+      caption.textContent = detail.image.credit;
+      figure.appendChild(caption);
+    }
+    sheet.appendChild(figure);
+  }
+
+  (detail.sections || []).forEach((section) => {
+    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-section-title", section.label);
+    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-text", section.text);
+  });
+
+  starPanelListEl.appendChild(sheet);
+  starPanelListEl.scrollTop = 0;
 }
 
 function hideStarPanel() {
