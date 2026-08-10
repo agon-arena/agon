@@ -2593,10 +2593,24 @@ const EXTERNAL_PREVIEW_CACHE_MAX = 300;
 const EXTERNAL_PREVIEW_NO_IMAGE_RETRY_MS = 30 * 60 * 1000;
 const debatesApiResponseCache = new Map();
 const DEBATES_API_CACHE_TTL_MS = 5 * 60 * 1000;
+// Flux "récent"/"old" (page d'accueil, sort=recent) : TTL dédié, plus court que les
+// autres clés car c'est la vue la plus consultée. Relevé de 2 à 15 min le 10/08/2026
+// (audit egress) : ce cache-key rebuild (debates+arguments+comments+votes, avec
+// media_extras) est le plus gros contributeur réel identifié, largement avant les
+// scans "popular"/"ideas" (peu/jamais appelés en pratique) — accepter jusqu'à 15 min
+// de délai avant qu'une arène tout juste créée/relancée apparaisse en tête réduit
+// d'autant sa fréquence de reconstruction.
+const DEBATES_RECENT_CACHE_TTL_MS = 15 * 60 * 1000;
 // La page d'accueil possède une entrée par catégorie et par orientation politique. Cinquante
 // entrées ne suffisaient plus : les pages récentes évinçaient en boucle les catégories, qui
 // repartaient alors sur quatre lectures Supabase (debates + arguments + comments + votes).
 const DEBATES_API_CACHE_MAX = 160;
+// Anti-dogpile : plusieurs visiteurs arrivant simultanément sur une clé de cache expirée
+// déclenchaient chacun leur propre reconstruction (debates + arguments + comments + votes),
+// jusqu'à ×N la même lecture Supabase en quelques millisecondes. Une seule reconstruction
+// en vol par clé, les autres requêtes attendent la même promesse (cf. audit egress du
+// 10/08/2026, même principe que latestDebatesMetaInFlight ci-dessous).
+const debatesApiInFlight = new Map();
 let latestDebatesMetaCache = null;
 let latestDebatesMetaInFlight = null;
 const LATEST_DEBATES_META_CACHE_TTL_MS = 60 * 1000;
@@ -2621,6 +2635,14 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "bumped_at",
   "political_group"
 ].join(",");
+
+// Utilisée uniquement quand /api/debates doit balayer TOUTES les arènes
+// correspondant aux filtres pour les classer côté Node avant de limiter
+// (sort=popular/ideas sans catégorie ni pagination — cf. canPageInDatabase) :
+// id/created_at/bumped_at suffisent au tri, le reste (dont media_extras, à
+// lui seul ~11 Mo sur l'ensemble de la table au 10/08/2026, cf. audit egress)
+// n'est relu qu'une fois les identifiants finalement affichés connus.
+const DEBATES_RANKING_SELECT_COLUMNS = "id,created_at,bumped_at";
 
 // getDebateById est appelé sur (quasi) chaque vue de débat (route la plus
 // chaude de l'API, ~1300 appels/jour) : ai_analysis et popularity_analysis
@@ -6996,9 +7018,15 @@ app.get("/api/debates", async (req, res) => {
       return res.json([]);
     }
 
+    // Reconstruction isolée dans sa propre fonction pour pouvoir la partager entre
+    // requêtes concurrentes visant la même cacheKey (cf. debatesApiInFlight plus bas) :
+    // sans ce partage, plusieurs visiteurs arrivant pile au moment où le cache expire
+    // déclenchaient chacun leur propre lecture Supabase (debates + arguments + comments
+    // + votes, ×N) — cf. audit egress du 10/08/2026.
+    const buildFreshDebatesRows = async () => {
     const canPageInDatabase = !searchQuery && (categoryQuery || effectiveSortMode === "recent" || effectiveSortMode === "old");
-    const buildDebatesQuery = () => {
-      let q = supabase.from("debates").select(DEBATES_LIST_SELECT_COLUMNS);
+    const buildDebatesQuery = (selectColumns) => {
+      let q = supabase.from("debates").select(selectColumns);
       if (idsQuery.length) {
         q = q.in("id", idsQuery);
       }
@@ -7032,20 +7060,29 @@ app.get("/api/debates", async (req, res) => {
       return q;
     };
 
+    // canPageInDatabase : la base ne renvoie déjà que les safeLimit lignes affichées,
+    // colonnes complètes directement utiles (pas de second aller-retour). Sinon (tri
+    // "popular"/"ideas" sans catégorie ni recherche : tout le tableau doit être
+    // comparé pour être classé) : passe 1 légère (id/created_at/bumped_at, sans
+    // media_extras) sur l'ensemble des lignes correspondantes, colonnes complètes
+    // relues plus bas une fois les identifiants réellement affichés connus (cf.
+    // DEBATES_RANKING_SELECT_COLUMNS et l'audit egress du 10/08/2026 : media_extras
+    // pèse à lui seul plusieurs Ko par ligne, inutile tant que le classement n'a pas
+    // réduit le jeu de résultats aux quelques dizaines/centaines finalement envoyées).
     const { data: debates, error } = canPageInDatabase
-      ? await buildDebatesQuery()
+      ? await buildDebatesQuery(DEBATES_LIST_SELECT_COLUMNS)
           .order("created_at", { ascending: effectiveSortMode === "old" })
           .range(safeOffset, safeOffset + safeLimit - 1)
-      : await fetchAllSupabaseRows(() => buildDebatesQuery().order("id", { ascending: true }));
+      : await fetchAllSupabaseRows(() => buildDebatesQuery(DEBATES_RANKING_SELECT_COLUMNS).order("id", { ascending: true }));
 
     if (error) {
       console.error(error);
-      return sendServerError(res, "Erreur lecture débats.");
+      throw error;
     }
 
     let debateRows = debates || [];
     if (!debateRows.length) {
-      return res.json([]);
+      return [];
     }
 
     const debateIds = debateRows.map((d) => d.id);
@@ -7060,7 +7097,7 @@ app.get("/api/debates", async (req, res) => {
 
     if (argsErr) {
       console.error(argsErr);
-      return sendServerError(res, "Erreur lecture débats.");
+      throw argsErr;
     }
 
     const argsByDebate = new Map();
@@ -7103,7 +7140,7 @@ app.get("/api/debates", async (req, res) => {
 
       if (commentsResult.error) {
         console.error(commentsResult.error);
-        return sendServerError(res, "Erreur lecture débats.");
+        throw commentsResult.error;
       }
 
       for (const comment of commentsResult.data || []) {
@@ -7156,6 +7193,10 @@ app.get("/api/debates", async (req, res) => {
       }
     }
 
+    // Rangée "légère" utilisée pour le tri : jamais les colonnes lourdes (media_extras,
+    // content...) à ce stade côté branche non paginable en base — cf. le second passage
+    // plus bas (fullRowById) qui ne relit les colonnes complètes que pour les lignes
+    // effectivement conservées après tri/pagination.
     const rows = debateRows.map((d) => {
       const sharedDebateId = resolveSharedDebateId(d.id) || String(d.id);
       const debateArgs = argsByDebate.get(sharedDebateId) || [];
@@ -7194,7 +7235,9 @@ app.get("/api/debates", async (req, res) => {
       ]);
 
       return {
-        ...enrichDebateWithStoredImage(d),
+        id: d.id,
+        created_at: d.created_at,
+        bumped_at: d.bumped_at,
         argument_count,
         comment_count,
         recent_argument_count,
@@ -7303,16 +7346,43 @@ app.get("/api/debates", async (req, res) => {
       pagedRows = rows.slice(0, MAX_DEBATES_RESPONSE);
     }
 
+    // Colonnes complètes (dont media_extras) : déjà présentes dans debateRows quand la
+    // base a paginé directement (canPageInDatabase), sinon relues ici, uniquement pour
+    // les quelques lignes retenues après tri/pagination — jamais pour tout le jeu trié.
+    const fullRowById = new Map();
+    if (canPageInDatabase) {
+      for (const d of debateRows) fullRowById.set(String(d.id), d);
+    } else {
+      const pagedIds = pagedRows.map((row) => row.id);
+      const { data: fullRows, error: fullRowsError } = await fetchAllSupabaseRowsIn(pagedIds, (idsChunk) =>
+        supabase.from("debates").select(DEBATES_LIST_SELECT_COLUMNS).in("id", idsChunk));
+      if (fullRowsError) {
+        console.error(fullRowsError);
+        throw fullRowsError;
+      }
+      for (const d of fullRows || []) fullRowById.set(String(d.id), d);
+    }
+
     const urlsToWarm = [];
-    const rowsWithSourcePreview = pagedRows.map((row) => {
-      if (!String(row.source_url || "").trim()) return row;
+    const rowsWithSourcePreview = pagedRows
+      .map((row) => {
+        const fullRow = fullRowById.get(String(row.id));
+        // Garde-fou : ligne supprimée entre la passe de tri (légère) et cette relecture
+        // complète (fenêtre de quelques millisecondes) — écartée plutôt que de renvoyer
+        // une carte à moitié vide.
+        if (!fullRow) return null;
+        return { ...enrichDebateWithStoredImage(fullRow), ...row };
+      })
+      .filter(Boolean)
+      .map((row) => {
+        if (!String(row.source_url || "").trim()) return row;
 
-      const sourcePreview = getCachedExternalLinkPreview(row.source_url);
-      if (sourcePreview) return { ...row, source_preview: sourcePreview };
+        const sourcePreview = getCachedExternalLinkPreview(row.source_url);
+        if (sourcePreview) return { ...row, source_preview: sourcePreview };
 
-      urlsToWarm.push(row.source_url);
-      return row;
-    });
+        urlsToWarm.push(row.source_url);
+        return row;
+      });
 
     if (urlsToWarm.length) {
       setImmediate(async () => {
@@ -7323,11 +7393,34 @@ app.get("/api/debates", async (req, res) => {
     }
 
     const cacheTtlMs = (effectiveSortMode === "recent" || effectiveSortMode === "old")
-      ? 2 * 60 * 1000
+      ? DEBATES_RECENT_CACHE_TTL_MS
       : DEBATES_API_CACHE_TTL_MS;
     if (!bypassCache) {
       setCachedDebatesApiResponse(cacheKey, rowsWithSourcePreview, cacheTtlMs);
     }
+    return rowsWithSourcePreview;
+    };
+
+    // bypassCache (ids=, fresh=1) : jamais partagé, chaque appelant veut sa propre
+    // lecture à jour. Sinon, une seule reconstruction en vol par cacheKey — les
+    // requêtes concurrentes attendent la même promesse au lieu de relire Supabase
+    // chacune de leur côté (cf. debatesApiInFlight).
+    let freshRowsPromise = bypassCache ? null : debatesApiInFlight.get(cacheKey);
+    if (!freshRowsPromise) {
+      freshRowsPromise = buildFreshDebatesRows();
+      if (!bypassCache) {
+        // Le même objet promesse (post-finally) est à la fois stocké dans la map et
+        // celui attendu ci-dessous : une seule chaîne, jamais de rejet non intercepté
+        // ailleurs (cf. le même principe sur latestDebatesMetaInFlight plus haut).
+        freshRowsPromise = freshRowsPromise.finally(() => {
+          if (debatesApiInFlight.get(cacheKey) === freshRowsPromise) {
+            debatesApiInFlight.delete(cacheKey);
+          }
+        });
+        debatesApiInFlight.set(cacheKey, freshRowsPromise);
+      }
+    }
+    const rowsWithSourcePreview = await freshRowsPromise;
     res.json(rowsWithSourcePreview.map((d) => sanitizeDebateForClient(d, clientKey)));
   } catch (error) {
     console.error(error);
@@ -9861,6 +9954,11 @@ function attachOpinionArticlePreviews(articles) {
 const OPINION_ARTICLES_CACHE_TTL_MS = 5 * 60 * 1000;
 let _opinionArticlesCache = null;
 let _opinionArticlesCacheComputedAt = 0;
+// Anti-dogpile (même principe que debatesApiInFlight/latestDebatesMetaInFlight) :
+// sans lui, plusieurs visiteurs arrivant pile au moment où le cache expire
+// déclenchaient chacun leur propre double lecture Supabase (scan léger +
+// select("*") des articles retenus) — cf. audit egress du 10/08/2026.
+let _opinionArticlesInFlight = null;
 
 // Seuls les bulletins de prévision type "météo du jour" sont écartés d'Autres
 // actus (demande du 19/07/2026, resserrée le même jour : tempêtes, vigilances
@@ -9888,7 +9986,15 @@ async function getOpinionArticlesSelection() {
   if (_opinionArticlesCache && Date.now() - _opinionArticlesCacheComputedAt < OPINION_ARTICLES_CACHE_TTL_MS) {
     return _opinionArticlesCache;
   }
+  if (_opinionArticlesInFlight) return _opinionArticlesInFlight;
 
+  _opinionArticlesInFlight = buildFreshOpinionArticlesSelection().finally(() => {
+    _opinionArticlesInFlight = null;
+  });
+  return _opinionArticlesInFlight;
+}
+
+async function buildFreshOpinionArticlesSelection() {
   // La classification gauche/droite (avec ses synonymes) se fait en JS, pas en SQL :
   // ilike n'est pas insensible aux accents, ce qui rendrait le filtre SQL aussi long
   // et fragile que la liste de synonymes elle-même. Passe 1 : colonnes légères
