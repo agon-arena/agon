@@ -19701,26 +19701,26 @@ body.page-home #debates-list .theme-row-section:first-child {
   color: #1A1F24;
 }
 
-/* "Ma mémoire" mis en avant (demande du 09/08/2026, "grossir ... et le différencier des 2
-   autres pour le rendre plus important") : police et rembourrage horizontal plus grands que ses
-   2 voisins (jamais le rembourrage vertical, pour ne pas déformer la hauteur commune de la
-   pastille — .agon-cloud-mode-switch stretch ses enfants par défaut) + teinte dorée dédiée, même
-   ton que le reste de "Ma mémoire" (poussière d'étoiles/halos, cf. mon-univers.js) plutôt que le
-   blanc neutre des 2 autres segments, visible même hors sélection. */
+/* "Ma mémoire" reste doré en permanence, même quand un autre mode est actif : ce bouton est
+   volontairement mis en avant par rapport à ses deux voisins. La hauteur commune de la barre
+   reste inchangée ; seuls sa largeur, sa police et son fond le différencient. */
 #agon-cloud-mode-memoire-btn {
   padding-left: 22px;
   padding-right: 22px;
   font-size: 14px;
-  color: #ffd98a;
+  background: linear-gradient(135deg, #ffe6b3, #ffb457);
+  color: #1A1F24;
 }
 #agon-cloud-mode-memoire-btn:hover {
-  color: #ffe6b3;
+  background: linear-gradient(135deg, #fff0cc, #ffc26f);
+  color: #1A1F24;
 }
 #agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active {
   background: linear-gradient(135deg, #ffe6b3, #ffb457);
   color: #1A1F24;
 }
 #agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active:hover {
+  background: linear-gradient(135deg, #fff0cc, #ffc26f);
   color: #1A1F24;
 }
 
