@@ -25057,7 +25057,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     position: absolute;
     left: 30px;
     right: 30px;
-    top: 44px;
+    top: 56px;
   }
 
   body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before .universe-breadcrumb {
@@ -25087,7 +25087,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Même position dans l'application installée : l'ancien top négatif faisait
      remonter le fil d'Ariane jusque sur le bouton Trier / Rechercher. */
   body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 44px;
+    top: 56px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
@@ -25103,7 +25103,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
      et la flèche, positionnés en absolu, suivent exactement le même décalage. */
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 44px;
+    top: 56px;
   }
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
     top: 451px;
