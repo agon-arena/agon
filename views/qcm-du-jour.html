@@ -518,9 +518,9 @@
       overscroll-behavior-x: contain;
       scrollbar-width: thin;
     }
-    /* Le dégradé et le discret repère vertical « suite » rendent visibles les colonnes
-       situées hors écran. Ils disparaissent dès que le tableau est arrivé à
-       son extrémité droite, puis réapparaissent si l'utilisateur revient. */
+    /* Le dégradé rend visibles les colonnes situées hors écran. Il disparaît
+       dès que le tableau est arrivé à son extrémité droite, puis réapparaît
+       si l'utilisateur revient. */
     .qcm-mesqcm-table-scroll-hint {
       position: absolute;
       z-index: 4;
@@ -528,10 +528,6 @@
       right: 0;
       bottom: 0;
       width: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      padding-right: 3px;
       box-sizing: border-box;
       background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.88) 52%, #ffffff 82%);
       pointer-events: none;
@@ -542,35 +538,6 @@
     .qcm-mesqcm-table-shell.has-right-overflow .qcm-mesqcm-table-scroll-hint {
       opacity: 1;
       visibility: visible;
-    }
-    .qcm-mesqcm-table-scroll-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 7px 4px;
-      border: none;
-      background: transparent;
-      color: #6b7280;
-      font: inherit;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      white-space: nowrap;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      cursor: pointer;
-      pointer-events: auto;
-    }
-    .qcm-mesqcm-table-scroll-btn:hover,
-    .qcm-mesqcm-table-scroll-btn:focus-visible {
-      color: #243038;
-      outline: none;
-    }
-    .qcm-mesqcm-table-scroll-arrow {
-      font-size: 15px;
-      line-height: 1;
-      letter-spacing: 0;
     }
     .qcm-mesqcm-table-shell.has-left-overflow::before {
       content: '';
@@ -2104,17 +2071,14 @@
       html += '</tr>';
     });
     html += '</tbody></table></div>';
-    html += '<div class="qcm-mesqcm-table-scroll-hint">';
-    html += '<button type="button" class="qcm-mesqcm-table-scroll-btn" tabindex="-1" aria-label="Voir les colonnes suivantes"><span>suite</span><span class="qcm-mesqcm-table-scroll-arrow" aria-hidden="true">›</span></button>';
-    html += '</div></div>';
+    html += '<div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div>';
     return html;
   }
 
   function initMesQcmTableScrollHints() {
     body.querySelectorAll('.qcm-mesqcm-table-shell').forEach(function (shell) {
       var scroller = shell.querySelector('.qcm-mesqcm-table-wrap');
-      var nextBtn = shell.querySelector('.qcm-mesqcm-table-scroll-btn');
-      if (!scroller || !nextBtn) return;
+      if (!scroller) return;
 
       function updateHint() {
         var hasOverflow = scroller.scrollWidth > scroller.clientWidth + 2;
@@ -2124,11 +2088,6 @@
       }
 
       scroller.addEventListener('scroll', updateHint, { passive: true });
-      nextBtn.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        scroller.scrollBy({ left: Math.max(180, scroller.clientWidth * 0.72), behavior: 'smooth' });
-      });
       if (typeof ResizeObserver === 'function') {
         var resizeObserver = new ResizeObserver(updateHint);
         resizeObserver.observe(scroller);
