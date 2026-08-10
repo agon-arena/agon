@@ -504,9 +504,72 @@
        fiche de révision. overflow-x:auto sur le conteneur, jamais sur le
        panneau entier, pour rester utilisable sur mobile sans casser la mise
        en page du reste de la page. */
+    .qcm-mesqcm-table-shell {
+      position: relative;
+      overflow: hidden;
+    }
     .qcm-mesqcm-table-wrap {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+      scrollbar-width: thin;
+    }
+    /* Le dégradé et la pilule rendent immédiatement visibles les colonnes
+       situées hors écran. Ils disparaissent dès que le tableau est arrivé à
+       son extrémité droite, puis réapparaissent si l'utilisateur revient. */
+    .qcm-mesqcm-table-scroll-hint {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 7px;
+      box-sizing: border-box;
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9) 44%, #ffffff 72%);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.18s ease, visibility 0.18s ease;
+    }
+    .qcm-mesqcm-table-shell.has-right-overflow .qcm-mesqcm-table-scroll-hint {
+      opacity: 1;
+      visibility: visible;
+    }
+    .qcm-mesqcm-table-scroll-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 30px;
+      padding: 6px 9px;
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 999px;
+      background: #243038;
+      color: #ffffff;
+      box-shadow: 0 3px 10px rgba(15,23,42,0.22);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .qcm-mesqcm-table-scroll-btn i {
+      font-size: 10px;
+    }
+    .qcm-mesqcm-table-shell.has-left-overflow::before {
+      content: '';
+      position: absolute;
+      z-index: 3;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 16px;
+      background: linear-gradient(90deg, rgba(36,48,56,0.16), rgba(36,48,56,0));
+      pointer-events: none;
     }
     .qcm-mesqcm-table {
       width: 100%;
@@ -2005,7 +2068,9 @@
   // (data-mesqcm-index), pour que le câblage des clics reste unique même
   // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
   function renderMesQcmTableHtml(list, allQuizzes) {
-    var html = '<div class="qcm-mesqcm-table-wrap"><table class="qcm-mesqcm-table">';
+    var html = '<div class="qcm-mesqcm-table-shell">';
+    html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
+    html += '<table class="qcm-mesqcm-table">';
     html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Répétitions</th><th>Fiche</th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
@@ -2027,7 +2092,38 @@
       html += '</tr>';
     });
     html += '</tbody></table></div>';
+    html += '<div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true">';
+    html += '<button type="button" class="qcm-mesqcm-table-scroll-btn" tabindex="-1">Glisser <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>';
+    html += '</div></div>';
     return html;
+  }
+
+  function initMesQcmTableScrollHints() {
+    body.querySelectorAll('.qcm-mesqcm-table-shell').forEach(function (shell) {
+      var scroller = shell.querySelector('.qcm-mesqcm-table-wrap');
+      var nextBtn = shell.querySelector('.qcm-mesqcm-table-scroll-btn');
+      if (!scroller || !nextBtn) return;
+
+      function updateHint() {
+        var hasOverflow = scroller.scrollWidth > scroller.clientWidth + 2;
+        var atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
+        shell.classList.toggle('has-right-overflow', hasOverflow && !atEnd);
+        shell.classList.toggle('has-left-overflow', hasOverflow && scroller.scrollLeft > 3);
+      }
+
+      scroller.addEventListener('scroll', updateHint, { passive: true });
+      nextBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        scroller.scrollBy({ left: Math.max(180, scroller.clientWidth * 0.72), behavior: 'smooth' });
+      });
+      if (typeof ResizeObserver === 'function') {
+        var resizeObserver = new ResizeObserver(updateHint);
+        resizeObserver.observe(scroller);
+        resizeObserver.observe(scroller.querySelector('.qcm-mesqcm-table'));
+      }
+      requestAnimationFrame(updateHint);
+    });
   }
 
   // Regroupé par thématique (cf. server.js classifyCultureGeneraleThemesWithAI)
@@ -2063,6 +2159,7 @@
     });
     html += '</div>';
     body.innerHTML = html;
+    initMesQcmTableScrollHints();
 
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
