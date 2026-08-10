@@ -15007,7 +15007,11 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
 });
 
 app.get("/apprentissage", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
+  // Cette page évolue souvent et embarque directement son interface/sa logique.
+  // Ne jamais laisser le navigateur conserver cinq minutes une ancienne version
+  // (accordéons, pagination, fiche QCM) après un déploiement.
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+    .sendFile(path.join(__dirname, "views/qcm-du-jour.html"));
 });
 
 // L'ancienne page Connaissances n'existe plus comme destination autonome.

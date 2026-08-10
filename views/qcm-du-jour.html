@@ -507,16 +507,21 @@
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
       margin-top: 10px;
     }
+    .qcm-mesqcm-theme-group {
+      overflow: hidden;
+      border: 1px solid #d9dfe3;
+      border-radius: 12px;
+      background: #ffffff;
+    }
     .qcm-mesqcm-theme-toggle {
       display: flex;
       align-items: center;
       gap: 8px;
       width: 100%;
       margin: 0;
-      padding: 14px 4px;
+      padding: 13px 14px;
       border: none;
-      border-bottom: 1px solid #e5e7eb;
-      background: none;
+      background: #f7f9fa;
       color: #111827;
       font: inherit;
       font-family: "Barlow Condensed", Arial, sans-serif;
@@ -524,6 +529,14 @@
       font-weight: 700;
       text-align: left;
       cursor: pointer;
+    }
+    .qcm-mesqcm-theme-toggle:hover,
+    .qcm-mesqcm-theme-toggle:focus-visible,
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-toggle {
+      background: #eef3f6;
+    }
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-toggle {
+      border-bottom: 1px solid #d9dfe3;
     }
     .qcm-mesqcm-theme-count {
       flex: 0 0 auto;
@@ -542,12 +555,30 @@
       font-size: 14px;
       transition: transform 0.15s ease;
     }
+    .qcm-mesqcm-theme-action {
+      flex: 0 0 auto;
+      margin-left: auto;
+      color: #6b7280;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .qcm-mesqcm-theme-action-open {
+      display: none;
+    }
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-action-closed {
+      display: none;
+    }
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-action-open {
+      display: inline;
+    }
     .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-chevron {
       transform: rotate(90deg);
     }
     .qcm-mesqcm-theme-panel {
       display: none;
-      padding: 14px 0 4px;
+      padding: 14px 10px 10px;
     }
     .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-panel {
       display: block;
@@ -2350,6 +2381,7 @@
       html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
       html += '<span>' + escapeHtml(theme) + '</span>';
       html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
+      html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-closed">Afficher</span><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
       html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
       html += '</button>';
       html += '<div class="qcm-mesqcm-theme-panel">';
