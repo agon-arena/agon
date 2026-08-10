@@ -19716,11 +19716,12 @@ body.page-home #debates-list .theme-row-section:first-child {
   color: #1A1F24;
 }
 #agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active {
-  background: linear-gradient(135deg, #ffe6b3, #ffb457);
+  background: linear-gradient(135deg, #ffd166, #e99a2e);
   color: #1A1F24;
+  box-shadow: inset 0 0 0 1px rgba(122, 72, 10, 0.28);
 }
 #agon-cloud-mode-memoire-btn.agon-cloud-mode-segment-active:hover {
-  background: linear-gradient(135deg, #fff0cc, #ffc26f);
+  background: linear-gradient(135deg, #ffdc85, #f0a941);
   color: #1A1F24;
 }
 
