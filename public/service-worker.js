@@ -1,4 +1,4 @@
-const SW_VERSION = "20260810-learning-all-heading-v169";
+const SW_VERSION = "20260810-learning-theme-pages-v170";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

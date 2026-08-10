@@ -504,6 +504,111 @@
       color: #7c4a12;
       border-bottom-color: #f1cf98;
     }
+    .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
+      margin-top: 10px;
+    }
+    .qcm-mesqcm-theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin: 0;
+      padding: 14px 4px;
+      border: none;
+      border-bottom: 1px solid #e5e7eb;
+      background: none;
+      color: #111827;
+      font: inherit;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-theme-count {
+      flex: 0 0 auto;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #516776;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .qcm-mesqcm-theme-chevron {
+      flex: 0 0 auto;
+      margin-left: auto;
+      color: #9ca3af;
+      font-size: 14px;
+      transition: transform 0.15s ease;
+    }
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-chevron {
+      transform: rotate(90deg);
+    }
+    .qcm-mesqcm-theme-panel {
+      display: none;
+      padding: 14px 0 4px;
+    }
+    .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-panel {
+      display: block;
+    }
+    .qcm-mesqcm-theme-collapse {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 16px;
+      padding: 8px 0 0;
+      border: none;
+      background: none;
+      color: #6b7280;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-theme-collapse:hover,
+    .qcm-mesqcm-theme-collapse:focus-visible {
+      color: #243038;
+    }
+    .qcm-mesqcm-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .qcm-mesqcm-pagination-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid #d1d5db;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #243038;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-pagination-btn:disabled {
+      color: #c4c9ce;
+      border-color: #eceff1;
+      cursor: default;
+    }
+    .qcm-mesqcm-pagination-label {
+      min-width: 54px;
+      color: #516776;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .qcm-mesqcm-paged-list {
+      scroll-margin-top: 90px;
+    }
     /* Tableau à l'intérieur de chaque rubrique — nom (ouvre/poursuit le
        QCM), progression "n / 4" vers la mémorisation durable, accès à la
        fiche de révision. overflow-x:auto sur le conteneur, jamais sur le
@@ -2076,25 +2181,112 @@
     return html;
   }
 
+  var MES_QCM_PAGE_SIZE = 10;
+
+  // Dix connaissances maximum à la fois dans chaque liste. Les autres
+  // restent accessibles par les flèches et le numéro de page placés sous le
+  // tableau, sans recharger la page ni perdre l'accordéon ouvert.
+  function renderMesQcmPaginatedTablesHtml(list, allQuizzes) {
+    var pageCount = Math.max(1, Math.ceil(list.length / MES_QCM_PAGE_SIZE));
+    var html = '<div class="qcm-mesqcm-paged-list" data-page-count="' + pageCount + '" data-current-page="0">';
+    for (var pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      var pageItems = list.slice(pageIndex * MES_QCM_PAGE_SIZE, (pageIndex + 1) * MES_QCM_PAGE_SIZE);
+      html += '<div class="qcm-mesqcm-page" data-page-index="' + pageIndex + '"' + (pageIndex ? ' hidden' : '') + '>';
+      html += renderMesQcmTableHtml(pageItems, allQuizzes);
+      html += '</div>';
+    }
+    if (pageCount > 1) {
+      html += '<nav class="qcm-mesqcm-pagination" aria-label="Pages des connaissances">';
+      html += '<button type="button" class="qcm-mesqcm-pagination-btn is-previous" aria-label="Page précédente" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>';
+      html += '<span class="qcm-mesqcm-pagination-label"><span class="qcm-mesqcm-current-page">1</span> / ' + pageCount + '</span>';
+      html += '<button type="button" class="qcm-mesqcm-pagination-btn is-next" aria-label="Page suivante"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>';
+      html += '</nav>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function syncMesQcmTableScrollHint(shell) {
+    var scroller = shell && shell.querySelector('.qcm-mesqcm-table-wrap');
+    if (!scroller) return;
+    var hasOverflow = scroller.scrollWidth > scroller.clientWidth + 2;
+    var atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
+    shell.classList.toggle('has-right-overflow', hasOverflow && !atEnd);
+    shell.classList.toggle('has-left-overflow', hasOverflow && scroller.scrollLeft > 3);
+  }
+
+  function refreshMesQcmVisibleTableHints(scope) {
+    requestAnimationFrame(function () {
+      (scope || body).querySelectorAll('.qcm-mesqcm-table-shell').forEach(syncMesQcmTableScrollHint);
+    });
+  }
+
   function initMesQcmTableScrollHints() {
     body.querySelectorAll('.qcm-mesqcm-table-shell').forEach(function (shell) {
       var scroller = shell.querySelector('.qcm-mesqcm-table-wrap');
       if (!scroller) return;
-
-      function updateHint() {
-        var hasOverflow = scroller.scrollWidth > scroller.clientWidth + 2;
-        var atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
-        shell.classList.toggle('has-right-overflow', hasOverflow && !atEnd);
-        shell.classList.toggle('has-left-overflow', hasOverflow && scroller.scrollLeft > 3);
-      }
-
-      scroller.addEventListener('scroll', updateHint, { passive: true });
+      scroller.addEventListener('scroll', function () { syncMesQcmTableScrollHint(shell); }, { passive: true });
       if (typeof ResizeObserver === 'function') {
-        var resizeObserver = new ResizeObserver(updateHint);
+        var resizeObserver = new ResizeObserver(function () { syncMesQcmTableScrollHint(shell); });
         resizeObserver.observe(scroller);
         resizeObserver.observe(scroller.querySelector('.qcm-mesqcm-table'));
       }
-      requestAnimationFrame(updateHint);
+      requestAnimationFrame(function () { syncMesQcmTableScrollHint(shell); });
+    });
+  }
+
+  function initMesQcmPagination() {
+    body.querySelectorAll('.qcm-mesqcm-paged-list').forEach(function (pagedList) {
+      var pageCount = Number(pagedList.getAttribute('data-page-count')) || 1;
+      var previousBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-previous');
+      var nextBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-next');
+      var pageLabel = pagedList.querySelector('.qcm-mesqcm-current-page');
+
+      function showPage(requestedPage, moveToTop) {
+        var pageIndex = Math.max(0, Math.min(pageCount - 1, requestedPage));
+        pagedList.setAttribute('data-current-page', String(pageIndex));
+        pagedList.querySelectorAll('.qcm-mesqcm-page').forEach(function (page) {
+          page.hidden = Number(page.getAttribute('data-page-index')) !== pageIndex;
+        });
+        if (previousBtn) previousBtn.disabled = pageIndex === 0;
+        if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
+        if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
+        refreshMesQcmVisibleTableHints(pagedList);
+        if (moveToTop) requestAnimationFrame(function () {
+          pagedList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+
+      if (previousBtn) previousBtn.addEventListener('click', function () {
+        showPage((Number(pagedList.getAttribute('data-current-page')) || 0) - 1, true);
+      });
+      if (nextBtn) nextBtn.addEventListener('click', function () {
+        showPage((Number(pagedList.getAttribute('data-current-page')) || 0) + 1, true);
+      });
+    });
+  }
+
+  function initMesQcmThemeMenus() {
+    body.querySelectorAll('.qcm-mesqcm-theme-toggle').forEach(function (toggle) {
+      toggle.addEventListener('click', function () {
+        var group = toggle.closest('.qcm-mesqcm-theme-group');
+        var isOpen = group.classList.toggle('is-open');
+        toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (isOpen) refreshMesQcmVisibleTableHints(group);
+      });
+    });
+    body.querySelectorAll('.qcm-mesqcm-theme-collapse').forEach(function (collapseBtn) {
+      collapseBtn.addEventListener('click', function () {
+        var group = collapseBtn.closest('.qcm-mesqcm-theme-group');
+        var toggle = group && group.querySelector('.qcm-mesqcm-theme-toggle');
+        if (!group || !toggle) return;
+        group.classList.remove('is-open');
+        toggle.setAttribute('aria-expanded', 'false');
+        requestAnimationFrame(function () {
+          toggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
+        });
+      });
     });
   }
 
@@ -2113,14 +2305,15 @@
   }
 
   // Regroupé par thématique (cf. server.js classifyCultureGeneraleThemesWithAI)
-  // avec de vraies rubriques titrées, plutôt qu'un simple tableau plat — une
+  // avec de vraies rubriques repliables, plutôt qu'un simple tableau plat — une
   // connaissance couvrant plusieurs thématiques apparaît sous chacune d'elles
   // (demande du 09/08/2026). "Autres" regroupe les QCM sans thématique
   // résolue (classification pas encore faite ou échouée), toujours en
   // dernier. Une rubrique prioritaire "En attente de réalisation" regroupe
   // tout en haut, une seule fois, les QCM non réalisés. Les rubriques
-  // thématiques restent ensuite triées par ordre alphabétique. À l'intérieur d'une
-  // rubrique : le nom (ouvre/poursuit le QCM, cf. loadSlot), la progression
+  // thématiques restent ensuite triées par ordre alphabétique, fermées par
+  // défaut et paginées par groupes de dix. À l'intérieur d'une rubrique : le
+  // nom (ouvre/poursuit le QCM, cf. loadSlot), la progression
   // vers la mémorisation durable ("n / 4", même logique que "Mes acquis",
   // cf. computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
   // (détail de la notion + corrigé complet des questions, cf.
@@ -2146,21 +2339,31 @@
     if (pendingQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
       html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
-      html += renderMesQcmTableHtml(pendingQuizzes, quizzes);
+      html += renderMesQcmPaginatedTablesHtml(pendingQuizzes, quizzes);
       html += '</section>';
     }
     html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
     html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
     themeNames.forEach(function (theme) {
-      html += '<section class="qcm-mesqcm-group">';
-      html += '<h2 class="qcm-mesqcm-group-title">' + escapeHtml(theme) + '</h2>';
-      html += renderMesQcmTableHtml(byTheme[theme].slice().sort(compareMesQcmByStateThenName), quizzes);
+      var themeQuizzes = byTheme[theme].slice().sort(compareMesQcmByStateThenName);
+      html += '<section class="qcm-mesqcm-theme-group">';
+      html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
+      html += '<span>' + escapeHtml(theme) + '</span>';
+      html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
+      html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
+      html += '</button>';
+      html += '<div class="qcm-mesqcm-theme-panel">';
+      html += renderMesQcmPaginatedTablesHtml(themeQuizzes, quizzes);
+      html += '<button type="button" class="qcm-mesqcm-theme-collapse"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i> Masquer</button>';
+      html += '</div>';
       html += '</section>';
     });
     html += '</section>';
     html += '</div>';
     body.innerHTML = html;
+    initMesQcmPagination();
     initMesQcmTableScrollHints();
+    initMesQcmThemeMenus();
 
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
