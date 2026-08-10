@@ -763,6 +763,14 @@ const starPanelListEl = document.getElementById("universe-star-panel-list");
 const starPanelCloseBtn = document.getElementById("universe-star-panel-close");
 const starPanelBackdropEl = document.getElementById("universe-star-panel-backdrop");
 
+// Sur l'accueil, le panneau est déclaré dans #agon-tag-trends-section, qui crée son
+// propre contexte d'empilement (z-index:1). Le dock blanc peut alors passer devant
+// malgré le z-index du panneau. Le rattacher au body lui rend un vrai calque plein
+// écran, comme les fiches blanches de "Mes acquis".
+if (starPanelEl && starPanelEl.parentElement !== document.body) {
+  document.body.appendChild(starPanelEl);
+}
+
 function formatAcquiredAt(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -806,6 +814,7 @@ function showStarPanel(star) {
     starPanelListEl.appendChild(el);
   });
 
+  document.body.classList.add("universe-star-panel-open");
   starPanelEl.hidden = false;
 }
 
@@ -864,6 +873,7 @@ function showKnowledgeSheet(article, star) {
 
 function hideStarPanel() {
   starPanelEl.hidden = true;
+  document.body.classList.remove("universe-star-panel-open");
 }
 
 starPanelCloseBtn.addEventListener("click", hideStarPanel);

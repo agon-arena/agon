@@ -19574,7 +19574,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260810-knowledge-sheets').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260810-star-panel-white').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
