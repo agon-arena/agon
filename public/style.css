@@ -11345,10 +11345,15 @@ body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
-/* Standalone : bulles centrées à l'écran, débats sous le fold */
+/* Standalone : bulles centrées à l'écran, débats sous le fold. min-height mesurée en
+   direct par JS (--agon-home-trends-section-min-height, cf. syncAgonHomeTrendsSectionMinHeight
+   dans script.js) : le calc() ci-dessous ne sert plus que de repli avant que le script
+   ait tourné une première fois — il suppose une hauteur de bandeau du haut fixe (110px)
+   devenue fausse depuis l'ajout du bandeau de score et du bouton "Trier / Rechercher"
+   (cadre affiché trop bas en conséquence, demande du 11/08/2026). */
 body.is-standalone .agon-tag-trends-section {
   margin-top: 0 !important;
-  min-height: calc(100dvh - 110px - 73px - env(safe-area-inset-bottom, 0px));
+  min-height: var(--agon-home-trends-section-min-height, calc(100dvh - 110px - 73px - env(safe-area-inset-bottom, 0px)));
   display: flex;
   flex-direction: column;
   align-items: center;

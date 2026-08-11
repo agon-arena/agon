@@ -34801,6 +34801,35 @@ async function waitForTrendsSectionStableThenSync(timeoutMs = 2000) {
   if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
 }
 
+// Le min-height CSS de .agon-tag-trends-section en standalone (cf. style.css,
+// body.is-standalone .agon-tag-trends-section) suppose une hauteur de bandeau du haut
+// fixe (110px codé en dur dans le calc()) — hypothèse devenue fausse depuis l'ajout du
+// bandeau de score (Rhetor/Logos/Gnosis) et du bouton "Trier / Rechercher" : le bandeau
+// réel est plus haut, la min-height calculée dépasse donc l'espace vraiment disponible,
+// et le cadre (centré verticalement via justify-content:center dans cette min-height
+// surestimée) apparaît décalé trop bas — surtout visible en "Ma mémoire", dont le
+// contenu est plus court que Bulles Actu/Agôn (demande du 11/08/2026, "le cadre du mode
+// ma mémoire apparaît trop bas"). Mesuré en direct plutôt que deviné (même principe que
+// syncAgonHomeTrendsCaptionAnchor juste en dessous) : aucune hypothèse sur la hauteur
+// réelle du bandeau du haut, quel que soit son contenu actuel ou futur.
+function syncAgonHomeTrendsSectionMinHeight() {
+  const body = document.body;
+  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
+  if (window.__agonDebateModalOpen === true) return;
+  const section = document.getElementById('agon-tag-trends-section');
+  const nav = document.querySelector('.home-bottom-nav');
+  if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) return;
+  const sectionTop = section.getBoundingClientRect().top;
+  const navTop = nav.getBoundingClientRect().top;
+  const available = Math.round(navTop - sectionTop);
+  // Garde-fou : une mesure prise pendant une transition (section pas encore à sa place,
+  // nav temporairement masqué/couvert...) donnerait une valeur aberrante — mieux vaut
+  // garder la dernière bonne valeur (ou le repli CSS calc()) qu'écraser avec du n'importe
+  // quoi, quitte à attendre le prochain passage de scheduleHomeBottomNavViewportOffsetUpdate.
+  if (!Number.isFinite(available) || available < 150) return;
+  document.documentElement.style.setProperty('--agon-home-trends-section-min-height', `${available}px`);
+}
+
 function syncAgonHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
   const body = document.body;
@@ -34950,6 +34979,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
 
 function updateHomeBottomNavViewportOffset() {
   syncAgonHomeTrendsCaptionAnchor();
+  syncAgonHomeTrendsSectionMinHeight();
   const viewportBottomFill = getAgonMobileViewportBottomFill();
   const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
   const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
