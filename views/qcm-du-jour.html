@@ -1240,7 +1240,7 @@
     <div id="qcm-body"></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260812-notion-quiz-levels" defer></script>
+<script src="/script.min.js?v=20260812-iframe-loading-overlay" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -2083,7 +2083,12 @@
     showNotionQuizLevelPicker(function (level) {
       customSearchBtn.disabled = true;
       customSearchInput.disabled = true;
-      setCustomSearchStatus('Génération de la fiche en cours (quelques secondes)…', false);
+      setCustomSearchStatus(
+        level === 'expert'
+          ? 'Génération en cours (quelques secondes, jusqu’à quelques minutes pour une liste à mémoriser en entier)…'
+          : 'Génération de la fiche en cours (quelques secondes)…',
+        false
+      );
 
       fetch('/api/users/notion-quizzes/custom', {
         method: 'POST',

@@ -5052,7 +5052,17 @@ function getDebateIframeParentLoadingImageSrc() {
 }
 
 function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
-  if (!isTopLevelIframeModalPage()) return;
+  // isTopLevelIframeModalPage() ne doit PAS servir ici : c'est une liste
+  // blanche pensée pour la cloche de notifications (/, /debate, /create,
+  // /notifications, /autres-sources, /debates), pas pour "toute page hôte du
+  // modal iframe". Depuis une page absente de cette liste (/eclairages,
+  // /mon-univers, /concept-du-jour…), ce garde-fou sautait silencieusement le
+  // bandeau, laissant voir l'iframe brute (rectangle blanc + flèche de
+  // fermeture) le temps du chargement (signalé le 12/08/2026 sur
+  // /apprentissage, mais touchait toute page hors liste). Seul ce qui
+  // comptait à l'origine (pathname === "/", cf. git blame) reste pertinent :
+  // ne jamais afficher ce bandeau depuis l'INTÉRIEUR d'une iframe.
+  if (window.self !== window.top) return;
   __agonDebugRefreshLog("showDebateIframeParentLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
 
   ensurePageArrivalLoadingOverlayStyles();
@@ -25381,7 +25391,7 @@ function showDebateNotionMemorizeExplainer(notionName) {
 const NOTION_QUIZ_LEVEL_OPTIONS = [
   { level: "elementaire", name: "Élémentaire", desc: "3 à 6 questions" },
   { level: "avance", name: "Avancé", desc: "8 à 12 questions" },
-  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" }
+  { level: "expert", name: "Expert", desc: "Une vingtaine de questions, bien plus pour les listes à mémoriser (capitales, vocabulaire...)" }
 ];
 
 // Modale de choix de niveau — `onSelect(level)` n'est appelé que si
@@ -35060,12 +35070,29 @@ function syncAgonHomeTrendsCaptionAnchor() {
 // dans le flux (jamais de sa propre hauteur, donc pas de dépendance circulaire avec le
 // min-height qu'on est en train de calculer), et .home-bottom-nav est position:fixed (73px
 // déjà correct dans le calc(), aucune mesure nécessaire de ce côté).
+// TEMPORAIRE : diagnostic du cadre "Ma mémoire" à la mauvaise taille de façon intermittente en
+// standalone (cf. syncAgonHomeTrendsSectionMinHeight juste en dessous). Réutilise le pipeline
+// déjà en place pour un souci similaire (__scrollJumpDiagLog / /api/debug/scroll-jump-sample) —
+// à retirer une fois la cause identifiée (conversation du 12/08/2026). Ne logge que sur
+// changement de résultat (pas à chaque appel) pour ne pas noyer le fichier partagé.
+let __memoireFrameDiagLastKey = null;
+function __memoireFrameDiagLog(outcome, data) {
+  const key = outcome + ':' + JSON.stringify(data);
+  if (key === __memoireFrameDiagLastKey) return;
+  __memoireFrameDiagLastKey = key;
+  __scrollJumpDiagLog('memoire-frame:' + outcome, data);
+}
+
 function syncAgonHomeTrendsSectionMinHeight() {
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
   if (window.__agonDebateModalOpen === true) return;
   const section = document.getElementById('agon-tag-trends-section');
-  if (!section || section.hidden) return;
+  if (!section) return;
+  if (section.hidden) {
+    __memoireFrameDiagLog('skip-hidden', { memoire: !!_memoireCloudMode });
+    return;
+  }
   const sectionTop = Math.round(section.getBoundingClientRect().top);
   // Garde-fou : une mesure prise pendant un scroll (section déjà remontée hors du haut de
   // l'écran) ou avant que la mise en page se soit stabilisée donnerait une valeur aberrante —
@@ -35073,8 +35100,17 @@ function syncAgonHomeTrendsSectionMinHeight() {
   // n'importe quoi. Plage large (0-400px) : couvre topbar + bandeau de score + bouton "Trier /
   // Rechercher" sur tous les téléphones, sans jamais accepter un scroll qui a fait défiler la
   // section hors du haut de l'écran.
-  if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) return;
+  if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) {
+    __memoireFrameDiagLog('skip-out-of-range', { sectionTop, memoire: !!_memoireCloudMode });
+    return;
+  }
   document.documentElement.style.setProperty('--agon-home-trends-section-top', `${sectionTop}px`);
+  __memoireFrameDiagLog('applied', {
+    sectionTop,
+    memoire: !!_memoireCloudMode,
+    innerHeight: window.innerHeight,
+    vvHeight: window.visualViewport ? Math.round(window.visualViewport.height) : null
+  });
 }
 
 function updateHomeBottomNavViewportOffset() {
