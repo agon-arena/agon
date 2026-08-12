@@ -25293,9 +25293,14 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   }
 
   /* Même position dans l'application installée : l'ancien top négatif faisait
-     remonter le fil d'Ariane jusque sur le bouton Trier / Rechercher. */
+     remonter le fil d'Ariane jusque sur le bouton Trier / Rechercher.
+     54px - 84px = -30px : suit le rapprochement du cadre lui-même (margin-top: -84px sur
+     #agon-tag-trends-cloud.agon-memoire-frame, cf. règle juste au-dessus dans ce fichier) —
+     sans ce même décalage, le fil d'Ariane (positionné indépendamment, relatif à la section et
+     non au cadre) flottait DANS le cadre au lieu de rester juste au-dessus (constaté le
+     12/08/2026 après le rapprochement du cadre). */
   body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 54px;
+    top: -30px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
