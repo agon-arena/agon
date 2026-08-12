@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260812-notion-quiz-levels">
+  <link rel="stylesheet" href="/style.min.css?v=20260812-notion-level-picker-layout">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -638,6 +638,58 @@
       font-family: Arial, Helvetica, sans-serif;
       font-size: 14px;
     }
+    .qcm-mesqcm-td-check {
+      width: 32px;
+      padding-right: 0;
+    }
+    .qcm-mesqcm-row-checkbox,
+    #qcm-mesqcm-select-all {
+      width: 17px;
+      height: 17px;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-bulk-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 14px;
+      padding: 10px 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #f9fafb;
+    }
+    .qcm-mesqcm-bulk-selectall {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-bulk-delete-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: 1px solid #dc2626;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #dc2626;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-bulk-delete-btn:hover:not(:disabled) {
+      background: #fef2f2;
+    }
+    .qcm-mesqcm-bulk-delete-btn:disabled {
+      border-color: #d1d5db;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
     .qcm-mesqcm-table td {
       padding: 10px;
       border-bottom: 1px solid #eef1f3;
@@ -727,6 +779,16 @@
       width: 18px;
       text-align: center;
       color: #516776;
+    }
+    .qcm-mesqcm-action-menu-item-danger {
+      color: #dc2626;
+    }
+    .qcm-mesqcm-action-menu-item-danger i {
+      color: #dc2626;
+    }
+    .qcm-mesqcm-action-menu-item-danger:hover,
+    .qcm-mesqcm-action-menu-item-danger:focus-visible {
+      background: #fef2f2;
     }
     .qcm-mesqcm-action-menu-backdrop {
       position: fixed;
@@ -1226,7 +1288,7 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <h1><span id="qcm-title-text"></span></h1>
+    <h1><span id="qcm-title-text">Mes apprentissages</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <form class="qcm-custom-search" id="qcm-custom-search" hidden>
@@ -1237,10 +1299,19 @@
       </button>
     </form>
     <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
-    <div id="qcm-body"></div>
+    <!-- Contenu par défaut statique (pas posé par JS) : le cadre .qcm-panel est
+         stylé (fond blanc, ombre, coins arrondis) dès le parsing du HTML, avant
+         toute exécution de script — sans ce sablier déjà présent dans le HTML
+         source, la toute première peinture de la page montrait un cadre vide
+         (juste le fond blanc, sans texte ni sablier) pendant l'intervalle avant
+         que le script inline ne s'exécute et n'y écrive le vrai message de
+         chargement (signalé le 12/08/2026, capture d'écran à l'appui — le cadre
+         masqué par le parent iframe pendant .loading n'empêche pas ce même
+         cadre vide d'apparaître si CE masquage lui-même a un accroc). -->
+    <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260812-iframe-loading-overlay" defer></script>
+<script src="/script.min.js?v=20260812-score-100-mute" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -2173,11 +2244,19 @@
   // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
   // Cliquer sur le nom ouvre directement la fiche (openMesQcmFiche) — plus de
   // bouton "Fiche" dédié à côté (demande du 12/08/2026, redondant).
+  // Clé stable d'un apprentissage à travers ses éventuels doublons d'affichage
+  // (un même QCM apparaît dans "En attente de réalisation" ET dans chacune de
+  // ses rubriques thématiques, cf. renderMesQcmList) : slot+date identifie le
+  // QCM de façon unique côté serveur (cf. /api/users/notion-quizzes/remove).
+  function getMesQcmRowKey(q) {
+    return q.slot + '|' + q.quizDate;
+  }
+
   function renderMesQcmTableHtml(list, allQuizzes) {
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>';
+    html += '<thead><tr><th></th><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -2189,6 +2268,7 @@
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
         : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
       html += '<tr>';
+      html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
       html += '</button></td>';
@@ -2356,7 +2436,17 @@
       .slice()
       .sort(compareMesQcmByStateThenName);
 
-    var html = '<div class="qcm-mesqcm-groups">';
+    // Sélection groupée (demande du 12/08/2026) : une seule case "Tout
+    // cocher" pour toute la page, pas une par table — un même apprentissage
+    // pouvant apparaître à la fois dans "En attente" et dans une ou
+    // plusieurs rubriques thématiques (cf. getMesQcmRowKey), la sélection
+    // est tenue par clé plutôt que par ligne (cf. initMesQcmBulkSelection).
+    var html = '<div class="qcm-mesqcm-bulk-bar" id="qcm-mesqcm-bulk-bar">' +
+      '<label class="qcm-mesqcm-bulk-selectall"><input type="checkbox" id="qcm-mesqcm-select-all"> Tout cocher</label>' +
+      '<button type="button" class="qcm-mesqcm-bulk-delete-btn" id="qcm-mesqcm-bulk-delete-btn" disabled>' +
+      '<i class="fa-solid fa-trash-can"></i> Supprimer la sélection</button>' +
+      '</div>';
+    html += '<div class="qcm-mesqcm-groups">';
     if (pendingQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
       html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
@@ -2387,11 +2477,12 @@
     initMesQcmPagination();
     initMesQcmTableScrollHints();
     initMesQcmThemeMenus();
+    initMesQcmBulkSelection(quizzes);
 
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
-        openMesQcmActionMenu(btn, q);
+        openMesQcmActionMenu(btn, q, quizzes);
       });
     });
     body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
@@ -2402,36 +2493,104 @@
     });
   }
 
-  // Retire un apprentissage de la liste personnelle (jamais le QCM partagé,
-  // cf. server.js POST /api/users/notion-quizzes/remove) — même modale de
-  // confirmation que les autres suppressions définitives du site
+  // Retire un ou plusieurs apprentissages de la liste personnelle (jamais le
+  // QCM partagé, cf. server.js POST /api/users/notion-quizzes/remove) — même
+  // modale de confirmation que les autres suppressions définitives du site
   // (showDeleteConfirmModal, cf. deleteComment/deleteArgument/deleteDebate
   // dans script.min.js, déjà chargé sur cette page), ré-affiche la liste
-  // sans l'item une fois le retrait confirmé côté serveur (jamais
+  // sans les items une fois le retrait confirmé côté serveur (jamais
   // optimiste : suppression définitive, contrairement au clic "Mémoriser"
-  // ailleurs sur le site).
+  // ailleurs sur le site). Une requête par item (pas de route batch côté
+  // serveur) mais en parallèle : la sélection groupée reste plafonnée à une
+  // page de tableau (10, cf. MES_QCM_PAGE_SIZE), largement sous la limite de
+  // débit de la route.
   function removeMesQcmItem(q, quizzes, btn) {
-    if (!q || !voterKey) return;
+    removeMesQcmItems([q], quizzes, btn);
+  }
+
+  function removeMesQcmItems(selectedQuizzes, quizzes, btn) {
+    if (!selectedQuizzes.length || !voterKey) return;
+    var count = selectedQuizzes.length;
     showDeleteConfirmModal({
-      title: 'Supprimer cet apprentissage ?',
+      title: count > 1 ? 'Supprimer ces ' + count + ' apprentissages ?' : 'Supprimer cet apprentissage ?',
       text: 'Cette suppression est définitive.',
       onConfirm: function () {
         btn.disabled = true;
-        fetch('/api/users/notion-quizzes/remove', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ legacyKey: voterKey, slot: q.slot, quizDate: q.quizDate })
-        })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (!data.ok) { btn.disabled = false; return; }
-            var index = quizzes.indexOf(q);
-            if (index !== -1) quizzes.splice(index, 1);
-            renderMesQcmList(quizzes);
+        Promise.all(selectedQuizzes.map(function (q) {
+          return fetch('/api/users/notion-quizzes/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ legacyKey: voterKey, slot: q.slot, quizDate: q.quizDate })
           })
-          .catch(function () { btn.disabled = false; });
+            .then(function (res) { return res.json(); })
+            .then(function (data) { return data.ok ? q : null; })
+            .catch(function () { return null; });
+        })).then(function (results) {
+          var anyRemoved = false;
+          results.forEach(function (removed) {
+            if (!removed) return;
+            anyRemoved = true;
+            var index = quizzes.indexOf(removed);
+            if (index !== -1) quizzes.splice(index, 1);
+          });
+          if (anyRemoved) renderMesQcmList(quizzes);
+          else btn.disabled = false;
+        });
       }
     });
+  }
+
+  // Barre de sélection groupée au-dessus des rubriques (cf. renderMesQcmList) :
+  // toutes les cases (y compris celles d'apprentissages dupliqués entre "En
+  // attente" et une rubrique thématique, cf. getMesQcmRowKey) sont déjà dans
+  // le DOM au moment de cet appel — pas de pagination réseau, seulement des
+  // pages masquées (cf. renderMesQcmPaginatedTablesHtml) — donc "Tout cocher"
+  // porte bien sur l'ensemble de la liste, pages/rubriques repliées incluses.
+  function initMesQcmBulkSelection(quizzes) {
+    var selectAllCheckbox = document.getElementById('qcm-mesqcm-select-all');
+    var deleteBtn = document.getElementById('qcm-mesqcm-bulk-delete-btn');
+    if (!selectAllCheckbox || !deleteBtn) return;
+    var rowCheckboxes = Array.prototype.slice.call(body.querySelectorAll('.qcm-mesqcm-row-checkbox'));
+    if (!rowCheckboxes.length) return;
+
+    function selectedKeySet() {
+      var keys = {};
+      rowCheckboxes.forEach(function (cb) { if (cb.checked) keys[cb.getAttribute('data-mesqcm-key')] = true; });
+      return keys;
+    }
+
+    function updateBulkBarState() {
+      var selectedCount = Object.keys(selectedKeySet()).length;
+      deleteBtn.disabled = selectedCount === 0;
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> Supprimer la sélection' + (selectedCount ? ' (' + selectedCount + ')' : '');
+      var allChecked = rowCheckboxes.every(function (cb) { return cb.checked; });
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = !allChecked && selectedCount > 0;
+    }
+
+    rowCheckboxes.forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var key = cb.getAttribute('data-mesqcm-key');
+        rowCheckboxes.forEach(function (other) {
+          if (other !== cb && other.getAttribute('data-mesqcm-key') === key) other.checked = cb.checked;
+        });
+        updateBulkBarState();
+      });
+    });
+
+    selectAllCheckbox.addEventListener('change', function () {
+      var checked = selectAllCheckbox.checked;
+      rowCheckboxes.forEach(function (cb) { cb.checked = checked; });
+      updateBulkBarState();
+    });
+
+    deleteBtn.addEventListener('click', function () {
+      var keys = selectedKeySet();
+      var selectedQuizzes = quizzes.filter(function (q) { return keys[getMesQcmRowKey(q)]; });
+      removeMesQcmItems(selectedQuizzes, quizzes, deleteBtn);
+    });
+
+    updateBulkBarState();
   }
 
   // Corrigé d'une question dans la fiche "Mes QCM" — jamais interactif
@@ -2480,9 +2639,10 @@
   }
 
   // Clic sur le nom d'un apprentissage dans le tableau "Mes apprentissages" :
-  // deux actions possibles (demande du 12/08/2026), proposées via un petit
-  // menu ancré sous le bouton plutôt qu'une colonne "Fiche" séparée. Un seul
-  // menu ouvert à la fois (closeMesQcmActionMenu la ferme au préalable).
+  // trois actions possibles (la suppression ajoutée le 12/08/2026, en plus
+  // du bouton corbeille déjà présent dans sa propre colonne), proposées via
+  // un petit menu ancré sous le bouton plutôt qu'une colonne "Fiche" séparée.
+  // Un seul menu ouvert à la fois (closeMesQcmActionMenu la ferme au préalable).
   var mesQcmActionMenuEls = null;
   function closeMesQcmActionMenu() {
     if (!mesQcmActionMenuEls) return;
@@ -2492,7 +2652,7 @@
     window.removeEventListener('resize', mesQcmActionMenuEls.close, { passive: true });
     mesQcmActionMenuEls = null;
   }
-  function openMesQcmActionMenu(btn, q) {
+  function openMesQcmActionMenu(btn, q, quizzes) {
     closeMesQcmActionMenu();
     var backdrop = document.createElement('div');
     backdrop.className = 'qcm-mesqcm-action-menu-backdrop';
@@ -2502,7 +2662,8 @@
     var doLabel = q.realized ? 'Refaire le QCM' : 'Faire le QCM';
     menu.innerHTML =
       '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="fiche"><i class="fa-solid fa-file-lines"></i> Consulter la fiche</button>' +
-      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>';
+      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>' +
+      '<button type="button" class="qcm-mesqcm-action-menu-item qcm-mesqcm-action-menu-item-danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> Supprimer</button>';
     document.body.appendChild(backdrop);
     document.body.appendChild(menu);
 
@@ -2526,6 +2687,10 @@
     menu.querySelector('[data-action="quiz"]').addEventListener('click', function () {
       closeMesQcmActionMenu();
       loadSlot(q.slot, q.quizDate, q.label);
+    });
+    menu.querySelector('[data-action="delete"]').addEventListener('click', function () {
+      closeMesQcmActionMenu();
+      removeMesQcmItem(q, quizzes, btn);
     });
 
     mesQcmActionMenuEls = { menu: menu, backdrop: backdrop, onKeydown: onKeydown, close: closeMesQcmActionMenu };

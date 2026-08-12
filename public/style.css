@@ -5137,8 +5137,9 @@ body.page-debate #score-b {
 }
 .notion-level-picker-option{
   display:flex;
-  align-items:center;
-  justify-content:space-between;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
   width:100%;
   margin:0 0 10px;
   padding:12px 18px;
@@ -5163,6 +5164,7 @@ body.page-debate #score-b {
 .notion-level-picker-option-desc{
   color:#6b7280;
   font-size:13px;
+  line-height:1.4;
 }
 .notion-level-picker-cancel{
   width:100%;
