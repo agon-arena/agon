@@ -1281,6 +1281,15 @@ function buildDemoUniverseData() {
   };
 }
 
+// Filet contre un fetch qui reste en attente indéfiniment (même raison que le service
+// worker, cf. service-worker.js NAVIGATION_FETCH_TIMEOUT_MS : un réveil du téléphone en
+// 4G/5G, ou ici plus spécifiquement un lancement à froid de la PWA standalone dont le
+// réseau met plus longtemps à se stabiliser qu'un onglet Safari déjà actif, peut laisser
+// ce fetch sans réponse ni erreur — sans lui, "Ma mémoire" restait bloquée en chargement
+// perpétuel, seulement en standalone, jamais en navigateur mobile classique déjà "chaud"
+// (demande du 12/08/2026, "rien ne s'affiche... ça se charge sans jamais finir").
+const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
+
 // ---- Chargement (un seul appel, jamais relancé au changement de niveau) ----
 async function loadUniverse() {
   // Jeton partagé avec script.js (toggleAgonCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
@@ -1306,7 +1315,14 @@ async function loadUniverse() {
   }
 
   try {
-    const response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`, { cache: "no-store" });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UNIVERSE_FETCH_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`, { cache: "no-store", signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!response.ok) throw new Error("http " + response.status);
     universeData = await response.json();
   } catch (error) {
