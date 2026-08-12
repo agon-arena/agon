@@ -35105,13 +35105,26 @@ function syncAgonHomeTrendsSectionMinHeight() {
     __memoireFrameDiagLog('skip-hidden', { memoire: !!_memoireCloudMode });
     return;
   }
+  // getBoundingClientRect().top est relatif au viewport COURANT, pas au document : dès que la
+  // page est scrollée (même de quelques px), cette valeur change alors que rien n'a bougé dans
+  // la mise en page réelle — repéré le 12/08/2026 (diagnostic __memoireFrameDiagLog) : une
+  // rampe fluide et continue de valeurs (-387 → -363 → … → 229) pendant un scroll, prise pour
+  // du bruit de mise en page à corriger, alors que c'était un simple scroll en cours (déclenché
+  // par le listener "scroll" ajouté juste avant pour un autre correctif). Cette section n'a de
+  // sens à recentrer que quand la page est tout en haut (juste après l'arrivée/un switch de
+  // mode) : hors de ce cas, on garde la dernière valeur confirmée plutôt que d'en calculer une
+  // fausse à partir d'une position de scroll qui ne représente plus la hauteur du bandeau du
+  // haut.
+  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  if (scrollY > 4) {
+    __memoireFrameDiagLog('skip-scrolled', { scrollY: Math.round(scrollY), memoire: !!_memoireCloudMode });
+    return;
+  }
   const sectionTop = Math.round(section.getBoundingClientRect().top);
-  // Garde-fou : une mesure prise pendant un scroll (section déjà remontée hors du haut de
-  // l'écran) ou avant que la mise en page se soit stabilisée donnerait une valeur aberrante —
-  // mieux vaut garder la dernière bonne valeur (ou le repli CSS calc()) que d'écraser avec du
-  // n'importe quoi. Plage large (0-400px) : couvre topbar + bandeau de score + bouton "Trier /
-  // Rechercher" sur tous les téléphones, sans jamais accepter un scroll qui a fait défiler la
-  // section hors du haut de l'écran.
+  // Garde-fou : une mesure prise avant que la mise en page se soit stabilisée donnerait une
+  // valeur aberrante — mieux vaut garder la dernière bonne valeur (ou le repli CSS calc()) que
+  // d'écraser avec du n'importe quoi. Plage large (0-400px) : couvre topbar + bandeau de score +
+  // bouton "Trier / Rechercher" sur tous les téléphones.
   if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) {
     __agonTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-out-of-range', { sectionTop, memoire: !!_memoireCloudMode });
